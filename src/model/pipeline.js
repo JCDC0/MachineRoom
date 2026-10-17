@@ -17,53 +17,108 @@ export function makeContext(tree) {
 
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 
-export function buildActivities(frames, { agents, tree }) {
+export function createPipeline({ agents, tree }) {
   const ctx = makeContext(tree)
   const byId = new Map(agents.map((agent) => [agent.id, agent]))
   const parsers = new Map()
+  const lastRunTime = new Map()
   const seen = new Set()
-  const out = []
   let order = 0
+  let lastTime = 0
 
-  function emit(activity, agent, runId) {
-    out.push({ ...activity, agent: agent.key, runId, order: (order += 1) })
+  function finalise(items) {
+    items.sort((a, b) => a.time - b.time || a.order - b.order)
+    for (const item of items) {
+      if (item.time < lastTime) item.time = lastTime
+      lastTime = item.time
+    }
+    return items
   }
 
-  for (const frame of frames) {
+  function push(frame) {
+    if (!frame || typeof frame !== 'object') return []
+    if (frame.id !== undefined && frame.id !== null) {
+      const frameKey = `frame:${frame.id}`
+      if (seen.has(frameKey)) return []
+      seen.add(frameKey)
+    }
+
     const payload = frame.payload
     const agent = byId.get(payload?.agentId)
-    if (!agent) continue
+    if (!agent) return []
     const runId = payload.runId ?? null
     const time = Date.parse(frame.createdAt)
+    const out = []
+
+    function emit(activity) {
+      out.push({ ...activity, agent: agent.key, runId, order: (order += 1) })
+    }
 
     if (frame.type === 'heartbeat.run.queued') {
-      emit({ time, type: 'run.queued' }, agent, runId)
+      lastRunTime.set(runId, time)
+      emit({ time, type: 'run.queued' })
     } else if (frame.type === 'heartbeat.run.status') {
       const key = `${runId}:${payload.status}`
-      if (seen.has(key)) continue
+      if (seen.has(key)) return []
       seen.add(key)
+      lastRunTime.set(runId, time)
       if (payload.status === 'running') {
-        emit({ time, type: 'run.start' }, agent, runId)
+        emit({ time, type: 'run.start' })
       } else if (RUN_END.has(payload.status)) {
-        const parser = parsers.get(runId)
-        if (parser) parser.flush(time).forEach((activity) => emit(activity, agent, runId))
+        const entry = parsers.get(runId)
+        if (entry) {
+          entry.parser.flush(time).forEach((activity) => emit(activity))
+          parsers.delete(runId)
+        }
         const ok = payload.status === 'succeeded'
-        emit({ time, type: 'run.end', ok, error: ok ? null : shorten(payload.error ?? payload.errorCode ?? payload.status, 120) }, agent, runId)
+        emit({ time, type: 'run.end', ok, error: ok ? null : shorten(payload.error ?? payload.errorCode ?? payload.status, 120) })
       }
     } else if (frame.type === 'heartbeat.run.log' && payload.stream === 'stdout') {
-      let parser = parsers.get(runId)
-      if (!parser) {
-        parser = createParser(agent, ctx)
-        parsers.set(runId, parser)
+      if (payload.seq !== undefined && payload.seq !== null) {
+        const seqKey = `${runId}:log:${payload.seq}`
+        if (seen.has(seqKey)) return []
+        seen.add(seqKey)
       }
-      parser.push(payload.chunk, Date.parse(payload.ts)).forEach((activity) => emit(activity, agent, runId))
+      let entry = parsers.get(runId)
+      if (!entry) {
+        entry = { parser: createParser(agent, ctx), agent, runId }
+        parsers.set(runId, entry)
+      }
+      const chunkTime = Date.parse(payload.ts ?? frame.createdAt)
+      lastRunTime.set(runId, chunkTime)
+      entry.parser.push(payload.chunk, chunkTime).forEach((activity) => emit(activity))
     } else if (frame.type === 'heartbeat.run.event' && payload.level === 'error') {
       const key = `${runId}:error:${payload.seq}`
-      if (seen.has(key)) continue
+      if (seen.has(key)) return []
       seen.add(key)
-      emit({ time, type: 'error', text: shorten(payload.message ?? 'error', 120) }, agent, runId)
+      lastRunTime.set(runId, time)
+      emit({ time, type: 'error', text: shorten(payload.message ?? 'error', 120) })
     }
+
+    return finalise(out)
   }
 
-  return out.sort((a, b) => a.time - b.time || a.order - b.order)
+  function flush() {
+    const out = []
+    for (const [runId, entry] of parsers) {
+      const time = lastRunTime.get(runId) ?? lastTime
+      entry.parser.flush(time).forEach((activity) => {
+        out.push({ ...activity, agent: entry.agent.key, runId, order: (order += 1) })
+      })
+    }
+    parsers.clear()
+    return finalise(out)
+  }
+
+  return { push, flush }
+}
+
+export function buildActivities(frames, { agents, tree }) {
+  const pipeline = createPipeline({ agents, tree })
+  const out = []
+  for (const frame of frames) {
+    out.push(...pipeline.push(frame))
+  }
+  out.push(...pipeline.flush())
+  return out
 }

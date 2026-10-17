@@ -1,12 +1,63 @@
 import { describe, expect, it } from 'vitest'
+import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadRecording } from './helpers.js'
 
 const recording = loadRecording()
-const { activities, agents, tree } = recording
+const { frames, activities, agents, tree } = recording
 
 describe('recorded run', () => {
+  it('produces the same activities when frames arrive one by one', () => {
+    const pipeline = createPipeline({ agents, tree })
+    const streamed = []
+    for (const frame of frames) {
+      streamed.push(...pipeline.push(frame))
+    }
+    streamed.push(...pipeline.flush())
+    expect(streamed).toEqual(buildActivities(frames, { agents, tree }))
+    expect(streamed).toEqual(activities)
+  })
+
+  it('keeps activity times non-decreasing when a frame arrives slightly out of order', () => {
+    const pipeline = createPipeline({ agents, tree })
+    const first = pipeline.push({
+      id: 1,
+      type: 'heartbeat.run.status',
+      createdAt: '2026-10-17T12:00:05.000Z',
+      payload: { runId: 'r1', agentId: agents[0].id, status: 'running' },
+    })
+    const second = pipeline.push({
+      id: 2,
+      type: 'heartbeat.run.queued',
+      createdAt: '2026-10-17T12:00:04.000Z',
+      payload: { runId: 'r2', agentId: agents[1].id },
+    })
+    expect(second[0].time).toBeGreaterThanOrEqual(first[0].time)
+  })
+
+  it('flushes buffered partial lines on flush', () => {
+    const claude = agents.find((a) => a.key === 'claude')
+    const pipeline = createPipeline({ agents, tree })
+    const line = JSON.stringify({
+      type: 'acpx.tool_call',
+      name: 'Read src\\math.js',
+      toolCallId: 't1',
+      tag: 'tool_call_update',
+    })
+    expect(
+      pipeline.push({
+        id: 10,
+        type: 'heartbeat.run.log',
+        createdAt: '2026-10-17T12:00:00.000Z',
+        payload: { runId: 'r-flush', agentId: claude.id, stream: 'stdout', seq: 1, ts: '2026-10-17T12:00:00.000Z', chunk: line },
+      })
+    ).toEqual([])
+    const flushed = pipeline.flush()
+    expect(flushed).toHaveLength(1)
+    expect(flushed[0]).toMatchObject({ type: 'tool.start', agent: 'claude', label: 'read src/math.js' })
+  })
+
   it('produces activities in time order', () => {
     for (let i = 1; i < activities.length; i++) {
       expect(activities[i].time).toBeGreaterThanOrEqual(activities[i - 1].time)
