@@ -143,6 +143,36 @@ Today OpenCode and AGY are driven by hand in their own windows, and their report
 - Argon and Gemini usage inside agy may not be visible to Paperclip's budgets. Check before trusting its budget meter.
 - Headless runs replace the interactive windows, so decide per task which one you want.
 
+## The assistant and the cost board
+
+A small floating terminal that is always with you. You type what you want to see or change ("what is agy doing", "costs", "terminal for hermes", "go to src/engine", "allow hermes to start subagents"), and it takes you there or opens the right panel. It is a router, not a coding agent. It never writes code and never reads file contents.
+
+How it decides, in order:
+
+1. **Rules first.** `src/assistant/intent.js` turns the text into one of 14 actions from a closed list (`src/assistant/actions.js`): focus an agent, its terminal, a folder or file, overview, follow, open a panel (dispatch, tasks, approvals, meters), open an issue, open an agent's settings (general, model, budget, subagents, keys), open the event log, replay controls, help, and three proposals. Rules are free and instant and cover the common requests. No model is called.
+2. **Names are resolved against the room.** An agent matches by name, key or the start of a word. A path matches by exact path, file name, folder name or part of a name. Two close matches become a question with buttons, never a guess.
+3. **Reads run at once, writes are proposals.** Dispatching a task, setting a budget and allowing subagents show a card that says what will happen, and nothing is sent until you click. A model can never skip this step, because the validator marks those three actions as needing a confirmation.
+4. **Keys never pass through the assistant.** If the text looks like a key or a password, the assistant stops, does not repeat it, does not send it anywhere, and opens the masked key form for the agent you named. The key goes from that form to Paperclip's secrets through the bridge (task A6).
+5. **A model only for unclear phrasing.** When the rules return `unknown` (with `fallback: true`), the viewer may ask a cheap model. `src/assistant/llm.js` builds a prompt with the agent names and the action shapes, no paths and no file contents, with keys removed. The reply must be one JSON object and goes through the same validator. A path comes back as words and is matched on our side, so the model cannot invent one. If the model is off or fails, the assistant says so and the plain commands keep working.
+
+Which model for step 5. It is a classification of one short sentence into a closed schema, so the smallest and cheapest model is enough, and speed matters more than skill.
+
+| Choice | Notes |
+| --- | --- |
+| `opencode/deepseek-v4.1-flash-free` through `opencode run` (recommended) | Free. Measured at 2.3 seconds from command to reply against the running OpenCode service. Needs the OpenCode CLI and its background service. |
+| `opencode/glm-5.3-flash-free`, `opencode/mimo-v2.6-flash-free`, `opencode/nemotron-3.5-lightning-free` | Other free ids from `opencode models`. Same route. Switch if one is slow or rate limited. |
+| `gemini-3.8-flash` at low effort through `agy --print` | Needs no API key, but counts against the agy quota and starts slower. |
+| `claude-haiku-5-5` | Paid or subscription. Reliable on JSON, but spends the same budget as the real work. |
+| None | The default for a public release until the owner enables a model. Rules only. |
+
+The model is a setting, not code. Do not send navigation through a Paperclip issue: a round trip through a heartbeat run took 24 to 35 seconds and leaves a task and a run behind.
+
+### Cost board
+
+Each harness reports usage differently. The rule is simple: show what is reported and say so when it is not. A harness that hides its usage shows "not reported" and is left out of totals. Nothing is estimated.
+
+The board is a panel floating in the 3D room, drawn like a terminal (CSS3D), near the core. It shows spend and tokens per agent from `GET /api/companies/:id/costs/by-agent`, the company budget from `costs/summary`, and the quota windows from `costs/quota-windows` (percent used and reset time, or the error when a provider cannot be read). Clicking an agent row flies the camera to that agent. The assistant opens it with "costs". It reads through the control client (`costs()`), so it works on the mock today.
+
 ## Order of work
 
 1. C0 and C1 first. They cost no credit and remove the hand-off pain.
@@ -150,3 +180,4 @@ Today OpenCode and AGY are driven by hand in their own windows, and their report
 3. C2 and C3 (control client and surface).
 4. C4 and C5 (policy, planner and orchestrator), tried first on tiny goals with the cheapest models.
 5. C6 (outcome log, then the decision model). Start the log as soon as C4 exists.
+6. A1 to A6 (assistant and cost board). A1 is done. A2 and A5 can start against the mock.

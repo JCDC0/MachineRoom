@@ -89,3 +89,19 @@ The daily loop and its limits are in `docs/agents/CONTROL-PLANE.md` under "Produ
 **W5. Talk to the planner (Claude, AGY).** A comment thread panel on each issue, posting through `POST /api/issues/:id/comments`. Evaluate Paperclip's board chat stream (`POST /api/board/chat/stream`, experimental, off) after that.
 
 **W6. Live status without polling (Claude).** Use the live-run routes (`/api/companies/:id/live-runs`, `/api/issues/:id/live-runs`) so the panels show which issue is running without reading the whole stream.
+
+## Roadmap: the assistant and the cost board
+
+The design is in `docs/agents/CONTROL-PLANE.md` under "The assistant and the cost board". The rule engine, the action list and the model reply parser exist and are tested.
+
+**A1. Intent rules and action list (Claude, done as 0.1.20).** `src/assistant/actions.js`, `intent.js` and `llm.js` with `tests/assistant.test.js`. Pure code, no DOM. `interpret(text, context)` returns `{ kind: action | propose | ask | unknown | blocked, action?, say, options? }` where `context` is `{ agents: [{ key, name }], paths: [...] }`. The only way to run an action is `validateAction`.
+
+**A2. Floating assistant terminal (AGY).** A React component `Assistant` for the HUD, in the style of the wall terminals. Props: `context` (as above), `onAction(action)`, and `ask(text)` (optional, async, returns the same result shape as `interpret`, used for the model fallback). It takes no key prop on purpose. Behaviour: opens with `/`, closes with Escape, draggable, remembers its position in `machineroom.settings`, history with the up arrow. Calls `interpret` on enter. For `action`, show the `say` line and call `onAction`. For `propose`, show a card with the `say` text and two buttons, and call `onAction` only on confirm. For `ask`, show the `options` as buttons that send the option's `text` back through `interpret`. For `blocked`, show the `say` line and open the masked key field if the result carries an `open_config` action with section `keys`. For `unknown`, call `ask` when given, otherwise show the help line. Never echo or store typed text that `containsSecret` flags. Use the mock for any data. Do not edit `src/engine` or `src/assistant`. Add a short test for any pure helper you write.
+
+**A3. Dispatcher (Claude).** `src/assistant/dispatch.js` maps each validated action to the room, the HUD and the control client: camera focus on an agent or folder, wall terminal focus, follow modes, panel tabs, issue and config views, replay controls, and the three confirmed writes through `client.createIssue`, `client.setAgentBudget` and the subagent setting.
+
+**A4. Model fallback route (OpenCode).** `POST /api/assistant` in the bridge, local pages only. Body `{ prompt }` with a length limit of 2000 characters. It runs `opencode run -m <model> --format json` with a timeout of 8 seconds and returns the model text. The model id comes from an env variable or the settings file and defaults to `opencode/deepseek-v4.1-flash-free`. When no model is set, answer `404` with a plain message. Never log the prompt. Test it with a fake runner.
+
+**A5. Cost board in the room (Claude).** A CSS3D panel floating near the core, fed by `client.costs()`. Per-agent spend and tokens, company budget, quota windows, and "not reported" for a harness that gives no numbers. Click an agent row to fly there. Also a plain HUD version for narrow windows.
+
+**A6. Key form and Paperclip secrets (AGY for the form, OpenCode for the bridge route).** A masked field per agent that sends the value only to a bridge route, which writes it to Paperclip's secrets and never returns or logs it. Needs C2. Check `PAPERCLIP-API.md` for the secrets routes first.
