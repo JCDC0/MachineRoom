@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- First run: a connect screen (bridge, Paperclip directly, demo, replay) opens on the first visit, remembers the choice and the replay speed, and comes back with a clear message when a live connection fails. A waiting overlay explains an empty or dropped live room. The start-up choice is a tested pure module.
+- Merged AGY's first-run components, settings module and README images.
 - Add `src/ui/brand.js`, `src/ui/settings.js` with `tests/settings.test.js`, `src/ui/Connect.jsx`, `src/ui/Waiting.jsx` and improved `src/ui/Notice.jsx` with retry support.
 - Add overview, close-up and connect screen screenshots under `docs/images/` and link them in `README.md`.
 - Folders float in 3D space at different heights and are joined by sagging strings. The layout is a fixed-pass relaxation, so it is deterministic, keeps tiles apart and out of the core, and a growing live tree keeps existing folders in place while tiles glide to new positions.

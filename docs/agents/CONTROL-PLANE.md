@@ -78,6 +78,29 @@ This needs real data. Expect it to be useful after about 100 logged runs, not be
 - The room shows the child as a new shape that splits off its parent along a string, with its own terminal.
 - Harness signals are unknown until S1 records them (see TASKS.md).
 
+## Product decision: fork or bundle
+
+Recommended, pending the owner's yes: ship MachineRoom as the one window in front of an unmodified Paperclip that it installs, pins and starts for you. Do not fork Paperclip now.
+
+Facts behind it:
+
+- Paperclip is MIT licensed (Copyright 2025 Paperclip AI), so a fork would be allowed.
+- Its UI is a separate static folder (`@paperclipai/server/ui-dist`, 18 MB) that the server serves. The server runs the same whether anyone opens that page or not. Stripping the UI saves nothing at run time. It only removes the admin screens that MachineRoom does not build: skills, secrets, connections, company settings, approvals detail.
+- Paperclip changes fast (the installed build is 2026.1012.0). A fork has to keep merging upstream to stay useful.
+- Server side additions have an official path: Paperclip's plugin system (out-of-process workers, host services, tool exposure, UI contributions).
+
+So: `machine-room up` (task W1) checks for a pinned Paperclip version, starts it and the bridge, and opens MachineRoom. You never open Paperclip's page except through a link for rare admin. Fork only if both hold: the plugin system cannot do something we need (for example enforcing routing inside the server), and keeping up with upstream is cheaper than the gap.
+
+## Using subscriptions and credits well
+
+Paperclip already reads subscription quota. `GET /api/companies/:id/costs/quota-windows` returned, for Anthropic over OAuth: the current session (percent used and reset time), the week for all models, and extra usage (not enabled). OpenAI's quota failed because the `codex` CLI is not installed. `GET /api/companies/:id/costs/window-spend` returns spend per provider for 5 hours, 24 hours and 7 days, but only in cents, so subscription runs show 0. Providers other than Anthropic give no quota percent.
+
+The routing policy should therefore use quota windows where they exist: avoid a provider above a chosen percent of its window, prefer the free or cheap tier for small tasks, and show the quota meters in the HUD (C3). For providers without a quota number, the policy falls back to our own token counts per window.
+
+## Large repositories
+
+Daily use on large repositories needs P3 (collapse and level of detail). Today, layout takes about 1.2 seconds for 1600 folders, and a live tree relays out each time it grows. Treat P3 as required before relying on MachineRoom for a big repository.
+
 ## Product shape: working in MachineRoom
 
 The goal is that you do your project work in MachineRoom, with Paperclip as the engine behind it. Paperclip is API first and can run without anyone opening its own web page, but it is not headless: it ships a full UI at its root address. MachineRoom does not replace that UI. It covers the daily loop and links to Paperclip's pages for rare admin work.

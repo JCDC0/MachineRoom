@@ -50,9 +50,9 @@ The goal is a public application that turns Paperclip into an overview room wher
 
 **P1. One command install (OpenCode).** `npx machine-room`: one process that serves the built viewer and the bridge on one port, with flags and env for the Paperclip URL, company and project folder, and no Vite or proxy needed. Add a `bin` entry and a test that packs the package and starts it.
 
-**P2. First run and polish (AGY).** A connect screen (Paperclip URL, company picker, demo link), clear empty and error states, remembered settings, a name, logo and favicon, and screenshots for the README.
+**P2. First run and polish (AGY, merged as 0.1.16 and wired in 0.1.17).** A connect screen (Paperclip URL, company picker, demo link), clear empty and error states, remembered settings, a name, logo and favicon, and screenshots for the README.
 
-**P3. Scale (Claude).** Collapse and level of detail for projects with thousands of folders, layout in a worker, reduced motion for the 3D scene.
+**P3. Scale (Claude).** Collapse and level of detail for projects with thousands of folders, layout in a worker, reduced motion for the 3D scene. Required before daily use on large repositories.
 
 **P4. Release decisions (the owner).** Licence, repository name and the trademark check on the names Paperclip and POI (use neither logo nor name of the show), whether `sprites.js` (copied from the graded portfolio) may be published or should be rewritten, CI (test and build), and a short security note (the bridge binds 127.0.0.1 and allows only local pages).
 
@@ -66,9 +66,9 @@ Design and rules are in `docs/agents/CONTROL-PLANE.md`. Paperclip already has hi
 
 **C2. Control client (OpenCode).** Bridge routes that pass hire, budget, dispatch (an issue with `assigneeAdapterOverrides`) and approval calls to Paperclip, local pages only, with tests against the fake Paperclip. Shapes are in `PAPERCLIP-API.md`.
 
-**C3. Control surface (AGY).** In the HUD: an agent builder form, a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters on the agent list and an approvals queue. Needs C2.
+**C3. Control surface (AGY).** In the HUD: an agent builder form, a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters on the agent list, quota meters from `/costs/quota-windows` (session and week percent, reset time) and an approvals queue. Needs C2.
 
-**C4. Routing policy, version 1 (Claude).** A pure module `src/policy/` with tests: task profile to tier, escalation, spend limits, and the policy file schema.
+**C4. Routing policy, version 1 (Claude).** A pure module `src/policy/` with tests: task profile to tier, escalation, spend limits, quota-aware choice (skip a provider above a set percent of its window), and the policy file schema.
 
 **C5. Planner and orchestrator agents (Claude).** Instruction bundles for both, hired through C2, first run on a tiny goal with the cheapest models and approvals on.
 

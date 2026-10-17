@@ -7,7 +7,10 @@ import { openStream, socketUrl } from './live/source.js'
 import { buildTimeline, createLogger, entriesUpTo } from './model/log.js'
 import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
+import { store } from './storage.js'
 import Hud from './ui/Hud.jsx'
+import { loadSettings, saveSettings } from './ui/settings.js'
+import Waiting from './ui/Waiting.jsx'
 
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
@@ -74,6 +77,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       },
     })
     roomRef.current = room
+    if (!live) {
+      const saved = loadSettings(store()).speed
+      if (SPEEDS.includes(saved)) player.setSpeed(saved)
+    }
     player.play()
     const timer = setInterval(() => setSnapshot(player.snapshot()), 120)
     const unsubscribe = player.subscribe(() => setSnapshot(player.snapshot()))
@@ -148,15 +155,20 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         player.seek(player.position - 5000)
       } else if (event.key === ']') {
         const index = SPEEDS.indexOf(player.speed)
-        player.setSpeed(SPEEDS[Math.min(SPEEDS.length - 1, index + 1)])
+        changeSpeed(SPEEDS[Math.min(SPEEDS.length - 1, index + 1)])
       } else if (event.key === '[') {
         const index = SPEEDS.indexOf(player.speed)
-        player.setSpeed(SPEEDS[Math.max(0, index - 1)])
+        changeSpeed(SPEEDS[Math.max(0, index - 1)])
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [data, player])
+
+  function changeSpeed(value) {
+    player.setSpeed(value)
+    saveSettings(store(), { speed: value })
+  }
 
   function focus(key) {
     setFollow(false)
@@ -169,6 +181,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     roomRef.current?.overview()
     setFocused(null)
   }
+
+  const idleSoFar = snapshot.agents.every((agent) => agent.runs === 0)
+  const linkTrouble = ['connecting', 'reconnecting', 'disconnected'].includes(snapshot.status)
+  const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
 
   return (
     <div className="surface" ref={surfaceRef}>
@@ -184,6 +200,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           Follow // {following}
         </div>
       )}
+      {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
       <Hud
         snapshot={snapshot}
         focused={focused}
@@ -196,7 +213,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         onMode={onMode}
         onToggle={() => player.toggle()}
         onSeek={(value) => player.seek(value)}
-        onSpeed={(value) => player.setSpeed(value)}
+        onSpeed={changeSpeed}
         onFocus={focus}
         onOverview={overview}
       />

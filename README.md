@@ -8,7 +8,7 @@ A 3D view of coding agents working on one project. Agents appear as wireframe sh
 
 ![Machine Room connect screen](docs/images/connect.png)
 
-By default it replays a recorded run of four agents (Claude Code, Hermes, OpenCode and agy) working through Paperclip. With Paperclip running, open `/?live` to follow your own agents as they work, or run `npm run bridge` (see `.env.example`) and open `/?live&bridge=http://127.0.0.1:5174`. Add `&simulate` to try live mode without Paperclip.
+The first time you open it, a connect screen lets you connect through the bridge (run `npm run bridge`, see `.env.example`), connect to Paperclip directly, watch a demo, or open a recorded replay of four agents (Claude Code, Hermes, OpenCode and agy). It remembers your connection and replay speed. Skip the screen with an address: `/?replay`, `/?live` (Paperclip through the dev proxy), `/?live&bridge=http://127.0.0.1:5174`, `/?live&simulate`, or `/?connect` to see the screen again.
 
 ```
 npm install

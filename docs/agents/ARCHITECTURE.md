@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.10. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.17. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -56,7 +56,9 @@ src/ui/           React HUD: agents, transport with run markers, event log, mode
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
 server/           the bridge: Paperclip frames, agent list and file tree for the browser
 src/Stage.jsx     wires player, room and HUD together
-src/App.jsx       loads the recording or the live source, shows loading, empty and error states
+src/App.jsx       chooses the first screen (connect, replay or live), loads the data, shows loading, empty and error states
+src/startup.js    pure: which screen to open from the address and the saved connection (tested)
+src/storage.js    safe access to localStorage
 public/fixtures/  the recorded run, agent list and file tree
 tests/            vitest
 ```
@@ -70,7 +72,7 @@ tests/            vitest
 
 ## Live mode
 
-Open the viewer while Paperclip runs. Three ways to connect:
+The first visit opens a connect screen (`src/ui/Connect.jsx`). The choice is saved in localStorage (`machineroom.settings`) with the replay speed, and the next visit reconnects by itself. A failed live connection returns to the connect screen with a message naming the address. While a live room has had no run yet, or the link is down, a waiting overlay (`Waiting.jsx`) says why. Addresses override the saved choice: `?connect` shows the screen, `?replay` opens the replay. Ways to connect:
 
 - `/?live` goes straight to Paperclip's WebSocket through the Vite proxy. Paperclip's REST endpoints refuse a cross-origin browser, so REST calls go through the proxy at `/paperclip`, which Vite forwards to `http://127.0.0.1:3100`. A production build has no proxy.
 - `/?live&bridge=http://127.0.0.1:5174` goes through the bridge (`npm run bridge`). The bridge holds the Paperclip socket, lists the agents, sends the project file list and pushes `tree` events when files appear. No proxy is needed.

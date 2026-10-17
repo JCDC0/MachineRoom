@@ -4,10 +4,13 @@ import { loadDemo } from './live/simulated.js'
 import { discover, loadTree } from './live/source.js'
 import { makeTree } from './model/paths.js'
 import { loadReplay } from './model/replay.js'
+import { PROXY_BASE, chooseRoute } from './startup.js'
+import { store } from './storage.js'
 import Stage from './Stage.jsx'
+import Connect from './ui/Connect.jsx'
 import Notice from './ui/Notice.jsx'
+import { SETTINGS_KEY, loadSettings, saveSettings } from './ui/settings.js'
 
-const PROXY_BASE = '/paperclip'
 
 async function loadSimulated(params) {
   const demo = await loadDemo()
@@ -22,81 +25,133 @@ async function loadBridge(params, url) {
   return { agents: found.agents, tree, activities: [], live: { bridge: url } }
 }
 
-async function loadLive(params) {
-  if (params.has('simulate')) return loadSimulated(params)
-  const bridge = params.get('bridge')
-  if (bridge) return loadBridge(params, bridge)
-  const base = params.get('paperclip') ?? PROXY_BASE
-  const found = await discover({ base, companyId: params.get('company'), root: params.get('root') })
+async function loadLive(connection, params) {
+  if (connection.source === 'demo') return loadSimulated(params)
+  if (connection.source === 'bridge') return loadBridge(params, connection.bridge)
+  const base = connection.paperclip || PROXY_BASE
+  const found = await discover({ base, companyId: connection.company || params.get('company'), root: params.get('root') })
   const treeUrl = params.get('tree')
   const listed = treeUrl ? await loadTree(treeUrl) : { files: [] }
   const tree = makeTree({ root: found.rootName, files: listed.files, created: [] })
   return { agents: found.agents, tree, activities: [], live: { base, companyId: found.companyId } }
 }
 
-function modeFromUrl() {
-  return new URLSearchParams(window.location.search).has('live') ? 'live' : 'replay'
+function hasSaved() {
+  try {
+    return store()?.getItem(SETTINGS_KEY) != null
+  } catch {
+    return false
+  }
+}
+
+function startRoute() {
+  const params = new URLSearchParams(window.location.search)
+  return chooseRoute(params, loadSettings(store()), hasSaved())
+}
+
+function describeFailure(error, connection) {
+  const where = connection.source === 'bridge' ? connection.bridge : connection.paperclip || PROXY_BASE
+  if (error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(error.message)) {
+    return `Could not reach ${where}. Check that it is running, then try again.`
+  }
+  return error.message
+}
+
+function syncUrl(mode) {
+  const params = new URLSearchParams(window.location.search)
+  if (mode === 'replay') params.set('replay', '')
+  else params.delete('replay')
+  params.delete('connect')
+  const query = params.toString().replace(/\b(replay|live)=(?=&|$)/g, '$1')
+  window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
 }
 
 export default function App() {
-  const [mode, setMode] = useState(modeFromUrl)
+  const [route, setRoute] = useState(startRoute)
   const [source, setSource] = useState({ status: 'loading' })
+  const [connectError, setConnectError] = useState(null)
+  const [attempt, setAttempt] = useState(0)
   const [liveAvailable, setLiveAvailable] = useState(false)
 
   useEffect(() => {
+    if (route.mode === 'connect') return undefined
     let current = true
+    setSource({ status: 'loading' })
     const params = new URLSearchParams(window.location.search)
-    const wanted = mode === 'live' ? loadLive(params) : loadReplay()
+    const wanted = route.mode === 'live' ? loadLive(route.connection, params) : loadReplay()
     wanted
       .then((data) => {
         if (current) setSource({ status: data.live || data.activities.length > 0 ? 'ready' : 'empty', data })
       })
       .catch((error) => {
-        if (current) setSource({ status: 'error', message: error.message })
+        if (!current) return
+        if (route.mode === 'live') {
+          setConnectError(describeFailure(error, route.connection))
+          setRoute((previous) => ({ ...previous, mode: 'connect' }))
+        } else {
+          setSource({ status: 'error', message: error.message })
+        }
       })
     return () => {
       current = false
     }
-  }, [mode])
+  }, [route, attempt])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.has('simulate')) {
+    const { connection } = route
+    if (connection.source === 'demo') {
       setLiveAvailable(true)
       return undefined
     }
     let current = true
-    probeLive({ base: params.get('paperclip') ?? PROXY_BASE, bridge: params.get('bridge') }).then((found) => {
-      if (current) setLiveAvailable(found)
+    Promise.all([
+      probeLive({ bridge: connection.bridge }),
+      probeLive({ base: connection.paperclip || PROXY_BASE }),
+    ]).then(([viaBridge, viaProxy]) => {
+      if (current) setLiveAvailable(viaBridge || viaProxy)
     })
     return () => {
       current = false
     }
+  }, [route.connection])
+
+  const connect = useCallback((settings) => {
+    saveSettings(store(), { source: settings.source, bridge: settings.bridge, paperclip: settings.paperclip, company: settings.company })
+    setConnectError(null)
+    setRoute((previous) => ({ mode: 'live', connection: { ...previous.connection, ...settings } }))
   }, [])
 
-  const switchMode = useCallback(
-    (next) => {
-      if (next === mode) return
-      const params = new URLSearchParams(window.location.search)
-      if (next === 'live') params.set('live', '')
-      else params.delete('live')
-      const query = params.toString().replace(/\blive=(?=&|$)/, 'live')
-      window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`)
-      setSource({ status: 'loading' })
-      setMode(next)
-    },
-    [mode]
-  )
+  const demo = useCallback(() => {
+    setConnectError(null)
+    setRoute((previous) => ({ mode: 'live', connection: { ...previous.connection, source: 'demo' } }))
+  }, [])
 
-  if (source.status === 'ready') return <Stage data={source.data} mode={mode} liveAvailable={liveAvailable} onMode={switchMode} />
-  const failedLive = source.status === 'error' && mode === 'live'
-  return (
-    <Notice status={source.status} message={source.message} title={failedLive ? 'Live mode failed to connect' : undefined}>
-      {failedLive && (
-        <button type="button" onClick={() => switchMode('replay')}>
-          Open the replay
-        </button>
-      )}
-    </Notice>
-  )
+  const replay = useCallback(() => {
+    setConnectError(null)
+    syncUrl('replay')
+    setRoute((previous) => ({ ...previous, mode: 'replay' }))
+  }, [])
+
+  const switchMode = useCallback((next) => {
+    syncUrl(next)
+    setConnectError(null)
+    setRoute((previous) => (previous.mode === next ? previous : { ...previous, mode: next }))
+  }, [])
+
+  if (route.mode === 'connect') {
+    const { source: choice, bridge, paperclip, company } = route.connection
+    return (
+      <Connect
+        initial={{ source: choice, bridge, paperclip, company }}
+        error={connectError}
+        onSubmit={connect}
+        onDemo={demo}
+        onReplay={replay}
+      />
+    )
+  }
+
+  if (source.status === 'ready') return <Stage data={source.data} mode={route.mode} liveAvailable={liveAvailable} onMode={switchMode} />
+  const failed = source.status === 'error'
+  return <Notice status={source.status} message={source.message} onRetry={failed ? () => setAttempt((count) => count + 1) : undefined} />
 }
