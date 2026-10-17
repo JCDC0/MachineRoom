@@ -116,4 +116,17 @@ Read from `GET /api/instance/settings/experimental`. Changing one changes the ow
 2. Worktrees (C0) need the flag `enableIsolatedWorkspaces`, a git project workspace and an issue preference of `isolated_workspace` with `workspaceStrategy.type: git_worktree`. The sandbox project today is a shared, non-git folder.
 3. Budgets cannot stop subscription runs. Pair budgets with turn and time limits, and read tokens from the cost routes for our own meters.
 4. The subagent depth limit may be able to ride on `requestDepth` (to confirm).
-5. Still to observe, with the owner's OK and one throwaway record each: the answer to a hire, to an issue create, and a full plan flow with the flag on.
+5. Still to observe, with the owner's OK and one throwaway record each: the answer to a hire and a full plan flow with the flag on. The project create and issue create answers were observed in the C0 test below.
+
+## Observed in the C0 test (2026-10-17)
+
+One throwaway project and one tiny issue, dispatched to the OpenCode Go agent with a model override. Nothing in the owner's other projects was touched.
+
+- `POST /api/companies/:id/projects` with `{ name, description, workspace: { name, sourceType: "git_repo", cwd, isPrimary: true } }` answered 201 with the project: `id, name, status, goals, executionWorkspacePolicy, codebase { workspaceId, localFolder, effectiveLocalFolder, origin }, workspaces[], primaryWorkspace`.
+- `POST /api/companies/:id/issues` with `{ title, description, assigneeAgentId, projectId, projectWorkspaceId, priority, status: "todo", assigneeAdapterOverrides }` answered 201 with the full issue (`id`, `identifier` such as `JC-18`, `status`, `assigneeAdapterOverrides` stored as sent).
+- Assigning the issue woke the agent at once (agent heartbeat is off, `wakeOnDemand` is on). The issue went `todo`, `in_progress`, `done` in 24 seconds.
+- The override worked: `assigneeAdapterOverrides.adapterConfig.model = "opencode/deepseek-v4.1-flash-free"`. The run's `usageJson` shows that model, `costUsd: 0`, 20 039 input tokens, 2 062 output tokens, 35 seconds. Model ids differ by plan: the free models are under `opencode/` (Zen), while `opencode-go/deepseek-v4.1-flash` is the paid one that failed earlier.
+- The agent edited the repo and committed in the project folder (shared workspace, so on the repo's own branch, with the owner's git identity).
+- The report comes back in three places: `resultJson.summary` on the run (`GET /api/heartbeat-runs/:id`), the issue comments (`GET /api/issues/:id/comments`, here two near-identical agent comments), and `GET /api/issues/:id/cost-summary`.
+- A run record is not linked to its issue by a top-level `issueId`. Use `contextSnapshot.issueId` (also `projectId`, `paperclipWorkspace`, `executionWorkspaceId`).
+- Run record fields with data: `usageJson` (`model, biller, provider, costUsd, costStatus, billingType, inputTokens, outputTokens, ...`), `resultJson` (`summary, stdout, stderr, stopReason, timeoutFired, effectiveTimeoutSec, ...`), `contextSnapshot`.
