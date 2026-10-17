@@ -6,6 +6,7 @@
 - Agents travel along the strings from folder to folder and hover above the exact file they touch, with a tether and a floating tag with the current command.
 - Follow mode on `F` now cycles wide, close up and off.
 - The overview camera centers on the bounding sphere of the room, so deep folders stay in view.
+- Fold the colour legend into the title block so the HUD clears the terminal wall at narrow widths, and align the event log columns.
 - The bridge restores truncated log frames from Paperclip's run log, so large tool calls are no longer lost in live mode. Frames keep their order and the restored chunk is replayed after a reconnect.
 - Merged OpenCode's bridge (`server/index.js`, `npm run bridge`) and `createPipeline`. The viewer's own copy is gone: `createPipeline` also carries `learn` and `context`.
 - Merged AGY's HUD: run markers, event log drawer on `L`, mode switch, help overlay on `?`, caret and glow on terminals.

@@ -77,18 +77,15 @@ export default function Hud({
 
   return (
     <div className="hud">
-      <div className="hud-top-left">
-        <header className="hud-title">
-          <h1>Machine Room</h1>
-          <p className="mono">{mode === 'live' ? 'LIVE' : 'REPLAY'} // {rootName}</p>
-        </header>
-
+      <header className="hud-title">
+        <h1>Machine Room</h1>
+        <p className="mono">{mode === 'live' ? 'LIVE' : 'REPLAY'} // {rootName}</p>
         <ul className="hud-legend mono" aria-label="Colour legend">
           <li className="is-white">activity</li>
           <li className="is-red">failure</li>
           <li className="is-yellow">finished</li>
         </ul>
-      </div>
+      </header>
 
       <div className="hud-top-right">
         <div className="hud-modes" role="group" aria-label="Mode">
