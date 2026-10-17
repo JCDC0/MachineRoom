@@ -66,7 +66,7 @@ Design and rules are in `docs/agents/CONTROL-PLANE.md`. Paperclip already has hi
 
 **C2. Control client (OpenCode).** Bridge routes that pass hire, budget, dispatch (an issue with `assigneeAdapterOverrides`) and approval calls to Paperclip, local pages only, with tests against the fake Paperclip. Shapes are in `PAPERCLIP-API.md`.
 
-**C3. Control surface (AGY).** In the HUD: an agent builder form, a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters on the agent list, quota meters from `/costs/quota-windows` (session and week percent, reset time) and an approvals queue. Needs C2.
+**C3. Control surface (AGY, starts now against the mock).** The contract is `docs/agents/CONTROL-CLIENT.md` and the mock is `src/control/mock.js`, so the panels do not wait for C2. In the HUD: an agent builder form, a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters on the agent list, quota meters from `/costs/quota-windows` (session and week percent, reset time) and an approvals queue. Needs C2.
 
 **C4. Routing policy, version 1 (Claude).** A pure module `src/policy/` with tests: task profile to tier, escalation, spend limits, quota-aware choice (skip a provider above a set percent of its window), and the policy file schema.
 

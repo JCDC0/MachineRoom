@@ -52,6 +52,7 @@ src/engine/       three.js scene, no React
   core.js           the Machine
   camera.js         orbit, zoom, focus, fit to the bounding sphere (pure fitDistance, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
+src/control/      the control client contract and its mock (see CONTROL-CLIENT.md)
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
 server/           the bridge: Paperclip frames, agent list and file tree for the browser

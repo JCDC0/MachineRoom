@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Control client contract (`docs/agents/CONTROL-CLIENT.md`) and a mock (`src/control/mock.js`) with tests, so the dispatch, thread, approvals and meter panels can be built before the real client exists. The demo and replay pass the mock to the HUD as `client`.
 - First run: a connect screen (bridge, Paperclip directly, demo, replay) opens on the first visit, remembers the choice and the replay speed, and comes back with a clear message when a live connection fails. A waiting overlay explains an empty or dropped live room. The start-up choice is a tested pure module.
 - Merged AGY's first-run components, settings module and README images.
 - Add `src/ui/brand.js`, `src/ui/settings.js` with `tests/settings.test.js`, `src/ui/Connect.jsx`, `src/ui/Waiting.jsx` and improved `src/ui/Notice.jsx` with retry support.

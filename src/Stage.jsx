@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createMockClient } from './control/mock.js'
 import { createRoom } from './engine/room.js'
 import { openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
@@ -44,6 +45,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (live) return createLivePlayer(handlers)
     return createPlayer({ ...handlers, activities: data.activities, onReset: (state) => roomRef.current?.reset(state) })
   }, [data, live])
+  const client = useMemo(() => (live && !live.simulated ? null : createMockClient()), [live])
   const [snapshot, setSnapshot] = useState(() => player.snapshot())
   const [focused, setFocused] = useState(null)
   const [following, setFollowing] = useState(false)
@@ -207,6 +209,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         speeds={SPEEDS}
         rootName={data.tree.rootName}
         mode={mode}
+        client={client}
         markers={timeline?.markers ?? NONE}
         log={log}
         liveAvailable={liveAvailable}
