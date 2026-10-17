@@ -77,7 +77,7 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
         </div>
         <h3 className="thread-title">{issue.title}</h3>
         <div className="thread-assignee">
-          Assignee: <strong>{assigneeName}</strong>
+          Assignee: <span className="thread-assignee-name">{assigneeName}</span>
         </div>
         {issue.description ? (
           <div className="thread-description">{issue.description}</div>
@@ -131,6 +131,7 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
             value={body}
             onChange={(event) => setBody(event.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={posting}
             placeholder="Write a comment. Press Ctrl+Enter to send."
           />
         </div>

@@ -102,7 +102,7 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
                     <div className="approval-summary">{item.summary}</div>
 
                     <div className="approval-requester">
-                      Requested by: <strong>{requesterName(item.requestedByAgentId)}</strong>
+                      Requested by: <span className="approval-requester-name">{requesterName(item.requestedByAgentId)}</span>
                     </div>
 
                     {item.justDecided ? (

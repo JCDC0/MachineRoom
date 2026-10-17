@@ -64,6 +64,12 @@ export default function Hud({
   }, [client])
 
   useEffect(() => {
+    if (controlOpen) {
+      setLogOpen(false)
+    }
+  }, [controlOpen])
+
+  useEffect(() => {
     function onKey(event) {
       if (event.target?.closest?.('input, textarea, select')) return
       if (event.ctrlKey || event.metaKey || event.altKey) return

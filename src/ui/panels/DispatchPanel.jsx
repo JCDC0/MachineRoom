@@ -70,11 +70,13 @@ export default function DispatchPanel({ client, onCreated }) {
       if (description.trim()) draft.description = description.trim()
       if (priority) draft.priority = priority
       if (model) draft.model = model
-      if (maxTurnsPerRun !== '' && !Number.isNaN(Number(maxTurnsPerRun))) {
-        draft.maxTurnsPerRun = Number(maxTurnsPerRun)
+      if (maxTurnsPerRun !== '') {
+        const turns = parseInt(maxTurnsPerRun, 10)
+        if (!Number.isNaN(turns) && turns > 0) draft.maxTurnsPerRun = turns
       }
-      if (timeoutSec !== '' && !Number.isNaN(Number(timeoutSec))) {
-        draft.timeoutSec = Number(timeoutSec)
+      if (timeoutSec !== '') {
+        const timeout = parseInt(timeoutSec, 10)
+        if (!Number.isNaN(timeout) && timeout > 0) draft.timeoutSec = timeout
       }
       if (subagentsAllowed) {
         draft.subagentsAllowed = true

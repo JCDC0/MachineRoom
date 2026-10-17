@@ -24,7 +24,7 @@ export default function ControlDrawer({ client, open, onClose }) {
       const pending = list.filter((a) => a.status === 'pending').length
       setPendingApprovalsCount(pending)
     } catch {
-      // Ignore initial badge count errors
+      setPendingApprovalsCount(0)
     }
   }, [client])
 
@@ -48,7 +48,7 @@ export default function ControlDrawer({ client, open, onClose }) {
 
   useEffect(() => {
     function onKeyDown(event) {
-      if (!open) return
+      if (!open || event.defaultPrevented) return
       if (event.key === 'Escape') {
         event.preventDefault()
         onClose?.()

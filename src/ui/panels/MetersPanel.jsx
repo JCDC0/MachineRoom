@@ -125,7 +125,8 @@ export default function MetersPanel({ client }) {
         <div className="meters-agents-list">
           {agents.map((agent) => {
             const isEditing = editingAgentId === agent.id
-            const spend = agent.spentMonthlyCents ?? 0
+            const agentCost = costs?.byAgent?.find((c) => c.agentId === agent.id)?.costCents
+            const spend = agentCost ?? agent.spentMonthlyCents ?? 0
             const budget = agent.budgetMonthlyCents ?? 0
             const pct = percentOf(spend, budget)
 
@@ -179,6 +180,7 @@ export default function MetersPanel({ client }) {
                             saveBudget(agent.id)
                           } else if (e.key === 'Escape') {
                             e.preventDefault()
+                            e.stopPropagation()
                             cancelEditing()
                           }
                         }}
@@ -245,7 +247,7 @@ export default function MetersPanel({ client }) {
                       <div key={w.label ?? index} className="quota-window-row">
                         <div className="quota-window-head">
                           <span className="quota-window-label">{w.label}</span>
-                          {hasPct && (
+                          {hasPct && w.resetsAt && (
                             <span className="quota-window-reset mono">
                               resets in {timeUntil(w.resetsAt)}
                             </span>
