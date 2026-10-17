@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { name } from './brand.js'
 import Transport from './Transport.jsx'
 
 const STATUS_TEXT = {
@@ -78,7 +79,7 @@ export default function Hud({
   return (
     <div className="hud">
       <header className="hud-title">
-        <h1>Machine Room</h1>
+        <h1>{name}</h1>
         <p className="mono">{mode === 'live' ? 'LIVE' : 'REPLAY'} // {rootName}</p>
         <ul className="hud-legend mono" aria-label="Colour legend">
           <li className="is-white">activity</li>

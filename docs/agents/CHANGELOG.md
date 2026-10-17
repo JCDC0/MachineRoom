@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add `src/ui/brand.js`, `src/ui/settings.js` with `tests/settings.test.js`, `src/ui/Connect.jsx`, `src/ui/Waiting.jsx` and improved `src/ui/Notice.jsx` with retry support.
+- Add overview, close-up and connect screen screenshots under `docs/images/` and link them in `README.md`.
 - Folders float in 3D space at different heights and are joined by sagging strings. The layout is a fixed-pass relaxation, so it is deterministic, keeps tiles apart and out of the core, and a growing live tree keeps existing folders in place while tiles glide to new positions.
 - Agents travel along the strings from folder to folder and hover above the exact file they touch, with a tether and a floating tag with the current command.
 - Follow mode on `F` now cycles wide, close up and off.
