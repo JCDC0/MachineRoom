@@ -9,10 +9,19 @@ export const CLIENT_METHODS = [
   'costs',
   'setAgentBudget',
   'models',
+  'subscribe',
 ]
 
 const DECISIONS = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
 const clone = (value) => JSON.parse(JSON.stringify(value))
+
+function overridesOf(draft) {
+  const overrides = {}
+  for (const key of ['model', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed']) {
+    if (draft[key] !== undefined && draft[key] !== null && draft[key] !== '') overrides[key] = draft[key]
+  }
+  return Object.keys(overrides).length ? overrides : null
+}
 
 function seed(at) {
   const iso = (minutesAgo) => new Date(at - minutesAgo * 60000).toISOString()
@@ -81,6 +90,11 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
   const failures = new Map()
   let issueCounter = 22
   let commentCounter = 3
+  const listeners = new Set()
+
+  function emit(event) {
+    for (const listener of [...listeners]) listener({ ...event })
+  }
 
   async function call(name, work) {
     await new Promise((resolve) => setTimeout(resolve, latencyMs))
@@ -114,10 +128,12 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
           priority: draft.priority ?? 'medium',
           assigneeAgentId: draft.assigneeAgentId,
           parentId: null,
+          overrides: overridesOf(draft),
           createdAt: stamp,
           updatedAt: stamp,
         }
         state.issues.unshift(issue)
+        emit({ topic: 'issues' })
         return issue
       }),
 
@@ -130,6 +146,7 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
         commentCounter += 1
         const comment = { id: `comment-${commentCounter}`, issueId, authorAgentId: null, authorName: 'You', body: body.trim(), createdAt: new Date(now()).toISOString() }
         state.comments[issueId] = [...(state.comments[issueId] ?? []), comment]
+        emit({ topic: 'comments', id: issueId })
         return comment
       }),
 
@@ -143,6 +160,7 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
         if (approval.status !== 'pending') throw new Error('That approval is already decided.')
         approval.status = DECISIONS[decision]
         if (note) approval.decisionNote = note
+        emit({ topic: 'approvals' })
         return approval
       }),
 
@@ -154,10 +172,19 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
         if (!agent) throw new Error('That agent no longer exists.')
         if (!Number.isInteger(budgetMonthlyCents) || budgetMonthlyCents < 0) throw new Error('The budget must be a whole number of cents, zero or more.')
         agent.budgetMonthlyCents = budgetMonthlyCents
+        emit({ topic: 'agents' })
+        emit({ topic: 'costs' })
         return agent
       }),
 
     models: () => call('models', () => state.models),
+
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+
+    emit,
 
     failNext(name, message = 'The request failed.') {
       failures.set(name, message)

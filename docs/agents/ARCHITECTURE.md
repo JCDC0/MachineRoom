@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.17. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.23. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -55,6 +55,7 @@ src/engine/       three.js scene, no React
 src/control/      the control client contract and its mock (see CONTROL-CLIENT.md)
 src/assistant/    request router: closed action list, rule based intent, key guard, model reply parser (pure, tested; see CONTROL-PLANE.md)
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
+  panels/           control drawer on `C`: dispatch, tasks and thread, approvals, meters (uses only the control client)
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
 server/           the bridge: Paperclip frames, agent list and file tree for the browser
 src/Stage.jsx     wires player, room and HUD together
@@ -159,4 +160,4 @@ Do not rename these classes without changing both sides.
 
 ## Open work
 
-See `docs/agents/TASKS.md`. The plan for the planner, orchestrator, budgets and routing is in `docs/agents/CONTROL-PLANE.md`.
+See `docs/agents/PLAN.md` for the order of work and `docs/agents/TASKS.md` for the briefs. The plan for the planner, orchestrator, budgets and routing is in `docs/agents/CONTROL-PLANE.md`.

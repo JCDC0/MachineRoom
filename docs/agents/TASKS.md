@@ -25,16 +25,14 @@ Three agents work on MachineRoom at the same time. Each one owns a set of paths 
 - OpenCode B1 to B4 (merged as 0.1.5): incremental pipeline, bridge server with agent mapping, tree, SSE with replay after `Last-Event-ID`, tree watcher, and tests against a fake Paperclip.
 - AGY F1 to F6 (merged as 0.1.7): HUD pass, run markers, event log drawer, terminal styling, mode switch and help overlay.
 - Claude (0.1.4 to 0.1.8): one shared pipeline, bridge client in the viewer, markers, log and mode switch wired, live transport, simulated feed, layout, follow mode and labels.
+- OpenCode B5 (merged as 0.1.21): four recorded scenarios under `public/fixtures/scenario-*`, `scripts/frames-from-runs.mjs` (rebuild frames from Paperclip's stored runs), renames and deletes count as writes. Findings are folded into P5 and P6 below.
+- AGY F7 (merged as 0.1.11) and Claude E1 (a real Paperclip run compared with the terminals, 0.1.8 to 0.1.9).
+- Claude A1 (0.1.20): the assistant core.
+- AGY C3a (merged as 0.1.22): the control drawer with dispatch, tasks, approvals and meters, running on the mock.
 
 ## Open work
 
-**B5. More recordings (OpenCode).** The Paperclip sandbox and the recorder are described in `docs/agents/RECORDING.md`. Record runs for: a failing test that the agent then fixes, an edit across three files, a file rename or delete, and a tool error. Add them under `public/fixtures/` through `npm run fixtures`, add parser tests that use them, and list any adapter behaviour the parsers get wrong. Do not edit parsers beyond what the new tests need.
-
 **B6. Late join replay (OpenCode).** A viewer that opens during a run sees only frames that arrive after it connects. Let `/events` send the kept history to a client that connects without `Last-Event-ID`, behind a `?history=1` query so the viewer can ask for it. Test it in `tests/bridge.test.js`. The pipeline already drops frames it has seen.
-
-**F7. Narrow windows (AGY).** At 1024 by 768 the left terminal sits under the title and legend. Move the legend into the right rail or fold it into the title block so the wall stays clear down to 1024 pixels wide. Do not touch `src/engine`.
-
-**E1. Real Paperclip run (Claude).** Run the bridge against a live Paperclip with real agents, not the fake, and compare the room with the terminals.
 
 **E2. Paperclip plugin page (Claude).** Check whether the viewer can ship as a page inside Paperclip instead of a separate app.
 
@@ -64,9 +62,9 @@ Design and rules are in `docs/agents/CONTROL-PLANE.md`. Paperclip already has hi
 
 **C1. Paperclip API audit (Claude, done).** Written up in `docs/agents/PAPERCLIP-API.md`. Open from it: the answers to a hire and an issue create, and a full plan flow, all need a throwaway write and the owner's OK.
 
-**C2. Control client (OpenCode).** Bridge routes that pass hire, budget, dispatch (an issue with `assigneeAdapterOverrides`) and approval calls to Paperclip, local pages only, with tests against the fake Paperclip. Shapes are in `PAPERCLIP-API.md`.
+**C2. Control client (OpenCode, first in the queue).** Make the contract in `CONTROL-CLIENT.md` real. Bridge routes that pass dispatch (an issue with `assigneeAdapterOverrides`), comments, approvals, budgets and costs to Paperclip, local pages only. Then `src/control/client.js`, a browser object with every method of the contract that calls those routes. `subscribe` is fed by the bridge's event stream: when a Paperclip frame touches a topic (run status, issue, comment, approval, cost), send a change notice for it. Write one contract test file that runs the same checks against the mock and against the real client over a fake Paperclip, so the two cannot drift apart. Hire and update an agent wait for C3c. Shapes are in `PAPERCLIP-API.md`. Done when `/?live&bridge=...` passes the real client to the HUD and the drawer shows the live agents and costs.
 
-**C3. Control surface (AGY, starts now against the mock).** The contract is `docs/agents/CONTROL-CLIENT.md` and the mock is `src/control/mock.js`, so the panels do not wait for C2. In the HUD: an agent builder form, a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters on the agent list, quota meters from `/costs/quota-windows` (session and week percent, reset time) and an approvals queue. Needs C2.
+**C3. Control surface (AGY, starts now against the mock).** The contract is `docs/agents/CONTROL-CLIENT.md` and the mock is `src/control/mock.js`, so the panels do not wait for C2. In the HUD: a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters, quota meters (session and week percent, reset time), an approvals queue and a task thread. These are merged as C3a (0.1.22). The agent builder form is C3d. Real data needs C2.
 
 **C4. Routing policy, version 1 (Claude).** A pure module `src/policy/` with tests: task profile to tier, escalation, spend limits, quota-aware choice (skip a provider above a set percent of its window), and the policy file schema.
 
@@ -105,3 +103,29 @@ The design is in `docs/agents/CONTROL-PLANE.md` under "The assistant and the cos
 **A5. Cost board in the room (Claude).** A CSS3D panel floating near the core, fed by `client.costs()`. Per-agent spend and tokens, company budget, quota windows, and "not reported" for a harness that gives no numbers. Click an agent row to fly there. Also a plain HUD version for narrow windows.
 
 **A6. Key form and Paperclip secrets (AGY for the form, OpenCode for the bridge route).** A masked field per agent that sends the value only to a bridge route, which writes it to Paperclip's secrets and never returns or logs it. Needs C2. Check `PAPERCLIP-API.md` for the secrets routes first.
+
+## Roadmap: the next plan
+
+The order and the milestones are in `docs/agents/PLAN.md`. These are the briefs it names that are not written elsewhere in this file.
+
+**C3b. Change notices in the panels (AGY).** `client.subscribe(listener)` is in the contract (`CONTROL-CLIENT.md`, "Change notices") and in the mock. In each panel, subscribe on mount and fetch again for the topics it shows (tasks: `issues`; a thread: `comments` with its issue id; approvals: `approvals`, including the pending count on the tab; meters: `agents` and `costs`; dispatch: `agents`). Unsubscribe on unmount. Keep the Refresh buttons. The mock now sends a notice after each of its own writes, so the drawer should update without a click. Test the pure parts. Do not edit `src/control`, `src/engine` or `src/assistant`.
+
+**C3c. Contract: hire and update an agent (Claude).** Add `hireAgent(draft)` and `updateAgent(id, patch)` to the contract and the mock, from `PAPERCLIP-API.md` (`POST /api/companies/:id/agent-hires` and the agent patch routes). A hire can wait for an approval, so it returns `{ agent, approval }`. Draft fields: name, adapter, model, reasoning effort, turn and time limits, monthly budget, subagents allowed, instructions.
+
+**C3d. Agent builder form (AGY, after C3c).** A form in the control drawer: name, harness, model from `models()` grouped by tier, reasoning effort, limits, monthly budget, subagents allowed, instructions. It says when a hire waits for approval. This is where "hire Hermes on DeepSeek V4.1 Flash" happens once C2 is real.
+
+**T1. Load a brief into the dispatch form (OpenCode for the route, AGY for the panel).** The bridge lists the briefs in `docs/agents/TASKS.md` (the format `**ID. Title (Owner).** text`) at `GET /api/briefs`, read only, local pages only. The dispatch panel gets a "Load a brief" menu that fills the title, description and assignee (the owner named in the brief, matched through the agent list). This replaces pasting briefs by hand. Tests with a sample file.
+
+**U1. Paperclip route list and doctor (OpenCode).** `server/surface.js` lists every Paperclip route the bridge calls, with the fields it reads. `npm run doctor` fetches `/api/openapi.json` from the running Paperclip, compares it with the list, and prints in plain words each route that is missing or changed. Test with a fake whose spec drops a route.
+
+**U2. Health fields and the unreadable counter (OpenCode for the bridge, AGY for the chip).** `/api/health` also returns `paperclipVersion`, `surface` (ok, or the routes that changed) and `unparsed` (chunks from a known adapter that no parser could read). The HUD shows a chip when something is not ok and says which feature is off.
+
+**U3. Candidate beside stable (Claude).** A runbook and a script that start a candidate bridge and viewer from a worktree on other ports (stable 5174, candidate 5175), and the promote steps for the supervisor (W1).
+
+**P5. Recover cut and redacted tool lines (OpenCode).** Every OpenCode Go run loses one to three calls because Paperclip's `***REDACTED***` masking breaks the stored JSON line. Recover the tool name and path from a broken line with a narrow pattern, and count what cannot be recovered (feeds U2). Tests from the scenario fixtures. Also map the Hermes `grep` to the `search` kind.
+
+**P6. Message text is not a file touch (OpenCode).** `git commit -m "..."`, `curl -d '...'` and similar must not touch files that are named only inside the message. A quoted path that is an argument (`cat "src/math.js"`) still counts. Tests from scenario C.
+
+**H1. Hermes on DeepSeek V4.1 Flash (the owner).** Set the model in Hermes, using an id that Hermes itself lists. See `PLAN.md`.
+
+**G1 to G6. Publish to GitHub.** History audit (Claude), licence and names (the owner), README (Claude, Hermes drafts), fresh screenshots (AGY), CI (OpenCode), private repository then public (the owner). Details in `PLAN.md`.

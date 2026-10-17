@@ -98,6 +98,50 @@ describe('mock control client', () => {
     await expect(client.agents()).resolves.toBeTruthy()
   })
 
+  it('keeps the dispatch overrides on the issue and drops empty ones', async () => {
+    const client = fast()
+    const withLimits = await client.createIssue({ title: 'A', assigneeAgentId: 'agent-opencode', model: 'opencode/deepseek-v4.1-flash-free', maxTurnsPerRun: 8, timeoutSec: 300, subagentsAllowed: false })
+    expect(withLimits.overrides).toEqual({ model: 'opencode/deepseek-v4.1-flash-free', maxTurnsPerRun: 8, timeoutSec: 300, subagentsAllowed: false })
+    const plain = await client.createIssue({ title: 'B', assigneeAgentId: 'agent-opencode', model: '' })
+    expect(plain.overrides).toBeNull()
+  })
+
+  it('tells subscribers what changed after a write', async () => {
+    const client = fast()
+    const seen = []
+    const stop = client.subscribe((event) => seen.push(event))
+    await client.createIssue({ title: 'C', assigneeAgentId: 'agent-agy' })
+    await client.postComment('issue-18', 'Thanks.')
+    await client.decideApproval('approval-1', 'approve')
+    await client.setAgentBudget('agent-claude', 100)
+    expect(seen).toEqual([
+      { topic: 'issues' },
+      { topic: 'comments', id: 'issue-18' },
+      { topic: 'approvals' },
+      { topic: 'agents' },
+      { topic: 'costs' },
+    ])
+    stop()
+    await client.createIssue({ title: 'D', assigneeAgentId: 'agent-agy' })
+    expect(seen).toHaveLength(5)
+  })
+
+  it('does not tell subscribers about a write that failed', async () => {
+    const client = fast()
+    const seen = []
+    client.subscribe((event) => seen.push(event))
+    await expect(client.createIssue({ title: ' ', assigneeAgentId: 'agent-agy' })).rejects.toThrow()
+    expect(seen).toEqual([])
+  })
+
+  it('lets a test send a change by hand', () => {
+    const client = fast()
+    const seen = []
+    client.subscribe((event) => seen.push(event))
+    client.emit({ topic: 'agents' })
+    expect(seen).toEqual([{ topic: 'agents' }])
+  })
+
   it('hands out copies, so a panel cannot change the stored data', async () => {
     const client = fast()
     const agents = await client.agents()

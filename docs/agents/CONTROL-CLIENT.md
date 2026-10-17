@@ -18,13 +18,15 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `costs()` | `Costs` |
 | `setAgentBudget(agentId, budgetMonthlyCents)` | `Agent` |
 | `models()` | `ModelOption[]` |
+| `subscribe(listener)` | an `unsubscribe` function (not async) |
 
 ## Shapes
 
 ```
 Agent        { id, key, name, adapterType, role, status, model: string|null, budgetMonthlyCents, spentMonthlyCents }
              status: idle | running | paused | error | pending_approval
-Issue        { id, identifier ("JC-18"), title, description, status, priority, assigneeAgentId: string|null, parentId: string|null, createdAt, updatedAt }
+Issue        { id, identifier ("JC-18"), title, description, status, priority, assigneeAgentId: string|null, parentId: string|null,
+               overrides: { model?, maxTurnsPerRun?, timeoutSec?, subagentsAllowed? } | null, createdAt, updatedAt }
              status: backlog | todo | in_progress | in_review | done | blocked | cancelled
              priority: critical | high | medium | low
 IssueDraft   { title, description?, assigneeAgentId, priority?, model?, maxTurnsPerRun?, timeoutSec?, subagentsAllowed? }
@@ -37,9 +39,14 @@ Costs        { summary: { spendCents, budgetCents, utilizationPercent },
                byAgent: [{ agentId, agentName, costCents, inputTokens, outputTokens }],
                quota: [{ provider, ok, error?, windows: [{ label, usedPercent: number|null, resetsAt: string|null, detail: string|null }] }] }
 ModelOption  { id, label, harness, tier: small | medium | large, free: boolean }
+ChangeEvent  { topic: agents | issues | comments | approvals | costs, id?: string }   (id is the issue id for comments)
 ```
 
 Times are ISO strings. Money is whole cents. A budget of `0` means no budget is set. A quota window with `usedPercent: null` has no number (show its `detail`). A quota provider with `ok: false` could not be read (show `error`).
+
+## Change notices
+
+`subscribe(listener)` tells a panel that data it may hold is out of date, so it can fetch again without a Refresh button. The listener gets a change event and no data. A panel fetches again only for the topics it shows. The real client sends one when the bridge reports a Paperclip event that touches that topic (a run changes status, an issue or comment is added, an approval is decided, a cost is booked), and may send a topic more than once. The mock sends one after each of its own writes, and `client.emit({ topic })` sends one by hand for tests.
 
 ## Notes for panel authors
 

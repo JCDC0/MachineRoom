@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Next plan (`docs/agents/PLAN.md`): milestones M1 to M4, the order of work for OpenCode, AGY and Claude, rules for staying current while Paperclip changes by itself, rules for MachineRoom building on itself, and the steps to publish on GitHub.
+- The control client contract gains `subscribe` (change notices) and an `overrides` field on issues. The mock sends a notice after each write and keeps the dispatch limits on the issue.
+- Merged OpenCode's four recorded scenarios and the stored-run frame tool, and AGY's control drawer (dispatch, tasks, approvals, meters on the mock). Removed a debug line that put the client on `window`.
 - Assistant core (`src/assistant/`): a closed list of 14 actions with a validator, rule based intent with agent and path resolution, a guard that stops keys before they go anywhere, and a parser for a cheap fallback model. Tests in `tests/assistant.test.js`. The plan and the cost board are in `docs/agents/CONTROL-PLANE.md` and tasks A1 to A6.
 - Fix keyboard handling, agent spend mapping, and typography in the control drawer panels.
 - Control drawer with dispatch form, tasks list and thread, approvals queue and spend and quota meters against the control client.

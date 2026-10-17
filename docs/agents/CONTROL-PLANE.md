@@ -173,7 +173,19 @@ Each harness reports usage differently. The rule is simple: show what is reporte
 
 The board is a panel floating in the 3D room, drawn like a terminal (CSS3D), near the core. It shows spend and tokens per agent from `GET /api/companies/:id/costs/by-agent`, the company budget from `costs/summary`, and the quota windows from `costs/quota-windows` (percent used and reset time, or the error when a provider cannot be read). Clicking an agent row flies the camera to that agent. The assistant opens it with "costs". It reads through the control client (`costs()`), so it works on the mock today.
 
+### Protected files
+
+A diff that touches one of these gets a mark in the review panel (W3) and needs a second click to merge. Agents may still change them on a branch.
+
+- `server/` host and origin checks, and any route that reads or writes Paperclip secrets.
+- `src/assistant/intent.js` (`containsSecret`, `redact`) and `src/assistant/actions.js` (`CONFIRMED`, `validateAction`).
+- Anything that reads, stores or prints an API key, and `.env.example`.
+- Anything that starts a process or runs a command.
+- `.gitignore`, `package.json` scripts, and any CI file.
+
 ## Order of work
+
+The current order, with milestones, is in `docs/agents/PLAN.md`. This list is the first version.
 
 1. C0 and C1 first. They cost no credit and remove the hand-off pain.
 2. S1 to S3 (subagents) and P1 to P2 (install and polish) run alongside.
