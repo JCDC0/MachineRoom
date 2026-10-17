@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.0. A browser viewer that shows coding agents working on one project as a 3D machine room. The first mode replays a recorded run. A later mode will follow a live Paperclip instance.
+Version 0.1.0. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -48,8 +48,9 @@ src/engine/       three.js scene, no React
   camera.js         orbit, zoom, focus
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/ui/           React HUD
+src/live/         live mode: agent discovery, socket, incremental pipeline, live player
 src/Stage.jsx     wires player, room and HUD together
-src/App.jsx       loads the recording, shows loading, empty and error states
+src/App.jsx       loads the recording or the live source, shows loading, empty and error states
 public/fixtures/  the recorded run, agent list and file tree
 tests/            vitest
 ```
@@ -60,6 +61,17 @@ tests/            vitest
 2. `pipeline.js` turns frames into activities. `heartbeat.run.log` carries raw agent output in `payload.chunk`; the parser for that agent turns it into tool calls.
 3. `state.js` applies each activity to a mutable room state. `player.js` owns the clock and calls `onActivity` for each applied activity and `onReset` after a seek.
 4. `room.js` reads the state every frame and reacts to activities with short animations (pulses, flashes, folder opening). Animations run on wall time. State changes run on replay time.
+
+## Live mode
+
+Open `http://localhost:5173/?live` while Paperclip runs. The viewer follows the agents of the first Paperclip company.
+
+- The browser opens Paperclip's WebSocket directly (through the Vite proxy). Paperclip's REST endpoints refuse a cross-origin browser, so REST calls go through the proxy at `/paperclip`, which Vite forwards to `http://127.0.0.1:3100`. A production build has no proxy.
+- Query parameters: `company` (company id), `root` (project folder name, default the folder name of the first agent's working directory), `tree` (base URL of a bridge that answers `/api/tree`, to start with the full file list), `paperclip` (another Paperclip base URL).
+- Without `tree`, the room starts empty. A file or folder appears when an agent first touches it, and the scene rebuilds its layout each time the file list grows.
+- Late join: only frames that arrive after the page connects are shown. An agent already mid-run appears as working from its next tool call.
+
+Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/incremental.js` (frame by frame pipeline, tested equal to the batch one), `src/live/livePlayer.js` (same interface as the replay player).
 
 ## Activity schema
 
@@ -113,7 +125,9 @@ Do not rename these classes without changing both sides.
 - The folder layout is a radial tree. Many folders at one level will crowd each other.
 - Hermes read lines carry only a file name. A name shared by two files cannot be resolved.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
-- Only a recorded run is wired in. The live mode is in `TASKS.md`.
+- In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
+- Live mode needs the dev server, because of the proxy. A bridge with `/api/tree` is still open work in `TASKS.md`.
+- The terminal wall holds five terminals per row and adds rows above for more agents.
 
 ## Open work
 

@@ -12,6 +12,15 @@ const FRONT = Math.PI / 2
 const BACK = (Math.PI * 3) / 2
 const BACK_GAP = 1.1
 
+export function treeFromState(state, rootName) {
+  return {
+    rootName,
+    files: [...state.files.keys()].sort(),
+    dirs: [...state.dirs.keys()].sort(),
+    created: [],
+  }
+}
+
 export function layoutTree(tree) {
   const nodes = new Map()
 

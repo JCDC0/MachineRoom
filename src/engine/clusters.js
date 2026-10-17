@@ -182,5 +182,22 @@ export function createClusters(scene, layout) {
     }
   }
 
-  return { clusters, center, slotPosition, open, flashFile, flashCluster, sync, update }
+  function dispose() {
+    for (const cluster of clusters.values()) {
+      scene.remove(cluster.group)
+      if (cluster.mesh) {
+        cluster.mesh.dispose()
+        cluster.mesh.material.dispose()
+        cluster.outline.geometry.dispose()
+        cluster.outline.material.dispose()
+      }
+      cluster.frame.geometry.dispose()
+      cluster.frame.material.dispose()
+      cluster.label.material.map?.dispose()
+      cluster.label.material.dispose()
+    }
+    clusters.clear()
+  }
+
+  return { clusters, center, slotPosition, open, flashFile, flashCluster, sync, update, dispose }
 }

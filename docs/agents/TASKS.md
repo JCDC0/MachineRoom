@@ -34,9 +34,9 @@ Do B1 to B4 in order. B5 is optional.
 - `GET /api/health` returns `{ ok, paperclip }` where `paperclip` says whether the upstream socket is open.
 - `GET /api/agents` reads `PAPERCLIP_URL/api/companies/:id/agents` and returns `[{ id, key, name, adapterType, parser }]`. `parser` is `claude` for `claude_local`, `hermes` for `hermes_local`, `opencode` for `opencode_local`. For `process` match the agent name (`agy`). Anything else gets a slug of its name and no parser.
 - `GET /api/tree` returns `{ root, files, created: [] }`. `root` is the folder name of `PROJECT_ROOT`. `files` come from `git ls-files --cached --others --exclude-standard` run in `PROJECT_ROOT`, sorted, with `/` separators. If it is not a git repo, walk the folder and skip `.git`, `node_modules`, `dist`.
-- `GET /events` is Server-Sent Events. Send every Paperclip frame for the company as `event: frame` with the frame JSON as `data`. Give each an `id`. Keep the last 500 frames and replay those after `Last-Event-ID`. Send a comment line every 15 seconds.
+- `GET /events` is Server-Sent Events. Send every Paperclip frame for the company as `event: frame` with the frame JSON as `data`. Give each an `id`. Keep the last 500 frames and replay those after `Last-Event-ID`. Send a comment line every 15 seconds. The viewer does not use this yet (it opens Paperclip's WebSocket through its dev proxy), so build `/api/tree` and the watcher first and `/events` after them.
 - Connect to `ws://PAPERCLIP_URL/api/companies/:id/events/ws`. Reconnect with a delay that grows from 1 to 15 seconds.
-- Bind to `127.0.0.1` only. Allow CORS only for `http://localhost:5173`. Do not log frame bodies.
+- Bind to `127.0.0.1` only. Allow CORS only for origins on `localhost` or `127.0.0.1` on any port (the viewer runs on 5173 or 5180). Do not log frame bodies. The viewer reads the file list with `/?live&tree=http://127.0.0.1:5174`, so `/api/tree` must answer that cross-origin request.
 
 **B3. Tree watcher.** Watch `PROJECT_ROOT` with `fs.watch` (recursive), debounce 300 ms, ignore `.git` and `node_modules`. When the file list changes, send `event: tree` on `/events` with `{ root, files }`.
 

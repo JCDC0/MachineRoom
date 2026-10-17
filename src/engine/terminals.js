@@ -5,6 +5,8 @@ const VISIBLE_LINES = 7
 const SCALE = 2.6
 const TYPE_RATE = 0.075
 const WALL_SPACING = 880
+const WALL_COLUMNS = 5
+const WALL_ROW_STEP = 520
 const WALL_HEIGHT = 1250
 const WALL_DEPTH = 100
 
@@ -23,7 +25,10 @@ export function createTerminals(cssScene, roster) {
 
     const object = new CSS3DObject(element)
     object.scale.setScalar(SCALE)
-    object.position.set((index - (roster.length - 1) / 2) * WALL_SPACING, WALL_HEIGHT, WALL_DEPTH)
+    const columns = Math.min(roster.length, WALL_COLUMNS)
+    const column = index % WALL_COLUMNS
+    const row = Math.floor(index / WALL_COLUMNS)
+    object.position.set((column - (columns - 1) / 2) * WALL_SPACING, WALL_HEIGHT + row * WALL_ROW_STEP, WALL_DEPTH)
     cssScene.add(object)
 
     terminals.set(agent.key, {

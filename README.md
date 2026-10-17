@@ -2,7 +2,7 @@
 
 A 3D view of coding agents working on one project. Agents appear as wireframe shapes around a core. Each has a terminal on a wall above the room. When an agent reads or writes, the folders on the floor open one after another and the files light up. White is activity, red is failure, yellow is finished work.
 
-This version replays a recorded run of four agents (Claude Code, Hermes, OpenCode and agy) working through Paperclip. A live mode is planned.
+By default it replays a recorded run of four agents (Claude Code, Hermes, OpenCode and agy) working through Paperclip. With Paperclip running, open `/?live` to follow your own agents as they work.
 
 ```
 npm install

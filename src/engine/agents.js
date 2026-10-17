@@ -25,7 +25,7 @@ export function createAgents(scene, roster) {
 
   roster.forEach((agent, index) => {
     const group = new THREE.Group()
-    const geometry = (SHAPES[agent.key] ?? SHAPES.claude)()
+    const geometry = (SHAPES[agent.shape] ?? SHAPES.claude)()
     const shape = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), lineMaterial(WHITE, 0.3))
     const ring = new THREE.LineLoop(
       new THREE.BufferGeometry().setFromPoints(new THREE.EllipseCurve(0, 0, 135, 135).getPoints(64)),

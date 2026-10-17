@@ -5,14 +5,14 @@ import { createAgents } from './agents.js'
 import { createCameraRig } from './camera.js'
 import { createClusters } from './clusters.js'
 import { createCore } from './core.js'
-import { layoutTree } from './layout.js'
+import { layoutTree, treeFromState } from './layout.js'
 import { RED, WHITE, YELLOW, glowTexture, lineMaterial, seeded } from './sprites.js'
 import { createTerminals } from './terminals.js'
 
 const OPEN_STEP_MS = 170
 const ZERO = new THREE.Vector3()
 
-export function createRoom({ surface, gl, css, tree, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
+export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
   const texture = glowTexture()
   const scene = new THREE.Scene()
   scene.background = new THREE.Color(0x000000)
@@ -43,16 +43,34 @@ export function createRoom({ surface, gl, css, tree, agents, getState, beforeFra
   )
   scene.add(dust)
 
-  const layout = layoutTree(tree)
   const core = createCore(scene, texture)
-  const clusters = createClusters(scene, layout)
-  const roster = agents.map((agent) => ({ key: agent.key, name: agent.name }))
+  const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key }))
   const agentSet = createAgents(scene, roster)
   const terminals = createTerminals(cssScene, roster)
 
-  const linkPoints = [ZERO.clone(), clusters.center('').clone()]
-  for (const link of layout.links) linkPoints.push(clusters.center(link.from).clone(), clusters.center(link.to).clone())
-  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(linkPoints), lineMaterial(WHITE, 0.12)))
+  let clusters = null
+  let links = null
+  const known = { files: -1, dirs: -1 }
+
+  function build(state) {
+    if (clusters) clusters.dispose()
+    if (links) {
+      scene.remove(links)
+      links.geometry.dispose()
+      links.material.dispose()
+    }
+    const layout = layoutTree(treeFromState(state, rootName))
+    clusters = createClusters(scene, layout)
+    const points = [ZERO.clone(), clusters.center('').clone()]
+    for (const link of layout.links) points.push(clusters.center(link.from).clone(), clusters.center(link.to).clone())
+    links = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), lineMaterial(WHITE, 0.12))
+    scene.add(links)
+    known.files = state.files.size
+    known.dirs = state.dirs.size
+    clusters.sync(state)
+  }
+
+  const grown = (state) => state.files.size !== known.files || state.dirs.size !== known.dirs
 
   const pulses = Array.from({ length: 32 }, () => {
     const sprite = new THREE.Sprite(
@@ -119,7 +137,8 @@ export function createRoom({ surface, gl, css, tree, agents, getState, beforeFra
       pulse.active = false
       pulse.sprite.material.opacity = 0
     })
-    clusters.sync(state)
+    if (grown(state)) build(state)
+    else clusters.sync(state)
     agentSet.snap(state, anchorFor)
   }
 
@@ -185,6 +204,7 @@ export function createRoom({ surface, gl, css, tree, agents, getState, beforeFra
     runQueue(now)
 
     const state = getState()
+    if (grown(state)) build(state)
     core.update(now / 1000, delta)
     clusters.update(state, delta)
     agentSet.update(state, delta, now, anchorFor, terminals.positionOf)
@@ -231,6 +251,7 @@ export function createRoom({ surface, gl, css, tree, agents, getState, beforeFra
       observer.disconnect()
       rig.dispose()
       terminals.dispose()
+      clusters.dispose()
       renderer.dispose()
       gl.removeChild(renderer.domElement)
       css.removeChild(cssRenderer.domElement)

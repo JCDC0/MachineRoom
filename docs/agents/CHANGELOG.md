@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Live mode: the viewer follows a running Paperclip over its WebSocket, with agent discovery, reconnect, an incremental pipeline and a live player. Open `/?live`.
+- The scene rebuilds its folders when the file list grows, so a live room can start empty.
+- Agents get their own key, so two agents with the same adapter no longer collide. Terminal wall gains rows.
+- Vite proxies `/paperclip` to Paperclip for REST calls.
+
 ## 0.1.0
 
 - Scaffold: Vite, React 19 and three.js, with vitest.
