@@ -9,6 +9,15 @@ export default function Transport({ snapshot, speeds, markers = [], onToggle, on
   const { position, duration, playing, speed } = snapshot
   const finished = position >= duration
 
+  if (snapshot.live) {
+    return (
+      <div className="transport is-live">
+        <span className="mono">Live feed</span>
+        <span className="mono">{clock(position)} since opening</span>
+      </div>
+    )
+  }
+
   return (
     <div className="transport">
       <button type="button" onClick={onToggle} aria-label={playing ? 'Pause replay' : 'Play replay'}>

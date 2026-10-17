@@ -49,6 +49,7 @@ export function createPlayer({ activities, tree, agents, idleCapMs = 4000, tailM
 
   return {
     duration,
+    stamps,
     get state() {
       return state
     },

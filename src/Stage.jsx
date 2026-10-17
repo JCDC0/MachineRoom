@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoom } from './engine/room.js'
-import { createPipeline } from './model/pipeline.js'
+import { openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
 import { openStream, socketUrl } from './live/source.js'
+import { buildTimeline, createLogger, entriesUpTo } from './model/log.js'
+import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
 import Hud from './ui/Hud.jsx'
 
 const SPEEDS = [1, 2, 4, 8]
+const NONE = []
+const LIVE_LOG_LIMIT = 200
 const BADGE = {
   position: 'fixed',
-  top: 112,
+  bottom: 96,
   right: 24,
   zIndex: 5,
   padding: '2px 8px',
@@ -22,7 +26,7 @@ const BADGE = {
   background: 'rgb(0 0 0 / 0.7)',
 }
 
-export default function Stage({ data }) {
+export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode }) {
   const surfaceRef = useRef(null)
   const glRef = useRef(null)
   const cssRef = useRef(null)
@@ -40,7 +44,13 @@ export default function Stage({ data }) {
   const [snapshot, setSnapshot] = useState(() => player.snapshot())
   const [focused, setFocused] = useState(null)
   const [following, setFollowing] = useState(false)
+  const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
+  const timeline = useMemo(() => (live ? null : buildTimeline(data.activities, player.stamps, data.agents)), [live, data, player])
+  const log = useMemo(
+    () => (timeline ? entriesUpTo(timeline.entries, snapshot.position) : liveLog),
+    [timeline, snapshot.position, liveLog]
+  )
 
   function setFollow(on) {
     followRef.current = on
@@ -78,20 +88,37 @@ export default function Stage({ data }) {
   useEffect(() => {
     if (!live) return undefined
     const pipeline = createPipeline({ agents: data.agents, tree: data.tree })
+    const entryFor = createLogger(data.agents)
     let known = player.state.files.size
+    const learned = () => {
+      if (player.state.files.size === known) return
+      known = player.state.files.size
+      pipeline.learn([...player.state.files.keys()])
+    }
     const handlers = {
       onStatus: (status) => player.setStatus(status),
       onFrame: (frame) => {
-        player.push(pipeline.push(frame))
-        if (player.state.files.size !== known) {
-          known = player.state.files.size
-          pipeline.learn([...player.state.files.keys()])
-        }
+        const activities = pipeline.push(frame)
+        player.push(activities)
+        learned()
+        const added = activities
+          .map((activity) => {
+            const entry = entryFor(activity)
+            return entry && { ...entry, time: new Date(activity.time).toLocaleTimeString('en-GB') }
+          })
+          .filter(Boolean)
+        if (added.length > 0) setLiveLog((previous) => [...previous, ...added].slice(-LIVE_LOG_LIMIT))
+      },
+      onTree: (tree) => {
+        player.addFiles(tree.files)
+        pipeline.learn(tree.files)
+        known = player.state.files.size
       },
     }
-    const link = live.simulated
-      ? openSimulated({ frames: live.frames, speed: live.speed, ...handlers })
-      : openStream({ url: socketUrl(live.base, live.companyId), ...handlers })
+    let link
+    if (live.simulated) link = openSimulated({ frames: live.frames, speed: live.speed, ...handlers })
+    else if (live.bridge) link = openBridge({ url: live.bridge, ...handlers })
+    else link = openStream({ url: socketUrl(live.base, live.companyId), ...handlers })
     return () => link.close()
   }, [data, live, player])
 
@@ -153,7 +180,7 @@ export default function Stage({ data }) {
         </div>
       )}
       {following && (
-        <div style={{ ...BADGE, top: live ? 142 : 112, color: 'var(--white)' }} role="status">
+        <div style={{ ...BADGE, bottom: live ? 128 : 96, color: 'var(--white)' }} role="status">
           Follow // on
         </div>
       )}
@@ -162,7 +189,11 @@ export default function Stage({ data }) {
         focused={focused}
         speeds={SPEEDS}
         rootName={data.tree.rootName}
-        mode={live ? 'live' : 'replay'}
+        mode={mode}
+        markers={timeline?.markers ?? NONE}
+        log={log}
+        liveAvailable={liveAvailable}
+        onMode={onMode}
         onToggle={() => player.toggle()}
         onSeek={(value) => player.seek(value)}
         onSpeed={(value) => player.setSpeed(value)}

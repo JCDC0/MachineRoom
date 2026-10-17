@@ -165,6 +165,25 @@ function makeTempDir() {
 }
 
 describe('live bridge', () => {
+  it('answers a viewer on any local port and refuses other sites', async () => {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', [])
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: dir, port: 0 })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    for (const origin of ['http://localhost:5180', 'http://127.0.0.1:4000', 'http://localhost']) {
+      const res = await fetch(`${url}/api/health`, { headers: { Origin: origin } })
+      expect(res.status).toBe(200)
+      expect(res.headers.get('access-control-allow-origin')).toBe(origin)
+    }
+    for (const origin of ['http://localhost.evil.com', 'https://example.com', 'http://127.0.0.1.evil.com:5173']) {
+      const res = await fetch(`${url}/api/health`, { headers: { Origin: origin } })
+      expect(res.status).toBe(403)
+    }
+  })
+
   it('maps Paperclip agents to viewer keys and parsers', async () => {
     const dir = makeTempDir()
     const fake = await startFakePaperclip('comp-1', [

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Merged OpenCode's bridge (`server/index.js`, `npm run bridge`) and `createPipeline`. The viewer's own copy is gone: `createPipeline` also carries `learn` and `context`.
+- Merged AGY's HUD: run markers, event log drawer on `L`, mode switch, help overlay on `?`, caret and glow on terminals.
+- Viewer connects through the bridge with `/?live&bridge=URL`, and adds files when the bridge reports them.
+- Replay and Live switch in the HUD without a page refresh. Live mode shows a feed clock instead of the scrubber.
+- Log lines and run markers come from `src/model/log.js`.
+- The bridge accepts any `localhost` or `127.0.0.1` page, not only port 5173.
 - Live mode: the viewer follows a running Paperclip over its WebSocket, with agent discovery, reconnect, an incremental pipeline and a live player. Open `/?live`.
 - The scene rebuilds its folders when the file list grows, so a live room can start empty.
 - Agents get their own key, so two agents with the same adapter no longer collide. Terminal wall gains rows.

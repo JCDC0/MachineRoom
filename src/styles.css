@@ -90,7 +90,7 @@ input:focus-visible {
   pointer-events: none;
   padding: calc(var(--space) * 2);
   display: grid;
-  grid-template-columns: 224px 1fr 224px;
+  grid-template-columns: 240px 1fr 240px;
   grid-template-rows: auto 1fr auto;
   gap: calc(var(--space) * 2);
 }
@@ -482,6 +482,11 @@ input:focus-visible {
   padding: var(--space) calc(var(--space) * 2);
   background: rgb(0 0 0 / 0.82);
   border: 1px solid var(--line);
+}
+
+.transport.is-live {
+  display: flex;
+  justify-content: space-between;
 }
 
 .transport > button {

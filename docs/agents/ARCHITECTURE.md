@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.0. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.8. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -19,6 +19,7 @@ Version 0.1.0. A browser viewer that shows coding agents working on one project 
 ```
 npm install
 npm run dev        http://localhost:5173
+npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
 npm test           vitest, node environment, no browser needed
 npm run build
 npm run fixtures -- <raw-events.jsonl> <sandbox-folder> <ids.json>
@@ -33,7 +34,8 @@ src/model/        pure logic, no DOM, fully tested
   paths.js          path cleanup, ancestors, tree builder
   commands.js       files and folders a shell command touches
   parsers/          one parser per agent type (claude, hermes, opencode, agy)
-  pipeline.js       Paperclip frames -> activities (batch)
+  pipeline.js       Paperclip frames -> activities (createPipeline for streams, buildActivities for a batch)
+  log.js            activities -> event log lines and run markers
   state.js          activities -> room state (agents, files, folders)
   player.js         replay clock, seek, speed, idle compression
   source.js         parse and prepare a recording
@@ -48,8 +50,9 @@ src/engine/       three.js scene, no React
   core.js           the Machine
   camera.js         orbit, zoom, focus, fit to the room (pure fitDistance, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
-src/ui/           React HUD
-src/live/         live mode: agent discovery, socket, incremental pipeline, live player, simulated feed
+src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
+src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
+server/           the bridge: Paperclip frames, agent list and file tree for the browser
 src/Stage.jsx     wires player, room and HUD together
 src/App.jsx       loads the recording or the live source, shows loading, empty and error states
 public/fixtures/  the recorded run, agent list and file tree
@@ -65,21 +68,27 @@ tests/            vitest
 
 ## Live mode
 
-Open `http://localhost:5173/?live` while Paperclip runs. The viewer follows the agents of the first Paperclip company.
+Open the viewer while Paperclip runs. Three ways to connect:
 
-- The browser opens Paperclip's WebSocket directly (through the Vite proxy). Paperclip's REST endpoints refuse a cross-origin browser, so REST calls go through the proxy at `/paperclip`, which Vite forwards to `http://127.0.0.1:3100`. A production build has no proxy.
-- Query parameters: `company` (company id), `root` (project folder name, default the folder name of the first agent's working directory), `tree` (base URL of a bridge that answers `/api/tree`, to start with the full file list), `paperclip` (another Paperclip base URL).
-- Without `tree`, the room starts empty. A file or folder appears when an agent first touches it, and the scene rebuilds its layout each time the file list grows.
+- `/?live` goes straight to Paperclip's WebSocket through the Vite proxy. Paperclip's REST endpoints refuse a cross-origin browser, so REST calls go through the proxy at `/paperclip`, which Vite forwards to `http://127.0.0.1:3100`. A production build has no proxy.
+- `/?live&bridge=http://127.0.0.1:5174` goes through the bridge (`npm run bridge`). The bridge holds the Paperclip socket, lists the agents, sends the project file list and pushes `tree` events when files appear. No proxy is needed.
+- `/?live&simulate&speed=3` plays the recording through the live path with no Paperclip, for testing. The badge reads `Demo`.
+
+Query parameters: `company` (company id), `root` (project folder name), `tree` (base URL of a bridge, to start with the full file list over the proxy route), `bridge`, `paperclip` (another Paperclip base URL), `speed` (simulated feed).
+
+The HUD has a Replay and Live switch. The Live button is enabled when the proxy or the bridge answers. The switch changes the `live` query parameter and reloads the data without a page refresh.
+
+- Without a file list, the room starts empty. A file or folder appears when an agent first touches it, and the scene rebuilds its layout each time the file list grows.
 - Late join: only frames that arrive after the page connects are shown. An agent already mid-run appears as working from its next tool call.
+- Live shows a feed clock instead of the scrubber, and the log keeps the last 200 lines.
 
-- Demo without Paperclip: `/?live&simulate&speed=3` feeds the recorded frames through the live path at wall time (idle gaps capped at 2.5 seconds, `speed` divides every gap). The badge reads `Demo`. Use it to test live mode when no agents are running.
-
-Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/incremental.js` (frame by frame pipeline, tested equal to the batch one), `src/live/livePlayer.js` (same interface as the replay player), `src/live/simulated.js` (recorded frames as a fake socket).
+Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/bridge.js` (bridge discovery, event stream, probe), `src/live/livePlayer.js` (same interface as the replay player), `src/live/simulated.js` (recorded frames as a fake socket), `server/index.js` (the bridge).
 
 ## Room behaviour
 
 - Layout: folders sit on rings around the Machine by depth. A ring moves out until its widest folder fits, and a branch gets angle in proportion to the room it needs, so tiles never overlap. A folder with more than 20 files switches to a dense grid (up to 14 columns) and its planes shrink down to 40 percent.
 - Camera: the overview distance grows with the size of the room and the window aspect, never below the default. `0` returns to it. Pressing `F` toggles follow mode: the camera moves to the agent that starts a tool call or a run, and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
+- HUD: the scrubber carries run markers (white start, red failed end, yellow finished end) and clicking one seeks. `L` opens the event log, built from the same activities as the terminals. `?` lists the keys.
 - Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above the plane for 2.6 seconds. Labels that land close together stack upward.
 
 ## Activity schema
@@ -135,7 +144,8 @@ Do not rename these classes without changing both sides.
 - Hermes read lines carry only a file name. A name shared by two files cannot be resolved.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
-- Live mode needs the dev server, because of the proxy. A bridge with `/api/tree` is still open work in `TASKS.md`.
+- The proxy route needs the dev server. The bridge route works with a production build too.
+- The bridge only allows pages on `localhost` or `127.0.0.1`.
 - The terminal wall holds five terminals per row and adds rows above for more agents.
 
 ## Open work

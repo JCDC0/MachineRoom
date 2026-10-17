@@ -4,7 +4,12 @@ import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-const ALLOWED_ORIGIN = 'http://localhost:5173'
+const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+
+function isAllowed(origin) {
+  return LOCAL_ORIGIN.test(origin)
+}
+
 const HISTORY_LIMIT = 500
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules)([/\\]|$)/
@@ -81,9 +86,9 @@ function toWsUrl(paperclipUrl, companyId) {
 
 function corsHeaders(req) {
   const origin = req.headers.origin
-  if (origin && origin !== ALLOWED_ORIGIN) return {}
+  if (origin && !isAllowed(origin)) return {}
   return {
-    'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
+    'Access-Control-Allow-Origin': origin ?? 'http://localhost:5173',
     Vary: 'Origin',
   }
 }
@@ -234,7 +239,7 @@ export function createBridge(options = {}) {
   heartbeatTimer.unref?.()
 
   const server = createServer(async (req, res) => {
-    if (req.headers.origin && req.headers.origin !== ALLOWED_ORIGIN) {
+    if (req.headers.origin && !isAllowed(req.headers.origin)) {
       res.writeHead(403)
       res.end()
       return
