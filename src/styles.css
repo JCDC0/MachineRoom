@@ -261,6 +261,115 @@ input:focus-visible {
   color: var(--yellow);
 }
 
+.hud-top-right {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  align-items: flex-end;
+}
+
+.hud-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+  padding: var(--space) calc(var(--space) * 1.5);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hud-action[aria-pressed='true'] {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+}
+
+.hud-log {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: end;
+  justify-self: end;
+  width: 320px;
+  max-height: min(312px, 42vh);
+  display: flex;
+  flex-direction: column;
+  background: rgb(0 0 0 / 0.88);
+  border: 1px solid var(--line);
+}
+
+.hud-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space) calc(var(--space) * 2);
+  border-bottom: 1px solid var(--line);
+}
+
+.hud-log-title {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.hud-log-count {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.65);
+}
+
+.hud-log-body {
+  padding: var(--space) calc(var(--space) * 2);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 0.5);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.log-line {
+  display: flex;
+  gap: var(--space);
+  color: rgb(255 255 255 / 0.9);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-line.is-normal {
+  color: rgb(255 255 255 / 0.9);
+}
+
+.log-line.is-dim {
+  color: rgb(255 255 255 / 0.62);
+}
+
+.log-line.is-error {
+  color: var(--red);
+}
+
+.log-line.is-done {
+  color: var(--yellow);
+}
+
+.log-time {
+  color: rgb(255 255 255 / 0.6);
+  flex-shrink: 0;
+}
+
+.log-agent {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.log-text {
+  flex: 1;
+}
+
 .transport {
   grid-column: 1 / -1;
   grid-row: 3;
