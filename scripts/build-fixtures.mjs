@@ -18,9 +18,10 @@ const SECRET = /eyJ[A-Za-z0-9_-]{40,}\.|\bsk-[A-Za-z0-9]{16,}|Bearer [A-Za-z0-9.
 
 const ACCOUNT = userInfo().username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const ACCOUNT_PATHS = new RegExp(ACCOUNT, 'gi')
+const EMAILS = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/g
 
 function scrub(value) {
-  if (typeof value === 'string') return value.replace(ACCOUNT_PATHS, 'user')
+  if (typeof value === 'string') return value.replace(ACCOUNT_PATHS, 'user').replace(EMAILS, 'user')
   if (Array.isArray(value)) return value.map(scrub)
   if (value && typeof value === 'object') {
     return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, scrub(item)]))

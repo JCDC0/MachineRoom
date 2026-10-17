@@ -134,7 +134,9 @@ async function main() {
       get(`/api/heartbeat-runs/${runId}/log`),
       get(`/api/heartbeat-runs/${runId}/events`),
     ])
-    frames.push(...buildRunFrames({ companyId, runId, run, log, events }))
+    const linked = await get(`/api/heartbeat-runs/${runId}/issues`)
+    const issue = Array.isArray(linked) ? linked[0] : linked
+    frames.push(...buildRunFrames({ companyId, runId, run: { ...run, issueId: run.issueId ?? run.nativeIssueId ?? issue?.issueId ?? null }, log, events }))
   }
   const ordered = sortAndNumber(frames)
   const text = ordered.map((frame) => JSON.stringify(frame)).join('\n')
