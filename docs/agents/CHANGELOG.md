@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Four recorded scenarios under `public/fixtures/` (failing test then fix, edit across three files, rename on three agents, tool error) with parser tests that pin the files, modes and results of every tool call.
+- A shell command that renames or deletes files now touches them as writes, so a `git mv` or `rm` shows on both names.
+- Fixture building scrubs email addresses along with the Windows profile name, and still refuses to write when a frame looks like it holds a key.
 - `scripts/frames-from-runs.mjs` rebuilds a frame file from Paperclip's stored run data, so a recording is complete even where the live socket truncates large log chunks. The frame building is unit tested with fake API answers.
 - `npm run fixtures` also takes plain frame files and an optional output name, so one fixture set per recording can live under `public/fixtures/`.
 - The bridge restores truncated log frames from Paperclip's run log, so large tool calls are no longer lost in live mode. Frames keep their order and the restored chunk is replayed after a reconnect.
