@@ -1,9 +1,14 @@
 import * as THREE from 'three'
 
 const MIN_DIST = 500
-const MAX_DIST = 9000
+const MAX_DIST = 26000
 
 export const OVERVIEW = { x: 0, y: 200, z: 450, yaw: 0, pitch: 0.72, dist: 4300 }
+
+export function fitDistance(extent, aspect) {
+  const narrow = Math.max(1, 1.33 / aspect)
+  return Math.max(OVERVIEW.dist, extent * 1.75 * narrow)
+}
 
 export function createCameraRig(camera, surface) {
   const view = { target: new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z), yaw: OVERVIEW.yaw, pitch: OVERVIEW.pitch, dist: OVERVIEW.dist }
@@ -11,6 +16,8 @@ export function createCameraRig(camera, surface) {
   const drag = { active: false, moved: 0, x: 0, y: 0 }
   let follow = null
   let onClick = () => {}
+  let overviewDist = OVERVIEW.dist
+  let adjusted = false
 
   function down(event) {
     if (event.target.closest('.hud, .mr-term')) return
@@ -25,6 +32,7 @@ export function createCameraRig(camera, surface) {
     const dx = event.clientX - drag.x
     const dy = event.clientY - drag.y
     drag.moved += Math.abs(dx) + Math.abs(dy)
+    adjusted = true
     drag.x = event.clientX
     drag.y = event.clientY
     goal.yaw -= dx * 0.005
@@ -39,6 +47,7 @@ export function createCameraRig(camera, surface) {
 
   function wheel(event) {
     if (event.target.closest('.hud')) return
+    adjusted = true
     goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(event.deltaY * 0.001), MIN_DIST, MAX_DIST)
   }
 
@@ -47,8 +56,22 @@ export function createCameraRig(camera, surface) {
   window.addEventListener('pointerup', up)
   surface.addEventListener('wheel', wheel, { passive: true })
 
+  function reset() {
+    follow = null
+    adjusted = false
+    goal.target.set(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
+    goal.yaw = OVERVIEW.yaw
+    goal.pitch = OVERVIEW.pitch
+    goal.dist = overviewDist
+    view.target.copy(goal.target)
+    view.yaw = goal.yaw
+    view.pitch = goal.pitch
+    view.dist = goal.dist
+  }
+
   function update(delta) {
     if (follow) goal.target.copy(follow())
+    if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
     const rate = 1 - Math.exp(-delta * 5)
     view.target.lerp(goal.target, rate)
     view.yaw += (goal.yaw - view.yaw) * rate
@@ -82,12 +105,17 @@ export function createCameraRig(camera, surface) {
       goal.dist = dist
       goal.pitch = Math.max(goal.pitch, 0.5)
     },
+    setOverviewDistance(distance) {
+      overviewDist = THREE.MathUtils.clamp(distance, MIN_DIST, MAX_DIST)
+      if (!adjusted && !follow) goal.dist = overviewDist
+    },
     overview() {
       follow = null
+      adjusted = false
       goal.target.set(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
       goal.yaw = OVERVIEW.yaw
       goal.pitch = OVERVIEW.pitch
-      goal.dist = OVERVIEW.dist
+      goal.dist = overviewDist
     },
     dispose() {
       surface.removeEventListener('pointerdown', down)

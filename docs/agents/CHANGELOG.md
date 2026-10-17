@@ -6,6 +6,10 @@
 - The scene rebuilds its folders when the file list grows, so a live room can start empty.
 - Agents get their own key, so two agents with the same adapter no longer collide. Terminal wall gains rows.
 - Vite proxies `/paperclip` to Paperclip for REST calls.
+- Simulated live feed: `/?live&simulate&speed=3` plays the recording through the live path, with a Demo badge.
+- Layout rewrite: folders no longer overlap, big folders use a dense grid and the overview camera fits the room.
+- Follow mode on `F`: the camera tracks the agent that is working.
+- File name labels for reads, writes and failures. Clusters recolour only the planes that changed.
 
 ## 0.1.0
 

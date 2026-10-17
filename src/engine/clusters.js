@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { CELL_H, CELL_W, PLANE_H, PLANE_W } from './layout.js'
+import { PLANE_H, PLANE_W } from './layout.js'
 import { RED, WHITE, YELLOW, lineMaterial, textSprite } from './sprites.js'
 
 const plane = new THREE.PlaneGeometry(PLANE_W, PLANE_H).rotateX(-Math.PI / 2)
@@ -11,12 +11,17 @@ const FAILED = new THREE.Color(RED).multiplyScalar(0.8)
 const FLASH = { white: new THREE.Color(WHITE), red: new THREE.Color(RED) }
 const HIDDEN = 0.001
 
-function outlineGeometry(slots) {
+function signature(entry) {
+  if (!entry) return 0
+  return (entry.failed ? 4 : 0) + (entry.yellow ? 2 : 0) + (entry.reads > 0 || entry.writes > 0 ? 1 : 0)
+}
+
+function outlineGeometry(slots, scale) {
   const source = edges.attributes.position
   const positions = []
   for (const slot of slots) {
     for (let i = 0; i < source.count; i++) {
-      positions.push(source.getX(i) + slot.x, source.getY(i) + 0.5, source.getZ(i) + slot.z)
+      positions.push(source.getX(i) * scale + slot.x, source.getY(i) + 0.5, source.getZ(i) * scale + slot.z)
     }
   }
   const geometry = new THREE.BufferGeometry()
@@ -25,8 +30,8 @@ function outlineGeometry(slots) {
 }
 
 function frameGeometry(node) {
-  const w = Math.max(1, node.cols) * CELL_W * 0.5 + 24
-  const h = Math.max(1, node.rows) * CELL_H * 0.5 + 24
+  const w = node.width * 0.5 + 24
+  const h = node.depthSize * 0.5 + 24
   const points = [new THREE.Vector3(-w, -1, -h), new THREE.Vector3(w, -1, -h), new THREE.Vector3(w, -1, h), new THREE.Vector3(-w, -1, h)]
   return new THREE.BufferGeometry().setFromPoints(points)
 }
@@ -50,7 +55,7 @@ export function createClusters(scene, layout) {
         count
       )
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
-      outline = new THREE.LineSegments(outlineGeometry(node.slots), lineMaterial(WHITE, 0.16))
+      outline = new THREE.LineSegments(outlineGeometry(node.slots, node.cellScale), lineMaterial(WHITE, 0.16))
       group.add(mesh, outline)
     }
 
@@ -59,7 +64,7 @@ export function createClusters(scene, layout) {
 
     const title = node.path === '' ? `${node.name}/` : `${node.name}/`
     const label = textSprite(title, { scale: 3.4, color: 'rgba(255,255,255,.85)' })
-    label.position.set(0, 90, -(Math.max(1, node.rows) * CELL_H * 0.5 + 70))
+    label.position.set(0, 90, -(node.depthSize * 0.5 + 70))
     group.add(label)
 
     scene.add(group)
@@ -73,6 +78,7 @@ export function createClusters(scene, layout) {
       index: new Map(node.files.map((file, i) => [file, i])),
       flash: new Float32Array(count),
       tone: new Array(count).fill('white'),
+      mark: new Int8Array(count).fill(-1),
       scale: new Float32Array(count).fill(1),
       goal: new Float32Array(count).fill(1),
       openness: 0,
@@ -123,7 +129,7 @@ export function createClusters(scene, layout) {
 
   function applyMatrix(cluster, index) {
     const slot = cluster.node.slots[index]
-    const s = Math.max(HIDDEN, cluster.scale[index])
+    const s = Math.max(HIDDEN, cluster.scale[index]) * cluster.node.cellScale
     matrix.makeScale(s, s, s).setPosition(slot.x, 0, slot.z)
     cluster.mesh.setMatrixAt(index, matrix)
   }
@@ -140,6 +146,7 @@ export function createClusters(scene, layout) {
         cluster.goal[index] = entry?.exists ? 1 : HIDDEN
         cluster.scale[index] = cluster.goal[index]
         cluster.flash[index] = 0
+        cluster.mark[index] = -1
         applyMatrix(cluster, index)
       })
       cluster.mesh.instanceMatrix.needsUpdate = true
@@ -161,6 +168,7 @@ export function createClusters(scene, layout) {
       cluster.outline.material.color.setHex(cluster.pulse > 0.05 ? pulseColor : WHITE)
 
       let moved = false
+      let recoloured = false
       cluster.node.files.forEach((file, index) => {
         const entry = state.files.get(file)
         cluster.goal[index] = entry?.exists ? 1 : HIDDEN
@@ -169,15 +177,20 @@ export function createClusters(scene, layout) {
           applyMatrix(cluster, index)
           moved = true
         }
-        cluster.flash[index] = Math.max(0, cluster.flash[index] - delta * 1.1)
+        const before = cluster.flash[index]
+        cluster.flash[index] = Math.max(0, before - delta * 1.1)
+        const mark = signature(entry)
+        if (before === 0 && mark === cluster.mark[index]) return
+        cluster.mark[index] = mark
         if (entry?.failed) color.copy(FAILED)
         else if (entry?.yellow) color.copy(DONE)
         else if (entry && (entry.reads > 0 || entry.writes > 0)) color.copy(TOUCHED)
         else color.copy(DIM)
         if (cluster.flash[index] > 0) color.lerp(FLASH[cluster.tone[index]], cluster.flash[index])
         cluster.mesh.setColorAt(index, color)
+        recoloured = true
       })
-      cluster.mesh.instanceColor.needsUpdate = true
+      if (recoloured) cluster.mesh.instanceColor.needsUpdate = true
       if (moved) cluster.mesh.instanceMatrix.needsUpdate = true
     }
   }

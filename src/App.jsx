@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
+import { loadDemo } from './live/simulated.js'
 import { discover, loadTree } from './live/source.js'
 import { makeTree } from './model/paths.js'
 import { loadReplay } from './model/replay.js'
 import Stage from './Stage.jsx'
 import Notice from './ui/Notice.jsx'
 
+async function loadSimulated(params) {
+  const demo = await loadDemo()
+  const tree = makeTree({ root: params.get('root') ?? demo.rootName, files: [], created: [] })
+  const speed = Number(params.get('speed')) || 1
+  return { agents: demo.agents, tree, activities: [], live: { simulated: true, frames: demo.frames, speed } }
+}
+
 async function loadLive(params) {
+  if (params.has('simulate')) return loadSimulated(params)
   const base = params.get('paperclip') ?? '/paperclip'
   const found = await discover({ base, companyId: params.get('company'), root: params.get('root') })
   const treeUrl = params.get('tree')

@@ -39,16 +39,17 @@ src/model/        pure logic, no DOM, fully tested
   source.js         parse and prepare a recording
   replay.js         fetch the recording from public/fixtures
 src/engine/       three.js scene, no React
-  layout.js         deterministic folder layout (pure, tested)
-  room.js           builds the scene, runs the frame loop, reacts to activities
-  clusters.js       folder tiles and file planes
+  layout.js         deterministic folder layout on rings, no overlap (pure, tested)
+  room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
+  clusters.js       folder tiles and file planes, recolours only what changed
+  labels.js         file name labels that rise and fade when a file is read, written or fails
   agents.js         agent shapes, movement, link lines
   terminals.js      CSS3D terminals on the wall
   core.js           the Machine
-  camera.js         orbit, zoom, focus
+  camera.js         orbit, zoom, focus, fit to the room (pure fitDistance, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/ui/           React HUD
-src/live/         live mode: agent discovery, socket, incremental pipeline, live player
+src/live/         live mode: agent discovery, socket, incremental pipeline, live player, simulated feed
 src/Stage.jsx     wires player, room and HUD together
 src/App.jsx       loads the recording or the live source, shows loading, empty and error states
 public/fixtures/  the recorded run, agent list and file tree
@@ -71,7 +72,15 @@ Open `http://localhost:5173/?live` while Paperclip runs. The viewer follows the 
 - Without `tree`, the room starts empty. A file or folder appears when an agent first touches it, and the scene rebuilds its layout each time the file list grows.
 - Late join: only frames that arrive after the page connects are shown. An agent already mid-run appears as working from its next tool call.
 
-Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/incremental.js` (frame by frame pipeline, tested equal to the batch one), `src/live/livePlayer.js` (same interface as the replay player).
+- Demo without Paperclip: `/?live&simulate&speed=3` feeds the recorded frames through the live path at wall time (idle gaps capped at 2.5 seconds, `speed` divides every gap). The badge reads `Demo`. Use it to test live mode when no agents are running.
+
+Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/incremental.js` (frame by frame pipeline, tested equal to the batch one), `src/live/livePlayer.js` (same interface as the replay player), `src/live/simulated.js` (recorded frames as a fake socket).
+
+## Room behaviour
+
+- Layout: folders sit on rings around the Machine by depth. A ring moves out until its widest folder fits, and a branch gets angle in proportion to the room it needs, so tiles never overlap. A folder with more than 20 files switches to a dense grid (up to 14 columns) and its planes shrink down to 40 percent.
+- Camera: the overview distance grows with the size of the room and the window aspect, never below the default. `0` returns to it. Pressing `F` toggles follow mode: the camera moves to the agent that starts a tool call or a run, and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
+- Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above the plane for 2.6 seconds. Labels that land close together stack upward.
 
 ## Activity schema
 

@@ -1,15 +1,17 @@
 import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
-import { ancestors, dirname } from '../model/paths.js'
+import { ancestors, basename, dirname } from '../model/paths.js'
 import { createAgents } from './agents.js'
-import { createCameraRig } from './camera.js'
+import { createCameraRig, fitDistance } from './camera.js'
 import { createClusters } from './clusters.js'
 import { createCore } from './core.js'
+import { createLabels } from './labels.js'
 import { layoutTree, treeFromState } from './layout.js'
 import { RED, WHITE, YELLOW, glowTexture, lineMaterial, seeded } from './sprites.js'
 import { createTerminals } from './terminals.js'
 
 const OPEN_STEP_MS = 170
+const FOLLOW_HOLD_MS = 2500
 const ZERO = new THREE.Vector3()
 
 export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
@@ -47,9 +49,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key }))
   const agentSet = createAgents(scene, roster)
   const terminals = createTerminals(cssScene, roster)
+  const labels = createLabels(scene)
 
   let clusters = null
   let links = null
+  let extent = 0
   const known = { files: -1, dirs: -1 }
 
   function build(state) {
@@ -67,7 +71,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     scene.add(links)
     known.files = state.files.size
     known.dirs = state.dirs.size
+    extent = layout.extent
+    refit()
     clusters.sync(state)
+  }
+
+  function refit() {
+    rig.setOverviewDistance(fitDistance(extent, width / height))
   }
 
   const grown = (state) => state.files.size !== known.files || state.dirs.size !== known.dirs
@@ -133,6 +143,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function sync(state) {
     queue = []
+    labels.clear()
     pulses.forEach((pulse) => {
       pulse.active = false
       pulse.sprite.material.opacity = 0
@@ -142,10 +153,29 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     agentSet.snap(state, anchorFor)
   }
 
+  let following = false
+  let lastSwitch = 0
+
+  function focusAgent(key) {
+    const view = agentSet.views.get(key)
+    if (!view) return
+    focused = key
+    const middle = new THREE.Vector3()
+    rig.focus(() => middle.copy(view.group.position).add(terminals.positionOf(key)).multiplyScalar(0.5), 2800)
+  }
+
+  function followTo(key) {
+    const now = performance.now()
+    if (key === focused || now - lastSwitch < FOLLOW_HOLD_MS) return
+    lastSwitch = now
+    focusAgent(key)
+  }
+
   function onActivity(activity) {
     const view = agentSet.views.get(activity.agent)
     if (!view) return
     const position = view.group.position
+    if (following && (activity.type === 'tool.start' || activity.type === 'run.start')) followTo(activity.agent)
 
     if (activity.type === 'run.start') {
       core.pulse(YELLOW, 1)
@@ -159,6 +189,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
             const dir = dirname(touch.path)
             clusters.flashFile(dir, touch.path, 'white')
             clusters.slotPosition(dir, touch.path, scratch)
+            labels.show(`${touch.mode === 'read' ? 'read' : 'write'} ${basename(touch.path)}`, scratch, '#ffffff')
           } else {
             clusters.flashCluster(touch.path, 'white')
             scratch.copy(clusters.center(touch.path))
@@ -169,8 +200,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     } else if (activity.type === 'tool.end' && !activity.ok) {
       const touches = getState().agents.get(activity.agent)?.calls.get(activity.id) ?? []
       touches.forEach((touch) => {
-        if (touch.kind === 'file') clusters.flashFile(dirname(touch.path), touch.path, 'red')
-        else clusters.flashCluster(touch.path, 'red')
+        if (touch.kind === 'file') {
+          clusters.flashFile(dirname(touch.path), touch.path, 'red')
+          clusters.slotPosition(dirname(touch.path), touch.path, scratch)
+          labels.show(`failed ${basename(touch.path)}`, scratch, '#ff2a2a')
+        } else {
+          clusters.flashCluster(touch.path, 'red')
+        }
       })
       core.pulse(RED, 0.5)
     } else if (activity.type === 'run.end') {
@@ -189,6 +225,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
+    refit()
   }
   const observer = new ResizeObserver(onResize)
   observer.observe(surface)
@@ -207,6 +244,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (grown(state)) build(state)
     core.update(now / 1000, delta)
     clusters.update(state, delta)
+    labels.update(delta)
     agentSet.update(state, delta, now, anchorFor, terminals.positionOf)
 
     pulses.forEach((pulse) => {
@@ -227,6 +265,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     cssRenderer.render(cssScene, camera)
   }
 
+  renderer.domElement.addEventListener('webglcontextlost', () => console.warn('machine-room: WebGL context lost'))
+  renderer.domElement.addEventListener('webglcontextrestored', () => console.warn('machine-room: WebGL context restored'))
   rig.snap()
   sync(getState())
   frameId = requestAnimationFrame(frame)
@@ -234,23 +274,23 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   return {
     onActivity,
     reset: sync,
-    focus(key) {
-      const view = agentSet.views.get(key)
-      if (!view) return
-      focused = key
-      const middle = new THREE.Vector3()
-      rig.focus(() => middle.copy(view.group.position).add(terminals.positionOf(key)).multiplyScalar(0.5), 2800)
-    },
+    focus: focusAgent,
     overview() {
       focused = null
       rig.overview()
     },
+    setFollow(on) {
+      following = on
+      if (on) lastSwitch = 0
+    },
+    following: () => following,
     focused: () => focused,
     dispose() {
       cancelAnimationFrame(frameId)
       observer.disconnect()
       rig.dispose()
       terminals.dispose()
+      labels.dispose()
       clusters.dispose()
       renderer.dispose()
       gl.removeChild(renderer.domElement)

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoom } from './engine/room.js'
 import { createIncrementalPipeline } from './live/incremental.js'
 import { createLivePlayer } from './live/livePlayer.js'
+import { openSimulated } from './live/simulated.js'
 import { openStream, socketUrl } from './live/source.js'
 import { createPlayer } from './model/player.js'
 import Hud from './ui/Hud.jsx'
@@ -38,6 +39,14 @@ export default function Stage({ data }) {
   }, [data, live])
   const [snapshot, setSnapshot] = useState(() => player.snapshot())
   const [focused, setFocused] = useState(null)
+  const [following, setFollowing] = useState(false)
+  const followRef = useRef(false)
+
+  function setFollow(on) {
+    followRef.current = on
+    roomRef.current?.setFollow(on)
+    setFollowing(on)
+  }
 
   useEffect(() => {
     const room = createRoom({
@@ -49,6 +58,7 @@ export default function Stage({ data }) {
       getState: () => player.state,
       beforeFrame: (ms) => player.tick(ms),
       onPick: (key) => {
+        setFollow(false)
         room.focus(key)
         setFocused(key)
       },
@@ -69,8 +79,7 @@ export default function Stage({ data }) {
     if (!live) return undefined
     const pipeline = createIncrementalPipeline({ agents: data.agents, tree: data.tree })
     let known = player.state.files.size
-    const link = openStream({
-      url: socketUrl(live.base, live.companyId),
+    const handlers = {
       onStatus: (status) => player.setStatus(status),
       onFrame: (frame) => {
         player.push(pipeline.push(frame))
@@ -79,7 +88,10 @@ export default function Stage({ data }) {
           pipeline.learn([...player.state.files.keys()])
         }
       },
-    })
+    }
+    const link = live.simulated
+      ? openSimulated({ frames: live.frames, speed: live.speed, ...handlers })
+      : openStream({ url: socketUrl(live.base, live.companyId), ...handlers })
     return () => link.close()
   }, [data, live, player])
 
@@ -90,12 +102,16 @@ export default function Stage({ data }) {
       if (event.code === 'Space') {
         event.preventDefault()
         player.toggle()
+      } else if (event.key === 'f' || event.key === 'F') {
+        setFollow(!followRef.current)
       } else if (event.key === '0') {
+        setFollow(false)
         room?.overview()
         setFocused(null)
       } else if (/^[1-9]$/.test(event.key)) {
         const agent = data.agents[Number(event.key) - 1]
         if (agent) {
+          setFollow(false)
           room?.focus(agent.key)
           setFocused(agent.key)
         }
@@ -116,11 +132,13 @@ export default function Stage({ data }) {
   }, [data, player])
 
   function focus(key) {
+    setFollow(false)
     roomRef.current?.focus(key)
     setFocused(key)
   }
 
   function overview() {
+    setFollow(false)
     roomRef.current?.overview()
     setFocused(null)
   }
@@ -131,7 +149,12 @@ export default function Stage({ data }) {
       <div className="layer" ref={cssRef} aria-hidden="true" />
       {live && (
         <div style={{ ...BADGE, color: snapshot.status === 'live' ? 'var(--yellow)' : 'var(--red)' }} role="status">
-          Live // {snapshot.status === 'live' ? 'connected' : snapshot.status}
+          {live.simulated ? 'Demo' : 'Live'} // {snapshot.status === 'live' ? 'connected' : snapshot.status}
+        </div>
+      )}
+      {following && (
+        <div style={{ ...BADGE, top: live ? 142 : 112, color: 'var(--white)' }} role="status">
+          Follow // on
         </div>
       )}
       <Hud
