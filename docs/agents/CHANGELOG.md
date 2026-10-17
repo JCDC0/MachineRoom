@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge restores truncated log frames from Paperclip's run log, so large tool calls are no longer lost in live mode. Frames keep their order and the restored chunk is replayed after a reconnect.
 - Merged OpenCode's bridge (`server/index.js`, `npm run bridge`) and `createPipeline`. The viewer's own copy is gone: `createPipeline` also carries `learn` and `context`.
 - Merged AGY's HUD: run markers, event log drawer on `L`, mode switch, help overlay on `?`, caret and glow on terminals.
 - Viewer connects through the bridge with `/?live&bridge=URL`, and adds files when the bridge reports them.

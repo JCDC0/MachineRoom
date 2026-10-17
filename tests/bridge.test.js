@@ -9,13 +9,27 @@ import { createBridge } from '../server/index.js'
 
 function startFakePaperclip(companyId = 'comp-1', agents = []) {
   const sockets = new Set()
+  const stored = new Map()
+  const logRequests = []
   let connections = 0
+  let logDelayMs = 0
 
   const server = createServer((req, res) => {
     if (req.method === 'GET' && req.url === `/api/companies/${companyId}/agents`) {
       const payload = JSON.stringify(agents)
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(payload)
+      return
+    }
+    const logRoute = /^\/api\/heartbeat-runs\/([^/?]+)\/log\?offset=(\d+)$/.exec(req.url ?? '')
+    if (req.method === 'GET' && logRoute) {
+      logRequests.push(req.url)
+      const full = Buffer.from(stored.get(decodeURIComponent(logRoute[1])) ?? '', 'utf8')
+      const content = full.subarray(Number(logRoute[2])).toString('utf8')
+      setTimeout(() => {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ runId: logRoute[1], content }))
+      }, logDelayMs)
       return
     }
     res.writeHead(404)
@@ -43,6 +57,15 @@ function startFakePaperclip(companyId = 'comp-1', agents = []) {
         url: `http://127.0.0.1:${port}`,
         get connections() {
           return connections
+        },
+        get logRequests() {
+          return logRequests
+        },
+        appendLog(runId, entry) {
+          stored.set(runId, `${stored.get(runId) ?? ''}${JSON.stringify(entry)}\n`)
+        },
+        delayLogs(ms) {
+          logDelayMs = ms
         },
         send(frame) {
           const text = JSON.stringify(frame)
@@ -382,5 +405,119 @@ describe('live bridge', () => {
     const treeEvent = await sse.next((e) => e.event === 'tree')
     const data = JSON.parse(treeEvent.data)
     expect(data.files).toEqual(['a.js', 'b.js'])
+  })
+})
+
+describe('truncated log frames', () => {
+  const big = (letter) => letter.repeat(20000)
+  const logFrame = (id, seq, chunk, truncated) => ({
+    id,
+    companyId: 'comp-1',
+    type: 'heartbeat.run.log',
+    createdAt: '2026-10-17T12:00:00.000Z',
+    payload: { runId: 'r1', agentId: 'a1', seq, stream: 'stdout', chunk, truncated },
+  })
+
+  async function startBridge(options = {}) {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      logRetries: 2,
+      logRetryMs: 10,
+      ...options,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).paperclip)
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+    return { fake, sse, url }
+  }
+
+  const frameOf = async (sse, id) => JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === String(id))).data)
+
+  it('swaps in the full chunk from the run log', async () => {
+    const { fake, sse } = await startBridge()
+    fake.appendLog('r1', { ts: '2026-10-17T12:00:00.000Z', stream: 'stdout', chunk: big('a'), seq: 1 })
+
+    fake.send(logFrame(301, 1, big('a').slice(-8192), true))
+    const frame = await frameOf(sse, 301)
+
+    expect(frame.payload.chunk).toBe(big('a'))
+    expect(frame.payload.truncated).toBe(false)
+  })
+
+  it('leaves a chunk that is not truncated alone and never asks for the log', async () => {
+    const { fake, sse } = await startBridge()
+    fake.send(logFrame(302, 1, 'short line', false))
+    const frame = await frameOf(sse, 302)
+
+    expect(frame.payload.chunk).toBe('short line')
+    expect(fake.logRequests).toHaveLength(0)
+  })
+
+  it('keeps frames in order while the log is being read', async () => {
+    const { fake, sse } = await startBridge()
+    fake.appendLog('r1', { ts: '2026-10-17T12:00:00.000Z', stream: 'stdout', chunk: big('b'), seq: 1 })
+    fake.delayLogs(150)
+
+    fake.send(logFrame(303, 1, big('b').slice(-8192), true))
+    fake.send(logFrame(304, 2, 'after', false))
+    fake.send({ id: 305, companyId: 'comp-1', type: 'heartbeat.run.status', createdAt: '2026-10-17T12:00:01.000Z', payload: { runId: 'r1', status: 'succeeded' } })
+
+    const order = []
+    for (let i = 0; i < 3; i += 1) order.push((await sse.next((e) => e.event === 'frame', 4000)).id)
+    expect(order).toEqual(['303', '304', '305'])
+  })
+
+  it('forwards the truncated frame as it is when the log has no such chunk', async () => {
+    const { fake, sse } = await startBridge()
+    const cut = big('c').slice(-8192)
+
+    fake.send(logFrame(306, 9, cut, true))
+    const frame = await frameOf(sse, 306)
+
+    expect(frame.payload.chunk).toBe(cut)
+    expect(frame.payload.truncated).toBe(true)
+  })
+
+  it('reads on from where it stopped for the next truncated chunk of a run', async () => {
+    const { fake, sse } = await startBridge()
+    const first = { ts: '2026-10-17T12:00:00.000Z', stream: 'stdout', chunk: big('d'), seq: 1 }
+    fake.appendLog('r1', first)
+    fake.send(logFrame(307, 1, big('d').slice(-8192), true))
+    await frameOf(sse, 307)
+
+    fake.appendLog('r1', { ts: '2026-10-17T12:00:05.000Z', stream: 'stdout', chunk: big('e'), seq: 2 })
+    fake.send(logFrame(308, 2, big('e').slice(-8192), true))
+    const frame = await frameOf(sse, 308)
+
+    expect(frame.payload.chunk).toBe(big('e'))
+    const firstBytes = Buffer.byteLength(`${JSON.stringify(first)}\n`, 'utf8')
+    expect(fake.logRequests).toEqual([
+      '/api/heartbeat-runs/r1/log?offset=0',
+      `/api/heartbeat-runs/r1/log?offset=${firstBytes}`,
+    ])
+  })
+
+  it('replays the restored chunk to a viewer that reconnects', async () => {
+    const { fake, sse, url } = await startBridge()
+    fake.appendLog('r1', { ts: '2026-10-17T12:00:00.000Z', stream: 'stdout', chunk: big('f'), seq: 1 })
+    fake.send({ id: 309, companyId: 'comp-1', type: 'heartbeat.run.queued', createdAt: '2026-10-17T12:00:00.000Z', payload: { runId: 'r1' } })
+    await sse.next((e) => e.event === 'frame')
+    fake.send(logFrame(310, 1, big('f').slice(-8192), true))
+    await frameOf(sse, 310)
+
+    const again = await openSse(url, { 'Last-Event-ID': '309' })
+    cleanups.push(() => again.close())
+    const replayed = await frameOf(again, 310)
+
+    expect(replayed.payload.chunk).toBe(big('f'))
+    expect(replayed.payload.truncated).toBe(false)
   })
 })

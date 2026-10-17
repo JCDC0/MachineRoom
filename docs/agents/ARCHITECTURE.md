@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.8. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.9. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -81,6 +81,7 @@ The HUD has a Replay and Live switch. The Live button is enabled when the proxy 
 - Without a file list, the room starts empty. A file or folder appears when an agent first touches it, and the scene rebuilds its layout each time the file list grows.
 - Late join: only frames that arrive after the page connects are shown. An agent already mid-run appears as working from its next tool call.
 - Live shows a feed clock instead of the scrubber, and the log keeps the last 200 lines.
+- Truncated chunks: Paperclip's live socket cuts a log chunk longer than 8192 characters to its last 8192 and sets `truncated`. A tool call whose JSON line is that large would lose its head and be missed. The bridge reads the full chunk from `/api/heartbeat-runs/:id/log?offset=` (paging by byte offset, keeping only chunks over 8192) and sends the restored frame. Frames stay in order while it reads. After 3 tries without a match the cut frame goes through unchanged. The proxy route has no bridge, so it can still miss such calls.
 
 Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/bridge.js` (bridge discovery, event stream, probe), `src/live/livePlayer.js` (same interface as the replay player), `src/live/simulated.js` (recorded frames as a fake socket), `server/index.js` (the bridge).
 
@@ -146,6 +147,7 @@ Do not rename these classes without changing both sides.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
 - The proxy route needs the dev server. The bridge route works with a production build too.
 - The bridge only allows pages on `localhost` or `127.0.0.1`.
+- Through the proxy route (no bridge), a tool call whose log line is over 8192 characters is missed. A real run lost 3 of 58 calls this way, all reads outside the project.
 - The terminal wall holds five terminals per row and adds rows above for more agents.
 
 ## Open work

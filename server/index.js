@@ -11,6 +11,8 @@ function isAllowed(origin) {
 }
 
 const HISTORY_LIMIT = 500
+const LIVE_CHUNK_LIMIT = 8192
+const LOG_RUNS_KEPT = 8
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules)([/\\]|$)/
 const PARSER_BY_ADAPTER = {
@@ -112,6 +114,9 @@ export function createBridge(options = {}) {
   const reconnectMaxMs = Number(options.reconnectMaxMs ?? 15000)
   const heartbeatMs = Number(options.heartbeatMs ?? 15000)
   const debounceMs = Number(options.debounceMs ?? 300)
+  const logRetries = Number(options.logRetries ?? 3)
+  const logRetryMs = Number(options.logRetryMs ?? 150)
+  const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
 
   const clients = new Set()
   const history = []
@@ -124,6 +129,9 @@ export function createBridge(options = {}) {
   let watcher = null
   let watchTimer = null
   let lastFiles = []
+  const logs = new Map()
+  const waiting = []
+  let resolving = false
 
   function writeSseFrame(res, entry) {
     res.write(`id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
@@ -164,16 +172,7 @@ export function createBridge(options = {}) {
     } catch {}
   }
 
-  function recordFrame(rawData) {
-    const text = typeof rawData === 'string' ? rawData : Buffer.from(rawData).toString('utf8')
-    let parsed
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      return
-    }
-    if (!parsed || typeof parsed !== 'object') return
-    if (companyId && parsed.companyId && parsed.companyId !== companyId) return
+  function accept(parsed) {
     if (typeof parsed.id === 'number' && parsed.id > nextId) {
       nextId = parsed.id
     } else {
@@ -187,6 +186,91 @@ export function createBridge(options = {}) {
     for (const client of clients) {
       writeSseFrame(client, entry)
     }
+  }
+
+  async function pullLog(state, runId) {
+    const response = await fetch(`${paperclipUrl}/api/heartbeat-runs/${encodeURIComponent(runId)}/log?offset=${state.offset}`, {
+      signal: AbortSignal.timeout(logTimeoutMs),
+    })
+    if (!response.ok) return
+    const body = await response.json()
+    const end = typeof body?.content === 'string' ? body.content.lastIndexOf('\n') : -1
+    if (end === -1) return
+    const complete = body.content.slice(0, end + 1)
+    for (const line of complete.split('\n')) {
+      if (!line) continue
+      try {
+        const entry = JSON.parse(line)
+        if (typeof entry.seq === 'number' && typeof entry.chunk === 'string' && entry.chunk.length > LIVE_CHUNK_LIMIT) {
+          state.chunks.set(entry.seq, entry.chunk)
+        }
+      } catch {}
+    }
+    state.offset += Buffer.byteLength(complete, 'utf8')
+  }
+
+  async function fullChunk(payload) {
+    let state = logs.get(payload.runId)
+    if (!state) {
+      state = { offset: 0, chunks: new Map() }
+      logs.set(payload.runId, state)
+      if (logs.size > LOG_RUNS_KEPT) logs.delete(logs.keys().next().value)
+    }
+    for (let attempt = 0; attempt < logRetries && !stopped; attempt += 1) {
+      if (state.chunks.has(payload.seq)) break
+      try {
+        await pullLog(state, payload.runId)
+      } catch {}
+      if (state.chunks.has(payload.seq)) break
+      await new Promise((resolveWait) => setTimeout(resolveWait, logRetryMs))
+    }
+    return state.chunks.get(payload.seq) ?? null
+  }
+
+  async function restore(parsed) {
+    let frame = parsed
+    try {
+      const chunk = await fullChunk(parsed.payload)
+      if (chunk) frame = { ...parsed, payload: { ...parsed.payload, chunk, truncated: false } }
+    } catch {}
+    if (!stopped) accept(frame)
+  }
+
+  function drain() {
+    resolving = false
+    while (waiting.length > 0 && !resolving && !stopped) dispatch(waiting.shift())
+  }
+
+  function dispatch(parsed) {
+    const payload = parsed.payload
+    const cut =
+      parsed.type === 'heartbeat.run.log' &&
+      payload?.truncated === true &&
+      typeof payload.runId === 'string' &&
+      typeof payload.seq === 'number'
+    if (!cut) {
+      accept(parsed)
+      return
+    }
+    resolving = true
+    restore(parsed).finally(drain)
+  }
+
+  function recordFrame(rawData) {
+    const text = typeof rawData === 'string' ? rawData : Buffer.from(rawData).toString('utf8')
+    let parsed
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      return
+    }
+    if (!parsed || typeof parsed !== 'object') return
+    if (companyId && parsed.companyId && parsed.companyId !== companyId) return
+    if (resolving) {
+      waiting.push(parsed)
+      return
+    }
+    dispatch(parsed)
   }
 
   function scheduleReconnect() {
@@ -333,6 +417,7 @@ export function createBridge(options = {}) {
 
   function stop() {
     stopped = true
+    waiting.length = 0
     clearInterval(heartbeatTimer)
     if (watchTimer) {
       clearTimeout(watchTimer)
