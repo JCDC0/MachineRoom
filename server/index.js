@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readdirSync } from 'node:fs'
+import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 const ALLOWED_ORIGIN = 'http://localhost:5173'
 const HISTORY_LIMIT = 500
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
+const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules)([/\\]|$)/
 const PARSER_BY_ADAPTER = {
   claude_local: 'claude',
   hermes_local: 'hermes',
@@ -105,6 +106,7 @@ export function createBridge(options = {}) {
   const reconnectMinMs = Number(options.reconnectMinMs ?? 1000)
   const reconnectMaxMs = Number(options.reconnectMaxMs ?? 15000)
   const heartbeatMs = Number(options.heartbeatMs ?? 15000)
+  const debounceMs = Number(options.debounceMs ?? 300)
 
   const clients = new Set()
   const history = []
@@ -114,9 +116,47 @@ export function createBridge(options = {}) {
   let stopped = false
   let reconnectTimer = null
   let reconnectDelay = reconnectMinMs
+  let watcher = null
+  let watchTimer = null
+  let lastFiles = []
 
   function writeSseFrame(res, entry) {
     res.write(`id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
+  }
+
+  function writeSseTree(res, tree) {
+    const data = JSON.stringify({ root: tree.root, files: tree.files })
+    res.write(`event: tree\ndata: ${data}\n\n`)
+  }
+
+  function checkTreeChange() {
+    if (stopped) return
+    const current = readTree(projectRoot)
+    const changed =
+      current.files.length !== lastFiles.length ||
+      current.files.some((file, index) => file !== lastFiles[index])
+    if (!changed) return
+    lastFiles = current.files
+    for (const client of clients) {
+      writeSseTree(client, current)
+    }
+  }
+
+  function startWatcher() {
+    if (!projectRoot || stopped) return
+    lastFiles = readTree(projectRoot).files
+    try {
+      watcher = watch(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
+        if (stopped) return
+        if (filename && IGNORED_WATCH.test(String(filename))) return
+        if (watchTimer) clearTimeout(watchTimer)
+        watchTimer = setTimeout(() => {
+          watchTimer = null
+          checkTreeChange()
+        }, debounceMs)
+      })
+      watcher.on('error', () => {})
+    } catch {}
   }
 
   function recordFrame(rawData) {
@@ -271,6 +311,7 @@ export function createBridge(options = {}) {
   })
 
   function start() {
+    startWatcher()
     connectUpstream()
     return new Promise((resolveStart, rejectStart) => {
       server.once('error', rejectStart)
@@ -288,6 +329,16 @@ export function createBridge(options = {}) {
   function stop() {
     stopped = true
     clearInterval(heartbeatTimer)
+    if (watchTimer) {
+      clearTimeout(watchTimer)
+      watchTimer = null
+    }
+    if (watcher) {
+      try {
+        watcher.close()
+      } catch {}
+      watcher = null
+    }
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
       reconnectTimer = null
