@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.23. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.24. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -20,7 +20,7 @@ Version 0.1.23. A browser viewer that shows coding agents working on one project
 npm install
 npm run dev        http://localhost:5173
 npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
-npm test           vitest, node environment, no browser needed
+npm test           vitest, node environment, threads pool, no browser needed
 npm run build
 npm run fixtures -- <raw-events.jsonl> <sandbox-folder> <ids.json>
 ```
