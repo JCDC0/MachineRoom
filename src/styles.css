@@ -706,21 +706,405 @@ input:focus-visible {
   inset: 0;
   display: grid;
   place-content: center;
-  gap: var(--space);
+  gap: calc(var(--space) * 3);
+  padding: calc(var(--space) * 3);
   text-align: center;
+  background: var(--black);
+}
+
+.notice-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space);
+}
+
+.notice-brand {
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.78);
+}
+
+.notice-tagline {
+  font-size: 14px;
+  color: rgb(255 255 255 / 0.78);
+}
+
+.notice-panel {
+  width: min(480px, 100%);
+  padding: calc(var(--space) * 3);
+  border: 1px solid var(--line);
+  background: rgb(0 0 0 / 0.88);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: calc(var(--space) * 2);
+}
+
+.notice[role='alert'] .notice-panel {
+  border-color: var(--red);
 }
 
 .notice h1 {
-  font-size: 22px;
-  letter-spacing: 0.22em;
+  font-size: 20px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-.notice p {
-  font-size: 12px;
-  color: rgb(255 255 255 / 0.55);
+.notice-message {
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.82);
 }
 
 .notice[role='alert'] h1 {
   color: var(--red);
 }
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space);
+  margin-top: var(--space);
+}
+
+.waiting {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--space) * 11);
+  transform: translateX(-50%);
+  width: min(512px, calc(100vw - 544px));
+  min-width: 320px;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.waiting button {
+  pointer-events: auto;
+}
+
+.waiting-card {
+  padding: calc(var(--space) * 2) calc(var(--space) * 3);
+  background: rgb(0 0 0 / 0.86);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.waiting.is-live .waiting-card {
+  border-color: var(--yellow);
+}
+
+.waiting.is-error .waiting-card {
+  border-color: var(--red);
+}
+
+.waiting-header {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space);
+}
+
+.waiting-dot {
+  width: var(--space);
+  height: var(--space);
+  border-radius: 50%;
+  background: var(--white);
+}
+
+.waiting.is-live .waiting-dot {
+  background: var(--yellow);
+}
+
+.waiting.is-error .waiting-dot {
+  background: var(--red);
+}
+
+.waiting-badge {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.82);
+}
+
+.waiting.is-live .waiting-badge {
+  color: var(--yellow);
+}
+
+.waiting.is-error .waiting-badge {
+  color: var(--red);
+}
+
+.waiting-title {
+  font-size: 16px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.waiting-detail {
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.88);
+}
+
+.waiting-agents {
+  font-size: 12px;
+  color: rgb(255 255 255 / 0.72);
+}
+
+.waiting-actions {
+  display: flex;
+  gap: var(--space);
+  margin-top: var(--space);
+}
+
+.connect {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--black);
+  display: grid;
+  place-items: center;
+  padding: calc(var(--space) * 3);
+}
+
+.connect-shell {
+  width: min(928px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 2);
+}
+
+.connect-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: calc(var(--space) * 2);
+  padding: calc(var(--space) * 2) calc(var(--space) * 3);
+  border: 1px solid var(--line);
+  background: rgb(0 0 0 / 0.88);
+}
+
+.connect-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.connect-brand h1 {
+  font-size: 22px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.connect-tagline {
+  font-size: 15px;
+  color: rgb(255 255 255 / 0.85);
+}
+
+.connect-header .hud-legend {
+  width: auto;
+  margin: 0;
+  gap: calc(var(--space) * 2);
+}
+
+.connect-error {
+  padding: calc(var(--space) * 1.5) calc(var(--space) * 2);
+  border: 1px solid var(--red);
+  background: rgb(255 42 42 / 0.08);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space) calc(var(--space) * 2);
+}
+
+.connect-error-label {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--red);
+}
+
+.connect-error p {
+  font-size: 14px;
+  color: var(--white);
+}
+
+.connect-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--space) * 2);
+}
+
+.connect-card {
+  padding: calc(var(--space) * 2.5);
+  border: 1px solid var(--line);
+  background: rgb(0 0 0 / 0.88);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.5);
+  transition: border-color 150ms, background-color 150ms;
+}
+
+.connect-card.is-selected {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.04);
+}
+
+.connect-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.connect-card-head h2,
+.connect-radio-label {
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.connect-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space);
+  cursor: pointer;
+}
+
+.connect-radio-label input[type='radio'] {
+  margin: 0;
+  width: calc(var(--space) * 2);
+  height: calc(var(--space) * 2);
+  accent-color: var(--yellow);
+  cursor: pointer;
+}
+
+.connect-tag {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px var(--space);
+  border: 1px solid var(--line);
+  color: rgb(255 255 255 / 0.82);
+  white-space: nowrap;
+}
+
+.connect-card.is-selected .connect-tag {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.connect-hint {
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.82);
+}
+
+.connect-hint code {
+  font-size: 12px;
+  color: var(--yellow);
+}
+
+.connect-fields-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(var(--space) * 1.5);
+}
+
+.connect-field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 0.75);
+  margin-top: auto;
+}
+
+.connect-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.connect-field label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.85);
+}
+
+.connect-field-error {
+  font-size: 11px;
+  color: var(--red);
+}
+
+.connect-field input {
+  width: 100%;
+  padding: var(--space) calc(var(--space) * 1.5);
+  font-size: 13px;
+  color: var(--white);
+  background: var(--black);
+  border: 1px solid var(--line);
+}
+
+.connect-field input::placeholder {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.connect-field input[aria-invalid='true'] {
+  border-color: var(--red);
+}
+
+.connect-submit-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.connect-submit {
+  min-width: 240px;
+  padding: calc(var(--space) * 1.25) calc(var(--space) * 3);
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+}
+
+.connect-submit:hover:not(:disabled) {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.18);
+}
+
+.connect-action {
+  margin-top: auto;
+  align-self: flex-start;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 768px) {
+  .connect-grid,
+  .connect-fields-pair {
+    grid-template-columns: 1fr;
+  }
+
+  .waiting {
+    width: calc(100vw - 32px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connect-card {
+    transition: none;
+  }
+}
+
