@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Assistant core (`src/assistant/`): a closed list of 14 actions with a validator, rule based intent with agent and path resolution, a guard that stops keys before they go anywhere, and a parser for a cheap fallback model. Tests in `tests/assistant.test.js`. The plan and the cost board are in `docs/agents/CONTROL-PLANE.md` and tasks A1 to A6.
+- Fix keyboard handling, agent spend mapping, and typography in the control drawer panels.
+- Control drawer with dispatch form, tasks list and thread, approvals queue and spend and quota meters against the control client.
 - Control client contract (`docs/agents/CONTROL-CLIENT.md`) and a mock (`src/control/mock.js`) with tests, so the dispatch, thread, approvals and meter panels can be built before the real client exists. The demo and replay pass the mock to the HUD as `client`.
 - First run: a connect screen (bridge, Paperclip directly, demo, replay) opens on the first visit, remembers the choice and the replay speed, and comes back with a clear message when a live connection fails. A waiting overlay explains an empty or dropped live room. The start-up choice is a tested pure module.
 - Merged AGY's first-run components, settings module and README images.
