@@ -9,6 +9,16 @@ const STATUS_TEXT = {
   done: 'finished',
 }
 
+const SHORTCUTS = [
+  ['Space', 'Play or pause replay'],
+  ['0', 'Overview camera'],
+  ['1 to 9', 'Focus agent 1 to 9'],
+  ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
+  ['[ and ]', 'Decrease or increase replay speed'],
+  ['L', 'Toggle event log'],
+  ['?', 'Toggle keyboard help'],
+]
+
 function formatTime(ms) {
   if (ms == null) return ''
   if (typeof ms === 'string') return ms
@@ -26,6 +36,9 @@ export default function Hud({
   rootName,
   markers = [],
   log = [],
+  mode = 'replay',
+  onMode = () => {},
+  liveAvailable = false,
   onToggle,
   onSeek,
   onSpeed,
@@ -33,6 +46,7 @@ export default function Hud({
   onOverview,
 }) {
   const [logOpen, setLogOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const logBodyRef = useRef(null)
   const visibleLog = log.slice(-50)
 
@@ -43,6 +57,11 @@ export default function Hud({
       if (event.key === 'l' || event.key === 'L') {
         event.preventDefault()
         setLogOpen((open) => !open)
+      } else if (event.key === '?') {
+        event.preventDefault()
+        setHelpOpen((open) => !open)
+      } else if (event.key === 'Escape') {
+        setHelpOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -60,7 +79,7 @@ export default function Hud({
       <div className="hud-top-left">
         <header className="hud-title">
           <h1>Machine Room</h1>
-          <p className="mono">REPLAY // {rootName}</p>
+          <p className="mono">{mode === 'live' ? 'LIVE' : 'REPLAY'} // {rootName}</p>
         </header>
 
         <ul className="hud-legend mono" aria-label="Colour legend">
@@ -71,17 +90,49 @@ export default function Hud({
       </div>
 
       <div className="hud-top-right">
-        <button
-          type="button"
-          className="hud-action"
-          aria-pressed={logOpen}
-          aria-expanded={logOpen}
-          aria-controls="hud-log-drawer"
-          onClick={() => setLogOpen((open) => !open)}
-        >
-          <span>Log</span>
-          <span className="agent-key mono">L</span>
-        </button>
+        <div className="hud-modes" role="group" aria-label="Mode">
+          <button
+            type="button"
+            aria-pressed={mode === 'replay'}
+            onClick={() => onMode('replay')}
+          >
+            Replay
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === 'live'}
+            disabled={!liveAvailable}
+            onClick={() => liveAvailable && onMode('live')}
+          >
+            Live
+          </button>
+        </div>
+
+        <div className="hud-actions">
+          <button
+            type="button"
+            className="hud-action"
+            aria-pressed={logOpen}
+            aria-expanded={logOpen}
+            aria-controls="hud-log-drawer"
+            onClick={() => setLogOpen((open) => !open)}
+          >
+            <span>Log</span>
+            <span className="agent-key mono">L</span>
+          </button>
+          <button
+            type="button"
+            className="hud-action"
+            aria-pressed={helpOpen}
+            aria-expanded={helpOpen}
+            aria-controls="hud-help-dialog"
+            aria-label="Keyboard help"
+            onClick={() => setHelpOpen((open) => !open)}
+          >
+            <span>Help</span>
+            <span className="agent-key mono">?</span>
+          </button>
+        </div>
       </div>
 
       <nav className="hud-agents" aria-label="Agents">
@@ -133,6 +184,38 @@ export default function Hud({
             )}
           </div>
         </aside>
+      )}
+
+      {helpOpen && (
+        <div className="hud-help-backdrop" onClick={() => setHelpOpen(false)}>
+          <section
+            id="hud-help-dialog"
+            className="hud-help"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="hud-help-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header className="hud-help-header">
+              <h2 id="hud-help-title">Keyboard Shortcuts</h2>
+              <button
+                type="button"
+                className="hud-help-close"
+                onClick={() => setHelpOpen(false)}
+              >
+                Close
+              </button>
+            </header>
+            <dl className="hud-shortcuts">
+              {SHORTCUTS.map(([keys, description]) => (
+                <div key={keys} className="hud-shortcut-row">
+                  <dt className="mono">{keys}</dt>
+                  <dd>{description}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+        </div>
       )}
 
       <Transport

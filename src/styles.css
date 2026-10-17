@@ -270,6 +270,40 @@ input:focus-visible {
   flex-direction: column;
   gap: var(--space);
   align-items: flex-end;
+  width: 100%;
+}
+
+.hud-modes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: 100%;
+  background: rgb(0 0 0 / 0.78);
+}
+
+.hud-modes button {
+  padding: var(--space) calc(var(--space) * 1.5);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.hud-modes button + button {
+  margin-left: -1px;
+}
+
+.hud-modes button[aria-pressed='true'] {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+  z-index: 1;
+}
+
+.hud-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space);
+  width: 100%;
 }
 
 .hud-action {
@@ -287,6 +321,74 @@ input:focus-visible {
   border-color: var(--yellow);
   color: var(--yellow);
   background: rgb(229 255 0 / 0.08);
+}
+
+.hud-help-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.75);
+  display: grid;
+  place-items: center;
+  padding: calc(var(--space) * 3);
+  z-index: 10;
+}
+
+.hud-help {
+  width: min(464px, 100%);
+  background: var(--black);
+  border: 1px solid var(--white);
+  padding: calc(var(--space) * 3);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 2);
+}
+
+.hud-help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space) * 2);
+  padding-bottom: calc(var(--space) * 1.5);
+  border-bottom: 1px solid var(--line);
+}
+
+.hud-help-header h2 {
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.hud-help-close {
+  padding: calc(var(--space) * 0.5) calc(var(--space) * 1.5);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.hud-shortcuts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.hud-shortcut-row {
+  display: grid;
+  grid-template-columns: 176px 1fr;
+  align-items: baseline;
+  gap: calc(var(--space) * 2);
+  padding: calc(var(--space) * 0.5) 0;
+}
+
+.hud-shortcut-row dt {
+  font-size: 12px;
+  color: var(--yellow);
+}
+
+.hud-shortcut-row dd {
+  margin: 0;
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.9);
 }
 
 .hud-log {
