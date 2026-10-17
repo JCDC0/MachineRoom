@@ -52,7 +52,7 @@ export default function Hud({
 
   useEffect(() => {
     function onKey(event) {
-      if (event.target.closest('input, textarea, select')) return
+      if (event.target?.closest?.('input, textarea, select')) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key === 'l' || event.key === 'L') {
         event.preventDefault()
