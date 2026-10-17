@@ -73,3 +73,19 @@ Design and rules are in `docs/agents/CONTROL-PLANE.md`. Paperclip already has hi
 **C5. Planner and orchestrator agents (Claude).** Instruction bundles for both, hired through C2, first run on a tiny goal with the cheapest models and approvals on.
 
 **C6. Outcome log and decision layer (Claude, OpenCode).** Log every run, build the success and cost tables, propose policy changes as diffs. Start logging as soon as C4 exists.
+
+## Roadmap: working in MachineRoom day to day
+
+The daily loop and its limits are in `docs/agents/CONTROL-PLANE.md` under "Product shape". These tasks fill the gaps between "I can watch" and "I work here". C2 and C3 above are part of it.
+
+**W1. Supervisor (OpenCode).** `machine-room up` and `machine-room doctor`: attach to a running Paperclip or start one, start the bridge, check health, and warn loudly when the last database backup is missing or older than a day. Extends P1.
+
+**W2. Backups and recovery (Claude, then OpenCode).** Find Paperclip's backup route (there is a route file for instance database backups), add a "back up now" call and a visible backup age in the HUD, and write down how to restore.
+
+**W3. Review and merge (OpenCode for the bridge, AGY for the panel).** Local git through the bridge: the branch of each issue, diff stat and patch, test result from the run report, merge with a confirmation, stop on a conflict, never push. Tests with a throwaway repo.
+
+**W4. Projects (Claude).** A project and company picker. The bridge serves one project folder today. Several projects means one room per project.
+
+**W5. Talk to the planner (Claude, AGY).** A comment thread panel on each issue, posting through `POST /api/issues/:id/comments`. Evaluate Paperclip's board chat stream (`POST /api/board/chat/stream`, experimental, off) after that.
+
+**W6. Live status without polling (Claude).** Use the live-run routes (`/api/companies/:id/live-runs`, `/api/issues/:id/live-runs`) so the panels show which issue is running without reading the whole stream.

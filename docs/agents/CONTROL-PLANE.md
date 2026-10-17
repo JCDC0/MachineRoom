@@ -78,6 +78,30 @@ This needs real data. Expect it to be useful after about 100 logged runs, not be
 - The room shows the child as a new shape that splits off its parent along a string, with its own terminal.
 - Harness signals are unknown until S1 records them (see TASKS.md).
 
+## Product shape: working in MachineRoom
+
+The goal is that you do your project work in MachineRoom, with Paperclip as the engine behind it. Paperclip is API first and can run without anyone opening its own web page, but it is not headless: it ships a full UI at its root address. MachineRoom does not replace that UI. It covers the daily loop and links to Paperclip's pages for rare admin work.
+
+| Step of the daily loop | Where it happens | Built? |
+| --- | --- | --- |
+| See what every agent is doing, up close | MachineRoom room | yes, subagents open |
+| Start work: write the task, pick agent, model, effort, budget, subagents allowed | MachineRoom panel, creates a Paperclip issue | no (C2, C3) |
+| Talk to an agent or the planner about a task | MachineRoom panel, posts issue comments (`POST /api/issues/:id/comments`) | no (W5) |
+| Approve hires, plans, budget overrides | MachineRoom queue, Paperclip approvals | no (C3) |
+| Watch spend and limits | MachineRoom meters, Paperclip cost routes | no (C3) |
+| Review the result: diff, tests, summary | MachineRoom panel, local git through the bridge | no (W3) |
+| Merge | MachineRoom button, local git through the bridge, never a push | no (W3) |
+| Rare admin: skills, secrets, connections, company settings | Paperclip's own UI, opened by a link | n/a |
+| Writing code by hand, running the app, editing in your editor | outside both | n/a |
+
+What this means in practice:
+
+- Review and merge are ours to build. Paperclip has no branch diff or merge route (only a GitHub review hook and a workspace branch check), so the bridge runs a few local git commands: list the branch of each issue, show the diff, merge with a confirmation, stop on a conflict and hand over to a terminal. It never pushes.
+- Text-heavy work (tasks, diffs, comments) needs panels. The 3D room is for awareness and navigation, and a click on an agent or folder opens its panel.
+- The planner and orchestrator are Paperclip agents, so "talking to the project" means writing to them through issue comments (agent chat in Paperclip is still behind an experimental flag and off). They replace the copy and paste between harnesses. They do not replace an interactive coding session when you want one: a coding chat like this one stays useful for design and for work that touches many things at once.
+- Paperclip becomes the record of your work (tasks, comments, runs, costs). It stores that in a local database and backs it up every 60 minutes of uptime. It is not a Windows service, so short sessions may never trigger a backup, and none exists yet. Check backups before trusting it.
+- One Paperclip, one machine, loopback only. Using it from a phone or another PC needs Paperclip's authenticated mode and is out of scope for now.
+
 ## Taking the copy and paste out of the loop
 
 Today OpenCode and AGY are driven by hand in their own windows, and their reports are pasted back. The fix is to run them as Paperclip agents in isolated worktrees:
