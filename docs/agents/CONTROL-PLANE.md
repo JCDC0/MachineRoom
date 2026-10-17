@@ -12,7 +12,7 @@ Paperclip already runs the company: hiring, budgets, approvals, planning, worksp
 
 ## What Paperclip already has
 
-Checked in its README and in the routes of its CLI (2026.1012.0). Request and answer shapes are not checked yet, which is task C1.
+Checked in its README, its routes and its OpenAPI file (2026.1012.0). Request and answer shapes are in `docs/agents/PAPERCLIP-API.md` (task C1, done).
 
 | Need | Paperclip feature | Route or note |
 | --- | --- | --- |
@@ -32,7 +32,7 @@ Paperclip lists these as not built: Self-Organization, Automatic Organizational 
 
 - Planner (large model, high reasoning). Takes a goal and writes a revisioned plan: sub-tasks, dependencies, a size label (small, medium or large) and the files each one will touch. Uses Paperclip's planning mode.
 - Orchestrator (medium model). Reads the approved plan, applies the routing policy, creates the issues and assigns them. Hires a worker through an agent-hire request when the roster lacks the tier it needs. Sets the budget of each issue, says whether subagents are allowed, watches runs and sends a failed task up one tier.
-- Workers, in tiers: small (cheap flash models), medium, large. Each is a Paperclip agent with a harness, a model, a reasoning effort and limits.
+- Workers, in tiers: small (cheap flash models), medium, large. A tier is not a separate agent. The orchestrator picks it per issue with `assigneeAdapterOverrides.adapterConfig` (model, turn limit, time limit) on the issue it creates, so one agent per harness is enough.
 - Reviewer (optional, large model). Checks the diff before a task closes.
 
 ## Agent builder
@@ -46,7 +46,7 @@ Every agent is described by one record, and a preset is a saved record:
 - instructions bundle and skills
 - reports to (the orchestrator, by default)
 
-The room shows the builder as a form. Submitting it creates an agent-hire request. With `requireBoardApprovalForNewAgents` on, the owner approves every hire an orchestrator makes. Keep it on.
+The room shows the builder as a form. Submitting it creates an agent-hire request. With `requireBoardApprovalForNewAgents` on (it is off today), the owner approves every hire an orchestrator makes. Turn it on before an orchestrator is allowed to hire. The builder is needed for a new harness or role. Choosing a model or limit for one task is an issue override, not a hire.
 
 ## Routing policy, version 1: rules
 
@@ -56,7 +56,7 @@ A policy file maps a task profile to a tier. The profile comes from the planner'
 - Medium: several files, or a change that needs a new test.
 - Large: design, an unclear bug, or anything that touches secrets, deployment or data.
 - Escalate one tier after a failed test, a failed review or one failed attempt. Never skip a tier twice.
-- Spend limits at four levels: run, issue, agent and company. A hard stop ends the run. Going over needs the owner's approval.
+- Spend limits at four levels: run, issue, agent and company. Paperclip budgets only count billed cents, so they never stop a subscription run (Claude Code, probably agy). For those, limits are turns (`maxTurnsPerRun`), time (`timeoutSec`) and token meters we compute from the cost routes. Going over needs the owner's approval.
 - The policy is a file in the repo. A change to it is a reviewed diff, never a silent edit.
 
 ## Decision layer, version 2: learn from outcomes
@@ -73,7 +73,7 @@ This needs real data. Expect it to be useful after about 100 logged runs, not be
 
 ## Subagents
 
-- Each agent and each issue carries `subagents: allowed or not`, and a depth limit.
+- Each agent and each issue carries `subagents: allowed or not`, and a depth limit. The issue field `requestDepth` may carry the depth (to confirm).
 - A child spends from its parent's issue budget.
 - The room shows the child as a new shape that splits off its parent along a string, with its own terminal.
 - Harness signals are unknown until S1 records them (see TASKS.md).
@@ -83,7 +83,7 @@ This needs real data. Expect it to be useful after about 100 logged runs, not be
 Today OpenCode and AGY are driven by hand in their own windows, and their reports are pasted back. The fix is to run them as Paperclip agents in isolated worktrees:
 
 - A task becomes an issue, and Claude (or the orchestrator) creates it through the API.
-- Each agent works in its own git worktree workspace.
+- Each agent works in its own git worktree workspace. This needs the instance flag `enableIsolatedWorkspaces` (off today) and a git project workspace, and each issue sets `executionWorkspacePreference: isolated_workspace` with `workspaceStrategy.type: git_worktree`.
 - The report is the run result and the issue comments, which Claude reads through the API.
 - OpenCode already fits (`opencode_local`, reports tokens).
 - agy does not fit yet: its Paperclip agent uses the `process` adapter with the prompt fixed in its arguments. It needs a launcher that reads its issue through the Paperclip API.

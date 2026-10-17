@@ -60,11 +60,11 @@ The goal is a public application that turns Paperclip into an overview room wher
 
 Design and rules are in `docs/agents/CONTROL-PLANE.md`. Paperclip already has hiring, budgets, approvals, planning and worktrees, so these tasks use its APIs and do not rebuild them.
 
-**C0. Run the dev agents inside Paperclip (Claude, with the owner).** Register OpenCode, AGY and Claude Code as Paperclip agents with isolated worktree workspaces, so tasks arrive as issues and reports come back as run results and comments. agy needs a launcher that reads its issue through the API, because its arguments hold a fixed prompt today. Try one tiny issue per agent. The owner picks the models first, because each run spends credit.
+**C0. Run the dev agents inside Paperclip (Claude, with the owner).** Needs the owner's yes to switch on the instance flag `enableIsolatedWorkspaces`, and a git project workspace for the repo. Register OpenCode, AGY and Claude Code as Paperclip agents with isolated worktree workspaces, so tasks arrive as issues and reports come back as run results and comments. agy needs a launcher that reads its issue through the API, because its arguments hold a fixed prompt today. Try one tiny issue per agent. The owner picks the models first, because each run spends credit.
 
-**C1. Paperclip API audit (Claude, no credit).** Start Paperclip, read the real request and answer shapes of agent-hires, budgets, approvals, workspaces, planning mode and cost summaries, and write `docs/agents/PAPERCLIP-API.md`.
+**C1. Paperclip API audit (Claude, done).** Written up in `docs/agents/PAPERCLIP-API.md`. Open from it: the answers to a hire and an issue create, and a full plan flow, all need a throwaway write and the owner's OK.
 
-**C2. Control client (OpenCode).** Bridge routes that pass hire, budget, dispatch and approval calls to Paperclip, local pages only, with tests against the fake Paperclip. Needs C1.
+**C2. Control client (OpenCode).** Bridge routes that pass hire, budget, dispatch (an issue with `assigneeAdapterOverrides`) and approval calls to Paperclip, local pages only, with tests against the fake Paperclip. Shapes are in `PAPERCLIP-API.md`.
 
 **C3. Control surface (AGY).** In the HUD: an agent builder form, a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters on the agent list and an approvals queue. Needs C2.
 
