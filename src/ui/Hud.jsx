@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
+import ControlDrawer from './panels/ControlDrawer.jsx'
 
 const STATUS_TEXT = {
   idle: 'idle',
@@ -18,6 +19,7 @@ const SHORTCUTS = [
   ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
   ['[ and ]', 'Decrease or increase replay speed'],
   ['L', 'Toggle event log'],
+  ['C', 'Toggle control drawer'],
   ['?', 'Toggle keyboard help'],
 ]
 
@@ -41,6 +43,7 @@ export default function Hud({
   mode = 'replay',
   onMode = () => {},
   liveAvailable = false,
+  client = null,
   onToggle,
   onSeek,
   onSpeed,
@@ -48,9 +51,17 @@ export default function Hud({
   onOverview,
 }) {
   const [logOpen, setLogOpen] = useState(false)
+  const [controlOpen, setControlOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
   const logBodyRef = useRef(null)
   const visibleLog = log.slice(-50)
+  const visibleShortcuts = client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && client) {
+      window.client = client
+    }
+  }, [client])
 
   useEffect(() => {
     function onKey(event) {
@@ -58,7 +69,18 @@ export default function Hud({
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key === 'l' || event.key === 'L') {
         event.preventDefault()
-        setLogOpen((open) => !open)
+        setLogOpen((open) => {
+          const next = !open
+          if (next) setControlOpen(false)
+          return next
+        })
+      } else if (client && (event.key === 'c' || event.key === 'C')) {
+        event.preventDefault()
+        setControlOpen((open) => {
+          const next = !open
+          if (next) setLogOpen(false)
+          return next
+        })
       } else if (event.key === '?') {
         event.preventDefault()
         setHelpOpen((open) => !open)
@@ -68,7 +90,7 @@ export default function Hud({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [client])
 
   useEffect(() => {
     if (logOpen && logBodyRef.current) {
@@ -108,13 +130,38 @@ export default function Hud({
         </div>
 
         <div className="hud-actions">
+          {client && (
+            <button
+              type="button"
+              className="hud-action"
+              aria-pressed={controlOpen}
+              aria-expanded={controlOpen}
+              aria-controls="hud-control-drawer"
+              onClick={() => {
+                setControlOpen((open) => {
+                  const next = !open
+                  if (next) setLogOpen(false)
+                  return next
+                })
+              }}
+            >
+              <span>Control</span>
+              <span className="agent-key mono">C</span>
+            </button>
+          )}
           <button
             type="button"
             className="hud-action"
             aria-pressed={logOpen}
             aria-expanded={logOpen}
             aria-controls="hud-log-drawer"
-            onClick={() => setLogOpen((open) => !open)}
+            onClick={() => {
+              setLogOpen((open) => {
+                const next = !open
+                if (next) setControlOpen(false)
+                return next
+              })
+            }}
           >
             <span>Log</span>
             <span className="agent-key mono">L</span>
@@ -185,6 +232,14 @@ export default function Hud({
         </aside>
       )}
 
+      {client && (
+        <ControlDrawer
+          client={client}
+          open={controlOpen}
+          onClose={() => setControlOpen(false)}
+        />
+      )}
+
       {helpOpen && (
         <div className="hud-help-backdrop" onClick={() => setHelpOpen(false)}>
           <section
@@ -206,7 +261,7 @@ export default function Hud({
               </button>
             </header>
             <dl className="hud-shortcuts">
-              {SHORTCUTS.map(([keys, description]) => (
+              {visibleShortcuts.map(([keys, description]) => (
                 <div key={keys} className="hud-shortcut-row">
                   <dt className="mono">{keys}</dt>
                   <dd>{description}</dd>
