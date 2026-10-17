@@ -43,4 +43,21 @@ describe('touchesForCommand', () => {
     expect(run('Test-Path docs\\notes.md')).toEqual(['read:docs/notes.md'])
     expect(run('ls docs\\')).toEqual(['list:docs'])
   })
+
+  it('writes both files of a rename', () => {
+    const files = ['docs/notes.md', 'docs/readme.md']
+    const touches = touchesForCommand('git mv docs/notes.md docs/readme.md', files, dirs)
+      .map((touch) => `${touch.mode}:${touch.path}`)
+    expect(touches).toEqual(['write:docs/notes.md', 'write:docs/readme.md'])
+  })
+
+  it('writes the named file of a delete', () => {
+    const files = ['docs/notes.md', 'docs/readme.md']
+    expect(touchesForCommand('rm docs/notes.md', files, dirs).map((touch) => `${touch.mode}:${touch.path}`)).toEqual(['write:docs/notes.md'])
+    expect(touchesForCommand('Remove-Item docs/readme.md', files, dirs).map((touch) => `${touch.mode}:${touch.path}`)).toEqual(['write:docs/readme.md'])
+  })
+
+  it('keeps a commit message as a read of the named files', () => {
+    expect(run('git commit -m "rename docs/notes.md to docs/readme.md"')).toEqual(['read:docs/notes.md'])
+  })
 })

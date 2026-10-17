@@ -1,6 +1,7 @@
 import { normalise } from './paths.js'
 
 const WRITE_OPERATOR = /(>>|(?<![>=-])>(?![&=])|\bSet-Content\b|\bAdd-Content\b|\bOut-File\b|\btee\b|\bsed\s+-i\b)/
+const MUTATOR = /^\s*(?:sudo\s+|npx\s+)?(?:git\s+)?(?:mv|rm|cp|del|erase|move|ren|rename|copy|Remove-Item|Rename-Item|Move-Item|Copy-Item|New-Item)\b/i
 const LISTER = /\b(ls|dir|Get-ChildItem|gci|find|tree|cd|Set-Location|Test-Path)\b/
 
 function escape(text) {
@@ -25,10 +26,11 @@ export function touchesForCommand(command, files, dirs) {
   const segments = normalise(command).split(/&&|;|\|\||\|/)
   for (const segment of segments) {
     const operator = WRITE_OPERATOR.exec(segment)
+    const mutator = MUTATOR.exec(segment)
     for (const file of files) {
       const at = tokenAt(segment, file)
       if (at === -1) continue
-      const mode = operator && operator.index < at ? 'write' : 'read'
+      const mode = mutator || (operator && operator.index < at) ? 'write' : 'read'
       add({ path: file, mode, kind: 'file' })
     }
     const lister = LISTER.exec(segment)
