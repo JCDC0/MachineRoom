@@ -1,0 +1,33 @@
+{
+  "projectRoot": "agent-sandbox",
+  "agents": [
+    {
+      "id": "6435db1d-8bbf-4289-8b2a-d0b04c249665",
+      "key": "agy",
+      "name": "agy",
+      "adapterType": "process",
+      "parser": "agy"
+    },
+    {
+      "id": "da8b0bb9-0673-4541-b8f8-66444066693d",
+      "key": "hermes",
+      "name": "Hermes",
+      "adapterType": "hermes_local",
+      "parser": "hermes"
+    },
+    {
+      "id": "d77bc211-2d3e-4423-be11-9db26e653c32",
+      "key": "opencode",
+      "name": "OpenCode Go",
+      "adapterType": "opencode_local",
+      "parser": "opencode"
+    },
+    {
+      "id": "289ac9c7-2797-47cd-aa8c-7550e4443c04",
+      "key": "claude",
+      "name": "Claude Code",
+      "adapterType": "claude_local",
+      "parser": "claude"
+    }
+  ]
+}

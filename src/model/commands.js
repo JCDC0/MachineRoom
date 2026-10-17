@@ -1,0 +1,50 @@
+import { normalise } from './paths.js'
+
+const WRITE_OPERATOR = /(>>|(?<![>=-])>(?![&=])|\bSet-Content\b|\bAdd-Content\b|\bOut-File\b|\btee\b|\bsed\s+-i\b)/
+const LISTER = /\b(ls|dir|Get-ChildItem|gci|find|tree|cd|Set-Location|Test-Path)\b/
+
+function escape(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function tokenAt(segment, token, folder = false) {
+  const tail = folder ? '(?![\\w-])(?!/[\\w.-])' : '(?![\\w-])'
+  const found = new RegExp(`(?<![\\w.-])${escape(token)}${tail}`).exec(segment)
+  return found ? found.index : -1
+}
+
+export function touchesForCommand(command, files, dirs) {
+  const touches = []
+  const seen = new Set()
+  const add = (touch) => {
+    const key = `${touch.kind}:${touch.mode}:${touch.path}`
+    if (seen.has(key)) return
+    seen.add(key)
+    touches.push(touch)
+  }
+  const segments = normalise(command).split(/&&|;|\|\||\|/)
+  for (const segment of segments) {
+    const operator = WRITE_OPERATOR.exec(segment)
+    for (const file of files) {
+      const at = tokenAt(segment, file)
+      if (at === -1) continue
+      const mode = operator && operator.index < at ? 'write' : 'read'
+      add({ path: file, mode, kind: 'file' })
+    }
+    const lister = LISTER.exec(segment)
+    if (!lister) continue
+    let named = false
+    for (const dir of dirs) {
+      if (dir === '') continue
+      const at = tokenAt(segment, dir, true)
+      if (at !== -1 && at > lister.index) {
+        add({ path: dir, mode: 'list', kind: 'dir' })
+        named = true
+      }
+    }
+    if (!named && !files.some((file) => tokenAt(segment, file) !== -1)) {
+      add({ path: '', mode: 'list', kind: 'dir' })
+    }
+  }
+  return touches
+}
