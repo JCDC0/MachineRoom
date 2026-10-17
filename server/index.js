@@ -3,8 +3,11 @@ import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createAssistantApi } from './assistant.js'
+import { changeEvents, createControlApi } from './control.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+const BODY_LIMIT = 64 * 1024
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
@@ -103,6 +106,53 @@ function sendJson(req, res, status, body) {
     'Content-Length': Buffer.byteLength(payload),
   })
   res.end(payload)
+}
+
+function readJsonBody(req, res) {
+  return new Promise((resolveBody) => {
+    const type = String(req.headers['content-type'] ?? '')
+    if (!type.toLowerCase().includes('application/json')) {
+      sendJson(req, res, 415, { error: 'Send JSON.' })
+      resolveBody(null)
+      return
+    }
+    let size = 0
+    let done = false
+    const chunks = []
+    const stop = (value) => {
+      if (done) return
+      done = true
+      resolveBody(value)
+    }
+    req.on('data', (chunk) => {
+      if (done) return
+      size += chunk.length
+      if (size > BODY_LIMIT) {
+        sendJson(req, res, 413, { error: 'That request is too large.' })
+        stop(null)
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      if (done) return
+      let parsed
+      try {
+        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+      } catch {
+        sendJson(req, res, 400, { error: 'That body is not valid JSON.' })
+        stop(null)
+        return
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        sendJson(req, res, 400, { error: 'Send a JSON object.' })
+        stop(null)
+        return
+      }
+      stop(parsed)
+    })
+    req.on('error', () => stop(null))
+  })
 }
 
 export function createBridge(options = {}) {
