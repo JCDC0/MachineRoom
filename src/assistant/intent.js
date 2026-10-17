@@ -116,6 +116,24 @@ export function resolveExplicit(text, paths) {
   return scorePaths(tokens, paths, 80)
 }
 
+export function rankPaths(text, paths, limit = 20) {
+  const tokens = tokenize(text).filter((token) => !PATH_STOP.has(token) && token.length >= 2)
+  const scored = []
+  const rest = []
+  for (const path of paths) {
+    if (path === '') continue
+    let score = 0
+    for (const token of tokens) score = Math.max(score, pathScore(path, token))
+    if (score > 0) scored.push({ path, score })
+    else rest.push(path)
+  }
+  scored.sort((a, b) => b.score - a.score || a.path.length - b.path.length)
+  const chosen = scored.slice(0, limit).map((item) => item.path)
+  const depth = (path) => path.split('/').length
+  rest.sort((a, b) => depth(a) - depth(b) || a.length - b.length)
+  return chosen.concat(rest.slice(0, Math.max(0, Math.min(limit, 12) - chosen.length)))
+}
+
 function dollarsToCents(text) {
   const found = /(\d+(?:\.\d{1,2})?)\s*(dollars?|usd|bucks|cents?|c)?\b/i.exec(text.replace(/\$\s*(\d)/g, '$1 dollars '))
   if (!found) return null
