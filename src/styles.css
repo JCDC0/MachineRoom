@@ -1935,6 +1935,242 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.6);
 }
 
+/* Floating Assistant Terminal */
+.mr-assistant {
+  position: fixed;
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  background: rgb(0 0 0 / 0.94);
+  border: 1px solid rgb(255 255 255 / 0.55);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 0.85);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.94);
+  pointer-events: auto;
+}
+
+.mr-assistant-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgb(255 255 255 / 0.94);
+  color: var(--black);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: grab;
+  user-select: none;
+}
+
+.mr-assistant-title:active {
+  cursor: grabbing;
+}
+
+.mr-assistant-title-text {
+  font-weight: 500;
+}
+
+.mr-assistant-close {
+  background: transparent;
+  border: none;
+  color: var(--black);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.mr-assistant-close:hover {
+  background: transparent;
+  color: var(--black);
+  opacity: 0.7;
+}
+
+.mr-assistant-log {
+  height: 220px;
+  max-height: 260px;
+  min-height: 140px;
+  padding: 8px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgb(0 0 0 / 0.94);
+}
+
+.mr-assistant-line {
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.mr-assistant-line.is-command {
+  color: rgb(255 255 255 / 0.65);
+}
+
+.mr-assistant-line.is-command.is-blocked {
+  color: var(--red);
+}
+
+.mr-assistant-line.is-action {
+  color: rgb(255 255 255 / 0.94);
+}
+
+.mr-assistant-line.is-blocked {
+  color: var(--red);
+}
+
+.mr-assistant-line.is-thinking {
+  color: rgb(255 255 255 / 0.6);
+  font-style: italic;
+}
+
+.mr-assistant-line.is-unknown {
+  color: rgb(255 255 255 / 0.8);
+}
+
+.mr-assistant-card {
+  border: 1px solid var(--line);
+  padding: 8px;
+  background: rgb(255 255 255 / 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mr-assistant-card-say {
+  font-size: 12px;
+  color: rgb(255 255 255 / 0.94);
+}
+
+.mr-assistant-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mr-assistant-btn-confirm {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+
+.mr-assistant-btn-confirm:hover:not(:disabled) {
+  background: rgb(229 255 0 / 0.12);
+  border-color: var(--yellow);
+}
+
+.mr-assistant-btn-cancel {
+  border-color: var(--line);
+  color: rgb(255 255 255 / 0.8);
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+
+.mr-assistant-card-status {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.mr-assistant-ask {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mr-assistant-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.mr-assistant-option-btn {
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.05);
+  color: rgb(255 255 255 / 0.9);
+  cursor: pointer;
+  font-weight: 400;
+}
+
+.mr-assistant-option-btn:hover:not(:disabled) {
+  border-color: var(--white);
+  background: rgb(255 255 255 / 0.12);
+}
+
+.mr-assistant-form {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  background: var(--black);
+  padding: 6px 8px;
+}
+
+.mr-assistant-prompt {
+  font-size: 13px;
+  color: rgb(255 255 255 / 0.7);
+  margin-right: 6px;
+  user-select: none;
+  font-weight: 500;
+}
+
+.mr-assistant-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--white);
+  font-size: 12px;
+  font-family: var(--mono);
+  font-weight: 400;
+  caret-color: var(--yellow);
+}
+
+.mr-assistant-input:focus-visible {
+  outline: none;
+}
+
+@media (max-width: 899px) {
+  .mr-assistant {
+    position: fixed !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 45vh !important;
+    border-left: none !important;
+    border-right: none !important;
+    border-bottom: none !important;
+    box-shadow: 0 -4px 16px rgb(0 0 0 / 0.6);
+  }
+
+  .mr-assistant-title {
+    cursor: default;
+  }
+}
+
 @media (max-width: 900px) {
   .control-drawer {
     top: auto;

@@ -22,7 +22,7 @@ function normalizeSettings(raw) {
   const paperclip = raw.paperclip ?? conn.paperclip
   const company = raw.company ?? conn.company
 
-  return {
+  const out = {
     source: VALID_SOURCES.has(source) ? source : DEFAULT_SETTINGS.source,
     bridge: typeof bridge === 'string' ? bridge : DEFAULT_SETTINGS.bridge,
     paperclip: typeof paperclip === 'string' ? paperclip : DEFAULT_SETTINGS.paperclip,
@@ -31,6 +31,16 @@ function normalizeSettings(raw) {
     speed: typeof raw.speed === 'number' && Number.isFinite(raw.speed) && raw.speed > 0 ? raw.speed : DEFAULT_SETTINGS.speed,
     helpSeen: typeof raw.helpSeen === 'boolean' ? raw.helpSeen : DEFAULT_SETTINGS.helpSeen,
   }
+
+  if (raw.assistantPosition && typeof raw.assistantPosition === 'object') {
+    const x = Number(raw.assistantPosition.x)
+    const y = Number(raw.assistantPosition.y)
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      out.assistantPosition = { x, y }
+    }
+  }
+
+  return out
 }
 
 export function loadSettings(storage) {
@@ -59,3 +69,15 @@ export function saveSettings(storage, partial) {
   }
   return merged
 }
+
+export function loadAssistantPosition(storage) {
+  const settings = loadSettings(storage)
+  return settings.assistantPosition ?? null
+}
+
+export function saveAssistantPosition(storage, pos) {
+  if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return null
+  const saved = saveSettings(storage, { assistantPosition: { x: pos.x, y: pos.y } })
+  return saved.assistantPosition ?? null
+}
+
