@@ -1,4 +1,4 @@
-# Next plan, from 0.1.25
+# Next plan, from 0.1.26
 
 Written 2026-10-18. The task briefs are in `TASKS.md`, the design is in `CONTROL-PLANE.md`. This file puts them in order and says what comes first.
 
@@ -33,7 +33,7 @@ Each line is one brief in `TASKS.md`. Lines that start together can run at the s
 
 - OpenCode: **C2** (real control client in the bridge, with change notices and health fields), then **A4** (assistant model route). Then **S1**, **B6**, **U1**, **U2**, **P5**, **P6**. C2 goes first because it removes the copy and paste. S1 and the later items are cheap and wait.
 - AGY: **A2** (floating assistant terminal), then **C3b** (panels refetch on change notices), then **C3d** (agent builder form, after C3c).
-- Claude: **C3c** (contract: hire and update an agent), **A3** (dispatcher), **A5** (cost board in the room), **G1** (history audit), **G3** (README skeleton), then **C0 stage 2** when you say yes to worktrees.
+- Claude: **C3c** (contract: hire and update an agent), **D1** (decision model probe set and comparison run), **A3** (dispatcher), **A5** (cost board in the room), **G1** (history audit), **G3** (README skeleton), then **C0 stage 2** when you say yes to worktrees.
 
 **Then M1 check.** Wire the real client, run the exit test with Hermes on DeepSeek V4.1 Flash, fix what breaks.
 
@@ -43,11 +43,15 @@ Each line is one brief in `TASKS.md`. Lines that start together can run at the s
 
 **Next, for M3**
 
-- **C4** (routing policy), **C5** (planner and orchestrator agents), **C6** (outcome log), **S2 and S3** (subagents in the room, after S1), **U3** (candidate build beside the stable one), the protected files list in `CONTROL-PLANE.md`.
+- **D2** (decide route in the bridge, OpenCode), **D3** to **D5** (assistant fallback, routing policy and queue proposals through the decision model), **C4** (routing policy), **C5** (planner and orchestrator agents), **C6** (outcome log), **S2 and S3** (subagents in the room, after S1), **U3** (candidate build beside the stable one), the protected files list in `CONTROL-PLANE.md`.
 
 **Next, for M4**
 
 - **P1** (npx install), **P3** (scale), **P4** and **G2** (your decisions), **G4** (fresh screenshots), **G5** (CI), **G6** (publish).
+
+## The decision model
+
+A decision model returns typed answers (a choice, a yes probability, a score) instead of text. It is cheap and fast enough to sit between our rules and the big models: it can tell the orchestrator which tier a task needs, whether subagents are worth it, how risky a wrong result would be, and whether a typed request should become a queued routine. The thresholds and the floors stay in our code, and it is off by default. Which one to use is decided by measuring on our own cases (D1), not by the published rankings, which disagree. The provisional choice is `typesafe/jev-1.14`, with Perplexity Decider and Strands Decider as challenger and offline option. Full design in `CONTROL-PLANE.md`.
 
 ## Hermes on DeepSeek V4.1 Flash (H1, you)
 
@@ -90,3 +94,4 @@ You said: publish it with a clean README. Pushing leaves your machine, so nothin
 1. Worktrees (`enableIsolatedWorkspaces`): say yes when C2 is merged, and Claude will list the exact setting changes first.
 2. Private GitHub repository now, as a backup? Recommended.
 3. The names and licence in G2.
+4. D1 needs your OpenRouter key in the environment of the shell that runs it, so it can try the decision models on our probe set. It costs cents. Say yes and run it yourself, or tell Claude to run it.

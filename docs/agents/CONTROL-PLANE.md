@@ -183,6 +183,64 @@ A diff that touches one of these gets a mark in the review panel (W3) and needs 
 - Anything that starts a process or runs a command.
 - `.gitignore`, `package.json` scripts, and any CI file.
 
+## The decision model
+
+A decision model does not write text. You send it a short text (the state) and typed questions, and for each question it returns a typed answer: `choice` (one of your options, with a probability for each), `noul` (the probability that a statement is true) or `score` (a position on ordered levels, up to 10). It answers in about 0.1 to 0.5 seconds and costs about $0.00002 for a call of 450 tokens. It cannot write code, plan or explain itself. That makes it the right size for the small judgments that sit between our rules and the big models, with the thresholds that act on its answers kept in our own code.
+
+Checked 2026-10-18. The category is two weeks old and moves fast, so check the live list before trusting any id below: `GET https://openrouter.ai/api/v1/models?output_modalities=decisions` lists 27 decision models today, and needs no key.
+
+### What we ask it
+
+| Question | Type | Used for |
+| --- | --- | --- |
+| tier | choice: small, medium, large | which model tier takes the task |
+| harness | choice among the enabled agents, each with a one line profile | which agent takes it |
+| coordination | noul | does the work need reasoning across parts of the system, beyond local edits |
+| uncertainty | noul | does it need open-ended investigation, not a bounded procedure |
+| consequence | noul | would a wrong result do broad harm (regressions, compatibility, security, data loss) |
+| splits | noul | does it break into independent parts, so subagents may help |
+| effort | score, four levels | reasoning effort |
+| shape | choice: one_off, recurring, conditional, not_a_task | whether the request should become a queued routine |
+
+For the assistant fallback it also takes a `choice` over the 14 action types, one over the agent keys, and one over up to 20 candidate paths that our own name matching already narrowed down. The answer space is closed, so the reply cannot be malformed and nothing is parsed from prose.
+
+### Rules for acting on its answers
+
+1. **Floors stay in code.** Budgets, quota, permissions, the protected files and the approval rules are checked by our code. An answer may make a choice safer or cheaper inside those floors. It never unlocks what a rule forbids.
+2. **Complexity.** Start from the OpenCode routing example that is published: `complexity = max(coordination, uncertainty)`, threshold 0.65, or 0.4 when `consequence >= 0.7`. At or above the threshold the task goes to a larger tier. Replace these numbers with ones fitted on our probe set and, later, our outcome log (C6).
+3. **Three bands.** Act, review, escalate. A `noul` between about 0.35 and 0.65 is not an answer. It goes up one tier or to you. Confidence is how concentrated the probabilities are, not whether the answer is right.
+4. **Subagents** are allowed only when `splits` is high, the tier is medium or larger, and the budget has room.
+5. **Time limit.** 3 seconds, one retry. On failure, or when the setting is off, the rules alone decide (C4). The room and the panels never wait for it.
+6. **Pin and log.** Use a versioned id such as `typesafe/jev-1.14`, never an alias. Log the model id, the question names, the probabilities and the thresholds with each decision, and not the text. Run the probe set again when the model changes.
+7. **Keep the question wording fixed.** One audit saw accuracy fall from AUC .815 to .581 when yes and no were swapped. Wording is part of the model.
+
+### Queueing automated tasks
+
+The assistant (and the dispatch form) passes a typed request through `shape`. `one_off` becomes a dispatch proposal, as today. `recurring` or `conditional` becomes a proposal for a Paperclip routine (`/api/companies/:id/routines`): a card with what it does, when, which agent, which tier and a spend cap. Nothing is queued without your click. A routine runs inside its own budget and stops after two failures in a row. A later setting may let one named class queue without a click (for example "docs only, small tier, under $0.50 a day"). Prompt text in an issue comes from outside and is untrusted: an audit raised prompt injection success on Jev from 1.8 to 3.5 percent, and an optimised context redirected 61 percent of decisions. That is why the floors above live in code.
+
+### What is sent
+
+Only the request or task title and description (keys removed with `redact`), the agent profile lines and the option names. Never file contents, diffs, keys or full paths. The call is made by the bridge (`POST /api/decide`, local pages only), so the key stays in the bridge's environment (`OPENROUTER_API_KEY`) and never reaches the browser. The setting is off by default, and the settings page shows the exact payload. The vendors say little about how long they keep inputs, so treat the text as shared with OpenRouter and the model's provider. The bridge logs ids and probabilities only.
+
+### Which model
+
+Nothing published measures routing for coding agents, and the rankings disagree. The Artificial Analysis Decision Index (launch, 2026-10-13) has Jev 1.13 first at 58, with GLiDE and Microsoft-Decision-1 at 54. Its BenchLM mirror (2026-10-15) has d1-ultra first at 65.2 and Jev 1.14 at 57.1. Perplexity Decider came first on one hand-labelled test of 82 questions (80 right) and placed in the top three, above Microsoft-Decision-1, on a 3,250-case index (83.3). The index measures general knowledge, multiple choice, tool-calling decisions and safety, not our questions. An evidence audit of 28 papers found no demonstrated accuracy advantage over ordinary label probabilities from the same model. The real gains are speed and cost against a language model. Its other findings: hosted Jev is not deterministic (about 1 in 100 answers changes on a repeat), probabilities are overconfident, and a stronger fallback only helps when its errors differ from the decision model's.
+
+| Model (OpenRouter id) | Per 1M input | Why consider it | Watch for |
+| --- | --- | --- | --- |
+| `typesafe/jev-1.14` | $0.042 | The reference. Best known, documented on OpenRouter, an OpenCode routing example exists, 262k context | Closed weights. Not deterministic. Overconfident. Text and PNG or JPEG only |
+| `perplexity/pplx-decider-v1.2`, `-flash-v1.2` | $0.02, $0.01 | Cheapest. First on one 82-question test, top three on a 3,250-case index | The tests ran v1.1 or v1. Recheck on v1.2 |
+| `cloudflare/clef`, `clef-flash` | $0.042, $0.021 | Open weights (Apache 2.0), same API as Jev, best calibrated in one benchmark (2.2 percent error) | Vendor figures. Flash is weak with many intents |
+| `inception/mercury-decide:free` | free | Zero cost for tests | Unknown data handling on the free tier |
+| `microsoft/microsoft-decision-1` | $0.042 | 4th of 12 on a 3,250-case benchmark | About 680 ms through OpenRouter |
+| Local: Strands Decider 2B (AWS), vLLM Decision 2.0 family, Laya | free | No key, nothing leaves the machine, can be retrained on our labels | You run it. Strands' local server has no authentication, so bind it to loopback only. Laya's general checkpoint scored below the majority-class baseline until fine-tuned |
+
+The call is `POST https://openrouter.ai/api/alpha/decisions` with `model`, `state` and `questions`. It is an alpha endpoint, and one source says it is limited to selected customers, so the first step is one smoke call with your key. The reference requires `criteria` on every question (a `true` and a `false` entry for `noul`, option keys for `choice`, an array for `score`); one community example leaves them out, so follow the reference.
+
+**The way to choose is to measure.** D1 builds a probe set from our own cases and runs every candidate on it, with two baselines the audit says must be there: our plain rules, and a small language model with structured output (DeepSeek V4.1 Flash or Claude Haiku 5.5). We keep the one with the most coverage at 5 percent accepted-case error, and good calibration, and the runner-up as a fallback. Until then the provisional choice is `typesafe/jev-1.14`, pinned, with `perplexity/pplx-decider-v1.2` as the challenger and Strands Decider 2B as the offline option. The seam takes the wire shape of the Decisions API, a base address and a model id, so switching is a setting.
+
+Not now: using it to auto-approve a harness's permission prompts. Community tools for that (jev-guard, pi-jev, jev-use) are unofficial and weeks old, and a wrong "approve" costs more than a wrong route.
+
 ## Order of work
 
 The current order, with milestones, is in `docs/agents/PLAN.md`. This list is the first version.

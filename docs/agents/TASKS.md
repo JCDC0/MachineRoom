@@ -129,3 +129,17 @@ The order and the milestones are in `docs/agents/PLAN.md`. These are the briefs 
 **H1. Hermes on DeepSeek V4.1 Flash (the owner).** Set the model in Hermes, using an id that Hermes itself lists. See `PLAN.md`.
 
 **G1 to G6. Publish to GitHub.** History audit (Claude), licence and names (the owner), README (Claude, Hermes drafts), fresh screenshots (AGY), CI (OpenCode), private repository then public (the owner). Details in `PLAN.md`.
+
+## Roadmap: the decision model
+
+Design and the model comparison are in `docs/agents/CONTROL-PLANE.md` under "The decision model".
+
+**D1. Probe set, seam and comparison run (Claude).** `src/decider/` holds the request builder, the answer parser and `decide(question set, state)` with an injected `fetch`, a timeout and a fallback to the rules. `scripts/decide-eval.mjs` runs every listed model id on the probe sets and prints, per model and per question: accuracy, coverage at 5 percent accepted-case error, calibration error, median latency, cost and the share of answers that change on a repeat. Baselines in the same table: our rules (`interpret`) and a small language model with structured output. Probe sets in `tests/probes/`: the assistant phrases from `tests/assistant.test.js`, and about 40 coding tasks with tier, splits and consequence labels that the owner reviews. Tests use a fake Decisions server. Running it needs `OPENROUTER_API_KEY` in the environment of whoever runs it (cents of spend). The key is never written to a file or printed.
+
+**D2. Decide route in the bridge (OpenCode).** `POST /api/decide`, local pages only. Body `{ state, questions, model? }`, limit 32 KB. The bridge adds the key from `OPENROUTER_API_KEY`, calls the Decisions API with a 3 second timeout and one retry, and returns the answers and `usage`. With no key, answer 404 in plain words. Log only the model id, the question names and the probabilities. Test with a fake server. Do not hard code a model: `DECISION_MODEL` in the environment, default `typesafe/jev-1.14`.
+
+**D3. Assistant fallback through the decider (Claude).** After D1 shows it matches the rules on the assistant probe set: choice over action types, agent keys and up to 20 candidate paths, through D2. It replaces the text model for A4, which stays as the second choice.
+
+**D4. Routing policy uses the answers (Claude).** C4 takes `tier`, `harness`, `coordination`, `uncertainty`, `consequence`, `splits` and `effort`, applies the floors and the three bands from the design, and returns the dispatch settings (model, effort, limits, subagents allowed, approval needed). Unit tests with canned answers. No network in the tests.
+
+**D5. Queue proposals (Claude, AGY).** `shape` turns a typed request into a routine proposal card in the assistant and the drawer. Needs the routines routes in `PAPERCLIP-API.md` (check them first), C2 and D2.

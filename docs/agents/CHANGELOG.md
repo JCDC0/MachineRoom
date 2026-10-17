@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The decision model: design, rules for acting on its answers, what is sent, a comparison of 27 listed models (Jev 1.14, Perplexity Decider, Clef, Mercury Decide, Microsoft-Decision-1 and local open ones), and tasks D1 to D5. The choice is to be measured on our own probe set.
 - Next plan (`docs/agents/PLAN.md`): milestones M1 to M4, the order of work for OpenCode, AGY and Claude, rules for staying current while Paperclip changes by itself, rules for MachineRoom building on itself, and the steps to publish on GitHub.
 - The control client contract gains `subscribe` (change notices) and an `overrides` field on issues. The mock sends a notice after each write and keeps the dispatch limits on the issue. Tests run in the threads pool, because the forks pool crashed on Windows in `tests/bridge.test.js` about once in eight full runs (exit code 3221226505); 40 runs in a row pass now.
 - Merged OpenCode's four recorded scenarios and the stored-run frame tool, and AGY's control drawer (dispatch, tasks, approvals, meters on the mock). Removed a debug line that put the client on `window`.
