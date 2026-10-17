@@ -91,6 +91,12 @@ Facts behind it:
 
 So: `machine-room up` (task W1) checks for a pinned Paperclip version, starts it and the bridge, and opens MachineRoom. You never open Paperclip's page except through a link for rare admin. Fork only if both hold: the plugin system cannot do something we need (for example enforcing routing inside the server), and keeping up with upstream is cheaper than the gap.
 
+## What agy offers (checked on the installed agy 1.4.0)
+
+- Per run flags: `--model`, `--effort` (low, medium, high, xhigh, max), `--mode` (accept-edits, auto, plan), `--agent`, `--print` with `--output-format stream-json`, `--print-timeout`, `--json-schema`, `--dangerously-skip-permissions`. The Paperclip `process` agent can pass these in its arguments, so the router can pick model and effort per task once agy has a launcher that reads its issue.
+- `agy models` lists 13 ids: `gemini-4-argon-{low,medium,high}`, `gemini-3.8-flash-{low,medium,high}`, `claude-opus-5-5-{low,medium,high}`, `claude-sonnet-5-5-{low,medium,high}` and `gpt-oss-120b-medium`. So agy is a multi-model harness, and a Claude model run through agy counts against the Antigravity quota, not Claude's. Paperclip cannot see either.
+- Subagents: secondary sources (not Google's own docs) say Antigravity has built-in browser and terminal subagents, that custom agents start with `--agent <name>` and are managed with `/agents`, and that a custom agent can name its own model (it inherits the parent's model if it names none). On this machine `agy agents` lists nothing and no plugin is installed, so no custom agent exists yet. Unverified: the file format of a custom agent, and whether the model field works. Test it before relying on it (task S1 can record an agy run that starts a subagent).
+
 ## Using subscriptions and credits well
 
 Paperclip already reads subscription quota. `GET /api/companies/:id/costs/quota-windows` returned, for Anthropic over OAuth: the current session (percent used and reset time), the week for all models, and extra usage (not enabled). OpenAI's quota failed because the `codex` CLI is not installed. `GET /api/companies/:id/costs/window-spend` returns spend per provider for 5 hours, 24 hours and 7 days, but only in cents, so subscription runs show 0. Providers other than Anthropic give no quota percent.
