@@ -469,21 +469,21 @@ input:focus-visible {
 }
 
 .mr-term {
-  width: 300px;
+  width: 320px;
   font-family: var(--mono);
-  font-size: 13px;
-  line-height: 1.35;
-  color: rgb(255 255 255 / 0.9);
-  background: rgb(0 0 0 / 0.86);
+  font-size: 14px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.94);
+  background: rgb(0 0 0 / 0.92);
   border: 1px solid rgb(255 255 255 / 0.55);
   pointer-events: auto;
   cursor: pointer;
-  transition: opacity 300ms, border-color 300ms;
+  transition: opacity 300ms, border-color 300ms, box-shadow 300ms;
 }
 
 .mr-term.is-idle {
-  opacity: 0.55;
-  border-color: rgb(255 255 255 / 0.25);
+  opacity: 0.72;
+  border-color: rgb(255 255 255 / 0.28);
 }
 
 .mr-term.is-working,
@@ -493,21 +493,24 @@ input:focus-visible {
 
 .mr-term.is-error {
   border-color: var(--red);
+  box-shadow: 0 0 18px rgb(255 42 42 / 0.45), inset 0 0 8px rgb(255 42 42 / 0.15);
 }
 
 .mr-term.is-done {
   border-color: var(--yellow);
+  box-shadow: 0 0 18px rgb(229 255 0 / 0.42), inset 0 0 8px rgb(229 255 0 / 0.14);
 }
 
 .mr-term.is-muted {
-  opacity: 0.3;
+  opacity: 0.35;
 }
 
 .mr-term-title {
-  padding: 3px 8px;
-  background: rgb(255 255 255 / 0.92);
-  color: #000;
-  font-size: 12px;
+  padding: 4px 8px;
+  background: rgb(255 255 255 / 0.94);
+  color: var(--black);
+  font-size: 13px;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -521,8 +524,8 @@ input:focus-visible {
 }
 
 .mr-term-body {
-  height: calc(7 * 1.35em + 16px);
-  padding: 8px 10px;
+  height: calc(7 * 1.4em + 16px);
+  padding: 8px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -530,14 +533,18 @@ input:focus-visible {
 }
 
 .mr-line {
-  min-height: 1.35em;
+  min-height: 1.4em;
   white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
+.mr-line.is-normal {
+  color: rgb(255 255 255 / 0.94);
+}
+
 .mr-line.is-dim {
-  color: rgb(255 255 255 / 0.42);
+  color: rgb(255 255 255 / 0.62);
 }
 
 .mr-line.is-error {
@@ -548,9 +555,37 @@ input:focus-visible {
   color: var(--yellow);
 }
 
+.mr-term.is-working .mr-line:last-child::after {
+  content: '';
+  display: inline-block;
+  width: 0.55em;
+  height: 0.95em;
+  margin-left: 4px;
+  vertical-align: -0.1em;
+  background: currentColor;
+  animation: mr-caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes mr-caret-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  button,
   .mr-term {
     transition: none;
+  }
+
+  .mr-term.is-working .mr-line:last-child::after {
+    animation: none;
+    opacity: 1;
   }
 }
 
