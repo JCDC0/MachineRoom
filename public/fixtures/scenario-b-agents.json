@@ -1,0 +1,12 @@
+{
+  "projectRoot": "agent-sandbox",
+  "agents": [
+    {
+      "id": "d77bc211-2d3e-4423-be11-9db26e653c32",
+      "key": "opencode",
+      "name": "OpenCode Go",
+      "adapterType": "opencode_local",
+      "parser": "opencode"
+    }
+  ]
+}
