@@ -1,16 +1,42 @@
+import { name, tagline } from './brand.js'
+
 const COPY = {
-  loading: ['Loading replay', 'Reading the recorded run.'],
-  empty: ['Nothing recorded', 'The replay holds no agent activity yet.'],
-  error: ['Replay failed to load', 'The recorded run could not be read.'],
+  loading: ['Loading room', 'Reading the agent feed and project files.'],
+  empty: ['Nothing recorded yet', 'This run has no agent activity to show yet.'],
+  error: ['Could not load the room', 'The agent feed could not be read. Check the connection and try again.'],
 }
 
-export default function Notice({ status, message, title: heading, children }) {
+export default function Notice({
+  status = 'loading',
+  message,
+  title: heading,
+  onRetry,
+  retryLabel = 'Try again',
+  children,
+}) {
   const [title, text] = COPY[status] ?? COPY.error
+  const isError = status === 'error'
+
   return (
-    <main className="notice" role={status === 'error' ? 'alert' : 'status'}>
-      <h1>{heading ?? title}</h1>
-      <p className="mono">{message ?? text}</p>
-      {children}
+    <main className="notice" role={isError ? 'alert' : 'status'} aria-live={isError ? 'assertive' : 'polite'}>
+      <header className="notice-header">
+        <p className="notice-brand mono">{name}</p>
+        <p className="notice-tagline">{tagline}</p>
+      </header>
+      <div className="notice-panel">
+        <h1>{heading ?? title}</h1>
+        <p className="notice-message mono">{message ?? text}</p>
+        {(onRetry || children) && (
+          <div className="notice-actions">
+            {onRetry && (
+              <button type="button" onClick={onRetry}>
+                {retryLabel}
+              </button>
+            )}
+            {children}
+          </div>
+        )}
+      </div>
     </main>
   )
 }
