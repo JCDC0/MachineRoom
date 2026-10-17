@@ -2,6 +2,12 @@
 
 A 3D view of coding agents working on one project. Agents appear as wireframe shapes around a core. Each has a terminal on a wall above the room. When an agent reads or writes, the folders on the floor open one after another and the files light up. White is activity, red is failure, yellow is finished work.
 
+![Machine Room overview](docs/images/overview.png)
+
+![Machine Room close-up follow view](docs/images/closeup.png)
+
+![Machine Room connect screen](docs/images/connect.png)
+
 By default it replays a recorded run of four agents (Claude Code, Hermes, OpenCode and agy) working through Paperclip. With Paperclip running, open `/?live` to follow your own agents as they work, or run `npm run bridge` (see `.env.example`) and open `/?live&bridge=http://127.0.0.1:5174`. Add `&simulate` to try live mode without Paperclip.
 
 ```
