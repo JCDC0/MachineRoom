@@ -8,7 +8,18 @@ const STATUS_TEXT = {
   done: 'finished',
 }
 
-export default function Hud({ snapshot, focused, speeds, rootName, onToggle, onSeek, onSpeed, onFocus, onOverview }) {
+export default function Hud({
+  snapshot,
+  focused,
+  speeds,
+  rootName,
+  markers = [],
+  onToggle,
+  onSeek,
+  onSpeed,
+  onFocus,
+  onOverview,
+}) {
   return (
     <div className="hud">
       <div className="hud-top-left">
@@ -50,7 +61,14 @@ export default function Hud({ snapshot, focused, speeds, rootName, onToggle, onS
         </button>
       </nav>
 
-      <Transport snapshot={snapshot} speeds={speeds} onToggle={onToggle} onSeek={onSeek} onSpeed={onSpeed} />
+      <Transport
+        snapshot={snapshot}
+        speeds={speeds}
+        markers={markers}
+        onToggle={onToggle}
+        onSeek={onSeek}
+        onSpeed={onSpeed}
+      />
     </div>
   )
 }

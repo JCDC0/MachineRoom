@@ -5,7 +5,7 @@ function clock(ms) {
   return `${minutes}:${seconds}`
 }
 
-export default function Transport({ snapshot, speeds, onToggle, onSeek, onSpeed }) {
+export default function Transport({ snapshot, speeds, markers = [], onToggle, onSeek, onSpeed }) {
   const { position, duration, playing, speed } = snapshot
   const finished = position >= duration
 
@@ -14,14 +14,33 @@ export default function Transport({ snapshot, speeds, onToggle, onSeek, onSpeed 
       <button type="button" onClick={onToggle} aria-label={playing ? 'Pause replay' : 'Play replay'}>
         {playing ? 'Pause' : finished ? 'Replay' : 'Play'}
       </button>
-      <input
-        type="range"
-        min="0"
-        max={Math.round(duration)}
-        value={Math.round(position)}
-        onChange={(event) => onSeek(Number(event.target.value))}
-        aria-label="Replay position"
-      />
+      <div className="scrubber">
+        <input
+          type="range"
+          min="0"
+          max={Math.round(duration)}
+          value={Math.round(position)}
+          onChange={(event) => onSeek(Number(event.target.value))}
+          aria-label="Replay position"
+        />
+        {duration > 0 && markers.length > 0 && (
+          <div className="scrubber-markers" role="group" aria-label="Run markers">
+            {markers.map((marker, index) => {
+              const pct = Math.min(100, Math.max(0, (marker.at / duration) * 100))
+              return (
+                <button
+                  key={`${marker.at}-${marker.tone}-${index}`}
+                  type="button"
+                  className={`scrubber-tick is-${marker.tone}`}
+                  style={{ left: `${pct}%` }}
+                  onClick={() => onSeek(marker.at)}
+                  aria-label={`Seek to ${marker.tone} at ${clock(marker.at)}`}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
       <span className="mono">
         {clock(position)} / {clock(duration)}
       </span>

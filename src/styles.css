@@ -281,11 +281,57 @@ input:focus-visible {
   padding: var(--space) calc(var(--space) * 1.5);
 }
 
+.scrubber {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: calc(var(--space) * 3);
+}
+
 .transport input[type='range'] {
   width: 100%;
   margin: 0;
   accent-color: var(--yellow);
   cursor: pointer;
+}
+
+.scrubber-markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.scrubber-tick {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: calc(var(--space) * 2);
+  padding: 0;
+  border: 0;
+  background: var(--white);
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  z-index: 2;
+}
+
+.scrubber-tick:hover:not(:disabled) {
+  background: var(--white);
+  transform: translate(-50%, -50%) scaleY(1.25);
+}
+
+.scrubber-tick.is-start {
+  background: var(--white);
+}
+
+.scrubber-tick.is-error,
+.scrubber-tick.is-error:hover:not(:disabled) {
+  background: var(--red);
+}
+
+.scrubber-tick.is-done,
+.scrubber-tick.is-done:hover:not(:disabled) {
+  background: var(--yellow);
 }
 
 .transport .mono {
