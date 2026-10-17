@@ -11,10 +11,18 @@ const STATUS_TEXT = {
 export default function Hud({ snapshot, focused, speeds, rootName, onToggle, onSeek, onSpeed, onFocus, onOverview }) {
   return (
     <div className="hud">
-      <header className="hud-title">
-        <h1>Machine Room</h1>
-        <p className="mono">REPLAY // {rootName}</p>
-      </header>
+      <div className="hud-top-left">
+        <header className="hud-title">
+          <h1>Machine Room</h1>
+          <p className="mono">REPLAY // {rootName}</p>
+        </header>
+
+        <ul className="hud-legend mono" aria-label="Colour legend">
+          <li className="is-white">activity</li>
+          <li className="is-red">failure</li>
+          <li className="is-yellow">finished</li>
+        </ul>
+      </div>
 
       <nav className="hud-agents" aria-label="Agents">
         {snapshot.agents.map((agent, index) => (
@@ -31,16 +39,16 @@ export default function Hud({ snapshot, focused, speeds, rootName, onToggle, onS
             <span className="agent-key mono">{index + 1}</span>
           </button>
         ))}
-        <button type="button" className="overview" onClick={onOverview}>
-          Overview <span className="agent-key mono">0</span>
+        <button
+          type="button"
+          className="overview"
+          aria-pressed={focused === null}
+          onClick={onOverview}
+        >
+          <span className="overview-label">Overview</span>
+          <span className="agent-key mono">0</span>
         </button>
       </nav>
-
-      <ul className="hud-legend mono" aria-label="Colour legend">
-        <li className="is-white">activity</li>
-        <li className="is-red">failure</li>
-        <li className="is-yellow">finished</li>
-      </ul>
 
       <Transport snapshot={snapshot} speeds={speeds} onToggle={onToggle} onSeek={onSeek} onSpeed={onSpeed} />
     </div>
