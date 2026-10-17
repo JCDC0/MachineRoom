@@ -99,27 +99,21 @@ input:focus-visible {
   pointer-events: auto;
 }
 
-.hud-top-left {
+.hud-title {
   grid-column: 1;
   grid-row: 1;
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--space) * 2);
-  align-items: flex-start;
-}
-
-.hud-title {
-  padding: var(--space) calc(var(--space) * 2);
+  align-self: start;
+  padding: var(--space) calc(var(--space) * 1.5);
   background: rgb(0 0 0 / 0.78);
   border: 1px solid var(--line);
   width: 100%;
 }
 
 .hud-title h1 {
-  font-size: 16px;
-  letter-spacing: 0.16em;
+  font-size: 15px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 .hud-title p {
@@ -128,28 +122,31 @@ input:focus-visible {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: rgb(255 255 255 / 0.7);
+  line-height: 1.2;
 }
 
 .hud-legend {
   list-style: none;
-  margin: 0;
-  padding: var(--space) calc(var(--space) * 2);
+  margin: var(--space) 0 0;
+  padding: 0;
   width: 100%;
-  background: rgb(0 0 0 / 0.78);
-  border: 1px solid var(--line);
   font-size: 11px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--space);
+  line-height: 1.2;
 }
 
 .hud-legend li {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space);
+  gap: calc(var(--space) * 0.5);
   color: rgb(255 255 255 / 0.85);
+  white-space: nowrap;
 }
 
 .hud-legend li::before {
@@ -435,10 +432,9 @@ input:focus-visible {
 
 .log-line {
   display: flex;
+  align-items: baseline;
   gap: var(--space);
   color: rgb(255 255 255 / 0.9);
-  white-space: pre-wrap;
-  word-break: break-word;
 }
 
 .log-line.is-normal {
@@ -458,18 +454,27 @@ input:focus-visible {
 }
 
 .log-time {
+  width: calc(var(--space) * 8);
   color: rgb(255 255 255 / 0.6);
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .log-agent {
+  width: calc(var(--space) * 9);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .log-text {
   flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .transport {
