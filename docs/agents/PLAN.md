@@ -1,4 +1,4 @@
-# Next plan, from 0.1.24
+# Next plan, from 0.1.25
 
 Written 2026-10-18. The task briefs are in `TASKS.md`, the design is in `CONTROL-PLANE.md`. This file puts them in order and says what comes first.
 
