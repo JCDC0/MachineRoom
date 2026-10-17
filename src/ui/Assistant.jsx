@@ -16,13 +16,18 @@ let nextEntryId = 1
 
 export default function Assistant({
   context = { agents: [], paths: [] },
-  onAction = () => {},
-  ask = null,
+  onAction,
+  onAssistantAction,
+  ask,
+  askAssistant,
   open: controlledOpen,
   onClose,
   initialOpen = false,
   storage = (typeof window !== 'undefined' ? window.localStorage : null),
 }) {
+  const handleAction = onAssistantAction ?? onAction ?? (() => {})
+  const handleAsk = askAssistant ?? ask ?? null
+
   const [internalOpen, setInternalOpen] = useState(initialOpen)
   const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen
 
@@ -53,6 +58,8 @@ export default function Assistant({
   const terminalRef = useRef(null)
   const inputRef = useRef(null)
   const logRef = useRef(null)
+  const posRef = useRef(pos)
+  posRef.current = pos
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -68,18 +75,34 @@ export default function Assistant({
         if (controlledOpen === undefined) {
           setInternalOpen(false)
         }
+        if (containsSecret(input)) {
+          setInput('')
+          setDraft('')
+          setHistoryIndex(-1)
+        }
         onClose?.()
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [isOpen, controlledOpen, onClose])
+  }, [isOpen, controlledOpen, onClose, input])
 
   useEffect(() => {
     if (isOpen) {
       const timer = setTimeout(() => {
         inputRef.current?.focus()
       }, 20)
+      if (terminalRef.current) {
+        const rect = terminalRef.current.getBoundingClientRect()
+        const size = {
+          width: rect.width || DEFAULT_TERMINAL_SIZE.width,
+          height: rect.height || DEFAULT_TERMINAL_SIZE.height,
+        }
+        setPos((current) => clampPosition(current, size, {
+          windowWidth: window.innerWidth,
+          windowHeight: window.innerHeight,
+        }))
+      }
       return () => clearTimeout(timer)
     }
   }, [isOpen])
@@ -87,16 +110,17 @@ export default function Assistant({
   useEffect(() => {
     function onResize() {
       const size = terminalRef.current
-        ? { width: terminalRef.current.offsetWidth, height: terminalRef.current.offsetHeight }
+        ? {
+            width: terminalRef.current.getBoundingClientRect().width || DEFAULT_TERMINAL_SIZE.width,
+            height: terminalRef.current.getBoundingClientRect().height || DEFAULT_TERMINAL_SIZE.height,
+          }
         : DEFAULT_TERMINAL_SIZE
-      setPos((current) => {
-        const next = clampPosition(current, size, {
-          windowWidth: window.innerWidth,
-          windowHeight: window.innerHeight,
-        })
-        saveAssistantPosition(storage, next)
-        return next
+      const next = clampPosition(posRef.current, size, {
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
       })
+      setPos(next)
+      saveAssistantPosition(storage, next)
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -112,25 +136,38 @@ export default function Assistant({
     if (controlledOpen === undefined) {
       setInternalOpen(false)
     }
+    if (containsSecret(input)) {
+      setInput('')
+      setDraft('')
+      setHistoryIndex(-1)
+    }
     onClose?.()
   }
 
   function handlePointerDown(event) {
+    if (event.button !== undefined && event.button !== 0) return
     if (event.target?.closest?.('button')) return
     if (typeof window !== 'undefined' && window.innerWidth < 900) return
     event.preventDefault()
 
     const startX = event.clientX
     const startY = event.clientY
-    const startPosX = pos.x
-    const startPosY = pos.y
+    const startPosX = posRef.current.x
+    const startPosY = posRef.current.y
+
+    function getTerminalSize() {
+      if (!terminalRef.current) return DEFAULT_TERMINAL_SIZE
+      const rect = terminalRef.current.getBoundingClientRect()
+      return {
+        width: rect.width || DEFAULT_TERMINAL_SIZE.width,
+        height: rect.height || DEFAULT_TERMINAL_SIZE.height,
+      }
+    }
 
     function onPointerMove(e) {
       const dx = e.clientX - startX
       const dy = e.clientY - startY
-      const size = terminalRef.current
-        ? { width: terminalRef.current.offsetWidth, height: terminalRef.current.offsetHeight }
-        : DEFAULT_TERMINAL_SIZE
+      const size = getTerminalSize()
       const nextPos = clampPosition(
         { x: startPosX + dx, y: startPosY + dy },
         size,
@@ -139,14 +176,13 @@ export default function Assistant({
       setPos(nextPos)
     }
 
-    function onPointerUp(e) {
+    function onPointerEnd(e) {
       window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointerup', onPointerEnd)
+      window.removeEventListener('pointercancel', onPointerEnd)
       const dx = e.clientX - startX
       const dy = e.clientY - startY
-      const size = terminalRef.current
-        ? { width: terminalRef.current.offsetWidth, height: terminalRef.current.offsetHeight }
-        : DEFAULT_TERMINAL_SIZE
+      const size = getTerminalSize()
       const finalPos = clampPosition(
         { x: startPosX + dx, y: startPosY + dy },
         size,
@@ -157,7 +193,8 @@ export default function Assistant({
     }
 
     window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointerup', onPointerEnd)
+    window.addEventListener('pointercancel', onPointerEnd)
   }
 
   async function processText(textToSend) {
@@ -189,7 +226,7 @@ export default function Assistant({
       }
       setEntries((prev) => [...prev, commandEntry, blockedEntry])
       if (blockedResult.action) {
-        onAction(blockedResult.action)
+        handleAction(blockedResult.action)
       }
       return
     }
@@ -204,7 +241,7 @@ export default function Assistant({
       }
       setEntries((prev) => [...prev, commandEntry, actionEntry])
       if (result.action) {
-        onAction(result.action)
+        handleAction(result.action)
       }
     } else if (result.kind === 'propose') {
       const proposeEntry = {
@@ -225,17 +262,19 @@ export default function Assistant({
       setEntries((prev) => [...prev, commandEntry, askEntry])
     } else if (result.kind === 'blocked') {
       const say = getBlockedSay(result)
+      const maskedCommandEntry = { ...commandEntry, text: BLOCKED_MASK, isBlocked: true }
+      setHistory((prev) => (prev.length > 0 ? [...prev.slice(0, -1), BLOCKED_MASK] : [BLOCKED_MASK]))
       const blockedEntry = {
         id: `entry-${nextEntryId++}`,
         kind: 'blocked',
         say,
       }
-      setEntries((prev) => [...prev, commandEntry, blockedEntry])
+      setEntries((prev) => [...prev, maskedCommandEntry, blockedEntry])
       if (result.action) {
-        onAction(result.action)
+        handleAction(result.action)
       }
     } else if (result.kind === 'unknown') {
-      if (result.fallback && typeof ask === 'function') {
+      if (result.fallback && typeof handleAsk === 'function') {
         const thinkingId = `entry-${nextEntryId++}`
         const thinkingEntry = {
           id: thinkingId,
@@ -245,8 +284,8 @@ export default function Assistant({
         setEntries((prev) => [...prev, commandEntry, thinkingEntry])
 
         try {
-          const reply = await ask(raw)
-          handleAsyncReply(thinkingId, reply, result.say)
+          const reply = await handleAsk(raw)
+          handleAsyncReply(thinkingId, commandEntry.id, reply, result.say)
         } catch {
           setEntries((prev) =>
             prev.map((item) =>
@@ -278,7 +317,7 @@ export default function Assistant({
     }
   }
 
-  function handleAsyncReply(targetId, reply, defaultSay) {
+  function handleAsyncReply(targetId, cmdId, reply, defaultSay) {
     if (!reply || typeof reply !== 'object') {
       setEntries((prev) =>
         prev.map((item) =>
@@ -294,7 +333,7 @@ export default function Assistant({
           item.id === targetId ? { id: targetId, kind: 'action', say: reply.say } : item
         )
       )
-      if (reply.action) onAction(reply.action)
+      if (reply.action) handleAction(reply.action)
     } else if (reply.kind === 'propose') {
       setEntries((prev) =>
         prev.map((item) =>
@@ -323,12 +362,15 @@ export default function Assistant({
         )
       )
     } else if (reply.kind === 'blocked') {
+      setHistory((prev) => (prev.length > 0 ? [...prev.slice(0, -1), BLOCKED_MASK] : [BLOCKED_MASK]))
       setEntries((prev) =>
-        prev.map((item) =>
-          item.id === targetId ? { id: targetId, kind: 'blocked', say: getBlockedSay(reply) } : item
-        )
+        prev.map((item) => {
+          if (item.id === cmdId) return { ...item, text: BLOCKED_MASK, isBlocked: true }
+          if (item.id === targetId) return { id: targetId, kind: 'blocked', say: getBlockedSay(reply) }
+          return item
+        })
       )
-      if (reply.action) onAction(reply.action)
+      if (reply.action) handleAction(reply.action)
     } else {
       setEntries((prev) =>
         prev.map((item) =>
@@ -339,25 +381,23 @@ export default function Assistant({
   }
 
   function handleConfirm(id) {
+    const target = entries.find((item) => item.id === id && item.status === 'pending')
+    if (!target) return
+    if (target.action) {
+      handleAction(target.action)
+    }
     setEntries((prev) =>
-      prev.map((item) => {
-        if (item.id === id && item.status === 'pending') {
-          if (item.action) onAction(item.action)
-          return { ...item, status: 'confirmed' }
-        }
-        return item
-      })
+      prev.map((item) => (item.id === id ? { ...item, status: 'confirmed' } : item))
     )
   }
 
   function handleCancel(id) {
     setEntries((prev) =>
-      prev.map((item) => {
-        if (item.id === id && item.status === 'pending') {
-          return { ...item, status: 'cancelled' }
-        }
-        return item
-      })
+      prev.map((item) =>
+        item.id === id && item.status === 'pending'
+          ? { ...item, status: 'cancelled' }
+          : item
+      )
     )
   }
 
@@ -378,6 +418,7 @@ export default function Assistant({
       setInput(next.value)
     } else if (event.key === 'ArrowDown') {
       event.preventDefault()
+      if (historyIndex === -1) return
       const next = stepHistory(history, historyIndex, 'down', draft)
       setHistoryIndex(next.index)
       setInput(next.value)
@@ -494,6 +535,14 @@ export default function Assistant({
           if (entry.kind === 'thinking') {
             return (
               <div key={entry.id} className="mr-assistant-line is-thinking">
+                {entry.say}
+              </div>
+            )
+          }
+
+          if (entry.kind === 'info') {
+            return (
+              <div key={entry.id} className="mr-assistant-line is-info">
                 {entry.say}
               </div>
             )

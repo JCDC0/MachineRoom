@@ -45,8 +45,8 @@ export function stepHistory(history, currentIndex, direction, draft = '') {
 }
 
 export function clampPosition(pos, size = DEFAULT_TERMINAL_SIZE, windowSize = {}) {
-  const width = Math.max(0, size?.width ?? DEFAULT_TERMINAL_SIZE.width)
-  const height = Math.max(0, size?.height ?? DEFAULT_TERMINAL_SIZE.height)
+  const width = size?.width && size.width > 0 ? size.width : DEFAULT_TERMINAL_SIZE.width
+  const height = size?.height && size.height > 0 ? size.height : DEFAULT_TERMINAL_SIZE.height
   const winW = Math.max(0, windowSize?.windowWidth ?? windowSize?.width ?? (typeof window !== 'undefined' ? window.innerWidth : 1280))
   const winH = Math.max(0, windowSize?.windowHeight ?? windowSize?.height ?? (typeof window !== 'undefined' ? window.innerHeight : 800))
 
@@ -63,7 +63,7 @@ export function clampPosition(pos, size = DEFAULT_TERMINAL_SIZE, windowSize = {}
 }
 
 export function getDefaultPosition(size = DEFAULT_TERMINAL_SIZE, windowSize = {}) {
-  const width = size?.width ?? DEFAULT_TERMINAL_SIZE.width
+  const width = size?.width && size.width > 0 ? size.width : DEFAULT_TERMINAL_SIZE.width
   const winW = windowSize?.windowWidth ?? windowSize?.width ?? (typeof window !== 'undefined' ? window.innerWidth : 1280)
   const preferredX = winW - width - 24
   const preferredY = 72

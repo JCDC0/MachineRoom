@@ -76,6 +76,14 @@ describe('history ring', () => {
     expect(stepHistory([], -1, 'up', 'draft')).toEqual({ index: -1, value: 'draft' })
     expect(stepHistory([], -1, 'down', 'draft')).toEqual({ index: -1, value: 'draft' })
   })
+
+  it('preserves draft when stepping down from index -1 with non-empty history', () => {
+    const history = ['alpha', 'beta']
+    expect(stepHistory(history, -1, 'down', 'current input')).toEqual({
+      index: -1,
+      value: 'current input',
+    })
+  })
 })
 
 describe('position clamp', () => {
@@ -113,6 +121,18 @@ describe('position clamp', () => {
     expect(isDocked(900)).toBe(false)
     expect(isDocked(1024)).toBe(false)
     expect(DOCK_BREAKPOINT).toBe(900)
+  })
+
+  it('falls back to DEFAULT_TERMINAL_SIZE when width or height is zero or invalid', () => {
+    const zeroSize = { width: 0, height: 0 }
+    expect(clampPosition({ x: 2000, y: 1500 }, zeroSize, win)).toEqual({
+      x: 1280 - 380,
+      y: 800 - 320,
+    })
+    expect(getDefaultPosition(zeroSize, win)).toEqual({
+      x: 1280 - 380 - 24,
+      y: 72,
+    })
   })
 })
 

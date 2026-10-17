@@ -19,7 +19,7 @@ const SHORTCUTS = [
   ['F', 'Follow the working agent: wide, close up, off'],
   ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
   ['[ and ]', 'Decrease or increase replay speed'],
-  ['/', 'Toggle assistant terminal'],
+  ['/', 'Open assistant terminal'],
   ['L', 'Toggle event log'],
   ['C', 'Toggle control drawer'],
   ['?', 'Toggle keyboard help'],
@@ -283,7 +283,9 @@ export default function Hud({
       <Assistant
         context={context}
         onAction={onAssistantAction}
+        onAssistantAction={onAssistantAction}
         ask={askAssistant}
+        askAssistant={askAssistant}
       />
 
       <Transport

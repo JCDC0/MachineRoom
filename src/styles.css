@@ -2037,6 +2037,18 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.8);
 }
 
+.mr-assistant-line.is-info {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.mr-assistant button:focus-visible {
+  outline-color: var(--white);
+}
+
+.mr-assistant .mr-assistant-btn-confirm:focus-visible {
+  outline-color: var(--yellow);
+}
+
 .mr-assistant-card {
   border: 1px solid var(--line);
   padding: 8px;
@@ -2164,6 +2176,12 @@ summary:focus-visible,
     border-right: none !important;
     border-bottom: none !important;
     box-shadow: 0 -4px 16px rgb(0 0 0 / 0.6);
+  }
+
+  .mr-assistant-log {
+    height: auto;
+    max-height: calc(45vh - 76px);
+    flex: 1;
   }
 
   .mr-assistant-title {
