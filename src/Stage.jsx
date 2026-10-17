@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createRoom } from './engine/room.js'
-import { createIncrementalPipeline } from './live/incremental.js'
+import { createPipeline } from './model/pipeline.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
 import { openStream, socketUrl } from './live/source.js'
@@ -77,7 +77,7 @@ export default function Stage({ data }) {
 
   useEffect(() => {
     if (!live) return undefined
-    const pipeline = createIncrementalPipeline({ agents: data.agents, tree: data.tree })
+    const pipeline = createPipeline({ agents: data.agents, tree: data.tree })
     let known = player.state.files.size
     const handlers = {
       onStatus: (status) => player.setStatus(status),

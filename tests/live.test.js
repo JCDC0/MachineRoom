@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { treeFromState } from '../src/engine/layout.js'
-import { createIncrementalPipeline } from '../src/live/incremental.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
 import { discover, openStream, parserFor, rootNameOf, socketUrl, toAgents } from '../src/live/source.js'
 import { makeTree } from '../src/model/paths.js'
-import { buildActivities } from '../src/model/pipeline.js'
+import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createState } from '../src/model/state.js'
 import { loadRecording } from './helpers.js'
 
@@ -133,21 +132,20 @@ describe('openStream', () => {
 
 describe('incremental pipeline', () => {
   it('gives the same activities as the batch pipeline', () => {
-    const pipeline = createIncrementalPipeline({ agents: recording.agents, tree: recording.tree })
-    const live = recording.frames.flatMap((frame) => pipeline.push(frame))
-    live.sort((a, b) => a.time - b.time || a.order - b.order)
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const live = [...recording.frames.flatMap((frame) => pipeline.push(frame)), ...pipeline.flush()]
     const batch = buildActivities(recording.frames, { agents: recording.agents, tree: recording.tree })
     expect(live).toEqual(batch)
   })
 
   it('ignores frames from agents it does not know', () => {
-    const pipeline = createIncrementalPipeline({ agents: recording.agents, tree: recording.tree })
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
     expect(pipeline.push({ type: 'heartbeat.run.queued', createdAt: '2026-01-01T00:00:00Z', payload: { agentId: 'nobody' } })).toEqual([])
   })
 
   it('lets commands touch a file it has just learned', () => {
     const tree = makeTree({ root: 'agent-sandbox', files: [], created: [] })
-    const pipeline = createIncrementalPipeline({ agents: recording.agents, tree })
+    const pipeline = createPipeline({ agents: recording.agents, tree })
     pipeline.learn(['src/math.js'])
     expect(pipeline.context.files).toEqual(['src/math.js'])
     expect(pipeline.context.dirs).toEqual(['', 'src'])
@@ -159,7 +157,7 @@ describe('live player', () => {
 
   it('builds the room from a tree that starts empty', () => {
     const player = createLivePlayer({ tree: empty, agents: recording.agents })
-    const pipeline = createIncrementalPipeline({ agents: recording.agents, tree: empty })
+    const pipeline = createPipeline({ agents: recording.agents, tree: empty })
     for (const frame of recording.frames) {
       player.push(pipeline.push(frame))
       pipeline.learn([...player.state.files.keys()])

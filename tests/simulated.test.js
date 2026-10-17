@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createIncrementalPipeline } from '../src/live/incremental.js'
+import { createPipeline } from '../src/model/pipeline.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
 import { openSimulated } from '../src/live/simulated.js'
 import { makeTree } from '../src/model/paths.js'
@@ -76,7 +76,7 @@ describe('the recording played as a live feed', () => {
   it('grows an empty room and ends with every agent finished', () => {
     const tree = makeTree({ root: 'agent-sandbox', files: [], created: [] })
     const player = createLivePlayer({ tree, agents: recording.agents })
-    const pipeline = createIncrementalPipeline({ agents: recording.agents, tree })
+    const pipeline = createPipeline({ agents: recording.agents, tree })
     const { run } = harness(recording.frames, {
       onFrame: (f) => {
         player.push(pipeline.push(f))

@@ -1,5 +1,6 @@
 import { createParser } from './parsers/index.js'
 import { shorten } from './parsers/common.js'
+import { ancestors } from './paths.js'
 
 export const AGENT_ORDER = ['claude', 'hermes', 'opencode', 'agy']
 
@@ -18,7 +19,7 @@ export function makeContext(tree) {
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 
 export function createPipeline({ agents, tree }) {
-  const ctx = makeContext(tree)
+  const ctx = makeContext({ ...tree, files: [...tree.files], dirs: [...(tree.dirs ?? [])] })
   const byId = new Map(agents.map((agent) => [agent.id, agent]))
   const parsers = new Map()
   const lastRunTime = new Map()
@@ -110,7 +111,15 @@ export function createPipeline({ agents, tree }) {
     return finalise(out)
   }
 
-  return { push, flush }
+  function learn(paths) {
+    for (const path of paths) {
+      if (ctx.files.includes(path)) continue
+      ctx.files.push(path)
+      for (const dir of ancestors(path)) if (!ctx.dirs.includes(dir)) ctx.dirs.push(dir)
+    }
+  }
+
+  return { push, flush, learn, context: ctx }
 }
 
 export function buildActivities(frames, { agents, tree }) {
