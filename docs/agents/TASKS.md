@@ -55,3 +55,21 @@ The goal is a public application that turns Paperclip into an overview room wher
 **P3. Scale (Claude).** Collapse and level of detail for projects with thousands of folders, layout in a worker, reduced motion for the 3D scene.
 
 **P4. Release decisions (the owner).** Licence, repository name and the trademark check on the names Paperclip and POI (use neither logo nor name of the show), whether `sprites.js` (copied from the graded portfolio) may be published or should be rewritten, CI (test and build), and a short security note (the bridge binds 127.0.0.1 and allows only local pages).
+
+## Roadmap: planner, orchestrator and budgets
+
+Design and rules are in `docs/agents/CONTROL-PLANE.md`. Paperclip already has hiring, budgets, approvals, planning and worktrees, so these tasks use its APIs and do not rebuild them.
+
+**C0. Run the dev agents inside Paperclip (Claude, with the owner).** Register OpenCode, AGY and Claude Code as Paperclip agents with isolated worktree workspaces, so tasks arrive as issues and reports come back as run results and comments. agy needs a launcher that reads its issue through the API, because its arguments hold a fixed prompt today. Try one tiny issue per agent. The owner picks the models first, because each run spends credit.
+
+**C1. Paperclip API audit (Claude, no credit).** Start Paperclip, read the real request and answer shapes of agent-hires, budgets, approvals, workspaces, planning mode and cost summaries, and write `docs/agents/PAPERCLIP-API.md`.
+
+**C2. Control client (OpenCode).** Bridge routes that pass hire, budget, dispatch and approval calls to Paperclip, local pages only, with tests against the fake Paperclip. Needs C1.
+
+**C3. Control surface (AGY).** In the HUD: an agent builder form, a dispatch panel (task, assignee, size, budget, subagents allowed), budget meters on the agent list and an approvals queue. Needs C2.
+
+**C4. Routing policy, version 1 (Claude).** A pure module `src/policy/` with tests: task profile to tier, escalation, spend limits, and the policy file schema.
+
+**C5. Planner and orchestrator agents (Claude).** Instruction bundles for both, hired through C2, first run on a tiny goal with the cheapest models and approvals on.
+
+**C6. Outcome log and decision layer (Claude, OpenCode).** Log every run, build the success and cost tables, propose policy changes as diffs. Start logging as soon as C4 exists.

@@ -155,4 +155,4 @@ Do not rename these classes without changing both sides.
 
 ## Open work
 
-See `docs/agents/TASKS.md`.
+See `docs/agents/TASKS.md`. The plan for the planner, orchestrator, budgets and routing is in `docs/agents/CONTROL-PLANE.md`.
