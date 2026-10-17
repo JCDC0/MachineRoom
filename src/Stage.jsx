@@ -130,7 +130,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         event.preventDefault()
         player.toggle()
       } else if (event.key === 'f' || event.key === 'F') {
-        setFollow(!followRef.current)
+        setFollow(followRef.current === 'wide' ? 'close' : followRef.current ? false : 'wide')
       } else if (event.key === '0') {
         setFollow(false)
         room?.overview()
@@ -181,7 +181,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       )}
       {following && (
         <div style={{ ...BADGE, bottom: live ? 128 : 96, color: 'var(--white)' }} role="status">
-          Follow // on
+          Follow // {following}
         </div>
       )}
       <Hud

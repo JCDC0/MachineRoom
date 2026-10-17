@@ -1,13 +1,13 @@
 # MachineRoom architecture
 
-Version 0.1.9. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.10. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
 - The core in the middle is the Machine: the Paperclip control plane.
 - Each agent is a wireframe shape on a ring around the core. It moves above the folder it is working in.
 - Each agent has a terminal on the terminal wall above the room, joined to its agent by a thin line.
-- The project folders are flat tiles on the floor. Each file is a plane. A folder opens when an agent touches it: root first, then each subfolder in turn.
+- The project folders are tiles floating in 3D space around the Machine, at different heights, joined parent to child by sagging strings (curved lines). Each file is a plane. A folder opens when an agent touches it: root first, then each subfolder in turn.
 - Colour has one meaning each: white is activity, red is failure, yellow is finished work.
   - A read or write flashes the file white.
   - A failed tool call, a failed run or a failed test flashes red and leaves the file red until it is written again.
@@ -41,14 +41,16 @@ src/model/        pure logic, no DOM, fully tested
   source.js         parse and prepare a recording
   replay.js         fetch the recording from public/fixtures
 src/engine/       three.js scene, no React
-  layout.js         deterministic folder layout on rings, no overlap (pure, tested)
+  layout.js         deterministic 3D folder layout, no overlap, warm start on growth (pure, tested)
+  route.js          the folders an agent passes between two folders (pure, tested)
+  strings.js        curved strings between folders (curvePoint is pure, tested)
   room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
-  clusters.js       folder tiles and file planes, recolours only what changed
+  clusters.js       folder tiles and file planes, glides to new positions, recolours only what changed
   labels.js         file name labels that rise and fade when a file is read, written or fails
   agents.js         agent shapes, movement, link lines
   terminals.js      CSS3D terminals on the wall
   core.js           the Machine
-  camera.js         orbit, zoom, focus, fit to the room (pure fitDistance, tested)
+  camera.js         orbit, zoom, focus, fit to the bounding sphere (pure fitDistance, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
@@ -87,8 +89,9 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 
 ## Room behaviour
 
-- Layout: folders sit on rings around the Machine by depth. A ring moves out until its widest folder fits, and a branch gets angle in proportion to the room it needs, so tiles never overlap. A folder with more than 20 files switches to a dense grid (up to 14 columns) and its planes shrink down to 40 percent.
-- Camera: the overview distance grows with the size of the room and the window aspect, never below the default. `0` returns to it. Pressing `F` toggles follow mode: the camera moves to the agent that starts a tool call or a run, and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
+- Layout: the root sits in front of the Machine. Top-level folders spread around it on a shell at staggered heights, and each deeper folder fans outward from its parent in a cone. A fixed number of relaxation passes then pushes every pair of folders apart (no randomness, so the same tree gives the same room) and keeps them out of the core. When a live tree grows, folders that already exist keep their place and the new ones settle around them, and the tiles glide to their new positions. A folder with more than 20 files switches to a dense grid (up to 14 columns) and its planes shrink down to 40 percent.
+- Agents: an agent travels from folder to folder along the strings (starting at the root), then hovers above the exact file it touches, with a tether to it. A tag above the agent shows its current command.
+- Camera: the overview centers on the bounding sphere of the folders, the core and the terminal wall, and backs off as the room or the window narrows, never below the default. `0` returns to it. `F` cycles follow mode: wide (the agent and its terminal), close up (the agent and the file it touches), off. The camera moves to the agent that starts a tool call or a run and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
 - HUD: the scrubber carries run markers (white start, red failed end, yellow finished end) and clicking one seeks. `L` opens the event log, built from the same activities as the terminals. `?` lists the keys.
 - Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above the plane for 2.6 seconds. Labels that land close together stack upward.
 
@@ -141,7 +144,7 @@ Do not rename these classes without changing both sides.
 
 ## Known limits
 
-- The folder layout is a radial tree. Many folders at one level will crowd each other.
+- The layout compares every pair of folders. About 400 folders take 0.13 seconds and 1600 take 1.2 seconds, and a live tree relays out each time it grows. There is no collapsing or level of detail for very large projects yet.
 - Hermes read lines carry only a file name. A name shared by two files cannot be resolved.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.

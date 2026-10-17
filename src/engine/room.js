@@ -6,13 +6,15 @@ import { createCameraRig, fitDistance } from './camera.js'
 import { createClusters } from './clusters.js'
 import { createCore } from './core.js'
 import { createLabels } from './labels.js'
-import { layoutTree, treeFromState } from './layout.js'
-import { RED, WHITE, YELLOW, glowTexture, lineMaterial, seeded } from './sprites.js'
+import { layoutTree, positionsOf, treeFromState } from './layout.js'
+import { RED, WHITE, YELLOW, glowTexture, seeded } from './sprites.js'
+import { createStrings } from './strings.js'
 import { createTerminals } from './terminals.js'
 
 const OPEN_STEP_MS = 170
 const FOLLOW_HOLD_MS = 2500
 const ZERO = new THREE.Vector3()
+const overviewCentre = new THREE.Vector3()
 
 export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
   const texture = glowTexture()
@@ -51,33 +53,37 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const terminals = createTerminals(cssScene, roster)
   const labels = createLabels(scene)
 
+  const strings = createStrings(scene)
   let clusters = null
-  let links = null
-  let extent = 0
+  let layout = null
   const known = { files: -1, dirs: -1 }
+  const centerOf = (path) => clusters.center(path ?? '')
+  const world = {
+    center: centerOf,
+    slot: (dir, file, out) => (file ? clusters.slotPosition(dir, file, out) : out.copy(clusters.center(dir))),
+  }
 
   function build(state) {
-    if (clusters) clusters.dispose()
-    if (links) {
-      scene.remove(links)
-      links.geometry.dispose()
-      links.material.dispose()
+    let from = null
+    if (clusters) {
+      from = new Map([...clusters.clusters].map(([path, cluster]) => [path, cluster.group.position.clone()]))
+      clusters.dispose()
     }
-    const layout = layoutTree(treeFromState(state, rootName))
-    clusters = createClusters(scene, layout)
-    const points = [ZERO.clone(), clusters.center('').clone()]
-    for (const link of layout.links) points.push(clusters.center(link.from).clone(), clusters.center(link.to).clone())
-    links = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), lineMaterial(WHITE, 0.12))
-    scene.add(links)
+    layout = layoutTree(treeFromState(state, rootName), layout ? positionsOf(layout) : null)
+    clusters = createClusters(scene, layout, from)
+    strings.build(layout.links, centerOf)
     known.files = state.files.size
     known.dirs = state.dirs.size
-    extent = layout.extent
     refit()
     clusters.sync(state)
   }
 
   function refit() {
-    rig.setOverviewDistance(fitDistance(extent, width / height))
+    if (layout) {
+      const { center, radius } = layout.bounds
+      rig.setOverviewTarget(overviewCentre.set(center.x, center.y, center.z))
+      rig.setOverviewDistance(fitDistance(radius, width / height))
+    }
   }
 
   const grown = (state) => state.files.size !== known.files || state.dirs.size !== known.dirs
@@ -139,8 +145,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     term.element.addEventListener('click', () => onPick(term.key))
   }
 
-  const anchorFor = (path) => clusters.center(path ?? '')
-
   function sync(state) {
     queue = []
     labels.clear()
@@ -150,25 +154,29 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     })
     if (grown(state)) build(state)
     else clusters.sync(state)
-    agentSet.snap(state, anchorFor)
+    agentSet.snap(state, world)
   }
 
   let following = false
   let lastSwitch = 0
 
-  function focusAgent(key) {
+  function focusAgent(key, style = 'wide') {
     const view = agentSet.views.get(key)
     if (!view) return
     focused = key
     const middle = new THREE.Vector3()
-    rig.focus(() => middle.copy(view.group.position).add(terminals.positionOf(key)).multiplyScalar(0.5), 2800)
+    if (style === 'close') {
+      rig.focus(() => middle.copy(view.group.position).lerp(view.touch, view.aim ? 0.5 : 0), 1050, 0.5)
+    } else {
+      rig.focus(() => middle.copy(view.group.position).add(terminals.positionOf(key)).multiplyScalar(0.5), 2800)
+    }
   }
 
   function followTo(key) {
     const now = performance.now()
     if (key === focused || now - lastSwitch < FOLLOW_HOLD_MS) return
     lastSwitch = now
-    focusAgent(key)
+    focusAgent(key, following)
   }
 
   function onActivity(activity) {
@@ -190,9 +198,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
             clusters.flashFile(dir, touch.path, 'white')
             clusters.slotPosition(dir, touch.path, scratch)
             labels.show(`${touch.mode === 'read' ? 'read' : 'write'} ${basename(touch.path)}`, scratch, '#ffffff')
+            agentSet.aimAt(activity.agent, dir, touch.path, performance.now())
           } else {
             clusters.flashCluster(touch.path, 'white')
             scratch.copy(clusters.center(touch.path))
+            agentSet.aimAt(activity.agent, touch.path, null, performance.now())
           }
           firePulse(view.group.position, scratch, WHITE, 600)
         })
@@ -244,8 +254,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (grown(state)) build(state)
     core.update(now / 1000, delta)
     clusters.update(state, delta)
+    if (clusters.moving()) strings.update(centerOf)
     labels.update(delta)
-    agentSet.update(state, delta, now, anchorFor, terminals.positionOf)
+    agentSet.update(state, delta, now, world, terminals.positionOf)
 
     pulses.forEach((pulse) => {
       if (!pulse.active) return
@@ -279,9 +290,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       focused = null
       rig.overview()
     },
-    setFollow(on) {
-      following = on
-      if (on) lastSwitch = 0
+    setFollow(mode) {
+      following = mode
+      lastSwitch = 0
+      if (mode && focused) focusAgent(focused, mode)
     },
     following: () => following,
     focused: () => focused,
@@ -291,6 +303,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       rig.dispose()
       terminals.dispose()
       labels.dispose()
+      strings.dispose()
       clusters.dispose()
       renderer.dispose()
       gl.removeChild(renderer.domElement)

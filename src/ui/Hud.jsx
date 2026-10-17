@@ -13,7 +13,7 @@ const SHORTCUTS = [
   ['Space', 'Play or pause replay'],
   ['0', 'Overview camera'],
   ['1 to 9', 'Focus agent 1 to 9'],
-  ['F', 'Follow the agent that is working'],
+  ['F', 'Follow the working agent: wide, close up, off'],
   ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
   ['[ and ]', 'Decrease or increase replay speed'],
   ['L', 'Toggle event log'],

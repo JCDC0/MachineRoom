@@ -7,7 +7,7 @@ export const OVERVIEW = { x: 0, y: 200, z: 450, yaw: 0, pitch: 0.72, dist: 4300 
 
 export function fitDistance(extent, aspect) {
   const narrow = Math.max(1, 1.33 / aspect)
-  return Math.max(OVERVIEW.dist, extent * 1.75 * narrow)
+  return Math.max(OVERVIEW.dist, extent * 2.0 * narrow)
 }
 
 export function createCameraRig(camera, surface) {
@@ -17,6 +17,7 @@ export function createCameraRig(camera, surface) {
   let follow = null
   let onClick = () => {}
   let overviewDist = OVERVIEW.dist
+  const overviewTarget = new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
   let adjusted = false
 
   function down(event) {
@@ -59,7 +60,7 @@ export function createCameraRig(camera, surface) {
   function reset() {
     follow = null
     adjusted = false
-    goal.target.set(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
+    goal.target.copy(overviewTarget)
     goal.yaw = OVERVIEW.yaw
     goal.pitch = OVERVIEW.pitch
     goal.dist = overviewDist
@@ -100,19 +101,23 @@ export function createCameraRig(camera, surface) {
     setClickHandler(handler) {
       onClick = handler
     },
-    focus(position, dist = 1500) {
+    focus(position, dist = 1500, pitch = null) {
       follow = position
       goal.dist = dist
-      goal.pitch = Math.max(goal.pitch, 0.5)
+      goal.pitch = pitch ?? Math.max(goal.pitch, 0.5)
     },
     setOverviewDistance(distance) {
       overviewDist = THREE.MathUtils.clamp(distance, MIN_DIST, MAX_DIST)
       if (!adjusted && !follow) goal.dist = overviewDist
     },
+    setOverviewTarget(position) {
+      overviewTarget.copy(position)
+      if (!adjusted && !follow) goal.target.copy(overviewTarget)
+    },
     overview() {
       follow = null
       adjusted = false
-      goal.target.set(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
+      goal.target.copy(overviewTarget)
       goal.yaw = OVERVIEW.yaw
       goal.pitch = OVERVIEW.pitch
       goal.dist = overviewDist

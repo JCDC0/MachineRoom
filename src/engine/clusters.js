@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { dirname } from '../model/paths.js'
 import { PLANE_H, PLANE_W } from './layout.js'
 import { RED, WHITE, YELLOW, lineMaterial, textSprite } from './sprites.js'
 
@@ -36,14 +37,16 @@ function frameGeometry(node) {
   return new THREE.BufferGeometry().setFromPoints(points)
 }
 
-export function createClusters(scene, layout) {
+export function createClusters(scene, layout, from = null) {
   const clusters = new Map()
   const matrix = new THREE.Matrix4()
   const color = new THREE.Color()
+  let movingNow = false
 
   for (const node of layout.nodes) {
     const group = new THREE.Group()
-    group.position.set(node.x, 0, node.z)
+    const home = new THREE.Vector3(node.x, node.y, node.z)
+    group.position.copy(from?.get(node.path) ?? from?.get(dirname(node.path)) ?? home)
     const count = node.files.length
 
     let mesh = null
@@ -71,6 +74,7 @@ export function createClusters(scene, layout) {
     clusters.set(node.path, {
       node,
       group,
+      home,
       mesh,
       outline,
       frame,
@@ -154,7 +158,14 @@ export function createClusters(scene, layout) {
   }
 
   function update(state, delta) {
+    movingNow = false
     for (const cluster of clusters.values()) {
+      if (cluster.group.position.distanceToSquared(cluster.home) > 0.25) {
+        cluster.group.position.lerp(cluster.home, 1 - Math.exp(-delta * 3))
+        movingNow = true
+      } else {
+        cluster.group.position.copy(cluster.home)
+      }
       cluster.openness += (cluster.openGoal - cluster.openness) * Math.min(1, delta * 5)
       cluster.pulse = Math.max(0, cluster.pulse - delta * 1.6)
       const open = cluster.openness
@@ -212,5 +223,5 @@ export function createClusters(scene, layout) {
     clusters.clear()
   }
 
-  return { clusters, center, slotPosition, open, flashFile, flashCluster, sync, update, dispose }
+  return { clusters, center, slotPosition, open, flashFile, flashCluster, sync, update, dispose, moving: () => movingNow }
 }

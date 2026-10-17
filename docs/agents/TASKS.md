@@ -37,3 +37,21 @@ Three agents work on MachineRoom at the same time. Each one owns a set of paths 
 **E1. Real Paperclip run (Claude).** Run the bridge against a live Paperclip with real agents, not the fake, and compare the room with the terminals.
 
 **E2. Paperclip plugin page (Claude).** Check whether the viewer can ship as a page inside Paperclip instead of a separate app.
+
+## Roadmap: subagents and a public release
+
+The goal is a public application that turns Paperclip into an overview room where you watch agents, and the subagents they start through their own harnesses, move between folders and touch files. The recordings so far hold no real subagent events, so the data comes first.
+
+**S1. Record subagent runs (OpenCode, extends B5).** One scenario per harness, tiny tasks, cheapest model that works: Claude Code starting a subagent with its Task tool, OpenCode starting one with its `task` tool, Hermes using `delegate_task`. Also record Paperclip's own delegation: the Orchestrator agent creating an issue for another agent (the `activity.logged` frame with `issue.created` carries the creator, the assignee and `parentId`). Report which signal in the raw log identifies the parent, the child and the child's tool calls.
+
+**S2. Subagent schema and room (Claude).** Add `agent.spawn` (parent, child, label) to the activity schema, let the state and the room add agents while they run, draw the spawn as a new shape splitting off its parent along a string, and give each child a terminal on the wall.
+
+**S3. Subagent parsers (OpenCode).** Detect the spawn in each harness and attribute the nested tool calls to the child. Needs S1 and S2's schema.
+
+**P1. One command install (OpenCode).** `npx machine-room`: one process that serves the built viewer and the bridge on one port, with flags and env for the Paperclip URL, company and project folder, and no Vite or proxy needed. Add a `bin` entry and a test that packs the package and starts it.
+
+**P2. First run and polish (AGY).** A connect screen (Paperclip URL, company picker, demo link), clear empty and error states, remembered settings, a name, logo and favicon, and screenshots for the README.
+
+**P3. Scale (Claude).** Collapse and level of detail for projects with thousands of folders, layout in a worker, reduced motion for the 3D scene.
+
+**P4. Release decisions (the owner).** Licence, repository name and the trademark check on the names Paperclip and POI (use neither logo nor name of the show), whether `sprites.js` (copied from the graded portfolio) may be published or should be rewritten, CI (test and build), and a short security note (the bridge binds 127.0.0.1 and allows only local pages).
