@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Briefs menu in the dispatch panel (task T1b): list open briefs grouped by owner above Title when `client.briefs` exists, fill Title and Assignee on selection, load the agent prompt into a read-only box with `Copy prompt` and `Use as description`, and add pure brief helpers (`src/ui/panels/briefs.js`) with tests (`tests/panels-briefs.test.js`).
 - HUD polish (task C3e): move the assistant terminal default position above the transport bar on the right while keeping saved positions, fix the top-right action bar clipping and control drawer spacing, and subscribe the control drawer to approval notices for the tab badge count.
 - Prompts come from the repository (task T1): `docs/agents/HOUSE-RULES.md` holds the rules every agent follows, `docs/agents/lanes.json` holds each agent's worktree, model and forbidden paths, and `src/briefs/briefs.js` parses the briefs in `TASKS.md` and builds the full prompt for one or more briefs and one lane. The mock client serves sample briefs through `briefs()` and `briefPrompt(ids, lane)`. TASKS.md loses its old rules and branch table. New briefs: T1a (routes), T1b (panel), G5 (CI), and a sharper P5.
 - Stage passes the real control client to the HUD when the viewer is connected through the bridge (`createClient({ baseUrl })`), so the drawer, the assistant and its confirmed writes talk to Paperclip. Demo and replay still use the mock. PAPERCLIP-API.md gains the approval, comment order and cost event findings from C2. New briefs U4 (reject a foreign Host header), C3e (HUD polish) and the M1 exit test.
