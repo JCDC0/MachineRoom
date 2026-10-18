@@ -3,8 +3,11 @@ import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createAssistantApi } from './assistant.js'
+import { changeEvents, createControlApi } from './control.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+const BODY_LIMIT = 64 * 1024
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
@@ -105,9 +108,58 @@ function sendJson(req, res, status, body) {
   res.end(payload)
 }
 
+function readJsonBody(req, res) {
+  return new Promise((resolveBody) => {
+    const type = String(req.headers['content-type'] ?? '')
+    if (!type.toLowerCase().includes('application/json')) {
+      sendJson(req, res, 415, { error: 'Send JSON.' })
+      resolveBody(null)
+      return
+    }
+    let size = 0
+    let done = false
+    const chunks = []
+    const stop = (value) => {
+      if (done) return
+      done = true
+      resolveBody(value)
+    }
+    req.on('data', (chunk) => {
+      if (done) return
+      size += chunk.length
+      if (size > BODY_LIMIT) {
+        sendJson(req, res, 413, { error: 'That request is too large.' })
+        stop(null)
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      if (done) return
+      let parsed
+      try {
+        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+      } catch {
+        sendJson(req, res, 400, { error: 'That body is not valid JSON.' })
+        stop(null)
+        return
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        sendJson(req, res, 400, { error: 'Send a JSON object.' })
+        stop(null)
+        return
+      }
+      stop(parsed)
+    })
+    req.on('error', () => stop(null))
+  })
+}
+
 export function createBridge(options = {}) {
   const paperclipUrl = (options.paperclipUrl ?? process.env.PAPERCLIP_URL ?? 'http://127.0.0.1:3100').replace(/\/+$/, '')
   const companyId = options.companyId ?? process.env.PAPERCLIP_COMPANY_ID ?? ''
+  const projectId = options.projectId ?? process.env.PAPERCLIP_PROJECT_ID ?? ''
+  const projectWorkspaceId = options.projectWorkspaceId ?? process.env.PAPERCLIP_WORKSPACE_ID ?? ''
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const port = Number(options.port ?? process.env.PORT ?? 5174)
   const reconnectMinMs = Number(options.reconnectMinMs ?? 1000)
@@ -117,6 +169,23 @@ export function createBridge(options = {}) {
   const logRetries = Number(options.logRetries ?? 3)
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
+
+  const control = createControlApi({
+    paperclipUrl,
+    companyId,
+    projectId,
+    projectWorkspaceId,
+    sendJson,
+    readJsonBody,
+  })
+  const assistant = createAssistantApi({
+    sendJson,
+    readJsonBody,
+    runner: options.assistantRunner,
+    model: options.assistantModel,
+    settingsFile: options.settingsFile ?? process.env.MACHINEROOM_SETTINGS_FILE,
+    env: options.env ?? process.env,
+  })
 
   const clients = new Set()
   const history = []
@@ -140,6 +209,10 @@ export function createBridge(options = {}) {
   function writeSseTree(res, tree) {
     const data = JSON.stringify({ root: tree.root, files: tree.files })
     res.write(`event: tree\ndata: ${data}\n\n`)
+  }
+
+  function writeSseChange(res, event) {
+    res.write(`event: change\ndata: ${JSON.stringify(event)}\n\n`)
   }
 
   function checkTreeChange() {
@@ -183,8 +256,10 @@ export function createBridge(options = {}) {
     const entry = { id, data }
     history.push(entry)
     if (history.length > HISTORY_LIMIT) history.shift()
+    const notices = changeEvents(parsed)
     for (const client of clients) {
       writeSseFrame(client, entry)
+      for (const notice of notices) writeSseChange(client, notice)
     }
   }
 
@@ -331,7 +406,7 @@ export function createBridge(options = {}) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         ...corsHeaders(req),
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Last-Event-ID, Content-Type',
       })
       res.end()
@@ -339,6 +414,9 @@ export function createBridge(options = {}) {
     }
 
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    if (await control.handle(req, res, url)) return
+    if (await assistant.handle(req, res, url)) return
+
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, { ok: true, paperclip: paperclipOpen })
       return
