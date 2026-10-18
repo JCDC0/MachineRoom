@@ -35,6 +35,7 @@ export function extractReplyText(output) {
         if (typeof json[key] === 'string') return json[key]
       }
       if (json.message && typeof json.message === 'object' && typeof json.message.text === 'string') return json.message.text
+      if (json.part && typeof json.part === 'object' && typeof json.part.text === 'string') return json.part.text
       if (Array.isArray(json.parts)) {
         const joined = json.parts
           .map((part) => (typeof part === 'string' ? part : typeof part?.text === 'string' ? part.text : ''))
@@ -43,6 +44,17 @@ export function extractReplyText(output) {
       }
     }
   } catch {
+    const parts = []
+    for (const line of text.split(/\r?\n/)) {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('{')) continue
+      try {
+        const item = JSON.parse(trimmed)
+        if (typeof item?.part?.text === 'string') parts.push(item.part.text)
+        else if (typeof item?.text === 'string') parts.push(item.text)
+      } catch {}
+    }
+    if (parts.length > 0) return parts.join('')
     return text
   }
   return text

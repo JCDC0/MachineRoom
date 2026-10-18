@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createBridge } from '../server/index.js'
+import { extractReplyText } from '../server/assistant.js'
 
 function startFakePaperclip(companyId = 'comp-1', agents = []) {
   const sockets = new Set()
@@ -519,5 +520,138 @@ describe('truncated log frames', () => {
 
     expect(replayed.payload.chunk).toBe(big('f'))
     expect(replayed.payload.truncated).toBe(false)
+  })
+})
+
+describe('assistant route', () => {
+  async function startAssistantBridge(options = {}) {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      ...options,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    return { url, dir }
+  }
+
+  it('calls the runner with the default model and 8s timeout and returns the text', async () => {
+    const calls = []
+    const { url } = await startAssistantBridge({
+      env: {},
+      assistantRunner: async (input) => {
+        calls.push(input)
+        return '{"type":"overview","say":"Going to overview."}'
+      },
+    })
+
+    const res = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { Origin: 'http://localhost:5173', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'show the whole room' }),
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ text: '{"type":"overview","say":"Going to overview."}' })
+    expect(calls).toEqual([
+      {
+        model: 'opencode/deepseek-v4.1-flash-free',
+        prompt: 'show the whole room',
+        timeoutMs: 8000,
+      },
+    ])
+  })
+
+  it('reads the model from ASSISTANT_MODEL or the settings file and answers 404 when no model is set', async () => {
+    const dir = makeTempDir()
+    const settingsPath = join(dir, 'settings.json')
+    writeFileSync(settingsPath, JSON.stringify({ assistantModel: 'opencode/glm-5.3-flash-free' }))
+
+    const seenModels = []
+    const { url: fromFileUrl } = await startAssistantBridge({
+      env: {},
+      settingsFile: settingsPath,
+      assistantRunner: async ({ model }) => {
+        seenModels.push(model)
+        return 'ok'
+      },
+    })
+
+    const fileRes = await fetch(`${fromFileUrl}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hello' }),
+    })
+    expect(fileRes.status).toBe(200)
+    expect(seenModels).toEqual(['opencode/glm-5.3-flash-free'])
+
+    const { url: disabledUrl } = await startAssistantBridge({
+      env: { ASSISTANT_MODEL: 'none' },
+      assistantRunner: async () => 'should not run',
+    })
+    const offRes = await fetch(`${disabledUrl}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hello' }),
+    })
+    expect(offRes.status).toBe(404)
+    const offBody = await offRes.json()
+    expect(offBody.error).toMatch(/no assistant model/i)
+  })
+
+  it('enforces local origins, POST method, 2000 character prompt limit and runner failures', async () => {
+    const { url } = await startAssistantBridge({
+      env: {},
+      assistantRunner: async () => {
+        throw new Error('timed out')
+      },
+    })
+
+    const evil = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { Origin: 'https://evil.example', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hi' }),
+    })
+    expect(evil.status).toBe(403)
+
+    const getRes = await fetch(`${url}/api/assistant`)
+    expect(getRes.status).toBe(405)
+
+    const emptyRes = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: '   ' }),
+    })
+    expect(emptyRes.status).toBe(400)
+
+    const longRes = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'a'.repeat(2001) }),
+    })
+    expect(longRes.status).toBe(400)
+    expect((await longRes.json()).error).toMatch(/2000/)
+
+    const failRes = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'valid prompt' }),
+    })
+    expect(failRes.status).toBe(502)
+    expect(await failRes.json()).toEqual({ error: 'The helper model is not reachable.' })
+  })
+
+  it('extracts text from opencode JSON lines and plain JSON replies', () => {
+    const jsonl = [
+      '{"type":"step_start","part":{"type":"step-start"}}',
+      '{"type":"text","part":{"type":"text","text":"{\\"type\\":\\"overview\\","}}',
+      '{"type":"text","part":{"type":"text","text":"\\"say\\":\\"Done.\\"}"}}',
+    ].join('\n')
+    expect(extractReplyText(jsonl)).toBe('{"type":"overview","say":"Done."}')
+    expect(extractReplyText('{"text":"hello"}')).toBe('hello')
   })
 })

@@ -33,7 +33,9 @@ export function changeEvents(frame) {
   const action = String(payload.action ?? '')
   const entity = String(payload.entityType ?? '')
   if (entity === 'issue') {
-    if (action === 'issue.comment_added') return [{ topic: 'comments', id: payload.entityId }]
+    if (action === 'issue.comment_added' || action === 'issue.comment.created') {
+      return [{ topic: 'comments', id: payload.entityId }]
+    }
     return [{ topic: 'issues' }]
   }
   if (entity === 'agent') {
@@ -42,6 +44,10 @@ export function changeEvents(frame) {
     return budget ? [{ topic: 'agents' }, { topic: 'costs' }] : [{ topic: 'agents' }]
   }
   if (entity === 'approval') return [{ topic: 'approvals' }]
+  if (entity === 'cost_event' || entity === 'finance_event' || entity === 'budget_policy' || entity === 'budget_incident') {
+    return [{ topic: 'costs' }]
+  }
+  if (entity === 'company' && action.includes('budget')) return [{ topic: 'costs' }]
   return []
 }
 
@@ -383,7 +389,10 @@ export function createControlApi(options) {
       const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : undefined
       const posted = await upstream('POST', `/api/approvals/${encodeURIComponent(id)}/${DECISION_ROUTES[decision]}`, note ? { decisionNote: note } : {})
       if (posted.status >= 300) {
-        const [code, message] = upstreamFailure(posted, 'That approval no longer exists.', 'Paperclip did not accept that decision.')
+        const already = typeof posted.json?.error === 'string' && /only pending|already/i.test(posted.json.error)
+        const [code, message] = already
+          ? [400, 'That approval is already decided.']
+          : upstreamFailure(posted, 'That approval no longer exists.', 'Paperclip did not accept that decision.')
         sendJson(req, res, code, { error: message })
         return true
       }
@@ -410,6 +419,23 @@ export function createControlApi(options) {
         return true
       }
       await sendAgent(req, res, id)
+      return true
+    }
+
+    if (method === 'GET' && path === '/api/control/costs') {
+      const [summary, rows, quota] = await Promise.all([
+        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/summary`),
+        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),
+        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/quota-windows`),
+      ])
+      for (const answer of [summary, rows, quota]) {
+        if (answer.status !== 200) {
+          const [code, message] = upstreamFailure(answer, 'That company no longer exists.', 'Paperclip could not read the costs.')
+          sendJson(req, res, code, { error: message })
+          return true
+        }
+      }
+      sendJson(req, res, 200, mapCosts({ summary: summary.json, rows: rows.json, quota: quota.json }))
       return true
     }
 
