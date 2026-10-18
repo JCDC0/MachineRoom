@@ -90,6 +90,14 @@ describe('hermes parser', () => {
     const parser = createHermesParser(ctx)
     expect(parser.push('  \u250a \ud83d\udcbb preparing terminal\u2026\n', 1)).toEqual([])
   })
+
+  it('maps a grep line to the search kind and keeps the pattern', () => {
+    const parser = createHermesParser(ctx)
+    const out = parser.push('  \u250a \ud83d\udd0e grep      notes\\.md  1.7s\n', 2000)
+    expect(out[0].tool).toBe('search')
+    expect(out[0].label).toBe('grep notes\\.md')
+    expect(summary(out)).toEqual(['start grep notes\\.md', 'end true'])
+  })
 })
 
 describe('opencode parser', () => {
@@ -115,6 +123,40 @@ describe('opencode parser', () => {
     const parser = createOpencodeParser(ctx)
     const out = parser.push(lines({ type: 'error', error: { message: 'Upstream request failed' } }), 7000)
     expect(out).toEqual([{ time: 7000, type: 'error', text: 'Upstream request failed' }])
+  })
+
+  it('recovers a shell call whose JSON breaks where the mask swallowed a quote', () => {
+    const parser = createOpencodeParser(ctx)
+    const broken = '{"type":"tool_use","part":{"id":"p9","tool":"shell","state":{"status":"completed","input":{"command":"cat docs/notes.md -H \\"Authorization: ***REDACTED***'
+    const out = parser.push(broken + '\n', 9000)
+    expect(out[0].tool).toBe('shell')
+    expect(out[0].label).toBe('$ cat docs/notes.md -H "Authorization:')
+    expect(out[0].touches).toEqual([{ path: 'docs/notes.md', mode: 'read', kind: 'file' }])
+    expect(out[1]).toMatchObject({ type: 'tool.end', ok: true })
+  })
+
+  it('recovers a shell call whose JSON breaks on the quotes the mask left behind', () => {
+    const parser = createOpencodeParser(ctx)
+    const broken = '{"type":"tool_use","part":{"id":"p10","tool":"shell","state":{"status":"completed","input":{"command":"Get-Content docs/notes.md -Headers @{ Authorization = \\\\"***REDACTED***\\\\"; ok = 1 }'
+    const out = parser.push(broken + '\n', 9000)
+    expect(out[0].tool).toBe('shell')
+    expect(out[0].touches).toEqual([{ path: 'docs/notes.md', mode: 'read', kind: 'file' }])
+    expect(out[1]).toMatchObject({ type: 'tool.end', ok: true })
+  })
+
+  it('recovers a file call from a broken line that still holds a complete path', () => {
+    const parser = createOpencodeParser(ctx)
+    const broken = '{"type":"tool_use","part":{"id":"p11","tool":"read","state":{"status":"completed","input":{"path":"docs/notes.md"},"output":"Authorization: ***REDACTED***'
+    const out = parser.push(broken + '\n', 9000)
+    expect(summary(out)).toEqual(['start read docs/notes.md', 'end true'])
+  })
+
+  it('drops a broken line that holds no tool name or no path or command', () => {
+    const parser = createOpencodeParser(ctx)
+    const skill = '{"type":"tool_use","part":{"id":"p12","tool":"skill","state":{"status":"completed","input":{"id":"paperclip"},"output":"<skill_content> Authorization: ***REDACTED***'
+    expect(parser.push(skill + '\n', 1)).toEqual([])
+    const cut = '{"type":"tool_use","part":{"id":"p13","tool":"shell","state":{"input":{"command":"cat docs/notes.md"'
+    expect(parser.push(cut + '\n', 1)).toEqual([])
   })
 })
 
