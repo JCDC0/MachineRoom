@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A first draft of the public README in `docs/agents/README-DRAFT.md` (task G3). It covers the replay and demo quick starts, live mode through the proxy or the bridge, the four harnesses with their known limits, what is not built yet, the safety rules of the bridge and the assistant, where the plan lives, how agents contribute, and a licence line that is still to be chosen. `README.md` is untouched; the owner moves the draft over at G6.
+
 - The body of a PowerShell here-string no longer counts as a file touch (task P7). Text from `@'` or `@"` up to the matching `'@` or `"@` is blanked before the command is split into segments, and a body whose closing mark never comes is blanked to the end. Text after the closing mark still counts, so a report piped into `Set-Content` still writes its file. A single quoted `'@'` and an email address such as `me@site.com` are not here-strings. Four scenario lines now expect no touches.
 
 - A lane name such as `__proto__`, `constructor` or `toString` no longer crashes the briefs route. Lane lookups in the bridge, `buildPrompt` and the mock use `Object.hasOwn`, so these names get a `400` like any unknown lane. The bridge also answers a `500` with a plain sentence when a route throws, instead of leaving the request hanging (`tests/bridge-safety.test.js`).
