@@ -1,4 +1,4 @@
-# Next plan, from 0.1.28
+# Next plan, from 0.1.29
 
 Written 2026-10-18. The task briefs are in `TASKS.md`, the design is in `CONTROL-PLANE.md`. This file puts them in order and says what comes first.
 
@@ -31,9 +31,10 @@ Each line is one brief in `TASKS.md`. Lines that start together can run at the s
 
 **Now, three lanes at once**
 
-- OpenCode: **C2** (real control client in the bridge, with change notices and health fields), then **A4** (assistant model route). Then **S1**, **B6**, **U1**, **U2**, **P5**, **P6**. C2 goes first because it removes the copy and paste. S1 and the later items are cheap and wait.
-- AGY: **A2** (floating assistant terminal), then **C3b** (panels refetch on change notices), then **C3d** (agent builder form, after C3c).
-- Claude: **C3c** (contract: hire and update an agent), **D1** (decision model probe set and comparison run), **A3** (dispatcher), **A5** (cost board in the room), **G1** (history audit), **G3** (README skeleton), then **C0 stage 2** when you say yes to worktrees.
+- OpenCode: **C2** (real control client in the bridge, with change notices and health fields), then **A4** (assistant model route). Then **U1**, **U2**, **S1**, **B6**. C2 goes first because it removes the copy and paste.
+- AGY: **A2** is merged. Next **C3b** (panels refetch on change notices), then **C3d** (agent builder form, after C3c).
+- Hermes (DeepSeek V4.1 Flash, own worktree): **P6**, **G5**, **P5**, then **G3** (README draft). Cheap tasks with named files, so they run beside the others without touching their files.
+- Claude: **A3** (dispatcher, so the assistant moves the room), **C3c** (contract: hire and update an agent), **D1** is built and waits for the owner's run, **A5** (cost board in the room), **G1** (history audit), **G3** (README skeleton), then **C0 stage 2** when you say yes to worktrees.
 
 **Then M1 check.** Wire the real client, run the exit test with Hermes on DeepSeek V4.1 Flash, fix what breaks.
 

@@ -29,6 +29,8 @@ Three agents work on MachineRoom at the same time. Each one owns a set of paths 
 - AGY F7 (merged as 0.1.11) and Claude E1 (a real Paperclip run compared with the terminals, 0.1.8 to 0.1.9).
 - Claude A1 (0.1.20): the assistant core.
 - AGY C3a (merged as 0.1.22): the control drawer with dispatch, tasks, approvals and meters, running on the mock.
+- Claude D1 (0.1.27): the decision model seam, probe sets and comparison script. Waiting for the owner to run it.
+- AGY A2 (merged as 0.1.28): the floating assistant terminal in the HUD. It is not wired to the room yet (A3).
 
 ## Open work
 
@@ -122,13 +124,13 @@ The order and the milestones are in `docs/agents/PLAN.md`. These are the briefs 
 
 **U3. Candidate beside stable (Claude).** A runbook and a script that start a candidate bridge and viewer from a worktree on other ports (stable 5174, candidate 5175), and the promote steps for the supervisor (W1).
 
-**P5. Recover cut and redacted tool lines (OpenCode).** Every OpenCode Go run loses one to three calls because Paperclip's `***REDACTED***` masking breaks the stored JSON line. Recover the tool name and path from a broken line with a narrow pattern, and count what cannot be recovered (feeds U2). Tests from the scenario fixtures. Also map the Hermes `grep` to the `search` kind.
+**P5. Recover cut and redacted tool lines (Hermes, after P6).** Every OpenCode Go run loses one to three calls because Paperclip's `***REDACTED***` masking breaks the stored JSON line. Recover the tool name and path from a broken line with a narrow pattern, and count what cannot be recovered (feeds U2). Tests from the scenario fixtures. Also map the Hermes `grep` to the `search` kind.
 
-**P6. Message text is not a file touch (OpenCode).** `git commit -m "..."`, `curl -d '...'` and similar must not touch files that are named only inside the message. A quoted path that is an argument (`cat "src/math.js"`) still counts. Tests from scenario C.
+**P6. Message text is not a file touch (Hermes).** `git commit -m "..."`, `curl -d '...'` and similar must not touch files that are named only inside the message. A quoted path that is an argument (`cat "src/math.js"`) still counts. The change goes in `touchesForCommand` in `src/model/commands.js`: before the command is split into segments, blank out the value of the message flags (`-m`, `--message`, `-d`, `--data`, `--data-raw`, `--data-binary`, with a space or `=` before the value) when the value is a double or single quoted string, and when the quote is never closed (the stored command labels are cut with a `~`) blank to the end of the text. Blanking first also stops a `;` or `&&` inside a message from splitting the command. Three tests currently pin the wrong behaviour and must change to the right one: `tests/commands.test.js` (the `git commit -m "rename docs/notes.md to docs/readme.md"` case) and the two rename commit lines in `tests/scenarios.test.js`. Add tests for each flag, for a cut message, for a message holding `;`, and for `cat "src/math.js"` still counting. Files: `src/model/commands.js`, `tests/commands.test.js`, `tests/scenarios.test.js`, nothing else.
 
 **H1. Hermes on DeepSeek V4.1 Flash (the owner).** Set the model in Hermes, using an id that Hermes itself lists. See `PLAN.md`.
 
-**G1 to G6. Publish to GitHub.** History audit (Claude), licence and names (the owner), README (Claude, Hermes drafts), fresh screenshots (AGY), CI (OpenCode), private repository then public (the owner). Details in `PLAN.md`.
+**G1 to G6. Publish to GitHub.** History audit (Claude), licence and names (the owner), README (Claude, Hermes drafts), fresh screenshots (AGY), CI (Hermes), private repository then public (the owner). Details in `PLAN.md`.
 
 ## Roadmap: the decision model
 
@@ -143,3 +145,9 @@ Design and the model comparison are in `docs/agents/CONTROL-PLANE.md` under "The
 **D4. Routing policy uses the answers (Claude).** C4 takes `tier`, `harness`, `coordination`, `uncertainty`, `consequence`, `splits` and `effort`, applies the floors and the three bands from the design, and returns the dispatch settings (model, effort, limits, subagents allowed, approval needed). Unit tests with canned answers. No network in the tests.
 
 **D5. Queue proposals (Claude, AGY).** `shape` turns a typed request into a routine proposal card in the assistant and the drawer. Needs the routines routes in `PAPERCLIP-API.md` (check them first), C2 and D2.
+
+## Roadmap: Hermes lane
+
+Hermes runs on DeepSeek V4.1 Flash (H1, set by the owner), works in its own worktree `C:\GitHub\MachineRoom-hermes`, and takes cheap tasks with named files and clear tests. One task at a time, one branch per task, never on `main`, never pushed. The prompt for each task says: the branch, the files it may touch, the test command, the commit prefix, and the report to give. Known limits to plan around: it may not see a long brief at once, so briefs stay short; its reads show only file names; and it tends to bundle commands, so the prompt asks for `npm test` after every change and a stop on a red test.
+
+Order: **P6** (parser, small), **G5** (CI file), **P5** (parser, harder), **G3** (README draft, text only). Each is described elsewhere in this file or in `PLAN.md`. Claude reviews and merges each branch. Hermes does not touch `server/**` (OpenCode), `src/ui/**` (AGY) or `src/engine/**`, `src/Stage.jsx`, `src/App.jsx`, `src/control/**`, `src/assistant/**`, `src/decider/**` (Claude).
