@@ -271,7 +271,8 @@ summary:focus-visible,
   flex-direction: column;
   gap: var(--space);
   align-items: flex-end;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
 }
 
 .hud-modes {
@@ -307,7 +308,7 @@ summary:focus-visible,
 }
 
 .hud-action {
-  flex: 1;
+  flex: 1 0 auto;
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -317,6 +318,7 @@ summary:focus-visible,
   font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .hud-action[aria-pressed='true'] {
@@ -1109,9 +1111,9 @@ summary:focus-visible,
 
 .control-drawer {
   position: fixed;
-  top: calc(var(--space) * 11);
+  top: calc(var(--space) * 13);
   right: calc(var(--space) * 2);
-  bottom: calc(var(--space) * 9);
+  bottom: calc(var(--space) * 11);
   width: 384px;
   max-width: calc(100vw - var(--space) * 4);
   background: rgb(0 0 0 / 0.94);
@@ -1935,7 +1937,6 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.6);
 }
 
-/* Floating Assistant Terminal */
 .mr-assistant {
   position: fixed;
   width: 380px;

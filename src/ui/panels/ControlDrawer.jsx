@@ -3,6 +3,7 @@ import DispatchPanel from './DispatchPanel.jsx'
 import TasksPanel from './TasksPanel.jsx'
 import ApprovalsPanel from './ApprovalsPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
+import { subscribeToNotices } from './notices.js'
 
 const TABS = [
   { id: 'dispatch', label: 'Dispatch' },
@@ -34,6 +35,13 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
       setPendingApprovalsCount(0)
     }
   }, [client])
+
+  useEffect(() => {
+    loadPendingCount()
+    return subscribeToNotices(client, 'approvals', () => {
+      loadPendingCount()
+    })
+  }, [client, loadPendingCount])
 
   useEffect(() => {
     if (controlTarget?.nonce != null) {

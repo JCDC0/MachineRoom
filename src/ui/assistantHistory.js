@@ -1,7 +1,7 @@
 export const MAX_HISTORY = 20
 export const BLOCKED_MASK = '[hidden]'
 export const DOCK_BREAKPOINT = 900
-export const DEFAULT_TERMINAL_SIZE = Object.freeze({ width: 380, height: 320 })
+export const DEFAULT_TERMINAL_SIZE = Object.freeze({ width: 380, height: 280 })
 
 export function addToHistory(history, text, limit = MAX_HISTORY) {
   const current = Array.isArray(history) ? history : []
@@ -64,9 +64,11 @@ export function clampPosition(pos, size = DEFAULT_TERMINAL_SIZE, windowSize = {}
 
 export function getDefaultPosition(size = DEFAULT_TERMINAL_SIZE, windowSize = {}) {
   const width = size?.width && size.width > 0 ? size.width : DEFAULT_TERMINAL_SIZE.width
+  const height = size?.height && size.height > 0 ? size.height : DEFAULT_TERMINAL_SIZE.height
   const winW = windowSize?.windowWidth ?? windowSize?.width ?? (typeof window !== 'undefined' ? window.innerWidth : 1280)
-  const preferredX = winW - width - 24
-  const preferredY = 72
+  const winH = windowSize?.windowHeight ?? windowSize?.height ?? (typeof window !== 'undefined' ? window.innerHeight : 800)
+  const preferredX = winW - width - 16
+  const preferredY = winH - height - 88
   return clampPosition({ x: preferredX, y: preferredY }, size, windowSize)
 }
 
