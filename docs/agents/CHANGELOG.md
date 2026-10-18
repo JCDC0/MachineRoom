@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Stage passes the real control client to the HUD when the viewer is connected through the bridge (`createClient({ baseUrl })`), so the drawer, the assistant and its confirmed writes talk to Paperclip. Demo and replay still use the mock. PAPERCLIP-API.md gains the approval, comment order and cost event findings from C2. New briefs U4 (reject a foreign Host header), C3e (HUD polish) and the M1 exit test.
 - Hermes P6: the value of a commit message or a request body (`-m`, `--message`, `-d`, `--data`, `--data-raw`, `--data-binary`, quoted with `"`, `'` or `\"`) no longer counts as a file touch. A cut message with no closing quote is blanked to the end. A quoted path that is an ordinary argument still counts. Four scenario lines that pinned the old behaviour now expect no touches.
 - The assistant now acts (task A3). `src/assistant/dispatch.js` runs each validated action against a host: it moves the camera to an agent, a terminal, a folder or a file, controls the overview, follow and replay, and creates a task or sets a budget through the control client after the confirm card. The room gains `focusTerminal` and `focusPath`. `Stage.jsx` passes the paths of the project, the action handler and a `controlTarget` to the HUD, and shows results in a toast. The control plane agent is matched by the room's agent id, then by key, then by name.
 - Change notices in the panels and drawer opening from outside (task C3b): panels subscribe to change notices with pure 100 ms batching, and Hud accepts controlTarget to open tabs and task threads.

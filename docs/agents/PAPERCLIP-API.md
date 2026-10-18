@@ -75,6 +75,9 @@ Finding: budgets count `billed_cents` only. A run on a subscription (Claude Code
 - `GET /api/companies/:id/approvals` (now an empty list), `POST /api/companies/:id/approvals` `{ type, requestedByAgentId?, payload: record, issueIds? }`.
 - `POST /api/approvals/:id/approve | reject | request-revision` with `{ decisionNote? }`, `POST .../resubmit` with `{ payload? }`, `POST .../comments` with `{ body }`. `GET /api/approvals/:id`, `/comments`, `/issues`.
 - Issues link to approvals with `POST /api/issues/:id/approvals`.
+- Checked against the installed server code (2026.1012.0) while building C2: an approval row has `id, companyId, type, requestedByAgentId, requestedByUserId, status, payload, decisionNote, decidedByUserId, decidedAt, createdAt, updatedAt` and no top-level summary. The text for a person lives in `payload.summary` or `payload.title` (a `budget_override_required` payload carries `scopeName, budgetAmount, observedAmount, guidance`). Deciding an approval that is no longer pending or revision requested answers `422`, and deciding it to the same status twice answers `200` with `applied: false`.
+- `GET /api/issues/:id/comments` returns newest first unless `?order=asc` is given. A comment row has `authorAgentId` and `authorUserId` and no author name, so a client must look the name up in the agent list.
+- Cost events: `POST /api/companies/:id/cost-events` logs an `activity.logged` frame with `entityType: cost_event` and `action: cost.reported`, and a finished run books its usage on the terminal `heartbeat.run.status`. The bridge sends a `costs` change notice for both.
 
 ## Workspaces
 
