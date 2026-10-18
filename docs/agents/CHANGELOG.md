@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge rejects requests whose `Host` header is not `localhost`, `127.0.0.1` or `[::1]` (with any port) with `403`, blocking DNS rebinding reads (task U4).
 - Prompts come from the repository (task T1): `docs/agents/HOUSE-RULES.md` holds the rules every agent follows, `docs/agents/lanes.json` holds each agent's worktree, model and forbidden paths, and `src/briefs/briefs.js` parses the briefs in `TASKS.md` and builds the full prompt for one or more briefs and one lane. The mock client serves sample briefs through `briefs()` and `briefPrompt(ids, lane)`. TASKS.md loses its old rules and branch table. New briefs: T1a (routes), T1b (panel), G5 (CI), and a sharper P5.
 - Stage passes the real control client to the HUD when the viewer is connected through the bridge (`createClient({ baseUrl })`), so the drawer, the assistant and its confirmed writes talk to Paperclip. Demo and replay still use the mock. PAPERCLIP-API.md gains the approval, comment order and cost event findings from C2. New briefs U4 (reject a foreign Host header), C3e (HUD polish) and the M1 exit test.
 - Hermes P6: the value of a commit message or a request body (`-m`, `--message`, `-d`, `--data`, `--data-raw`, `--data-binary`, quoted with `"`, `'` or `\"`) no longer counts as a file touch. A cut message with no closing quote is blanked to the end. A quoted path that is an ordinary argument still counts. Four scenario lines that pinned the old behaviour now expect no touches.

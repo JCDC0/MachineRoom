@@ -177,7 +177,7 @@ The board is a panel floating in the 3D room, drawn like a terminal (CSS3D), nea
 
 A diff that touches one of these gets a mark in the review panel (W3) and needs a second click to merge. Agents may still change them on a branch.
 
-- `server/` host and origin checks, and any route that reads or writes Paperclip secrets.
+- `server/index.js` (`isAllowed`, `isAllowedHost`), host and origin checks in `server/`, and any route that reads or writes Paperclip secrets.
 - `src/assistant/intent.js` (`containsSecret`, `redact`) and `src/assistant/actions.js` (`CONFIRMED`, `validateAction`).
 - Anything that reads, stores or prints an API key, and `.env.example`.
 - Anything that starts a process or runs a command.

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { WebSocketServer } from 'ws'
-import { createBridge } from '../server/index.js'
+import { createBridge, isAllowedHost } from '../server/index.js'
 import { extractReplyText } from '../server/assistant.js'
 
 function startFakePaperclip(companyId = 'comp-1', agents = []) {
@@ -205,6 +205,39 @@ describe('live bridge', () => {
     for (const origin of ['http://localhost.evil.com', 'https://example.com', 'http://127.0.0.1.evil.com:5173']) {
       const res = await fetch(`${url}/api/health`, { headers: { Origin: origin } })
       expect(res.status).toBe(403)
+    }
+  })
+
+  it('allows localhost, 127.0.0.1 and [::1] Host headers and rejects foreign hosts', async () => {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', [])
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: dir, port: 0 })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const getWithHost = (path, host) =>
+      new Promise((resolveReq, rejectReq) => {
+        const headers = host === undefined ? {} : { Host: host }
+        const req = httpRequest(`${url}${path}`, { headers, setHost: false }, (res) => {
+          res.resume()
+          resolveReq(res.statusCode)
+        })
+        req.on('error', rejectReq)
+        req.end()
+      })
+
+    for (const host of ['localhost', 'localhost:5174', '127.0.0.1', '127.0.0.1:5174', '[::1]', '[::1]:5174']) {
+      expect(isAllowedHost(host), host).toBe(true)
+      expect(await getWithHost('/api/health', host), host).toBe(200)
+    }
+    expect(isAllowedHost('')).toBe(false)
+    expect(isAllowedHost(undefined)).toBe(false)
+    for (const host of ['evil.example', 'evil.example:5174', 'localhost.evil.com', '127.0.0.1.evil.com:5174', '[::2]:5174']) {
+      expect(isAllowedHost(host), host).toBe(false)
+      for (const path of ['/api/health', '/api/tree', '/api/control/models', '/events']) {
+        expect(await getWithHost(path, host), `${host} ${path}`).toBe(403)
+      }
     }
   })
 

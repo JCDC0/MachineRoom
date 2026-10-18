@@ -7,10 +7,15 @@ import { createAssistantApi } from './assistant.js'
 import { changeEvents, createControlApi } from './control.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 const BODY_LIMIT = 64 * 1024
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
+}
+
+export function isAllowedHost(host) {
+  return typeof host === 'string' && LOCAL_HOST.test(host)
 }
 
 const HISTORY_LIMIT = 500
@@ -398,6 +403,11 @@ export function createBridge(options = {}) {
   heartbeatTimer.unref?.()
 
   const server = createServer(async (req, res) => {
+    if (!isAllowedHost(req.headers.host)) {
+      res.writeHead(403)
+      res.end()
+      return
+    }
     if (req.headers.origin && !isAllowed(req.headers.origin)) {
       res.writeHead(403)
       res.end()
