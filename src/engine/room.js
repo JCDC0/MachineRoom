@@ -282,10 +282,51 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   sync(getState())
   frameId = requestAnimationFrame(frame)
 
+  const pathTarget = new THREE.Vector3()
+
+  function focusTerminal(key) {
+    if (!terminals.terminals.has(key)) return false
+    focused = key
+    rig.focus(() => terminals.positionOf(key), 1000, 0.12)
+    return true
+  }
+
+  function focusPath(path) {
+    if (!clusters) return false
+    const state = getState()
+    const isFile = state.files.has(path)
+    if (!isFile && path !== '' && !state.dirs.has(path)) return false
+    const dir = isFile ? dirname(path) : path
+    const chain = ancestors(isFile ? path : `${path}/x`)
+    focused = null
+    chain.forEach((step, index) => later(index * OPEN_STEP_MS, () => clusters.open(step)))
+    later(chain.length * OPEN_STEP_MS, () => {
+      if (isFile) {
+        clusters.flashFile(dir, path, 'white')
+        clusters.slotPosition(dir, path, scratch)
+        labels.show(basename(path), scratch, '#ffffff')
+      } else {
+        clusters.flashCluster(path, 'white')
+      }
+    })
+    rig.focus(
+      () => {
+        if (isFile) clusters.slotPosition(dir, path, pathTarget)
+        else pathTarget.copy(clusters.center(path))
+        return pathTarget
+      },
+      isFile ? 700 : 1500,
+      0.6
+    )
+    return true
+  }
+
   return {
     onActivity,
     reset: sync,
     focus: focusAgent,
+    focusTerminal,
+    focusPath,
     overview() {
       focused = null
       rig.overview()

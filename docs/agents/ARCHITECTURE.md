@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.29. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.31. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -55,7 +55,7 @@ src/engine/       three.js scene, no React
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/control/      the control client contract and its mock (see CONTROL-CLIENT.md)
 src/decider/      decision model seam: Decisions API wire shape, `decide()`, fixed questions, stats, baselines and the comparison runner (see DECIDER-EVAL.md; not used by the app yet)
-src/assistant/    request router: closed action list, rule based intent, key guard, model reply parser (pure, tested; see CONTROL-PLANE.md)
+src/assistant/    request router: closed action list, rule based intent, key guard, model reply parser, and `dispatch.js` which runs a validated action against a host (the room, the HUD, the control client). Pure, tested; see CONTROL-PLANE.md
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
   panels/           control drawer on `C`: dispatch, tasks and thread, approvals, meters (uses only the control client)
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
@@ -99,6 +99,7 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 - Layout: the root sits in front of the Machine. Top-level folders spread around it on a shell at staggered heights, and each deeper folder fans outward from its parent in a cone. A fixed number of relaxation passes then pushes every pair of folders apart (no randomness, so the same tree gives the same room) and keeps them out of the core. When a live tree grows, folders that already exist keep their place and the new ones settle around them, and the tiles glide to their new positions. A folder with more than 20 files switches to a dense grid (up to 14 columns) and its planes shrink down to 40 percent.
 - Agents: an agent travels from folder to folder along the strings (starting at the root), then hovers above the exact file it touches, with a tether to it. A tag above the agent shows its current command.
 - Camera: the overview centers on the bounding sphere of the folders, the core and the terminal wall, and backs off as the room or the window narrows, never below the default. `0` returns to it. `F` cycles follow mode: wide (the agent and its terminal), close up (the agent and the file it touches), off. The camera moves to the agent that starts a tool call or a run and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
+- Assistant: `/` opens the floating terminal. Typed requests become actions that `Stage.jsx` runs through `dispatch.js`. The room offers `focus(key, view)`, `focusTerminal(key)` (camera on the agent's terminal) and `focusPath(path)` (opens the folders on the way, flashes the target and flies to it). A toast at the bottom right shows results that need words (a created task, a refusal). Writes (a task, a budget) run only after the confirm card, and the dispatcher refuses them without an explicit `confirmed`. Panels open through the HUD's `controlTarget` prop.
 - HUD: the scrubber carries run markers (white start, red failed end, yellow finished end) and clicking one seeks. `L` opens the event log, built from the same activities as the terminals. `?` lists the keys.
 - Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above the plane for 2.6 seconds. Labels that land close together stack upward.
 

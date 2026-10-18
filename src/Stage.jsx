@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createDispatcher } from './assistant/dispatch.js'
 import { createMockClient } from './control/mock.js'
 import { createRoom } from './engine/room.js'
 import { openBridge } from './live/bridge.js'
@@ -51,6 +52,17 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [following, setFollowing] = useState(false)
   const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
+  const [controlTarget, setControlTarget] = useState(null)
+  const [toast, setToast] = useState('')
+  const targetCount = useRef(0)
+  const fileCount = player.state.files.size
+  const dirCount = player.state.dirs.size
+  const assistantPaths = useMemo(
+    () => [...new Set(['', ...player.state.dirs.keys(), ...player.state.files.keys()])],
+    [player, fileCount, dirCount]
+  )
+  const pathsRef = useRef(assistantPaths)
+  pathsRef.current = assistantPaths
   const timeline = useMemo(() => (live ? null : buildTimeline(data.activities, player.stamps, data.agents)), [live, data, player])
   const log = useMemo(
     () => (timeline ? entriesUpTo(timeline.entries, snapshot.position) : liveLog),
@@ -184,6 +196,60 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     setFocused(null)
   }
 
+  function replay(op, value) {
+    if (live) return { ok: false, message: 'Replay controls do not apply to a live feed.' }
+    if (op === 'play') player.play()
+    else if (op === 'pause') player.pause()
+    else if (op === 'speed') changeSpeed(value)
+    else {
+      const index = SPEEDS.indexOf(player.speed)
+      changeSpeed(SPEEDS[op === 'faster' ? Math.min(SPEEDS.length - 1, index + 1) : Math.max(0, index - 1)])
+    }
+    return { ok: true, message: '' }
+  }
+
+  const dispatcher = createDispatcher({
+    client,
+    context: () => ({ agents: data.agents.map(({ key, name }) => ({ key, name })), paths: pathsRef.current }),
+    agentName: (key) => data.agents.find((agent) => agent.key === key)?.name ?? key,
+    agentId: (key) => data.agents.find((agent) => agent.key === key)?.id,
+    focusAgent: (key, view) => {
+      setFollow(false)
+      roomRef.current?.focus(key, view)
+      setFocused(key)
+    },
+    focusTerminal: (key) => {
+      setFollow(false)
+      setFocused(key)
+      return roomRef.current?.focusTerminal(key) ?? false
+    },
+    focusPath: (path) => {
+      setFollow(false)
+      setFocused(null)
+      return roomRef.current?.focusPath(path) ?? false
+    },
+    overview,
+    setFollow,
+    replay,
+    openPanel: (tab, issueIdentifier) => {
+      targetCount.current += 1
+      setControlTarget({ tab, issueIdentifier, nonce: targetCount.current })
+    },
+    pressKey: (key) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })),
+  })
+
+  async function runAssistant(action) {
+    const result = await dispatcher.run(action, { confirmed: true })
+    if (result.message) setToast(result.message)
+    return result
+  }
+
+  useEffect(() => {
+    if (!toast) return undefined
+    const timer = setTimeout(() => setToast(''), 4500)
+    return () => clearTimeout(timer)
+  }, [toast])
+
   const idleSoFar = snapshot.agents.every((agent) => agent.runs === 0)
   const linkTrouble = ['connecting', 'reconnecting', 'disconnected'].includes(snapshot.status)
   const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
@@ -202,6 +268,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           Follow // {following}
         </div>
       )}
+      {toast && (
+        <div style={{ ...BADGE, bottom: live ? 164 : 132, color: 'var(--white)', maxWidth: 360, textTransform: 'none' }} role="status">
+          {toast}
+        </div>
+      )}
       {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
       <Hud
         snapshot={snapshot}
@@ -210,6 +281,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         rootName={data.tree.rootName}
         mode={mode}
         client={client}
+        assistantPaths={assistantPaths}
+        onAssistantAction={runAssistant}
+        controlTarget={controlTarget}
         markers={timeline?.markers ?? NONE}
         log={log}
         liveAvailable={liveAvailable}
