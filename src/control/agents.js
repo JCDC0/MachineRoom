@@ -22,7 +22,8 @@ export const EFFORTS = ['low', 'medium', 'high']
 export const SETTABLE_STATUS = ['active', 'paused']
 export const CANNOT_TAKE_TASKS = ['pending_approval', 'terminated']
 
-const LIMITS = { maxTurnsPerRun: [1, 200], timeoutSec: [10, 7200], budgetMonthlyCents: [0, 1000000], subagentDepth: [1, 3] }
+export const LIMITS = Object.freeze({ maxTurnsPerRun: [1, 200], timeoutSec: [10, 7200], budgetMonthlyCents: [0, 1000000], subagentDepth: [1, 3] })
+export const TEXT_LIMITS = Object.freeze({ name: 80, model: 120, instructions: 20000 })
 
 function fail(message) {
   throw new Error(message)
@@ -37,19 +38,29 @@ const text = (value) => (typeof value === 'string' ? value.trim() : value)
 const blank = (value) => value === null || text(value) === ''
 
 const CHECKS = {
-  name: (value) => (typeof value === 'string' && text(value).length >= 1 && text(value).length <= 80 ? text(value) : fail('The name must be 1 to 80 characters.')),
+  name: (value) => (typeof value === 'string' && text(value).length >= 1 && text(value).length <= TEXT_LIMITS.name ? text(value) : fail('The name must be 1 to 80 characters.')),
   adapterType: (value) => (ADAPTER_TYPES.includes(value) ? value : fail('Choose a harness from the list.')),
   role: (value) => (AGENT_ROLES.includes(value) ? value : fail('Choose a role from the list.')),
-  model: (value) => (blank(value) ? null : typeof value === 'string' && text(value).length <= 120 ? text(value) : fail('The model must be 1 to 120 characters, or empty.')),
+  model: (value) => (blank(value) ? null : typeof value === 'string' && text(value).length <= TEXT_LIMITS.model ? text(value) : fail('The model must be 1 to 120 characters, or empty.')),
   reasoningEffort: (value) => (blank(value) ? null : EFFORTS.includes(value) ? value : fail('Effort must be low, medium or high.')),
   maxTurnsPerRun: (value) => (value === null ? null : whole(value, 'maxTurnsPerRun', 'Turns per run must be a whole number from 1 to 200.')),
   timeoutSec: (value) => (value === null ? null : whole(value, 'timeoutSec', 'The time limit must be a whole number of seconds from 10 to 7200.')),
   budgetMonthlyCents: (value) => whole(value, 'budgetMonthlyCents', 'The budget must be a whole number of cents, from 0 to 1,000,000.'),
   subagentsAllowed: (value) => (typeof value === 'boolean' ? value : fail('Subagents must be yes or no.')),
   subagentDepth: (value) => whole(value, 'subagentDepth', 'The subagent depth must be 1, 2 or 3.'),
-  instructions: (value) => (typeof value === 'string' && value.length <= 20000 ? value : fail('The instructions must be text of at most 20,000 characters.')),
+  instructions: (value) => (typeof value === 'string' && value.length <= TEXT_LIMITS.instructions ? value : fail('The instructions must be text of at most 20,000 characters.')),
   reportsToAgentId: (value) => (blank(value) ? null : typeof value === 'string' ? text(value) : fail('Reports to must name an agent, or be empty.')),
   status: (value) => (SETTABLE_STATUS.includes(value) ? value : fail('The status must be active or paused.')),
+}
+
+export function fieldProblem(key, value) {
+  if (!Object.hasOwn(CHECKS, key)) return null
+  try {
+    CHECKS[key](value)
+    return null
+  } catch (error) {
+    return error.message
+  }
 }
 
 const DRAFT_KEYS = ['name', 'adapterType', 'role', 'model', 'reasoningEffort', 'maxTurnsPerRun', 'timeoutSec', 'budgetMonthlyCents', 'subagentsAllowed', 'subagentDepth', 'instructions', 'reportsToAgentId']

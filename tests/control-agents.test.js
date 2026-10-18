@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ADAPTER_TYPES, AGENT_ROLES, CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary } from '../src/control/agents.js'
+import { ADAPTER_TYPES, AGENT_ROLES, CANNOT_TAKE_TASKS, LIMITS, TEXT_LIMITS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary } from '../src/control/agents.js'
 
 const base = { name: 'Planner', adapterType: 'claude_local' }
 
@@ -130,5 +130,29 @@ describe('hireSummary', () => {
       'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).'
     )
     expect(hireSummary({ name: 'Scout', adapterType: 'process', model: null, maxTurnsPerRun: null, subagentsAllowed: true, subagentDepth: 2 })).toBe('Hire "Scout" (process, subagents to depth 2).')
+  })
+})
+
+describe('limits and fieldProblem', () => {
+  it('exports the ranges the checks use, frozen', () => {
+    expect(LIMITS.maxTurnsPerRun).toEqual([1, 200])
+    expect(LIMITS.timeoutSec).toEqual([10, 7200])
+    expect(LIMITS.budgetMonthlyCents).toEqual([0, 1000000])
+    expect(LIMITS.subagentDepth).toEqual([1, 3])
+    expect(TEXT_LIMITS).toEqual({ name: 80, model: 120, instructions: 20000 })
+    expect(Object.isFrozen(LIMITS)).toBe(true)
+    expect(Object.isFrozen(TEXT_LIMITS)).toBe(true)
+  })
+
+  it('returns null for a good value and the plain sentence for a bad one', () => {
+    expect(fieldProblem('name', 'Planner')).toBeNull()
+    expect(fieldProblem('maxTurnsPerRun', 14)).toBeNull()
+    expect(fieldProblem('maxTurnsPerRun', 0)).toBe('Turns per run must be a whole number from 1 to 200.')
+    expect(fieldProblem('name', 'x'.repeat(TEXT_LIMITS.name + 1))).toBe('The name must be 1 to 80 characters.')
+    expect(fieldProblem('role', 'wizard')).toBe('Choose a role from the list.')
+  })
+
+  it('returns null for a name that is not a setting, including names every object has', () => {
+    for (const key of ['nothing', '__proto__', 'constructor', 'toString']) expect(fieldProblem(key, 'x')).toBeNull()
   })
 })

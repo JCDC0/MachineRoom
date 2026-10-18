@@ -87,7 +87,7 @@ describe('history ring', () => {
 })
 
 describe('position clamp', () => {
-  const size = { width: 380, height: 320 }
+  const size = { width: 380, height: 280 }
   const win = { windowWidth: 1280, windowHeight: 800 }
 
   it('keeps positions inside viewport bounds', () => {
@@ -101,7 +101,7 @@ describe('position clamp', () => {
   it('clamps right and bottom edges to window boundaries', () => {
     expect(clampPosition({ x: 2000, y: 1500 }, size, win)).toEqual({
       x: 1280 - 380,
-      y: 800 - 320,
+      y: 800 - 280,
     })
   })
 
@@ -110,10 +110,14 @@ describe('position clamp', () => {
     expect(clampPosition({ x: 50, y: 50 }, size, smallWin)).toEqual({ x: 0, y: 0 })
   })
 
-  it('calculates a valid default position', () => {
+  it('calculates a valid default position above the transport bar on the right', () => {
     const pos = getDefaultPosition(size, win)
-    expect(pos.x).toBe(1280 - 380 - 24)
-    expect(pos.y).toBe(72)
+    expect(pos.x).toBe(1280 - 380 - 16)
+    expect(pos.y).toBe(800 - 280 - 88)
+
+    const smallerPos = getDefaultPosition(size, { windowWidth: 1024, windowHeight: 768 })
+    expect(smallerPos.x).toBe(1024 - 380 - 16)
+    expect(smallerPos.y).toBe(768 - 280 - 88)
   })
 
   it('identifies dock threshold under 900px', () => {
@@ -127,11 +131,11 @@ describe('position clamp', () => {
     const zeroSize = { width: 0, height: 0 }
     expect(clampPosition({ x: 2000, y: 1500 }, zeroSize, win)).toEqual({
       x: 1280 - 380,
-      y: 800 - 320,
+      y: 800 - 280,
     })
     expect(getDefaultPosition(zeroSize, win)).toEqual({
-      x: 1280 - 380 - 24,
-      y: 72,
+      x: 1280 - 380 - 16,
+      y: 800 - 280 - 88,
     })
   })
 })

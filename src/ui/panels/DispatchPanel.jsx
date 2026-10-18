@@ -1,4 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  chooseAssignee,
+  formatBriefTitle,
+  groupBriefsByOwner,
+  ownerToLane,
+} from './briefs.js'
 import { subscribeToNotices } from './notices.js'
 
 export default function DispatchPanel({ client, onCreated }) {
@@ -6,6 +12,19 @@ export default function DispatchPanel({ client, onCreated }) {
   const [models, setModels] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+
+  const [briefs, setBriefs] = useState([])
+  const [briefsLoading, setBriefsLoading] = useState(() => typeof client?.briefs === 'function')
+  const [briefsError, setBriefsError] = useState(null)
+  const [selectedBriefId, setSelectedBriefId] = useState('')
+  const [promptText, setPromptText] = useState('')
+  const [promptLoading, setPromptLoading] = useState(false)
+  const [promptError, setPromptError] = useState(null)
+  const [notForAgent, setNotForAgent] = useState(false)
+  const [copyStatus, setCopyStatus] = useState(null)
+
+  const promptReqRef = useRef(0)
+  const promptBoxRef = useRef(null)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -20,6 +39,8 @@ export default function DispatchPanel({ client, onCreated }) {
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [createdIdentifier, setCreatedIdentifier] = useState(null)
+
+  const hasBriefs = typeof client?.briefs === 'function'
 
   async function loadData() {
     setLoading(true)
@@ -38,6 +59,20 @@ export default function DispatchPanel({ client, onCreated }) {
     }
   }
 
+  async function loadBriefs() {
+    if (typeof client?.briefs !== 'function') return
+    setBriefsLoading(true)
+    setBriefsError(null)
+    try {
+      const list = await client.briefs()
+      setBriefs(Array.isArray(list) ? list : [])
+    } catch (err) {
+      setBriefsError(err.message || 'Could not load briefs.')
+    } finally {
+      setBriefsLoading(false)
+    }
+  }
+
   async function refreshAgents() {
     try {
       const agentList = await client.agents()
@@ -49,6 +84,13 @@ export default function DispatchPanel({ client, onCreated }) {
 
   useEffect(() => {
     loadData()
+    if (typeof client?.briefs === 'function') {
+      loadBriefs()
+    } else {
+      setBriefs([])
+      setBriefsLoading(false)
+      setBriefsError(null)
+    }
   }, [client])
 
   useEffect(() => {
@@ -56,6 +98,103 @@ export default function DispatchPanel({ client, onCreated }) {
       refreshAgents()
     })
   }, [client])
+
+  async function loadPromptForBrief(briefId, briefObj) {
+    const brief = briefObj ?? briefs.find((item) => item.id === briefId)
+    if (!brief) return
+    const lane = ownerToLane(brief)
+    if (!lane) {
+      promptReqRef.current += 1
+      setNotForAgent(true)
+      setPromptLoading(false)
+      setPromptError(null)
+      setPromptText('')
+      setCopyStatus(null)
+      return
+    }
+
+    setNotForAgent(false)
+    if (typeof client?.briefPrompt !== 'function') {
+      setPromptError('Could not load prompt.')
+      return
+    }
+
+    const reqId = ++promptReqRef.current
+    setPromptLoading(true)
+    setPromptError(null)
+    setPromptText('')
+    setCopyStatus(null)
+
+    try {
+      const result = await client.briefPrompt([brief.id], lane)
+      if (promptReqRef.current !== reqId) return
+      setPromptText(typeof result?.prompt === 'string' ? result.prompt : '')
+    } catch (err) {
+      if (promptReqRef.current !== reqId) return
+      setPromptError(err.message || 'Could not load prompt.')
+    } finally {
+      if (promptReqRef.current === reqId) {
+        setPromptLoading(false)
+      }
+    }
+  }
+
+  function handleBriefChange(event) {
+    const id = event.target.value
+    setSelectedBriefId(id)
+    setCopyStatus(null)
+
+    if (!id) {
+      promptReqRef.current += 1
+      setNotForAgent(false)
+      setPromptLoading(false)
+      setPromptError(null)
+      setPromptText('')
+      return
+    }
+
+    const brief = briefs.find((item) => item.id === id)
+    if (!brief) return
+
+    const nextTitle = formatBriefTitle(brief)
+    setTitle(nextTitle)
+    if (nextTitle && fieldErrors.title) {
+      setFieldErrors((prev) => ({ ...prev, title: null }))
+    }
+
+    const matchedAssignee = chooseAssignee(brief, agents)
+    setAssigneeAgentId(matchedAssignee)
+    if (matchedAssignee && fieldErrors.agent) {
+      setFieldErrors((prev) => ({ ...prev, agent: null }))
+    }
+
+    loadPromptForBrief(id, brief)
+  }
+
+  async function handleCopyPrompt() {
+    if (!promptText) return
+    try {
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error('Clipboard unavailable')
+      }
+      await navigator.clipboard.writeText(promptText)
+      setCopyStatus({ ok: true, message: 'Copied' })
+    } catch {
+      if (promptBoxRef.current) {
+        promptBoxRef.current.focus()
+        promptBoxRef.current.select()
+        if (typeof promptBoxRef.current.setSelectionRange === 'function') {
+          promptBoxRef.current.setSelectionRange(0, promptText.length)
+        }
+      }
+      setCopyStatus({ ok: false, message: 'Copy failed. Text is selected.' })
+    }
+  }
+
+  function handleUseAsDescription() {
+    if (!promptText) return
+    setDescription(promptText)
+  }
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -100,6 +239,12 @@ export default function DispatchPanel({ client, onCreated }) {
 
       const created = await client.createIssue(draft)
       setCreatedIdentifier(created.identifier)
+      setSelectedBriefId('')
+      setPromptText('')
+      setPromptError(null)
+      setPromptLoading(false)
+      setNotForAgent(false)
+      setCopyStatus(null)
       setTitle('')
       setDescription('')
       setAssigneeAgentId('')
@@ -140,6 +285,7 @@ export default function DispatchPanel({ client, onCreated }) {
     return <div className="panel-state">No agents available to assign.</div>
   }
 
+  const briefGroups = hasBriefs ? groupBriefsByOwner(briefs) : []
   const smallModels = models.filter((item) => item.tier === 'small')
   const mediumModels = models.filter((item) => item.tier === 'medium')
   const largeModels = models.filter((item) => item.tier === 'large')
@@ -155,6 +301,96 @@ export default function DispatchPanel({ client, onCreated }) {
       {submitError && (
         <div className="panel-banner is-error" role="alert">
           {submitError}
+        </div>
+      )}
+
+      {hasBriefs && (
+        <div className="panel-field brief-section">
+          <label htmlFor="dispatch-brief">Brief</label>
+          {briefsLoading ? (
+            <div className="brief-state mono" role="status">Loading briefs...</div>
+          ) : briefsError ? (
+            <div className="brief-error-row" role="alert">
+              <span className="panel-error-message">{briefsError}</span>
+              <button type="button" onClick={loadBriefs}>Retry</button>
+            </div>
+          ) : briefGroups.length === 0 ? (
+            <div className="brief-state is-dim mono">No open briefs.</div>
+          ) : (
+            <select
+              id="dispatch-brief"
+              value={selectedBriefId}
+              onChange={handleBriefChange}
+            >
+              <option value="">Select a brief</option>
+              {briefGroups.map((group) => (
+                <optgroup key={group.owner} label={group.label}>
+                  {group.briefs.map((brief) => (
+                    <option key={brief.id} value={brief.id}>
+                      {formatBriefTitle(brief)}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+
+          {notForAgent && (
+            <div className="brief-state is-dim mono" role="status">
+              This brief is not for an agent
+            </div>
+          )}
+
+          {promptLoading && (
+            <div className="brief-state mono" role="status">
+              Loading prompt...
+            </div>
+          )}
+
+          {promptError && (
+            <div className="brief-error-row" role="alert">
+              <span className="panel-error-message">{promptError}</span>
+              {selectedBriefId && (
+                <button type="button" onClick={() => loadPromptForBrief(selectedBriefId)}>
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+
+          {!promptLoading && !promptError && !notForAgent && selectedBriefId && !promptText && (
+            <div className="brief-state is-dim mono">No prompt available.</div>
+          )}
+
+          {!promptLoading && !promptError && !notForAgent && promptText && (
+            <div className="brief-prompt-area">
+              <textarea
+                ref={promptBoxRef}
+                id="dispatch-brief-prompt"
+                className="brief-prompt-box mono"
+                rows={5}
+                value={promptText}
+                readOnly
+                aria-label="Brief prompt"
+              />
+              <div className="brief-prompt-actions">
+                <button type="button" onClick={handleCopyPrompt}>
+                  Copy prompt
+                </button>
+                <button type="button" onClick={handleUseAsDescription}>
+                  Use as description
+                </button>
+                {copyStatus && (
+                  <span
+                    className={`brief-copy-status mono ${copyStatus.ok ? 'is-ok' : 'is-error'}`}
+                    role="status"
+                  >
+                    {copyStatus.message}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

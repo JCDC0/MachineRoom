@@ -60,7 +60,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 
 ## Hiring and updating an agent (C3c)
 
-`src/control/agents.js` holds the lists and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`). The mock uses them, and the bridge should use the same ones, so a bad request is refused the same way in both.
+`src/control/agents.js` holds the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). The mock uses them, and the bridge should use the same ones, so a bad request is refused the same way in both.
 
 - `hireAgent` refuses a draft without a name or a harness, a value outside its range, an unknown setting, a name that is taken, and a `reportsToAgentId` that does not exist. Every refusal is a plain sentence.
 - When approval is required (the Paperclip company flag `requireBoardApprovalForNewAgents`; the mock defaults to on, `createMockClient({ requireApproval: false })` turns it off) the new agent has status `pending_approval` and `approval` is a pending `hire_agent` approval with `agentId` set. Approving it makes the agent `idle`. Rejecting it makes the agent `terminated`. Asking for a revision leaves it waiting. When approval is not required the agent is `idle` and `approval` is `null`.

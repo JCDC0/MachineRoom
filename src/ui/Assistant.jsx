@@ -43,12 +43,14 @@ export default function Assistant({
     },
   ])
 
+  const savedPosRef = useRef(null)
   const [pos, setPos] = useState(() => {
     const saved = loadAssistantPosition(storage)
     const win = typeof window !== 'undefined'
       ? { windowWidth: window.innerWidth, windowHeight: window.innerHeight }
       : { windowWidth: 1280, windowHeight: 800 }
     if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      savedPosRef.current = { x: saved.x, y: saved.y }
       return clampPosition(saved, DEFAULT_TERMINAL_SIZE, win)
     }
     return getDefaultPosition(DEFAULT_TERMINAL_SIZE, win)
@@ -98,14 +100,22 @@ export default function Assistant({
           width: rect.width || DEFAULT_TERMINAL_SIZE.width,
           height: rect.height || DEFAULT_TERMINAL_SIZE.height,
         }
-        setPos((current) => clampPosition(current, size, {
+        const win = {
           windowWidth: window.innerWidth,
           windowHeight: window.innerHeight,
-        }))
+        }
+        const saved = loadAssistantPosition(storage)
+        if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+          savedPosRef.current = { x: saved.x, y: saved.y }
+          setPos(clampPosition(saved, size, win))
+        } else {
+          savedPosRef.current = null
+          setPos(getDefaultPosition(size, win))
+        }
       }
       return () => clearTimeout(timer)
     }
-  }, [isOpen])
+  }, [isOpen, storage])
 
   useEffect(() => {
     function onResize() {
@@ -115,12 +125,15 @@ export default function Assistant({
             height: terminalRef.current.getBoundingClientRect().height || DEFAULT_TERMINAL_SIZE.height,
           }
         : DEFAULT_TERMINAL_SIZE
-      const next = clampPosition(posRef.current, size, {
+      const win = {
         windowWidth: window.innerWidth,
         windowHeight: window.innerHeight,
-      })
-      setPos(next)
-      saveAssistantPosition(storage, next)
+      }
+      if (savedPosRef.current) {
+        setPos(clampPosition(savedPosRef.current, size, win))
+      } else {
+        setPos(getDefaultPosition(size, win))
+      }
     }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
@@ -188,6 +201,7 @@ export default function Assistant({
         size,
         { windowWidth: window.innerWidth, windowHeight: window.innerHeight }
       )
+      savedPosRef.current = finalPos
       setPos(finalPos)
       saveAssistantPosition(storage, finalPos)
     }

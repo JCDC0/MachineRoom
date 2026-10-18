@@ -271,7 +271,8 @@ summary:focus-visible,
   flex-direction: column;
   gap: var(--space);
   align-items: flex-end;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
 }
 
 .hud-modes {
@@ -307,7 +308,7 @@ summary:focus-visible,
 }
 
 .hud-action {
-  flex: 1;
+  flex: 1 0 auto;
   min-width: 0;
   display: inline-flex;
   align-items: center;
@@ -317,6 +318,7 @@ summary:focus-visible,
   font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .hud-action[aria-pressed='true'] {
@@ -1109,9 +1111,9 @@ summary:focus-visible,
 
 .control-drawer {
   position: fixed;
-  top: calc(var(--space) * 11);
+  top: calc(var(--space) * 13);
   right: calc(var(--space) * 2);
-  bottom: calc(var(--space) * 9);
+  bottom: calc(var(--space) * 11);
   width: 384px;
   max-width: calc(100vw - var(--space) * 4);
   background: rgb(0 0 0 / 0.94);
@@ -1362,6 +1364,77 @@ summary:focus-visible,
   justify-content: flex-end;
   gap: var(--space);
   margin-top: calc(var(--space) * 1.5);
+}
+
+.brief-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  margin-bottom: calc(var(--space) * 2);
+  padding-bottom: calc(var(--space) * 1.5);
+  border-bottom: 1px solid var(--line);
+}
+
+.brief-section .panel-field {
+  margin-bottom: 0;
+}
+
+.brief-state {
+  padding: var(--space) calc(var(--space) * 1.25);
+  font-size: 12px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.85);
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.03);
+}
+
+.brief-state.is-dim {
+  color: rgb(255 255 255 / 0.6);
+}
+
+.brief-error-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+  padding: var(--space) calc(var(--space) * 1.25);
+  border: 1px solid var(--red);
+  background: rgb(255 42 42 / 0.08);
+}
+
+.brief-prompt-area {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.brief-prompt-box {
+  width: 100%;
+  padding: var(--space) calc(var(--space) * 1.25);
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.9);
+  background: var(--black);
+  border: 1px solid var(--line);
+  resize: vertical;
+}
+
+.brief-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+}
+
+.brief-copy-status {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--yellow);
+}
+
+.brief-copy-status.is-error {
+  color: var(--red);
 }
 
 .tasks-list {
@@ -1935,7 +2008,6 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.6);
 }
 
-/* Floating Assistant Terminal */
 .mr-assistant {
   position: fixed;
   width: 380px;
