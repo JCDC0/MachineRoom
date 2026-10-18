@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { formatCents, meterTone, percentOf, timeUntil } from './format.js'
+import { subscribeToNotices } from './notices.js'
 
 export default function MetersPanel({ client }) {
   const [costs, setCosts] = useState(null)
@@ -12,9 +13,11 @@ export default function MetersPanel({ client }) {
   const [savingBudget, setSavingBudget] = useState(false)
   const [budgetError, setBudgetError] = useState(null)
 
-  async function loadData() {
-    setLoading(true)
-    setLoadError(null)
+  async function loadData({ isInitial = false } = {}) {
+    if (isInitial) {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const [costData, agentList] = await Promise.all([
         client.costs(),
@@ -23,14 +26,24 @@ export default function MetersPanel({ client }) {
       setCosts(costData)
       setAgents(agentList)
     } catch (err) {
-      setLoadError(err.message || 'Could not load meters.')
+      if (isInitial) {
+        setLoadError(err.message || 'Could not load meters.')
+      }
     } finally {
-      setLoading(false)
+      if (isInitial) {
+        setLoading(false)
+      }
     }
   }
 
   useEffect(() => {
-    loadData()
+    loadData({ isInitial: true })
+  }, [client])
+
+  useEffect(() => {
+    return subscribeToNotices(client, ['agents', 'costs'], () => {
+      loadData()
+    })
   }, [client])
 
   function startEditing(agent) {
@@ -75,7 +88,7 @@ export default function MetersPanel({ client }) {
     return (
       <div className="panel-state">
         <div className="panel-error-message">{loadError}</div>
-        <button type="button" onClick={loadData}>Retry</button>
+        <button type="button" onClick={() => loadData({ isInitial: true })}>Retry</button>
       </div>
     )
   }
@@ -93,7 +106,7 @@ export default function MetersPanel({ client }) {
     <div className="meters-panel">
       <div className="panel-toolbar">
         <span className="panel-count mono">Spend & Quota</span>
-        <button type="button" onClick={loadData}>Refresh</button>
+        <button type="button" onClick={() => loadData({ isInitial: false })}>Refresh</button>
       </div>
 
       <section className="meters-section" aria-label="Company budget">

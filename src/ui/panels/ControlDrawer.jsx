@@ -11,11 +11,18 @@ const TABS = [
   { id: 'meters', label: 'Meters' },
 ]
 
-export default function ControlDrawer({ client, open, onClose }) {
-  const [activeTab, setActiveTab] = useState('dispatch')
+export default function ControlDrawer({ client, open, onClose, controlTarget = null }) {
+  const [activeTab, setActiveTab] = useState(() => {
+    const rawId = controlTarget?.issueIdentifier
+    const hasId = typeof rawId === 'string' ? rawId.trim().length > 0 : rawId != null && String(rawId).trim().length > 0
+    if (hasId) return 'tasks'
+    if (controlTarget?.tab && TABS.some((t) => t.id === controlTarget.tab)) return controlTarget.tab
+    return 'dispatch'
+  })
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0)
   const tabRefs = useRef({})
   const triggerRef = useRef(null)
+  const lastTargetNonceRef = useRef(controlTarget?.nonce ?? null)
 
   const loadPendingCount = useCallback(async () => {
     if (!client) return
@@ -27,6 +34,23 @@ export default function ControlDrawer({ client, open, onClose }) {
       setPendingApprovalsCount(0)
     }
   }, [client])
+
+  useEffect(() => {
+    if (controlTarget?.nonce != null) {
+      if (controlTarget.nonce !== lastTargetNonceRef.current) {
+        lastTargetNonceRef.current = controlTarget.nonce
+        const rawId = controlTarget.issueIdentifier
+        const hasId = typeof rawId === 'string' ? rawId.trim().length > 0 : rawId != null && String(rawId).trim().length > 0
+        if (hasId) {
+          setActiveTab('tasks')
+        } else if (controlTarget.tab && TABS.some((t) => t.id === controlTarget.tab)) {
+          setActiveTab(controlTarget.tab)
+        }
+      }
+    } else {
+      lastTargetNonceRef.current = null
+    }
+  }, [controlTarget])
 
   useEffect(() => {
     if (open) {
@@ -145,7 +169,7 @@ export default function ControlDrawer({ client, open, onClose }) {
             }}
           />
         )}
-        {activeTab === 'tasks' && <TasksPanel client={client} />}
+        {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={controlTarget} />}
         {activeTab === 'approvals' && (
           <ApprovalsPanel
             client={client}

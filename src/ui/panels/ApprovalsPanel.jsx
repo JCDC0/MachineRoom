@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { approvalTypeLabel, statusLabel, timeAgo } from './format.js'
+import { subscribeToNotices } from './notices.js'
 
 export default function ApprovalsPanel({ client, onPendingCountChange }) {
   const [approvals, setApprovals] = useState([])
@@ -11,25 +12,72 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
   const [decidingId, setDecidingId] = useState(null)
   const [decisionErrors, setDecisionErrors] = useState({})
 
-  async function loadData() {
-    setLoading(true)
-    setLoadError(null)
+  async function loadData({ isInitial = false, preserveDecided = false } = {}) {
+    if (isInitial) {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const [approvalList, agentList] = await Promise.all([
         client.approvals(),
         client.agents(),
       ])
-      setApprovals(approvalList)
+      if (preserveDecided) {
+        setApprovals((prev) => {
+          const justDecidedMap = new Map(
+            prev.filter((item) => item.justDecided).map((item) => [item.id, item])
+          )
+          return approvalList.map((item) => {
+            const existing = justDecidedMap.get(item.id)
+            if (existing) {
+              return { ...item, justDecided: true }
+            }
+            return item
+          })
+        })
+      } else {
+        setApprovals(approvalList)
+      }
       setAgents(agentList)
     } catch (err) {
-      setLoadError(err.message || 'Could not load approvals.')
+      if (isInitial) {
+        setLoadError(err.message || 'Could not load approvals.')
+      }
     } finally {
-      setLoading(false)
+      if (isInitial) {
+        setLoading(false)
+      }
+    }
+  }
+
+  async function refreshApprovals() {
+    try {
+      const approvalList = await client.approvals()
+      setApprovals((prev) => {
+        const justDecidedMap = new Map(
+          prev.filter((item) => item.justDecided).map((item) => [item.id, item])
+        )
+        return approvalList.map((item) => {
+          const existing = justDecidedMap.get(item.id)
+          if (existing) {
+            return { ...item, justDecided: true }
+          }
+          return item
+        })
+      })
+    } catch {
+      return
     }
   }
 
   useEffect(() => {
-    loadData()
+    loadData({ isInitial: true })
+  }, [client])
+
+  useEffect(() => {
+    return subscribeToNotices(client, 'approvals', () => {
+      refreshApprovals()
+    })
   }, [client])
 
   useEffect(() => {
@@ -61,7 +109,7 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
     return (
       <div className="panel-state">
         <div className="panel-error-message">{loadError}</div>
-        <button type="button" onClick={loadData}>Retry</button>
+        <button type="button" onClick={() => loadData({ isInitial: true })}>Retry</button>
       </div>
     )
   }
@@ -77,7 +125,7 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
         <span className="panel-count mono">
           {approvals.filter((a) => a.status === 'pending').length} pending
         </span>
-        <button type="button" onClick={loadData}>Refresh</button>
+        <button type="button" onClick={() => loadData({ isInitial: false, preserveDecided: false })}>Refresh</button>
       </div>
 
       {approvals.length === 0 ? (
