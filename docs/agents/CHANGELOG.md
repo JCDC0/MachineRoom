@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Change notices in the panels and drawer opening from outside (task C3b): panels subscribe to change notices with pure 100 ms batching, and Hud accepts controlTarget to open tabs and task threads.
 - Floating assistant terminal (task A2): draggable terminal in the style of wall terminals, opened with / and closed with Escape, history ring of 20 lines, position remembered in settings and clamped to the window, bottom docked under 900px, proposal confirmations, and secret blocking.
 - Decision model comparison tool (task D1): `src/decider/` (Decisions API request and answer shapes, `decide()` with a time limit, retries and key scrubbing, the fixed assistant and routing questions, stats, baselines, runner), `npm run decide-eval` and 138 probes in `tests/probes/` (98 assistant phrases, 40 coding tasks). It makes no call without `--run`, reads the key only from your environment, and sends it only over https or to this machine. Tests use a fake Decisions server. `rankPaths` in the assistant narrows the path options. The assistant test now takes its phrases from `tests/probes/`.
 - The decision model: design, rules for acting on its answers, what is sent, a comparison of 27 listed models (Jev 1.14, Perplexity Decider, Clef, Mercury Decide, Microsoft-Decision-1 and local open ones), and tasks D1 to D5. The choice is to be measured on our own probe set.

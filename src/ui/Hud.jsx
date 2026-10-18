@@ -49,6 +49,7 @@ export default function Hud({
   assistantPaths = [],
   onAssistantAction = () => {},
   askAssistant = null,
+  controlTarget = null,
   onToggle,
   onSeek,
   onSpeed,
@@ -56,9 +57,10 @@ export default function Hud({
   onOverview,
 }) {
   const [logOpen, setLogOpen] = useState(false)
-  const [controlOpen, setControlOpen] = useState(false)
+  const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [helpOpen, setHelpOpen] = useState(false)
   const logBodyRef = useRef(null)
+  const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
   const visibleShortcuts = client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')
 
@@ -70,6 +72,18 @@ export default function Hud({
       setLogOpen(false)
     }
   }, [controlOpen])
+
+  useEffect(() => {
+    if (controlTarget?.nonce != null) {
+      if (controlTarget.nonce !== lastControlNonceRef.current) {
+        lastControlNonceRef.current = controlTarget.nonce
+        setControlOpen(true)
+        setLogOpen(false)
+      }
+    } else {
+      lastControlNonceRef.current = null
+    }
+  }, [controlTarget])
 
   useEffect(() => {
     function onKey(event) {
@@ -245,6 +259,7 @@ export default function Hud({
           client={client}
           open={controlOpen}
           onClose={() => setControlOpen(false)}
+          controlTarget={controlTarget}
         />
       )}
 

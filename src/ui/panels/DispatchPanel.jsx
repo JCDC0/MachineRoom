@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { subscribeToNotices } from './notices.js'
 
 export default function DispatchPanel({ client, onCreated }) {
   const [agents, setAgents] = useState([])
@@ -37,8 +38,23 @@ export default function DispatchPanel({ client, onCreated }) {
     }
   }
 
+  async function refreshAgents() {
+    try {
+      const agentList = await client.agents()
+      setAgents(agentList)
+    } catch {
+      return
+    }
+  }
+
   useEffect(() => {
     loadData()
+  }, [client])
+
+  useEffect(() => {
+    return subscribeToNotices(client, 'agents', () => {
+      refreshAgents()
+    })
   }, [client])
 
   async function handleSubmit(event) {

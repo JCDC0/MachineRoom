@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import IssueThread from './IssueThread.jsx'
 import { statusLabel } from './format.js'
+import { findIssueByIdentifier, subscribeToNotices } from './notices.js'
 
 const OPEN_ORDER = {
   in_progress: 1,
@@ -10,16 +11,20 @@ const OPEN_ORDER = {
   backlog: 5,
 }
 
-export default function TasksPanel({ client }) {
+export default function TasksPanel({ client, controlTarget = null }) {
   const [issues, setIssues] = useState([])
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
   const [selectedIssueId, setSelectedIssueId] = useState(null)
+  const [notice, setNotice] = useState(null)
+  const lastHandledNonceRef = useRef(null)
 
-  async function loadData() {
-    setLoading(true)
-    setLoadError(null)
+  async function loadData({ isInitial = false } = {}) {
+    if (isInitial) {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const [issueList, agentList] = await Promise.all([
         client.issues(),
@@ -28,15 +33,62 @@ export default function TasksPanel({ client }) {
       setIssues(issueList)
       setAgents(agentList)
     } catch (err) {
-      setLoadError(err.message || 'Could not load tasks.')
+      if (isInitial) {
+        setLoadError(err.message || 'Could not load tasks.')
+      }
     } finally {
-      setLoading(false)
+      if (isInitial) {
+        setLoading(false)
+      }
+    }
+  }
+
+  async function refreshIssues() {
+    try {
+      const issueList = await client.issues()
+      setIssues(issueList)
+    } catch {
+      return
     }
   }
 
   useEffect(() => {
-    loadData()
+    loadData({ isInitial: true })
   }, [client])
+
+  useEffect(() => {
+    return subscribeToNotices(client, 'issues', () => {
+      refreshIssues()
+    })
+  }, [client])
+
+  useEffect(() => {
+    if (loading || loadError) return
+    if (controlTarget?.nonce == null) {
+      lastHandledNonceRef.current = null
+      return
+    }
+    if (controlTarget.nonce === lastHandledNonceRef.current) return
+
+    lastHandledNonceRef.current = controlTarget.nonce
+
+    const rawId = controlTarget.issueIdentifier
+    const targetIdentifier = typeof rawId === 'string' ? rawId.trim() : (rawId != null ? String(rawId).trim() : '')
+    if (!targetIdentifier) {
+      setSelectedIssueId(null)
+      setNotice(null)
+      return
+    }
+
+    const match = findIssueByIdentifier(issues, targetIdentifier)
+    if (match) {
+      setSelectedIssueId(match.id)
+      setNotice(null)
+    } else {
+      setSelectedIssueId(null)
+      setNotice('That task was not found.')
+    }
+  }, [loading, loadError, issues, controlTarget])
 
   if (loading) {
     return <div className="panel-state mono">Loading tasks...</div>
@@ -46,7 +98,7 @@ export default function TasksPanel({ client }) {
     return (
       <div className="panel-state">
         <div className="panel-error-message">{loadError}</div>
-        <button type="button" onClick={loadData}>Retry</button>
+        <button type="button" onClick={() => loadData({ isInitial: true })}>Retry</button>
       </div>
     )
   }
@@ -58,8 +110,11 @@ export default function TasksPanel({ client }) {
         issue={selectedIssue}
         client={client}
         agents={agents}
-        onBack={() => setSelectedIssueId(null)}
-        onRefresh={loadData}
+        onBack={() => {
+          setSelectedIssueId(null)
+          setNotice(null)
+        }}
+        onRefresh={() => loadData({ isInitial: false })}
       />
     )
   }
@@ -80,7 +135,10 @@ export default function TasksPanel({ client }) {
         key={issue.id}
         type="button"
         className="task-row"
-        onClick={() => setSelectedIssueId(issue.id)}
+        onClick={() => {
+          setNotice(null)
+          setSelectedIssueId(issue.id)
+        }}
       >
         <div className="task-row-top">
           <span className="task-identifier mono">{issue.identifier}</span>
@@ -95,9 +153,15 @@ export default function TasksPanel({ client }) {
 
   return (
     <div className="tasks-panel">
+      {notice && (
+        <div className="panel-banner is-error" role="alert">
+          {notice}
+        </div>
+      )}
+
       <div className="panel-toolbar">
         <span className="panel-count mono">{issues.length} tasks</span>
-        <button type="button" onClick={loadData}>Refresh</button>
+        <button type="button" onClick={() => loadData({ isInitial: false })}>Refresh</button>
       </div>
 
       {issues.length === 0 ? (

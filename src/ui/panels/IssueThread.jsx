@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { statusLabel, timeAgo } from './format.js'
+import { subscribeToNotices } from './notices.js'
 
 export default function IssueThread({ issue, client, agents = [], onBack, onRefresh }) {
   const [comments, setComments] = useState([])
@@ -10,25 +11,37 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
   const [posting, setPosting] = useState(false)
   const [postError, setPostError] = useState(null)
 
-  async function loadComments() {
-    setLoading(true)
-    setLoadError(null)
+  async function loadComments({ isInitial = false } = {}) {
+    if (isInitial) {
+      setLoading(true)
+      setLoadError(null)
+    }
     try {
       const list = await client.comments(issue.id)
       setComments(list)
     } catch (err) {
-      setLoadError(err.message || 'Could not load comments.')
+      if (isInitial) {
+        setLoadError(err.message || 'Could not load comments.')
+      }
     } finally {
-      setLoading(false)
+      if (isInitial) {
+        setLoading(false)
+      }
     }
   }
 
   async function handleRefresh() {
-    await Promise.all([loadComments(), onRefresh?.()])
+    await Promise.all([loadComments({ isInitial: false }), onRefresh?.()])
   }
 
   useEffect(() => {
-    loadComments()
+    loadComments({ isInitial: true })
+  }, [client, issue.id])
+
+  useEffect(() => {
+    return subscribeToNotices(client, { topic: 'comments', id: issue.id }, () => {
+      loadComments()
+    })
   }, [client, issue.id])
 
   async function handlePost(event) {
@@ -94,7 +107,7 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
         {loadError && (
           <div className="panel-state">
             <div className="panel-error-message">{loadError}</div>
-            <button type="button" onClick={loadComments}>Retry</button>
+            <button type="button" onClick={() => loadComments({ isInitial: true })}>Retry</button>
           </div>
         )}
 
