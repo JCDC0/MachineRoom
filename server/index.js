@@ -4,6 +4,7 @@ import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createAssistantApi } from './assistant.js'
+import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
@@ -175,6 +176,11 @@ export function createBridge(options = {}) {
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
 
+  const briefs = createBriefsApi({
+    projectRoot,
+    briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
+    sendJson,
+  })
   const control = createControlApi({
     paperclipUrl,
     companyId,
@@ -424,6 +430,7 @@ export function createBridge(options = {}) {
     }
 
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    if (await briefs.handle(req, res, url)) return
     if (await control.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
 

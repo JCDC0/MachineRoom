@@ -688,3 +688,109 @@ describe('assistant route', () => {
     expect(extractReplyText('{"text":"hello"}')).toBe('hello')
   })
 })
+
+describe('briefs routes', () => {
+  function writeBriefFixture(rootDir, briefsSubdir = join(rootDir, 'docs', 'agents')) {
+    mkdirSync(briefsSubdir, { recursive: true })
+    writeFileSync(join(rootDir, 'package.json'), JSON.stringify({ name: 'sample', version: '0.1.36' }))
+    writeFileSync(
+      join(briefsSubdir, 'TASKS.md'),
+      [
+        '## Next',
+        '',
+        '**C3e. HUD polish (AGY).** Move the assistant window.',
+        '',
+        '**T1b. Briefs menu in the dispatch panel (AGY).** Add a Brief menu.',
+      ].join('\n')
+    )
+    writeFileSync(
+      join(briefsSubdir, 'HOUSE-RULES.md'),
+      ['## About', 'Sample viewer.', '## Rules', '- Never push.', '## Report', 'Report in your reply.'].join('\n')
+    )
+    writeFileSync(
+      join(briefsSubdir, 'lanes.json'),
+      JSON.stringify({
+        agy: {
+          name: 'agy',
+          harness: 'agy',
+          model: 'Gemini 3.8 Flash (High)',
+          models: { C3e: 'Gemini 4 Argon', T1b: 'Gemini 4 Argon' },
+          worktree: 'C:\\GitHub\\MachineRoom-agy',
+          role: 'You own the HUD.',
+          forbidden: ['server/**'],
+          notes: [],
+        },
+      })
+    )
+  }
+
+  it('serves briefs and builds a prompt for multiple ids from the project briefs folder', async () => {
+    const dir = makeTempDir()
+    writeBriefFixture(dir)
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: dir, port: 0 })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const listRes = await fetch(`${url}/api/control/briefs`)
+    expect(listRes.status).toBe(200)
+    const { briefs } = await listRes.json()
+    expect(briefs.map((b) => b.id)).toEqual(['C3e', 'T1b'])
+
+    const promptRes = await fetch(`${url}/api/control/brief-prompt?ids=C3e,T1b&lane=agy`)
+    expect(promptRes.status).toBe(200)
+    const built = await promptRes.json()
+    expect(built.lane).toBe('agy')
+    expect(built.model).toBe('Gemini 4 Argon')
+    expect(built.branch).toBe('feat/c3e-hud-polish')
+    expect(built.prompt).toContain('Task C3e: HUD polish.')
+    expect(built.prompt).toContain('Task T1b: Briefs menu in the dispatch panel.')
+    expect(built.prompt).toContain('with the prefix 0.1.37 and one plain sentence')
+  })
+
+  it('answers an empty list or 404 with no path when files are missing, and 400 for an unknown lane or id', async () => {
+    const emptyDir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+    const emptyBridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: emptyDir, port: 0 })
+    cleanups.push(() => emptyBridge.stop())
+    const { url: emptyUrl } = await emptyBridge.start()
+
+    const missingList = await fetch(`${emptyUrl}/api/control/briefs`)
+    expect(missingList.status).toBe(200)
+    expect(await missingList.json()).toEqual({ briefs: [] })
+
+    const missingPrompt = await fetch(`${emptyUrl}/api/control/brief-prompt?ids=C3e&lane=agy`)
+    expect(missingPrompt.status).toBe(404)
+    const missingBody = await missingPrompt.json()
+    expect(missingBody.error).toMatch(/missing/i)
+    expect(missingBody.error).not.toContain(emptyDir)
+    expect(missingBody.error).not.toMatch(/[/\\]|TASKS\.md|HOUSE-RULES|lanes\.json|package\.json/)
+
+    const customRoot = makeTempDir()
+    const customBriefs = makeTempDir()
+    writeBriefFixture(customRoot, customBriefs)
+    const customBridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: customRoot,
+      briefsDir: customBriefs,
+      port: 0,
+    })
+    cleanups.push(() => customBridge.stop())
+    const { url: customUrl } = await customBridge.start()
+
+    const badId = await fetch(`${customUrl}/api/control/brief-prompt?ids=NOPE&lane=agy`)
+    expect(badId.status).toBe(400)
+
+    const badLane = await fetch(`${customUrl}/api/control/brief-prompt?ids=C3e&lane=nobody`)
+    expect(badLane.status).toBe(400)
+
+    const badMethod = await fetch(`${customUrl}/api/control/briefs`, { method: 'POST' })
+    expect(badMethod.status).toBe(405)
+
+    const badOrigin = await fetch(`${customUrl}/api/control/briefs`, { headers: { Origin: 'https://evil.example' } })
+    expect(badOrigin.status).toBe(403)
+  })
+})

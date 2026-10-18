@@ -11,6 +11,8 @@ export const CLIENT_METHODS = [
   'costs',
   'setAgentBudget',
   'models',
+  'briefs',
+  'briefPrompt',
   'subscribe',
 ]
 
