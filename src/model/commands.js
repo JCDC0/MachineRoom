@@ -3,6 +3,35 @@ import { normalise } from './paths.js'
 const WRITE_OPERATOR = /(>>|(?<![>=-])>(?![&=])|\bSet-Content\b|\bAdd-Content\b|\bOut-File\b|\btee\b|\bsed\s+-i\b)/
 const MUTATOR = /^\s*(?:sudo\s+|npx\s+)?(?:git\s+)?(?:mv|rm|cp|del|erase|move|ren|rename|copy|Remove-Item|Rename-Item|Move-Item|Copy-Item|New-Item)\b/i
 const LISTER = /\b(ls|dir|Get-ChildItem|gci|find|tree|cd|Set-Location|Test-Path)\b/
+const MESSAGE_FLAG = /(?:^|[\s;|&(])(?:--message|--data-raw|--data-binary|--data|-m|-d)(?:[ \t]*=[ \t]*|[ \t]+)/g
+
+function quotedValueEnd(text, at) {
+  const quote = text.startsWith('\\"', at) ? '\\"' : text[at]
+  if (quote !== '\\"' && quote !== '"' && quote !== "'") return -1
+  let cursor = at + quote.length
+  while (cursor < text.length) {
+    if (text.startsWith(quote, cursor)) return cursor + quote.length
+    cursor += quote === '"' && text[cursor] === '\\' ? 2 : 1
+  }
+  return text.length
+}
+
+function withoutMessageValues(command) {
+  const text = String(command)
+  let out = ''
+  let copied = 0
+  const flag = new RegExp(MESSAGE_FLAG.source, 'g')
+  let match
+  while ((match = flag.exec(text))) {
+    const start = match.index + match[0].length
+    const end = quotedValueEnd(text, start)
+    if (end === -1) continue
+    out += `${text.slice(copied, start)}""`
+    copied = end
+    flag.lastIndex = end
+  }
+  return out + text.slice(copied)
+}
 
 function escape(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -23,7 +52,7 @@ export function touchesForCommand(command, files, dirs) {
     seen.add(key)
     touches.push(touch)
   }
-  const segments = normalise(command).split(/&&|;|\|\||\|/)
+  const segments = normalise(withoutMessageValues(command)).split(/&&|;|\|\||\|/)
   for (const segment of segments) {
     const operator = WRITE_OPERATOR.exec(segment)
     const mutator = MUTATOR.exec(segment)
