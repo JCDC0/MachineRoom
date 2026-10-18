@@ -153,10 +153,18 @@ describe('confirmed writes', () => {
     expect((await client.agents()).find((agent) => agent.key === 'hermes').budgetMonthlyCents).toBe(250)
   })
 
-  it('says plainly that subagent settings are not available until the update call exists', async () => {
-    const result = await createDispatcher(makeHost({ client: fast() })).run({ type: 'propose_subagents', agent: 'agy', allowed: true }, { confirmed: true })
+  it('says plainly that subagent settings are not available when the client has no update call', async () => {
+    const result = await createDispatcher(makeHost({ client: { ...fast(), updateAgent: undefined } })).run({ type: 'propose_subagents', agent: 'agy', allowed: true }, { confirmed: true })
     expect(result.ok).toBe(false)
     expect(result.message).toMatch(/C3c/)
+  })
+
+  it('changes the subagent setting through the mock update call', async () => {
+    const client = fast()
+    const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_subagents', agent: 'agy', allowed: true }, { confirmed: true })
+    expect(result).toEqual({ ok: true, message: 'agy may start subagents.' })
+    const agy = (await client.agents()).find((agent) => agent.key === 'agy')
+    expect(agy).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
   })
 
   it('uses the update call when the client has one', async () => {

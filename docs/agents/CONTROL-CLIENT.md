@@ -17,6 +17,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `decideApproval(id, decision, note?)` | `Approval` |
 | `costs()` | `Costs` |
 | `setAgentBudget(agentId, budgetMonthlyCents)` | `Agent` |
+| `hireAgent(draft)` | `{ agent, approval }`. `approval` is `null` when no approval is needed (task C3c; the mock has it, the real client waits for C2b) |
+| `updateAgent(agentId, patch)` | `Agent` (C3c, same note) |
 | `models()` | `ModelOption[]` |
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
 | `briefs()` | `Brief[]`, in file order (added with task T1a; the mock serves samples) |
@@ -25,15 +27,23 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 ## Shapes
 
 ```
-Agent        { id, key, name, adapterType, role, status, model: string|null, budgetMonthlyCents, spentMonthlyCents }
-             status: idle | running | paused | error | pending_approval
+Agent        { id, key, name, adapterType, role, status, model: string|null, budgetMonthlyCents, spentMonthlyCents,
+               reasoningEffort: low|medium|high|null, maxTurnsPerRun: number|null, timeoutSec: number|null,
+               subagentsAllowed: boolean, subagentDepth: 0..3, instructions: string, reportsToAgentId: string|null }
+             status: idle | running | paused | error | pending_approval | terminated
+             A waiting or terminated agent cannot take a task (`createIssue` refuses it).
+             role: one of the Paperclip roles; adapterType: one of the Paperclip adapter types (lists in src/control/agents.js)
+AgentDraft   { name, adapterType, role? (engineer), model?, reasoningEffort?, maxTurnsPerRun? (1..200), timeoutSec? (10..7200),
+               budgetMonthlyCents? (0), subagentsAllowed? (false), subagentDepth? (1..3, default 1 when allowed), instructions? (max 20000), reportsToAgentId? }
+AgentPatch   { any AgentDraft field except adapterType, plus status?: active | paused }   at least one field; an unknown field is refused
 Issue        { id, identifier ("JC-18"), title, description, status, priority, assigneeAgentId: string|null, parentId: string|null,
                overrides: { model?, maxTurnsPerRun?, timeoutSec?, subagentsAllowed? } | null, createdAt, updatedAt }
              status: backlog | todo | in_progress | in_review | done | blocked | cancelled
              priority: critical | high | medium | low
 IssueDraft   { title, description?, assigneeAgentId, priority?, model?, maxTurnsPerRun?, timeoutSec?, subagentsAllowed? }
 Comment      { id, issueId, authorAgentId: string|null, authorName, body, createdAt }
-Approval     { id, type, status, summary, requestedByAgentId: string|null, createdAt, decisionNote? }
+Approval     { id, type, status, summary, requestedByAgentId: string|null, agentId?: string|null, createdAt, decisionNote? }
+             agentId names the agent a hire_agent approval is about.
              type: hire_agent | approve_ceo_strategy | budget_override_required | request_board_approval
              status: pending | approved | rejected | revision_requested
 decision     approve | reject | request-revision
@@ -47,6 +57,17 @@ ChangeEvent  { topic: agents | issues | comments | approvals | costs, id?: strin
 ```
 
 Times are ISO strings. Money is whole cents. A budget of `0` means no budget is set. A quota window with `usedPercent: null` has no number (show its `detail`). A quota provider with `ok: false` could not be read (show `error`).
+
+## Hiring and updating an agent (C3c)
+
+`src/control/agents.js` holds the lists and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`). The mock uses them, and the bridge should use the same ones, so a bad request is refused the same way in both.
+
+- `hireAgent` refuses a draft without a name or a harness, a value outside its range, an unknown setting, a name that is taken, and a `reportsToAgentId` that does not exist. Every refusal is a plain sentence.
+- When approval is required (the Paperclip company flag `requireBoardApprovalForNewAgents`; the mock defaults to on, `createMockClient({ requireApproval: false })` turns it off) the new agent has status `pending_approval` and `approval` is a pending `hire_agent` approval with `agentId` set. Approving it makes the agent `idle`. Rejecting it makes the agent `terminated`. Asking for a revision leaves it waiting. When approval is not required the agent is `idle` and `approval` is `null`.
+- `updateAgent` changes only the fields given. It refuses a waiting or a terminated agent, an empty patch, a change of harness, a depth while subagents are off, an agent that reports to itself, and a name that another agent's key already uses. Turning subagents off sets the depth to 0, and turning them on sets it to 1 unless a depth is given. `status: 'active'` resumes a paused agent (the agent is `idle` until it runs).
+- A budget in a patch changes the same number as `setAgentBudget` and sends a `costs` notice as well as an `agents` notice.
+- Notices: a hire sends `approvals` (when one is made) and `agents`. An update sends `agents`.
+- The real client (task C2b) maps these onto `POST /api/companies/:id/agent-hires` and `PATCH /api/agents/:id`. Model, turn limit and time limit go in `adapterConfig`. Where Paperclip has no field for reasoning effort or subagents, the bridge says so in plain words instead of pretending.
 
 ## Change notices
 

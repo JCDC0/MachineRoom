@@ -1,4 +1,5 @@
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
+import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary } from './agents.js'
 
 export const CLIENT_METHODS = [
   'agents',
@@ -16,6 +17,9 @@ export const CLIENT_METHODS = [
 
 const DECISIONS = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
 const clone = (value) => JSON.parse(JSON.stringify(value))
+const slug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+
+const AGENT_DEFAULTS = { reasoningEffort: null, maxTurnsPerRun: null, timeoutSec: null, subagentsAllowed: false, subagentDepth: 0, instructions: '', reportsToAgentId: null }
 
 const SAMPLE_BRIEFS = [
   '## Open work',
@@ -57,7 +61,7 @@ function seed(at) {
   const iso = (minutesAgo) => new Date(at - minutesAgo * 60000).toISOString()
   return {
     agents: [
-      { id: 'agent-claude', key: 'claude-code', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer', status: 'idle', model: 'claude-haiku-5-5', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-claude', key: 'claude-code', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer', status: 'idle', model: 'claude-haiku-5-5', maxTurnsPerRun: 14, timeoutSec: 420, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
       { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: 'engineer', status: 'idle', model: null, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
       { id: 'agent-opencode', key: 'opencode-go', name: 'OpenCode Go', adapterType: 'opencode_local', role: 'engineer', status: 'running', model: 'opencode-go/qwen3.8-flash', budgetMonthlyCents: 500, spentMonthlyCents: 8 },
       { id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', role: 'designer', status: 'idle', model: null, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
@@ -115,8 +119,10 @@ function seed(at) {
   }
 }
 
-export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
+export function createMockClient({ latencyMs = 120, now = Date.now, requireApproval = true } = {}) {
   const state = seed(now())
+  state.agents = state.agents.map((agent) => ({ ...AGENT_DEFAULTS, ...agent }))
+  let approvalCounter = 3
   const failures = new Map()
   let issueCounter = 22
   let commentCounter = 3
@@ -146,7 +152,9 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
     createIssue: (draft) =>
       call('createIssue', () => {
         if (!draft?.title?.trim()) throw new Error('A title is required.')
-        if (!agentById(draft.assigneeAgentId)) throw new Error('Choose an agent for this task.')
+        const assignee = agentById(draft.assigneeAgentId)
+        if (!assignee) throw new Error('Choose an agent for this task.')
+        if (CANNOT_TAKE_TASKS.includes(assignee.status)) throw new Error('That agent cannot take tasks yet.')
         issueCounter += 1
         const stamp = new Date(now()).toISOString()
         const issue = {
@@ -190,6 +198,12 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
         if (approval.status !== 'pending') throw new Error('That approval is already decided.')
         approval.status = DECISIONS[decision]
         if (note) approval.decisionNote = note
+        const hired = approval.type === 'hire_agent' && approval.agentId ? agentById(approval.agentId) : null
+        if (hired && hired.status === 'pending_approval') {
+          if (approval.status === 'approved') hired.status = 'idle'
+          else if (approval.status === 'rejected') hired.status = 'terminated'
+          emit({ topic: 'agents' })
+        }
         emit({ topic: 'approvals' })
         return approval
       }),
@@ -204,6 +218,57 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
         agent.budgetMonthlyCents = budgetMonthlyCents
         emit({ topic: 'agents' })
         emit({ topic: 'costs' })
+        return agent
+      }),
+
+    hireAgent: (draft) =>
+      call('hireAgent', () => {
+        const clean = cleanAgentDraft(draft)
+        const key = slug(clean.name)
+        if (!key) throw new Error('The name needs letters or numbers.')
+        if (state.agents.some((agent) => agent.key === key)) throw new Error('An agent with that name already exists.')
+        if (clean.reportsToAgentId && !agentById(clean.reportsToAgentId)) throw new Error('The agent it reports to no longer exists.')
+        const agent = { id: `agent-${key}`, key, ...clean, status: requireApproval ? 'pending_approval' : 'idle', spentMonthlyCents: 0 }
+        state.agents.push(agent)
+        let approval = null
+        if (requireApproval) {
+          approvalCounter += 1
+          approval = {
+            id: `approval-${approvalCounter}`,
+            type: 'hire_agent',
+            status: 'pending',
+            summary: hireSummary(agent),
+            requestedByAgentId: null,
+            agentId: agent.id,
+            createdAt: new Date(now()).toISOString(),
+          }
+          state.approvals.unshift(approval)
+          emit({ topic: 'approvals' })
+        }
+        emit({ topic: 'agents' })
+        return { agent, approval }
+      }),
+
+    updateAgent: (agentId, patch) =>
+      call('updateAgent', () => {
+        const agent = agentById(agentId)
+        if (!agent) throw new Error('That agent no longer exists.')
+        if (agent.status === 'terminated') throw new Error('That agent was terminated.')
+        if (agent.status === 'pending_approval') throw new Error('Approve the hire first.')
+        const { status, ...changes } = cleanAgentPatch(patch)
+        if (changes.reportsToAgentId === agent.id) throw new Error('An agent cannot report to itself.')
+        if (changes.reportsToAgentId && !agentById(changes.reportsToAgentId)) throw new Error('The agent it reports to no longer exists.')
+        if ('name' in changes && state.agents.some((other) => other.id !== agent.id && other.key === slug(changes.name))) throw new Error('An agent with that name already exists.')
+        const allowed = changes.subagentsAllowed ?? agent.subagentsAllowed
+        if ('subagentDepth' in changes && !allowed) throw new Error('Turn subagents on to set a depth.')
+        Object.assign(agent, changes)
+        if ('subagentsAllowed' in changes) {
+          if (!allowed) agent.subagentDepth = 0
+          else if (!('subagentDepth' in changes) && agent.subagentDepth === 0) agent.subagentDepth = 1
+        }
+        if (status) agent.status = status === 'paused' ? 'paused' : 'idle'
+        emit({ topic: 'agents' })
+        if ('budgetMonthlyCents' in changes) emit({ topic: 'costs' })
         return agent
       }),
 
