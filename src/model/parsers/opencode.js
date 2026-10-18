@@ -2,6 +2,44 @@ import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parse
 
 const TOOLS = { shell: 'shell', bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'search', grep: 'search', list: 'search' }
 const OUTPUT_PATH = /(?:Created file successfully|Edited|Wrote|Updated|Written)[:\s]+(\S+)/i
+const MASK = '***REDACTED***'
+const BROKEN_TOOL = /"tool"\s*:\s*"(shell|read|write|edit)"/
+const BROKEN_STATUS = /"status"\s*:\s*"(completed|error|running)"/
+const BROKEN_ID = /"id"\s*:\s*"([^"\\]+)"/
+const BROKEN_COMMAND = /"input"\s*:\s*\{\s*"command"\s*:\s*"/
+const BROKEN_PATH = /"input"\s*:\s*\{\s*"(?:path|filePath)"\s*:\s*"([^"\\]*)"/
+
+function unescape(text) {
+  return text.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (all, code) => {
+    if (code === 'n') return '\n'
+    if (code === 'r') return '\r'
+    if (code === 't') return '\t'
+    if (code[0] === 'u') return String.fromCharCode(parseInt(code.slice(1), 16))
+    return code
+  })
+}
+
+function recoverCall(line) {
+  if (!/"type"\s*:\s*"tool_use"/.test(line) || !line.includes(MASK)) return null
+  const maskAt = line.indexOf(MASK)
+  const tool = BROKEN_TOOL.exec(line)
+  if (!tool || tool.index > maskAt) return null
+  const status = BROKEN_STATUS.exec(line)
+  const id = BROKEN_ID.exec(line)
+  const input = {}
+  if (tool[1] === 'shell') {
+    const at = BROKEN_COMMAND.exec(line)
+    if (!at || at.index > maskAt) return null
+    const raw = line.slice(at.index + at[0].length, maskAt)
+    if (!raw.trim()) return null
+    input.command = unescape(raw)
+  } else {
+    const found = BROKEN_PATH.exec(line)
+    if (!found || !found[1]) return null
+    input.path = unescape(found[1])
+  }
+  return { name: tool[1], input, status: status?.[1], id: id?.[1] }
+}
 
 export function createOpencodeParser(ctx) {
   const out = []
@@ -9,7 +47,11 @@ export function createOpencodeParser(ctx) {
 
   const reader = createLineReader((line, time) => {
     const json = parseJson(line)
-    if (!json) return
+    if (!json) {
+      const recovered = recoverCall(line)
+      if (recovered) report(recovered.name, recovered.input, recovered.status, '', recovered.id, time)
+      return
+    }
     if (json.type === 'error') {
       out.push({ time, type: 'error', text: shorten(json.error?.message ?? 'error', 140) })
       return
@@ -17,13 +59,16 @@ export function createOpencodeParser(ctx) {
     if (json.type !== 'tool_use') return
     const part = json.part ?? {}
     const state = part.state ?? {}
-    const input = state.input ?? {}
-    const tool = TOOLS[part.tool] ?? 'other'
-    const id = part.id ?? `opencode-${(counter += 1)}`
+    report(part.tool, state.input ?? {}, state.status, state.output, part.id, time)
+  })
+
+  function report(name, input, status, output, id, time) {
+    const tool = TOOLS[name] ?? 'other'
+    const callId = id ?? `opencode-${(counter += 1)}`
     let touches = []
-    let label = `${part.tool} ${shorten(JSON.stringify(input), 48)}`
+    let label = `${name} ${shorten(JSON.stringify(input), 48)}`
     if (tool === 'read' || tool === 'write' || tool === 'edit') {
-      const raw = input.path ?? input.filePath ?? OUTPUT_PATH.exec(String(state.output ?? ''))?.[1]
+      const raw = input.path ?? input.filePath ?? OUTPUT_PATH.exec(String(output ?? ''))?.[1]
       label = `${tool} file`
       if (raw) {
         const touched = fileTouch(ctx, raw, tool)
@@ -35,12 +80,12 @@ export function createOpencodeParser(ctx) {
       touches = commandTouch(ctx, command)
       label = `$ ${shorten(command)}`
     } else if (tool === 'search') {
-      label = `${part.tool} ${shorten(input.pattern ?? input.path ?? '')}`
+      label = `${name} ${shorten(input.pattern ?? input.path ?? '')}`
     }
-    const failed = state.status === 'error' || (tool === 'shell' && looksFailed(state.output))
-    out.push(toolStart({ time: time - 300, id, tool, label, touches }))
-    out.push(toolEnd({ time, id, ok: !failed }))
-  })
+    const failed = status === 'error' || (tool === 'shell' && looksFailed(output))
+    out.push(toolStart({ time: time - 300, id: callId, tool, label, touches }))
+    out.push(toolEnd({ time, id: callId, ok: !failed }))
+  }
 
   return {
     push(chunk, time) {

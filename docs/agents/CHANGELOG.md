@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recover the tool calls that Paperclip's `***REDACTED***` mask used to drop (task P5). When a stored OpenCode line fails to parse and the mask is the cause, the parser now takes the tool name and the command up to the mask, or a complete path, and builds the same call it builds for a good line. It still drops a line with no tool name or no command or path. The four recorded scenarios now show the six calls they used to lose. The Hermes `grep` line counts as a search.
+
 - CI on GitHub (task G5): `.github/workflows/ci.yml` runs `npm ci`, `npm test` and `npm run build` on Ubuntu and Windows for a push to `main` and for every pull request. The token is read only and an older run of the same branch is cancelled. The workflow is untested until it runs on GitHub.
 
 - Prompts come from the repository (task T1): `docs/agents/HOUSE-RULES.md` holds the rules every agent follows, `docs/agents/lanes.json` holds each agent's worktree, model and forbidden paths, and `src/briefs/briefs.js` parses the briefs in `TASKS.md` and builds the full prompt for one or more briefs and one lane. The mock client serves sample briefs through `briefs()` and `briefPrompt(ids, lane)`. TASKS.md loses its old rules and branch table. New briefs: T1a (routes), T1b (panel), G5 (CI), and a sharper P5.

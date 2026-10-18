@@ -2,7 +2,7 @@ import { basename, resolveKnown } from '../paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, shorten, toolEnd, toolStart } from './common.js'
 
 const LINE = /^\s*┊\s+\S+\s+(\$|[a-z_]+)\s+(.+?)\s+(\d+(?:\.\d+)?)s(?:\s+\[exit (\d+)\])?\s*$/u
-const VERBS = { read: 'read', write: 'write', patch: 'edit', find: 'search', search: 'search', $: 'shell' }
+const VERBS = { read: 'read', write: 'write', patch: 'edit', find: 'search', search: 'search', grep: 'search', $: 'shell' }
 
 export function createHermesParser(ctx) {
   const out = []
@@ -27,7 +27,7 @@ export function createHermesParser(ctx) {
       touches = commandTouch(ctx, command)
       label = `$ ${shorten(command)}`
     } else if (tool === 'search') {
-      label = `${verb} ${basename(detail)}`
+      label = `${verb} ${verb === 'grep' ? shorten(detail) : basename(detail)}`
     }
     out.push(toolStart({ time: startTime, id, tool, label, touches }))
     out.push(toolEnd({ time, id, ok: !exit || Number(exit) === 0 }))
