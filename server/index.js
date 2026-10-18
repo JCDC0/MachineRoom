@@ -4,13 +4,19 @@ import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createAssistantApi } from './assistant.js'
+import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 const BODY_LIMIT = 64 * 1024
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
+}
+
+export function isAllowedHost(host) {
+  return typeof host === 'string' && LOCAL_HOST.test(host)
 }
 
 const HISTORY_LIMIT = 500
@@ -170,6 +176,11 @@ export function createBridge(options = {}) {
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
 
+  const briefs = createBriefsApi({
+    projectRoot,
+    briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
+    sendJson,
+  })
   const control = createControlApi({
     paperclipUrl,
     companyId,
@@ -397,7 +408,12 @@ export function createBridge(options = {}) {
   }, heartbeatMs)
   heartbeatTimer.unref?.()
 
-  const server = createServer(async (req, res) => {
+  async function handleRequest(req, res) {
+    if (!isAllowedHost(req.headers.host)) {
+      res.writeHead(403)
+      res.end()
+      return
+    }
     if (req.headers.origin && !isAllowed(req.headers.origin)) {
       res.writeHead(403)
       res.end()
@@ -414,6 +430,7 @@ export function createBridge(options = {}) {
     }
 
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    if (await briefs.handle(req, res, url)) return
     if (await control.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
 
@@ -475,6 +492,13 @@ export function createBridge(options = {}) {
     }
 
     sendJson(req, res, 404, { error: 'not found' })
+  }
+
+  const server = createServer((req, res) => {
+    handleRequest(req, res).catch(() => {
+      if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ error: 'The bridge could not answer that.' }))
+    })
   })
 
   function start() {

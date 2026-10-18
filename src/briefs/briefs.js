@@ -70,7 +70,7 @@ export function modelFor(lane, briefId) {
 }
 
 export function buildPrompt({ briefs, laneKey, lanes, rules, version }) {
-  const lane = lanes[laneKey]
+  const lane = Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
   if (!lane) throw new Error(`There is no lane named ${laneKey}.`)
   if (!Array.isArray(briefs) || briefs.length === 0) throw new Error('Choose at least one brief.')
   const prefix = nextVersion(version)

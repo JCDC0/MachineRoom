@@ -1,4 +1,7 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createBridge } from '../server/index.js'
@@ -7,6 +10,45 @@ import { CLIENT_METHODS, createMockClient } from '../src/control/mock.js'
 
 const BASE_TIME = Date.parse('2026-10-18T00:00:00Z')
 const iso = (minutesAgo) => new Date(BASE_TIME - minutesAgo * 60000).toISOString()
+
+const SAMPLE_TASKS_MD = [
+  '## Open work',
+  '',
+  '**B6. Late join replay (OpenCode).** Let the event stream send the kept history to a viewer that connects without Last-Event-ID, behind a history query. Test it in tests/bridge.test.js.',
+  '',
+  '**U4. Reject a foreign Host header in the bridge (OpenCode).** Answer 403 when the Host header is not localhost, 127.0.0.1 or [::1]. Add tests for each.',
+  '',
+  '**C3e. HUD polish (AGY).** Move the assistant window above the transport bar and check the result by eye at two window sizes.',
+  '',
+  '**P5. Recover cut and redacted tool lines (Hermes).** Recover the tool name and path from a broken OpenCode log line, with tests.',
+  '',
+  '**M1. Exit test with a real Paperclip (Claude and the owner).** Create a task for Hermes from the drawer and read its comment in the thread.',
+  '',
+  '**C2. Control client (OpenCode, merged as 0.1.34).** Make the contract real.',
+].join('\n')
+
+const SAMPLE_HOUSE_RULES_MD = [
+  '# House rules',
+  '',
+  '## About',
+  '',
+  'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
+  '',
+  '## Rules',
+  '',
+  '- Work only in your own worktree and branch. Never push.',
+  '- Run npm test after every change.',
+  '',
+  '## Report',
+  '',
+  'Give the report in your reply, not in a file.',
+].join('\n')
+
+const SAMPLE_LANES_JSON = {
+  hermes: { name: 'Hermes', harness: 'Hermes', model: 'deepseek/deepseek-v4.1-flash-1017', worktree: 'C:\\GitHub\\MachineRoom-hermes', role: 'You take cheap tasks with named files and clear tests.', forbidden: ['server/**', 'src/ui/**', 'src/engine/**', 'src/control/**'], notes: [] },
+  opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [] },
+  agy: { name: 'agy', harness: 'agy', model: 'Gemini 3.8 Flash (High)', models: { C3e: 'Gemini 4 Argon' }, worktree: 'C:\\GitHub\\MachineRoom-agy', role: 'You own the HUD.', forbidden: ['server/**', 'src/engine/**', 'src/control/**'], notes: [] },
+}
 
 function seedPaperclipState() {
   return {
@@ -356,6 +398,18 @@ async function waitUntil(fn, timeoutMs = 3000) {
 
 const cleanups = []
 
+function makeSampleProjectDir() {
+  const dir = mkdtempSync(join(tmpdir(), 'mr-contract-briefs-'))
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  const agentsDir = join(dir, 'docs', 'agents')
+  mkdirSync(agentsDir, { recursive: true })
+  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'machine-room', version: '0.1.35' }))
+  writeFileSync(join(agentsDir, 'TASKS.md'), SAMPLE_TASKS_MD)
+  writeFileSync(join(agentsDir, 'HOUSE-RULES.md'), SAMPLE_HOUSE_RULES_MD)
+  writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify(SAMPLE_LANES_JSON))
+  return dir
+}
+
 afterEach(async () => {
   while (cleanups.length > 0) {
     const fn = cleanups.pop()
@@ -481,6 +535,34 @@ function runContractSuite(label, makeHarness) {
       expect(models.filter((model) => model.free).map((model) => model.id)).toContain('opencode/deepseek-v4.1-flash-free')
     })
 
+    it('lists briefs and builds a prompt for one or more briefs and one lane', async () => {
+      const { client } = await makeHarness()
+      const briefs = await client.briefs()
+      expect(briefs.map((brief) => brief.id)).toEqual(['B6', 'U4', 'C3e', 'P5', 'M1', 'C2'])
+      for (const brief of briefs) {
+        for (const key of ['id', 'title', 'ownerText', 'owners', 'done', 'section', 'text']) {
+          expect(brief, `${brief.id} ${key}`).toHaveProperty(key)
+        }
+      }
+      expect(briefs.find((brief) => brief.id === 'C2').done).toBe(true)
+
+      const one = await client.briefPrompt(['C3e'], 'agy')
+      expect(one.lane).toBe('agy')
+      expect(one.model).toBe('Gemini 4 Argon')
+      expect(one.branch).toBe('feat/c3e-hud-polish')
+      expect(one.prompt).toContain('Model to select in agy: Gemini 4 Argon.')
+      expect(one.prompt).toContain('Task C3e: HUD polish.')
+      expect(one.prompt).toContain('Commit with the prefix 0.1.36')
+
+      const two = await client.briefPrompt(['U4', 'B6'], 'opencode')
+      expect(two.branch).toBe('feat/u4-reject-a-foreign')
+      expect(two.prompt).toContain('Do the tasks in order.')
+
+      await expect(client.briefPrompt(['ZZ9'], 'agy')).rejects.toThrow(/Choose a brief/)
+      await expect(client.briefPrompt([], 'agy')).rejects.toThrow(/Choose a brief/)
+      await expect(client.briefPrompt(['C3e'], 'nobody')).rejects.toThrow(/Choose hermes/)
+    })
+
     it('notifies subscribers of topic changes after writes and stops after unsubscribe', async () => {
       const { client } = await makeHarness()
       const seen = []
@@ -512,12 +594,13 @@ runContractSuite('mock', async () => ({
 runContractSuite('real client over bridge and fake Paperclip', async () => {
   const fake = await startFakeControlPaperclip('comp-1')
   cleanups.push(() => fake.close())
+  const projectDir = makeSampleProjectDir()
   const bridge = createBridge({
     paperclipUrl: fake.url,
     companyId: 'comp-1',
     projectId: 'proj-1',
     projectWorkspaceId: 'ws-1',
-    projectRoot: '',
+    projectRoot: projectDir,
     port: 0,
   })
   cleanups.push(() => bridge.stop())

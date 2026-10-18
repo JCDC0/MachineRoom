@@ -86,6 +86,16 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
 
     models: () => request('GET', '/api/control/models'),
 
+    briefs: async () => {
+      const data = await request('GET', '/api/control/briefs')
+      return Array.isArray(data) ? data : data?.briefs ?? []
+    },
+
+    briefPrompt: (ids, lane) => {
+      const list = Array.isArray(ids) ? ids.map((id) => encodeURIComponent(id ?? '')).join(',') : encodeURIComponent(ids ?? '')
+      return request('GET', `/api/control/brief-prompt?ids=${list}&lane=${encodeURIComponent(lane ?? '')}`)
+    },
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()

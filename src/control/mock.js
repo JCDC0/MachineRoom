@@ -12,6 +12,8 @@ export const CLIENT_METHODS = [
   'costs',
   'setAgentBudget',
   'models',
+  'briefs',
+  'briefPrompt',
   'subscribe',
 ]
 
@@ -281,7 +283,7 @@ export function createMockClient({ latencyMs = 120, now = Date.now, requireAppro
         const all = parseBriefs(SAMPLE_BRIEFS)
         const picked = (ids ?? []).map((id) => all.find((brief) => brief.id === id))
         if (picked.length === 0 || picked.some((brief) => !brief)) throw new Error('Choose a brief from the list.')
-        if (!SAMPLE_LANES[lane]) throw new Error('Choose hermes, opencode or agy.')
+        if (!Object.hasOwn(SAMPLE_LANES, lane)) throw new Error('Choose hermes, opencode or agy.')
         return {
           prompt: buildPrompt({ briefs: picked, laneKey: lane, lanes: SAMPLE_LANES, rules: SAMPLE_RULES, version: '0.1.35' }),
           lane,
