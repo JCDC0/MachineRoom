@@ -7,3 +7,4 @@ dist/
 *.mp4
 *.zip
 .claude/settings.local.json
+decide-report*.json

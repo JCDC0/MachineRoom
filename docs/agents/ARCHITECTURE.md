@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.25. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.29. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -20,6 +20,7 @@ Version 0.1.25. A browser viewer that shows coding agents working on one project
 npm install
 npm run dev        http://localhost:5173
 npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
+npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
 npm test           vitest, node environment, threads pool, no browser needed
 npm run build
 npm run fixtures -- <raw-events.jsonl> <sandbox-folder> <ids.json>
@@ -53,6 +54,7 @@ src/engine/       three.js scene, no React
   camera.js         orbit, zoom, focus, fit to the bounding sphere (pure fitDistance, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/control/      the control client contract and its mock (see CONTROL-CLIENT.md)
+src/decider/      decision model seam: Decisions API wire shape, `decide()`, fixed questions, stats, baselines and the comparison runner (see DECIDER-EVAL.md; not used by the app yet)
 src/assistant/    request router: closed action list, rule based intent, key guard, model reply parser (pure, tested; see CONTROL-PLANE.md)
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
   panels/           control drawer on `C`: dispatch, tasks and thread, approvals, meters (uses only the control client)

@@ -2,36 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { ACTION_TYPES, CONFIRMED, validateAction } from '../src/assistant/actions.js'
 import { containsSecret, finalizeModelAction, interpret, redact, resolveAgents, resolvePaths } from '../src/assistant/intent.js'
 import { askModel, buildPrompt, parseReply } from '../src/assistant/llm.js'
-
-const context = {
-  agents: [
-    { key: 'claude-code', name: 'Claude Code' },
-    { key: 'hermes', name: 'Hermes' },
-    { key: 'opencode-go', name: 'OpenCode Go' },
-    { key: 'agy', name: 'agy' },
-    { key: 'orchestrator', name: 'Orchestrator' },
-  ],
-  paths: [
-    '',
-    'src',
-    'src/engine',
-    'src/engine/room.js',
-    'src/engine/layout.js',
-    'src/model',
-    'src/model/state.js',
-    'src/ui',
-    'src/ui/Hud.jsx',
-    'src/ui/Hud.css',
-    'server',
-    'server/index.js',
-    'tests',
-    'tests/layout.test.js',
-    'docs/agents/TASKS.md',
-    'docs/agents/ARCHITECTURE.md',
-    'README.md',
-    'package.json',
-  ],
-}
+import { ACTION_CASES } from './probes/assistant.js'
+import { context } from './probes/context.js'
 
 const run = (text) => interpret(text, context)
 
@@ -126,66 +98,6 @@ describe('path resolution', () => {
     expect(resolvePaths('zebra', context.paths).match).toBeNull()
   })
 })
-
-const ACTION_CASES = [
-  ['what is agy doing', { type: 'focus_agent', agent: 'agy', view: 'close' }],
-  ['whats hermes up to', { type: 'focus_agent', agent: 'hermes', view: 'close' }],
-  ['show agy', { type: 'focus_agent', agent: 'agy', view: 'wide' }],
-  ['take me to opencode', { type: 'focus_agent', agent: 'opencode-go', view: 'wide' }],
-  ['bring me to claude code', { type: 'focus_agent', agent: 'claude-code', view: 'wide' }],
-  ['zoom in on the orchestrator', { type: 'focus_agent', agent: 'orchestrator', view: 'close' }],
-  ['agy', { type: 'focus_agent', agent: 'agy', view: 'wide' }],
-  ['show agy terminal', { type: 'focus_terminal', agent: 'agy' }],
-  ['terminal for hermes', { type: 'focus_terminal', agent: 'hermes' }],
-  ['open the opencode console', { type: 'focus_terminal', agent: 'opencode-go' }],
-  ['show me hermes output', { type: 'focus_terminal', agent: 'hermes' }],
-  ['go to src/engine', { type: 'focus_path', path: 'src/engine' }],
-  ['show me the engine folder', { type: 'focus_path', path: 'src/engine' }],
-  ['where is room.js', { type: 'focus_path', path: 'src/engine/room.js' }],
-  ['find the readme', { type: 'focus_path', path: 'README.md' }],
-  ['open package.json', { type: 'focus_path', path: 'package.json' }],
-  ['go to the server folder', { type: 'focus_path', path: 'server' }],
-  ['costs', { type: 'open_panel', tab: 'meters' }],
-  ['how much have we spent', { type: 'open_panel', tab: 'meters' }],
-  ['show quota', { type: 'open_panel', tab: 'meters' }],
-  ['usage', { type: 'open_panel', tab: 'meters' }],
-  ['how much has hermes spent', { type: 'open_panel', tab: 'meters' }],
-  ['approvals', { type: 'open_panel', tab: 'approvals' }],
-  ['anything waiting for me', { type: 'open_panel', tab: 'approvals' }],
-  ['new task', { type: 'open_panel', tab: 'dispatch' }],
-  ['create a task', { type: 'open_panel', tab: 'dispatch' }],
-  ['dispatch', { type: 'open_panel', tab: 'dispatch' }],
-  ['tasks', { type: 'open_panel', tab: 'tasks' }],
-  ['show the issue board', { type: 'open_panel', tab: 'tasks' }],
-  ['open JC-19', { type: 'open_issue', identifier: 'JC-19' }],
-  ['jc-22', { type: 'open_issue', identifier: 'JC-22' }],
-  ['show me task JC-7', { type: 'open_issue', identifier: 'JC-7' }],
-  ['configure opencode', { type: 'open_config', agent: 'opencode-go', section: 'general' }],
-  ['settings for hermes', { type: 'open_config', agent: 'hermes', section: 'general' }],
-  ['change the model of claude code', { type: 'open_config', agent: 'claude-code', section: 'model' }],
-  ['hermes model', { type: 'open_config', agent: 'hermes', section: 'model' }],
-  ['agy budget', { type: 'open_config', agent: 'agy', section: 'budget' }],
-  ['agy subagents', { type: 'open_config', agent: 'agy', section: 'subagents' }],
-  ['subagents for claude code', { type: 'open_config', agent: 'claude-code', section: 'subagents' }],
-  ['api key for hermes', { type: 'open_config', agent: 'hermes', section: 'keys' }],
-  ['set up keys for opencode', { type: 'open_config', agent: 'opencode-go', section: 'keys' }],
-  ['follow', { type: 'follow', mode: 'wide' }],
-  ['follow up close', { type: 'follow', mode: 'close' }],
-  ['stop following', { type: 'follow', mode: 'off' }],
-  ['unfollow', { type: 'follow', mode: 'off' }],
-  ['overview', { type: 'overview' }],
-  ['zoom out', { type: 'overview' }],
-  ['show everything', { type: 'overview' }],
-  ['pause', { type: 'replay', op: 'pause' }],
-  ['play', { type: 'replay', op: 'play' }],
-  ['faster', { type: 'replay', op: 'faster' }],
-  ['slow down', { type: 'replay', op: 'slower' }],
-  ['speed 4x', { type: 'replay', op: 'speed', value: 4 }],
-  ['2x', { type: 'replay', op: 'speed', value: 2 }],
-  ['help', { type: 'open_help' }],
-  ['what can you do', { type: 'open_help' }],
-  ["what's happening", { type: 'open_log' }],
-]
 
 describe('rule based intent', () => {
   for (const [text, expected] of ACTION_CASES) {

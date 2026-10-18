@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.25",
+  "version": "0.1.29",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "fixtures": "node scripts/build-fixtures.mjs",
+    "decide-eval": "node scripts/decide-eval.mjs",
     "bridge": "node server/index.js"
   },
   "dependencies": {

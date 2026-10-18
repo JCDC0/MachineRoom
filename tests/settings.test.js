@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { validateConnectUrl } from '../src/ui/Connect.jsx'
-import { DEFAULT_SETTINGS, loadSettings, saveSettings, SETTINGS_KEY } from '../src/ui/settings.js'
+import { DEFAULT_SETTINGS, loadAssistantPosition, loadSettings, saveAssistantPosition, saveSettings, SETTINGS_KEY } from '../src/ui/settings.js'
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -83,6 +83,19 @@ describe('settings', () => {
       speed: 2,
       logOpen: true,
     })
+  })
+
+  it('saves and loads assistantPosition when provided', () => {
+    const storage = makeStorage()
+    expect(loadAssistantPosition(storage)).toBeNull()
+
+    const saved = saveAssistantPosition(storage, { x: 240, y: 120 })
+    expect(saved).toEqual({ x: 240, y: 120 })
+    expect(loadAssistantPosition(storage)).toEqual({ x: 240, y: 120 })
+
+    const updated = saveSettings(storage, { speed: 4 })
+    expect(updated.speed).toBe(4)
+    expect(updated.assistantPosition).toEqual({ x: 240, y: 120 })
   })
 })
 

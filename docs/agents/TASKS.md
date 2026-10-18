@@ -29,6 +29,8 @@ Three agents work on MachineRoom at the same time. Each one owns a set of paths 
 - AGY F7 (merged as 0.1.11) and Claude E1 (a real Paperclip run compared with the terminals, 0.1.8 to 0.1.9).
 - Claude A1 (0.1.20): the assistant core.
 - AGY C3a (merged as 0.1.22): the control drawer with dispatch, tasks, approvals and meters, running on the mock.
+- Claude D1 (0.1.27): the decision model seam, probe sets and comparison script. Waiting for the owner to run it.
+- AGY A2 (merged as 0.1.28): the floating assistant terminal in the HUD. It is not wired to the room yet (A3).
 
 ## Open work
 
@@ -108,7 +110,7 @@ The design is in `docs/agents/CONTROL-PLANE.md` under "The assistant and the cos
 
 The order and the milestones are in `docs/agents/PLAN.md`. These are the briefs it names that are not written elsewhere in this file.
 
-**C3b. Change notices in the panels (AGY).** `client.subscribe(listener)` is in the contract (`CONTROL-CLIENT.md`, "Change notices") and in the mock. In each panel, subscribe on mount and fetch again for the topics it shows (tasks: `issues`; a thread: `comments` with its issue id; approvals: `approvals`, including the pending count on the tab; meters: `agents` and `costs`; dispatch: `agents`). Unsubscribe on unmount. Keep the Refresh buttons. The mock now sends a notice after each of its own writes, so the drawer should update without a click. Test the pure parts. Do not edit `src/control`, `src/engine` or `src/assistant`.
+**C3b. Change notices in the panels (AGY).** `client.subscribe(listener)` is in the contract (`CONTROL-CLIENT.md`, "Change notices") and in the mock. In each panel, subscribe on mount and fetch again for the topics it shows (tasks: `issues`; a thread: `comments` with its issue id; approvals: `approvals`, including the pending count on the tab; meters: `agents` and `costs`; dispatch: `agents`). Unsubscribe on unmount. Keep the Refresh buttons. The mock now sends a notice after each of its own writes, so the drawer should update without a click. Test the pure parts. Second part, so the assistant can open the drawer (A3): `Hud` takes an optional prop `controlTarget`, an object `{ tab, issueIdentifier?, nonce }` where `tab` is `dispatch`, `tasks`, `approvals` or `meters`. When `nonce` changes, the drawer opens on that tab, and if `issueIdentifier` is set and an issue with that identifier is in the list, its thread opens. Do not edit `src/control`, `src/engine` or `src/assistant`.
 
 **C3c. Contract: hire and update an agent (Claude).** Add `hireAgent(draft)` and `updateAgent(id, patch)` to the contract and the mock, from `PAPERCLIP-API.md` (`POST /api/companies/:id/agent-hires` and the agent patch routes). A hire can wait for an approval, so it returns `{ agent, approval }`. Draft fields: name, adapter, model, reasoning effort, turn and time limits, monthly budget, subagents allowed, instructions.
 
@@ -122,10 +124,30 @@ The order and the milestones are in `docs/agents/PLAN.md`. These are the briefs 
 
 **U3. Candidate beside stable (Claude).** A runbook and a script that start a candidate bridge and viewer from a worktree on other ports (stable 5174, candidate 5175), and the promote steps for the supervisor (W1).
 
-**P5. Recover cut and redacted tool lines (OpenCode).** Every OpenCode Go run loses one to three calls because Paperclip's `***REDACTED***` masking breaks the stored JSON line. Recover the tool name and path from a broken line with a narrow pattern, and count what cannot be recovered (feeds U2). Tests from the scenario fixtures. Also map the Hermes `grep` to the `search` kind.
+**P5. Recover cut and redacted tool lines (Hermes, after P6).** Every OpenCode Go run loses one to three calls because Paperclip's `***REDACTED***` masking breaks the stored JSON line. Recover the tool name and path from a broken line with a narrow pattern, and count what cannot be recovered (feeds U2). Tests from the scenario fixtures. Also map the Hermes `grep` to the `search` kind.
 
-**P6. Message text is not a file touch (OpenCode).** `git commit -m "..."`, `curl -d '...'` and similar must not touch files that are named only inside the message. A quoted path that is an argument (`cat "src/math.js"`) still counts. Tests from scenario C.
+**P6. Message text is not a file touch (Hermes).** `git commit -m "..."`, `curl -d '...'` and similar must not touch files that are named only inside the message. A quoted path that is an argument (`cat "src/math.js"`) still counts. The change goes in `touchesForCommand` in `src/model/commands.js`: before the command is split into segments, blank out the value of the message flags (`-m`, `--message`, `-d`, `--data`, `--data-raw`, `--data-binary`, with a space or `=` before the value) when the value is a double or single quoted string, and when the quote is never closed (the stored command labels are cut with a `~`) blank to the end of the text. Blanking first also stops a `;` or `&&` inside a message from splitting the command. Three tests currently pin the wrong behaviour and must change to the right one: `tests/commands.test.js` (the `git commit -m "rename docs/notes.md to docs/readme.md"` case) and the two rename commit lines in `tests/scenarios.test.js`. Add tests for each flag, for a cut message, for a message holding `;`, and for `cat "src/math.js"` still counting. Files: `src/model/commands.js`, `tests/commands.test.js`, `tests/scenarios.test.js`, nothing else.
 
 **H1. Hermes on DeepSeek V4.1 Flash (the owner).** Set the model in Hermes, using an id that Hermes itself lists. See `PLAN.md`.
 
-**G1 to G6. Publish to GitHub.** History audit (Claude), licence and names (the owner), README (Claude, Hermes drafts), fresh screenshots (AGY), CI (OpenCode), private repository then public (the owner). Details in `PLAN.md`.
+**G1 to G6. Publish to GitHub.** History audit (Claude), licence and names (the owner), README (Claude, Hermes drafts), fresh screenshots (AGY), CI (Hermes), private repository then public (the owner). Details in `PLAN.md`.
+
+## Roadmap: the decision model
+
+Design and the model comparison are in `docs/agents/CONTROL-PLANE.md` under "The decision model".
+
+**D1. Probe set, seam and comparison run (Claude, built as 0.1.27, waiting for the owner to run it).** How to run it and read it: `docs/agents/DECIDER-EVAL.md`. Built: `src/decider/` holds the request builder, the answer parser and `decide(question set, state)` with an injected `fetch`, a timeout and a fallback to the rules. `scripts/decide-eval.mjs` runs every listed model id on the probe sets and prints, per model and per question: accuracy, coverage at 5 percent accepted-case error, calibration error, median latency, cost and the share of answers that change on a repeat. Baselines in the same table: our rules (`interpret`) and a small language model with structured output. Probe sets in `tests/probes/`: the assistant phrases from `tests/assistant.test.js`, and about 40 coding tasks with tier, splits and consequence labels that the owner reviews. Tests use a fake Decisions server. Running it needs `OPENROUTER_API_KEY` in the environment of whoever runs it (cents of spend). The key is never written to a file or printed.
+
+**D2. Decide route in the bridge (OpenCode).** `POST /api/decide`, local pages only. Body `{ state, questions, model? }`, limit 32 KB. The bridge adds the key from `OPENROUTER_API_KEY`, calls the Decisions API with a 3 second timeout and one retry, and returns the answers and `usage`. With no key, answer 404 in plain words. Log only the model id, the question names and the probabilities. Test with a fake server. Do not hard code a model: `DECISION_MODEL` in the environment, default `typesafe/jev-1.14`.
+
+**D3. Assistant fallback through the decider (Claude).** After D1 shows it matches the rules on the assistant probe set: choice over action types, agent keys and up to 20 candidate paths, through D2. It replaces the text model for A4, which stays as the second choice.
+
+**D4. Routing policy uses the answers (Claude).** C4 takes `tier`, `harness`, `coordination`, `uncertainty`, `consequence`, `splits` and `effort`, applies the floors and the three bands from the design, and returns the dispatch settings (model, effort, limits, subagents allowed, approval needed). Unit tests with canned answers. No network in the tests.
+
+**D5. Queue proposals (Claude, AGY).** `shape` turns a typed request into a routine proposal card in the assistant and the drawer. Needs the routines routes in `PAPERCLIP-API.md` (check them first), C2 and D2.
+
+## Roadmap: Hermes lane
+
+Hermes runs on DeepSeek V4.1 Flash (H1, set by the owner), works in its own worktree `C:\GitHub\MachineRoom-hermes`, and takes cheap tasks with named files and clear tests. One task at a time, one branch per task, never on `main`, never pushed. The prompt for each task says: the branch, the files it may touch, the test command, the commit prefix, and the report to give. Known limits to plan around: it may not see a long brief at once, so briefs stay short; its reads show only file names; and it tends to bundle commands, so the prompt asks for `npm test` after every change and a stop on a red test.
+
+Order: **P6** (parser, small), **G5** (CI file), **P5** (parser, harder), **G3** (README draft, text only). Each is described elsewhere in this file or in `PLAN.md`. Claude reviews and merges each branch. Hermes does not touch `server/**` (OpenCode), `src/ui/**` (AGY) or `src/engine/**`, `src/Stage.jsx`, `src/App.jsx`, `src/control/**`, `src/assistant/**`, `src/decider/**` (Claude).
