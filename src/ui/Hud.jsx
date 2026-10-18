@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
+import Assistant from './Assistant.jsx'
 
 const STATUS_TEXT = {
   idle: 'idle',
@@ -18,6 +19,7 @@ const SHORTCUTS = [
   ['F', 'Follow the working agent: wide, close up, off'],
   ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
   ['[ and ]', 'Decrease or increase replay speed'],
+  ['/', 'Open assistant terminal'],
   ['L', 'Toggle event log'],
   ['C', 'Toggle control drawer'],
   ['?', 'Toggle keyboard help'],
@@ -44,6 +46,9 @@ export default function Hud({
   onMode = () => {},
   liveAvailable = false,
   client = null,
+  assistantPaths = [],
+  onAssistantAction = () => {},
+  askAssistant = null,
   onToggle,
   onSeek,
   onSpeed,
@@ -56,6 +61,9 @@ export default function Hud({
   const logBodyRef = useRef(null)
   const visibleLog = log.slice(-50)
   const visibleShortcuts = client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')
+
+  const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
+  const context = { agents, paths: assistantPaths }
 
   useEffect(() => {
     if (controlOpen) {
@@ -271,6 +279,14 @@ export default function Hud({
           </section>
         </div>
       )}
+
+      <Assistant
+        context={context}
+        onAction={onAssistantAction}
+        onAssistantAction={onAssistantAction}
+        ask={askAssistant}
+        askAssistant={askAssistant}
+      />
 
       <Transport
         snapshot={snapshot}
