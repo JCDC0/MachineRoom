@@ -92,4 +92,33 @@ describe('touchesForCommand', () => {
   it('reads the rest of the command after a message', () => {
     expect(run('git commit -m "add src/math.js"; cat docs/notes.md')).toEqual(['read:docs/notes.md'])
   })
+
+  it('does not touch a file named in a closed single quote here-string', () => {
+    expect(run("$comment = @'\nrename docs/notes.md to src/math.js\n'@")).toEqual([])
+  })
+
+  it('does not touch a file named in a closed double quote here-string', () => {
+    expect(run('$body = @"\nsee docs/notes.md and src/math.js\n"@')).toEqual([])
+  })
+
+  it('does not touch a file named in a here-string that never closes', () => {
+    expect(run("$body = @' see docs/notes.md and src/math.js~")).toEqual([])
+  })
+
+  it('still writes a file named after the closing mark', () => {
+    expect(run("$comment = @' see src/math.js '@ | Set-Content docs/notes.md")).toEqual(['write:docs/notes.md'])
+  })
+
+  it('does not treat an email address as a here-string', () => {
+    expect(run('echo me@site.com')).toEqual([])
+    expect(run('git log --author me@site.com -- src/math.js')).toEqual(['read:src/math.js'])
+  })
+
+  it('does not treat a single quoted at sign as a here-string', () => {
+    expect(run("echo '@' > docs/notes.md")).toEqual(['write:docs/notes.md'])
+  })
+
+  it('leaves a command without a here-string unchanged', () => {
+    expect(run('cat src/math.js > docs/notes.md')).toEqual(['read:src/math.js', 'write:docs/notes.md'])
+  })
 })

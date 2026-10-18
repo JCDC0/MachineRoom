@@ -48,7 +48,7 @@ describe('scenario A: a failing test that the agent then fixes', () => {
       "edit | edit docs/api.md | write file docs/api.md | ok=true",
       "shell | $ git add src/strings.js test/strings.test.js docs/api.md; git commit -m ~ | read file docs/api.md, read file src/strings.js, read file test/strings.test.js | ok=true",
       "shell | $ git show --stat HEAD; Get-Content src\\strings.js -TotalCount 6; \"---\"; ~ | read file src/strings.js | ok=true",
-      "shell | $ $comment = @' ## JC-17 complete — failing test written, then made to pa~ | read file docs/api.md, read file src/strings.js, read file test/strings.test.js | ok=true",
+      "shell | $ $comment = @' ## JC-17 complete — failing test written, then made to pa~ | no touches | ok=true",
     ])
   })
 
@@ -82,7 +82,7 @@ describe('scenario B: an edit across three files', () => {
       "shell | $ node --test | no touches | ok=true",
       "shell | $ git diff --stat; git diff | no touches | ok=true",
       "other | execute {\"code\":\"\\nconst api = (process.env.PAPERCLIP_A~ | no touches | ok=true",
-      "shell | $ $body = @\" JC-19 complete - src/math.js: added ``clamp(n, lo, hi)`` usi~ | read file docs/notes.md, read file src/math.js, read file test/math.test.js | ok=true",
+      "shell | $ $body = @\" JC-19 complete - src/math.js: added ``clamp(n, lo, hi)`` usi~ | no touches | ok=true",
     ])
   })
 
@@ -110,7 +110,7 @@ describe('scenario C: a file rename, once per parser', () => {
       "other | execute {\"code\":\"const s = await tools.opencode.list_mc~ | no touches | ok=true",
       "other | skill {\"id\":\"paperclip\"} | no touches | ok=true",
       "shell | $ \"URL=$env:PAPERCLIP_API_URL\"; \"TASK=$env:PAPERCLIP_TASK_ID\"; \"RUN=$env:~ | no touches | ok=true",
-      "shell | $ $body = @\" Done Renamed docs/notes.md to docs/readme.md in the project ~ | read file docs/notes.md, read file docs/readme.md | ok=true",
+      "shell | $ $body = @\" Done Renamed docs/notes.md to docs/readme.md in the project ~ | no touches | ok=true",
       "shell | $ $body = Get-Content \"$env:TEMP\\jc20-comment.md\" -Raw $json = @{ status ~ | no touches | ok=true",
       "shell | $ $body = Get-Content \"$env:TEMP\\jc20-comment.md\" -Raw \"TYPE=$($body.GetT~ | no touches | ok=true",
       "shell | $ $body = [string](Get-Content \"$env:TEMP\\jc20-comment.md\" -Raw) $test = ~ | no touches | ok=true",
@@ -168,7 +168,7 @@ describe('scenario D: a tool error', () => {
       "read | read src/does-not-exist.js | read file src/does-not-exist.js | ok=false",
       "shell | $ git status --porcelain; '--- log ---'; git log --oneline -5 -- src/does~ | list dir . | ok=true",
       "shell | $ 'TASK_ID set: ' + [bool]$env:PAPERCLIP_TASK_ID; 'API_URL set: ' + [bool~ | no touches | ok=true",
-      "shell | $ $base = $env:PAPERCLIP_API_URL -replace '/api/?$','' ; $base = $base -r~ | list dir . | ok=true",
+      "shell | $ $base = $env:PAPERCLIP_API_URL -replace '/api/?$','' ; $base = $base -r~ | no touches | ok=true",
     ])
   })
 

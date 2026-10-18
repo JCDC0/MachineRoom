@@ -4,6 +4,7 @@ const WRITE_OPERATOR = /(>>|(?<![>=-])>(?![&=])|\bSet-Content\b|\bAdd-Content\b|
 const MUTATOR = /^\s*(?:sudo\s+|npx\s+)?(?:git\s+)?(?:mv|rm|cp|del|erase|move|ren|rename|copy|Remove-Item|Rename-Item|Move-Item|Copy-Item|New-Item)\b/i
 const LISTER = /\b(ls|dir|Get-ChildItem|gci|find|tree|cd|Set-Location|Test-Path)\b/
 const MESSAGE_FLAG = /(?:^|[\s;|&(])(?:--message|--data-raw|--data-binary|--data|-m|-d)(?:[ \t]*=[ \t]*|[ \t]+)/g
+const HERE_STRING = /(?<![\w'"@])@(['"])/g
 
 function quotedValueEnd(text, at) {
   const quote = text.startsWith('\\"', at) ? '\\"' : text[at]
@@ -33,6 +34,23 @@ function withoutMessageValues(command) {
   return out + text.slice(copied)
 }
 
+function withoutHereStrings(command) {
+  const text = String(command)
+  let out = ''
+  let copied = 0
+  const opener = new RegExp(HERE_STRING.source, 'g')
+  let match
+  while ((match = opener.exec(text))) {
+    const start = match.index
+    const close = text.indexOf(`${match[1]}@`, start + 2)
+    const end = close === -1 ? text.length : close + 2
+    out += `${text.slice(copied, start)}''`
+    copied = end
+    opener.lastIndex = end
+  }
+  return out + text.slice(copied)
+}
+
 function escape(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
@@ -52,7 +70,7 @@ export function touchesForCommand(command, files, dirs) {
     seen.add(key)
     touches.push(touch)
   }
-  const segments = normalise(withoutMessageValues(command)).split(/&&|;|\|\||\|/)
+  const segments = normalise(withoutHereStrings(withoutMessageValues(command))).split(/&&|;|\|\||\|/)
   for (const segment of segments) {
     const operator = WRITE_OPERATOR.exec(segment)
     const mutator = MUTATOR.exec(segment)
