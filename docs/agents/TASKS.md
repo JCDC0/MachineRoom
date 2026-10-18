@@ -1,24 +1,8 @@
 # Task briefs
 
-Three agents work on MachineRoom at the same time. Each one owns a set of paths and works on its own branch in its own git worktree. Stay inside your paths. If you need a change outside them, write it in your report and stop.
+Several agents work on MachineRoom at the same time. Each one works on its own branch in its own git worktree, and Claude reviews and merges every branch. The rules every agent follows are in `docs/agents/HOUSE-RULES.md`. Who works where, on which model, and which paths each agent may not touch are in `docs/agents/lanes.json`. The bridge builds the prompt for a task from those two files and the brief below (`GET /api/control/brief-prompt`, task T1a), so nobody has to write or paste prompts by hand.
 
-| Agent | Role | Branch and folder | Owns |
-| --- | --- | --- | --- |
-| Claude | Engine and merges | `main` in `C:\GitHub\MachineRoom` | `src/engine/**`, `src/Stage.jsx`, `src/App.jsx`, `docs/agents/ARCHITECTURE.md`, version bumps, merges |
-| OpenCode | Backend and data | `feat/live-bridge` in `C:\GitHub\MachineRoom-opencode` | `src/model/**`, `server/**`, `scripts/**`, `public/fixtures/**`, `tests/` files for those, `.env.example`, `dependencies` in `package.json` |
-| AGY | Frontend | `feat/hud` in `C:\GitHub\MachineRoom-agy` | `src/ui/**`, `src/styles.css`, `index.html` |
-
-## Rules for every agent
-
-- Read `AGENTS.md` (or `GEMINI.md`), then `docs/agents/ARCHITECTURE.md`, then your section below.
-- Work in your own worktree. Never push. Never force anything. Never switch the main folder's branch.
-- Commit small on your branch. Prefix: `0.1.1:` for OpenCode, `0.1.2:` for AGY, then one plain sentence. Claude renumbers on merge.
-- Before you report, run `npm test` and `npm run build`. Both must pass.
-- Add one line per change under `Unreleased` in `docs/agents/CHANGELOG.md`.
-- Style: plain words, short sentences, no em dashes, no single-line explanatory comments, no bold fonts, no emoji in code or copy.
-- Never read, print or commit a secret. Never write a key into a file, a log or a report.
-- Stop every process you start (dev servers, bridges, browsers). Delete any log file you wrote.
-- Report: files changed, commands run with pass or fail, and what you could not verify. Do not claim a pass you did not run.
+A brief is one paragraph that starts `**ID. Title (Owner).**`. Keep that shape: the parser reads it.
 
 ## Done
 
@@ -117,7 +101,9 @@ The order and the milestones are in `docs/agents/PLAN.md`. These are the briefs 
 
 **C3d. Agent builder form (AGY, after C3c).** A form in the control drawer: name, harness, model from `models()` grouped by tier, reasoning effort, limits, monthly budget, subagents allowed, instructions. It says when a hire waits for approval. This is where "hire Hermes on DeepSeek V4.1 Flash" happens once C2 is real.
 
-**T1. Load a brief into the dispatch form (OpenCode for the route, AGY for the panel).** The bridge lists the briefs in `docs/agents/TASKS.md` (the format `**ID. Title (Owner).** text`) at `GET /api/briefs`, read only, local pages only. The dispatch panel gets a "Load a brief" menu that fills the title, description and assignee (the owner named in the brief, matched through the agent list). This replaces pasting briefs by hand. Tests with a sample file.
+**T1a. Briefs routes and client methods (OpenCode).** The pure code is done: `src/briefs/briefs.js` (`parseBriefs`, `parseRules`, `buildPrompt`, `nextVersion`) with tests, plus `docs/agents/HOUSE-RULES.md` and `docs/agents/lanes.json`. Add two read-only bridge routes, local pages only, in a new `server/briefs.js` wired into `server/index.js`. `GET /api/control/briefs` answers `{ briefs: [...] }` from `parseBriefs` of `<BRIEFS_DIR>/TASKS.md`. `BRIEFS_DIR` defaults to `<project root>/docs/agents`, so any project can keep its own briefs. `GET /api/control/brief-prompt?ids=C3e,T1b&lane=agy` answers `{ prompt, lane, model, branch }` built with `buildPrompt` from `HOUSE-RULES.md`, `lanes.json` and the version in the project's `package.json`. A missing file answers an empty list, or 404 in plain words with no path in it. An unknown lane or id answers 400. Then add `briefs()` and `briefPrompt(ids, lane)` to `src/control/client.js`, add `'briefs'` and `'briefPrompt'` to `CLIENT_METHODS` in `src/control/mock.js` (the mock already has both methods), and keep `tests/control-contract.test.js` green for the mock and the real client. Tests use a throwaway folder with sample files. Files: `server/briefs.js`, `server/index.js`, `src/control/client.js`, the `CLIENT_METHODS` line of `src/control/mock.js`, `tests/bridge.test.js`, `tests/control-contract.test.js`, `docs/agents/CHANGELOG.md`.
+
+**T1b. Briefs menu in the dispatch panel (AGY).** In `DispatchPanel`, when `client.briefs` exists, add a Brief menu above the title. It lists the open briefs (`done` false), grouped by owner, each as `ID title`. Choosing one fills the title with `ID title`, picks the assignee whose name matches the first owner (case-insensitive, empty if none match), and loads the prompt with `client.briefPrompt([id], lane)` into a read-only box. The lane is the first owner in lower case (`hermes`, `opencode` or `agy`); a brief owned only by Claude or the owner has no lane, so show "This brief is not for an agent" and no prompt. Two buttons under the box: Copy prompt (`navigator.clipboard`, then say "Copied"; if it fails, say so and leave the text selected) and Use as description (puts the prompt in the description field). Show loading, empty and error states. Pure helpers (grouping, owner to lane, assignee choice) in `src/ui/panels/briefs.js` with tests. Files: `src/ui/panels/DispatchPanel.jsx`, `src/ui/panels/briefs.js`, `src/styles.css`, `tests/panels-briefs.test.js`, `docs/agents/CHANGELOG.md`. The mock serves sample briefs today and the real client serves the real ones once T1a is merged.
 
 **U1. Paperclip route list and doctor (OpenCode).** `server/surface.js` lists every Paperclip route the bridge calls, with the fields it reads. `npm run doctor` fetches `/api/openapi.json` from the running Paperclip, compares it with the list, and prints in plain words each route that is missing or changed. Test with a fake whose spec drops a route.
 
@@ -125,11 +111,13 @@ The order and the milestones are in `docs/agents/PLAN.md`. These are the briefs 
 
 **U3. Candidate beside stable (Claude).** A runbook and a script that start a candidate bridge and viewer from a worktree on other ports (stable 5174, candidate 5175), and the promote steps for the supervisor (W1).
 
-**P5. Recover cut and redacted tool lines (Hermes, after P6).** Every OpenCode Go run loses one to three calls because Paperclip's `***REDACTED***` masking breaks the stored JSON line. Recover the tool name and path from a broken line with a narrow pattern, and count what cannot be recovered (feeds U2). Tests from the scenario fixtures. Also map the Hermes `grep` to the `search` kind.
+**P5. Recover cut and redacted tool lines (Hermes).** Every OpenCode Go run in `public/fixtures/scenario-*-run.jsonl` loses one to three tool calls. Paperclip's `***REDACTED***` masking breaks the stored JSON line (search the files for `REDACTED`), so the line no longer parses and the parser drops the whole call. First find out exactly what the broken lines look like and describe the shapes in your report. Then, in `src/model/parsers/opencode.js` (and `common.js` only if you must), when a line does not parse as JSON but is clearly a tool call, recover the tool name and the path or the command with a narrow pattern, and build the same call the parser builds for a good line. Never guess: if the pattern does not find both, drop the call as today. Also map the Hermes `grep` line to the `search` kind in `src/model/parsers/hermes.js`. Tests: a unit test for each broken shape you recover, and update the scenario tests in `tests/scenarios.test.js` that now see more calls (explain each changed line in your report). Files: `src/model/parsers/opencode.js`, `src/model/parsers/hermes.js`, `src/model/parsers/common.js`, `tests/parsers.test.js`, `tests/scenarios.test.js`, `docs/agents/CHANGELOG.md`.
 
 **P6. Message text is not a file touch (Hermes, merged as 0.1.32).** `git commit -m "..."`, `curl -d '...'` and similar must not touch files that are named only inside the message. A quoted path that is an argument (`cat "src/math.js"`) still counts. The change goes in `touchesForCommand` in `src/model/commands.js`: before the command is split into segments, blank out the value of the message flags (`-m`, `--message`, `-d`, `--data`, `--data-raw`, `--data-binary`, with a space or `=` before the value) when the value is a double or single quoted string, and when the quote is never closed (the stored command labels are cut with a `~`) blank to the end of the text. Blanking first also stops a `;` or `&&` inside a message from splitting the command. Three tests currently pin the wrong behaviour and must change to the right one: `tests/commands.test.js` (the `git commit -m "rename docs/notes.md to docs/readme.md"` case) and the two rename commit lines in `tests/scenarios.test.js`. Add tests for each flag, for a cut message, for a message holding `;`, and for `cat "src/math.js"` still counting. Files: `src/model/commands.js`, `tests/commands.test.js`, `tests/scenarios.test.js`, nothing else.
 
 **H1. Hermes on DeepSeek V4.1 Flash (the owner).** Set the model in Hermes, using an id that Hermes itself lists. See `PLAN.md`.
+
+**G5. CI workflow (Hermes).** Add `.github/workflows/ci.yml`. It runs on push to `main` and on every pull request, with one job on `ubuntu-latest` and one on `windows-latest` (`fail-fast: false`). Steps: `actions/checkout@v4`, `actions/setup-node@v4` with Node 24 and the npm cache, `npm ci`, `npm test`, `npm run build`. Set `permissions: contents: read` and cancel older runs of the same branch with `concurrency`. Keep the file under 40 lines. You cannot run a workflow here, so read it twice, check the YAML with a parser that is already in `node_modules` (do not download anything), and check that the lock file matches `package.json` with `npm ci --dry-run`. Say in your report that the workflow itself is untested. Files: `.github/workflows/ci.yml`, `docs/agents/CHANGELOG.md`.
 
 **G1 to G6. Publish to GitHub.** History audit (Claude), licence and names (the owner), README (Claude, Hermes drafts), fresh screenshots (AGY), CI (Hermes), private repository then public (the owner). Details in `PLAN.md`.
 

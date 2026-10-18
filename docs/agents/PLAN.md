@@ -1,4 +1,4 @@
-# Next plan, from 0.1.31
+# Next plan, from 0.1.36
 
 Written 2026-10-18. The task briefs are in `TASKS.md`, the design is in `CONTROL-PLANE.md`. This file puts them in order and says what comes first.
 
@@ -29,14 +29,16 @@ The repository goes to GitHub as a private backup before M4 (G6 below). It goes 
 
 Each line is one brief in `TASKS.md`. Lines that start together can run at the same time, because they touch different files.
 
-**Now, three lanes at once**
+**Now, four lanes at once** (done so far: A1 to A3, C2, C3a to C3b, A4, D1, P6)
 
-- OpenCode: **C2** (real control client in the bridge, with change notices and health fields), then **A4** (assistant model route). Then **U1**, **U2**, **S1**, **B6**. C2 goes first because it removes the copy and paste.
-- AGY: **A2** is merged. Next **C3b** (panels refetch on change notices), then **C3d** (agent builder form, after C3c).
-- Hermes (DeepSeek V4.1 Flash, own worktree): **P6**, **G5**, **P5**, then **G3** (README draft). Cheap tasks with named files, so they run beside the others without touching their files.
-- Claude: **A3** (dispatcher, so the assistant moves the room), **C3c** (contract: hire and update an agent), **D1** is built and waits for the owner's run, **A5** (cost board in the room), **G1** (history audit), **G3** (README skeleton), then **C0 stage 2** when you say yes to worktrees.
+- OpenCode (Argon): **U4** (reject a foreign Host header), then **T1a** (briefs routes and client methods). Later **U1**, **U2**, **S1**, **B6**.
+- AGY (Argon for C3e and T1b, Flash for small things): **C3e** (HUD polish, checked by eye), then **T1b** (briefs menu in the dispatch panel), then **C3d** (agent builder form, after C3c).
+- Hermes (DeepSeek V4.1 Flash 1017, own worktree): **G5** (CI file), **P5** (recover cut tool lines), then **G3** (README draft).
+- Claude: **C3c** (contract: hire and update an agent), **M1** (exit test with a real Paperclip, needs the owner's yes), **A5** (cost board in the room), **G1** (history audit), then **C0 stage 2** when you say yes to worktrees. **D1** is built and waits for the owner's run.
 
-**Then M1 check.** Wire the real client, run the exit test with Hermes on DeepSeek V4.1 Flash, fix what breaks.
+**Getting off the terminals.** The aim is that nobody opens three harness windows and pastes prompts. T1a and T1b are the first step: the bridge builds the full prompt for any brief from `HOUSE-RULES.md`, `lanes.json` and `TASKS.md`, and the dispatch panel shows it with a Copy button. That removes Claude from writing prompts. The next steps remove the pasting: M1 sends a task to Hermes through Paperclip and reads the report back in the thread, C0 stage 2 gives each agent its own worktree through Paperclip so a task can run without a harness window, and W3 shows the diff and merges it. agy still needs a launcher that reads its issue through the API, so it is last.
+
+**Then M1 check.** The real client is wired in Stage. Run the exit test with Hermes on DeepSeek V4.1 Flash, fix what breaks.
 
 **Next, for M2**
 

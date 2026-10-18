@@ -19,6 +19,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `setAgentBudget(agentId, budgetMonthlyCents)` | `Agent` |
 | `models()` | `ModelOption[]` |
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
+| `briefs()` | `Brief[]`, in file order (added with task T1a; the mock serves samples) |
+| `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
 
 ## Shapes
 
@@ -39,6 +41,8 @@ Costs        { summary: { spendCents, budgetCents, utilizationPercent },
                byAgent: [{ agentId, agentName, costCents, inputTokens, outputTokens }],
                quota: [{ provider, ok, error?, windows: [{ label, usedPercent: number|null, resetsAt: string|null, detail: string|null }] }] }
 ModelOption  { id, label, harness, tier: small | medium | large, free: boolean }
+Brief        { id ("C3e"), title, ownerText, owners: (hermes | opencode | agy | claude)[], done: boolean, section, text }
+BriefPrompt  { prompt, lane, model, branch }
 ChangeEvent  { topic: agents | issues | comments | approvals | costs, id?: string }   (id is the issue id for comments)
 ```
 

@@ -1,3 +1,5 @@
+import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
+
 export const CLIENT_METHODS = [
   'agents',
   'issues',
@@ -14,6 +16,34 @@ export const CLIENT_METHODS = [
 
 const DECISIONS = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
 const clone = (value) => JSON.parse(JSON.stringify(value))
+
+const SAMPLE_BRIEFS = [
+  '## Open work',
+  '',
+  '**B6. Late join replay (OpenCode).** Let the event stream send the kept history to a viewer that connects without Last-Event-ID, behind a history query. Test it in tests/bridge.test.js.',
+  '',
+  '**U4. Reject a foreign Host header in the bridge (OpenCode).** Answer 403 when the Host header is not localhost, 127.0.0.1 or [::1]. Add tests for each.',
+  '',
+  '**C3e. HUD polish (AGY).** Move the assistant window above the transport bar and check the result by eye at two window sizes.',
+  '',
+  '**P5. Recover cut and redacted tool lines (Hermes).** Recover the tool name and path from a broken OpenCode log line, with tests.',
+  '',
+  '**M1. Exit test with a real Paperclip (Claude and the owner).** Create a task for Hermes from the drawer and read its comment in the thread.',
+  '',
+  '**C2. Control client (OpenCode, merged as 0.1.34).** Make the contract real.',
+].join('\n')
+
+const SAMPLE_LANES = {
+  hermes: { name: 'Hermes', harness: 'Hermes', model: 'deepseek/deepseek-v4.1-flash-1017', worktree: 'C:\\GitHub\\MachineRoom-hermes', role: 'You take cheap tasks with named files and clear tests.', forbidden: ['server/**', 'src/ui/**', 'src/engine/**', 'src/control/**'], notes: [] },
+  opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [] },
+  agy: { name: 'agy', harness: 'agy', model: 'Gemini 3.8 Flash (High)', models: { C3e: 'Gemini 4 Argon' }, worktree: 'C:\\GitHub\\MachineRoom-agy', role: 'You own the HUD.', forbidden: ['server/**', 'src/engine/**', 'src/control/**'], notes: [] },
+}
+
+const SAMPLE_RULES = {
+  about: 'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
+  rules: ['Work only in your own worktree and branch. Never push.', 'Run npm test after every change.'],
+  report: 'Give the report in your reply, not in a file.',
+}
 
 function overridesOf(draft) {
   const overrides = {}
@@ -178,6 +208,22 @@ export function createMockClient({ latencyMs = 120, now = Date.now } = {}) {
       }),
 
     models: () => call('models', () => state.models),
+
+    briefs: () => call('briefs', () => parseBriefs(SAMPLE_BRIEFS)),
+
+    briefPrompt: (ids, lane) =>
+      call('briefPrompt', () => {
+        const all = parseBriefs(SAMPLE_BRIEFS)
+        const picked = (ids ?? []).map((id) => all.find((brief) => brief.id === id))
+        if (picked.length === 0 || picked.some((brief) => !brief)) throw new Error('Choose a brief from the list.')
+        if (!SAMPLE_LANES[lane]) throw new Error('Choose hermes, opencode or agy.')
+        return {
+          prompt: buildPrompt({ briefs: picked, laneKey: lane, lanes: SAMPLE_LANES, rules: SAMPLE_RULES, version: '0.1.35' }),
+          lane,
+          model: modelFor(SAMPLE_LANES[lane], picked[0].id),
+          branch: branchFor(picked[0]),
+        }
+      }),
 
     subscribe(listener) {
       listeners.add(listener)

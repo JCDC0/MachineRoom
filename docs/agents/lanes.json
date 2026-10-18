@@ -1,0 +1,40 @@
+{
+  "hermes": {
+    "name": "Hermes",
+    "harness": "Hermes",
+    "model": "deepseek/deepseek-v4.1-flash-1017",
+    "modelHint": "the OpenRouter id; pick it from Hermes' own model list",
+    "worktree": "C:\\GitHub\\MachineRoom-hermes",
+    "role": "You take cheap tasks with named files and clear tests.",
+    "forbidden": ["server/**", "src/ui/**", "src/styles.css", "src/engine/**", "src/Stage.jsx", "src/App.jsx", "src/control/**", "src/assistant/**", "src/decider/**"],
+    "notes": [
+      "Run one command per tool call. Do not chain commands with && or ;. The room shows your tool calls to the owner, and a chained call hides which part failed. Keep command output short."
+    ]
+  },
+  "opencode": {
+    "name": "OpenCode",
+    "harness": "OpenCode",
+    "model": "Gemini 4 Argon",
+    "modelHint": "in OpenCode's list it appears as opencode-go/gemini-4-argon-contributor",
+    "worktree": "C:\\GitHub\\MachineRoom-opencode",
+    "role": "You own the bridge (server/**), scripts/** and src/control/client.js.",
+    "forbidden": ["src/ui/**", "src/styles.css", "src/engine/**", "src/Stage.jsx", "src/App.jsx", "src/assistant/**", "src/decider/**"],
+    "notes": [
+      "Do not start an agent run and do not change any Paperclip setting. You may start the real Paperclip (paperclipai run) to check the shape of GET routes. If you start it, stop it when you are done, kill any orphaned postgres worker, and check that ports 3100 and 54329 are free.",
+      "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start."
+    ]
+  },
+  "agy": {
+    "name": "agy",
+    "harness": "agy",
+    "model": "Gemini 3.8 Flash (High)",
+    "models": { "C3d": "Gemini 4 Argon", "C3e": "Gemini 4 Argon", "T1b": "Gemini 4 Argon" },
+    "worktree": "C:\\GitHub\\MachineRoom-agy",
+    "role": "You own the HUD: src/ui/** and src/styles.css.",
+    "forbidden": ["server/**", "src/engine/**", "src/Stage.jsx", "src/App.jsx", "src/control/**", "src/assistant/**", "src/decider/**"],
+    "notes": [
+      "Check every visual change by eye: run npm run dev -- --port 5181, open the page, look at it at 1280 by 800 and 1024 by 768, then stop the server. Say in your report what you looked at. Do not report a visual check you did not make.",
+      "Fonts: Jost and Space Mono, weights 400 and 500 only, never bold. Colours: white, #e5ff00, #ff2a2a on black. Spacing on an 8px base."
+    ]
+  }
+}
