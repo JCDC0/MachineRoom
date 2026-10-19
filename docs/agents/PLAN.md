@@ -40,6 +40,8 @@ Each line is one brief in `TASKS.md`. Lines that start together can run at the s
 
 **Then M1 check.** The real client is wired in Stage. Run the exit test with Hermes on DeepSeek V4.1 Flash, fix what breaks.
 
+**The room, version 2 (the owner's redesign, 2026-10-19).** **V1** (folder view plan, Hermes, after T9), then **V2** to **V5** (Claude: the void, folders as folders, agents and the hub ring, terminals on demand) and the V5 buttons (AGY, after T7). Two answers from the owner first: the reference for the portfolio lens look, and which agent is the orchestrator.
+
 **Next, for M2**
 
 - **C0 stage 2** (worktrees, needs your yes), **W3** (review and merge, OpenCode for the bridge and AGY for the panel), **W2** (backups), **W1** (supervisor and doctor), **T1** (load a brief into the dispatch form).
