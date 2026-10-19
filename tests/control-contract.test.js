@@ -45,10 +45,24 @@ const SAMPLE_HOUSE_RULES_MD = [
 ].join('\n')
 
 const SAMPLE_LANES_JSON = {
-  hermes: { name: 'Hermes', harness: 'Hermes', model: 'deepseek/deepseek-v4.1-flash-1017', worktree: 'C:\\GitHub\\MachineRoom-hermes', role: 'You take cheap tasks with named files and clear tests.', forbidden: ['server/**', 'src/ui/**', 'src/engine/**', 'src/control/**'], notes: [] },
-  opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [] },
+  hermes: { name: 'Hermes', harness: 'Hermes', model: 'deepseek/deepseek-v4.1-flash-1017', worktree: 'C:\\GitHub\\MachineRoom-hermes', role: 'You take cheap tasks with named files and clear tests.', forbidden: ['server/**', 'src/ui/**', 'src/engine/**', 'src/control/**'], notes: [], cli: { harness: 'hermes', bin: 'hermes.exe', model: 'deepseek/deepseek-v4.1-flash-1017' } },
+  opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [], cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
   agy: { name: 'agy', harness: 'agy', model: 'Gemini 3.8 Flash (High)', models: { C3e: 'Gemini 4 Argon' }, worktree: 'C:\\GitHub\\MachineRoom-agy', role: 'You own the HUD.', forbidden: ['server/**', 'src/engine/**', 'src/control/**'], notes: [] },
 }
+
+const TINY_RUNNER = [
+  "import { appendFileSync, mkdirSync } from 'node:fs'",
+  "import { tmpdir } from 'node:os'",
+  "import { join } from 'node:path'",
+  'const args = process.argv.slice(2)',
+  "console.log('args ' + args.join(' '))",
+  "for (let i = 1; i <= 7; i += 1) console.log('line ' + i)",
+  'await new Promise((done) => setTimeout(done, 300))',
+  "const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')",
+  "mkdirSync(folder, { recursive: true })",
+  "const record = { lane: args[0], briefs: args.slice(1), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: null, log: null, branch: '', commits: [] }",
+  "appendFileSync(join(folder, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
+].join('\n')
 
 function seedPaperclipState() {
   return {
@@ -756,6 +770,59 @@ function runContractSuite(label, makeHarness) {
       await expect(client.briefPrompt(['C3e'], 'nobody')).rejects.toThrow(/Choose hermes/)
     })
 
+    it('starts a run on a lane and keeps its record when it ends', async () => {
+      const { client } = await makeHarness()
+      const entry = await client.startRun('hermes', ['C3e'])
+      expect(entry.lane).toBe('hermes')
+      expect(entry.briefs).toEqual(['C3e'])
+      expect(typeof entry.startedAt).toBe('string')
+      expect(entry.lastLines).toEqual([])
+
+      await waitUntil(async () => {
+        const state = await client.runs()
+        return state.running.every((item) => item.lane !== 'hermes') && state.recent.some((record) => record.lane === 'hermes')
+      })
+      const { running, recent } = await client.runs()
+      expect(running).toEqual([])
+      const record = recent.find((item) => item.lane === 'hermes')
+      expect(record).toMatchObject({ lane: 'hermes', briefs: ['C3e'], exitCode: 0, killed: false })
+      expect(typeof record.startedAt).toBe('string')
+    })
+
+    it('refuses a second run on a lane that is already running', async () => {
+      const { client } = await makeHarness()
+      const results = await Promise.allSettled([client.startRun('hermes', ['C3e']), client.startRun('hermes', ['B6'])])
+      const started = results.filter((item) => item.status === 'fulfilled')
+      const refused = results.filter((item) => item.status === 'rejected')
+      expect(started).toHaveLength(1)
+      expect(refused).toHaveLength(1)
+      expect(String(refused[0].reason.message)).toMatch(/already running/i)
+      await waitUntil(async () => (await client.runs()).running.length === 0)
+    })
+
+    it('refuses a bad lane, a lane with no command line and bad briefs with plain sentences', async () => {
+      const { client } = await makeHarness()
+      await expect(client.startRun('nobody', ['C3e'])).rejects.toThrow('Choose a lane from the list.')
+      await expect(client.startRun('agy', ['C3e'])).rejects.toThrow('That lane has no command line.')
+      await expect(client.startRun('hermes', [])).rejects.toThrow('Choose one to five briefs.')
+      await expect(client.startRun('hermes', ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'])).rejects.toThrow('Choose one to five briefs.')
+      await expect(client.startRun('hermes', ['c3e'])).rejects.toThrow('Choose a brief from the list.')
+      await expect(client.startRun('hermes', ['Z9'])).rejects.toThrow('Choose a brief from the list.')
+      await expect(client.startRun('hermes', ['C3e&calc'])).rejects.toThrow('Choose a brief from the list.')
+      const { running } = await client.runs()
+      expect(running).toEqual([])
+    })
+
+    it('notices a run when it starts and when it ends', async () => {
+      const { client, settle } = await makeHarness()
+      const seen = []
+      const stop = client.subscribe((event) => seen.push(event))
+      await settle()
+      await client.startRun('hermes', ['C3e'])
+      await waitUntil(() => seen.filter((event) => event.topic === 'runs').length >= 2)
+      stop()
+    })
+
     it('notifies subscribers of topic changes after writes and stops after unsubscribe', async () => {
       const { client } = await makeHarness()
       const seen = []
@@ -782,11 +849,23 @@ function runContractSuite(label, makeHarness) {
 
 runContractSuite('mock', async () => ({
   client: createMockClient({ latencyMs: 0, now: () => BASE_TIME }),
+  settle: async () => {},
 }))
 
 runContractSuite('real client over bridge and fake Paperclip', async () => {
   const fake = await startFakeControlPaperclip('comp-1')
   cleanups.push(() => fake.close())
+  const runsTemp = mkdtempSync(join(tmpdir(), 'mr-contract-runs-'))
+  cleanups.push(() => rmSync(runsTemp, { recursive: true, force: true }))
+  const previousTemp = process.env.TEMP
+  process.env.TEMP = runsTemp
+  cleanups.push(() => {
+    process.env.TEMP = previousTemp
+  })
+  const runnerDir = mkdtempSync(join(tmpdir(), 'mr-contract-runner-'))
+  cleanups.push(() => rmSync(runnerDir, { recursive: true, force: true }))
+  const runnerPath = join(runnerDir, 'tiny-runner.mjs')
+  writeFileSync(runnerPath, TINY_RUNNER)
   const projectDir = makeSampleProjectDir()
   const bridge = createBridge({
     paperclipUrl: fake.url,
@@ -795,6 +874,7 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
     projectWorkspaceId: 'ws-1',
     projectRoot: projectDir,
     port: 0,
+    runnerCommand: { file: process.execPath, args: [runnerPath] },
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
@@ -804,7 +884,11 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
     for (const item of instances) item.close()
   })
   const client = createClient({ baseUrl: url, EventSourceImpl: NodeEventSource })
-  return { client, fake, url, instances }
+  const settle = async () => {
+    await waitUntil(() => instances.some((item) => item.connected))
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  return { client, fake, url, instances, settle }
 })
 
 describe('real control client and bridge extras', () => {

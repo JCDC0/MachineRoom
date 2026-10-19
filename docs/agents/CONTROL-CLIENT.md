@@ -23,6 +23,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
 | `briefs()` | `Brief[]`, in file order (added with task T1a; the mock serves samples) |
 | `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
+| `runs()` | `{ running, recent }`, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
+| `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends and adds a record) |
 
 ## Shapes
 

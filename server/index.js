@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
+import { createRunsApi } from './runs.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
@@ -180,6 +181,16 @@ export function createBridge(options = {}) {
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
+  })
+  const runs = createRunsApi({
+    projectRoot,
+    briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
+    runnerCommand: options.runnerCommand,
+    sendJson,
+    readJsonBody,
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
   })
   const control = createControlApi({
     paperclipUrl,
@@ -431,6 +442,7 @@ export function createBridge(options = {}) {
 
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (await briefs.handle(req, res, url)) return
+    if (await runs.handle(req, res, url)) return
     if (await control.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
 
@@ -520,6 +532,7 @@ export function createBridge(options = {}) {
   function stop() {
     stopped = true
     waiting.length = 0
+    runs.stopAll()
     clearInterval(heartbeatTimer)
     if (watchTimer) {
       clearTimeout(watchTimer)
