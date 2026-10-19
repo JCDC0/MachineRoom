@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { commandFor, formatSummary, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { commandFor, formatSummary, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const env = { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }
@@ -60,6 +60,24 @@ describe('unattendedPrompt', () => {
 })
 
 describe('parseRunArgs', () => {
+  it('takes a model and a reasoning level for one run', () => {
+    expect(parseRunArgs(['hermes', 'T9', '--model', 'minimax/minimax-m3.1-flash:free', '--reasoning=high'])).toEqual({
+      lane: 'hermes', briefs: ['T9'], dryRun: false, minutes: 100, list: false, model: 'minimax/minimax-m3.1-flash:free', reasoning: 'high',
+    })
+    expect(() => parseRunArgs(['hermes', 'T9', '--model'])).toThrow('--model needs a model id')
+    expect(() => parseRunArgs(['hermes', 'T9', '--model', '-z'])).toThrow('--model needs a model id')
+    expect(() => parseRunArgs(['hermes', 'T9', '--reasoning', 'HIGH; calc'])).toThrow('--reasoning needs a level')
+  })
+
+  it('puts the override on a copy of the lane', () => {
+    const lane = { name: 'Hermes', model: 'DeepSeek', models: { T1: 'Other' }, reasoning: 'xhigh', cli: { harness: 'hermes', model: 'deepseek/x' } }
+    const next = laneWithOverrides(lane, { model: 'minimax/minimax-m3.1-flash:free', reasoning: 'high' })
+    expect(next).toMatchObject({ model: 'minimax/minimax-m3.1-flash:free', reasoning: 'high', cli: { model: 'minimax/minimax-m3.1-flash:free' } })
+    expect(next.models).toBeUndefined()
+    expect(lane.cli.model).toBe('deepseek/x')
+    expect(laneWithOverrides(lane, {})).toEqual(lane)
+  })
+
   it('reads a lane and one or more briefs', () => {
     expect(parseRunArgs(['hermes', 'T2'])).toEqual({ lane: 'hermes', briefs: ['T2'], dryRun: false, minutes: 100, list: false })
     expect(parseRunArgs(['opencode', 'T2', 'G7', '--dry-run', '--minutes', '45'])).toEqual({

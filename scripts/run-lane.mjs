@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { commandFor, formatSummary, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { commandFor, formatSummary, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 const docs = join(root, 'docs', 'agents')
@@ -145,7 +145,8 @@ async function main() {
   if (options.list) return listRuns()
   const lanes = JSON.parse(read('lanes.json'))
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
-  const lane = lanes[options.lane]
+  const lane = laneWithOverrides(lanes[options.lane], options)
+  lanes[options.lane] = lane
   const briefs = parseBriefs(read('TASKS.md'))
   const wanted = options.briefs.map((id) => {
     const brief = briefs.find((item) => item.id.toUpperCase() === id.toUpperCase())

@@ -6,6 +6,10 @@ export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 const REPORT_LINES = 20
+const OVERRIDES = [
+  { key: 'model', pattern: /^[A-Za-z0-9][\w./:@-]*$/, problem: '--model needs a model id, for example minimax/minimax-m3.1-flash:free.' },
+  { key: 'reasoning', pattern: /^[a-z]+$/, problem: '--reasoning needs a level such as low, medium, high or xhigh.' },
+]
 const TOOL_PREVIEW = 72
 
 const HERMES_LINES = {
@@ -56,8 +60,17 @@ export function parseRunArgs(argv) {
   let dryRun = false
   let list = false
   let minutes = DEFAULT_MINUTES
+  const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
+    const named = OVERRIDES.find((option) => arg === `--${option.key}` || arg.startsWith(`--${option.key}=`))
+    if (named) {
+      const value = arg === `--${named.key}` ? args[index + 1] : arg.slice(named.key.length + 3)
+      if (arg === `--${named.key}`) index += 1
+      if (!named.pattern.test(value ?? '')) throw new Error(named.problem)
+      overrides[named.key] = value
+      continue
+    }
     if (arg === '--dry-run') {
       dryRun = true
       continue
@@ -81,7 +94,19 @@ export function parseRunArgs(argv) {
   if (list) return { lane, briefs, dryRun, minutes, list }
   if (!lane) throw new Error('Name a lane to run, for example hermes.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
-  return { lane, briefs, dryRun, minutes, list }
+  return { lane, briefs, dryRun, minutes, list, ...overrides }
+}
+
+export function laneWithOverrides(lane, { model, reasoning } = {}) {
+  if (!lane?.cli) return lane
+  const next = { ...lane, cli: { ...lane.cli } }
+  if (model) {
+    next.cli.model = model
+    next.model = model
+    delete next.models
+  }
+  if (reasoning) next.reasoning = reasoning
+  return next
 }
 
 function unique(values) {

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `npm run run-lane` takes `--model <id>` and `--reasoning <level>` for one run, without changing `lanes.json`. The prompt, the command and the run record all use the override.
 - `/?recording=<name>` replays a lane run: it opens the replay with `public/recordings/<name>-run.jsonl`, `-agents.json` and `-tree.json` instead of the sandbox fixtures. The name must be a plain file name (letters, digits, `-`, `_` and single dots inside), and a missing recording says how to make one.
 - Review fixes on T8: `agentsFile` and the recording script look a lane up with `Object.hasOwn`, and the script refuses a commit or branch name from the run record that is not a plain ref (one starting with `-` would reach `git ls-tree` as an option).
 - Replay a lane run in the room (task T8): `src/briefs/recording.js` turns a finished run into the frames, agent list and file tree the replay loads, `npm run run-recording -- <n>` writes them under `public/recordings/` (ignored by git, because they hold real commands), and the Hermes parser reads ` [error]` at the end of a tool line as a failed call.
