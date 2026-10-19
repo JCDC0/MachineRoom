@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { PROXY_BASE, chooseRoute, connectionFrom } from '../src/startup.js'
+import { PROXY_BASE, chooseRoute, connectionFrom, recordingName } from '../src/startup.js'
+import { replayFiles } from '../src/model/replay.js'
 
 const saved = { source: 'bridge', bridge: 'http://127.0.0.1:5174', paperclip: '/paperclip', company: '', speed: 2 }
 const at = (query) => new URLSearchParams(query)
@@ -31,6 +32,29 @@ describe('chooseRoute', () => {
 
   it('prefers replay over a live address when both are present', () => {
     expect(chooseRoute(at('live&replay'), saved, true).mode).toBe('replay')
+  })
+
+  it('opens the replay for a recording address', () => {
+    expect(chooseRoute(at('recording=hermes-T8-20261019-233640'), saved, true).mode).toBe('replay')
+  })
+})
+
+describe('recordingName', () => {
+  it('takes a plain recording name', () => {
+    expect(recordingName(at('recording=hermes-T8-20261019-233640'))).toBe('hermes-T8-20261019-233640')
+    expect(recordingName(at('recording=run.v2'))).toBe('run.v2')
+  })
+
+  it('refuses a name that could leave the recordings folder', () => {
+    for (const name of ['', '..', '../fixtures/sandbox', '..%2Fx', 'a/b', 'a\\b', '.hidden', 'a..b', 'x?y', 'x y']) {
+      expect(recordingName(at(`recording=${encodeURIComponent(name)}`)), name).toBeNull()
+    }
+    expect(recordingName(at(''))).toBeNull()
+  })
+
+  it('maps a recording to its three files and no recording to the sandbox fixtures', () => {
+    expect(replayFiles('opencode-T5')).toEqual({ run: 'recordings/opencode-T5-run.jsonl', agents: 'recordings/opencode-T5-agents.json', tree: 'recordings/opencode-T5-tree.json' })
+    expect(replayFiles(null).run).toBe('fixtures/sandbox-run.jsonl')
   })
 })
 

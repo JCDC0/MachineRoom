@@ -10,9 +10,16 @@ export function connectionFrom(params, saved) {
   return saved
 }
 
+export const RECORDING_NAME = /^[A-Za-z0-9][\w-]*(\.[\w-]+)*$/
+
+export function recordingName(params) {
+  const name = params.get('recording')
+  return name && RECORDING_NAME.test(name) ? name : null
+}
+
 export function chooseRoute(params, saved, hasSaved) {
   const connection = connectionFrom(params, saved)
-  if (params.has('replay')) return { mode: 'replay', connection }
+  if (params.has('replay') || params.has('recording')) return { mode: 'replay', connection }
   if (LIVE_PARAMS.some((key) => params.has(key))) return { mode: 'live', connection }
   if (params.has('connect') || !hasSaved) return { mode: 'connect', connection }
   return { mode: 'live', connection }

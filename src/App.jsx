@@ -4,7 +4,7 @@ import { loadDemo } from './live/simulated.js'
 import { discover, loadTree } from './live/source.js'
 import { makeTree } from './model/paths.js'
 import { loadReplay } from './model/replay.js'
-import { PROXY_BASE, chooseRoute } from './startup.js'
+import { PROXY_BASE, chooseRoute, recordingName } from './startup.js'
 import { store } from './storage.js'
 import Stage from './Stage.jsx'
 import Connect from './ui/Connect.jsx'
@@ -78,7 +78,7 @@ export default function App() {
     let current = true
     setSource({ status: 'loading' })
     const params = new URLSearchParams(window.location.search)
-    const wanted = route.mode === 'live' ? loadLive(route.connection, params) : loadReplay()
+    const wanted = route.mode === 'live' ? loadLive(route.connection, params) : loadReplay({ recording: recordingName(params) })
     wanted
       .then((data) => {
         if (current) setSource({ status: data.live || data.activities.length > 0 ? 'ready' : 'empty', data })

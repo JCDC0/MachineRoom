@@ -22,6 +22,7 @@ npm run dev        http://localhost:5173
 npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
 npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records
+npm run run-recording -- 1      turn run 1 of that list into a recording in public/recordings/, then open /?recording=<name>
 npm test           vitest, node environment, threads pool, no browser needed
 npm run build
 npm run fixtures -- <raw-events.jsonl> <sandbox-folder> <ids.json>
@@ -85,7 +86,7 @@ The first visit opens a connect screen (`src/ui/Connect.jsx`). The choice is sav
 - `/?live&bridge=http://127.0.0.1:5174` goes through the bridge (`npm run bridge`). The bridge holds the Paperclip socket, lists the agents, sends the project file list and pushes `tree` events when files appear. No proxy is needed.
 - `/?live&simulate&speed=3` plays the recording through the live path with no Paperclip, for testing. The badge reads `Demo`.
 
-Query parameters: `company` (company id), `root` (project folder name), `tree` (base URL of a bridge, to start with the full file list over the proxy route), `bridge`, `paperclip` (another Paperclip base URL), `speed` (simulated feed).
+Query parameters: `recording` (replay a lane run from `public/recordings/<name>-*`, made by `npm run run-recording`; the name is the run's log name), `company` (company id), `root` (project folder name), `tree` (base URL of a bridge, to start with the full file list over the proxy route), `bridge`, `paperclip` (another Paperclip base URL), `speed` (simulated feed).
 
 The HUD has a Replay and Live switch. The Live button is enabled when the proxy or the bridge answers. The switch changes the `live` query parameter and reloads the data without a page refresh.
 
