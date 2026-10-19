@@ -25,6 +25,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
 | `runs()` | `{ running, recent }`, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
+| `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
+| `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
 
 ## Shapes
 
@@ -58,6 +60,11 @@ BriefPrompt  { prompt, lane, model, branch }
 RunInfo      { lane, briefs: string[], startedAt, lastLines: string[] (the last 5 lines the run printed) }
 RunRecord    { lane, briefs, model: string|null, reasoning: string|null, startedAt, minutes: number|null, exitCode: number|null,
                killed: boolean, costUsd: number|null, log: string|null, branch, commits: string[] }   (one line of runs.jsonl)
+Review       { lane, worktree, branch, ahead: number (commits on top of main), commits: string[] (at most 50),
+               dirty: boolean, files: number, added: number, deleted: number, lastRun: RunRecord | null }
+             A worktree that is missing or is not a git repository gives { lane, worktree, error } instead.
+ReviewDiff   { lane, branch, files: [{ path, added, deleted }], patch, truncated: boolean }
+             patch is the diff of the lane branch against main, cut at 400 KB (truncated is true when it was cut).
 ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs, id?: string }   (id is the issue id for comments)
 ```
 

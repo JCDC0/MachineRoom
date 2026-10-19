@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
+import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
@@ -191,6 +192,12 @@ export function createBridge(options = {}) {
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)
     },
+  })
+  const reviews = createReviewsApi({
+    projectRoot,
+    briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
+    patchLimit: options.patchLimit,
+    sendJson,
   })
   const control = createControlApi({
     paperclipUrl,
@@ -443,6 +450,7 @@ export function createBridge(options = {}) {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (await briefs.handle(req, res, url)) return
     if (await runs.handle(req, res, url)) return
+    if (await reviews.handle(req, res, url)) return
     if (await control.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
 

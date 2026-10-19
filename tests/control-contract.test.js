@@ -1,8 +1,9 @@
+import { execFileSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
@@ -518,8 +519,56 @@ async function waitUntil(fn, timeoutMs = 3000) {
 }
 
 const cleanups = []
+const REAL_TMP = tmpdir()
+const NO_GIT_CONFIG = join(REAL_TMP, 'machineroom-contract-no-git-config')
 
-function makeSampleProjectDir() {
+function testGit(cwd, args) {
+  return execFileSync('git', args, {
+    cwd,
+    shell: false,
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      GIT_CONFIG_SYSTEM: NO_GIT_CONFIG,
+      GIT_CONFIG_GLOBAL: NO_GIT_CONFIG,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_AUTHOR_NAME: 'MachineRoom Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'MachineRoom Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+    },
+  })
+}
+
+let sharedLaneGit = null
+
+function laneGit() {
+  if (sharedLaneGit) return sharedLaneGit
+  const base = mkdtempSync(join(REAL_TMP, 'mr-contract-git-'))
+  const repo = join(base, 'repo')
+  const worktree = join(base, 'lane-worktree')
+  mkdirSync(repo, { recursive: true })
+  testGit(repo, ['init', '-b', 'main'])
+  writeFileSync(join(repo, 'notes.txt'), 'hello\n')
+  testGit(repo, ['add', 'notes.txt'])
+  testGit(repo, ['commit', '-m', 'first'])
+  testGit(repo, ['worktree', 'add', '-b', 'feat/x', worktree])
+  writeFileSync(join(worktree, 'notes.txt'), 'hello again\n')
+  testGit(worktree, ['add', 'notes.txt'])
+  testGit(worktree, ['commit', '-m', 'second'])
+  sharedLaneGit = { base, repo, worktree, missing: join(base, 'gone') }
+  return sharedLaneGit
+}
+
+afterAll(() => {
+  if (sharedLaneGit) rmSync(sharedLaneGit.base, { recursive: true, force: true })
+  sharedLaneGit = null
+})
+
+function makeSampleProjectDir(lanes = SAMPLE_LANES_JSON) {
   const dir = mkdtempSync(join(tmpdir(), 'mr-contract-briefs-'))
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   const agentsDir = join(dir, 'docs', 'agents')
@@ -527,7 +576,7 @@ function makeSampleProjectDir() {
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'machine-room', version: '0.1.35' }))
   writeFileSync(join(agentsDir, 'TASKS.md'), SAMPLE_TASKS_MD)
   writeFileSync(join(agentsDir, 'HOUSE-RULES.md'), SAMPLE_HOUSE_RULES_MD)
-  writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify(SAMPLE_LANES_JSON))
+  writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify(lanes))
   return dir
 }
 
@@ -844,6 +893,50 @@ function runContractSuite(label, makeHarness) {
       await new Promise((r) => setTimeout(r, 40))
       expect(seen).toHaveLength(5)
     })
+
+    it('lists one review per lane with a worktree and the contract fields', async () => {
+      const { client } = await makeHarness()
+      const reviews = await client.reviews()
+      expect(reviews.length).toBeGreaterThan(0)
+      for (const review of reviews) {
+        expect(typeof review.lane, review.lane).toBe('string')
+        expect(typeof review.worktree, review.lane).toBe('string')
+        if (review.error) {
+          expect(typeof review.error).toBe('string')
+          expect(Object.keys(review).sort()).toEqual(['error', 'lane', 'worktree'])
+        } else {
+          for (const key of ['branch', 'ahead', 'commits', 'dirty', 'files', 'added', 'deleted', 'lastRun']) {
+            expect(review, `${review.lane} ${key}`).toHaveProperty(key)
+          }
+          expect(Array.isArray(review.commits), review.lane).toBe(true)
+          expect(Number.isInteger(review.ahead), review.lane).toBe(true)
+          expect(typeof review.dirty, review.lane).toBe('boolean')
+          expect(review.lastRun === null || typeof review.lastRun === 'object', review.lane).toBe(true)
+        }
+      }
+    })
+
+    it('answers the diff for a lane and refuses a bad lane the same way', async () => {
+      const { client } = await makeHarness()
+      const reviews = await client.reviews()
+      const good = reviews.find((review) => !review.error)
+      expect(good).toBeTruthy()
+      const diff = await client.reviewDiff(good.lane)
+      expect(diff.lane).toBe(good.lane)
+      expect(typeof diff.branch).toBe('string')
+      expect(Array.isArray(diff.files)).toBe(true)
+      for (const file of diff.files) {
+        expect(typeof file.path).toBe('string')
+        expect(Number.isInteger(file.added), file.path).toBe(true)
+        expect(Number.isInteger(file.deleted), file.path).toBe(true)
+      }
+      expect(typeof diff.patch).toBe('string')
+      expect(typeof diff.truncated).toBe('boolean')
+
+      for (const lane of ['__proto__', 'constructor', 'nobody']) {
+        await expect(client.reviewDiff(lane), lane).rejects.toThrow('Choose a lane from the list.')
+      }
+    })
   })
 }
 
@@ -866,7 +959,13 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
   cleanups.push(() => rmSync(runnerDir, { recursive: true, force: true }))
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
   writeFileSync(runnerPath, TINY_RUNNER)
-  const projectDir = makeSampleProjectDir()
+  const gitLane = laneGit()
+  const projectDir = makeSampleProjectDir({
+    ...SAMPLE_LANES_JSON,
+    hermes: { ...SAMPLE_LANES_JSON.hermes, worktree: gitLane.worktree },
+    opencode: { ...SAMPLE_LANES_JSON.opencode, worktree: gitLane.repo },
+    agy: { ...SAMPLE_LANES_JSON.agy, worktree: gitLane.missing },
+  })
   const bridge = createBridge({
     paperclipUrl: fake.url,
     companyId: 'comp-1',
