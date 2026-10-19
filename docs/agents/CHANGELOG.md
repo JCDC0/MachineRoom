@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A folder collapse plan (task P3a): `src/model/collapse.js` exports `planCollapse({ folders, fileCounts, hot, maxTiles })`, a pure function that adds missing ancestors, keeps the root, every hot folder and every hot ancestor open, then opens the rest breadth first while the tile count stays within `maxTiles` (400 by default). It returns the sorted open folders, one `{ path, folders, files }` entry per collapsed folder with subtree counts, and an `overBudget` flag. `tests/collapse.test.js` covers the fit, the over-budget split, a hot chain, input order, an oversized hot set, a missing parent and 10,000 folders under 200 ms. It is not wired into the room yet.
+
 - The Node version is pinned (task G7): `engines.node` in `package.json` is `>=24`, `.nvmrc` holds `24`, and the README draft says where the version is pinned. `package-lock.json` gains the same `engines` field, and `npm ci --dry-run` still matches.
 
 - New briefs G7 (pin Node) and P3a (folder collapse plan) for Hermes. The M1 brief records the models for live tests that spend money: MiniMax M3.1 Flash Free for Hermes and OpenCode with DeepSeek V4.1 Flash as the fallback, Haiku 5.5 for Claude Code, Gemini 3.8 Flash for agy.
