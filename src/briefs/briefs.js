@@ -75,8 +75,10 @@ export function buildPrompt({ briefs, laneKey, lanes, rules, version }) {
   if (!Array.isArray(briefs) || briefs.length === 0) throw new Error('Choose at least one brief.')
   const prefix = nextVersion(version)
   const header = modelFor(lane, briefs[0].id)
+  const hint = lane.modelHint && header === lane.model ? ` (${lane.modelHint})` : ''
+  const reasoning = lane.reasoning ? `, reasoning ${lane.reasoning}` : ''
   const lines = []
-  lines.push(`Model to select in ${lane.harness}: ${header}${lane.modelHint && header === lane.model ? ` (${lane.modelHint})` : ''}.`)
+  lines.push(`Model to select in ${lane.harness}: ${header}${hint}${reasoning}.`)
   lines.push('')
   lines.push(`You are ${lane.name}, one of the coding agents building MachineRoom in parallel. ${lane.role}`)
   lines.push(`Your worktree is ${lane.worktree}. Run: git switch -c ${branchFor(briefs[0])} main`)

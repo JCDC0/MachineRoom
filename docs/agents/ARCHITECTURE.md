@@ -21,6 +21,7 @@ npm install
 npm run dev        http://localhost:5173
 npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
+npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command
 npm test           vitest, node environment, threads pool, no browser needed
 npm run build
 npm run fixtures -- <raw-events.jsonl> <sandbox-folder> <ids.json>
