@@ -1,10 +1,20 @@
 import { basename } from '../model/paths.js'
+import { createHermesParser } from '../model/parsers/hermes.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
 
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 const REPORT_LINES = 20
+const TOOL_PREVIEW = 72
+
+const HERMES_LINES = {
+  read_file: { emoji: '📖', verb: 'read' },
+  write_file: { emoji: '✍️', verb: 'write' },
+  patch: { emoji: '🔧', verb: 'patch' },
+  terminal: { emoji: '💻', verb: '$' },
+  search_files: { emoji: '🔎', verb: 'grep' },
+}
 
 export function unattendedPrompt(prompt) {
   return `${prompt}\n\n${UNATTENDED_NOTE}`
@@ -78,10 +88,104 @@ function unique(values) {
   return [...new Set(values)].sort()
 }
 
+function toolArguments(value) {
+  if (value && typeof value === 'object') return value
+  try {
+    const parsed = JSON.parse(String(value ?? '{}'))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function toolResult(result) {
+  const content = result?.content
+  if (content && typeof content === 'object') return content
+  const text = String(content ?? '')
+  let parsed = null
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    parsed = null
+  }
+  return parsed && typeof parsed === 'object' ? parsed : { output: text }
+}
+
+function toolDetail(name, args) {
+  const keys = name === 'terminal' ? ['command'] : ['path', 'pattern', 'query', 'file']
+  for (const key of keys) {
+    const value = args[key]
+    if (typeof value === 'string' && value.trim()) return value.replace(/\s+/g, ' ').trim()
+  }
+  return name
+}
+
+function toolSuffix(name, result) {
+  if (!result) return ''
+  const data = toolResult(result)
+  if (name === 'terminal') {
+    const code = Number(data.exit_code)
+    return Number.isFinite(code) && code !== 0 ? ` [exit ${code}]` : ''
+  }
+  const failed = data.success === false || Boolean(data.error) || String(data.output ?? '').startsWith('Error')
+  return failed ? ' [error]' : ''
+}
+
+function toolSeconds(message, result) {
+  const start = Number(message?.timestamp)
+  const end = Number(result?.timestamp)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0
+  return Math.round((end - start) * 10) / 10
+}
+
+function toolLine({ name, args, seconds, suffix }) {
+  const known = HERMES_LINES[name]
+  const emoji = known?.emoji ?? '⚡'
+  const verb = name === 'search_files' && args.target === 'files' ? 'find' : known?.verb ?? name.slice(0, 9)
+  const detail = toolDetail(name, args)
+  const shown = detail.length > TOOL_PREVIEW ? `${detail.slice(0, TOOL_PREVIEW - 1)}~` : detail
+  return `┊ ${emoji} ${verb.padEnd(9)} ${shown}  ${seconds.toFixed(1)}s${suffix}`
+}
+
+export function sessionToolLines(exportText) {
+  const lines = []
+  for (const raw of String(exportText ?? '').split(/\r?\n/)) {
+    if (!raw.trim()) continue
+    let session
+    try {
+      session = JSON.parse(raw)
+    } catch {
+      continue
+    }
+    const messages = Array.isArray(session?.messages) ? session.messages : []
+    const results = new Map()
+    for (const message of messages) {
+      if (message?.role === 'tool' && message.tool_call_id) results.set(String(message.tool_call_id), message)
+    }
+    for (const message of messages) {
+      if (message?.role !== 'assistant' || !Array.isArray(message.tool_calls)) continue
+      for (const call of message.tool_calls) {
+        const name = String(call?.function?.name ?? call?.name ?? '').trim()
+        if (!name) continue
+        const result = results.get(String(call.id ?? call.call_id ?? ''))
+        lines.push(toolLine({
+          name,
+          args: toolArguments(call?.function?.arguments ?? call?.arguments),
+          seconds: toolSeconds(message, result),
+          suffix: toolSuffix(name, result),
+        }))
+      }
+    }
+  }
+  return lines
+}
+
 function reportHead(log) {
-  const text = String(log ?? '').replace(/\s+$/, '')
-  if (!text) return []
-  return text.split(/\r?\n/).slice(0, REPORT_LINES)
+  const lines = String(log ?? '').split(/\r?\n/)
+  const firstTool = lines.findIndex((line) => line.trimStart().startsWith('┊'))
+  const report = (firstTool === -1 ? lines : lines.slice(0, firstTool)).join('\n').replace(/\s+$/, '')
+  if (!report) return []
+  return report.split(/\r?\n/).slice(0, REPORT_LINES)
 }
 
 function logCost(log) {
@@ -105,6 +209,10 @@ function logCost(log) {
 function opencodeSummary(log, worktree) {
   const parser = createOpencodeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
+  return summaryOf('opencode', activities, [], logCost(log))
+}
+
+function summaryOf(harness, activities, head, costUsd) {
   const calls = activities.filter((activity) => activity.type === 'tool.start')
   const written = []
   const read = []
@@ -116,28 +224,40 @@ function opencodeSummary(log, worktree) {
     }
   }
   return {
-    harness: 'opencode',
+    harness,
     toolCalls: calls.length,
     failed: activities.filter((activity) => activity.type === 'tool.end' && activity.ok === false).length,
     written: unique(written),
     read: unique(read),
-    head: [],
-    costUsd: logCost(log),
+    head,
+    costUsd,
   }
+}
+
+function hermesSummary(log, worktree) {
+  const parser = createHermesParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
+  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
+  return summaryOf('hermes', activities, reportHead(log), null)
 }
 
 export function summarizeRun({ harness, log, worktree } = {}) {
   if (harness === 'opencode') return opencodeSummary(log, worktree)
   if (harness !== 'hermes') throw new Error(`The summary does not know the ${harness} log.`)
-  return { harness: 'hermes', toolCalls: 0, failed: 0, written: [], read: [], head: reportHead(log), costUsd: null }
+  return hermesSummary(log, worktree)
 }
 
 export function formatSummary(summary) {
-  if (summary.harness === 'hermes') {
-    if (summary.head.length === 0) return ['summary: the log holds no report']
-    return [`summary: first ${summary.head.length} lines of the report`, ...summary.head.map((line) => `  ${line}`)]
-  }
   const list = (paths) => (paths.length ? paths.join(', ') : 'none')
+  if (summary.harness === 'hermes') {
+    const lines = [
+      `summary: ${summary.toolCalls} tool calls, ${summary.failed} failed`,
+      `written: ${list(summary.written)}`,
+      `read: ${list(summary.read)}`,
+    ]
+    if (summary.head.length === 0) return [...lines, 'report: none']
+    const count = summary.head.length === 1 ? '1 line' : `${summary.head.length} lines`
+    return [...lines, `report: first ${count}`, ...summary.head.map((line) => `  ${line}`)]
+  }
   const cost = typeof summary.costUsd === 'number' ? `${summary.costUsd.toFixed(4)} USD` : 'not reported'
   return [
     `summary: ${summary.toolCalls} tool calls, ${summary.failed} failed`,

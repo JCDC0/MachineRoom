@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { commandFor, formatSummary, parseRunArgs, runListLine, runRecord, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { commandFor, formatSummary, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const env = { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }
@@ -147,12 +147,108 @@ describe('summarizeRun', () => {
     expect(summarizeRun({ harness: 'hermes', log: 'a\nb\n', worktree: '' }).head).toEqual(['a', 'b'])
   })
 
+  it('counts the tool lines of a real Hermes run and still shows the report', () => {
+    const log = readFileSync(new URL('./fixtures/hermes-run.log', import.meta.url), 'utf8')
+    const summary = summarizeRun({ harness: 'hermes', log, worktree: 'C:\\scratch' })
+    expect(summary).toEqual({
+      harness: 'hermes',
+      toolCalls: 1,
+      failed: 0,
+      written: [],
+      read: [],
+      head: ['Files in current directory:', '- err.txt', '- out.txt'],
+      costUsd: null,
+    })
+    expect(formatSummary(summary)).toEqual([
+      'summary: 1 tool calls, 0 failed',
+      'written: none',
+      'read: none',
+      'report: first 3 lines',
+      '  Files in current directory:',
+      '  - err.txt',
+      '  - out.txt',
+    ])
+  })
+
+  it('reads, writes and failures from Hermes tool lines, relative to the worktree', () => {
+    const log = [
+      'Done with the work.',
+      '┊ 📖 read      C:\\GitHub\\MachineRoom-hermes\\src\\briefs\\run.js  0.4s',
+      '┊ ✍️  write     C:\\GitHub\\MachineRoom-hermes\\docs\\agents\\CHANGELOG.md  0.2s',
+      '┊ 💻 $         npm test  12.0s [exit 1]',
+    ].join('\n')
+    const summary = summarizeRun({ harness: 'hermes', log, worktree: 'C:\\GitHub\\MachineRoom-hermes' })
+    expect(summary.toolCalls).toBe(3)
+    expect(summary.failed).toBe(1)
+    expect(summary.read).toEqual(['src/briefs/run.js'])
+    expect(summary.written).toEqual(['docs/agents/CHANGELOG.md'])
+    expect(summary.head).toEqual(['Done with the work.'])
+    expect(formatSummary(summary)).toContain('report: first 1 line')
+  })
+
   it('handles an empty log for both harnesses', () => {
     expect(summarizeRun({ harness: 'opencode', log: '', worktree: 'C:\\scratch' })).toEqual({
       harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null,
     })
     expect(summarizeRun({ harness: 'hermes', log: '', worktree: 'C:\\scratch' }).head).toEqual([])
-    expect(formatSummary(summarizeRun({ harness: 'hermes', log: '', worktree: '' }))).toEqual(['summary: the log holds no report'])
+    expect(formatSummary(summarizeRun({ harness: 'hermes', log: '', worktree: '' }))).toEqual([
+      'summary: 0 tool calls, 0 failed',
+      'written: none',
+      'read: none',
+      'report: none',
+    ])
+  })
+})
+
+const exported = (messages) => JSON.stringify({ id: 's1', source: 'oneshot', messages })
+const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } })
+const answer = (timestamp, calls) => ({ role: 'assistant', timestamp, content: '', tool_calls: calls })
+const result = (id, timestamp, content) => ({ role: 'tool', tool_call_id: id, timestamp, content: JSON.stringify(content) })
+
+describe('sessionToolLines', () => {
+  it('turns the tool calls of a session export into Hermes lines', () => {
+    const text = exported([
+      { role: 'user', timestamp: 1000, content: 'Do the work.' },
+      answer(1010, [call('c1', 'read_file', { path: 'C:\\GitHub\\MachineRoom-hermes\\src\\a.js' })]),
+      result('c1', 1012.4, { output: 'ok', exit_code: 0 }),
+      answer(1020, [call('c2', 'terminal', { command: 'npm test' })]),
+      result('c2', 1043, { output: 'FAIL', exit_code: 1 }),
+      answer(1050, [call('c3', 'patch', { path: 'C:\\GitHub\\MachineRoom-hermes\\src\\b.js' })]),
+      result('c3', 1050.6, { output: 'ok' }),
+    ])
+    expect(sessionToolLines(text)).toEqual([
+      '┊ 📖 read      C:\\GitHub\\MachineRoom-hermes\\src\\a.js  2.4s',
+      '┊ 💻 $         npm test  23.0s [exit 1]',
+      '┊ 🔧 patch     C:\\GitHub\\MachineRoom-hermes\\src\\b.js  0.6s',
+    ])
+  })
+
+  it('keeps a call that never returned and skips lines that are not a session', () => {
+    const text = [
+      'not json',
+      exported([answer(10, [call('c1', 'write_file', { path: '/w/notes.md' })])]),
+      '',
+    ].join('\n')
+    expect(sessionToolLines(text)).toEqual(['┊ ✍️ write     /w/notes.md  0.0s'])
+    expect(sessionToolLines('')).toEqual([])
+    expect(sessionToolLines(JSON.stringify({ id: 's2' }))).toEqual([])
+  })
+
+  it('marks a failed file call and names a tool it does not know', () => {
+    const text = exported([
+      answer(10, [call('c1', 'write_file', { path: '/w/notes.md' }), call('c2', 'browser_click', { ref: 'e12' })]),
+      result('c1', 11, { output: 'Error: denied', error: 'denied' }),
+      result('c2', 11.5, { output: 'ok' }),
+    ])
+    expect(sessionToolLines(text)).toEqual([
+      '┊ ✍️ write     /w/notes.md  1.0s [error]',
+      '┊ ⚡ browser_c browser_click  1.5s',
+    ])
+  })
+
+  it('searches files by name when the target is files', () => {
+    const text = exported([answer(10, [call('c1', 'search_files', { pattern: '*.js', target: 'files' })])])
+    expect(sessionToolLines(text)).toEqual(['┊ 🔎 find      *.js  0.0s'])
   })
 })
 

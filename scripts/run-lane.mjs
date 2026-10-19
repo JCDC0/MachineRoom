@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { commandFor, formatSummary, parseRunArgs, runListLine, runRecord, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { commandFor, formatSummary, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 const docs = join(root, 'docs', 'agents')
@@ -53,6 +53,21 @@ function readLog(path) {
   } catch {
     return ''
   }
+}
+
+function captureToolLines(file, sessionId, logPath) {
+  if (!sessionId) return 0
+  const result = spawnSync(file, ['sessions', 'export', '--session-id', String(sessionId), '--format', 'jsonl', '-'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: 120000,
+    maxBuffer: 64 * 1024 * 1024,
+  })
+  if (result.error || result.status !== 0) return 0
+  const lines = sessionToolLines(String(result.stdout ?? ''))
+  if (lines.length === 0) return 0
+  appendFileSync(logPath, `\n${lines.join('\n')}\n`)
+  return lines.length
 }
 
 function printUsage(path) {
@@ -158,7 +173,10 @@ async function main() {
   console.log(`minutes: ${minutes}`)
   console.log(`log: ${logPath}`)
   const report = harness === 'hermes' ? readUsage(usageFile) : null
-  if (harness === 'hermes') printUsage(usageFile)
+  if (harness === 'hermes') {
+    printUsage(usageFile)
+    console.log(`tool lines: ${captureToolLines(command.file, report?.session_id, logPath)}`)
+  }
 
   const summary = summarizeRun({ harness, log: readLog(logPath), worktree: lane.worktree })
   formatSummary(summary).forEach((line) => console.log(line))
