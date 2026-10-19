@@ -1108,3 +1108,205 @@ describe('agent change notices', () => {
     expect(JSON.parse(approval.data)).toEqual({ topic: 'approvals' })
   })
 })
+
+describe('run routes', () => {
+  const TINY_RUNNER = [
+    "import { appendFileSync, mkdirSync } from 'node:fs'",
+    "import { tmpdir } from 'node:os'",
+    "import { join } from 'node:path'",
+    'const args = process.argv.slice(2)',
+    "console.log('args ' + args.join(' '))",
+    "for (let i = 1; i <= 7; i += 1) console.log('line ' + i)",
+    'await new Promise((done) => setTimeout(done, 300))',
+    "const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')",
+    "mkdirSync(folder, { recursive: true })",
+    "const record = { lane: args[0], briefs: args.slice(1), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: null, log: null, branch: '', commits: [] }",
+    "appendFileSync(join(folder, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
+  ].join('\n')
+
+  const TINY_SLEEPER = [
+    "console.log('pid ' + process.pid)",
+    "console.log('sleeping')",
+    'setTimeout(() => {}, 60000)',
+  ].join('\n')
+
+  function writeRunsProject(dir) {
+    const agents = join(dir, 'docs', 'agents')
+    mkdirSync(agents, { recursive: true })
+    writeFileSync(
+      join(agents, 'TASKS.md'),
+      ['**B6. Late join replay (OpenCode).** Let the event stream send history.', '', '**C3e. HUD polish (AGY).** Move the assistant window.'].join('\n')
+    )
+    writeFileSync(
+      join(agents, 'lanes.json'),
+      JSON.stringify({
+        hermes: { name: 'Hermes', harness: 'Hermes', cli: { harness: 'hermes', bin: 'hermes.exe', model: 'deepseek/deepseek-v4.1-flash-1017' } },
+        opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
+        agy: { name: 'agy', harness: 'agy' },
+      })
+    )
+  }
+
+  function useRunsTemp() {
+    const dir = makeTempDir()
+    const previous = process.env.TEMP
+    process.env.TEMP = dir
+    cleanups.push(() => {
+      process.env.TEMP = previous
+    })
+    return dir
+  }
+
+  async function startRunsBridge({ script = TINY_RUNNER, project = true } = {}) {
+    const dir = makeTempDir()
+    if (project) writeRunsProject(dir)
+    const runnerPath = join(makeTempDir(), 'tiny-runner.mjs')
+    writeFileSync(runnerPath, script)
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      runnerCommand: { file: process.execPath, args: [runnerPath] },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    return { url, dir, bridge }
+  }
+
+  it('answers an empty recent list when the records file is missing', async () => {
+    useRunsTemp()
+    const { url } = await startRunsBridge()
+    const res = await fetch(`${url}/api/control/runs`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ running: [], recent: [] })
+  })
+
+  it('reads the last 20 records newest first and skips lines that do not parse', async () => {
+    const tempDir = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const folder = join(tempDir, 'machineroom-runs')
+    mkdirSync(folder, { recursive: true })
+    const lines = []
+    for (let i = 1; i <= 25; i += 1) {
+      lines.push(JSON.stringify({ lane: `lane-${i}`, briefs: ['C3e'], startedAt: new Date(i * 1000).toISOString() }))
+      if (i === 5) lines.push('not json at all')
+      if (i === 9) lines.push('{ "lane": ')
+    }
+    writeFileSync(join(folder, 'runs.jsonl'), `${lines.join('\n')}\n`)
+
+    const res = await fetch(`${url}/api/control/runs`)
+    const { running, recent } = await res.json()
+    expect(running).toEqual([])
+    expect(recent).toHaveLength(20)
+    expect(recent.map((record) => record.lane)).toEqual([
+      'lane-25', 'lane-24', 'lane-23', 'lane-22', 'lane-21', 'lane-20', 'lane-19', 'lane-18', 'lane-17', 'lane-16',
+      'lane-15', 'lane-14', 'lane-13', 'lane-12', 'lane-11', 'lane-10', 'lane-9', 'lane-8', 'lane-7', 'lane-6',
+    ])
+  })
+
+  it('starts the runner with an argument list, keeps the last five lines and records the run when it ends', async () => {
+    useRunsTemp()
+    const { url } = await startRunsBridge()
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e', 'B6'] })
+    expect(res.status).toBe(202)
+    const entry = await res.json()
+    expect(entry.lane).toBe('hermes')
+    expect(entry.briefs).toEqual(['C3e', 'B6'])
+    expect(typeof entry.startedAt).toBe('string')
+    expect(entry.lastLines).toEqual([])
+
+    await waitUntil(async () => {
+      const { running } = await fetch(`${url}/api/control/runs`).then((r) => r.json())
+      return running.length === 1 && running[0].lastLines.includes('line 7')
+    })
+    const runningNow = await fetch(`${url}/api/control/runs`).then((r) => r.json())
+    expect(runningNow.running[0].lastLines).toEqual(['line 3', 'line 4', 'line 5', 'line 6', 'line 7'])
+
+    await waitUntil(async () => {
+      const state = await fetch(`${url}/api/control/runs`).then((r) => r.json())
+      return state.running.length === 0 && state.recent.length === 1
+    })
+    const done = await fetch(`${url}/api/control/runs`).then((r) => r.json())
+    expect(done.recent[0]).toMatchObject({ lane: 'hermes', briefs: ['C3e', 'B6'], exitCode: 0, killed: false })
+  })
+
+  it('refuses a bad lane, a bad brief and a second run on a busy lane with plain sentences', async () => {
+    useRunsTemp()
+    const { url } = await startRunsBridge()
+
+    const noLane = await postJson(url, '/api/control/runs', 'POST', { briefs: ['C3e'] })
+    expect(noLane.status).toBe(400)
+    expect(await noLane.json()).toEqual({ error: 'Choose a lane from the list.' })
+    const badLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'nobody', briefs: ['C3e'] })
+    expect(await badLane.json()).toEqual({ error: 'Choose a lane from the list.' })
+    const noCli = await postJson(url, '/api/control/runs', 'POST', { lane: 'agy', briefs: ['C3e'] })
+    expect(noCli.status).toBe(400)
+    expect(await noCli.json()).toEqual({ error: 'That lane has no command line.' })
+
+    const empty = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: [] })
+    expect(await empty.json()).toEqual({ error: 'Choose one to five briefs.' })
+    const tooMany = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'] })
+    expect(await tooMany.json()).toEqual({ error: 'Choose one to five briefs.' })
+    const notAList = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: 'C3e' })
+    expect(await notAList.json()).toEqual({ error: 'Choose one to five briefs.' })
+
+    for (const briefs of [['c3e'], ['C3e&calc'], ['Z9'], ['C3e', 42]]) {
+      const badId = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs })
+      expect(badId.status).toBe(400)
+      expect(await badId.json()).toEqual({ error: 'Choose a brief from the list.' })
+    }
+
+    const wrongMethod = await fetch(`${url}/api/control/runs`, { method: 'DELETE' })
+    expect(wrongMethod.status).toBe(405)
+
+    const started = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'] })
+    expect(started.status).toBe(202)
+    const busy = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6'] })
+    expect(busy.status).toBe(409)
+    expect(await busy.json()).toEqual({ error: 'That lane is already running.' })
+    const otherLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['B6'] })
+    expect(otherLane.status).toBe(202)
+  })
+
+  it('answers 404 without a path when the brief files are missing', async () => {
+    useRunsTemp()
+    const { url, dir } = await startRunsBridge({ project: false })
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'] })
+    expect(res.status).toBe(404)
+    const body = await res.json()
+    expect(body.error).toMatch(/missing/i)
+    expect(body.error).not.toContain(dir)
+    expect(body.error).not.toMatch(/[/\\]|TASKS\.md|lanes\.json/)
+  })
+
+  it('keeps the run going after the request and kills it when the bridge stops', async () => {
+    useRunsTemp()
+    const { url, bridge } = await startRunsBridge({ script: TINY_SLEEPER })
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'] })
+    expect(res.status).toBe(202)
+    await res.arrayBuffer()
+
+    let pid = 0
+    await waitUntil(async () => {
+      const { running } = await fetch(`${url}/api/control/runs`).then((r) => r.json())
+      const line = running[0]?.lastLines.find((item) => item.startsWith('pid '))
+      if (!line) return false
+      pid = Number(line.slice('pid '.length))
+      return Number.isInteger(pid) && pid > 0
+    })
+    expect(() => process.kill(pid, 0)).not.toThrow()
+
+    await bridge.stop()
+    await waitUntil(() => {
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+  })
+})

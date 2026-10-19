@@ -16,10 +16,14 @@ export const CLIENT_METHODS = [
   'models',
   'briefs',
   'briefPrompt',
+  'runs',
+  'startRun',
   'subscribe',
 ]
 
 const DECISIONS = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
+const RUN_ID = /^[A-Z]\d+[a-z]?$/
+const RUN_RECENT_LIMIT = 20
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const slug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
@@ -42,8 +46,8 @@ const SAMPLE_BRIEFS = [
 ].join('\n')
 
 const SAMPLE_LANES = {
-  hermes: { name: 'Hermes', harness: 'Hermes', model: 'deepseek/deepseek-v4.1-flash-1017', worktree: 'C:\\GitHub\\MachineRoom-hermes', role: 'You take cheap tasks with named files and clear tests.', forbidden: ['server/**', 'src/ui/**', 'src/engine/**', 'src/control/**'], notes: [] },
-  opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [] },
+  hermes: { name: 'Hermes', harness: 'Hermes', model: 'deepseek/deepseek-v4.1-flash-1017', worktree: 'C:\\GitHub\\MachineRoom-hermes', role: 'You take cheap tasks with named files and clear tests.', forbidden: ['server/**', 'src/ui/**', 'src/engine/**', 'src/control/**'], notes: [], cli: { harness: 'hermes', bin: 'hermes.exe', model: 'deepseek/deepseek-v4.1-flash-1017' } },
+  opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [], cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
   agy: { name: 'agy', harness: 'agy', model: 'Gemini 3.8 Flash (High)', models: { C3e: 'Gemini 4 Argon' }, worktree: 'C:\\GitHub\\MachineRoom-agy', role: 'You own the HUD.', forbidden: ['server/**', 'src/engine/**', 'src/control/**'], notes: [] },
 }
 
@@ -123,7 +127,7 @@ function seed(at) {
   }
 }
 
-export function createMockClient({ latencyMs = 120, now = Date.now, requireApproval = true } = {}) {
+export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now = Date.now, requireApproval = true } = {}) {
   const state = seed(now())
   state.agents = state.agents.map((agent) => ({ ...AGENT_DEFAULTS, ...agent }))
   let approvalCounter = 3
@@ -131,6 +135,7 @@ export function createMockClient({ latencyMs = 120, now = Date.now, requireAppro
   let issueCounter = 22
   let commentCounter = 3
   const listeners = new Set()
+  const runsState = { running: [], recent: [] }
 
   function emit(event) {
     for (const listener of [...listeners]) listener({ ...event })
@@ -292,6 +297,44 @@ export function createMockClient({ latencyMs = 120, now = Date.now, requireAppro
           model: modelFor(SAMPLE_LANES[lane], picked[0].id),
           branch: branchFor(picked[0]),
         }
+      }),
+
+    runs: () => call('runs', () => runsState),
+
+    startRun: (lane, briefs) =>
+      call('startRun', () => {
+        const info = typeof lane === 'string' && Object.hasOwn(SAMPLE_LANES, lane) ? SAMPLE_LANES[lane] : null
+        if (!info || typeof info !== 'object') throw new Error('Choose a lane from the list.')
+        if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
+        if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 5) throw new Error('Choose one to five briefs.')
+        const known = new Set(parseBriefs(SAMPLE_BRIEFS).map((brief) => brief.id))
+        if (briefs.some((id) => typeof id !== 'string' || !RUN_ID.test(id) || !known.has(id))) throw new Error('Choose a brief from the list.')
+        if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
+        const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
+        runsState.running.push(entry)
+        emit({ topic: 'runs' })
+        setTimeout(() => {
+          const index = runsState.running.indexOf(entry)
+          if (index === -1) return
+          runsState.running.splice(index, 1)
+          runsState.recent.unshift({
+            lane,
+            briefs: [...entry.briefs],
+            model: typeof info.cli.model === 'string' && info.cli.model ? info.cli.model : null,
+            reasoning: info.reasoning ? String(info.reasoning) : null,
+            startedAt: entry.startedAt,
+            minutes: 0,
+            exitCode: 0,
+            killed: false,
+            costUsd: null,
+            log: null,
+            branch: '',
+            commits: [],
+          })
+          if (runsState.recent.length > RUN_RECENT_LIMIT) runsState.recent.pop()
+          emit({ topic: 'runs' })
+        }, runMs)
+        return entry
       }),
 
     subscribe(listener) {

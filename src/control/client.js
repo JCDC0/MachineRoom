@@ -100,6 +100,10 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
       return request('GET', `/api/control/brief-prompt?ids=${list}&lane=${encodeURIComponent(lane ?? '')}`)
     },
 
+    runs: () => request('GET', '/api/control/runs'),
+
+    startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs }),
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()

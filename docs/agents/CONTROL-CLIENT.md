@@ -23,6 +23,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
 | `briefs()` | `Brief[]`, in file order (added with task T1a; the mock serves samples) |
 | `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
+| `runs()` | `{ running, recent }`, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
+| `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 
 ## Shapes
 
@@ -53,7 +55,10 @@ Costs        { summary: { spendCents, budgetCents, utilizationPercent },
 ModelOption  { id, label, harness, tier: small | medium | large, free: boolean }
 Brief        { id ("C3e"), title, ownerText, owners: (hermes | opencode | agy | claude)[], done: boolean, section, text }
 BriefPrompt  { prompt, lane, model, branch }
-ChangeEvent  { topic: agents | issues | comments | approvals | costs, id?: string }   (id is the issue id for comments)
+RunInfo      { lane, briefs: string[], startedAt, lastLines: string[] (the last 5 lines the run printed) }
+RunRecord    { lane, briefs, model: string|null, reasoning: string|null, startedAt, minutes: number|null, exitCode: number|null,
+               killed: boolean, costUsd: number|null, log: string|null, branch, commits: string[] }   (one line of runs.jsonl)
+ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs, id?: string }   (id is the issue id for comments)
 ```
 
 Times are ISO strings. Money is whole cents. A budget of `0` means no budget is set. A quota window with `usedPercent: null` has no number (show its `detail`). A quota provider with `ok: false` could not be read (show `error`).
@@ -72,7 +77,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 
 ## Change notices
 
-`subscribe(listener)` tells a panel that data it may hold is out of date, so it can fetch again without a Refresh button. The listener gets a change event and no data. A panel fetches again only for the topics it shows. The real client sends one when the bridge reports a Paperclip event that touches that topic (a run changes status, an issue or comment is added, an approval is decided, a cost is booked), and may send a topic more than once. The mock sends one after each of its own writes, and `client.emit({ topic })` sends one by hand for tests.
+`subscribe(listener)` tells a panel that data it may hold is out of date, so it can fetch again without a Refresh button. The listener gets a change event and no data. A panel fetches again only for the topics it shows. The real client sends one when the bridge reports a Paperclip event that touches that topic (a run changes status, an issue or comment is added, an approval is decided, a cost is booked) and when a run it started begins or ends (`runs`), and may send a topic more than once. The mock sends one after each of its own writes, and `client.emit({ topic })` sends one by hand for tests.
 
 ## Notes for panel authors
 
