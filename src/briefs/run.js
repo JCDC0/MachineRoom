@@ -205,12 +205,34 @@ export function sessionToolLines(exportText) {
   return lines
 }
 
+function headLines(text) {
+  const report = String(text ?? '').replace(/\s+$/, '')
+  if (!report) return []
+  return report.split(/\r?\n/).slice(0, REPORT_LINES)
+}
+
 function reportHead(log) {
   const lines = String(log ?? '').split(/\r?\n/)
   const firstTool = lines.findIndex((line) => line.trimStart().startsWith('┊'))
-  const report = (firstTool === -1 ? lines : lines.slice(0, firstTool)).join('\n').replace(/\s+$/, '')
-  if (!report) return []
-  return report.split(/\r?\n/).slice(0, REPORT_LINES)
+  return headLines((firstTool === -1 ? lines : lines.slice(0, firstTool)).join('\n'))
+}
+
+function opencodeReport(log) {
+  let words = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'text') continue
+    const text = item?.part?.text
+    if (typeof text !== 'string' || !text.trim()) continue
+    words = text
+  }
+  return headLines(words ?? '')
 }
 
 function logCost(log) {
@@ -234,7 +256,7 @@ function logCost(log) {
 function opencodeSummary(log, worktree) {
   const parser = createOpencodeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('opencode', activities, [], logCost(log))
+  return summaryOf('opencode', activities, opencodeReport(log), logCost(log))
 }
 
 function summaryOf(harness, activities, head, costUsd) {
@@ -271,17 +293,21 @@ export function summarizeRun({ harness, log, worktree } = {}) {
   return hermesSummary(log, worktree)
 }
 
+function reportLines(head) {
+  if (head.length === 0) return ['report: none']
+  const count = head.length === 1 ? '1 line' : `${head.length} lines`
+  return [`report: first ${count}`, ...head.map((line) => `  ${line}`)]
+}
+
 export function formatSummary(summary) {
   const list = (paths) => (paths.length ? paths.join(', ') : 'none')
   if (summary.harness === 'hermes') {
-    const lines = [
+    return [
       `summary: ${summary.toolCalls} tool calls, ${summary.failed} failed`,
       `written: ${list(summary.written)}`,
       `read: ${list(summary.read)}`,
+      ...reportLines(summary.head),
     ]
-    if (summary.head.length === 0) return [...lines, 'report: none']
-    const count = summary.head.length === 1 ? '1 line' : `${summary.head.length} lines`
-    return [...lines, `report: first ${count}`, ...summary.head.map((line) => `  ${line}`)]
   }
   const cost = typeof summary.costUsd === 'number' ? `${summary.costUsd.toFixed(4)} USD` : 'not reported'
   return [
@@ -289,6 +315,7 @@ export function formatSummary(summary) {
     `estimated cost: ${cost}`,
     `written: ${list(summary.written)}`,
     `read: ${list(summary.read)}`,
+    ...reportLines(summary.head),
   ]
 }
 
@@ -317,11 +344,12 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
 
 export function runListLine(record) {
   const when = record.startedAt ?? 'time unknown'
+  const model = record.model ? String(record.model) : 'model unknown'
   const briefs = record.briefs?.length ? record.briefs.join(' ') : 'none'
   const minutes = Number.isFinite(record.minutes) ? `${record.minutes} min` : 'minutes unknown'
   const exit = Number.isInteger(record.exitCode) ? `exit ${record.exitCode}` : 'exit none'
   const killed = record.killed ? ' (killed)' : ''
   const cost = typeof record.costUsd === 'number' ? `${record.costUsd.toFixed(4)} USD` : 'not reported'
   const branch = record.branch || 'no branch'
-  return `${when} | ${record.lane} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}`
+  return `${when} | ${record.lane} | ${model} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}`
 }
