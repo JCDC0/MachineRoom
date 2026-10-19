@@ -93,7 +93,18 @@ describe('settings requests', () => {
     expect(keys.message).toMatch(/Nothing was stored/)
     expect(host.calls).toEqual([['focusAgent', 'hermes', 'close']])
     host.calls.length = 0
-    expect((await dispatcher.run({ type: 'open_config', agent: 'agy', section: 'model' })).message).toMatch(/C3d/)
+    expect((await dispatcher.run({ type: 'open_config', agent: 'agy', section: 'model' })).message).toMatch(/does not offer/)
+    host.calls.length = 0
+    const withBuilder = makeHost({ client: fast() })
+    const opened = await createDispatcher(withBuilder).run({ type: 'open_config', agent: 'agy', section: 'subagents' })
+    expect(opened.message).toBe('Opened the Agents tab. Pick agy in the list to change its subagents settings.')
+    expect(withBuilder.calls).toEqual([['focusAgent', 'agy', 'close'], ['openPanel', 'agents']])
+  })
+
+  it('opens the agents tab by name', async () => {
+    const host = makeHost()
+    expect((await createDispatcher(host).run({ type: 'open_panel', tab: 'agents' })).ok).toBe(true)
+    expect(host.calls).toEqual([['openPanel', 'agents']])
   })
 })
 

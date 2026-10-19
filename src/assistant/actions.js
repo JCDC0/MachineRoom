@@ -1,4 +1,4 @@
-export const TABS = ['dispatch', 'tasks', 'approvals', 'meters']
+export const TABS = ['dispatch', 'tasks', 'approvals', 'meters', 'agents']
 export const SECTIONS = ['general', 'model', 'budget', 'subagents', 'keys']
 export const SPEEDS = [1, 2, 4, 8]
 

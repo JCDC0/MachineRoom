@@ -26,6 +26,7 @@ export const TAB_GUIDE = {
   tasks: 'List tasks and read their threads.',
   approvals: 'Decisions that wait for the owner.',
   meters: 'Costs, spend, quota and budgets.',
+  agents: 'Hire a new agent or change an existing one.',
   [NONE]: 'No panel is asked for.',
 }
 

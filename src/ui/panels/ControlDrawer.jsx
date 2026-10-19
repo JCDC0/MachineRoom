@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DispatchPanel from './DispatchPanel.jsx'
 import TasksPanel from './TasksPanel.jsx'
 import ApprovalsPanel from './ApprovalsPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
+import AgentBuilder from './AgentBuilder.jsx'
 import { subscribeToNotices } from './notices.js'
 
-const TABS = [
+const BASE_TABS = [
   { id: 'dispatch', label: 'Dispatch' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'approvals', label: 'Approvals' },
@@ -13,17 +14,29 @@ const TABS = [
 ]
 
 export default function ControlDrawer({ client, open, onClose, controlTarget = null }) {
+  const hasAgentsTab = typeof client?.hireAgent === 'function'
+  const tabs = useMemo(
+    () => (hasAgentsTab ? [...BASE_TABS, { id: 'agents', label: 'Agents' }] : BASE_TABS),
+    [hasAgentsTab]
+  )
+
+  const [internalTarget, setInternalTarget] = useState(null)
+  const internalNonceRef = useRef(0)
+
+  const effectiveTarget = internalTarget ?? controlTarget
+
   const [activeTab, setActiveTab] = useState(() => {
     const rawId = controlTarget?.issueIdentifier
     const hasId = typeof rawId === 'string' ? rawId.trim().length > 0 : rawId != null && String(rawId).trim().length > 0
     if (hasId) return 'tasks'
-    if (controlTarget?.tab && TABS.some((t) => t.id === controlTarget.tab)) return controlTarget.tab
+    if (controlTarget?.tab && tabs.some((t) => t.id === controlTarget.tab)) return controlTarget.tab
     return 'dispatch'
   })
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0)
   const tabRefs = useRef({})
   const triggerRef = useRef(null)
   const lastTargetNonceRef = useRef(controlTarget?.nonce ?? null)
+  const lastInternalNonceRef = useRef(null)
 
   const loadPendingCount = useCallback(async () => {
     if (!client) return
@@ -44,21 +57,43 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
   }, [client, loadPendingCount])
 
   useEffect(() => {
+    if (!tabs.some((t) => t.id === activeTab)) {
+      setActiveTab('dispatch')
+    }
+  }, [tabs, activeTab])
+
+  useEffect(() => {
     if (controlTarget?.nonce != null) {
       if (controlTarget.nonce !== lastTargetNonceRef.current) {
         lastTargetNonceRef.current = controlTarget.nonce
+        setInternalTarget(null)
         const rawId = controlTarget.issueIdentifier
         const hasId = typeof rawId === 'string' ? rawId.trim().length > 0 : rawId != null && String(rawId).trim().length > 0
         if (hasId) {
           setActiveTab('tasks')
-        } else if (controlTarget.tab && TABS.some((t) => t.id === controlTarget.tab)) {
+        } else if (controlTarget.tab && tabs.some((t) => t.id === controlTarget.tab)) {
           setActiveTab(controlTarget.tab)
         }
       }
     } else {
       lastTargetNonceRef.current = null
     }
-  }, [controlTarget])
+  }, [controlTarget, tabs])
+
+  useEffect(() => {
+    if (internalTarget?.nonce != null && internalTarget.nonce !== lastInternalNonceRef.current) {
+      lastInternalNonceRef.current = internalTarget.nonce
+      if (internalTarget.tab && tabs.some((t) => t.id === internalTarget.tab)) {
+        setActiveTab(internalTarget.tab)
+      }
+    }
+  }, [internalTarget, tabs])
+
+  function handleSelectControlTarget(target) {
+    if (!target || typeof target !== 'object') return
+    internalNonceRef.current += 1
+    setInternalTarget({ ...target, nonce: `internal-${internalNonceRef.current}` })
+  }
 
   useEffect(() => {
     if (open) {
@@ -93,18 +128,18 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
   function handleTabKeyDown(event, currentIndex) {
     let nextIndex = null
     if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-      nextIndex = (currentIndex + 1) % TABS.length
+      nextIndex = (currentIndex + 1) % tabs.length
     } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-      nextIndex = (currentIndex - 1 + TABS.length) % TABS.length
+      nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
     } else if (event.key === 'Home') {
       nextIndex = 0
     } else if (event.key === 'End') {
-      nextIndex = TABS.length - 1
+      nextIndex = tabs.length - 1
     }
 
     if (nextIndex !== null) {
       event.preventDefault()
-      const nextTab = TABS[nextIndex]
+      const nextTab = tabs[nextIndex]
       setActiveTab(nextTab.id)
       tabRefs.current[nextTab.id]?.focus()
     }
@@ -135,7 +170,7 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
         role="tablist"
         aria-label="Control panel sections"
       >
-        {TABS.map((tab, index) => {
+        {tabs.map((tab, index) => {
           const isSelected = activeTab === tab.id
           const count = tab.id === 'approvals' ? pendingApprovalsCount : 0
 
@@ -177,7 +212,7 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
             }}
           />
         )}
-        {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={controlTarget} />}
+        {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={effectiveTarget} />}
         {activeTab === 'approvals' && (
           <ApprovalsPanel
             client={client}
@@ -185,6 +220,12 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
           />
         )}
         {activeTab === 'meters' && <MetersPanel client={client} />}
+        {activeTab === 'agents' && hasAgentsTab && (
+          <AgentBuilder
+            client={client}
+            onSelectControlTarget={handleSelectControlTarget}
+          />
+        )}
       </div>
     </aside>
   )
