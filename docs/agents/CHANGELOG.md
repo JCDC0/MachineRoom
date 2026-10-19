@@ -3,7 +3,6 @@
 ## Unreleased
 
 - The OpenCode report and the model in run lists (task T9): the summary of an OpenCode run now takes the text of the last `text` line in the log as its report and prints it after the OpenCode lines as `report: first N lines` (or `report: none`), the way the Hermes summary does, and `npm run run-lane -- --list` names the model right after the lane, so runs on different models tell each other apart.
-
 - `npm run run-lane` takes `--model <id>` and `--reasoning <level>` for one run, without changing `lanes.json`. The prompt, the command and the run record all use the override.
 - `/?recording=<name>` replays a lane run: it opens the replay with `public/recordings/<name>-run.jsonl`, `-agents.json` and `-tree.json` instead of the sandbox fixtures. The name must be a plain file name (letters, digits, `-`, `_` and single dots inside), and a missing recording says how to make one.
 - Review fixes on T8: `agentsFile` and the recording script look a lane up with `Object.hasOwn`, and the script refuses a commit or branch name from the run record that is not a plain ref (one starting with `-` would reach `git ls-tree` as an option).
