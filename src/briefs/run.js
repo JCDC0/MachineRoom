@@ -1,6 +1,10 @@
+import { basename } from '../model/paths.js'
+import { createOpencodeParser } from '../model/parsers/opencode.js'
+
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
+const REPORT_LINES = 20
 
 export function unattendedPrompt(prompt) {
   return `${prompt}\n\n${UNATTENDED_NOTE}`
@@ -29,7 +33,7 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
     return { file, args, cwd: lane.worktree }
   }
   const model = reasoning ? `${cli.model}#${reasoning}` : cli.model
-  return { file, args: ['run', '--model', model, '--auto', '--title', title, prompt], cwd: lane.worktree }
+  return { file, args: ['run', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: lane.worktree }
 }
 
 export const DEFAULT_MINUTES = 100
@@ -39,11 +43,16 @@ export function parseRunArgs(argv) {
   const briefs = []
   let lane = ''
   let dryRun = false
+  let list = false
   let minutes = DEFAULT_MINUTES
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
     if (arg === '--dry-run') {
       dryRun = true
+      continue
+    }
+    if (arg === '--list') {
+      list = true
       continue
     }
     if (arg === '--minutes' || arg.startsWith('--minutes=')) {
@@ -58,7 +67,94 @@ export function parseRunArgs(argv) {
     if (!lane) lane = arg
     else briefs.push(arg)
   }
+  if (list) return { lane, briefs, dryRun, minutes, list }
   if (!lane) throw new Error('Name a lane to run, for example hermes.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
-  return { lane, briefs, dryRun, minutes }
+  return { lane, briefs, dryRun, minutes, list }
+}
+
+function unique(values) {
+  return [...new Set(values)].sort()
+}
+
+function reportHead(log) {
+  const text = String(log ?? '').replace(/\s+$/, '')
+  if (!text) return []
+  return text.split(/\r?\n/).slice(0, REPORT_LINES)
+}
+
+function opencodeSummary(log, worktree) {
+  const parser = createOpencodeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
+  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
+  const calls = activities.filter((activity) => activity.type === 'tool.start')
+  const written = []
+  const read = []
+  for (const call of calls) {
+    for (const touch of call.touches ?? []) {
+      if (touch.kind !== 'file') continue
+      if (touch.mode === 'write') written.push(touch.path)
+      if (touch.mode === 'read') read.push(touch.path)
+    }
+  }
+  return {
+    harness: 'opencode',
+    toolCalls: calls.length,
+    failed: activities.filter((activity) => activity.type === 'tool.end' && activity.ok === false).length,
+    written: unique(written),
+    read: unique(read),
+    head: [],
+  }
+}
+
+export function summarizeRun({ harness, log, worktree } = {}) {
+  if (harness === 'opencode') return opencodeSummary(log, worktree)
+  if (harness !== 'hermes') throw new Error(`The summary does not know the ${harness} log.`)
+  return { harness: 'hermes', toolCalls: 0, failed: 0, written: [], read: [], head: reportHead(log) }
+}
+
+export function formatSummary(summary) {
+  if (summary.harness === 'hermes') {
+    if (summary.head.length === 0) return ['summary: the log holds no report']
+    return [`summary: first ${summary.head.length} lines of the report`, ...summary.head.map((line) => `  ${line}`)]
+  }
+  const list = (paths) => (paths.length ? paths.join(', ') : 'none')
+  return [
+    `summary: ${summary.toolCalls} tool calls, ${summary.failed} failed`,
+    `written: ${list(summary.written)}`,
+    `read: ${list(summary.read)}`,
+  ]
+}
+
+function isoTime(value) {
+  if (value === null || value === undefined || value === '') return null
+  const date = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, log, branch, commits } = {}) {
+  return {
+    lane: String(lane ?? ''),
+    briefs: Array.isArray(briefs) ? briefs.map(String) : [],
+    model: model ? String(model) : null,
+    reasoning: reasoning ? String(reasoning) : null,
+    startedAt: isoTime(startedAt),
+    minutes: Number.isFinite(minutes) ? minutes : null,
+    exitCode: Number.isInteger(exitCode) ? exitCode : null,
+    killed: killed === true,
+    costUsd: typeof costUsd === 'number' && Number.isFinite(costUsd) ? costUsd : null,
+    log: log ? String(log) : null,
+    branch: branch ? String(branch) : '',
+    commits: Array.isArray(commits) ? commits.map(String) : [],
+  }
+}
+
+export function runListLine(record) {
+  const when = record.startedAt ?? 'time unknown'
+  const briefs = record.briefs?.length ? record.briefs.join(' ') : 'none'
+  const minutes = Number.isFinite(record.minutes) ? `${record.minutes} min` : 'minutes unknown'
+  const exit = Number.isInteger(record.exitCode) ? `exit ${record.exitCode}` : 'exit none'
+  const killed = record.killed ? ' (killed)' : ''
+  const cost = typeof record.costUsd === 'number' ? `${record.costUsd.toFixed(4)} USD` : 'not reported'
+  const branch = record.branch || 'no branch'
+  return `${when} | ${record.lane} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}`
 }
