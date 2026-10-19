@@ -1147,25 +1147,26 @@ summary:focus-visible,
 }
 
 .control-tabs {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
   border-bottom: 1px solid var(--line);
   background: rgb(0 0 0 / 0.78);
 }
 
 .control-tab-btn {
+  flex: 1 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: calc(var(--space) * 0.5);
-  padding: var(--space) calc(var(--space) * 0.5);
+  gap: 4px;
+  padding: var(--space) 6px;
   font-size: 11px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   border: none;
   border-bottom: 2px solid transparent;
   background: transparent;
   color: rgb(255 255 255 / 0.75);
+  white-space: nowrap;
 }
 
 .control-tab-btn + .control-tab-btn {
@@ -2283,4 +2284,69 @@ summary:focus-visible,
   }
 }
 
+.agent-builder-panel {
+  display: flex;
+  flex-direction: column;
+}
 
+.agent-builder-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  flex-shrink: 0;
+}
+
+.agent-builder-toolbar-actions button {
+  white-space: nowrap;
+  padding: 4px var(--space);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel-inline-link {
+  display: inline;
+  padding: 2px var(--space);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--yellow);
+  color: var(--yellow);
+  background: transparent;
+}
+
+.panel-inline-link:hover:not(:disabled) {
+  background: rgb(229 255 0 / 0.16);
+  border-color: var(--yellow);
+}
+
+.panel-field input[readonly] {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.agent-builder-list-section {
+  margin-top: calc(var(--space) * 3);
+  padding-top: calc(var(--space) * 2);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.agent-builder-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.agent-builder-row.is-selected {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+}
+
+.agent-row-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--white);
+}
