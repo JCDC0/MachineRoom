@@ -18,6 +18,8 @@ export const CLIENT_METHODS = [
   'briefPrompt',
   'runs',
   'startRun',
+  'reviews',
+  'reviewDiff',
   'subscribe',
 ]
 
@@ -55,6 +57,73 @@ const SAMPLE_RULES = {
   about: 'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
   rules: ['Work only in your own worktree and branch. Never push.', 'Run npm test after every change.'],
   report: 'Give the report in your reply, not in a file.',
+}
+
+const SAMPLE_REVIEW_PATCH = [
+  'diff --git a/src/control/client.js b/src/control/client.js',
+  'index 1111111..2222222 100644',
+  '--- a/src/control/client.js',
+  '+++ b/src/control/client.js',
+  '@@ -103,6 +103,8 @@',
+  "     runs: () => request('GET', '/api/control/runs'),",
+  ' ',
+  "+    reviews: () => request('GET', '/api/control/reviews'),",
+  '+',
+  '     subscribe(listener) {',
+].join('\n')
+
+const SAMPLE_REVIEW_DIFF_FILES = [{ path: 'src/control/client.js', added: 2, deleted: 0 }]
+
+const SAMPLE_REVIEWS = {
+  hermes: {
+    lane: 'hermes',
+    worktree: 'C:\\GitHub\\MachineRoom-hermes',
+    branch: 'feat/p5-recover-cut-tool-lines',
+    ahead: 2,
+    commits: ['9f1c2a3 P5: take the tool name from the broken line', '4b7d0e8 P5: map the grep line to search'],
+    dirty: false,
+    files: 1,
+    added: 2,
+    deleted: 0,
+    lastRun: null,
+  },
+  opencode: {
+    lane: 'opencode',
+    worktree: 'C:\\GitHub\\MachineRoom-opencode',
+    branch: 'feat/w3a-read-the-lane',
+    ahead: 1,
+    commits: ['6c49a75 0.1.47: Start a lane on a brief from the bridge'],
+    dirty: true,
+    files: 1,
+    added: 2,
+    deleted: 0,
+    lastRun: {
+      lane: 'opencode',
+      briefs: ['W3a'],
+      model: 'opencode-go/mimo-v2.6-pro',
+      reasoning: null,
+      startedAt: '2026-10-18T22:10:00.000Z',
+      minutes: 12,
+      exitCode: 0,
+      killed: false,
+      costUsd: 0.42,
+      log: null,
+      branch: 'feat/w3a-read-the-lane',
+      commits: ['6c49a75 0.1.47: Start a lane on a brief from the bridge'],
+    },
+  },
+  agy: {
+    lane: 'agy',
+    worktree: 'C:\\GitHub\\MachineRoom-agy',
+    branch: 'feat/t7-run-a-brief',
+    ahead: 3,
+    commits: ['c3a1b2e T7: add the Run now button', '5d6e7f8 T7: confirm card before a run', '0a1b2c3 T7: list the runs under the brief'],
+    dirty: false,
+    files: 1,
+    added: 2,
+    deleted: 0,
+    lastRun: null,
+  },
 }
 
 function overridesOf(draft) {
@@ -335,6 +404,21 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           emit({ topic: 'runs' })
         }, runMs)
         return entry
+      }),
+
+    reviews: () => call('reviews', () => Object.values(SAMPLE_REVIEWS)),
+
+    reviewDiff: (lane) =>
+      call('reviewDiff', () => {
+        const review = typeof lane === 'string' && Object.hasOwn(SAMPLE_REVIEWS, lane) ? SAMPLE_REVIEWS[lane] : null
+        if (!review) throw new Error('Choose a lane from the list.')
+        return {
+          lane: review.lane,
+          branch: review.branch,
+          files: clone(SAMPLE_REVIEW_DIFF_FILES),
+          patch: SAMPLE_REVIEW_PATCH,
+          truncated: false,
+        }
       }),
 
     subscribe(listener) {

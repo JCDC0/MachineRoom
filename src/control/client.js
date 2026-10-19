@@ -104,6 +104,13 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
 
     startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs }),
 
+    reviews: async () => {
+      const data = await request('GET', '/api/control/reviews')
+      return Array.isArray(data) ? data : data?.lanes ?? []
+    },
+
+    reviewDiff: (lane) => request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/diff`),
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()

@@ -31,7 +31,7 @@ Each line is one brief in `TASKS.md`. Lines that start together can run at the s
 
 **Now, four lanes at once** (done so far: A1 to A3, C2, C3a to C3c, A4, D1, P6)
 
-- OpenCode (Argon until 0.1.41, MiMo V2.6 Pro from C2b on, the owner's choice): **U4** (reject a foreign Host header), then **T1a** (briefs routes and client methods), then **C2b** (hire and update routes). Then **T5** (start a lane from the bridge, merged as 0.1.49) and **W3a** (read the lane branches). Later **U1**, **U2**, **S1**, **B6**.
+- OpenCode (Argon until 0.1.41, MiMo V2.6 Pro from C2b on, the owner's choice): **U4** (reject a foreign Host header), then **T1a** (briefs routes and client methods), then **C2b** (hire and update routes). Then **T5** (start a lane from the bridge, merged as 0.1.49) and **W3a** (read the lane branches, merged as 0.1.52). Then **B6** (late join replay, agent roles, unique keys). Later **U1**, **U2**, **S1**, **B6**.
 - AGY (Argon for C3e and T1b, Flash for small things): **C3e** (HUD polish, checked by eye), then **T1b** (briefs menu in the dispatch panel), then **C3d** (agent builder form, against the mock), then **T7** (run a brief from the dispatch panel, after T5 is merged).
 - Hermes (DeepSeek V4.1 Flash 1017, own worktree): **G5** (CI file), **P5** (recover cut tool lines), then **G3** (README draft).
 - Claude: **M1** (exit test with a real Paperclip, needs the owner's yes), **A5** (cost board in the room), **G1** (history audit), then **C0 stage 2** when you say yes to worktrees. **D1** is built and waits for the owner's run.
