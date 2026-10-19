@@ -99,7 +99,7 @@ describe('buildPrompt', () => {
 
   it('builds a prompt for one task', () => {
     const prompt = make(['U4'], 'opencode')
-    expect(prompt.startsWith('Model to select in OpenCode: MiMo V2.6 Pro (in OpenCode')).toBe(true)
+    expect(prompt.split('\n')[0]).toBe("Model to select in OpenCode: MiMo V2.6 Pro (in OpenCode's list it appears as opencode-go/mimo-v2.6-pro), reasoning max.")
     expect(prompt).toContain('Your worktree is C:\\GitHub\\MachineRoom-opencode. Run: git switch -c feat/u4-reject-a-foreign main')
     expect(prompt).toContain('Task U4: Reject a foreign Host header in the bridge.')
     expect(prompt).toContain(byId('U4').text)
@@ -114,6 +114,7 @@ describe('buildPrompt', () => {
   it('builds one prompt for several tasks and says how to commit and report', () => {
     const prompt = make(['G5', 'P5'], 'hermes')
     expect(prompt).toContain('Model to select in Hermes: deepseek/deepseek-v4.1-flash-1017 (the OpenRouter id')
+    expect(prompt.split('\n')[0]).toBe("Model to select in Hermes: deepseek/deepseek-v4.1-flash-1017 (the OpenRouter id; pick it from Hermes' own model list), reasoning xhigh.")
     expect(prompt).toContain('git switch -c feat/g5-ci-workflow main')
     expect(prompt).toContain('Task G5: CI workflow.')
     expect(prompt).toContain('Task P5: Recover cut and redacted tool lines.')
@@ -126,6 +127,7 @@ describe('buildPrompt', () => {
   it('names the stronger model for a task that needs it and leaves out the hint', () => {
     const prompt = make(['C3e'], 'agy')
     expect(prompt.startsWith('Model to select in agy: Gemini 4 Argon (Medium).')).toBe(true)
+    expect(prompt.split('\n')[0]).not.toContain('reasoning')
     expect(prompt).toContain('Check every visual change by eye')
   })
 
