@@ -28,6 +28,7 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
   const reasoning = lane.reasoning ? String(lane.reasoning) : ''
   if (harness === 'hermes') {
     const args = ['-z', prompt, '-m', cli.model, '--provider', cli.provider]
+    if (cli.toolsets) args.push('-t', String(cli.toolsets))
     if (reasoning) args.push('--reasoning', reasoning)
     if (usageFile) args.push('--usage-file', usageFile)
     return { file, args, cwd: lane.worktree }
@@ -83,6 +84,24 @@ function reportHead(log) {
   return text.split(/\r?\n/).slice(0, REPORT_LINES)
 }
 
+function logCost(log) {
+  let total = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'step_finish') continue
+    const cost = item?.part?.cost
+    if (typeof cost !== 'number' || !Number.isFinite(cost)) continue
+    total = (total ?? 0) + cost
+  }
+  return total === null ? null : Math.round(total * 1e6) / 1e6
+}
+
 function opencodeSummary(log, worktree) {
   const parser = createOpencodeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
@@ -103,13 +122,14 @@ function opencodeSummary(log, worktree) {
     written: unique(written),
     read: unique(read),
     head: [],
+    costUsd: logCost(log),
   }
 }
 
 export function summarizeRun({ harness, log, worktree } = {}) {
   if (harness === 'opencode') return opencodeSummary(log, worktree)
   if (harness !== 'hermes') throw new Error(`The summary does not know the ${harness} log.`)
-  return { harness: 'hermes', toolCalls: 0, failed: 0, written: [], read: [], head: reportHead(log) }
+  return { harness: 'hermes', toolCalls: 0, failed: 0, written: [], read: [], head: reportHead(log), costUsd: null }
 }
 
 export function formatSummary(summary) {
@@ -118,8 +138,10 @@ export function formatSummary(summary) {
     return [`summary: first ${summary.head.length} lines of the report`, ...summary.head.map((line) => `  ${line}`)]
   }
   const list = (paths) => (paths.length ? paths.join(', ') : 'none')
+  const cost = typeof summary.costUsd === 'number' ? `${summary.costUsd.toFixed(4)} USD` : 'not reported'
   return [
     `summary: ${summary.toolCalls} tool calls, ${summary.failed} failed`,
+    `estimated cost: ${cost}`,
     `written: ${list(summary.written)}`,
     `read: ${list(summary.read)}`,
   ]

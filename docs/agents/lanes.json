@@ -9,7 +9,8 @@
       "harness": "hermes",
       "bin": "%LOCALAPPDATA%\\hermes\\bin\\hermes.exe",
       "model": "deepseek/deepseek-v4.1-flash-1017",
-      "provider": "openrouter"
+      "provider": "openrouter",
+      "toolsets": "file,terminal"
     },
     "worktree": "C:\\GitHub\\MachineRoom-hermes",
     "role": "You take cheap tasks with named files and clear tests.",
@@ -23,7 +24,6 @@
     "harness": "OpenCode",
     "model": "MiMo V2.6 Pro",
     "modelHint": "in OpenCode's list it appears as opencode-go/mimo-v2.6-pro",
-    "reasoning": "max",
     "cli": {
       "harness": "opencode",
       "bin": "%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",

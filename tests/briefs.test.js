@@ -99,7 +99,7 @@ describe('buildPrompt', () => {
 
   it('builds a prompt for one task', () => {
     const prompt = make(['U4'], 'opencode')
-    expect(prompt.split('\n')[0]).toBe("Model to select in OpenCode: MiMo V2.6 Pro (in OpenCode's list it appears as opencode-go/mimo-v2.6-pro), reasoning max.")
+    expect(prompt.split('\n')[0]).toBe("Model to select in OpenCode: MiMo V2.6 Pro (in OpenCode's list it appears as opencode-go/mimo-v2.6-pro).")
     expect(prompt).toContain('Your worktree is C:\\GitHub\\MachineRoom-opencode. Run: git switch -c feat/u4-reject-a-foreign main')
     expect(prompt).toContain('Task U4: Reject a foreign Host header in the bridge.')
     expect(prompt).toContain(byId('U4').text)

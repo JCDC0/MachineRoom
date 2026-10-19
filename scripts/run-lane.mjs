@@ -174,7 +174,7 @@ async function main() {
     minutes,
     exitCode: result.code,
     killed,
-    costUsd: totalCost(report),
+    costUsd: harness === 'opencode' ? summary.costUsd : totalCost(report),
     log: logPath,
     branch,
     commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],

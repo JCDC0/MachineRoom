@@ -12,13 +12,13 @@ describe('commandFor', () => {
   it('builds the Hermes command from the lane and the environment', () => {
     expect(commandFor({ lane: lanes.hermes, prompt, env, usageFile, title })).toEqual({
       file: 'C:\\Users\\me\\AppData\\Local\\hermes\\bin\\hermes.exe',
-      args: ['-z', prompt, '-m', 'deepseek/deepseek-v4.1-flash-1017', '--provider', 'openrouter', '--reasoning', 'xhigh', '--usage-file', usageFile],
+      args: ['-z', prompt, '-m', 'deepseek/deepseek-v4.1-flash-1017', '--provider', 'openrouter', '-t', 'file,terminal', '--reasoning', 'xhigh', '--usage-file', usageFile],
       cwd: lanes.hermes.worktree,
     })
   })
 
   it('builds the OpenCode command with the reasoning as the model variant', () => {
-    expect(commandFor({ lane: lanes.opencode, prompt, env, usageFile, title })).toEqual({
+    expect(commandFor({ lane: { ...lanes.opencode, reasoning: 'max' }, prompt, env, usageFile, title })).toEqual({
       file: 'C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe',
       args: ['run', '--format', 'json', '--model', 'opencode-go/mimo-v2.6-pro#max', '--auto', '--title', title, prompt],
       cwd: lanes.opencode.worktree,
@@ -28,9 +28,16 @@ describe('commandFor', () => {
   it('leaves out the usage file and the reasoning when the lane has none', () => {
     const lane = { ...lanes.hermes, reasoning: undefined }
     const command = commandFor({ lane, prompt, env, title })
-    expect(command.args).toEqual(['-z', prompt, '-m', 'deepseek/deepseek-v4.1-flash-1017', '--provider', 'openrouter'])
+    expect(command.args).toEqual(['-z', prompt, '-m', 'deepseek/deepseek-v4.1-flash-1017', '--provider', 'openrouter', '-t', 'file,terminal'])
     expect(commandFor({ lane: { ...lanes.opencode, reasoning: undefined }, prompt, env, title }).args).toEqual([
       'run', '--format', 'json', '--model', 'opencode-go/mimo-v2.6-pro', '--auto', '--title', title, prompt,
+    ])
+  })
+
+  it('leaves out the toolsets when the block has none', () => {
+    const lane = { ...lanes.hermes, cli: { ...lanes.hermes.cli, toolsets: undefined } }
+    expect(commandFor({ lane, prompt, env, title }).args).toEqual([
+      '-z', prompt, '-m', 'deepseek/deepseek-v4.1-flash-1017', '--provider', 'openrouter', '--reasoning', 'xhigh',
     ])
   })
 
@@ -82,12 +89,39 @@ const opencodeLog = (items) => items.map((item) => JSON.stringify(item)).join('\
 describe('summarizeRun', () => {
   it('counts the tool calls of a real OpenCode JSON log', () => {
     const summary = summarizeRun({ harness: 'opencode', log: fixture, worktree: 'C:\\scratch' })
-    expect(summary).toEqual({ harness: 'opencode', toolCalls: 2, failed: 0, written: [], read: [], head: [] })
+    expect(summary).toEqual({ harness: 'opencode', toolCalls: 2, failed: 0, written: [], read: [], head: [], costUsd: 0 })
     expect(formatSummary(summary)).toEqual([
       'summary: 2 tool calls, 0 failed',
+      'estimated cost: 0.0000 USD',
       'written: none',
       'read: none',
     ])
+  })
+
+  it('adds up the cost of every step that carries one', () => {
+    const log = opencodeLog([
+      { type: 'step_start', part: { type: 'step-start' } },
+      { type: 'step_finish', part: { type: 'step-finish', cost: 0.0123 } },
+      { type: 'tool_use', part: { id: 'c1', tool: 'read', state: { status: 'completed', input: { path: 'C:\\scratch\\a.js' } } } },
+      { type: 'step_finish', part: { type: 'step-finish', cost: 0.0456 } },
+      { type: 'step_finish', part: { type: 'step-finish', reason: 'stop' } },
+    ])
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'C:\\scratch' })
+    expect(summary.costUsd).toBe(0.0579)
+    expect(formatSummary(summary)).toContain('estimated cost: 0.0579 USD')
+  })
+
+  it('reports no cost when no step carries a number', () => {
+    const log = opencodeLog([
+      { type: 'step_start', part: { type: 'step-start' } },
+      { type: 'step_finish', part: { type: 'step-finish', cost: null } },
+      { type: 'step_finish', part: { type: 'step-finish', cost: '0.0100' } },
+      { type: 'text', part: { type: 'text', text: 'done' } },
+    ])
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'C:\\scratch' })
+    expect(summary.costUsd).toBeNull()
+    expect(formatSummary(summary)).toContain('estimated cost: not reported')
+    expect(summarizeRun({ harness: 'hermes', log: 'report', worktree: '' }).costUsd).toBeNull()
   })
 
   it('lists the files read and written, relative to the worktree, and the failed calls', () => {
@@ -115,7 +149,7 @@ describe('summarizeRun', () => {
 
   it('handles an empty log for both harnesses', () => {
     expect(summarizeRun({ harness: 'opencode', log: '', worktree: 'C:\\scratch' })).toEqual({
-      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [],
+      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null,
     })
     expect(summarizeRun({ harness: 'hermes', log: '', worktree: 'C:\\scratch' }).head).toEqual([])
     expect(formatSummary(summarizeRun({ harness: 'hermes', log: '', worktree: '' }))).toEqual(['summary: the log holds no report'])
