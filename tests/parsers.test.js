@@ -98,6 +98,15 @@ describe('hermes parser', () => {
     expect(out[0].label).toBe('grep notes\\.md')
     expect(summary(out)).toEqual(['start grep notes\\.md', 'end true'])
   })
+
+  it('reads an [error] suffix as a failed call and [exit 0] as a pass', () => {
+    const parser = createHermesParser(ctx)
+    const failed = parser.push('  \u250a \ud83d\udcd6 read      strings.js  1.2s [error]\n', 10000)
+    expect(summary(failed)).toEqual(['start read src/strings.js', 'end false'])
+    expect(failed[0].label).toBe('read src/strings.js')
+    const passed = parser.push('  \u250a \ud83d\udcbb $         npm test  2.0s [exit 0]\n', 20000)
+    expect(summary(passed)).toEqual(['start $ npm test', 'end true'])
+  })
 })
 
 describe('opencode parser', () => {

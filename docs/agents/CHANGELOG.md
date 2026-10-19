@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Replay a lane run in the room (task T8): `src/briefs/recording.js` turns a finished run into the frames, agent list and file tree the replay loads, `npm run run-recording -- <n>` writes them under `public/recordings/` (ignored by git, because they hold real commands), and the Hermes parser reads ` [error]` at the end of a tool line as a failed call.
 - Tool lines from Hermes runs (task T6): one-shot mode prints only the final report, so the runner now reads back the session Hermes keeps for that run (`hermes sessions export --session-id <id> --format jsonl -`, the id comes from the usage file), turns its tool calls into the `┊` lines that `src/model/parsers/hermes.js` reads, and appends them to the run log. `summarizeRun` for hermes now reports the tool calls, the failed calls and the files read and written relative to the worktree, then the first 20 lines of the report, and the script prints how many tool lines it captured.
 - The assistant knows the Agents tab: `open_panel` accepts `agents`, and asking for an agent's general, model or subagent settings opens that tab when the connection offers the agent builder. A refused hire or save now moves focus to the first field with a problem, so its message is in view.
 - OpenCode's lane runs MiMo V2.6 Pro at its default level. OpenCode refuses every level name for that model (`max`, `high`, `xhigh` and `thinking` all answer "Variant unavailable" before any model call), so the lane has no `reasoning` and the runner passes no `#` part.
