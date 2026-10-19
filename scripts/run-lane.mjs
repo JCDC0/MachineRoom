@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -91,6 +91,34 @@ function printUsage(path) {
   console.log(`tokens total: ${count(report.total_tokens)}`)
 }
 
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+function takeLaneLock(folder, laneKey) {
+  const path = join(folder, `${laneKey}.lock`)
+  try {
+    writeFileSync(path, String(process.pid), { flag: 'wx' })
+    return path
+  } catch (error) {
+    if (error?.code !== 'EEXIST') throw error
+  }
+  const holder = Number.parseInt(readLog(path), 10)
+  if (processAlive(holder)) throw new Error(`The ${laneKey} lane is already running (process ${holder}). Wait for that run to end, or delete ${path} if no run is going.`)
+  writeFileSync(path, String(process.pid))
+  return path
+}
+
+function releaseLaneLock(path) {
+  if (Number.parseInt(readLog(path), 10) === process.pid) rmSync(path, { force: true })
+}
+
 function listRuns() {
   const path = runsFile()
   const records = []
@@ -141,11 +169,20 @@ async function main() {
     return 0
   }
 
+  mkdirSync(folder, { recursive: true })
+  const lock = takeLaneLock(folder, options.lane)
+  try {
+    return await startLane({ options, lane, wanted, prompt, logPath, usageFile, name })
+  } finally {
+    releaseLaneLock(lock)
+  }
+}
+
+async function startLane({ options, lane, wanted, prompt, logPath, usageFile, name }) {
   const status = gitStatus(lane.worktree)
   if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
 
   const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name })
-  mkdirSync(folder, { recursive: true })
   const log = createWriteStream(logPath)
   const startedAt = Date.now()
   const child = spawn(command.file, command.args, { cwd: command.cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
