@@ -6,6 +6,7 @@ import {
   ownerToLane,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
+import { recordLine, resultWord, timeSinceStart } from './runs.js'
 
 export default function DispatchPanel({ client, onCreated }) {
   const [agents, setAgents] = useState([])
@@ -18,10 +19,18 @@ export default function DispatchPanel({ client, onCreated }) {
   const [briefsError, setBriefsError] = useState(null)
   const [selectedBriefId, setSelectedBriefId] = useState('')
   const [promptText, setPromptText] = useState('')
+  const [promptModel, setPromptModel] = useState('')
   const [promptLoading, setPromptLoading] = useState(false)
   const [promptError, setPromptError] = useState(null)
   const [notForAgent, setNotForAgent] = useState(false)
   const [copyStatus, setCopyStatus] = useState(null)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [startingRun, setStartingRun] = useState(false)
+  const [runError, setRunError] = useState(null)
+
+  const [runsState, setRunsState] = useState({ running: [], recent: [] })
+  const [runsLoading, setRunsLoading] = useState(() => typeof client?.runs === 'function')
+  const [runsError, setRunsError] = useState(null)
 
   const promptReqRef = useRef(0)
   const promptBoxRef = useRef(null)
@@ -41,6 +50,11 @@ export default function DispatchPanel({ client, onCreated }) {
   const [createdIdentifier, setCreatedIdentifier] = useState(null)
 
   const hasBriefs = typeof client?.briefs === 'function'
+  const hasRuns = typeof client?.runs === 'function'
+
+  const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
+  const briefLane = selectedBrief ? ownerToLane(selectedBrief) : null
+  const canRunBrief = typeof client?.startRun === 'function' && Boolean(briefLane)
 
   async function loadData() {
     setLoading(true)
@@ -73,6 +87,22 @@ export default function DispatchPanel({ client, onCreated }) {
     }
   }
 
+  async function loadRuns() {
+    if (typeof client?.runs !== 'function') return
+    setRunsError(null)
+    try {
+      const data = await client.runs()
+      setRunsState({
+        running: Array.isArray(data?.running) ? data.running : [],
+        recent: Array.isArray(data?.recent) ? data.recent : [],
+      })
+    } catch (err) {
+      setRunsError(err.message || 'Could not load runs.')
+    } finally {
+      setRunsLoading(false)
+    }
+  }
+
   async function refreshAgents() {
     try {
       const agentList = await client.agents()
@@ -91,11 +121,25 @@ export default function DispatchPanel({ client, onCreated }) {
       setBriefsLoading(false)
       setBriefsError(null)
     }
+    if (typeof client?.runs === 'function') {
+      setRunsLoading(true)
+      loadRuns()
+    } else {
+      setRunsState({ running: [], recent: [] })
+      setRunsLoading(false)
+      setRunsError(null)
+    }
   }, [client])
 
   useEffect(() => {
     return subscribeToNotices(client, 'agents', () => {
       refreshAgents()
+    })
+  }, [client])
+
+  useEffect(() => {
+    return subscribeToNotices(client, 'runs', () => {
+      loadRuns()
     })
   }, [client])
 
@@ -109,7 +153,10 @@ export default function DispatchPanel({ client, onCreated }) {
       setPromptLoading(false)
       setPromptError(null)
       setPromptText('')
+      setPromptModel('')
       setCopyStatus(null)
+      setShowConfirm(false)
+      setRunError(null)
       return
     }
 
@@ -123,12 +170,16 @@ export default function DispatchPanel({ client, onCreated }) {
     setPromptLoading(true)
     setPromptError(null)
     setPromptText('')
+    setPromptModel('')
     setCopyStatus(null)
+    setShowConfirm(false)
+    setRunError(null)
 
     try {
       const result = await client.briefPrompt([brief.id], lane)
       if (promptReqRef.current !== reqId) return
       setPromptText(typeof result?.prompt === 'string' ? result.prompt : '')
+      setPromptModel(typeof result?.model === 'string' ? result.model : '')
     } catch (err) {
       if (promptReqRef.current !== reqId) return
       setPromptError(err.message || 'Could not load prompt.')
@@ -143,6 +194,9 @@ export default function DispatchPanel({ client, onCreated }) {
     const id = event.target.value
     setSelectedBriefId(id)
     setCopyStatus(null)
+    setShowConfirm(false)
+    setRunError(null)
+    setStartingRun(false)
 
     if (!id) {
       promptReqRef.current += 1
@@ -150,6 +204,7 @@ export default function DispatchPanel({ client, onCreated }) {
       setPromptLoading(false)
       setPromptError(null)
       setPromptText('')
+      setPromptModel('')
       return
     }
 
@@ -169,6 +224,21 @@ export default function DispatchPanel({ client, onCreated }) {
     }
 
     loadPromptForBrief(id, brief)
+  }
+
+  async function handleConfirmRun() {
+    if (!selectedBriefId || !briefLane || typeof client?.startRun !== 'function') return
+    setStartingRun(true)
+    setRunError(null)
+    try {
+      await client.startRun(briefLane, [selectedBriefId])
+      setShowConfirm(false)
+      loadRuns()
+    } catch (err) {
+      setRunError(err.message || 'Could not start run.')
+    } finally {
+      setStartingRun(false)
+    }
   }
 
   async function handleCopyPrompt() {
@@ -241,6 +311,10 @@ export default function DispatchPanel({ client, onCreated }) {
       setCreatedIdentifier(created.identifier)
       setSelectedBriefId('')
       setPromptText('')
+      setPromptModel('')
+      setShowConfirm(false)
+      setRunError(null)
+      setStartingRun(false)
       setPromptError(null)
       setPromptLoading(false)
       setNotForAgent(false)
@@ -377,6 +451,18 @@ export default function DispatchPanel({ client, onCreated }) {
                 <button type="button" onClick={handleCopyPrompt}>
                   Copy prompt
                 </button>
+                {canRunBrief && (
+                  <button
+                    type="button"
+                    className="brief-run-btn"
+                    onClick={() => {
+                      setShowConfirm(true)
+                      setRunError(null)
+                    }}
+                  >
+                    Run now
+                  </button>
+                )}
                 <button type="button" onClick={handleUseAsDescription}>
                   Use as description
                 </button>
@@ -389,6 +475,102 @@ export default function DispatchPanel({ client, onCreated }) {
                   </span>
                 )}
               </div>
+              {showConfirm && (
+                <div className="brief-confirm-card" role="region" aria-label="Confirm run">
+                  <div className="brief-confirm-meta mono">
+                    <span className="brief-confirm-lane">Lane: {briefLane}</span>
+                    <span className="brief-confirm-model">Model: {promptModel || 'Default model'}</span>
+                    <span className="brief-confirm-id">Brief: {selectedBriefId}</span>
+                  </div>
+                  <div className="brief-confirm-warning">
+                    This starts the agent on this computer and spends money.
+                  </div>
+                  <div className="brief-confirm-actions">
+                    <button
+                      type="button"
+                      className="brief-confirm-btn"
+                      disabled={startingRun}
+                      onClick={handleConfirmRun}
+                    >
+                      {startingRun ? 'Starting' : 'Confirm'}
+                    </button>
+                    <button
+                      type="button"
+                      className="brief-cancel-btn"
+                      disabled={startingRun}
+                      onClick={() => {
+                        setShowConfirm(false)
+                        setRunError(null)
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {runError && (
+                    <div className="brief-confirm-error mono" role="alert">
+                      {runError}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasRuns && (
+        <div className="panel-field runs-section">
+          <div className="panel-field-head">
+            <label>Runs</label>
+            <button
+              type="button"
+              className="runs-refresh-btn"
+              onClick={loadRuns}
+            >
+              Refresh
+            </button>
+          </div>
+
+          {runsLoading ? (
+            <div className="runs-state mono" role="status">Loading runs...</div>
+          ) : runsError ? (
+            <div className="runs-error-row" role="alert">
+              <span className="panel-error-message">{runsError}</span>
+              <button type="button" onClick={loadRuns}>Retry</button>
+            </div>
+          ) : runsState.running.length === 0 && runsState.recent.length === 0 ? (
+            <div className="runs-state is-dim mono">No runs yet.</div>
+          ) : (
+            <div className="runs-list">
+              {runsState.running.map((entry, index) => (
+                <div
+                  key={`running-${entry.lane}-${entry.startedAt || index}`}
+                  className="runs-entry is-running"
+                >
+                  <div className="runs-entry-head mono">
+                    <span className="runs-entry-lane">{entry.lane}</span>
+                    <span className="runs-entry-briefs">
+                      {Array.isArray(entry.briefs) && entry.briefs.length > 0
+                        ? entry.briefs.join(' ')
+                        : 'none'}
+                    </span>
+                    <span className="runs-entry-time">{timeSinceStart(entry.startedAt)}</span>
+                  </div>
+                  {Array.isArray(entry.lastLines) && entry.lastLines.length > 0 && (
+                    <pre className="runs-entry-lines mono is-dim">
+                      {entry.lastLines.join('\n')}
+                    </pre>
+                  )}
+                </div>
+              ))}
+              {runsState.recent.map((record, index) => (
+                <div
+                  key={`recent-${record.lane}-${record.startedAt || index}`}
+                  className={`runs-entry is-recent mono is-${resultWord(record)}`}
+                >
+                  {recordLine(record)}
+                </div>
+              ))}
             </div>
           )}
         </div>
