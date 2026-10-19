@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { commandFor, formatSummary, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { writeRecording } from './recording-files.mjs'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
 const docs = join(root, 'docs', 'agents')
@@ -56,18 +57,19 @@ function readLog(path) {
 }
 
 function captureToolLines(file, sessionId, logPath) {
-  if (!sessionId) return 0
+  if (!sessionId) return { count: 0, session: '' }
   const result = spawnSync(file, ['sessions', 'export', '--session-id', String(sessionId), '--format', 'jsonl', '-'], {
     encoding: 'utf8',
     windowsHide: true,
     timeout: 120000,
     maxBuffer: 64 * 1024 * 1024,
   })
-  if (result.error || result.status !== 0) return 0
-  const lines = sessionToolLines(String(result.stdout ?? ''))
-  if (lines.length === 0) return 0
+  if (result.error || result.status !== 0) return { count: 0, session: '' }
+  const session = String(result.stdout ?? '')
+  const lines = sessionToolLines(session)
+  if (lines.length === 0) return { count: 0, session }
   appendFileSync(logPath, `\n${lines.join('\n')}\n`)
-  return lines.length
+  return { count: lines.length, session }
 }
 
 function printUsage(path) {
@@ -173,13 +175,13 @@ async function main() {
   mkdirSync(folder, { recursive: true })
   const lock = takeLaneLock(folder, options.lane)
   try {
-    return await startLane({ options, lane, wanted, prompt, logPath, usageFile, name })
+    return await startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name })
   } finally {
     releaseLaneLock(lock)
   }
 }
 
-async function startLane({ options, lane, wanted, prompt, logPath, usageFile, name }) {
+async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name }) {
   const status = gitStatus(lane.worktree)
   if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
 
@@ -211,9 +213,11 @@ async function startLane({ options, lane, wanted, prompt, logPath, usageFile, na
   console.log(`minutes: ${minutes}`)
   console.log(`log: ${logPath}`)
   const report = harness === 'hermes' ? readUsage(usageFile) : null
+  let toolLines = { count: 0, session: '' }
   if (harness === 'hermes') {
     printUsage(usageFile)
-    console.log(`tool lines: ${captureToolLines(command.file, report?.session_id, logPath)}`)
+    toolLines = captureToolLines(command.file, report?.session_id, logPath)
+    console.log(`tool lines: ${toolLines.count}`)
   }
 
   const summary = summarizeRun({ harness, log: readLog(logPath), worktree: lane.worktree })
@@ -237,6 +241,12 @@ async function startLane({ options, lane, wanted, prompt, logPath, usageFile, na
   })
   appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
   console.log(`record: ${runsFile()}`)
+  try {
+    const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
+    console.log(`room: /?recording=${written.name}`)
+  } catch (error) {
+    console.log(`room: not recorded (${String(error?.message ?? error)})`)
+  }
   return result.code ?? 1
 }
 
