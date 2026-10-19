@@ -107,12 +107,36 @@ const opencodeLog = (items) => items.map((item) => JSON.stringify(item)).join('\
 describe('summarizeRun', () => {
   it('counts the tool calls of a real OpenCode JSON log', () => {
     const summary = summarizeRun({ harness: 'opencode', log: fixture, worktree: 'C:\\scratch' })
-    expect(summary).toEqual({ harness: 'opencode', toolCalls: 2, failed: 0, written: [], read: [], head: [], costUsd: 0 })
+    expect(summary).toEqual({
+      harness: 'opencode',
+      toolCalls: 2,
+      failed: 0,
+      written: [],
+      read: [],
+      head: [
+        'Files in `C:\\scratch`:',
+        '',
+        '- `run.mjs`',
+        '- `run.jsonl`',
+        '- `err.txt`',
+        '',
+        'Stopping here as instructed.',
+      ],
+      costUsd: 0,
+    })
     expect(formatSummary(summary)).toEqual([
       'summary: 2 tool calls, 0 failed',
       'estimated cost: 0.0000 USD',
       'written: none',
       'read: none',
+      'report: first 7 lines',
+      '  Files in `C:\\scratch`:',
+      '  ',
+      '  - `run.mjs`',
+      '  - `run.jsonl`',
+      '  - `err.txt`',
+      '  ',
+      '  Stopping here as instructed.',
     ])
   })
 
@@ -202,6 +226,62 @@ describe('summarizeRun', () => {
     expect(summary.written).toEqual(['docs/agents/CHANGELOG.md'])
     expect(summary.head).toEqual(['Done with the work.'])
     expect(formatSummary(summary)).toContain('report: first 1 line')
+  })
+
+  it('takes the report of an OpenCode log from the last text line', () => {
+    const log = opencodeLog([
+      { type: 'text', part: { type: 'text', text: 'The first report.' } },
+      { type: 'tool_use', part: { id: 'c1', tool: 'read', state: { status: 'completed', input: { path: 'C:\\scratch\\a.js' } } } },
+      { type: 'text', part: { type: 'text', text: 'The last report.\nIt has two lines.' } },
+    ])
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'C:\\scratch' })
+    expect(summary.head).toEqual(['The last report.', 'It has two lines.'])
+    expect(formatSummary(summary)).toEqual([
+      'summary: 1 tool calls, 0 failed',
+      'estimated cost: not reported',
+      'written: none',
+      'read: a.js',
+      'report: first 2 lines',
+      '  The last report.',
+      '  It has two lines.',
+    ])
+  })
+
+  it('reports no report when an OpenCode log holds no text line', () => {
+    const log = opencodeLog([
+      { type: 'step_start', part: { type: 'step-start' } },
+      { type: 'tool_use', part: { id: 'c1', tool: 'read', state: { status: 'completed', input: { path: 'C:\\scratch\\a.js' } } } },
+    ])
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'C:\\scratch' })
+    expect(summary.head).toEqual([])
+    expect(formatSummary(summary)).toContain('report: none')
+  })
+
+  it('keeps the blank lines inside the text of an OpenCode report', () => {
+    const log = opencodeLog([
+      { type: 'text', part: { type: 'text', text: 'First paragraph.\n\nSecond paragraph.\n\n' } },
+    ])
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'C:\\scratch' })
+    expect(summary.head).toEqual(['First paragraph.', '', 'Second paragraph.'])
+  })
+
+  it('skips a line of an OpenCode log that does not parse', () => {
+    const log = [
+      'not json at all',
+      JSON.stringify({ type: 'text', part: { type: 'text', text: 'The report.' } }),
+      '{ broken',
+    ].join('\n')
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'C:\\scratch' })
+    expect(summary.head).toEqual(['The report.'])
+  })
+
+  it('keeps the last OpenCode text line that carries words', () => {
+    const log = opencodeLog([
+      { type: 'text', part: { type: 'text', text: 'The report.' } },
+      { type: 'text', part: { type: 'text', text: '   ' } },
+    ])
+    const summary = summarizeRun({ harness: 'opencode', log, worktree: 'C:\\scratch' })
+    expect(summary.head).toEqual(['The report.'])
   })
 
   it('handles an empty log for both harnesses', () => {
@@ -321,8 +401,13 @@ describe('runRecord', () => {
 describe('runListLine', () => {
   it('prints one line with the cost or not reported', () => {
     const record = runRecord({ lane: 'hermes', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 12.4, exitCode: 0, costUsd: 0.0421, branch: 'feat/t3' })
-    expect(runListLine(record)).toBe('2026-10-19T12:00:00.000Z | hermes | T3 | 12.4 min | exit 0 | 0.0421 USD | feat/t3')
+    expect(runListLine(record)).toBe('2026-10-19T12:00:00.000Z | hermes | model unknown | T3 | 12.4 min | exit 0 | 0.0421 USD | feat/t3')
     const bare = runRecord({ lane: 'opencode', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 3, exitCode: 1, killed: true })
-    expect(runListLine(bare)).toBe('2026-10-19T12:00:00.000Z | opencode | T3 | 3 min | exit 1 (killed) | not reported | no branch')
+    expect(runListLine(bare)).toBe('2026-10-19T12:00:00.000Z | opencode | model unknown | T3 | 3 min | exit 1 (killed) | not reported | no branch')
+  })
+
+  it('names the model right after the lane', () => {
+    const record = runRecord({ lane: 'hermes', briefs: ['T9'], model: 'minimax/minimax-m3.1-flash:free', startedAt: '2026-10-19T12:00:00.000Z', minutes: 3, exitCode: 0, branch: 'feat/t9' })
+    expect(runListLine(record)).toBe('2026-10-19T12:00:00.000Z | hermes | minimax/minimax-m3.1-flash:free | T9 | 3 min | exit 0 | not reported | feat/t9')
   })
 })
