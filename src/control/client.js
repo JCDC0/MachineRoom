@@ -84,6 +84,10 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
     setAgentBudget: (agentId, budgetMonthlyCents) =>
       request('POST', `/api/control/agents/${encodeURIComponent(agentId ?? '')}/budget`, { budgetMonthlyCents }),
 
+    hireAgent: (draft) => request('POST', '/api/control/agents', draft ?? {}),
+
+    updateAgent: (agentId, patch) => request('PATCH', `/api/control/agents/${encodeURIComponent(agentId ?? '')}`, patch ?? {}),
+
     models: () => request('GET', '/api/control/models'),
 
     briefs: async () => {

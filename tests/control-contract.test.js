@@ -121,12 +121,15 @@ function sendJson(res, status, data) {
   res.end(payload)
 }
 
-function startFakeControlPaperclip(companyId = 'comp-1') {
+function startFakeControlPaperclip(companyId = 'comp-1', { requireApproval = true } = {}) {
   const state = seedPaperclipState()
   const sockets = new Set()
   const createdIssues = []
+  const createdHires = []
+  const agentPatches = []
   let issueCounter = 22
   let commentCounter = 3
+  let approvalCounter = 3
   let frameCounter = 0
 
   function broadcast(type, payload) {
@@ -150,6 +153,89 @@ function startFakeControlPaperclip(companyId = 'comp-1') {
 
     if (method === 'GET' && path === `/api/companies/${companyId}/agents`) {
       sendJson(res, 200, state.agents)
+      return
+    }
+
+    if (method === 'GET' && path === `/api/companies/${companyId}`) {
+      sendJson(res, 200, { id: companyId, name: 'MachineRoom', requireBoardApprovalForNewAgents: requireApproval })
+      return
+    }
+
+    if (method === 'POST' && path === `/api/companies/${companyId}/agent-hires`) {
+      const body = await readBody(req)
+      createdHires.push(body)
+      const key = String(body.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      const stamp = new Date(BASE_TIME).toISOString()
+      const agent = {
+        id: `agent-${key}`,
+        urlKey: key,
+        name: String(body.name ?? ''),
+        role: body.role ?? 'general',
+        adapterType: body.adapterType ?? '',
+        adapterConfig: body.adapterConfig ?? {},
+        metadata: body.metadata ?? {},
+        reportsTo: body.reportsTo ?? null,
+        budgetMonthlyCents: body.budgetMonthlyCents ?? 0,
+        spentMonthlyCents: 0,
+        status: requireApproval ? 'pending_approval' : 'idle',
+        createdAt: stamp,
+        updatedAt: stamp,
+      }
+      state.agents.push(agent)
+      broadcast('activity.logged', {
+        entityType: 'agent',
+        entityId: agent.id,
+        action: 'agent.hire_created',
+        details: { name: agent.name, requiresApproval: requireApproval },
+      })
+      if (requireApproval) {
+        approvalCounter += 1
+        const approval = {
+          id: `approval-${approvalCounter}`,
+          type: 'hire_agent',
+          status: 'pending',
+          payload: { summary: `Hire "${agent.name}".`, agentId: agent.id },
+          requestedByAgentId: null,
+          createdAt: stamp,
+          decisionNote: null,
+        }
+        state.approvals.unshift(approval)
+        broadcast('activity.logged', {
+          entityType: 'approval',
+          entityId: approval.id,
+          action: 'approval.created',
+          details: { type: 'hire_agent', linkedAgentId: agent.id },
+        })
+      }
+      sendJson(res, 201, agent)
+      return
+    }
+
+    const agentPatch = /^\/api\/agents\/([^/]+)$/.exec(path)
+    if (method === 'PATCH' && agentPatch) {
+      const id = decodeURIComponent(agentPatch[1])
+      const agent = state.agents.find((item) => item.id === id)
+      if (!agent) {
+        sendJson(res, 404, { error: 'Agent not found' })
+        return
+      }
+      const body = await readBody(req)
+      agentPatches.push({ id, body })
+      if (body.adapterConfig && typeof body.adapterConfig === 'object') {
+        agent.adapterConfig = { ...agent.adapterConfig, ...body.adapterConfig }
+      }
+      if (body.metadata && typeof body.metadata === 'object') agent.metadata = body.metadata
+      if (body.name !== undefined) agent.name = body.name
+      if (body.role !== undefined) agent.role = body.role
+      if (body.reportsTo !== undefined) agent.reportsTo = body.reportsTo
+      if (body.status !== undefined) agent.status = body.status
+      broadcast('activity.logged', {
+        entityType: 'agent',
+        entityId: agent.id,
+        action: 'agent.updated',
+        details: { changedTopLevelKeys: Object.keys(body).sort() },
+      })
+      sendJson(res, 200, agent)
       return
     }
 
@@ -257,6 +343,12 @@ function startFakeControlPaperclip(companyId = 'comp-1') {
       const statusMap = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
       approval.status = statusMap[verb]
       approval.decisionNote = body.decisionNote ?? null
+      const linkedAgentId = approval.type === 'hire_agent' ? (approval.payload?.agentId ?? null) : null
+      const linked = linkedAgentId ? state.agents.find((item) => item.id === linkedAgentId) : null
+      if (linked && linked.status === 'pending_approval') {
+        if (approval.status === 'approved') linked.status = 'idle'
+        else if (approval.status === 'rejected') linked.status = 'terminated'
+      }
       broadcast('activity.logged', {
         entityType: 'approval',
         entityId: approval.id,
@@ -323,6 +415,8 @@ function startFakeControlPaperclip(companyId = 'comp-1') {
       resolve({
         url: `http://127.0.0.1:${port}`,
         createdIssues,
+        createdHires,
+        agentPatches,
         broadcast,
         close() {
           for (const ws of sockets) ws.terminate()
@@ -429,7 +523,7 @@ function runContractSuite(label, makeHarness) {
       const agents = await client.agents()
       expect(agents).toHaveLength(5)
       for (const agent of agents) {
-        for (const key of ['id', 'key', 'name', 'adapterType', 'role', 'status', 'model', 'budgetMonthlyCents', 'spentMonthlyCents']) {
+        for (const key of ['id', 'key', 'name', 'adapterType', 'role', 'status', 'model', 'reasoningEffort', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed', 'subagentDepth', 'instructions', 'reportsToAgentId', 'budgetMonthlyCents', 'spentMonthlyCents']) {
           expect(agent, `${agent.name} ${key}`).toHaveProperty(key)
         }
       }
@@ -526,6 +620,92 @@ function runContractSuite(label, makeHarness) {
       expect((await client.setAgentBudget('agent-claude', 250)).budgetMonthlyCents).toBe(250)
       await expect(client.setAgentBudget('agent-claude', -1)).rejects.toThrow(/cents/i)
       await expect(client.setAgentBudget('nobody', 10)).rejects.toThrow(/agent/i)
+    })
+
+    it('hires an agent and maps the answer to the agent and its approval', async () => {
+      const { client } = await makeHarness()
+      const { agent, approval } = await client.hireAgent({
+        name: 'Scout',
+        adapterType: 'hermes_local',
+        role: 'researcher',
+        model: 'xiaomi/mimo-v2.6-pro',
+        reasoningEffort: 'high',
+        maxTurnsPerRun: 4,
+        timeoutSec: 120,
+        budgetMonthlyCents: 250,
+        subagentsAllowed: true,
+        subagentDepth: 2,
+        reportsToAgentId: 'agent-hermes',
+        instructions: 'Be brief.',
+      })
+      expect(agent).toMatchObject({
+        name: 'Scout',
+        adapterType: 'hermes_local',
+        role: 'researcher',
+        status: 'pending_approval',
+        model: 'xiaomi/mimo-v2.6-pro',
+        reasoningEffort: 'high',
+        maxTurnsPerRun: 4,
+        timeoutSec: 120,
+        budgetMonthlyCents: 250,
+        subagentsAllowed: true,
+        subagentDepth: 2,
+        reportsToAgentId: 'agent-hermes',
+      })
+      expect(approval).toMatchObject({ type: 'hire_agent', status: 'pending', agentId: agent.id })
+      const list = await client.agents()
+      expect(list.some((item) => item.id === agent.id)).toBe(true)
+    })
+
+    it('refuses a bad hire and a bad update with plain sentences', async () => {
+      const { client } = await makeHarness()
+      await expect(client.hireAgent({ adapterType: 'claude_local' })).rejects.toThrow('A name is required.')
+      await expect(client.hireAgent({ name: 'Planner' })).rejects.toThrow('Choose a harness.')
+      await expect(client.hireAgent({ name: 'Hermes', adapterType: 'hermes_local' })).rejects.toThrow('An agent with that name already exists.')
+      await expect(client.hireAgent({ name: '!!!', adapterType: 'process' })).rejects.toThrow('The name needs letters or numbers.')
+      await expect(client.hireAgent({ name: 'Planner', adapterType: 'claude_local', reportsToAgentId: 'agent-ghost' })).rejects.toThrow('The agent it reports to no longer exists.')
+      await expect(client.hireAgent({ name: 'Planner', adapterType: 'claude_local', maxTurnsPerRun: 0 })).rejects.toThrow(/1 to 200/)
+      await expect(client.updateAgent('agent-ghost', { model: 'm' })).rejects.toThrow('That agent no longer exists.')
+      await expect(client.updateAgent('agent-hermes', {})).rejects.toThrow('Change at least one setting.')
+      await expect(client.updateAgent('agent-hermes', { adapterType: 'process' })).rejects.toThrow('The harness cannot be changed. Hire a new agent.')
+      await expect(client.updateAgent('agent-hermes', { reportsToAgentId: 'agent-hermes' })).rejects.toThrow('An agent cannot report to itself.')
+      await expect(client.updateAgent('agent-hermes', { name: 'agy' })).rejects.toThrow('An agent with that name already exists.')
+      await expect(client.updateAgent('agent-hermes', { subagentDepth: 2 })).rejects.toThrow('Turn subagents on to set a depth.')
+    })
+
+    it('updates an agent, its subagent settings and its budget', async () => {
+      const { client } = await makeHarness()
+      const updated = await client.updateAgent('agent-hermes', { model: 'm2', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600 })
+      expect(updated).toMatchObject({ model: 'm2', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600 })
+      expect(await client.updateAgent('agent-agy', { subagentsAllowed: true })).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
+      expect(await client.updateAgent('agent-agy', { subagentDepth: 3 })).toMatchObject({ subagentsAllowed: true, subagentDepth: 3 })
+      expect(await client.updateAgent('agent-agy', { subagentsAllowed: false })).toMatchObject({ subagentsAllowed: false, subagentDepth: 0 })
+      expect((await client.updateAgent('agent-hermes', { model: '' })).model).toBeNull()
+      expect((await client.updateAgent('agent-hermes', { budgetMonthlyCents: 250 })).budgetMonthlyCents).toBe(250)
+      expect((await client.updateAgent('agent-hermes', { status: 'paused' })).status).toBe('paused')
+      expect((await client.updateAgent('agent-hermes', { status: 'active' })).status).toBe('idle')
+    })
+
+    it('refuses to change a waiting or a terminated agent and turns a hire ready on approval', async () => {
+      const { client } = await makeHarness()
+      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
+      await expect(client.updateAgent(agent.id, { model: 'm' })).rejects.toThrow('Approve the hire first.')
+      await client.decideApproval(approval.id, 'approve')
+      expect(await client.updateAgent(agent.id, { model: 'm3' })).toMatchObject({ status: 'idle', model: 'm3' })
+      const second = await client.hireAgent({ name: 'Scout', adapterType: 'claude_local' })
+      await client.decideApproval(second.approval.id, 'reject')
+      await expect(client.updateAgent(second.agent.id, { model: 'm' })).rejects.toThrow('That agent was terminated.')
+    })
+
+    it('notices agents after a hire and an update and approvals after a hire', async () => {
+      const { client } = await makeHarness()
+      const seen = []
+      const stop = client.subscribe((event) => seen.push(event))
+      await new Promise((r) => setTimeout(r, 30))
+      await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
+      await client.updateAgent('agent-hermes', { model: 'm4' })
+      await waitUntil(() => seen.filter((event) => event.topic === 'agents').length >= 2 && seen.some((event) => event.topic === 'approvals'))
+      stop()
     })
 
     it('lists models in tiers and marks the free one', async () => {
@@ -693,6 +873,13 @@ describe('real control client and bridge extras', () => {
     const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: '', port: 0 })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
+
+    const preflight = await fetch(`${url}/api/control/agents`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'PATCH' },
+    })
+    expect(preflight.status).toBe(204)
+    expect(preflight.headers.get('access-control-allow-methods')).toContain('PATCH')
 
     const evil = await fetch(`${url}/api/control/models`, { headers: { Origin: 'https://evil.example' } })
     expect(evil.status).toBe(403)
