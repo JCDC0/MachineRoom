@@ -422,7 +422,7 @@ export function createBridge(options = {}) {
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
         ...corsHeaders(req),
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
         'Access-Control-Allow-Headers': 'Last-Event-ID, Content-Type',
       })
       res.end()

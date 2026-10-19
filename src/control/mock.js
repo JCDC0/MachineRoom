@@ -11,6 +11,8 @@ export const CLIENT_METHODS = [
   'decideApproval',
   'costs',
   'setAgentBudget',
+  'hireAgent',
+  'updateAgent',
   'models',
   'briefs',
   'briefPrompt',

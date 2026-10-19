@@ -1,3 +1,4 @@
+import { EFFORTS, cleanAgentDraft, cleanAgentPatch } from '../src/control/agents.js'
 import { MODELS } from './models.js'
 
 const AGENT_STATUS = {
@@ -11,6 +12,16 @@ const AGENT_STATUS = {
 }
 
 const OVERRIDE_KEYS = ['model', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed']
+const CONFIG_SETTING_KEYS = ['model', 'maxTurnsPerRun', 'timeoutSec']
+const EFFORT_KEYS = {
+  claude_local: 'effort',
+  codex_local: 'modelReasoningEffort',
+  grok_local: 'reasoningEffort',
+  kimi_local: 'effort',
+  opencode_local: 'variant',
+  paperclip_runner: 'modelReasoningEffort',
+  pi_local: 'thinking',
+}
 const TERMINAL_RUN = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const DECISION_ROUTES = { approve: 'approve', reject: 'reject', 'request-revision': 'request-revision' }
 
@@ -20,6 +31,52 @@ function plainId(value) {
 
 function money(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0
+}
+
+function slugKey(name) {
+  return String(name ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+}
+
+function keyOf(raw) {
+  return String(raw?.urlKey ?? '').trim() || slugKey(raw?.name ?? raw?.id) || 'agent'
+}
+
+function setting(raw, name) {
+  const value = raw?.adapterConfig?.[name]
+  return Number.isInteger(value) ? value : null
+}
+
+function effortOf(raw) {
+  const key = EFFORT_KEYS[String(raw?.adapterType ?? '')]
+  const fromConfig = key ? raw?.adapterConfig?.[key] : undefined
+  if (EFFORTS.includes(fromConfig)) return fromConfig
+  const fromMeta = raw?.metadata?.reasoningEffort
+  return EFFORTS.includes(fromMeta) ? fromMeta : null
+}
+
+function subagentsOf(raw) {
+  const saved = raw?.metadata?.subagents && typeof raw.metadata.subagents === 'object' ? raw.metadata.subagents : {}
+  const allowed = saved.allowed === true
+  const depth = Number.isInteger(saved.depth) && saved.depth >= 1 && saved.depth <= 3 ? saved.depth : allowed ? 1 : 0
+  return { subagentsAllowed: allowed, subagentDepth: allowed ? depth : 0 }
+}
+
+function metadataOf(raw) {
+  return raw?.metadata && typeof raw.metadata === 'object' && !Array.isArray(raw.metadata) ? { ...raw.metadata } : {}
+}
+
+function mergedSubagents(changes, raw) {
+  const before = subagentsOf(raw)
+  const allowed = 'subagentsAllowed' in changes ? changes.subagentsAllowed : before.subagentsAllowed
+  let depth = 'subagentDepth' in changes ? changes.subagentDepth : before.subagentDepth
+  if ('subagentsAllowed' in changes) {
+    if (!allowed) depth = 0
+    else if (!('subagentDepth' in changes) && depth === 0) depth = 1
+  }
+  return { allowed, depth }
 }
 
 export function changeEvents(frame) {
@@ -55,12 +112,18 @@ export function mapAgent(raw, spendCents) {
   const name = String(raw?.name ?? raw?.id ?? 'agent')
   return {
     id: String(raw?.id ?? ''),
-    key: String(raw?.urlKey ?? '').trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent',
+    key: keyOf(raw),
     name,
     adapterType: String(raw?.adapterType ?? ''),
     role: String(raw?.role ?? 'general'),
     status: AGENT_STATUS[raw?.status] ?? 'idle',
     model: typeof raw?.adapterConfig?.model === 'string' && raw.adapterConfig.model ? raw.adapterConfig.model : null,
+    reasoningEffort: effortOf(raw),
+    maxTurnsPerRun: setting(raw, 'maxTurnsPerRun'),
+    timeoutSec: setting(raw, 'timeoutSec'),
+    ...subagentsOf(raw),
+    instructions: '',
+    reportsToAgentId: plainId(raw?.reportsTo) || null,
     budgetMonthlyCents: money(raw?.budgetMonthlyCents),
     spentMonthlyCents: Number.isInteger(spendCents) ? spendCents : money(raw?.spentMonthlyCents),
   }
@@ -121,6 +184,8 @@ export function mapApproval(raw, decisionNote) {
     requestedByAgentId: plainId(raw?.requestedByAgentId) || null,
     createdAt: String(raw?.createdAt ?? ''),
   }
+  const agentId = plainId(raw?.agentId) || plainId(payload.agentId)
+  if (agentId) approval.agentId = agentId
   if (note) approval.decisionNote = String(note)
   return approval
 }
@@ -179,6 +244,62 @@ export function issueOverrides(draft) {
   return Object.keys(out).length ? out : null
 }
 
+export function buildHireBody(clean) {
+  const adapterConfig = {}
+  for (const key of CONFIG_SETTING_KEYS) {
+    if (clean[key] !== null) adapterConfig[key] = clean[key]
+  }
+  const effortKey = EFFORT_KEYS[clean.adapterType]
+  if (effortKey && clean.reasoningEffort !== null) adapterConfig[effortKey] = clean.reasoningEffort
+  const metadata = { subagents: { allowed: clean.subagentsAllowed, depth: clean.subagentDepth } }
+  if (!effortKey && clean.reasoningEffort !== null) metadata.reasoningEffort = clean.reasoningEffort
+  const body = {
+    name: clean.name,
+    role: clean.role,
+    adapterType: clean.adapterType,
+    adapterConfig,
+    metadata,
+    budgetMonthlyCents: clean.budgetMonthlyCents,
+  }
+  if (clean.reportsToAgentId !== null) body.reportsTo = clean.reportsToAgentId
+  if (clean.instructions) {
+    body.instructionsBundle = { entryFile: 'AGENTS.md', files: { 'AGENTS.md': clean.instructions } }
+  }
+  return body
+}
+
+export function buildUpdateBody(clean, raw) {
+  const changes = { ...clean }
+  const budgetMonthlyCents = 'budgetMonthlyCents' in changes ? changes.budgetMonthlyCents : undefined
+  delete changes.budgetMonthlyCents
+  const status = changes.status
+  delete changes.status
+  const patch = {}
+  if ('name' in changes) patch.name = changes.name
+  if ('role' in changes) patch.role = changes.role
+  if ('reportsToAgentId' in changes) patch.reportsTo = changes.reportsToAgentId
+  const adapterConfig = {}
+  for (const key of CONFIG_SETTING_KEYS) {
+    if (key in changes) adapterConfig[key] = changes[key]
+  }
+  const effortKey = EFFORT_KEYS[String(raw?.adapterType ?? '')]
+  if ('reasoningEffort' in changes && effortKey) adapterConfig[effortKey] = changes.reasoningEffort
+  if (Object.keys(adapterConfig).length) patch.adapterConfig = adapterConfig
+  const metadata = metadataOf(raw)
+  let metadataChanged = false
+  if ('reasoningEffort' in changes && !effortKey) {
+    metadataChanged = true
+    if (changes.reasoningEffort === null) delete metadata.reasoningEffort
+    else metadata.reasoningEffort = changes.reasoningEffort
+  }
+  if ('subagentsAllowed' in changes || 'subagentDepth' in changes) {
+    metadataChanged = true
+    metadata.subagents = mergedSubagents(changes, raw)
+  }
+  if (metadataChanged) patch.metadata = metadata
+  return { patch, budgetMonthlyCents, status }
+}
+
 export function createControlApi(options) {
   const { paperclipUrl, companyId, projectId, projectWorkspaceId, sendJson, readJsonBody } = options
   const base = String(paperclipUrl).replace(/\/+$/, '')
@@ -232,6 +353,29 @@ export function createControlApi(options) {
     sendJson(req, res, 200, mapAgent(found, Number.isInteger(row?.costCents) ? row.costCents : undefined))
   }
 
+  async function readAgents(req, res) {
+    const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
+    if (answer.status !== 200) {
+      const [code, message] = upstreamFailure(answer, 'That agent no longer exists.', 'Paperclip could not read the agents.')
+      fail(req, res, code, message)
+      return null
+    }
+    return Array.isArray(answer.json) ? answer.json : []
+  }
+
+  async function hireApproval(rawAgent, fromAnswer) {
+    const company = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}`)
+    const flagged = company.json?.requireBoardApprovalForNewAgents === true
+    const waiting = rawAgent?.status === 'pending_approval'
+    if (!flagged && !waiting) return null
+    const listed = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/approvals`)
+    const rows = Array.isArray(listed.json) ? listed.json : []
+    const ofAgent = (row) => row?.type === 'hire_agent' && plainId(row?.payload?.agentId ?? row?.agentId) === plainId(rawAgent?.id)
+    const match = rows.find((row) => ofAgent(row) && row?.status === 'pending') ?? rows.find(ofAgent)
+    if (match) return mapApproval(match)
+    return fromAnswer && typeof fromAnswer === 'object' ? mapApproval(fromAnswer) : null
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
@@ -258,6 +402,127 @@ export function createControlApi(options) {
         return mapAgent(agent, Number.isInteger(row?.costCents) ? row.costCents : undefined)
       })
       sendJson(req, res, 200, out)
+      return true
+    }
+
+    if (method === 'POST' && path === '/api/control/agents') {
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      let clean
+      try {
+        clean = cleanAgentDraft(body)
+      } catch (error) {
+        fail(req, res, 400, error.message)
+        return true
+      }
+      const key = slugKey(clean.name)
+      if (!key) {
+        fail(req, res, 400, 'The name needs letters or numbers.')
+        return true
+      }
+      const list = await readAgents(req, res)
+      if (list === null) return true
+      if (list.some((agent) => keyOf(agent) === key)) {
+        fail(req, res, 400, 'An agent with that name already exists.')
+        return true
+      }
+      if (clean.reportsToAgentId && !list.some((agent) => agent?.id === clean.reportsToAgentId)) {
+        fail(req, res, 400, 'The agent it reports to no longer exists.')
+        return true
+      }
+      const hired = await upstream('POST', `/api/companies/${encodeURIComponent(companyId)}/agent-hires`, buildHireBody(clean))
+      if (hired.status >= 300 || !hired.json) {
+        const [code, message] = upstreamFailure(hired, 'Paperclip did not accept that agent.', 'Paperclip did not accept that agent.')
+        fail(req, res, code, message)
+        return true
+      }
+      const rawAgent = hired.json.agent ?? hired.json
+      const approval = await hireApproval(rawAgent, hired.json.approval)
+      sendJson(req, res, 201, { agent: mapAgent(rawAgent), approval })
+      return true
+    }
+
+    const updateAgent = /^\/api\/control\/agents\/([^/]+)$/.exec(path)
+    if (method === 'PATCH' && updateAgent) {
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      let id
+      try {
+        id = decodeURIComponent(updateAgent[1])
+      } catch {
+        fail(req, res, 404, 'That agent no longer exists.')
+        return true
+      }
+      const list = await readAgents(req, res)
+      if (list === null) return true
+      const raw = list.find((agent) => agent?.id === id)
+      if (!raw) {
+        fail(req, res, 404, 'That agent no longer exists.')
+        return true
+      }
+      if (raw.status === 'terminated') {
+        fail(req, res, 400, 'That agent was terminated.')
+        return true
+      }
+      if (raw.status === 'pending_approval') {
+        fail(req, res, 400, 'Approve the hire first.')
+        return true
+      }
+      let clean
+      try {
+        clean = cleanAgentPatch(body)
+      } catch (error) {
+        fail(req, res, 400, error.message)
+        return true
+      }
+      if ('instructions' in clean) {
+        fail(req, res, 400, 'The instructions cannot be changed here yet.')
+        return true
+      }
+      if (clean.reportsToAgentId === raw.id) {
+        fail(req, res, 400, 'An agent cannot report to itself.')
+        return true
+      }
+      if (clean.reportsToAgentId && !list.some((agent) => agent?.id === clean.reportsToAgentId)) {
+        fail(req, res, 400, 'The agent it reports to no longer exists.')
+        return true
+      }
+      if ('name' in clean && list.some((agent) => agent?.id !== raw.id && keyOf(agent) === slugKey(clean.name))) {
+        fail(req, res, 400, 'An agent with that name already exists.')
+        return true
+      }
+      const allowed = 'subagentsAllowed' in clean ? clean.subagentsAllowed : subagentsOf(raw).subagentsAllowed
+      if ('subagentDepth' in clean && !allowed) {
+        fail(req, res, 400, 'Turn subagents on to set a depth.')
+        return true
+      }
+      const { patch, budgetMonthlyCents, status } = buildUpdateBody(clean, raw)
+      if (Object.keys(patch).length > 0) {
+        const patched = await upstream('PATCH', `/api/agents/${encodeURIComponent(id)}`, patch)
+        if (patched.status >= 300) {
+          const [code, message] = upstreamFailure(patched, 'That agent no longer exists.', 'Paperclip did not accept that update.')
+          fail(req, res, code, message)
+          return true
+        }
+      }
+      if (budgetMonthlyCents !== undefined) {
+        const budgeted = await upstream('PATCH', `/api/agents/${encodeURIComponent(id)}/budgets`, { budgetMonthlyCents })
+        if (budgeted.status >= 300) {
+          const [code, message] = upstreamFailure(budgeted, 'That agent no longer exists.', 'Paperclip did not accept that budget.')
+          fail(req, res, code, message)
+          return true
+        }
+      }
+      const turn = status === 'paused' && raw.status !== 'paused' ? 'pause' : status === 'active' && raw.status === 'paused' ? 'resume' : null
+      if (turn) {
+        const turned = await upstream('POST', `/api/agents/${encodeURIComponent(id)}/${turn}`)
+        if (turned.status >= 300) {
+          const [code, message] = upstreamFailure(turned, 'That agent no longer exists.', turn === 'pause' ? 'Paperclip could not pause that agent.' : 'Paperclip could not resume that agent.')
+          fail(req, res, code, message)
+          return true
+        }
+      }
+      await sendAgent(req, res, id)
       return true
     }
 

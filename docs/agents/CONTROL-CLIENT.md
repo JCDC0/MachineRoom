@@ -67,6 +67,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 - `updateAgent` changes only the fields given. It refuses a waiting or a terminated agent, an empty patch, a change of harness, a depth while subagents are off, an agent that reports to itself, and a name that another agent's key already uses. Turning subagents off sets the depth to 0, and turning them on sets it to 1 unless a depth is given. `status: 'active'` resumes a paused agent (the agent is `idle` until it runs).
 - A budget in a patch changes the same number as `setAgentBudget` and sends a `costs` notice as well as an `agents` notice.
 - Notices: a hire sends `approvals` (when one is made) and `agents`. An update sends `agents`.
+- The real client (merged as 0.1.45) differs from the mock in one place: it reports `instructions` as an empty string and refuses an instructions change with "The instructions cannot be changed here yet.", because Paperclip keeps instructions in a separate bundle. `status: 'paused'` and `status: 'active'` go through Paperclip's pause and resume routes.
 - The real client (task C2b) maps these onto `POST /api/companies/:id/agent-hires` and `PATCH /api/agents/:id`. Model, turn limit and time limit go in `adapterConfig`. Where Paperclip has no field for reasoning effort or subagents, the bridge says so in plain words instead of pretending.
 
 ## Change notices

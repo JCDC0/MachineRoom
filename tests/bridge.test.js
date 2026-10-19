@@ -794,3 +794,317 @@ describe('briefs routes', () => {
     expect(badOrigin.status).toBe(403)
   })
 })
+
+function sendJson(res, status, data) {
+  const payload = JSON.stringify(data)
+  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.end(payload)
+}
+
+function readJson(req) {
+  return new Promise((resolve) => {
+    const chunks = []
+    req.on('data', (chunk) => chunks.push(chunk))
+    req.on('end', () => {
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'))
+      } catch {
+        resolve({})
+      }
+    })
+  })
+}
+
+function startFakeAgentPaperclip(companyId = 'comp-1', { requireApproval = true } = {}) {
+  const calls = []
+  const agents = [
+    { id: 'agent-hermes', urlKey: 'hermes', name: 'Hermes', role: 'engineer', adapterType: 'hermes_local', adapterConfig: {}, metadata: {}, reportsTo: null, budgetMonthlyCents: 0, spentMonthlyCents: 0, status: 'idle' },
+    { id: 'agent-agy', urlKey: 'agy', name: 'agy', role: 'designer', adapterType: 'process', adapterConfig: {}, metadata: {}, reportsTo: null, budgetMonthlyCents: 0, spentMonthlyCents: 0, status: 'idle' },
+  ]
+  const approvals = []
+  let approvalCounter = 0
+
+  const server = createServer(async (req, res) => {
+    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
+    const path = url.pathname
+    const method = req.method ?? 'GET'
+    const body = method === 'GET' ? {} : await readJson(req)
+    calls.push({ method, path, body })
+
+    if (method === 'GET' && path === `/api/companies/${companyId}/agents`) {
+      sendJson(res, 200, agents)
+      return
+    }
+    if (method === 'GET' && path === `/api/companies/${companyId}`) {
+      sendJson(res, 200, { id: companyId, name: 'MachineRoom', requireBoardApprovalForNewAgents: requireApproval })
+      return
+    }
+    if (method === 'GET' && path === `/api/companies/${companyId}/approvals`) {
+      sendJson(res, 200, approvals)
+      return
+    }
+    if (method === 'GET' && path === `/api/companies/${companyId}/costs/by-agent`) {
+      sendJson(res, 200, [])
+      return
+    }
+    if (method === 'POST' && path === `/api/companies/${companyId}/agent-hires`) {
+      const key = String(body.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      const agent = {
+        id: `agent-${key}`,
+        urlKey: key,
+        name: String(body.name ?? ''),
+        role: body.role ?? 'general',
+        adapterType: body.adapterType ?? '',
+        adapterConfig: body.adapterConfig ?? {},
+        metadata: body.metadata ?? {},
+        reportsTo: body.reportsTo ?? null,
+        budgetMonthlyCents: body.budgetMonthlyCents ?? 0,
+        spentMonthlyCents: 0,
+        status: requireApproval ? 'pending_approval' : 'idle',
+      }
+      agents.push(agent)
+      let approval = null
+      if (requireApproval) {
+        approvalCounter += 1
+        approval = {
+          id: `approval-${approvalCounter}`,
+          type: 'hire_agent',
+          status: 'pending',
+          payload: { summary: `Hire "${agent.name}".`, agentId: agent.id },
+          requestedByAgentId: null,
+          createdAt: new Date().toISOString(),
+        }
+        approvals.unshift(approval)
+      }
+      sendJson(res, 201, { agent, approval })
+      return
+    }
+    const patchRoute = /^\/api\/agents\/([^/]+)$/.exec(path)
+    if (method === 'PATCH' && patchRoute) {
+      const agent = agents.find((item) => item.id === decodeURIComponent(patchRoute[1]))
+      if (!agent) {
+        sendJson(res, 404, { error: 'Agent not found' })
+        return
+      }
+      if (body.adapterConfig && typeof body.adapterConfig === 'object') {
+        agent.adapterConfig = { ...agent.adapterConfig, ...body.adapterConfig }
+      }
+      if (body.metadata && typeof body.metadata === 'object') agent.metadata = body.metadata
+      if (body.name !== undefined) agent.name = body.name
+      if (body.role !== undefined) agent.role = body.role
+      if (body.reportsTo !== undefined) agent.reportsTo = body.reportsTo
+      if (body.status !== undefined) agent.status = body.status
+      sendJson(res, 200, agent)
+      return
+    }
+    const turnRoute = /^\/api\/agents\/([^/]+)\/(pause|resume)$/.exec(path)
+    if (method === 'POST' && turnRoute) {
+      const agent = agents.find((item) => item.id === decodeURIComponent(turnRoute[1]))
+      if (!agent) {
+        sendJson(res, 404, { error: 'Agent not found' })
+        return
+      }
+      agent.status = turnRoute[2] === 'pause' ? 'paused' : 'idle'
+      sendJson(res, 200, agent)
+      return
+    }
+    const budgetRoute = /^\/api\/agents\/([^/]+)\/budgets$/.exec(path)
+    if (method === 'PATCH' && budgetRoute) {
+      const agent = agents.find((item) => item.id === decodeURIComponent(budgetRoute[1]))
+      if (!agent) {
+        sendJson(res, 404, { error: 'Agent not found' })
+        return
+      }
+      agent.budgetMonthlyCents = body.budgetMonthlyCents
+      sendJson(res, 200, agent)
+      return
+    }
+    sendJson(res, 404, { error: 'API route not found' })
+  })
+
+  return new Promise((resolve) => {
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address()
+      resolve({
+        url: `http://127.0.0.1:${port}`,
+        calls,
+        agents,
+        close: () =>
+          new Promise((resolveClose) => {
+            server.close(() => resolveClose())
+          }),
+      })
+    })
+  })
+}
+
+async function makeAgentBridge(options = {}) {
+  const fake = await startFakeAgentPaperclip('comp-1', options)
+  cleanups.push(() => fake.close())
+  const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: '', port: 0 })
+  cleanups.push(() => bridge.stop())
+  const { url } = await bridge.start()
+  return { fake, url }
+}
+
+function postJson(url, path, method, body) {
+  return fetch(`${url}${path}`, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+describe('control agent routes', () => {
+  it('puts the settings in adapterConfig on a hire and keeps the rest in metadata', async () => {
+    const { fake, url } = await makeAgentBridge()
+    const res = await postJson(url, '/api/control/agents', 'POST', {
+      name: 'Scout',
+      adapterType: 'claude_local',
+      role: 'engineer',
+      model: 'claude-haiku-5-5',
+      reasoningEffort: 'high',
+      maxTurnsPerRun: 4,
+      timeoutSec: 120,
+      budgetMonthlyCents: 250,
+      subagentsAllowed: true,
+      subagentDepth: 2,
+      reportsToAgentId: 'agent-hermes',
+      instructions: 'Be brief.',
+    })
+    expect(res.status).toBe(201)
+    const answer = await res.json()
+    expect(answer.agent).toMatchObject({
+      id: 'agent-scout',
+      name: 'Scout',
+      role: 'engineer',
+      status: 'pending_approval',
+      model: 'claude-haiku-5-5',
+      reasoningEffort: 'high',
+      maxTurnsPerRun: 4,
+      timeoutSec: 120,
+      budgetMonthlyCents: 250,
+      subagentsAllowed: true,
+      subagentDepth: 2,
+      reportsToAgentId: 'agent-hermes',
+    })
+    expect(answer.approval).toMatchObject({ type: 'hire_agent', status: 'pending', agentId: 'agent-scout' })
+    const hire = fake.calls.find((call) => call.method === 'POST' && call.path.endsWith('/agent-hires'))
+    expect(hire.body).toEqual({
+      name: 'Scout',
+      role: 'engineer',
+      adapterType: 'claude_local',
+      adapterConfig: { model: 'claude-haiku-5-5', maxTurnsPerRun: 4, timeoutSec: 120, effort: 'high' },
+      metadata: { subagents: { allowed: true, depth: 2 } },
+      budgetMonthlyCents: 250,
+      reportsTo: 'agent-hermes',
+      instructionsBundle: { entryFile: 'AGENTS.md', files: { 'AGENTS.md': 'Be brief.' } },
+    })
+  })
+
+  it('keeps the reasoning effort in metadata where the harness has no field for it', async () => {
+    const { fake, url } = await makeAgentBridge()
+    await postJson(url, '/api/control/agents', 'POST', { name: 'Scribe', adapterType: 'hermes_local', reasoningEffort: 'low' })
+    await postJson(url, '/api/control/agents', 'POST', { name: 'Seeker', adapterType: 'opencode_local', reasoningEffort: 'medium' })
+    const [scribe, seeker] = fake.calls.filter((call) => call.method === 'POST' && call.path.endsWith('/agent-hires')).map((call) => call.body)
+    expect(scribe.adapterConfig).toEqual({})
+    expect(scribe.metadata).toEqual({ subagents: { allowed: false, depth: 0 }, reasoningEffort: 'low' })
+    expect(seeker.adapterConfig).toEqual({ variant: 'medium' })
+    expect(seeker.metadata).toEqual({ subagents: { allowed: false, depth: 0 } })
+  })
+
+  it('answers no approval when the company does not require one', async () => {
+    const { url } = await makeAgentBridge({ requireApproval: false })
+    const res = await postJson(url, '/api/control/agents', 'POST', { name: 'Scout', adapterType: 'claude_local' })
+    const answer = await res.json()
+    expect(answer.agent.status).toBe('idle')
+    expect(answer.approval).toBeNull()
+  })
+
+  it('updates an agent through the patch route and a budget through the budgets route', async () => {
+    const { fake, url } = await makeAgentBridge()
+    const res = await postJson(url, '/api/control/agents/agent-hermes', 'PATCH', {
+      model: 'm2',
+      maxTurnsPerRun: 3,
+      subagentsAllowed: true,
+      budgetMonthlyCents: 250,
+      status: 'paused',
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({ model: 'm2', maxTurnsPerRun: 3, subagentsAllowed: true, subagentDepth: 1, budgetMonthlyCents: 250, status: 'paused' })
+    const patch = fake.calls.find((call) => call.method === 'PATCH' && call.path === '/api/agents/agent-hermes')
+    expect(patch.body).toEqual({
+      adapterConfig: { model: 'm2', maxTurnsPerRun: 3 },
+      metadata: { subagents: { allowed: true, depth: 1 } },
+    })
+    const budget = fake.calls.find((call) => call.method === 'PATCH' && call.path === '/api/agents/agent-hermes/budgets')
+    expect(budget.body).toEqual({ budgetMonthlyCents: 250 })
+    expect(fake.calls.some((call) => call.method === 'POST' && call.path === '/api/agents/agent-hermes/pause')).toBe(true)
+  })
+
+  it('pauses and resumes through Paperclip\'s own routes, not a status write', async () => {
+    const { fake, url } = await makeAgentBridge()
+    const paused = await postJson(url, '/api/control/agents/agent-hermes', 'PATCH', { status: 'paused' })
+    expect((await paused.json()).status).toBe('paused')
+    const resumed = await postJson(url, '/api/control/agents/agent-hermes', 'PATCH', { status: 'active' })
+    expect((await resumed.json()).status).toBe('idle')
+    const paths = fake.calls.filter((call) => call.method === 'POST' && /\/(pause|resume)$/.test(call.path)).map((call) => call.path)
+    expect(paths).toEqual(['/api/agents/agent-hermes/pause', '/api/agents/agent-hermes/resume'])
+    expect(fake.calls.some((call) => call.method === 'PATCH' && call.path === '/api/agents/agent-hermes')).toBe(false)
+  })
+
+  it('answers 404 for an agent id that is not valid percent encoding', async () => {
+    const { url } = await makeAgentBridge()
+    const res = await postJson(url, '/api/control/agents/%E0%A4%A', 'PATCH', { model: 'm2' })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'That agent no longer exists.' })
+  })
+
+  it('refuses a bad hire and a bad update with the same sentences as the mock', async () => {
+    const { url } = await makeAgentBridge()
+    const missingName = await postJson(url, '/api/control/agents', 'POST', { adapterType: 'claude_local' })
+    expect(missingName.status).toBe(400)
+    expect(await missingName.json()).toEqual({ error: 'A name is required.' })
+
+    const duplicate = await postJson(url, '/api/control/agents', 'POST', { name: 'Hermes', adapterType: 'hermes_local' })
+    expect(await duplicate.json()).toEqual({ error: 'An agent with that name already exists.' })
+
+    const unknown = await postJson(url, '/api/control/agents/agent-hermes', 'PATCH', { perms: {} })
+    expect(await unknown.json()).toEqual({ error: 'Unknown setting: perms.' })
+
+    const instructions = await postJson(url, '/api/control/agents/agent-hermes', 'PATCH', { instructions: 'Be brief.' })
+    expect(await instructions.json()).toEqual({ error: 'The instructions cannot be changed here yet.' })
+
+    const missing = await postJson(url, '/api/control/agents/agent-ghost', 'PATCH', { model: 'm' })
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({ error: 'That agent no longer exists.' })
+
+    const depth = await postJson(url, '/api/control/agents/agent-agy', 'PATCH', { subagentDepth: 2 })
+    expect(await depth.json()).toEqual({ error: 'Turn subagents on to set a depth.' })
+  })
+})
+
+describe('agent change notices', () => {
+  it('sends an agents notice for the Paperclip activity that creates or updates an agent', async () => {
+    const fake = await startFakePaperclip('comp-1', [])
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: '', port: 0 })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+    await waitUntil(() => fake.connections > 0)
+
+    fake.send({ id: 1, companyId: 'comp-1', type: 'activity.logged', createdAt: new Date().toISOString(), payload: { action: 'agent.hire_created', entityType: 'agent', entityId: 'agent-1', details: { name: 'Scout' } } })
+    const created = await sse.next((event) => event.event === 'change')
+    expect(JSON.parse(created.data)).toEqual({ topic: 'agents' })
+
+    fake.send({ id: 2, companyId: 'comp-1', type: 'activity.logged', createdAt: new Date().toISOString(), payload: { action: 'agent.updated', entityType: 'agent', entityId: 'agent-1', details: { changedTopLevelKeys: ['name'] } } })
+    const updated = await sse.next((event) => event.event === 'change')
+    expect(JSON.parse(updated.data)).toEqual({ topic: 'agents' })
+
+    fake.send({ id: 3, companyId: 'comp-1', type: 'activity.logged', createdAt: new Date().toISOString(), payload: { action: 'approval.created', entityType: 'approval', entityId: 'approval-1', details: { type: 'hire_agent' } } })
+    const approval = await sse.next((event) => event.event === 'change')
+    expect(JSON.parse(approval.data)).toEqual({ topic: 'approvals' })
+  })
+})

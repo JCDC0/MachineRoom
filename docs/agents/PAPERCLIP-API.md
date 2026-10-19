@@ -49,7 +49,15 @@ inheritRuntimeFrom?: "caller"               agent-authored hires only
 
 Update with `PATCH /api/agents/:agentId` (same fields, all optional, plus `status`, `replaceAdapterConfig`). Wake with `POST /api/agents/:id/wakeup` `{ source?: timer|assignment|on_demand|automation, triggerDetail?: manual|ping|callback|system, reason?, payload?, idempotencyKey? }`.
 
-Not observed: the answer to a hire. The company flag `requireBoardApprovalForNewAgents` (now `false`) decides whether a hire waits for approval (`pending_approval` agent plus an approval of type `hire_agent`).
+Not observed live: the answer to a hire. The installed server code (read for C2b) answers `201` with `{ agent, approval }`. The company flag `requireBoardApprovalForNewAgents` (now `false`) decides whether a hire waits for approval (`pending_approval` agent plus an approval of type `hire_agent`).
+
+Found in the installed server code while building C2b (2026-10-19):
+
+- Reasoning effort lives in `adapterConfig` under a different key per harness: `claude_local` `effort`, `codex_local` `modelReasoningEffort`, `grok_local` `reasoningEffort`, `kimi_local` `effort`, `opencode_local` `variant`, `pi_local` `thinking`, `paperclip_runner` `modelReasoningEffort`. The others (`hermes_local`, `hermes_gateway`, `gemini_local`, `cursor`, `cursor_cloud`, `openclaw_gateway`, `process`, `http`) have no field; Paperclip's own Hermes form appends `--reasoning-effort` to `extraArgs` instead.
+- No harness has a field for subagents or their depth. The bridge keeps `metadata.subagents = { allowed, depth }` and, where there is no effort field, `metadata.reasoningEffort`. Paperclip stores `metadata` but never hands it to an adapter, so these are records for MachineRoom, not limits Paperclip enforces.
+- `adapterConfig` in a PATCH is a shallow merge unless `replaceAdapterConfig: true`. A key sent as `null` stays as `null`.
+- Instructions are not a plain field: a hire takes `instructionsBundle`, and changing them later needs the instructions bundle routes with a base revision. The bridge refuses an instructions change for now.
+- Pause and resume have their own routes, `POST /api/agents/:id/pause` and `POST /api/agents/:id/resume`. Pause also cancels the agent's active runs, and resume checks the reporting chain first. A PATCH accepts `status` too but skips both, so the bridge uses the routes.
 
 ## Budgets
 
