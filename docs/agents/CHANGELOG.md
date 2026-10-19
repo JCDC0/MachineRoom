@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The owner's model table (2026-10-19). Coding: AGY on Gemini 3.8 Flash (High) or Gemini 4 Argon (Medium), OpenCode on MiMo V2.6 Pro at max, Hermes on DeepSeek V4.1 Flash 1017 at xhigh. Live tests in MachineRoom: AGY on Gemini 3.8 Flash at medium only, OpenCode and Hermes on MiniMax M3.1 Flash Free at high, Claude Code on Haiku 5.5 at medium (in the M1 brief). New brief T2 for a lane runner that starts Hermes and OpenCode from the command line.
 - OpenCode's lane now names MiMo V2.6 Pro (`opencode-go/mimo-v2.6-pro`) in its prompts instead of Gemini 4 Argon, the owner's choice from C2b on.
 - A folder collapse plan (task P3a): `src/model/collapse.js` exports `planCollapse({ folders, fileCounts, hot, maxTiles })`, a pure function that adds missing ancestors, keeps the root, every hot folder and every hot ancestor open, then opens the rest breadth first while the tile count stays within `maxTiles` (400 by default). It returns the sorted open folders, one `{ path, folders, files }` entry per collapsed folder with subtree counts, and an `overBudget` flag. `tests/collapse.test.js` covers the fit, the over-budget split, a hot chain, input order, an oversized hot set, a missing parent and 10,000 folders under 200 ms. It is not wired into the room yet.
 - The Node version is pinned (task G7): `engines.node` in `package.json` is `>=24`, `.nvmrc` holds `24`, and the README draft says where the version is pinned. `package-lock.json` gains the same `engines` field, and `npm ci --dry-run` still matches.

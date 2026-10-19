@@ -28,7 +28,7 @@
     "name": "agy",
     "harness": "agy",
     "model": "Gemini 3.8 Flash (High)",
-    "models": { "C3d": "Gemini 4 Argon", "C3e": "Gemini 4 Argon", "T1b": "Gemini 4 Argon" },
+    "models": { "C3d": "Gemini 4 Argon (Medium)", "C3e": "Gemini 4 Argon (Medium)", "T1b": "Gemini 4 Argon (Medium)" },
     "worktree": "C:\\GitHub\\MachineRoom-agy",
     "role": "You own the HUD: src/ui/** and src/styles.css.",
     "forbidden": ["server/**", "src/engine/**", "src/Stage.jsx", "src/App.jsx", "src/control/**", "src/assistant/**", "src/decider/**"],

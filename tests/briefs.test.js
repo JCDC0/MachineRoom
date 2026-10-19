@@ -70,7 +70,7 @@ describe('helpers', () => {
   })
 
   it('picks the model of a task, with a default per lane', () => {
-    expect(modelFor(lanes.agy, 'C3e')).toBe('Gemini 4 Argon')
+    expect(modelFor(lanes.agy, 'C3e')).toBe('Gemini 4 Argon (Medium)')
     expect(modelFor(lanes.agy, 'C3b')).toBe('Gemini 3.8 Flash (High)')
     expect(modelFor(lanes.hermes, 'P5')).toBe('deepseek/deepseek-v4.1-flash-1017')
   })
@@ -125,7 +125,7 @@ describe('buildPrompt', () => {
 
   it('names the stronger model for a task that needs it and leaves out the hint', () => {
     const prompt = make(['C3e'], 'agy')
-    expect(prompt.startsWith('Model to select in agy: Gemini 4 Argon.')).toBe(true)
+    expect(prompt.startsWith('Model to select in agy: Gemini 4 Argon (Medium).')).toBe(true)
     expect(prompt).toContain('Check every visual change by eye')
   })
 
