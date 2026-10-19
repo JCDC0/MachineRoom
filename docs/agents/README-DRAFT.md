@@ -14,7 +14,7 @@ You can replay a recorded run with no Paperclip at all, or follow a live Papercl
 
 ## What you need
 
-- Node 24, the version the CI workflow uses.
+- Node 24. The version is pinned in `package.json` (`engines`) and in `.nvmrc`.
 - A browser with WebGL.
 - For live mode only: Paperclip 2026.1012.0 in local_trusted mode, and at least one coding agent harness. The pinned version and the API notes are in docs/agents/PAPERCLIP-API.md.
 
