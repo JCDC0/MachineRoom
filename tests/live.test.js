@@ -23,18 +23,36 @@ describe('agent discovery', () => {
   })
 
   it('orders known agents first and gives every agent its own key', () => {
-    expect(toAgents(raw).map((agent) => agent.key)).toEqual(['claude-code', 'agy', 'some-bot'])
+    expect(toAgents(raw).map((agent) => agent.key)).toEqual(['claude', 'agy', 'some-bot'])
   })
 
   it('keeps two agents with the same parser apart', () => {
     const twins = [
-      { id: '1', name: 'Orchestrator', adapterType: 'claude_local' },
-      { id: '2', name: 'Claude Code', adapterType: 'claude_local' },
+      { id: '1', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo' },
+      { id: '2', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer' },
       { id: '3', name: 'Claude Code', adapterType: 'claude_local' },
     ]
-    const keys = toAgents(twins).map((agent) => agent.key)
-    expect(new Set(keys).size).toBe(3)
-    expect(toAgents(twins).every((agent) => agent.parser === 'claude')).toBe(true)
+    const agents = toAgents(twins)
+    expect(new Set(agents.map((agent) => agent.key)).size).toBe(3)
+    expect(Object.fromEntries(agents.map((agent) => [agent.id, agent.key]))).toEqual({
+      1: 'claude',
+      2: 'claude-code',
+      3: 'claude-code-2',
+    })
+    expect(agents.every((agent) => agent.parser === 'claude')).toBe(true)
+  })
+
+  it('carries the Paperclip role or null', () => {
+    const withRoles = [
+      { id: '1', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer' },
+      { id: '2', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo' },
+      { id: '3', name: 'Some Bot', adapterType: 'http' },
+    ]
+    expect(Object.fromEntries(toAgents(withRoles).map((agent) => [agent.id, agent.role]))).toEqual({
+      1: 'engineer',
+      2: 'ceo',
+      3: null,
+    })
   })
 
   it('takes the project name from the first agent folder', () => {

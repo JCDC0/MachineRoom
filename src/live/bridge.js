@@ -13,7 +13,7 @@ export async function discoverBridge({ url, root, fetchImpl = fetch }) {
 
 export function openBridge({ url, onFrame, onTree, onStatus, EventSourceImpl = EventSource }) {
   onStatus('connecting')
-  const source = new EventSourceImpl(`${url}/events`)
+  const source = new EventSourceImpl(`${url}/events?history=1`)
   source.onopen = () => onStatus('live')
   source.onerror = () => onStatus(source.readyState === 2 ? 'disconnected' : 'reconnecting')
   source.addEventListener('frame', (event) => {
