@@ -14,8 +14,8 @@
   "opencode": {
     "name": "OpenCode",
     "harness": "OpenCode",
-    "model": "Gemini 4 Argon",
-    "modelHint": "in OpenCode's list it appears as opencode-go/gemini-4-argon-contributor",
+    "model": "MiMo V2.6 Pro",
+    "modelHint": "in OpenCode's list it appears as opencode-go/mimo-v2.6-pro",
     "worktree": "C:\\GitHub\\MachineRoom-opencode",
     "role": "You own the bridge (server/**), scripts/** and src/control/client.js.",
     "forbidden": ["src/ui/**", "src/styles.css", "src/engine/**", "src/Stage.jsx", "src/App.jsx", "src/assistant/**", "src/decider/**"],

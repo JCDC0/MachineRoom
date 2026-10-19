@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- OpenCode's lane now names MiMo V2.6 Pro (`opencode-go/mimo-v2.6-pro`) in its prompts instead of Gemini 4 Argon, the owner's choice from C2b on.
 - New briefs G7 (pin Node) and P3a (folder collapse plan) for Hermes. The M1 brief records the models for live tests that spend money: MiniMax M3.1 Flash Free for Hermes and OpenCode with DeepSeek V4.1 Flash as the fallback, Haiku 5.5 for Claude Code, Gemini 3.8 Flash for agy.
 - `src/control/agents.js` exports `LIMITS` and `TEXT_LIMITS` (the numbers the checks use) and `fieldProblem(key, value)`, so a form can show a refusal under the field it names without copying a number. C3d now asks for this.
 - A first draft of the public README in `docs/agents/README-DRAFT.md` (task G3). It covers the replay and demo quick starts, live mode through the proxy or the bridge, the four harnesses with their known limits, what is not built yet, the safety rules of the bridge and the assistant, where the plan lives, how agents contribute, and a licence line that is still to be chosen. `README.md` is untouched; the owner moves the draft over at G6.
