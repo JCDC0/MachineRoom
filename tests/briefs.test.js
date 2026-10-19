@@ -16,7 +16,8 @@ describe('parseBriefs', () => {
   })
 
   it('reads owner, done and section', () => {
-    expect(byId('P7')).toMatchObject({ title: 'A here-string body is not a file touch', owners: ['hermes'], done: false })
+    expect(byId('P3a')).toMatchObject({ title: 'Folder collapse plan', owners: ['hermes'], done: false })
+    expect(byId('P7')).toMatchObject({ title: 'A here-string body is not a file touch', owners: ['hermes'], done: true })
     expect(byId('P5')).toMatchObject({ title: 'Recover cut and redacted tool lines', owners: ['hermes'], done: true })
     expect(byId('C2')).toMatchObject({ owners: ['opencode'], done: true })
     expect(byId('C3e').owners).toEqual(['agy'])
