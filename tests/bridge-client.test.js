@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { discoverBridge, openBridge, probeLive } from '../src/live/bridge.js'
+import { REOPEN_LIMIT, REOPEN_START, discoverBridge, openBridge, probeLive } from '../src/live/bridge.js'
 
 class FakeSource {
   constructor(url) {
@@ -59,6 +59,68 @@ describe('openBridge', () => {
     source.readyState = 2
     source.onerror()
     expect(seen.statuses.at(-1)).toBe('disconnected')
+  })
+
+  it('opens the stream again after the browser gives up, waiting longer each time', () => {
+    const timers = []
+    const sources = []
+    class Counting extends FakeSource {
+      constructor(url) {
+        super(url)
+        sources.push(this)
+      }
+    }
+    const statuses = []
+    const link = openBridge({
+      url: 'http://bridge',
+      EventSourceImpl: Counting,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: (status) => statuses.push(status),
+      setTimer: (fn, ms) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      clearTimer: () => {},
+    })
+    const giveUp = () => {
+      const source = sources.at(-1)
+      source.readyState = 2
+      source.onerror()
+    }
+    giveUp()
+    giveUp()
+    expect(timers.map((timer) => timer.ms)).toEqual([REOPEN_START])
+    for (let round = 0; round < 6; round += 1) {
+      timers.at(-1).fn()
+      giveUp()
+    }
+    expect(sources).toHaveLength(7)
+    expect(sources.at(-1).url).toBe('http://bridge/events?history=1')
+    expect(timers.map((timer) => timer.ms)).toEqual([1000, 2000, 4000, 8000, REOPEN_LIMIT, REOPEN_LIMIT, REOPEN_LIMIT])
+    timers.at(-1).fn()
+    sources.at(-1).onopen()
+    giveUp()
+    expect(timers.at(-1).ms).toBe(REOPEN_START)
+    expect(statuses.slice(-3)).toEqual(['connecting', 'live', 'disconnected'])
+    link.close()
+    expect(sources.at(-1).closed).toBe(true)
+  })
+
+  it('does not open the stream again once closed', () => {
+    const timers = []
+    const link = openBridge({
+      url: 'http://bridge',
+      EventSourceImpl: FakeSource,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+      setTimer: (fn, ms) => timers.push({ fn, ms }),
+      clearTimer: () => {},
+    })
+    link.close()
+    FakeSource.last.onerror()
+    expect(timers).toEqual([])
   })
 
   it('passes frames and tree changes on as objects', () => {
