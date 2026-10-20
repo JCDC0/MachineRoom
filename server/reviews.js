@@ -9,6 +9,9 @@ const COMMIT_LIMIT = 50
 const MESSAGE_LIMIT = 200
 const HEAD_PATTERN = /^[0-9a-fA-F]{40}$/
 const MERGE_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true' }
+const MAIN_REF = 'refs/heads/main'
+const LANE_RANGE = `${MAIN_REF}..HEAD`
+const LANE_DIFF = `${MAIN_REF}...HEAD`
 export const DEFAULT_PATCH_LIMIT = 400 * 1024
 
 function readText(path) {
@@ -155,10 +158,10 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
   async function laneReview(lane, worktree) {
     const branch = (await git(worktree, ['branch', '--show-current'])).trim()
     const head = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
-    const log = await git(worktree, ['log', '--oneline', 'main..HEAD'])
+    const log = await git(worktree, ['log', '--oneline', LANE_RANGE])
     const commits = log.split(/\r?\n/).filter(Boolean)
     const status = await git(worktree, ['status', '--porcelain'])
-    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', 'main...HEAD']))
+    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', LANE_DIFF]))
     return {
       lane,
       worktree,
@@ -176,8 +179,8 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
 
   async function laneDiff(lane, worktree) {
     const branch = (await git(worktree, ['branch', '--show-current'])).trim()
-    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', 'main...HEAD']))
-    const full = await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', 'main...HEAD'])
+    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', LANE_DIFF]))
+    const full = await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', LANE_DIFF])
     const truncated = full.length > limit
     return {
       lane,
@@ -218,7 +221,7 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
     if (laneStatus.trim() !== '') {
       return { status: 409, body: { error: 'The lane has uncommitted changes.' } }
     }
-    if (await isAncestor(resolvedRoot, laneHead, 'main')) {
+    if (await isAncestor(resolvedRoot, laneHead, MAIN_REF)) {
       return { status: 409, body: { error: 'Nothing to merge.' } }
     }
 

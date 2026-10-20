@@ -288,7 +288,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   formatSummary(summary).forEach((line) => console.log(line))
 
   const branch = gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
-  const commitsText = gitRead(lane.worktree, ['log', '--oneline', 'main..HEAD']) ?? ''
+  const commitsText = gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
   const record = runRecord({
     lane: options.lane,
     briefs: wanted.map((brief) => brief.id),

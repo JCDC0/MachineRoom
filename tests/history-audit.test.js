@@ -173,6 +173,32 @@ describe('history-audit script', () => {
   }, 30000)
 })
 
+describe('history-audit script and a tag named main', () => {
+  it('reads the main branch, not a tag that has the same name', () => {
+    const dir = makeTempDir('history-audit-')
+    try {
+      git(['init', '-b', 'main'], dir)
+      git(['config', 'user.email', 'tester@users.noreply.github.com'], dir)
+      git(['config', 'user.name', 'Tester'], dir)
+      writeFileSync(join(dir, 'notes.md'), 'first\n')
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Start'], dir)
+      git(['tag', 'main'], dir)
+      writeFileSync(join(dir, 'notes.md'), `const key = '${fakeSk}'\n`)
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Add notes'], dir)
+      writeFileSync(join(dir, 'notes.md'), 'const key = null\n')
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Remove the key'], dir)
+      const result = spawnSync(process.execPath, [SCRIPT, '--json'], { cwd: dir, encoding: 'utf8', windowsHide: true })
+      expect(result.status).toBe(1)
+      expect(JSON.parse(result.stdout).counts.key).toBeGreaterThanOrEqual(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }, 30000)
+})
+
 describe('findLeaks on a line that holds a key', () => {
   it('masks the key in the samples of every other kind on that line', () => {
     const key = 'sk-or-v1-' + 'q'.repeat(48)

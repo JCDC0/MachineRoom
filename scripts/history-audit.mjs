@@ -7,7 +7,7 @@ import { countLeaks, findLeaks, LEAK_KINDS } from '../src/briefs/audit.js'
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024
 const TRACKED = '(tracked)'
-const HISTORY_ARGS = ['log', '-p', '--no-color', '--no-ext-diff', '--no-textconv', 'main', '--tags']
+const HISTORY_ARGS = ['log', '-p', '--no-color', '--no-ext-diff', '--no-textconv', 'refs/heads/main', '--tags']
 
 function runGit(repo, args) {
   return new Promise((done, fail) => {
