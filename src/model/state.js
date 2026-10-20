@@ -25,15 +25,27 @@ export function createState(tree, agents) {
       runs: 0,
       calls: new Map(),
       runWrites: new Set(),
+      focus: [],
     })
   }
-  return { files, dirs, agents: roster, now: 0 }
+  return { files, dirs, agents: roster, now: 0, recent: [] }
 }
 
 function say(agent, text, tone = 'normal') {
   agent.lines.push({ text, tone })
   if (agent.lines.length > LINE_LIMIT) agent.lines.shift()
   agent.version += 1
+}
+
+export const RECENT_LIMIT = 8
+
+function remember(state, paths) {
+  for (const path of paths) {
+    const index = state.recent.indexOf(path)
+    if (index !== -1) state.recent.splice(index, 1)
+    state.recent.push(path)
+  }
+  if (state.recent.length > RECENT_LIMIT) state.recent.splice(0, state.recent.length - RECENT_LIMIT)
 }
 
 function ensureFile(state, path) {
@@ -98,6 +110,10 @@ export function apply(state, activity) {
       agent.calls.set(activity.id, activity.touches)
       say(agent, activity.label)
       activity.touches.forEach((touch) => applyTouch(state, agent, touch))
+      if (activity.touches.length > 0) {
+        agent.focus = activity.touches.map((touch) => touch.path)
+        remember(state, agent.focus)
+      }
       break
     case 'tool.end':
       if (!activity.ok) {
@@ -116,6 +132,7 @@ export function apply(state, activity) {
     case 'run.end':
       agent.endedAt = activity.time
       agent.calls.clear()
+      agent.focus = []
       if (activity.ok) {
         agent.status = 'done'
         agent.label = 'done'

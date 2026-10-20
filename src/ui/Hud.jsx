@@ -128,7 +128,8 @@ export default function Hud({
         <ul className="hud-legend mono" aria-label="Colour legend">
           <li className="is-white">activity</li>
           <li className="is-red">failure</li>
-          <li className="is-yellow">finished</li>
+          <li className="is-yellow">active</li>
+          <li className="is-green">finished</li>
         </ul>
       </header>
 

@@ -52,9 +52,10 @@ export function createStrings(scene) {
     line.geometry.attributes.position.needsUpdate = true
   }
 
-  function build(links, centerOf) {
+  function build(links, centerOf, anchor = true) {
     dispose()
-    ends = [{ from: null, to: '' }, ...links]
+    ends = anchor ? [{ from: null, to: '' }, ...links] : [...links]
+    if (ends.length === 0) return
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ends.length * SEGMENTS * 6), 3))
     line = new THREE.LineSegments(geometry, lineMaterial(WHITE, 0.22))

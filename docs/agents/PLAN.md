@@ -40,7 +40,7 @@ Each line is one brief in `TASKS.md`. Lines that start together can run at the s
 
 **Then M1 check.** The real client is wired in Stage. Run the exit test with Hermes on DeepSeek V4.1 Flash, fix what breaks.
 
-**The room, version 2 (the owner's redesign, 2026-10-19).** **V1** (folder view plan, Hermes, after T9), then **V2** to **V5** (Claude: the void, folders as folders, agents and the hub ring, terminals on demand) and the V5 buttons (AGY, after T7). The owner chose Paperclip's Orchestrator agent as the orchestrator, and V2 records the portfolio look.
+**The room, version 2 (the owner's redesign, 2026-10-19).** **V1** (folder view plan, Hermes, after T9), then **V2** to **V5** (Claude: the void, folders as folders, agents and the hub ring, terminals on demand, merged as 0.1.55) and the V5 buttons (AGY, next). The owner chose Paperclip's Orchestrator agent as the orchestrator, and V2 records the portfolio look.
 
 **Next, for M2**
 

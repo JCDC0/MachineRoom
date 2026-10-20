@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { WHITE, lineMaterial } from './sprites.js'
 
-export const HUB_RADIUS = 640
+export const HUB_RADIUS = 300
 export const HUB_Y = 200
 export const PARK_LIFT = 90
 export const HUB_CENTER = new THREE.Vector3(0, HUB_Y, 0)

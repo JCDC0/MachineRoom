@@ -1,17 +1,18 @@
 # MachineRoom architecture
 
-Version 0.1.54. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.55. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
-- The core in the middle is the Machine: the Paperclip control plane.
-- Each agent is a wireframe shape on a ring around the core. It moves above the folder it is working in.
-- Each agent has a terminal on the terminal wall above the room, joined to its agent by a thin line.
-- The project folders are tiles floating in 3D space around the Machine, at different heights, joined parent to child by sagging strings (curved lines). Each file is a plane. A folder opens when an agent touches it: root first, then each subfolder in turn.
-- Colour has one meaning each: white is activity, red is failure, yellow is finished work.
-  - A read or write flashes the file white.
+- The middle is the hub: a flat ring where each agent parks at its own slot between runs.
+- Each agent is a distinct wireframe shape. When it works it leaves the ring and stands beside the folder it works in, in front of it.
+- Each agent has a terminal chip beside it, joined by a thin line. The chip shows the name and a status ring, and opens to show the log.
+- The project folders are flat folder cards scattered in 3D space around the hub, joined parent to child by curved strings. Only the folders on the agents' paths open. An open folder shows at most 3 child folders and up to 3 faint folders behind it for the rest, and the folder that holds the file being touched lists up to 10 items.
+- Colour has one meaning each: white is activity, red is failure, yellow is active, green is finished work.
+  - A read or write flashes the file row and its card white.
+  - The folder and the file an agent works on right now carry a dashed yellow outline, and the trace from its chip to the file is yellow.
   - A failed tool call, a failed run or a failed test flashes red and leaves the file red until it is written again.
-  - A run that ends well turns the agent, its terminal and every file it wrote in that run yellow.
+  - A run that ends well turns the agent, its chip and every file it wrote in that run green.
 - There is no randomness. The same recording always draws the same room.
 
 ## Commands
@@ -44,16 +45,18 @@ src/model/        pure logic, no DOM, fully tested
   source.js         parse and prepare a recording
   replay.js         fetch the recording from public/fixtures
 src/engine/       three.js scene, no React
-  layout.js         deterministic 3D folder layout, no overlap, warm start on growth (pure, tested)
+  layout.js         layoutCards: the folder cards in the view plane, no overlap, warm start (pure, tested); layoutTree: the older whole-tree 3D layout, kept for the collapse work
   route.js          the folders an agent passes between two folders (pure, tested)
   strings.js        curved strings between folders (curvePoint is pure, tested)
   room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
-  clusters.js       folder tiles and file planes, glides to new positions, recolours only what changed
-  labels.js         file name labels that rise and fade when a file is read, written or fails
-  agents.js         agent shapes, movement, link lines
-  terminals.js      CSS3D terminals on the wall
-  core.js           the Machine
-  camera.js         orbit, zoom, focus, fit to the bounding sphere (pure fitDistance, tested)
+  cards.js          folder cards from planFolderView, each a CSS3D element with a depth plane, glides and grows, rows for files (cardSize is pure, tested)
+  labels.js         file name labels that rise and fade above a card when a file is read, written or fails
+  agents.js         agent shapes, movement, link line to the chip, dashed trace to the file
+  shapes.js         one distinct wireframe shape per agent, the orchestrator's own shape
+  hub.js            the ring in the middle, agent slots, pulses
+  void.js           the faint 3D lattice, coordinate labels and far dust
+  terminals.js      CSS3D terminal chips beside their agents
+  camera.js         orbit, zoom, focus, pointer drift, fit the overview to a set of spheres (pure fitView, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/control/      the control client contract, its mock, the real client over the bridge, and `agents.js` (the agent lists and the checks for hire and update; see CONTROL-CLIENT.md)
 src/briefs/       parses the briefs in TASKS.md and builds the full prompt for an agent from HOUSE-RULES.md and lanes.json (pure, tested)
@@ -99,12 +102,18 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 
 ## Room behaviour
 
-- Layout: the root sits in front of the Machine. Top-level folders spread around it on a shell at staggered heights, and each deeper folder fans outward from its parent in a cone. A fixed number of relaxation passes then pushes every pair of folders apart (no randomness, so the same tree gives the same room) and keeps them out of the core. When a live tree grows, folders that already exist keep their place and the new ones settle around them, and the tiles glide to their new positions. A folder with more than 20 files switches to a dense grid (up to 14 columns) and its planes shrink down to 40 percent.
-- Agents: an agent travels from folder to folder along the strings (starting at the root), then hovers above the exact file it touches, with a tether to it. A tag above the agent shows its current command.
-- Camera: the overview centers on the bounding sphere of the folders, the core and the terminal wall, and backs off as the room or the window narrows, never below the default. `0` returns to it. `F` cycles follow mode: wide (the agent and its terminal), close up (the agent and the file it touches), off. The camera moves to the agent that starts a tool call or a run and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
+- Space: black, with a faint lattice in all three axes (2000 unit cells, brighter tick crosses, a few coordinate labels), a far shell of dust and fog. The camera drifts a little with the pointer, eased, and not at all under reduced motion.
+- Hub: a flat ring at the middle, radius 300. Each agent has a slot on it in roster order and parks there when it has no run. A run start pulses the ring white, a run end pulses it green or red, and each slot marker takes its agent's colour.
+- Folders: `planFolderView` (`src/model/folderView.js`) picks the cards from the files, the paths agents touch now and the 8 most recent touches, plus any pinned folder. Closed cards are smallest, open cards larger, and a card that lists files is largest. A card that lists files has a row per item with read and write counts and a `+ N more` line. Cards face the camera.
+- Card layout: `layoutCards` lays the cards out in the view plane of the overview camera. The root sits above the hub, top-level folders go left and right of it, and deeper folders form columns further out on their parent's side. Box relaxation keeps every card apart and clear of the hub. Deeper folders sit nearer the camera (the root 320 behind the hub, each level 260 nearer, at most 460 in front), so orbiting shows depth. A card that comes back takes its last place, and cards glide and grow to new places and sizes.
+- Clicks: a card's head pins the folder open (its tab turns yellow) or unpins it. A row shows the full path and counts and flies the camera to it; a folder row also pins that folder.
+- Depth: the WebGL canvas sits over the CSS3D layer with a clear background, and each card has an invisible plane that writes only depth. WebGL lines and shapes behind a card are hidden, and those in front of it draw over it.
+- Agents: each has its own wireframe shape (`shapes.js`: Claude a compound, Hermes a knot, OpenCode a stellated solid, agy a geodesic, the orchestrator an armillary with a second ring, spare shapes for more). A working agent travels folder by folder from the root, then stands on the hub side of the card, a little in front of it. Its chip sits between it and the card, and a dashed trace runs from the chip to the row of the file it touches: yellow while working, green for 5 seconds after a good run, red on a failure. A tag above the agent shows its current command.
+- Terminal chips: each chip follows its agent and faces the camera. Collapsed it shows the name and a status ring (yellow working, red error, green done). `T` opens the focused agent's chip to show its log, or opens or closes every chip when no agent is focused. `focusTerminal` opens the chip and flies to it.
+- Camera: the overview fits the hub and every card from the overview angle (`fitView`), never closer than 1800. It refits when the cards change, but only when the frame would move more than 150 or change distance by more than 8 percent. `0` returns to it. `F` cycles follow mode: wide (the agent and its chip), close up (the agent and the file it touches), off. The camera moves to the agent that starts a tool call or a run and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
 - Assistant: `/` opens the floating terminal. Typed requests become actions that `Stage.jsx` runs through `dispatch.js`. The room offers `focus(key, view)`, `focusTerminal(key)` (camera on the agent's terminal) and `focusPath(path)` (opens the folders on the way, flashes the target and flies to it). A toast at the bottom right shows results that need words (a created task, a refusal). Writes (a task, a budget) run only after the confirm card, and the dispatcher refuses them without an explicit `confirmed`. Panels open through the HUD's `controlTarget` prop.
-- HUD: the scrubber carries run markers (white start, red failed end, yellow finished end) and clicking one seeks. `L` opens the event log, built from the same activities as the terminals. `?` lists the keys.
-- Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above the plane for 2.6 seconds. Labels that land close together stack upward.
+- HUD: the scrubber carries run markers (white start, red failed end, green finished end) and clicking one seeks. `L` opens the event log, built from the same activities as the terminals. `?` lists the keys.
+- Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above its card for 2.6 seconds. Labels that land close together stack upward.
 
 ## Activity schema
 
@@ -132,16 +141,33 @@ A touch is `{path, mode, kind}`. `kind` is `file` or `dir`. `mode` is `read`, `w
 
 A shell command touches files only when its text names a known file or folder. See `commands.js` and its tests.
 
-## DOM contract for terminals
+## DOM contract for terminals and cards
 
-`engine/terminals.js` builds, and the stylesheet styles, this structure:
+`engine/terminals.js` and `engine/cards.js` build, and the stylesheet styles, these structures:
 
 ```
-.mr-term.is-{idle|queued|working|error|done}[.is-muted]
+.mr-term.is-{idle|queued|working|error|done}[.is-open][.is-muted]
   .mr-term-title
   .mr-term-body
     .mr-line.is-{normal|dim|error|done}
+
+.mr-card.is-{closed|open|files}[.is-active|.is-path][.is-pinned][.is-flash-white|.is-flash-red]
+  .mr-card-backs
+    .mr-card-back.is-back-{1|2|3}
+  .mr-card-face
+    .mr-card-head
+      .mr-card-tab
+      .mr-card-name
+      .mr-card-meta
+    .mr-card-items
+      .mr-item.is-{file|dir}[.is-read|.is-written|.is-finished|.is-failed][.is-active][.is-flash-white|.is-flash-red][.is-inspected]
+        .mr-item-name
+        .mr-item-note
+        .mr-item-detail
+      .mr-card-more
 ```
+
+A chip without `.is-open` hides its body.
 
 Do not rename these classes without changing both sides.
 
@@ -149,20 +175,21 @@ Do not rename these classes without changing both sides.
 
 - Plain words, short sentences. No em dashes. No single-line explanatory comments.
 - Fonts: Jost and Space Mono, weights 400 and 500 only. Never bold.
-- Colours: white, `#e5ff00`, `#ff2a2a` on black. Spacing on an 8px base.
+- Colours: white, `#e5ff00` (active), `#ff2a2a` (failure), `#2aff80` (finished) on black. Spacing on an 8px base.
 - Commit message: version prefix, then a sentence. Example: `0.1.1: Add the live bridge`.
 - Keep large binaries and secrets out of git. Never print a key.
 
 ## Known limits
 
-- The layout compares every pair of folders. About 400 folders take 0.13 seconds and 1600 take 1.2 seconds, and a live tree relays out each time it grows. There is no collapsing or level of detail for very large projects yet.
+- The card layout compares every pair of drawn cards, which stays small because the folder plan draws only the folders on the agents' paths. The older whole-tree layout (`layoutTree`) took 0.13 seconds for 400 folders and 1.2 seconds for 1600.
 - Hermes read lines carry only a file name. A name shared by two files cannot be resolved.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
 - The proxy route needs the dev server. The bridge route works with a production build too.
 - The bridge only allows pages on `localhost` or `127.0.0.1`.
 - Through the proxy route (no bridge), a tool call whose log line is over 8192 characters is missed. A real run lost 3 of 58 calls this way, all reads outside the project.
-- The terminal wall holds five terminals per row and adds rows above for more agents.
+- A card's depth plane matches its face, not its tab or the faint folders behind it, so a line can show through those.
+- The card layout is fitted to the overview angle. From another angle cards can overlap until `0` returns to the overview.
 
 ## Open work
 
