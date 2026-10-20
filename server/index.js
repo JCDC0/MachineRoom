@@ -814,8 +814,11 @@ export function createBridge(options = {}) {
 
   const server = createServer((req, res) => {
     handleRequest(req, res).catch(() => {
-      if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'The bridge could not answer that.' }))
+      if (res.headersSent) {
+        res.end()
+        return
+      }
+      sendJson(req, res, 500, { error: 'The bridge could not answer that.' })
     })
   })
 

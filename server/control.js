@@ -30,6 +30,14 @@ function plainId(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
 }
 
+function decodedId(text) {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return null
+  }
+}
+
 function money(value) {
   return Number.isInteger(value) && value >= 0 ? value : 0
 }
@@ -680,7 +688,11 @@ export function createControlApi(options) {
         sendJson(req, res, 400, { error: `Unknown decision: ${decision}` })
         return true
       }
-      const id = decodeURIComponent(decide[1])
+      const id = decodedId(decide[1])
+      if (id === null) {
+        sendJson(req, res, 404, { error: 'That approval no longer exists.' })
+        return true
+      }
       const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : undefined
       const posted = await upstream('POST', `/api/approvals/${encodeURIComponent(id)}/${DECISION_ROUTES[decision]}`, note ? { decisionNote: note } : {})
       if (posted.status >= 300) {
@@ -708,7 +720,11 @@ export function createControlApi(options) {
         sendJson(req, res, 400, { error: problem })
         return true
       }
-      const id = decodeURIComponent(budget[1])
+      const id = decodedId(budget[1])
+      if (id === null) {
+        sendJson(req, res, 404, { error: 'That agent no longer exists.' })
+        return true
+      }
       const patched = await upstream('PATCH', `/api/agents/${encodeURIComponent(id)}/budgets`, { budgetMonthlyCents: cents })
       if (patched.status >= 300) {
         const [code, message] = upstreamFailure(patched, 'That agent no longer exists.', 'Paperclip did not accept that budget.')

@@ -54,8 +54,9 @@ describe('briefs route with hostile or broken input', () => {
 
   it('answers 500 for a bug inside a route and keeps running', async () => {
     const url = await startBridge({ agy: goodLane, broken: {} })
-    const response = await fetch(`${url}/api/control/brief-prompt?ids=X1&lane=broken`)
+    const response = await fetch(`${url}/api/control/brief-prompt?ids=X1&lane=broken`, { headers: { Origin: 'http://localhost:5173' } })
     expect(response.status).toBe(500)
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
     expect(await response.json()).toEqual({ error: 'The bridge could not answer that.' })
     expect((await fetch(`${url}/api/health`)).status).toBe(200)
     expect((await fetch(`${url}/api/control/brief-prompt?ids=X1&lane=agy`)).status).toBe(200)
@@ -118,5 +119,19 @@ describe('a Paperclip that takes the request and never answers', () => {
 
     const list = await fetch(`${url}/api/agents`, { signal: AbortSignal.timeout(3000) })
     expect(list.status).toBe(502)
+  })
+})
+
+describe('ids that are not valid percent-escapes', () => {
+  it('answers the not-found sentence for an approval or an agent', async () => {
+    const url = await startBridge({ agy: goodLane })
+    const post = (path, body) =>
+      fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    const decided = await post('/api/control/approvals/%E0%A4%A/decide', { decision: 'approve' })
+    expect(decided.status).toBe(404)
+    expect(await decided.json()).toEqual({ error: 'That approval no longer exists.' })
+    const budget = await post('/api/control/agents/%E0%A4%A/budget', { budgetMonthlyCents: 100 })
+    expect(budget.status).toBe(404)
+    expect(await budget.json()).toEqual({ error: 'That agent no longer exists.' })
   })
 })
