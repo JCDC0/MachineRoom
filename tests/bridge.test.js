@@ -318,22 +318,54 @@ function makeTempDir() {
 }
 
 describe('live bridge', () => {
-  it('answers a viewer on any local port and refuses other sites', async () => {
+  it('allows the bridge port, Vite and the named origins, and skips a bad list entry', async () => {
     const dir = makeTempDir()
     const fake = await startFakePaperclip('comp-1', [])
     cleanups.push(() => fake.close())
-    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: dir, port: 0 })
+    const logs = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((line) => {
+      logs.push(String(line))
+    })
+    cleanups.push(() => spy.mockRestore())
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      env: { MACHINEROOM_ORIGINS: 'http://localhost:4000, https://example.com,http://127.0.0.1:4000/diff' },
+    })
     cleanups.push(() => bridge.stop())
-    const { url } = await bridge.start()
+    const { url, port } = await bridge.start()
 
-    for (const origin of ['http://localhost:5180', 'http://127.0.0.1:4000', 'http://localhost']) {
+    expect(logs).toEqual([
+      'MACHINEROOM_ORIGINS: skipped https://example.com.',
+      'MACHINEROOM_ORIGINS: skipped http://127.0.0.1:4000/diff.',
+    ])
+
+    for (const origin of [
+      `http://localhost:${port}`,
+      `http://127.0.0.1:${port}`,
+      'http://localhost:5173',
+      'http://127.0.0.1:5173',
+      'http://localhost:4000',
+    ]) {
       const res = await fetch(`${url}/api/health`, { headers: { Origin: origin } })
-      expect(res.status).toBe(200)
-      expect(res.headers.get('access-control-allow-origin')).toBe(origin)
+      expect(res.status, origin).toBe(200)
+      expect(res.headers.get('access-control-allow-origin'), origin).toBe(origin)
     }
-    for (const origin of ['http://localhost.evil.com', 'https://example.com', 'http://127.0.0.1.evil.com:5173']) {
+    for (const origin of [
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:4000',
+      'http://localhost:5180',
+      'http://localhost',
+      'https://localhost:5173',
+      'http://localhost.evil.com',
+      'https://example.com',
+      'http://127.0.0.1.evil.com:5173',
+    ]) {
       const res = await fetch(`${url}/api/health`, { headers: { Origin: origin } })
-      expect(res.status).toBe(403)
+      expect(res.status, origin).toBe(403)
     }
   })
 
@@ -2269,7 +2301,7 @@ describe('run routes', () => {
   it('starts the runner with an argument list, keeps the last five lines and records the run when it ends', async () => {
     useRunsTemp()
     const { url } = await startRunsBridge()
-    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e', 'B6'] })
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e', 'B6'], confirmed: true })
     expect(res.status).toBe(202)
     const entry = await res.json()
     expect(entry.lane).toBe('hermes')
@@ -2296,24 +2328,24 @@ describe('run routes', () => {
     useRunsTemp()
     const { url } = await startRunsBridge()
 
-    const noLane = await postJson(url, '/api/control/runs', 'POST', { briefs: ['C3e'] })
+    const noLane = await postJson(url, '/api/control/runs', 'POST', { briefs: ['C3e'], confirmed: true })
     expect(noLane.status).toBe(400)
     expect(await noLane.json()).toEqual({ error: 'Choose a lane from the list.' })
-    const badLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'nobody', briefs: ['C3e'] })
+    const badLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'nobody', briefs: ['C3e'], confirmed: true })
     expect(await badLane.json()).toEqual({ error: 'Choose a lane from the list.' })
-    const noCli = await postJson(url, '/api/control/runs', 'POST', { lane: 'agy', briefs: ['C3e'] })
+    const noCli = await postJson(url, '/api/control/runs', 'POST', { lane: 'agy', briefs: ['C3e'], confirmed: true })
     expect(noCli.status).toBe(400)
     expect(await noCli.json()).toEqual({ error: 'That lane has no command line.' })
 
-    const empty = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: [] })
+    const empty = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: [], confirmed: true })
     expect(await empty.json()).toEqual({ error: 'Choose one to five briefs.' })
-    const tooMany = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'] })
+    const tooMany = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'], confirmed: true })
     expect(await tooMany.json()).toEqual({ error: 'Choose one to five briefs.' })
-    const notAList = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: 'C3e' })
+    const notAList = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: 'C3e', confirmed: true })
     expect(await notAList.json()).toEqual({ error: 'Choose one to five briefs.' })
 
     for (const briefs of [['c3e'], ['C3e&calc'], ['Z9'], ['C3e', 42]]) {
-      const badId = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs })
+      const badId = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs, confirmed: true })
       expect(badId.status).toBe(400)
       expect(await badId.json()).toEqual({ error: 'Choose a brief from the list.' })
     }
@@ -2321,19 +2353,36 @@ describe('run routes', () => {
     const wrongMethod = await fetch(`${url}/api/control/runs`, { method: 'DELETE' })
     expect(wrongMethod.status).toBe(405)
 
-    const started = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'] })
+    const started = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'], confirmed: true })
     expect(started.status).toBe(202)
-    const busy = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6'] })
+    const busy = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6'], confirmed: true })
     expect(busy.status).toBe(409)
     expect(await busy.json()).toEqual({ error: 'That lane is already running.' })
-    const otherLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['B6'] })
+    const otherLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['B6'], confirmed: true })
     expect(otherLane.status).toBe(202)
+  })
+
+  it('refuses a run that was not confirmed', async () => {
+    useRunsTemp()
+    const { url } = await startRunsBridge()
+
+    for (const confirmed of [undefined, false, 'true', 1]) {
+      const body = { lane: 'hermes', briefs: ['C3e'] }
+      if (confirmed !== undefined) body.confirmed = confirmed
+      const res = await postJson(url, '/api/control/runs', 'POST', body)
+      expect(res.status, String(confirmed)).toBe(400)
+      expect(await res.json(), String(confirmed)).toEqual({ error: 'Confirm the run first.' })
+    }
+
+    const { running, recent } = await fetch(`${url}/api/control/runs`).then((r) => r.json())
+    expect(running).toEqual([])
+    expect(recent).toEqual([])
   })
 
   it('answers 404 without a path when the brief files are missing', async () => {
     useRunsTemp()
     const { url, dir } = await startRunsBridge({ project: false })
-    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'] })
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'], confirmed: true })
     expect(res.status).toBe(404)
     const body = await res.json()
     expect(body.error).toMatch(/missing/i)
@@ -2344,7 +2393,7 @@ describe('run routes', () => {
   it('keeps the run going after the request and kills it when the bridge stops', async () => {
     useRunsTemp()
     const { url, bridge } = await startRunsBridge({ script: TINY_SLEEPER })
-    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'] })
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'], confirmed: true })
     expect(res.status).toBe(202)
     await res.arrayBuffer()
 

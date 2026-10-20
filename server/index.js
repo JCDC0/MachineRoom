@@ -14,8 +14,9 @@ import { gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
 import { compareSurface, surfaceFeatures } from './surface.js'
 
-const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1):(\d+)$/
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
+const VITE_PORT = 5173
 const BODY_LIMIT = 64 * 1024
 const SURFACE_TIMEOUT_MS = 10000
 const SURFACE_EVERY_MS = 15 * 60 * 1000
@@ -23,8 +24,25 @@ const BACKUP_READ_TIMEOUT_MS = 10000
 const BACKUP_RUN_TIMEOUT_MS = 120000
 const AGENTS_TIMEOUT_MS = 15000
 
-function isAllowed(origin) {
-  return LOCAL_ORIGIN.test(origin)
+function localOrigin(origin) {
+  const match = LOCAL_ORIGIN.exec(String(origin ?? ''))
+  if (!match) return null
+  const port = Number(match[2])
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null
+  return { port, text: `http://${match[1]}:${port}` }
+}
+
+function namedOrigins(value) {
+  const origins = new Set()
+  const skipped = []
+  for (const raw of String(value ?? '').split(',')) {
+    const entry = raw.trim()
+    if (!entry) continue
+    const origin = localOrigin(entry)
+    if (origin) origins.add(origin.text)
+    else skipped.push(entry)
+  }
+  return { origins, skipped }
 }
 
 export function isAllowedHost(host) {
@@ -119,7 +137,7 @@ function toWsUrl(paperclipUrl, companyId) {
   return `${base}/api/companies/${encodeURIComponent(companyId)}/events/ws`
 }
 
-function corsHeaders(req) {
+function corsHeaders(req, isAllowed) {
   const origin = req.headers.origin
   if (origin && !isAllowed(origin)) return {}
   return {
@@ -128,61 +146,65 @@ function corsHeaders(req) {
   }
 }
 
-function sendJson(req, res, status, body) {
-  const payload = JSON.stringify(body)
-  res.writeHead(status, {
-    ...corsHeaders(req),
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(payload),
-  })
-  res.end(payload)
+function createSendJson(isAllowed) {
+  return function sendJson(req, res, status, body) {
+    const payload = JSON.stringify(body)
+    res.writeHead(status, {
+      ...corsHeaders(req, isAllowed),
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Length': Buffer.byteLength(payload),
+    })
+    res.end(payload)
+  }
 }
 
-function readJsonBody(req, res, limit = BODY_LIMIT) {
-  return new Promise((resolveBody) => {
-    const type = String(req.headers['content-type'] ?? '')
-    if (!type.toLowerCase().includes('application/json')) {
-      sendJson(req, res, 415, { error: 'Send JSON.' })
-      resolveBody(null)
-      return
-    }
-    let size = 0
-    let done = false
-    const chunks = []
-    const stop = (value) => {
-      if (done) return
-      done = true
-      resolveBody(value)
-    }
-    req.on('data', (chunk) => {
-      if (done) return
-      size += chunk.length
-      if (size > limit) {
-        sendJson(req, res, 413, { error: 'That request is too large.' })
-        stop(null)
+function createReadJsonBody(sendJson) {
+  return function readJsonBody(req, res, limit = BODY_LIMIT) {
+    return new Promise((resolveBody) => {
+      const type = String(req.headers['content-type'] ?? '')
+      if (!type.toLowerCase().includes('application/json')) {
+        sendJson(req, res, 415, { error: 'Send JSON.' })
+        resolveBody(null)
         return
       }
-      chunks.push(chunk)
+      let size = 0
+      let done = false
+      const chunks = []
+      const stop = (value) => {
+        if (done) return
+        done = true
+        resolveBody(value)
+      }
+      req.on('data', (chunk) => {
+        if (done) return
+        size += chunk.length
+        if (size > limit) {
+          sendJson(req, res, 413, { error: 'That request is too large.' })
+          stop(null)
+          return
+        }
+        chunks.push(chunk)
+      })
+      req.on('end', () => {
+        if (done) return
+        let parsed
+        try {
+          parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
+        } catch {
+          sendJson(req, res, 400, { error: 'That body is not valid JSON.' })
+          stop(null)
+          return
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          sendJson(req, res, 400, { error: 'Send a JSON object.' })
+          stop(null)
+          return
+        }
+        stop(parsed)
+      })
+      req.on('error', () => stop(null))
     })
-    req.on('end', () => {
-      if (done) return
-      let parsed
-      try {
-        parsed = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}')
-      } catch {
-        sendJson(req, res, 400, { error: 'That body is not valid JSON.' })
-        stop(null)
-        return
-      }
-      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        sendJson(req, res, 400, { error: 'Send a JSON object.' })
-        stop(null)
-        return
-      }
-      stop(parsed)
-    })
-    req.on('error', () => stop(null))
-  })
+  }
 }
 
 function backupWarningCodes(block) {
@@ -231,6 +253,18 @@ export function createBridge(options = {}) {
   const surfaceEveryMs = Number(options.surfaceEveryMs ?? SURFACE_EVERY_MS)
   const upstreamTimeoutMs = Number(options.upstreamTimeoutMs ?? AGENTS_TIMEOUT_MS)
   const env = options.env ?? process.env
+  const origins = namedOrigins(env.MACHINEROOM_ORIGINS)
+  for (const entry of origins.skipped) {
+    console.log(`MACHINEROOM_ORIGINS: skipped ${entry}.`)
+  }
+  let servingPort = port
+  const isAllowed = (origin) => {
+    const parsed = localOrigin(origin)
+    if (!parsed) return false
+    return parsed.port === servingPort || parsed.port === VITE_PORT || origins.origins.has(parsed.text)
+  }
+  const sendJson = createSendJson(isAllowed)
+  const readJsonBody = createReadJsonBody(sendJson)
 
   const briefs = createBriefsApi({
     projectRoot,
@@ -641,7 +675,7 @@ export function createBridge(options = {}) {
     }
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
-        ...corsHeaders(req),
+        ...corsHeaders(req, isAllowed),
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
         'Access-Control-Allow-Headers': 'Last-Event-ID, Content-Type',
       })
@@ -774,7 +808,7 @@ export function createBridge(options = {}) {
 
     if (req.method === 'GET' && url.pathname === '/events') {
       res.writeHead(200, {
-        ...corsHeaders(req),
+        ...corsHeaders(req, isAllowed),
         'Content-Type': 'text/event-stream; charset=utf-8',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
@@ -834,9 +868,11 @@ export function createBridge(options = {}) {
       server.listen(port, '127.0.0.1', () => {
         server.off('error', rejectStart)
         const address = server.address()
+        const actualPort = typeof address === 'object' && address ? address.port : port
+        servingPort = actualPort
         resolveStart({
-          port: typeof address === 'object' && address ? address.port : port,
-          url: `http://127.0.0.1:${typeof address === 'object' && address ? address.port : port}`,
+          port: actualPort,
+          url: `http://127.0.0.1:${actualPort}`,
         })
       })
     })

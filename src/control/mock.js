@@ -411,8 +411,10 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     outcomes: () => call('outcomes', () => outcomeTable(SAMPLE_OUTCOME_RUNS, SAMPLE_OUTCOMES)),
 
-    startRun: (lane, briefs) =>
+    startRun: (lane, briefs, options = {}) =>
       call('startRun', () => {
+        const confirmed = Object.hasOwn(options, 'confirmed') ? options.confirmed : true
+        if (confirmed !== true) throw new Error('Confirm the run first.')
         const info = typeof lane === 'string' && Object.hasOwn(SAMPLE_LANES, lane) ? SAMPLE_LANES[lane] : null
         if (!info || typeof info !== 'object') throw new Error('Choose a lane from the list.')
         if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
