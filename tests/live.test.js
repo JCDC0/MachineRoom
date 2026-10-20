@@ -183,6 +183,18 @@ describe('incremental pipeline', () => {
     expect(pipeline.context.files).toEqual(['src/math.js'])
     expect(pipeline.context.dirs).toEqual(['', 'src'])
   })
+
+  it('learns a large project again and again without slowing the page', () => {
+    const files = Array.from({ length: 40000 }, (_, index) => `pkg${index % 200}/lib/file${index}.js`)
+    const tree = makeTree({ root: 'big', files, created: [] })
+    const pipeline = createPipeline({ agents: recording.agents, tree })
+    const started = performance.now()
+    for (let round = 0; round < 4; round += 1) pipeline.learn([...files, `new/file${round}.js`])
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(pipeline.context.files).toHaveLength(40004)
+    expect(new Set(pipeline.context.files).size).toBe(40004)
+    expect(pipeline.context.dirs.filter((dir) => dir === 'new')).toEqual(['new'])
+  })
 })
 
 describe('live player', () => {

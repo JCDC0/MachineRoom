@@ -112,11 +112,19 @@ export function createPipeline({ agents, tree }) {
     return finalise(out)
   }
 
+  const knownFiles = new Set(ctx.files)
+  const knownDirs = new Set(ctx.dirs)
+
   function learn(paths) {
     for (const path of paths) {
-      if (ctx.files.includes(path)) continue
+      if (knownFiles.has(path)) continue
+      knownFiles.add(path)
       ctx.files.push(path)
-      for (const dir of ancestors(path)) if (!ctx.dirs.includes(dir)) ctx.dirs.push(dir)
+      for (const dir of ancestors(path)) {
+        if (knownDirs.has(dir)) continue
+        knownDirs.add(dir)
+        ctx.dirs.push(dir)
+      }
     }
   }
 
