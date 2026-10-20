@@ -175,13 +175,13 @@ export function removeReviewTree({ root, temp, tree }) {
   return !existsSync(temp)
 }
 
-async function mergedResult({ root, branch, keep, env, execPath, onStep }) {
+async function mergedResult({ root, branch, keep, env, execPath, onStep, tempRoot = tmpdir() }) {
   const name = 'merged result'
   const modules = join(root, 'node_modules')
   if (!existsSync(modules)) return check(name, 'FAIL', 'The main checkout has no node_modules. Run npm install there first.')
   const npmCli = npmCliPath(env, execPath)
   if (!npmCli) return check(name, 'FAIL', 'npm-cli.js was not found beside Node, so npm test could not start.')
-  const temp = mkdtempSync(join(tmpdir(), 'machineroom-review-'))
+  const temp = mkdtempSync(join(tempRoot, 'machineroom-review-'))
   const hooks = join(temp, 'hooks')
   const tree = join(temp, 'main')
   mkdirSync(hooks)
@@ -247,7 +247,7 @@ function branchProblem(branch) {
   return null
 }
 
-export async function reviewLane({ root, lane, keep = false, env = process.env, runsPath = runsFile(), execPath = process.execPath, onStep = () => {} }) {
+export async function reviewLane({ root, lane, keep = false, env = process.env, runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = tmpdir() }) {
   const docs = join(root, 'docs', 'agents')
   let lanes
   try {
@@ -330,11 +330,11 @@ export async function reviewLane({ root, lane, keep = false, env = process.env, 
   report.checks.push(fromResult('TASKS.md', tasksCheck(gitText(root, ['show', `${head}:docs/agents/TASKS.md`]))))
 
   if (ahead === 0) report.checks.push(check('merged result', 'FAIL', 'Not run: there is nothing to merge.'))
-  else report.checks.push(await mergedResult({ root, branch, keep, env, execPath, onStep }))
+  else report.checks.push(await mergedResult({ root, branch, keep, env, execPath, onStep, tempRoot }))
   return report
 }
 
-export async function main(argv, { root, log = console.log, error = console.error, env = process.env, runsPath = runsFile() } = {}) {
+export async function main(argv, { root, log = console.log, error = console.error, env = process.env, runsPath = runsFile(), tempRoot = tmpdir() } = {}) {
   let options
   try {
     options = parseReviewArgs(argv)
@@ -343,7 +343,7 @@ export async function main(argv, { root, log = console.log, error = console.erro
     return 1
   }
   const checkout = root ?? mainCheckout(resolve(dirname(fileURLToPath(import.meta.url)), '..'))
-  const report = await reviewLane({ root: checkout, lane: options.lane, keep: options.keep, env, runsPath, onStep: options.json ? () => {} : (line) => error(line) })
+  const report = await reviewLane({ root: checkout, lane: options.lane, keep: options.keep, env, runsPath, tempRoot, onStep: options.json ? () => {} : (line) => error(line) })
   if (report.error) {
     error(report.error)
     return 1

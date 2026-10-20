@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -29,6 +29,14 @@ const fakeKey = 'sk-' + 'q'.repeat(40)
 const fakeMail = 'someone' + '@' + 'site.com'
 const fakeHome = 'C:' + '\\Users\\' + 'mira'
 const cleanups = []
+
+function systemReviewFolders() {
+  return readdirSync(tmpdir(), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith('machineroom-review-'))
+    .map((entry) => entry.name)
+}
+
+const SYSTEM_REVIEW_FOLDERS = new Set(systemReviewFolders())
 
 afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()()
@@ -331,8 +339,9 @@ function setup() {
   const repo = makeTempDir('mr-review-main-')
   const lane = join(makeTempDir('mr-review-lane-'), 'MachineRoom-hermes')
   const runs = makeTempDir('mr-review-runs-')
+  const tempRoot = makeTempDir('mr-review-temp-')
   cleanups.push(() => {
-    for (const dir of [repo, dirname(lane), runs]) rmSync(dir, { recursive: true, force: true })
+    for (const dir of [repo, dirname(lane), runs, tempRoot]) rmSync(dir, { recursive: true, force: true })
   })
   git(repo, ['init', '-q', '-b', 'main'])
   write(repo, 'package.json', `${JSON.stringify({ name: 'fixture', version: '0.1.1', private: true, scripts: { test: 'node fake-test.mjs', build: 'node -e "console.log(\'built\')"' }, dependencies: { three: '1.0.0' } }, null, 2)}\n`)
@@ -347,7 +356,7 @@ function setup() {
   git(repo, ['worktree', 'add', '-q', '-b', 'feat/t9-a-task', lane, 'refs/heads/main'])
   const runsPath = join(runs, 'runs.jsonl')
   writeFileSync(runsPath, `${JSON.stringify({ lane: 'hermes', briefs: ['T9'], branch: 'feat/t9-a-task' })}\n`)
-  return { repo, lane, runsPath }
+  return { repo, lane, runsPath, tempRoot }
 }
 
 function addGoodWork(lane) {
@@ -365,13 +374,13 @@ function byName(report) {
 }
 
 describe('reviewLane on real repositories', () => {
-  it('passes good work, tests the merge in a temporary worktree and removes it', async () => {
-    const { repo, lane, runsPath } = setup()
+  it('passes good work, tests the merge in a worktree under tempRoot and removes it', async () => {
+    const { repo, lane, runsPath, tempRoot } = setup()
     addGoodWork(lane)
     const before = snapshot(repo)
     const laneBefore = snapshot(lane)
     const steps = []
-    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath, onStep: (line) => steps.push(line) })
+    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath, tempRoot, onStep: (line) => steps.push(line) })
     const checks = byName(report)
     expect(report.branch).toBe('feat/t9-a-task')
     expect(Object.values(checks).map((check) => `${check.name} ${check.status}`)).toEqual([
@@ -389,14 +398,15 @@ describe('reviewLane on real repositories', () => {
     expect(checks['merged result'].text).toBe('npm test passed (3 passed of 3), npm run build passed.')
     expect(steps).toHaveLength(2)
     expect(existsSync(checks['merged result'].tree)).toBe(false)
-    expect(existsSync(dirname(checks['merged result'].tree))).toBe(false)
+    expect(dirname(dirname(checks['merged result'].tree))).toBe(tempRoot)
+    expect(readdirSync(tempRoot)).toEqual([])
     expect(snapshot(repo)).toEqual(before)
     expect(snapshot(lane)).toEqual(laneBefore)
     expect(readFileSync(join(repo, 'node_modules', 'marker.txt'), 'utf8')).toBe('kept')
   }, 60000)
 
   it('fails bad work on every check that sees it', async () => {
-    const { repo, lane, runsPath } = setup()
+    const { repo, lane, runsPath, tempRoot } = setup()
     write(lane, 'server/x.js', "spawnSync('git', ['diff', 'main'])\n")
     write(lane, 'src/a.js', `export const a = '${EM_DASH}'\n`)
     write(lane, 'fail-tests', 'yes\n')
@@ -404,7 +414,7 @@ describe('reviewLane on real repositories', () => {
     commitAll(lane, 'Add things')
     write(lane, 'loose.txt', 'not committed\n')
     const before = snapshot(repo)
-    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath })
+    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath, tempRoot })
     const checks = byName(report)
     expect(checks.commits.status).toBe('FAIL')
     expect(texts(checks.commits.details)).toEqual(['FAIL loose.txt not committed'])
@@ -427,22 +437,22 @@ describe('reviewLane on real repositories', () => {
   }, 60000)
 
   it('fails a lane with nothing ahead and does not run the merge', async () => {
-    const { repo, runsPath } = setup()
-    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath })
+    const { repo, runsPath, tempRoot } = setup()
+    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath, tempRoot })
     const checks = byName(report)
     expect(texts(checks.commits.details)).toEqual(['FAIL feat/t9-a-task has no commit ahead of main.'])
     expect(checks['merged result'].text).toBe('Not run: there is nothing to merge.')
   }, 60000)
 
   it('reports a conflict with main and leaves both checkouts as they were', async () => {
-    const { repo, lane, runsPath } = setup()
+    const { repo, lane, runsPath, tempRoot } = setup()
     write(lane, 'src/keep.js', 'export const keep = 2\n')
     commitAll(lane, '0.1.2: Change keep.')
     write(repo, 'src/keep.js', 'export const keep = 3\n')
     commitAll(repo, '0.1.2: Change keep on main.')
     const before = snapshot(repo)
     const laneBefore = snapshot(lane)
-    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath })
+    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath, tempRoot })
     const merged = byName(report)['merged result']
     expect(merged.status).toBe('FAIL')
     expect(merged.text).toBe('feat/t9-a-task does not merge cleanly into main.')
@@ -453,9 +463,9 @@ describe('reviewLane on real repositories', () => {
   }, 60000)
 
   it('keeps the temporary worktree with --keep', async () => {
-    const { repo, lane, runsPath } = setup()
+    const { repo, lane, runsPath, tempRoot } = setup()
     addGoodWork(lane)
-    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath, keep: true })
+    const report = await reviewLane({ root: repo, lane: 'hermes', runsPath, keep: true, tempRoot })
     const merged = byName(report)['merged result']
     expect(merged.kept).toBe(merged.tree)
     expect(existsSync(join(merged.tree, 'src', 'a.js'))).toBe(true)
@@ -465,28 +475,35 @@ describe('reviewLane on real repositories', () => {
   }, 60000)
 
   it('refuses an unknown lane and a lane worktree on main', async () => {
-    const { repo, lane, runsPath } = setup()
-    expect(await reviewLane({ root: repo, lane: 'nobody', runsPath })).toEqual({ error: 'There is no lane named nobody.' })
-    expect(await reviewLane({ root: repo, lane: '__proto__', runsPath })).toEqual({ error: 'There is no lane named __proto__.' })
+    const { repo, lane, runsPath, tempRoot } = setup()
+    expect(await reviewLane({ root: repo, lane: 'nobody', runsPath, tempRoot })).toEqual({ error: 'There is no lane named nobody.' })
+    expect(await reviewLane({ root: repo, lane: '__proto__', runsPath, tempRoot })).toEqual({ error: 'There is no lane named __proto__.' })
     git(lane, ['switch', '-q', '--detach'])
-    const detached = await reviewLane({ root: repo, lane: 'hermes', runsPath })
+    const detached = await reviewLane({ root: repo, lane: 'hermes', runsPath, tempRoot })
     expect(detached.checks).toEqual([{ name: 'commits', status: 'FAIL', text: 'The lane worktree is not on a branch.', details: [] }])
   }, 60000)
 
   it('prints JSON and exits 1 on a FAIL through main', async () => {
-    const { repo, lane, runsPath } = setup()
+    const { repo, lane, runsPath, tempRoot } = setup()
     addGoodWork(lane)
     write(lane, 'src/b.js', 'export const b = 1\n')
     commitAll(lane, 'no prefix')
     const out = []
-    const code = await main(['hermes', '--json'], { root: repo, runsPath, log: (line) => out.push(line), error: () => {} })
+    const code = await main(['hermes', '--json'], { root: repo, runsPath, tempRoot, log: (line) => out.push(line), error: () => {} })
     const parsed = JSON.parse(out.join('\n'))
     expect(code).toBe(1)
     expect(parsed.counts).toEqual({ PASS: 8, WARN: 1, FAIL: 1 })
     expect(parsed.checks.find((check) => check.status === 'FAIL').name).toBe('commit messages')
     expect(parsed.checks.find((check) => check.name === 'brief').details.map((detail) => detail.where)).toEqual(['src/b.js'])
     const usage = []
-    expect(await main([], { root: repo, runsPath, log: () => {}, error: (line) => usage.push(line) })).toBe(1)
+    expect(await main([], { root: repo, runsPath, tempRoot, log: () => {}, error: (line) => usage.push(line) })).toBe(1)
     expect(usage).toEqual(['Use: npm run review-lane -- LANE [--json] [--keep]'])
   }, 60000)
+})
+
+describe('the system temp folder', () => {
+  it('gains no machineroom-review-* folder during this file', () => {
+    const gained = systemReviewFolders().filter((name) => !SYSTEM_REVIEW_FOLDERS.has(name))
+    expect(gained).toEqual([])
+  })
 })
