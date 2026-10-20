@@ -302,7 +302,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('decideApproval', () => {
         const approval = state.approvals.find((item) => item.id === id)
         if (!approval) throw new Error('That approval no longer exists.')
-        if (!DECISIONS[decision]) throw new Error(`Unknown decision: ${decision}`)
+        if (!Object.hasOwn(DECISIONS, decision)) throw new Error(`Unknown decision: ${decision}`)
         if (approval.status !== 'pending') throw new Error('That approval is already decided.')
         approval.status = DECISIONS[decision]
         if (note) approval.decisionNote = note

@@ -686,6 +686,15 @@ function runContractSuite(label, makeHarness) {
       await expect(client.decideApproval('missing', 'approve')).rejects.toThrow(/exist/i)
     })
 
+    it('refuses a decision that is only an inherited name and leaves the approval pending', async () => {
+      const { client } = await makeHarness()
+      for (const decision of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+        await expect(client.decideApproval('approval-1', decision)).rejects.toThrow(`Unknown decision: ${decision}`)
+      }
+      const list = await client.approvals()
+      expect(list.find((item) => item.id === 'approval-1').status).toBe('pending')
+    })
+
     it('reports costs and quota windows, including one that could not be read', async () => {
       const { client } = await makeHarness()
       const { quota, summary, byAgent } = await client.costs()

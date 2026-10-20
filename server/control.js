@@ -660,7 +660,7 @@ export function createControlApi(options) {
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const decision = typeof body?.decision === 'string' ? body.decision : ''
-      if (!DECISION_ROUTES[decision]) {
+      if (!Object.hasOwn(DECISION_ROUTES, decision)) {
         sendJson(req, res, 400, { error: `Unknown decision: ${decision}` })
         return true
       }
