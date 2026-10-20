@@ -7,6 +7,7 @@ import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
+import { createDecideApi } from './decide.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
 import { createStaticHandler } from './static.js'
@@ -127,7 +128,7 @@ function sendJson(req, res, status, body) {
   res.end(payload)
 }
 
-function readJsonBody(req, res) {
+function readJsonBody(req, res, limit = BODY_LIMIT) {
   return new Promise((resolveBody) => {
     const type = String(req.headers['content-type'] ?? '')
     if (!type.toLowerCase().includes('application/json')) {
@@ -146,7 +147,7 @@ function readJsonBody(req, res) {
     req.on('data', (chunk) => {
       if (done) return
       size += chunk.length
-      if (size > BODY_LIMIT) {
+      if (size > limit) {
         sendJson(req, res, 413, { error: 'That request is too large.' })
         stop(null)
         return
@@ -218,6 +219,7 @@ export function createBridge(options = {}) {
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
   const surfaceEveryMs = Number(options.surfaceEveryMs ?? SURFACE_EVERY_MS)
+  const env = options.env ?? process.env
 
   const briefs = createBriefsApi({
     projectRoot,
@@ -254,7 +256,14 @@ export function createBridge(options = {}) {
     runner: options.assistantRunner,
     model: options.assistantModel,
     settingsFile: options.settingsFile ?? process.env.MACHINEROOM_SETTINGS_FILE,
-    env: options.env ?? process.env,
+    env,
+  })
+  const decideApi = createDecideApi({
+    sendJson,
+    readJsonBody,
+    env,
+    decideUrl: options.decideUrl,
+    timeoutMs: options.decideTimeoutMs,
   })
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
 
@@ -631,6 +640,7 @@ export function createBridge(options = {}) {
     if (await reviews.handle(req, res, url)) return
     if (await control.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
+    if (await decideApi.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {

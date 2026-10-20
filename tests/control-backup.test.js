@@ -20,6 +20,14 @@ describe('mock run totals', () => {
   })
 })
 
+describe('mock decide', () => {
+  it('answers like a bridge with no key', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    await expect(client.decide({ state: 'x', questions: {} })).rejects.toThrow('Send at least one question.')
+    await expect(client.decide({ state: 'x', questions: { tier: {} } })).rejects.toThrow('No key is set for the decision model.')
+  })
+})
+
 describe('mock backup methods', () => {
   it('reports a stale backup until one is made', async () => {
     let clock = NOW

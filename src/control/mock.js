@@ -22,6 +22,7 @@ export const CLIENT_METHODS = [
   'startRun',
   'reviews',
   'reviewDiff',
+  'decide',
   'backupStatus',
   'backupNow',
   'subscribe',
@@ -432,6 +433,13 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           patch: SAMPLE_REVIEW_PATCH,
           truncated: false,
         }
+      }),
+
+    decide: ({ questions } = {}) =>
+      call('decide', () => {
+        const named = questions !== null && typeof questions === 'object' && !Array.isArray(questions)
+        if (!named || Object.keys(questions).length === 0) throw new Error('Send at least one question.')
+        throw new Error('No key is set for the decision model.')
       }),
 
     backupStatus: () =>

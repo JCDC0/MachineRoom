@@ -28,6 +28,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
+| `decide({ state, questions, model? })` | `{ ok: true, model, answers, usage, ms, attempts }` from the decision model (D2; see `DECIDER-EVAL.md`). It rejects with `No key is set for the decision model.` when the bridge has no `OPENROUTER_API_KEY`, which is also what the mock always does |
 | `backupStatus()` | `BackupStatus`, the age of Paperclip's newest database backup (W2b) |
 | `backupNow()` | `BackupResult`. It asks Paperclip for a backup at once, so call it only after the user confirmed; it rejects with `A backup is already running.` while one runs (W2b) |
 
