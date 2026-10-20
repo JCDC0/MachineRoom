@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.116",
+  "version": "0.1.117",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -46,6 +46,8 @@
     "doctor": "node scripts/doctor.mjs",
     "pack-check": "node scripts/pack-check.mjs",
     "history-audit": "node scripts/history-audit.mjs",
+    "review-lane": "node scripts/review-lane.mjs",
+    "bump": "node scripts/bump.mjs",
     "bridge": "node server/index.js",
     "serve": "node bin/machine-room.mjs"
   },

@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.116. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.117. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -30,6 +30,8 @@ npm run hand-run -- agy W3c --minutes 40   record a run started by hand (AGY) in
 npm run outcome -- BRANCH merged --grade A- --fixes 0   record what happened to a lane run (merged or rejected, with --note; npm run run-lane -- --outcomes [--since] prints the table) in outcomes.jsonl beside runs.jsonl; GET /api/control/runs/outcomes and the client's outcomes() give the merge rate and cost per lane and model
 npm run policy-propose -- [--since YYYY-MM-DD] [--min N]   build the outcome table, ask proposePolicy for a reorder of the routing policy and, when it finds one, write it as policy-STAMP.patch in the runs folder for the owner to read and git apply; it never writes docs/agents/policy.json
 npm run history-audit   scan main, the tags and the tracked files for keys, e-mail addresses, Windows user paths, the profile name and paths into coursework; a key is never printed (first 4 characters and its length); --json; exits 1 on any finding
+npm run review-lane -- hermes   review the branch in that lane's worktree against refs/heads/main: one PASS, WARN or FAIL line per check (commits ahead and nothing uncommitted, forbidden paths, the brief's Files: list from the newest run record, em dashes, keys, user paths and e-mail addresses in added lines, emoji and bold, new dependencies, heuristics for bare git, main refs, git diff flags, fetch without a signal and lookups without Object.hasOwn, the changelog line, commit prefixes, TASKS.md ids), then npm test and npm run build on the merge in a temporary worktree of main under the system temp folder, removed afterwards unless --keep; --json; exits 1 on a FAIL; never merges, pushes or changes either checkout
+npm run bump -- 0.1.113   set the version in package.json, the two version lines of package-lock.json and the Version line of this file, and print each change; refuses a version that is not three whole numbers or not higher than the current one
 npm run candidate -- opencode   build that lane's worktree and serve it on port 5175 (--port) beside the stable room, with --paperclip, --company and --root passed through; refuses a dirty worktree or a taken port (see CANDIDATE.md)
 node scripts/agy-prompt.mjs V7a   write AGY's prompt for a brief to agy-V7a-prompt.txt in its worktree (--clean removes the older ones)
 npm run run-recording -- 1      turn run 1 of that list into a recording in public/recordings/ again (run-lane already writes one after each run and prints its /?recording=<name>)
@@ -70,7 +72,7 @@ src/engine/       three.js scene, no React
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/control/      the control client contract, its mock, the real client over the bridge, and `agents.js` (the agent lists and the checks for hire and update; see CONTROL-CLIENT.md)
 src/policy/       route.js: the routing policy, version 1 (readPolicy, tierFor, escalate, chooseRoute) over docs/agents/policy.json; profile.js: profileFromBrief, the profile tierFor reads, from a brief; proposals.js: proposePolicy, policyText and policyDiff, a reorder of one tier suggested by the outcome table as a patch to review; pure, tested; the bridge answers POST /api/control/route with chooseRoute, quota and spend from Paperclip (server/policy.js), and the UI does not call it yet (C4c)
-src/briefs/       parses the briefs in TASKS.md and builds the full prompt for an agent from HOUSE-RULES.md and lanes.json (pure, tested)
+src/briefs/       parses the briefs in TASKS.md and builds the full prompt for an agent from HOUSE-RULES.md and lanes.json; review.js holds the checks behind npm run review-lane (pure, tested)
 src/decider/      decision model seam: Decisions API wire shape, `decide()`, fixed questions, stats, baselines and the comparison runner (see DECIDER-EVAL.md; not used by the app yet)
 src/assistant/    request router: closed action list, rule based intent, key guard, model reply parser, and `dispatch.js` which runs a validated action against a host (the room, the HUD, the control client). Pure, tested; see CONTROL-PLANE.md
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
