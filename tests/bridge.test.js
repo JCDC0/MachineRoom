@@ -51,9 +51,11 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
   const stored = new Map()
   const logRequests = []
   const specRequests = []
+  const agentRequests = []
   let spec = options.spec ?? null
   let connections = 0
   let logDelayMs = 0
+  let agentsFailing = false
   const specDelayMs = Number(options.specDelayMs ?? 0)
 
   const server = createServer((req, res) => {
@@ -81,8 +83,14 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
       return
     }
     if (req.method === 'GET' && req.url === `/api/companies/${companyId}/agents`) {
+      agentRequests.push(req.url)
+      if (agentsFailing) {
+        res.writeHead(500, { Connection: 'close' })
+        res.end()
+        return
+      }
       const payload = JSON.stringify(agents)
-      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
       res.end(payload)
       return
     }
@@ -128,6 +136,12 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
         },
         get specRequests() {
           return specRequests
+        },
+        get agentRequests() {
+          return agentRequests
+        },
+        setAgentsFailing(next) {
+          agentsFailing = next
         },
         setSpec(next) {
           spec = next
@@ -907,6 +921,158 @@ describe('truncated log frames', () => {
 
     expect(replayed.payload.chunk).toBe(big('f'))
     expect(replayed.payload.truncated).toBe(false)
+  })
+})
+
+describe('unreadable counter', () => {
+  const OPENCODE_BROKEN = '{"type":"tool_use","part":{"id":"p13","tool":"shell","state":{"input":{"command":"cat docs/notes.md"'
+  const OPENCODE_GOOD = JSON.stringify({
+    type: 'tool_use',
+    part: { id: 'p1', tool: 'read', state: { status: 'completed', input: { path: 'docs/notes.md' } } },
+  })
+  const HERMES_PREPARING = '  \u250a \ud83d\udcbb preparing terminal\u2026'
+  const HERMES_BROKEN = '  \u250a \ud83d\udcd6 read      strings.js'
+  const ZERO = { claude: 0, hermes: 0, opencode: 0, agy: 0 }
+
+  const agents = () => [
+    { id: 'a1', name: 'Claude Code', adapterType: 'claude_local' },
+    { id: 'a2', name: 'Hermes', adapterType: 'hermes_local' },
+    { id: 'a3', name: 'OpenCode Go', adapterType: 'opencode_local' },
+  ]
+
+  function logFrame(id, { runId = 'r1', agentId = 'a3', seq = 1, stream = 'stdout', chunk, truncated = false }) {
+    return {
+      id,
+      companyId: 'comp-1',
+      type: 'heartbeat.run.log',
+      createdAt: '2026-10-20T12:00:00.000Z',
+      payload: { runId, agentId, seq, stream, chunk, truncated },
+    }
+  }
+
+  function statusFrame(id, status, runId = 'r1') {
+    return {
+      id,
+      companyId: 'comp-1',
+      type: 'heartbeat.run.status',
+      createdAt: '2026-10-20T12:00:01.000Z',
+      payload: { runId, status },
+    }
+  }
+
+  async function startCounterBridge(list = agents()) {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', list)
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: dir, port: 0 })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    await fetch(`${url}/api/agents`)
+    const health = () => fetch(`${url}/api/health`).then((r) => r.json())
+    return { fake, url, health, list }
+  }
+
+  const unparsedOf = async (health) => (await health()).unparsed
+
+  it('starts at zero with a since time and counts a broken OpenCode line split over two frames once', async () => {
+    const { fake, health } = await startCounterBridge()
+    const first = await unparsedOf(health)
+    expect(first.total).toBe(0)
+    expect(first.byParser).toEqual(ZERO)
+    expect(Number.isNaN(Date.parse(first.since))).toBe(false)
+
+    const half = Math.floor(OPENCODE_BROKEN.length / 2)
+    fake.send(logFrame(701, { seq: 1, chunk: OPENCODE_BROKEN.slice(0, half) }))
+    fake.send(logFrame(702, { seq: 2, chunk: `${OPENCODE_BROKEN.slice(half)}\n` }))
+
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+    expect(await unparsedOf(health)).toMatchObject({ total: 1, byParser: { ...ZERO, opencode: 1 } })
+  })
+
+  it('counts a well formed OpenCode line as nothing', async () => {
+    const { fake, health } = await startCounterBridge()
+    fake.send(logFrame(703, { chunk: `${OPENCODE_GOOD}\n` }))
+    fake.send(logFrame(704, { seq: 2, chunk: `${OPENCODE_BROKEN}\n` }))
+
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+    expect((await unparsedOf(health)).byParser.opencode).toBe(1)
+  })
+
+  it('counts a Hermes preparing line as nothing', async () => {
+    const { fake, health } = await startCounterBridge()
+    fake.send(logFrame(705, { agentId: 'a2', chunk: `${HERMES_PREPARING}\n` }))
+    fake.send(logFrame(706, { agentId: 'a2', seq: 2, chunk: `${HERMES_BROKEN}\n` }))
+
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+    expect((await unparsedOf(health)).byParser.hermes).toBe(1)
+  })
+
+  it('counts nothing from a stderr frame', async () => {
+    const { fake, health } = await startCounterBridge()
+    fake.send(logFrame(707, { stream: 'stderr', chunk: `${OPENCODE_BROKEN}\n` }))
+    fake.send(logFrame(708, { seq: 2, chunk: `${OPENCODE_BROKEN}\n` }))
+
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+    expect((await unparsedOf(health)).byParser.opencode).toBe(1)
+  })
+
+  it('counts nothing for an unknown agent until the agent list knows it and fetches that list once', async () => {
+    const list = agents().filter((agent) => agent.id !== 'a3')
+    const { fake, url, health } = await startCounterBridge(list)
+    await sleep(100)
+    const before = fake.agentRequests.length
+
+    fake.send(logFrame(709, { chunk: OPENCODE_BROKEN }))
+    fake.send(logFrame(710, { seq: 2, chunk: `${OPENCODE_BROKEN}\n` }))
+    await waitUntil(() => fake.agentRequests.length > before)
+    await sleep(100)
+    expect(fake.agentRequests.length).toBe(before + 1)
+    expect((await unparsedOf(health)).total).toBe(0)
+
+    list.push({ id: 'a3', name: 'OpenCode Go', adapterType: 'opencode_local' })
+    await fetch(`${url}/api/agents`)
+    fake.send(logFrame(711, { seq: 3, chunk: `${OPENCODE_BROKEN}\n` }))
+
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+    expect((await unparsedOf(health)).byParser.opencode).toBe(1)
+  })
+
+  it('keeps the old agent map when a fetch fails and never throws', async () => {
+    const { fake, health } = await startCounterBridge()
+    await sleep(100)
+    const before = fake.agentRequests.length
+    fake.setAgentsFailing(true)
+
+    fake.send(logFrame(712, { agentId: 'ghost', chunk: `${OPENCODE_BROKEN}\n` }))
+    await waitUntil(() => fake.agentRequests.length > before)
+    await sleep(100)
+    expect((await unparsedOf(health)).total).toBe(0)
+
+    fake.send(logFrame(713, { seq: 2, chunk: `${OPENCODE_BROKEN}\n` }))
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+  })
+
+  it('counts a truncated frame the bridge restores as the full line', async () => {
+    const { fake, health } = await startCounterBridge()
+    const full = `${OPENCODE_BROKEN}\n${'x'.repeat(9000)}\n`
+    fake.appendLog('r1', { ts: '2026-10-20T12:00:00.000Z', stream: 'stdout', chunk: full, seq: 1 })
+
+    fake.send(logFrame(714, { seq: 1, chunk: full.slice(-8192), truncated: true }))
+
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+    expect((await unparsedOf(health)).byParser.opencode).toBe(1)
+  })
+
+  it('counts a broken tail when the run ends', async () => {
+    const { fake, health } = await startCounterBridge()
+    fake.send(logFrame(715, { chunk: OPENCODE_BROKEN }))
+    fake.send(logFrame(716, { runId: 'r2', seq: 2, chunk: `${OPENCODE_BROKEN}\n` }))
+    await waitUntil(async () => (await unparsedOf(health)).total === 1)
+
+    fake.send(statusFrame(717, 'succeeded', 'r1'))
+
+    await waitUntil(async () => (await unparsedOf(health)).total === 2)
+    expect((await unparsedOf(health)).byParser.opencode).toBe(2)
   })
 })
 
