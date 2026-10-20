@@ -37,3 +37,4 @@ if (process.argv.includes('--clean')) {
 const file = join(worktree, `agy-${brief.id}-prompt.txt`)
 writeFileSync(file, prompt)
 console.log(`Wrote ${file} (${prompt.length} characters).`)
+console.log(`When AGY is done: npm run hand-run -- agy ${brief.id} --minutes N`)

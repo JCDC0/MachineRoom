@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.105",
+  "version": "0.1.106",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -37,6 +37,7 @@
     "run-lane": "node scripts/run-lane.mjs",
     "run-recording": "node scripts/run-recording.mjs",
     "outcome": "node scripts/outcome.mjs",
+    "hand-run": "node scripts/hand-run.mjs",
     "candidate": "node scripts/candidate.mjs",
     "doctor": "node scripts/doctor.mjs",
     "pack-check": "node scripts/pack-check.mjs",
