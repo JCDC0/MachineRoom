@@ -116,6 +116,9 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
 
     reviewDiff: (lane) => request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/diff`),
 
+    mergeReview: (lane, { head, message } = {}) =>
+      request('POST', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/merge`, { confirmed: true, head, message }),
+
     decide: ({ state, questions, model } = {}) =>
       request('POST', '/api/decide', model === undefined ? { state, questions } : { state, questions, model }),
 

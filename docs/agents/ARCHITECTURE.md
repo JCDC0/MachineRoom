@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.87. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.88. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -191,7 +191,7 @@ Do not rename these classes without changing both sides.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
 - The proxy route needs the dev server. The bridge route works with a production build too, and `npm run serve` serves that build from the bridge on one port.
-- The bridge only allows pages on `localhost` or `127.0.0.1`.
+- The bridge only allows pages on `localhost` or `127.0.0.1`, on any port, so another local page could call `POST /api/control/reviews/:lane/merge`. It still needs the lane's exact head sha and `confirmed: true`, refuses a dirty main checkout, and never pushes.
 - Through the proxy route (no bridge), a tool call whose log line is over 8192 characters is missed. A real run lost 3 of 58 calls this way, all reads outside the project.
 - A card's depth plane matches its face, not its tab or the faint folders behind it, so a line can show through those.
 - About half of the full test runs on this machine die inside `node.exe` 24.15.0 with 0xC0000409 (bash shows exit 127) while the test files that start a bridge run (`bridge`, `control-contract`, `bridge-reviews`). The Windows event log names Node itself at a fixed address, and a probe hit the libuv assertion `!(handle->flags & UV_HANDLE_CLOSING)` in `src\win\async.c` when a process exited right after `bridge.stop()`. The forks pool still crashes, and one worker avoids it but is 3.6 times slower (T15). A crashed run leaves its `mr-*` temp folders behind. `npm test` runs them again by itself (T15b); it is not a test failure.
