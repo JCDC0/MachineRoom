@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Terminal buttons in the HUD (task V5b): each agent row has a Log button that toggles its chip and shows its log state, Overview gains a Show all or Hide all button, and T is added to the shortcut help list.
+- Review fix on V5b: the HUD's left column is 288px instead of 240px, so the Log buttons no longer cut the agent names short (checked by eye at 1280 by 800 and 1024 by 768).
 - Review fix on P10: when a line grows past the tail limit, the counter skips the rest of that line in the next chunks instead of counting its end as a new line.
 - Count unreadable lines across chunks (task P10): `createUnreadableCounter({ tailLimit = 65536 })` in `src/model/parsers/unreadable.js` returns `{ push, end, counts, reset }`, puts the kept tail of a run in front of the next chunk before counting its complete lines with `unreadableLines`, keeps the text after the last line break as the new tail, drops a tail longer than the limit without counting it, counts a run's tail as one last line at `end` and forgets the run, keeps tails for at most 50 runs and drops the oldest first, and counts nothing and keeps no tail for an unknown parser; `counts()` gives a fresh `{ total, byParser: { claude, hermes, opencode, agy } }`. Tests in `tests/unreadable.test.js`, including the sandbox fixture at a total of 0. It is not wired into the pipeline.
 - Review fixes on P9: Hermes' progress lines (`┊ 💻 preparing terminal…` and `┊ review diff`) hold no call and no longer count, which the Paperclip sandbox recording showed (18 false counts, now 0; every lane recording also counts 0). The runs panel test waits for the mock run to finish instead of a fixed 40 ms, so a busy machine no longer fails it.

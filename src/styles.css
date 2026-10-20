@@ -99,7 +99,7 @@ summary:focus-visible,
   pointer-events: none;
   padding: calc(var(--space) * 2);
   display: grid;
-  grid-template-columns: 240px 1fr 240px;
+  grid-template-columns: 288px 1fr 240px;
   grid-template-rows: auto 1fr auto;
   gap: calc(var(--space) * 2);
 }
@@ -187,6 +187,44 @@ summary:focus-visible,
   flex-direction: column;
   gap: var(--space);
   width: 100%;
+}
+
+.hud-agent-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space);
+  width: 100%;
+}
+
+.hud-agent-row .agent,
+.hud-agent-row .overview {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.agent-log {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  border: 1px solid var(--white);
+  padding: var(--space) var(--space);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.agent-log:active {
+  border-color: var(--yellow);
+}
+
+.agent-log[aria-pressed='true'],
+.agent-log[aria-pressed='true']:hover {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
 }
 
 .agent,
