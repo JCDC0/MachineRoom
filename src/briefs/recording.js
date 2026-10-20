@@ -1,11 +1,29 @@
 import { basename } from '../model/paths.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
+import { RECORDING_NAME } from '../startup.js'
 import { sessionToolLines } from './run.js'
 
 const ADAPTERS = { hermes: 'hermes_local', opencode: 'opencode_local' }
 const RUNNING_DELAY = 1000
 const END_PAD = 1000
 const MS_FLOOR = 1e11
+
+function hasPlainName(item) {
+  return item !== null && typeof item === 'object' && !Array.isArray(item) && typeof item.name === 'string' && RECORDING_NAME.test(item.name)
+}
+
+export function recordingIndex(entries, entry, limit = 50) {
+  const list = Array.isArray(entries) ? entries : []
+  const kept = []
+  if (hasPlainName(entry)) kept.push(entry)
+  for (const item of list) {
+    if (!hasPlainName(item)) continue
+    if (hasPlainName(entry) && item.name === entry.name) continue
+    kept.push(item)
+  }
+  const max = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 50
+  return kept.slice(0, max)
+}
 
 function msFrom(value) {
   if (value === null || value === undefined || value === '') return null

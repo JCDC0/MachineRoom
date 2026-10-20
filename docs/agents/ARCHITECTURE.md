@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.61. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.62. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -90,7 +90,7 @@ The first visit opens a connect screen (`src/ui/Connect.jsx`). The choice is sav
 - `/?live&bridge=http://127.0.0.1:5174` goes through the bridge (`npm run bridge`). The bridge holds the Paperclip socket, lists the agents (with their Paperclip `role`, and a unique key each: the first agent of an adapter keeps the adapter key, later ones get the slug of their name), sends the project file list and pushes `tree` events when files appear. No proxy is needed.
 - `/?live&simulate&speed=3` plays the recording through the live path with no Paperclip, for testing. The badge reads `Demo`.
 
-Query parameters: `recording` (replay a lane run from `public/recordings/<name>-*`, written by `npm run run-lane` after each run or by `npm run run-recording`; the name is the run's log name), `company` (company id), `root` (project folder name), `tree` (base URL of a bridge, to start with the full file list over the proxy route), `bridge`, `paperclip` (another Paperclip base URL), `speed` (simulated feed).
+Query parameters: `recording` (replay a lane run from `public/recordings/<name>-*`, written by `npm run run-lane` after each run or by `npm run run-recording`; the name is the run's log name, and `public/recordings/index.json` lists the last 50 with lane, briefs, model, start, minutes, exit code and counts, newest first), `company` (company id), `root` (project folder name), `tree` (base URL of a bridge, to start with the full file list over the proxy route), `bridge`, `paperclip` (another Paperclip base URL), `speed` (simulated feed).
 
 The HUD has a Replay and Live switch. The Live button is enabled when the proxy or the bridge answers. The switch changes the `live` query parameter and reloads the data without a page refresh.
 
