@@ -301,7 +301,7 @@ export function buildUpdateBody(clean, raw) {
 }
 
 export function createControlApi(options) {
-  const { paperclipUrl, companyId, projectId, projectWorkspaceId, sendJson, readJsonBody } = options
+  const { paperclipUrl, companyId, projectId, projectWorkspaceId, sendJson, readJsonBody, featureOn } = options
   const base = String(paperclipUrl).replace(/\/+$/, '')
 
   async function upstream(method, path, body) {
@@ -325,6 +325,12 @@ export function createControlApi(options) {
 
   function fail(req, res, status, message) {
     sendJson(req, res, status, { error: message })
+  }
+
+  function featureOff(req, res, feature) {
+    if (typeof featureOn !== 'function' || featureOn(feature) !== false) return false
+    fail(req, res, 503, `Paperclip changed: ${feature} is off. Run npm run doctor to see which routes.`)
+    return true
   }
 
   function upstreamFailure(answer, missing, generic) {
@@ -386,6 +392,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/agents') {
+      if (featureOff(req, res, 'team')) return true
       const [agents, spend] = await Promise.all([
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`),
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),
@@ -406,6 +413,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'POST' && path === '/api/control/agents') {
+      if (featureOff(req, res, 'team')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
       let clean
@@ -444,6 +452,7 @@ export function createControlApi(options) {
 
     const updateAgent = /^\/api\/control\/agents\/([^/]+)$/.exec(path)
     if (method === 'PATCH' && updateAgent) {
+      if (featureOff(req, res, 'team')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
       let id
@@ -527,6 +536,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/issues') {
+      if (featureOff(req, res, 'tasks')) return true
       const status = url.searchParams.get('status')
       const query = status ? `?status=${encodeURIComponent(status)}` : ''
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/issues${query}`)
@@ -542,6 +552,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'POST' && path === '/api/control/issues') {
+      if (featureOff(req, res, 'tasks')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const draft = body
@@ -575,6 +586,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/comments') {
+      if (featureOff(req, res, 'tasks')) return true
       const issueId = plainId(url.searchParams.get('issueId'))
       const [comments, agents] = await Promise.all([
         upstream('GET', `/api/issues/${encodeURIComponent(issueId)}/comments`),
@@ -600,6 +612,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'POST' && path === '/api/control/comments') {
+      if (featureOff(req, res, 'tasks')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const issueId = plainId(body?.issueId)
@@ -629,6 +642,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/approvals') {
+      if (featureOff(req, res, 'approvals')) return true
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/approvals`)
       if (answer.status !== 200) {
         const [code, message] = upstreamFailure(answer, 'That approval no longer exists.', 'Paperclip could not read the approvals.')
@@ -643,6 +657,7 @@ export function createControlApi(options) {
 
     const decide = /^\/api\/control\/approvals\/([^/]+)\/decide$/.exec(path)
     if (method === 'POST' && decide) {
+      if (featureOff(req, res, 'approvals')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const decision = typeof body?.decision === 'string' ? body.decision : ''
@@ -669,6 +684,7 @@ export function createControlApi(options) {
 
     const budget = /^\/api\/control\/agents\/([^/]+)\/budget$/.exec(path)
     if (method === 'POST' && budget) {
+      if (featureOff(req, res, 'meters')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const cents = body?.budgetMonthlyCents
@@ -688,6 +704,7 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/costs') {
+      if (featureOff(req, res, 'meters')) return true
       const [summary, rows, quota] = await Promise.all([
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/summary`),
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),

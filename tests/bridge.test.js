@@ -8,7 +8,7 @@ import { WebSocketServer } from 'ws'
 import { createBridge, isAllowedHost } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
 import { extractReplyText } from '../server/assistant.js'
-import { PAPERCLIP_SURFACE } from '../server/surface.js'
+import { FEATURES, PAPERCLIP_SURFACE } from '../server/surface.js'
 import { choice } from '../src/decider/wire.js'
 import { startFakeDecisions } from './fakeDecisions.js'
 
@@ -55,6 +55,7 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
   const logRequests = []
   const specRequests = []
   const agentRequests = []
+  const requests = []
   let spec = options.spec ?? null
   let connections = 0
   let logDelayMs = 0
@@ -65,6 +66,7 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
   const backupRequests = []
 
   const server = createServer((req, res) => {
+    requests.push({ method: req.method, url: req.url })
     if (req.method === 'GET' && req.url === '/api/openapi.json') {
       specRequests.push(req.url)
       const answer = () => {
@@ -86,6 +88,11 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
       } else {
         answer()
       }
+      return
+    }
+    if (req.method === 'GET' && req.url === `/api/companies/${companyId}/issues`) {
+      res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+      res.end(JSON.stringify(options.issues ?? []))
       return
     }
     if (req.method === 'GET' && req.url === `/api/companies/${companyId}/agents`) {
@@ -167,6 +174,9 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
         },
         get agentRequests() {
           return agentRequests
+        },
+        get requests() {
+          return requests
         },
         get backupRequests() {
           return backupRequests
@@ -701,9 +711,9 @@ describe('live bridge', () => {
 })
 
 describe('health surface check', () => {
-  async function startSurfaceBridge({ spec, specBody, specDelayMs, surfaceEveryMs, health } = {}) {
+  async function startSurfaceBridge({ spec, specBody, specDelayMs, surfaceEveryMs, health, issues } = {}) {
     const dir = makeTempDir()
-    const fake = await startFakePaperclip('comp-1', [], { spec, specBody, specDelayMs, health })
+    const fake = await startFakePaperclip('comp-1', [], { spec, specBody, specDelayMs, health, issues })
     cleanups.push(() => fake.close())
     const bridge = createBridge({
       paperclipUrl: fake.url,
@@ -848,6 +858,79 @@ describe('health surface check', () => {
     await sleep(150)
 
     expect(fake.specRequests.length).toBe(count)
+  })
+
+  describe('feature switches', () => {
+    const ALL_ON = Object.fromEntries(FEATURES.map((name) => [name, true]))
+    const off = (feature) => ({ ...ALL_ON, [feature]: false })
+    const sentence = (feature) => `Paperclip changed: ${feature} is off. Run npm run doctor to see which routes.`
+
+    it('keeps every feature on with a full spec', async () => {
+      const { url } = await startSurfaceBridge({ spec: paperclipSpec() })
+      await waitUntil(async () => (await healthOf(url)).surface?.ok === true)
+
+      expect((await healthOf(url)).features).toEqual(ALL_ON)
+    })
+
+    it('switches off only approvals and refuses its control route before Paperclip', async () => {
+      const { fake, url } = await startSurfaceBridge({
+        spec: paperclipSpec({ drop: ['GET /api/companies/{companyId}/approvals'] }),
+        issues: [],
+      })
+      await waitUntil(async () => (await healthOf(url)).surface?.ok === false)
+
+      expect((await healthOf(url)).features).toEqual(off('approvals'))
+      const denied = await fetch(`${url}/api/control/approvals`)
+      expect(denied.status).toBe(503)
+      expect(await denied.json()).toEqual({ error: sentence('approvals') })
+
+      const tasks = await fetch(`${url}/api/control/issues`)
+      expect(tasks.status).toBe(200)
+      expect(await tasks.json()).toEqual([])
+      expect(fake.requests.some((request) => request.url === '/api/companies/comp-1/approvals')).toBe(false)
+    })
+
+    it('switches off meters when a costs field changes', async () => {
+      const spec = paperclipSpec()
+      delete spec.paths['/api/companies/{companyId}/costs/by-agent'].get.responses[200].content['application/json'].schema
+        .properties.inputTokens
+      const { url } = await startSurfaceBridge({ spec })
+      await waitUntil(async () => (await healthOf(url)).surface?.ok === false)
+
+      expect((await healthOf(url)).features).toEqual(off('meters'))
+      const denied = await fetch(`${url}/api/control/costs`)
+      expect(denied.status).toBe(503)
+      expect(await denied.json()).toEqual({ error: sentence('meters') })
+    })
+
+    it('keeps every feature on before the spec check answers', async () => {
+      const { url } = await startSurfaceBridge({ spec: paperclipSpec(), specDelayMs: 500 })
+
+      expect((await healthOf(url)).features).toEqual(ALL_ON)
+    })
+
+    it('keeps the event stream and the agent list when room is off', async () => {
+      const { fake, url } = await startSurfaceBridge({ spec: paperclipSpec({ drop: ['GET /api/companies'] }) })
+      await waitUntil(async () => {
+        const health = await healthOf(url)
+        return fake.connections > 0 && health.features?.room === false
+      })
+
+      const sse = await openSse(url)
+      cleanups.push(() => sse.close())
+      const frame = {
+        id: 701,
+        companyId: 'comp-1',
+        type: 'heartbeat.run.queued',
+        createdAt: '2026-10-20T12:00:00.000Z',
+        payload: { runId: 'r7' },
+      }
+      fake.send(frame)
+      const event = await sse.next((entry) => entry.event === 'frame')
+      expect(JSON.parse(event.data)).toEqual(frame)
+      expect((await fetch(`${url}/api/agents`)).status).toBe(200)
+      expect((await fetch(`${url}/api/tree`)).status).toBe(200)
+    })
   })
 })
 

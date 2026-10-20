@@ -16,26 +16,32 @@ const APPROVAL_FIELDS = [
   'decision.note',
 ]
 
+export const FEATURES = ['room', 'backup', 'team', 'meters', 'tasks', 'approvals']
+
 export const PAPERCLIP_SURFACE = [
   {
     method: 'GET',
     path: '/api/companies',
+    feature: 'room',
     fields: ['id'],
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}/events/ws',
+    feature: 'room',
     socket: true,
     fields: ['id', 'companyId', 'type', 'createdAt', 'payload', 'payload.chunk', 'payload.runId', 'payload.seq', 'payload.truncated'],
   },
   {
     method: 'GET',
     path: '/api/heartbeat-runs/{runId}/log',
+    feature: 'room',
     fields: ['content'],
   },
   {
     method: 'GET',
     path: '/api/health',
+    feature: 'backup',
     fields: [
       'version',
       'databaseBackup',
@@ -49,16 +55,19 @@ export const PAPERCLIP_SURFACE = [
   {
     method: 'POST',
     path: '/api/instance/database-backups',
+    feature: 'backup',
     fields: ['backupFile', 'sizeBytes', 'prunedCount', 'finishedAt'],
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}',
+    feature: 'room',
     fields: ['requireBoardApprovalForNewAgents'],
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}/agents',
+    feature: 'room',
     fields: [
       'id',
       'name',
@@ -78,30 +87,36 @@ export const PAPERCLIP_SURFACE = [
   {
     method: 'POST',
     path: '/api/companies/{companyId}/agent-hires',
+    feature: 'team',
     body: ['name', 'role', 'adapterType', 'adapterConfig', 'metadata', 'budgetMonthlyCents', 'reportsTo', 'instructionsBundle'],
     fields: ['agent', 'approval'],
   },
   {
     method: 'PATCH',
     path: '/api/agents/{id}',
+    feature: 'team',
     body: ['name', 'role', 'reportsTo', 'adapterConfig', 'metadata'],
   },
   {
     method: 'PATCH',
     path: '/api/agents/{agentId}/budgets',
+    feature: 'meters',
     body: ['budgetMonthlyCents'],
   },
   {
     method: 'POST',
     path: '/api/agents/{id}/pause',
+    feature: 'team',
   },
   {
     method: 'POST',
     path: '/api/agents/{id}/resume',
+    feature: 'team',
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}/issues',
+    feature: 'tasks',
     fields: [
       'id',
       'identifier',
@@ -119,6 +134,7 @@ export const PAPERCLIP_SURFACE = [
   {
     method: 'POST',
     path: '/api/companies/{companyId}/issues',
+    feature: 'tasks',
     body: [
       'title',
       'description',
@@ -146,55 +162,65 @@ export const PAPERCLIP_SURFACE = [
   {
     method: 'GET',
     path: '/api/issues/{id}/comments',
+    feature: 'tasks',
     fields: ['id', 'issueId', 'authorAgentId', 'authorName', 'body', 'createdAt'],
   },
   {
     method: 'POST',
     path: '/api/issues/{id}/comments',
+    feature: 'tasks',
     body: ['body'],
     fields: ['id', 'issueId', 'authorAgentId', 'authorName', 'body', 'createdAt'],
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}/approvals',
+    feature: 'approvals',
     fields: APPROVAL_FIELDS,
   },
   {
     method: 'GET',
     path: '/api/approvals/{id}',
+    feature: 'approvals',
     fields: APPROVAL_FIELDS,
   },
   {
     method: 'POST',
     path: '/api/approvals/{id}/approve',
+    feature: 'approvals',
     body: ['decisionNote'],
     fields: APPROVAL_FIELDS,
   },
   {
     method: 'POST',
     path: '/api/approvals/{id}/reject',
+    feature: 'approvals',
     body: ['decisionNote'],
     fields: APPROVAL_FIELDS,
   },
   {
     method: 'POST',
     path: '/api/approvals/{id}/request-revision',
+    feature: 'approvals',
     body: ['decisionNote'],
     fields: APPROVAL_FIELDS,
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}/costs/summary',
+    feature: 'meters',
     fields: ['spendCents', 'budgetCents', 'utilizationPercent'],
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}/costs/by-agent',
+    feature: 'meters',
     fields: ['agentId', 'agentName', 'costCents', 'inputTokens', 'outputTokens'],
   },
   {
     method: 'GET',
     path: '/api/companies/{companyId}/costs/quota-windows',
+    feature: 'meters',
     fields: ['provider', 'ok', 'error', 'windows[].label', 'windows[].usedPercent', 'windows[].resetsAt', 'windows[].detail'],
   },
 ]
@@ -328,6 +354,20 @@ export function compareSurface(spec, routes = PAPERCLIP_SURFACE) {
   }
   result.ok = result.missing.length === 0 && result.changed.length === 0
   return result
+}
+
+export function surfaceFeatures(result, routes = PAPERCLIP_SURFACE) {
+  const features = Object.fromEntries(FEATURES.map((name) => [name, true]))
+  const failed = new Set()
+  const missing = Array.isArray(result?.missing) ? result.missing : []
+  const changed = Array.isArray(result?.changed) ? result.changed : []
+  for (const item of [...missing, ...changed]) {
+    failed.add(`${item?.method} ${item?.path}`)
+  }
+  for (const route of routes) {
+    if (failed.has(`${route.method} ${route.path}`)) features[route.feature] = false
+  }
+  return features
 }
 
 function fieldList(fields) {

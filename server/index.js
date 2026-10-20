@@ -11,7 +11,7 @@ import { createDecideApi } from './decide.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
 import { createStaticHandler } from './static.js'
-import { compareSurface } from './surface.js'
+import { compareSurface, surfaceFeatures } from './surface.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
@@ -242,6 +242,8 @@ export function createBridge(options = {}) {
     patchLimit: options.patchLimit,
     sendJson,
   })
+  let surface = { ok: null, checkedAt: null, error: 'not checked yet' }
+  const featureIsOff = (feature) => surfaceFeatures(surface)[feature] === false
   const control = createControlApi({
     paperclipUrl,
     companyId,
@@ -249,6 +251,7 @@ export function createBridge(options = {}) {
     projectWorkspaceId,
     sendJson,
     readJsonBody,
+    featureOn: (feature) => !featureIsOff(feature),
   })
   const assistant = createAssistantApi({
     sendJson,
@@ -282,7 +285,6 @@ export function createBridge(options = {}) {
   let surfaceChecking = false
   let surfacePending = false
   let paperclipVersion = null
-  let surface = { ok: null, checkedAt: null, error: 'not checked yet' }
   const logs = new Map()
   const waiting = []
   let resolving = false
@@ -648,12 +650,17 @@ export function createBridge(options = {}) {
         paperclip: paperclipOpen,
         paperclipVersion,
         surface,
+        features: surfaceFeatures(surface),
         unparsed: { ...unreadable.counts(), since: unparsedSince },
       })
       return
     }
 
     if (req.method === 'GET' && url.pathname === '/api/backup') {
+      if (featureIsOff('backup')) {
+        sendJson(req, res, 503, { error: 'Paperclip changed: backup is off. Run npm run doctor to see which routes.' })
+        return
+      }
       let upstream
       try {
         upstream = await fetch(`${paperclipUrl}/api/health`, { signal: AbortSignal.timeout(BACKUP_READ_TIMEOUT_MS) })
@@ -677,6 +684,10 @@ export function createBridge(options = {}) {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/backup') {
+      if (featureIsOff('backup')) {
+        sendJson(req, res, 503, { error: 'Paperclip changed: backup is off. Run npm run doctor to see which routes.' })
+        return
+      }
       const body = await readJsonBody(req, res)
       if (body === null) return
       if (body.confirmed !== true) {
