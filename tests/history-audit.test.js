@@ -14,7 +14,7 @@ const fakeGhp = 'ghp_' + 'c'.repeat(36)
 const fakeGho = 'gho_' + 'd'.repeat(36)
 const fakePat = 'github_pat_' + 'e'.repeat(36)
 const fakeAws = 'AKIA' + 'F'.repeat(16)
-const fakeMail = 'someone' + '@' + 'example.com'
+const fakeMail = 'someone' + '@' + 'site.com'
 const fakeHome = 'C:' + '\\Users\\' + 'mira'
 const fakeHomeSlash = 'c:' + '/users/' + 'mira'
 const fakeGraded = 'D:' + '\\School\\' + '6' + 'APSI' + '\\notes.md'
@@ -118,6 +118,47 @@ describe('findLeaks addresses and paths', () => {
   })
 })
 
+describe('findLeaks placeholders', () => {
+  it('leaves out each placeholder user folder, any case', () => {
+    const folders = ['user', 'owner', 'name', 'you', 'me', 'example', 'username', '%USERNAME%', '$env:USERNAME', '<user>']
+    for (const folder of folders) {
+      expect(findLeaks(`C:\\Users\\${folder}\\notes.md`)).toEqual([])
+      expect(findLeaks(`C:\\Users\\${folder.toUpperCase()}\\notes.md`)).toEqual([])
+    }
+  })
+
+  it('leaves out a placeholder folder with either slash', () => {
+    expect(findLeaks('c:/users/user/notes.md')).toEqual([])
+  })
+
+  it('keeps a folder that only starts with a placeholder', () => {
+    expect(kindsOf('C:\\Users\\username2\\notes.md')).toEqual(['userpath'])
+    expect(kindsOf('C:\\Users\\users\\notes.md')).toEqual(['userpath'])
+  })
+
+  it('leaves out each domain kept for examples', () => {
+    const domains = ['example.com', 'example.org', 'example.net', 'shop.example', 'host.invalid', 'x.test', 'app.localhost']
+    for (const domain of domains) {
+      expect(findLeaks(`write to someone@${domain}`)).toEqual([])
+    }
+    expect(findLeaks('write to Someone@Example.COM')).toEqual([])
+  })
+
+  it('still finds a real-looking folder and domain', () => {
+    expect(kindsOf('C:\\Users\\mira\\notes.md')).toEqual(['userpath'])
+    expect(kindsOf('write to someone@site.com')).toEqual(['email'])
+  })
+
+  it('leaves out both placeholders on one line', () => {
+    expect(findLeaks('C:\\Users\\user\\notes.md and test@example.com')).toEqual([])
+  })
+
+  it('keeps the real ones beside placeholders on one line', () => {
+    const line = 'C:\\Users\\user\\a, C:\\Users\\mira\\b, test@example.com, real@site.com'
+    expect(kindsOf(line)).toEqual(['userpath', 'email'])
+  })
+})
+
 describe('findLeaks output', () => {
   it('gives the line number inside the text', () => {
     expect(findLeaks(`clean\n${fakeMail}\nclean`)).toEqual([{ kind: 'email', line: 2, sample: fakeMail }])
@@ -202,7 +243,7 @@ describe('history-audit script and a tag named main', () => {
 describe('findLeaks on a line that holds a key', () => {
   it('masks the key in the samples of every other kind on that line', () => {
     const key = 'sk-or-v1-' + 'q'.repeat(48)
-    const line = `OPENROUTER_API_KEY=${key} set by someuser at C:/Users/someuser/x, mail someone@example.com`
+    const line = `OPENROUTER_API_KEY=${key} set by someuser at C:/Users/someuser/x, mail someone@site.com`
     const found = findLeaks(line, { profileName: 'someuser' })
     expect(found.map((finding) => finding.kind)).toEqual(expect.arrayContaining(['key', 'profile', 'userpath', 'email']))
     for (const finding of found) expect(finding.sample).not.toContain('q'.repeat(20))
