@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.79",
+  "version": "0.1.80",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -9,6 +9,24 @@
   "bin": {
     "machine-room": "bin/machine-room.mjs"
   },
+  "files": [
+    "bin/",
+    "server/",
+    "src/briefs/briefs.js",
+    "src/briefs/run.js",
+    "src/control/agents.js",
+    "src/decider/decide.js",
+    "src/decider/wire.js",
+    "src/model/commands.js",
+    "src/model/paths.js",
+    "src/model/parsers/common.js",
+    "src/model/parsers/hermes.js",
+    "src/model/parsers/opencode.js",
+    "src/model/parsers/unreadable.js",
+    "dist/",
+    "!dist/recordings/",
+    "README.md"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -19,6 +37,7 @@
     "run-lane": "node scripts/run-lane.mjs",
     "run-recording": "node scripts/run-recording.mjs",
     "doctor": "node scripts/doctor.mjs",
+    "pack-check": "node scripts/pack-check.mjs",
     "bridge": "node server/index.js",
     "serve": "node bin/machine-room.mjs"
   },
