@@ -3,7 +3,7 @@ import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { countLeaks, findLeaks, LEAK_KINDS } from '../src/briefs/audit.js'
+import { countLeaks, findLeaks, LEAK_KINDS, maskKeys } from '../src/briefs/audit.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/history-audit.mjs', import.meta.url))
@@ -219,5 +219,69 @@ describe('findLeaks on other key shapes', () => {
       expect(found.map((finding) => finding.kind)).toEqual(['key'])
       expect(found[0].sample).toBe(`${key.slice(0, 4)}… (${key.length} characters)`)
     }
+  })
+})
+
+describe('maskKeys', () => {
+  it('masks and counts each key shape', () => {
+    const google = 'AIza' + 'g'.repeat(35)
+    const shapes = [fakeSk, fakeOr, fakeGhp, fakeGho, fakePat, fakeAws, google]
+    for (const key of shapes) {
+      expect(maskKeys(`value ${key} end`)).toEqual({ text: 'value [key] end', count: 1 })
+    }
+  })
+
+  it('masks two keys on one line', () => {
+    expect(maskKeys(`${fakeSk} and ${fakeAws}`)).toEqual({ text: '[key] and [key]', count: 2 })
+    expect(maskKeys(`${fakeGhp} ${fakeGho} ${fakePat}`)).toEqual({ text: '[key] [key] [key]', count: 3 })
+  })
+
+  it('keeps the name of a key setting and masks its value', () => {
+    expect(maskKeys(`OPENROUTER_API_KEY=${fakeOr}`)).toEqual({ text: 'OPENROUTER_API_KEY=[key]', count: 1 })
+    expect(maskKeys('OPENAI_API_KEY="abc123"')).toEqual({ text: 'OPENAI_API_KEY="[key]"', count: 1 })
+    expect(maskKeys(`ANTHROPIC_API_KEY=${fakeSk}`)).toEqual({ text: 'ANTHROPIC_API_KEY=[key]', count: 1 })
+  })
+
+  it('leaves a 40 character git sha and a UUID alone', () => {
+    const sha = '3f2a9c1d4b5e6f708192a3b4c5d6e7f8091a2b3c'
+    const uuid = '123e4567-e89b-12d3-a456-426614174000'
+    expect(sha).toHaveLength(40)
+    expect(maskKeys(`commit ${sha}`)).toEqual({ text: `commit ${sha}`, count: 0 })
+    expect(maskKeys(`run ${uuid}`)).toEqual({ text: `run ${uuid}`, count: 0 })
+  })
+
+  it('leaves a placeholder setting alone', () => {
+    expect(maskKeys('OPENROUTER_API_KEY=your-key')).toEqual({ text: 'OPENROUTER_API_KEY=your-key', count: 0 })
+    expect(maskKeys('ANTHROPIC_API_KEY=xxx')).toEqual({ text: 'ANTHROPIC_API_KEY=xxx', count: 0 })
+    expect(maskKeys('OPENAI_API_KEY=<your key>')).toEqual({ text: 'OPENAI_API_KEY=<your key>', count: 0 })
+    expect(maskKeys('OPENAI_API_KEY=')).toEqual({ text: 'OPENAI_API_KEY=', count: 0 })
+    expect(maskKeys('OPENROUTER_API_KEY=${OPENROUTER_API_KEY}')).toEqual({
+      text: 'OPENROUTER_API_KEY=${OPENROUTER_API_KEY}',
+      count: 0,
+    })
+  })
+
+  it('masks twice to the same text', () => {
+    const sha = '3f2a9c1d4b5e6f708192a3b4c5d6e7f8091a2b3c'
+    const text = `key ${fakeSk}\nOPENROUTER_API_KEY=${fakeOr}\nsha ${sha}`
+    const once = maskKeys(text)
+    const twice = maskKeys(once.text)
+    expect(once.count).toBe(2)
+    expect(once.text).toBe(`key [key]\nOPENROUTER_API_KEY=[key]\nsha ${sha}`)
+    expect(twice.text).toBe(once.text)
+    expect(twice.count).toBe(0)
+  })
+
+  it('keeps the other lines and their endings', () => {
+    expect(maskKeys(`a ${fakeAws}\r\nb\r\nc ${fakeGhp}`)).toEqual({
+      text: 'a [key]\r\nb\r\nc [key]',
+      count: 2,
+    })
+  })
+
+  it('answers an empty result for empty or missing text', () => {
+    expect(maskKeys('')).toEqual({ text: '', count: 0 })
+    expect(maskKeys(undefined)).toEqual({ text: '', count: 0 })
+    expect(maskKeys(null)).toEqual({ text: '', count: 0 })
   })
 })

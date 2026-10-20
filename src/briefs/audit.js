@@ -120,6 +120,52 @@ export function findLeaks(text, { profileName } = {}) {
   return findings
 }
 
+export const KEY_MASK = '[key]'
+
+function keyRanges(line) {
+  const ranges = []
+  const settings = []
+  eachMatch(KEY_SETTING, line, (match) => {
+    const value = match[3] ?? ''
+    if (value === '') return
+    const start = match.index + match[0].lastIndexOf(value)
+    settings.push([start, start + value.length])
+    if (value === KEY_MASK || isPlaceholder(value)) return
+    ranges.push([start, start + value.length])
+  })
+  for (const re of [SK_TOKEN, GITHUB_TOKEN, AWS_TOKEN, GOOGLE_KEY]) {
+    eachMatch(re, line, (match) => {
+      const inside = settings.some(([start, end]) => match.index >= start && match.index < end)
+      if (inside) return
+      ranges.push([match.index, match.index + match[0].length])
+    })
+  }
+  return ranges
+}
+
+function maskLine(line) {
+  const ranges = keyRanges(line)
+  if (ranges.length === 0) return { text: line, count: 0 }
+  let text = line
+  for (const [start, end] of [...ranges].sort((a, b) => b[0] - a[0])) {
+    text = `${text.slice(0, start)}${KEY_MASK}${text.slice(end)}`
+  }
+  return { text, count: ranges.length }
+}
+
+export function maskKeys(text) {
+  if (typeof text !== 'string') return { text: '', count: 0 }
+  if (text === '') return { text: '', count: 0 }
+  const parts = text.split(/(\r\n|\r|\n)/)
+  let count = 0
+  for (let index = 0; index < parts.length; index += 2) {
+    const masked = maskLine(parts[index])
+    parts[index] = masked.text
+    count += masked.count
+  }
+  return { text: parts.join(''), count }
+}
+
 export function countLeaks(findings) {
   const counts = {}
   for (const kind of LEAK_KINDS) counts[kind] = 0
