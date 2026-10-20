@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
+import { connect } from 'node:net'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
@@ -1646,6 +1647,67 @@ describe('assistant route', () => {
         timeoutMs: 8000,
       },
     ])
+  })
+
+  it('accepts application/json with a charset parameter', async () => {
+    const { url } = await startAssistantBridge({
+      env: {},
+      assistantRunner: async () => 'ok',
+    })
+
+    const res = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ prompt: 'hello' }),
+    })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ text: 'ok' })
+  })
+
+  it('answers 415 when application/json appears only after the semicolon', async () => {
+    const { url } = await startAssistantBridge({
+      env: {},
+      assistantRunner: async () => 'should not run',
+    })
+
+    const res = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain; x=application/json' },
+      body: JSON.stringify({ prompt: 'hello' }),
+    })
+    expect(res.status).toBe(415)
+    expect(await res.json()).toEqual({ error: 'Send JSON.' })
+  })
+
+  it('answers 413 to a 100 KB body and closes the connection before the rest is sent', async () => {
+    const { url } = await startAssistantBridge({
+      env: {},
+      assistantRunner: async () => 'should not run',
+    })
+    const target = new URL(url)
+    const body = 'x'.repeat(100 * 1024)
+    const first = body.slice(0, 70 * 1024)
+    const rest = body.slice(70 * 1024)
+    const socket = connect(Number(target.port), target.hostname)
+    socket.setEncoding('utf8')
+    let text = ''
+    socket.on('data', (chunk) => {
+      text += chunk
+    })
+    const closed = new Promise((resolveClose) => socket.on('close', resolveClose))
+    await new Promise((resolveOpen, rejectOpen) => {
+      socket.on('connect', resolveOpen)
+      socket.on('error', rejectOpen)
+    })
+    socket.write(`POST /api/assistant HTTP/1.1\r\nHost: ${target.host}\r\nContent-Type: application/json\r\nConnection: keep-alive\r\nContent-Length: ${body.length}\r\n\r\n`)
+    socket.write(first)
+    await closed
+
+    expect(rest).toHaveLength(30 * 1024)
+    expect(text).toContain('HTTP/1.1 413')
+    expect(text).toMatch(/connection: close/i)
+    expect(text).toContain('That request is too large.')
+    expect(socket.destroyed).toBe(true)
   })
 
   it('reads the model from ASSISTANT_MODEL or the settings file and answers 404 when no model is set', async () => {
