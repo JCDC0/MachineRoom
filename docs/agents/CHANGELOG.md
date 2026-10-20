@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Audit report: `docs/agents/AUDIT-2026-10.md` lists the 19 findings fixed on this branch with severity, file, line, what an attacker or bad input does and the fix commit, what Part 0 changed for Linux, and 17 findings left open with the reason for each.
 - Audit fix: `relativeTo` in `src/model/paths.js` folds `.` and `..` folders and answers `null` for a path that climbs out of the project, so a lane reading `../MachineRoom/docs/agents/TASKS.md` no longer draws a `..` folder inside the room; `.` is the project root, a trailing slash is dropped, and a project with no name yet no longer reads every path that ends in a slash as the root; the four recorded scenarios replay unchanged; tests in `tests/paths.test.js`.
 - Audit fix: the pipeline gives an activity whose frame time does not parse (`createdAt` or a chunk's `ts`) the time of the activity before it; before, one `NaN` time made every later replay stamp `NaN`, so nothing after that frame ever played and the scrubber had no length; test in `tests/live.test.js`.
 - Audit fix: the Hermes, OpenCode and agy parsers and `createParser` read their tool and parser tables with `Object.hasOwn`, so a tool named `toString` or `__proto__` in agy output no longer throws while the destructuring runs (which stopped a recording from loading), and Hermes and OpenCode read such names as `other` instead of a function or an object; tests in `tests/parsers.test.js`.
