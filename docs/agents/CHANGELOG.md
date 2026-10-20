@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The native test crash found (task T15): a full run dies about half the time with exit code 0xC0000409 inside `node.exe` 24.15.0 at a fixed offset, always while `tests/bridge.test.js` is in flight (7 of 12 full runs, and 7 of 20 runs of that file alone), with `tests/control-contract.test.js` and `tests/bridge-reviews.test.js` in flight too and `tests/run-recording.test.js` sometimes; `--pool=forks` does not stop it (6 of 12) and one worker does (6 of 6) but takes 34 seconds a run against 9, so `vite.config.js` is unchanged.
 - Review fixes on D2: the mock client and the contract have `decide`, and the mock answers like a bridge with no key.
 - Decide route in the bridge (task D2): `POST /api/decide` is local pages only, takes `state`, `questions` and an optional `model` with a 32 KB limit, calls `decide()` with `OPENROUTER_API_KEY` and the model from the body, `DECISION_MODEL` or `typesafe/jev-1.14`, answers the model, answers, usage, milliseconds and attempts, maps a missing key to 404 and a rate limit to 429 and any other failure to 502, logs only the model, the question names, the result kind and the milliseconds, and `decide({ state, questions, model })` joins the control client; tests in `tests/bridge.test.js` use a fake Decisions server.
 - Review fixes on T13b: `readRunRecords` reads through `readAllRunRecords` instead of a second copy of the loop, the bridge takes the bad day sentence from `src/briefs/run.js` (`SINCE_PROBLEM`, now exported), and the mock client and the contract have `runStats`.

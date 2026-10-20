@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.78. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.79. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -193,6 +193,7 @@ Do not rename these classes without changing both sides.
 - The bridge only allows pages on `localhost` or `127.0.0.1`.
 - Through the proxy route (no bridge), a tool call whose log line is over 8192 characters is missed. A real run lost 3 of 58 calls this way, all reads outside the project.
 - A card's depth plane matches its face, not its tab or the faint folders behind it, so a line can show through those.
+- About half of the full test runs on this machine die inside `node.exe` 24.15.0 with 0xC0000409 (bash shows exit 127) while the test files that start a bridge run (`bridge`, `control-contract`, `bridge-reviews`). The Windows event log names Node itself at a fixed address, and a probe hit the libuv assertion `!(handle->flags & UV_HANDLE_CLOSING)` in `src\win\async.c` when a process exited right after `bridge.stop()`. The forks pool still crashes, and one worker avoids it but is 3.6 times slower (T15). A crashed run leaves its `mr-*` temp folders behind. Run the tests again; it is not a test failure.
 - The card layout is fitted to the overview angle. From another angle cards can overlap until `0` returns to the overview.
 
 ## Open work
