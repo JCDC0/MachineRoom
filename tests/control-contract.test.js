@@ -1214,3 +1214,14 @@ describe('mock merge confirm', () => {
     await expect(client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })).rejects.toThrow('Nothing to merge.')
   })
 })
+
+describe('mock run confirm', () => {
+  it('refuses a run that was not confirmed', async () => {
+    const client = createMockClient({ latencyMs: 0, now: () => BASE_TIME })
+    await expect(client.startRun('hermes', ['C3e'], { confirmed: false })).rejects.toThrow('Confirm the run first.')
+    const { running } = await client.runs()
+    expect(running).toEqual([])
+    const entry = await client.startRun('hermes', ['C3e'])
+    expect(entry.lane).toBe('hermes')
+  })
+})

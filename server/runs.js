@@ -168,6 +168,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const body = await readJsonBody(req, res)
     if (body === null) return true
 
+    if (body.confirmed !== true) {
+      sendJson(req, res, 400, { error: 'Confirm the run first.' })
+      return true
+    }
+
     const lanesText = readText('lanes.json')
     const tasksText = readText('TASKS.md')
     if (lanesText === null || tasksText === null) {

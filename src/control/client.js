@@ -112,7 +112,7 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
       return Array.isArray(data) ? data : data?.rows ?? []
     },
 
-    startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs }),
+    startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs, confirmed: true }),
 
     reviews: async () => {
       const data = await request('GET', '/api/control/reviews')
