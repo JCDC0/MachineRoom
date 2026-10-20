@@ -3,12 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createBridge, isAllowedHost } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
 import { extractReplyText } from '../server/assistant.js'
 import { PAPERCLIP_SURFACE } from '../server/surface.js'
+import { choice } from '../src/decider/wire.js'
+import { startFakeDecisions } from './fakeDecisions.js'
 
 function fieldsSchema(fields = []) {
   const root = { type: 'object', properties: {} }
@@ -2264,6 +2266,231 @@ describe('run routes', () => {
       } catch {
         return true
       }
+    })
+  })
+})
+
+describe('decide route', () => {
+  const KEY = 'test-decision-key-123456'
+  const QUESTIONS = { tier: choice('Which tier?', { small: 'A small one.', large: 'A large one.' }) }
+  const ANSWERS = {
+    tier: { type: 'choice', choice: 'small', confidence: 0.9, probabilities: { small: 0.9, large: 0.1 } },
+  }
+  const RAW_USAGE = { input_tokens: 120, output_tokens: 8, cost: 0.00002 }
+  const USAGE = { inputTokens: 120, outputTokens: 8, cost: 0.00002 }
+
+  function goodAnswer(body) {
+    return { body: { model: body.model, answers: ANSWERS, usage: RAW_USAGE } }
+  }
+
+  async function startDecideBridge({ env = { OPENROUTER_API_KEY: KEY }, decideUrl, decideTimeoutMs } = {}) {
+    const fakePaperclip = await startFakePaperclip('comp-1')
+    cleanups.push(() => fakePaperclip.close())
+    const bridge = createBridge({
+      paperclipUrl: fakePaperclip.url,
+      companyId: 'comp-1',
+      projectRoot: '',
+      port: 0,
+      env,
+      decideUrl,
+      decideTimeoutMs,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    return { url }
+  }
+
+  async function startFakeDecisionBridge(options = {}) {
+    const fake = await startFakeDecisions(options.answer ?? goodAnswer)
+    cleanups.push(() => fake.close())
+    const { url } = await startDecideBridge({ ...options, decideUrl: fake.url })
+    return { fake, url }
+  }
+
+  function startStalledDecisions() {
+    const sockets = new Set()
+    const requests = []
+    const server = createServer((req) => {
+      requests.push(req.url)
+      req.resume()
+    })
+    server.on('connection', (socket) => {
+      sockets.add(socket)
+      socket.on('close', () => sockets.delete(socket))
+    })
+    return new Promise((resolveReady) => {
+      server.listen(0, '127.0.0.1', () => {
+        resolveReady({
+          url: `http://127.0.0.1:${server.address().port}/decide`,
+          requests,
+          close: () =>
+            new Promise((resolveClose) => {
+              for (const socket of sockets) socket.destroy()
+              server.close(() => resolveClose())
+            }),
+        })
+      })
+    })
+  }
+
+  it('answers a good call with its model, answers, usage, milliseconds and attempts', async () => {
+    const { fake, url } = await startFakeDecisionBridge()
+    const res = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: QUESTIONS })
+    expect(res.status).toBe(200)
+    const answer = await res.json()
+    expect(answer).toMatchObject({
+      ok: true,
+      model: 'typesafe/jev-1.14',
+      answers: ANSWERS,
+      usage: USAGE,
+      attempts: 1,
+    })
+    expect(typeof answer.ms).toBe('number')
+    expect(fake.seen).toHaveLength(1)
+    expect(fake.seen[0].authorization).toBe(`Bearer ${KEY}`)
+    expect(fake.seen[0].body).toEqual({ model: 'typesafe/jev-1.14', state: 'Task x', questions: QUESTIONS })
+  })
+
+  it('takes the model from the body, then DECISION_MODEL, then the default', async () => {
+    const fake = await startFakeDecisions(goodAnswer)
+    cleanups.push(() => fake.close())
+    const fromEnv = await startDecideBridge({
+      env: { OPENROUTER_API_KEY: KEY, DECISION_MODEL: 'env/model' },
+      decideUrl: fake.url,
+    })
+    const plain = await startDecideBridge({ decideUrl: fake.url })
+
+    const body = await postJson(fromEnv.url, '/api/decide', 'POST', {
+      state: 'Task x',
+      questions: QUESTIONS,
+      model: 'body/model',
+    }).then((res) => res.json())
+    expect(body.model).toBe('body/model')
+
+    const fromEnvironment = await postJson(fromEnv.url, '/api/decide', 'POST', {
+      state: 'Task x',
+      questions: QUESTIONS,
+    }).then((res) => res.json())
+    expect(fromEnvironment.model).toBe('env/model')
+
+    const fallback = await postJson(plain.url, '/api/decide', 'POST', {
+      state: 'Task x',
+      questions: QUESTIONS,
+    }).then((res) => res.json())
+    expect(fallback.model).toBe('typesafe/jev-1.14')
+
+    expect(fake.seen.map((request) => request.body.model)).toEqual(['body/model', 'env/model', 'typesafe/jev-1.14'])
+  })
+
+  it('answers 404 when no key is set and calls nothing', async () => {
+    const { fake, url } = await startFakeDecisionBridge({ env: {} })
+    const res = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: QUESTIONS })
+    expect(res.status).toBe(404)
+    expect(await res.json()).toEqual({ error: 'No key is set for the decision model.' })
+    expect(fake.seen).toHaveLength(0)
+  })
+
+  it('answers 413 for a body over 32 KB', async () => {
+    const { fake, url } = await startFakeDecisionBridge()
+    const res = await postJson(url, '/api/decide', 'POST', { state: 'x'.repeat(33 * 1024), questions: QUESTIONS })
+    expect(res.status).toBe(413)
+    expect(await res.json()).toEqual({ error: 'That request is too large.' })
+    expect(fake.seen).toHaveLength(0)
+  })
+
+  it('answers 400 without a state or a question', async () => {
+    const { fake, url } = await startFakeDecisionBridge()
+
+    const noState = await postJson(url, '/api/decide', 'POST', { questions: QUESTIONS })
+    expect(noState.status).toBe(400)
+    expect(await noState.json()).toEqual({ error: 'Send a state as text or an object.' })
+
+    const badState = await postJson(url, '/api/decide', 'POST', { state: 42, questions: QUESTIONS })
+    expect(badState.status).toBe(400)
+    expect(await badState.json()).toEqual({ error: 'Send a state as text or an object.' })
+
+    const noQuestions = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: {} })
+    expect(noQuestions.status).toBe(400)
+    expect(await noQuestions.json()).toEqual({ error: 'Send at least one question.' })
+
+    const listQuestions = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: [] })
+    expect(listQuestions.status).toBe(400)
+    expect(await listQuestions.json()).toEqual({ error: 'Send at least one question.' })
+    expect(fake.seen).toHaveLength(0)
+  })
+
+  it('answers 429 when the model is rate limited after its retry', async () => {
+    const { fake, url } = await startFakeDecisionBridge({
+      answer: () => ({ status: 429, body: { error: { message: 'slow down' } } }),
+    })
+    const res = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: QUESTIONS })
+    expect(res.status).toBe(429)
+    expect(await res.json()).toEqual({ error: 'Too many requests. Try again in a moment.' })
+    expect(fake.seen).toHaveLength(2)
+  })
+
+  it('answers 502 after the retry on a server error', async () => {
+    const { fake, url } = await startFakeDecisionBridge({
+      answer: () => ({ status: 500, body: { error: { message: 'boom' } } }),
+    })
+    const res = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: QUESTIONS })
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: 'The service failed: boom' })
+    expect(fake.seen).toHaveLength(2)
+  })
+
+  it('answers 502 when the model does not answer in time', async () => {
+    const stalled = await startStalledDecisions()
+    cleanups.push(() => stalled.close())
+    const { url } = await startDecideBridge({ decideUrl: stalled.url, decideTimeoutMs: 50 })
+    const res = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: QUESTIONS })
+    expect(res.status).toBe(502)
+    expect(await res.json()).toEqual({ error: 'The decision model did not answer in time.' })
+    expect(stalled.requests).toHaveLength(2)
+  })
+
+  it('never puts the key, the state or the answers in an answer or a log line', async () => {
+    const logs = []
+    const spy = vi.spyOn(console, 'log').mockImplementation((line) => {
+      logs.push(String(line))
+    })
+    cleanups.push(() => spy.mockRestore())
+    const { url } = await startFakeDecisionBridge({
+      answer: (body, count) =>
+        count === 1 ? goodAnswer(body) : { status: 500, body: { error: { message: `failed for Bearer ${KEY} and ${KEY}` } } },
+    })
+    const state = 'SECRET STATE TEXT'
+
+    const first = await postJson(url, '/api/decide', 'POST', { state, questions: QUESTIONS })
+    const firstText = await first.text()
+    const second = await postJson(url, '/api/decide', 'POST', { state, questions: QUESTIONS })
+    const secondText = await second.text()
+
+    expect(firstText).not.toContain(KEY)
+    expect(secondText).not.toContain(KEY)
+    expect(secondText).toContain('[key]')
+    expect(logs).toHaveLength(2)
+    for (const line of logs) {
+      expect(line).not.toContain(KEY)
+      expect(line).not.toContain(state)
+      expect(line).not.toContain('small')
+    }
+    expect(logs[0]).toContain('typesafe/jev-1.14')
+    expect(logs[0]).toContain('tier')
+    expect(logs[0]).toContain('ok')
+    expect(logs[1]).toContain('server')
+  })
+
+  it('calls the decide route through the control client', async () => {
+    const { url } = await startFakeDecisionBridge()
+    const client = createClient({ baseUrl: url })
+    const answer = await client.decide({ state: 'Task x', questions: QUESTIONS })
+    expect(answer).toMatchObject({
+      ok: true,
+      model: 'typesafe/jev-1.14',
+      answers: ANSWERS,
+      usage: USAGE,
+      attempts: 1,
     })
   })
 })
