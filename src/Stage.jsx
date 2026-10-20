@@ -58,6 +58,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
   const [toast, setToast] = useState('')
+  const [openChips, setOpenChips] = useState(NONE)
   const targetCount = useRef(0)
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
@@ -95,6 +96,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       },
     })
     roomRef.current = room
+    setOpenChips(NONE)
     if (!live) {
       const saved = loadSettings(store()).speed
       if (SPEEDS.includes(saved)) player.setSpeed(saved)
@@ -157,7 +159,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       } else if (event.key === 'f' || event.key === 'F') {
         setFollow(followRef.current === 'wide' ? 'close' : followRef.current ? false : 'wide')
       } else if (event.key === 't' || event.key === 'T') {
-        room?.toggleTerminal(room.focused())
+        setOpenChips(room?.toggleTerminal(room.focused()) ?? NONE)
       } else if (event.key === '0') {
         setFollow(false)
         room?.overview()
@@ -196,6 +198,15 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     setFocused(key)
   }
 
+  function toggleTerminal(key) {
+    setOpenChips(roomRef.current?.toggleTerminal(key) ?? NONE)
+  }
+
+  function showTerminals(open) {
+    roomRef.current?.openTerminals(open)
+    setOpenChips(roomRef.current?.openTerminalKeys() ?? NONE)
+  }
+
   function overview() {
     setFollow(false)
     roomRef.current?.overview()
@@ -227,7 +238,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     focusTerminal: (key) => {
       setFollow(false)
       setFocused(key)
-      return roomRef.current?.focusTerminal(key) ?? false
+      const shown = roomRef.current?.focusTerminal(key) ?? false
+      setOpenChips(roomRef.current?.openTerminalKeys() ?? NONE)
+      return shown
     },
     focusPath: (path) => {
       setFollow(false)
@@ -299,6 +312,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         onSpeed={changeSpeed}
         onFocus={focus}
         onOverview={overview}
+        openTerminals={openChips}
+        onToggleTerminal={toggleTerminal}
+        onShowTerminals={showTerminals}
       />
     </div>
   )

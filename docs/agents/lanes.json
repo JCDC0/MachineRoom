@@ -22,12 +22,13 @@
   "opencode": {
     "name": "OpenCode",
     "harness": "OpenCode",
-    "model": "MiMo V2.6 Pro",
-    "modelHint": "in OpenCode's list it appears as opencode-go/mimo-v2.6-pro",
+    "model": "DeepSeek V4.1 Flash 1017",
+    "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
+    "reasoning": "max",
     "cli": {
       "harness": "opencode",
       "bin": "%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
-      "model": "opencode-go/mimo-v2.6-pro"
+      "model": "opencode-go/deepseek-v4.1-flash"
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode",
     "role": "You own the bridge (server/**), scripts/** and src/control/client.js.",

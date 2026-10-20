@@ -20,7 +20,7 @@ describe('commandFor', () => {
   it('builds the OpenCode command with the reasoning as the model variant', () => {
     expect(commandFor({ lane: { ...lanes.opencode, reasoning: 'max' }, prompt, env, usageFile, title })).toEqual({
       file: 'C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe',
-      args: ['run', '--format', 'json', '--model', 'opencode-go/mimo-v2.6-pro#max', '--auto', '--title', title, prompt],
+      args: ['run', '--format', 'json', '--model', 'opencode-go/deepseek-v4.1-flash#max', '--auto', '--title', title, prompt],
       cwd: lanes.opencode.worktree,
     })
   })
@@ -30,7 +30,7 @@ describe('commandFor', () => {
     const command = commandFor({ lane, prompt, env, title })
     expect(command.args).toEqual(['-z', prompt, '-m', 'deepseek/deepseek-v4.1-flash-1017', '--provider', 'openrouter', '-t', 'file,terminal'])
     expect(commandFor({ lane: { ...lanes.opencode, reasoning: undefined }, prompt, env, title }).args).toEqual([
-      'run', '--format', 'json', '--model', 'opencode-go/mimo-v2.6-pro', '--auto', '--title', title, prompt,
+      'run', '--format', 'json', '--model', 'opencode-go/deepseek-v4.1-flash', '--auto', '--title', title, prompt,
     ])
   })
 
