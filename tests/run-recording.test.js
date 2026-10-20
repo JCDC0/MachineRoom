@@ -1,7 +1,11 @@
-import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
 import { agentsFile, framesFromRun, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
+import { writeRecording } from '../scripts/recording-files.mjs'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const scenarioTree = JSON.parse(readFileSync(new URL('../public/fixtures/scenario-a-tree.json', import.meta.url), 'utf8'))
@@ -169,5 +173,123 @@ describe('agentsFile and treeFile', () => {
     expect(() => agentsFile('claude', lanes)).toThrow(/no lane named claude/)
     expect(() => framesFromRun({ harness: 'claude', log: '', record: { lane: 'claude', startedAt: '2026-10-19T00:00:00.000Z' } })).toThrow(/does not know/)
     expect(() => framesFromRun({ harness: 'opencode', log: '', record: {} })).toThrow(/start time/)
+  })
+})
+
+const temporary = []
+
+function tempFolder() {
+  const dir = mkdtempSync(join(tmpdir(), 'mr-recording-'))
+  temporary.push(dir)
+  return dir
+}
+
+function git(cwd, args) {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true, shell: false })
+  if (result.error || result.status !== 0) throw new Error(`git ${args[0]} failed: ${String(result.stderr ?? '').trim()}`)
+  return String(result.stdout ?? '').trim()
+}
+
+function worktreeWith(files) {
+  const dir = tempFolder()
+  git(dir, ['init', '-q', '-b', 'main'])
+  for (const [name, text] of Object.entries(files)) {
+    const path = join(dir, name)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, text)
+  }
+  git(dir, ['add', '-A'])
+  git(dir, ['-c', 'user.email=test@example.com', '-c', 'user.name=test', 'commit', '-q', '-m', 'one'])
+  return { dir, sha: git(dir, ['rev-parse', 'HEAD']) }
+}
+
+function sessionFor(worktree) {
+  const text = readFileSync(new URL('./fixtures/hermes-session.jsonl', import.meta.url), 'utf8')
+  return text.replaceAll('C:\\\\work\\\\MachineRoom-hermes', worktree.replace(/\\/g, '\\\\'))
+}
+
+function readFrames(path) {
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line))
+}
+
+describe('writeRecording', () => {
+  afterEach(() => {
+    for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('writes the three recording files for a Hermes record from the session export it is given', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'hermes-T10-20261020-101010.log')
+    writeFileSync(logPath, 'the report\n')
+    const record = {
+      lane: 'hermes',
+      startedAt: '2026-10-19T15:05:15.000Z',
+      minutes: 4,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: 'feat/t10',
+      commits: [`${sha} one`],
+    }
+    const written = writeRecording({ record, lanes: { hermes: { ...lanes.hermes, worktree: dir } }, root, env: {}, session: sessionFor(dir) })
+
+    expect(written.name).toBe('hermes-T10-20261020-101010')
+    expect(written.runPath).toBe(join(root, 'public', 'recordings', 'hermes-T10-20261020-101010-run.jsonl'))
+    expect(written.agentsPath).toBe(join(root, 'public', 'recordings', 'hermes-T10-20261020-101010-agents.json'))
+    expect(written.treePath).toBe(join(root, 'public', 'recordings', 'hermes-T10-20261020-101010-tree.json'))
+    expect(written.frames).toBe(5)
+    expect(written.toolCalls).toBe(2)
+
+    const frames = readFrames(written.runPath)
+    expect(frames).toHaveLength(5)
+    expect(frames[frames.length - 1].payload).toMatchObject({ status: 'succeeded', error: null })
+    const agents = JSON.parse(readFileSync(written.agentsPath, 'utf8'))
+    expect(agents.agents[0]).toMatchObject({ key: 'hermes', parser: 'hermes' })
+    const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect([...tree.files].sort()).toEqual(['docs/agents/CHANGELOG.md', 'src/briefs/run.js'])
+  })
+
+  it('writes the three recording files for an OpenCode record and marks a failed run', () => {
+    const { dir, sha } = worktreeWith({ 'README.md': 'x\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'opencode-T10-20261020-101010.log')
+    writeFileSync(logPath, readFileSync(new URL('./fixtures/opencode-run-json.jsonl', import.meta.url), 'utf8'))
+    const record = {
+      lane: 'opencode',
+      startedAt: '2026-10-20T10:10:10.000Z',
+      minutes: 3,
+      exitCode: 1,
+      killed: false,
+      log: logPath,
+      branch: 'feat/t10',
+      commits: [`${sha} one`],
+    }
+    const written = writeRecording({ record, lanes: { opencode: { ...lanes.opencode, worktree: dir } }, root, env: {} })
+
+    expect(written.name).toBe('opencode-T10-20261020-101010')
+    expect(written.frames).toBe(5)
+    expect(written.toolCalls).toBe(2)
+    const frames = readFrames(written.runPath)
+    expect(frames[frames.length - 1].payload).toMatchObject({ status: 'failed', error: 'exit 1' })
+    const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect(tree.files).toEqual(['README.md'])
+  })
+
+  it('refuses a record whose log is gone and writes nothing', () => {
+    const { dir, sha } = worktreeWith({ 'README.md': 'x\n' })
+    const root = tempFolder()
+    const record = { lane: 'opencode', log: join(root, 'gone.log'), branch: 'main', commits: [`${sha} one`] }
+    expect(() => writeRecording({ record, lanes: { opencode: { ...lanes.opencode, worktree: dir } }, root, env: {} })).toThrow('The log for that run is gone.')
+    expect(existsSync(join(root, 'public'))).toBe(false)
+  })
+
+  it('refuses an unknown lane and a lane with no command line', () => {
+    const root = tempFolder()
+    expect(() => writeRecording({ record: { lane: 'claude' }, lanes, root, env: {} })).toThrow(/no lane named claude/)
+    expect(() => writeRecording({ record: { lane: 'agy' }, lanes, root, env: {} })).toThrow(/no command line/)
   })
 })
