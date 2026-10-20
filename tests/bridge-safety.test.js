@@ -1,4 +1,5 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -75,5 +76,47 @@ describe('prompt builders with hostile lane names', () => {
   it('the mock refuses them in plain words', async () => {
     const client = createMockClient({ latencyMs: 0 })
     for (const lane of ['__proto__', 'constructor']) await expect(client.briefPrompt(['C3e'], lane)).rejects.toThrow(/Choose hermes/)
+  })
+})
+
+describe('a Paperclip that takes the request and never answers', () => {
+  async function startSilentPaperclip() {
+    const server = createServer(() => {})
+    await new Promise((settle) => server.listen(0, '127.0.0.1', settle))
+    cleanups.push(
+      () =>
+        new Promise((settle) => {
+          server.closeAllConnections()
+          server.close(() => settle())
+        })
+    )
+    return `http://127.0.0.1:${server.address().port}`
+  }
+
+  it('answers the page within the time limit instead of holding the request open', async () => {
+    const paperclipUrl = await startSilentPaperclip()
+    const bridge = createBridge({
+      port: 0,
+      projectRoot: '',
+      paperclipUrl,
+      companyId: 'company-1',
+      reconnectMinMs: 60000,
+      reconnectMaxMs: 60000,
+      surfaceEveryMs: 0,
+      upstreamTimeoutMs: 200,
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+    const url = `http://127.0.0.1:${info.port}`
+
+    const agents = await fetch(`${url}/api/control/agents`, { signal: AbortSignal.timeout(3000) })
+    expect(agents.status).toBe(504)
+    expect(await agents.json()).toEqual({ error: 'Paperclip did not answer in time.' })
+
+    const task = await fetch(`${url}/api/control/approvals`, { signal: AbortSignal.timeout(3000) })
+    expect(task.status).toBe(504)
+
+    const list = await fetch(`${url}/api/agents`, { signal: AbortSignal.timeout(3000) })
+    expect(list.status).toBe(502)
   })
 })

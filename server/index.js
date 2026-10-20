@@ -20,6 +20,7 @@ const SURFACE_TIMEOUT_MS = 10000
 const SURFACE_EVERY_MS = 15 * 60 * 1000
 const BACKUP_READ_TIMEOUT_MS = 10000
 const BACKUP_RUN_TIMEOUT_MS = 120000
+const AGENTS_TIMEOUT_MS = 15000
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
@@ -219,6 +220,7 @@ export function createBridge(options = {}) {
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
   const surfaceEveryMs = Number(options.surfaceEveryMs ?? SURFACE_EVERY_MS)
+  const upstreamTimeoutMs = Number(options.upstreamTimeoutMs ?? AGENTS_TIMEOUT_MS)
   const env = options.env ?? process.env
 
   const briefs = createBriefsApi({
@@ -253,6 +255,7 @@ export function createBridge(options = {}) {
     sendJson,
     readJsonBody,
     featureOn: (feature) => !featureIsOff(feature),
+    timeoutMs: upstreamTimeoutMs,
   })
   const assistant = createAssistantApi({
     sendJson,
@@ -353,7 +356,7 @@ export function createBridge(options = {}) {
   }
 
   function loadAgents() {
-    fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`)
+    fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, { signal: AbortSignal.timeout(upstreamTimeoutMs) })
       .then(async (upstream) => {
         if (!upstream.ok) return
         rememberAgents(agentListOf(await upstream.json()))
@@ -740,7 +743,9 @@ export function createBridge(options = {}) {
 
     if (req.method === 'GET' && url.pathname === '/api/agents') {
       try {
-        const upstream = await fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`)
+        const upstream = await fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, {
+          signal: AbortSignal.timeout(upstreamTimeoutMs),
+        })
         if (!upstream.ok) {
           sendJson(req, res, 502, { error: `upstream answered ${upstream.status}` })
           return
