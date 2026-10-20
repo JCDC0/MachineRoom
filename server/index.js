@@ -34,6 +34,8 @@ const HISTORY_LIMIT = 500
 const LIVE_CHUNK_LIMIT = 8192
 const LOG_RUNS_KEPT = 8
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
+const TREE_MAX_BUFFER = 64 * 1024 * 1024
+const TREE_TIMEOUT_MS = 20000
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules)([/\\]|$)/
 const PARSER_BY_ADAPTER = {
   claude_local: 'claude',
@@ -68,22 +70,25 @@ export function mapAgent(raw, taken = new Set()) {
   return { id, key, name, adapterType, role, parser }
 }
 
-function walkFiles(rootDir, currentDir = rootDir, out = []) {
-  const entries = readdirSync(currentDir, { withFileTypes: true })
+function walkFiles(listDir, currentDir, prefix = '', out = []) {
+  let entries
+  try {
+    entries = listDir(currentDir, { withFileTypes: true })
+  } catch {
+    return out
+  }
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      walkFiles(rootDir, join(currentDir, entry.name), out)
+      walkFiles(listDir, join(currentDir, entry.name), `${prefix}${entry.name}/`, out)
     } else if (entry.isFile()) {
-      const full = join(currentDir, entry.name)
-      const rel = full.slice(rootDir.length + 1).replace(/\\/g, '/')
-      out.push(rel)
+      out.push(`${prefix}${entry.name}`)
     }
   }
   return out
 }
 
-export function readTree(projectRoot) {
+export function readTree(projectRoot, { listDir = readdirSync } = {}) {
   if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
@@ -92,6 +97,9 @@ export function readTree(projectRoot) {
       encoding: 'utf8',
       env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
       stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: TREE_MAX_BUFFER,
+      timeout: TREE_TIMEOUT_MS,
+      windowsHide: true,
     })
     const files = output
       .split(/\r?\n/)
@@ -100,7 +108,7 @@ export function readTree(projectRoot) {
       .sort()
     return { root, files, created: [] }
   } catch {
-    const files = walkFiles(resolved).sort()
+    const files = walkFiles(listDir, resolved).sort()
     return { root, files, created: [] }
   }
 }
