@@ -59,4 +59,5 @@ The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts
 - **S1**: recording subagent runs (spends money).
 - **G2 and G6**: licence and names, then the private repository and every push. Run G1a (the history audit) first.
 - A Node upgrade would likely end the 0xC0000409 crash. On 2026-10-20 it crashed twice in a row in several full runs, one short of the three tries `npm test` makes.
+- Hermes' OpenRouter workspace has a daily budget of $1.00, which the lane runs and an orchestrator on the same key share. At the limit a run ends with exit 2 and `HTTP 403: Workspace daily budget of $1.00 exceeded`, and it resets at 00:00 UTC. C5a hit it on 2026-10-20 after its commit. Raising it is the owner's call.
 - Whether to set a model for Hermes in Paperclip (it has none and runs on MiMo V2.6 Pro, its own default).
