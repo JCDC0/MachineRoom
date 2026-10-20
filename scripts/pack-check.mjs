@@ -139,6 +139,38 @@ export function runPack(root = ROOT, timeoutMs = PACK_TIME_LIMIT_MS) {
   return spawnSync('npm', ['pack', '--dry-run', '--json'], { ...options, shell: process.platform === 'win32' })
 }
 
+export function packTo(root = ROOT, destination, budgetMs = PACK_TIME_LIMIT_MS) {
+  const npmCli = npmCliPath()
+  const args = ['pack', '--json', '--pack-destination', destination]
+  const options = {
+    cwd: root,
+    encoding: 'utf8',
+    timeout: budgetMs,
+    windowsHide: true,
+  }
+  const result = npmCli
+    ? spawnSync(process.execPath, [npmCli, ...args], options)
+    : spawnSync('npm', args, { ...options, shell: process.platform === 'win32' })
+  return {
+    status: result.status,
+    error: result.error,
+    signal: result.signal,
+    file: readPackedFile(result.stdout, destination),
+  }
+}
+
+function readPackedFile(stdout, destination) {
+  let entry
+  try {
+    const parsed = JSON.parse(String(stdout ?? ''))
+    entry = Array.isArray(parsed) ? parsed[0] : null
+  } catch {
+    return null
+  }
+  if (!entry || typeof entry.filename !== 'string' || entry.filename === '') return null
+  return resolve(destination, entry.filename)
+}
+
 export function packCheck(root = ROOT) {
   const result = runPack(root)
   if (result.error || result.status !== 0) {
