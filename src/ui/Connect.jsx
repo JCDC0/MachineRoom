@@ -131,7 +131,7 @@ export default function Connect({
 
         <form className="connect-grid" onSubmit={handleSubmit} noValidate>
           <section className={`connect-card ${source === 'bridge' ? 'is-selected' : ''}`}>
-            <div className="connect-card-head">
+            <div className="connect-card-head hud-header-strip">
               <label className="connect-radio-label" htmlFor="source-bridge">
                 <input
                   id="source-bridge"
@@ -184,7 +184,7 @@ export default function Connect({
           </section>
 
           <section className={`connect-card ${source === 'paperclip' ? 'is-selected' : ''}`}>
-            <div className="connect-card-head">
+            <div className="connect-card-head hud-header-strip">
               <label className="connect-radio-label" htmlFor="source-paperclip">
                 <input
                   id="source-paperclip"
@@ -265,7 +265,7 @@ export default function Connect({
           </div>
 
           <section className={`connect-card connect-choice ${source === 'demo' ? 'is-selected' : ''}`}>
-            <div className="connect-card-head">
+            <div className="connect-card-head hud-header-strip">
               <h2>Watch the demo</h2>
               <span className="connect-tag mono">Simulated live</span>
             </div>
@@ -278,7 +278,7 @@ export default function Connect({
           </section>
 
           <section className="connect-card connect-choice">
-            <div className="connect-card-head">
+            <div className="connect-card-head hud-header-strip">
               <h2>Open the recorded replay</h2>
               <span className="connect-tag mono">5 min run</span>
             </div>

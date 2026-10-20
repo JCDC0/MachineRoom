@@ -24,18 +24,22 @@ export default function Notice({
         <p className="notice-tagline">{tagline}</p>
       </header>
       <div className="notice-panel">
-        <h1>{heading ?? title}</h1>
-        <p className="notice-message mono">{message ?? text}</p>
-        {(onRetry || children) && (
-          <div className="notice-actions">
-            {onRetry && (
-              <button type="button" onClick={onRetry}>
-                {retryLabel}
-              </button>
-            )}
-            {children}
-          </div>
-        )}
+        <div className="hud-header-strip">
+          <h1>{heading ?? title}</h1>
+        </div>
+        <div className="notice-body">
+          <p className="notice-message mono">{message ?? text}</p>
+          {(onRetry || children) && (
+            <div className="notice-actions">
+              {onRetry && (
+                <button type="button" onClick={onRetry}>
+                  {retryLabel}
+                </button>
+              )}
+              {children}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   )
