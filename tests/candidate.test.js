@@ -4,7 +4,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { buildCommand, candidatePlan, parseCandidateArgs, runCandidate } from '../scripts/candidate.mjs'
+import { buildCommand, candidatePlan, laneEnv, parseCandidateArgs, runCandidate } from '../scripts/candidate.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-candidate-no-git-config')
@@ -223,6 +223,44 @@ describe('runCandidate', () => {
     } finally {
       await new Promise((settle) => server.close(settle))
     }
+  })
+
+  it('keeps keys, tokens and secrets out of the environment it gives the lane', () => {
+    const env = {
+      PATH: '/usr/bin',
+      Path: 'C:\\Windows',
+      SystemRoot: 'C:\\Windows',
+      TEMP: '/tmp',
+      MACHINEROOM_BUILD_COMMAND: '["node"]',
+      OPENROUTER_API_KEY: 'fake',
+      ANTHROPIC_API_KEY: 'fake',
+      openai_apikey: 'fake',
+      GITHUB_TOKEN: 'fake',
+      GH_TOKEN: 'fake',
+      AWS_SECRET: 'fake',
+      DB_PASSWORD: 'fake',
+      SSH_KEY: 'fake',
+      MONKEY: 'kept',
+      TOKENIZER_HOME: 'kept',
+    }
+    expect(Object.keys(laneEnv(env)).sort()).toEqual(['MACHINEROOM_BUILD_COMMAND', 'MONKEY', 'PATH', 'Path', 'SystemRoot', 'TEMP', 'TOKENIZER_HOME'])
+  })
+
+  it('builds the lane without the keys in the owner shell', async () => {
+    const { base, worktree } = makeLaneRepo()
+    writeLanes(base, worktree)
+    const port = await freePort()
+    const script = "console.log('key ' + (process.env.OPENROUTER_API_KEY ?? 'none') + ' token ' + (process.env.GITHUB_TOKEN ?? 'none')); process.exit(1)"
+    const errors = []
+    const code = await runCandidate({
+      argv: ['lane', '--port', String(port)],
+      cwd: base,
+      env: { ...buildEnv([process.execPath, '-e', script]), OPENROUTER_API_KEY: 'sk-or-v1-fake', GITHUB_TOKEN: 'ghp-fake' },
+      log: () => {},
+      error: (line) => errors.push(line),
+    })
+    expect(code).toBe(1)
+    expect(errors).toContain('key none token none')
   })
 
   it('prints the last 20 build lines and exits 1', async () => {

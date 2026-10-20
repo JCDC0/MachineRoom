@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
+import { killTree } from '../server/processTree.js'
+import { gitPath } from '../server/programPath.js'
 import { writeRecording } from './recording-files.mjs'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -27,14 +29,20 @@ function outcomesFile() {
 }
 
 function gitStatus(cwd) {
-  const result = spawnSync('git', ['status', '--porcelain'], { cwd, encoding: 'utf8', windowsHide: true })
+  const result = spawnSync(gitPath(), ['status', '--porcelain'], { cwd, encoding: 'utf8', windowsHide: true })
   if (result.error) throw new Error(`git status did not run in ${cwd}.`)
   if (result.status !== 0) throw new Error(`git status failed in ${cwd}: ${String(result.stderr ?? '').trim()}`)
   return result.stdout ?? ''
 }
 
 function gitRead(cwd, args) {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true })
+  let git
+  try {
+    git = gitPath()
+  } catch {
+    return null
+  }
+  const result = spawnSync(git, args, { cwd, encoding: 'utf8', windowsHide: true })
   if (result.error || result.status !== 0) return null
   return String(result.stdout ?? '').trim()
 }
@@ -43,19 +51,13 @@ let mainCheckoutPath = null
 
 function mainCheckout() {
   if (mainCheckoutPath) return mainCheckoutPath
-  const result = spawnSync('git', ['rev-parse', '--git-common-dir'], {
-    cwd: root, encoding: 'utf8', shell: false, windowsHide: true,
-  })
-  const common = result.error || result.status !== 0 ? '' : String(result.stdout ?? '').trim()
+  const common = gitRead(root, ['rev-parse', '--git-common-dir']) ?? ''
   mainCheckoutPath = common ? dirname(resolve(root, common)) : root
   return mainCheckoutPath
 }
 
 function branchExists(name) {
-  const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`], {
-    cwd: mainCheckout(), encoding: 'utf8', shell: false, windowsHide: true,
-  })
-  return !result.error && result.status === 0
+  return gitRead(mainCheckout(), ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`]) !== null
 }
 
 function readUsage(path) {
@@ -259,7 +261,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   const timer = setTimeout(() => {
     if (!child.pid) return
     killed = true
-    spawnSync('taskkill', ['/T', '/F', '/PID', String(child.pid)], { windowsHide: true })
+    killTree(child)
   }, options.minutes * 60 * 1000)
 
   const result = await new Promise((done) => {
@@ -287,7 +289,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   formatSummary(summary).forEach((line) => console.log(line))
 
   const branch = gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
-  const commitsText = gitRead(lane.worktree, ['log', '--oneline', 'main..HEAD']) ?? ''
+  const commitsText = gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
   const record = runRecord({
     lane: options.lane,
     briefs: wanted.map((brief) => brief.id),

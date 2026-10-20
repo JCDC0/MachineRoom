@@ -19,6 +19,8 @@ export const ADAPTER_TYPES = [
 ]
 
 export const EFFORTS = ['low', 'medium', 'high']
+export const PRIORITIES = ['critical', 'high', 'medium', 'low']
+export const TASK_OVERRIDE_KEYS = ['model', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed']
 export const SETTABLE_STATUS = ['active', 'paused']
 export const CANNOT_TAKE_TASKS = ['pending_approval', 'terminated']
 
@@ -61,6 +63,18 @@ export function fieldProblem(key, value) {
   } catch (error) {
     return error.message
   }
+}
+
+export function taskDraftProblem(draft) {
+  const priority = draft?.priority
+  if (priority !== undefined && priority !== null && !PRIORITIES.includes(priority)) return 'The priority must be critical, high, medium or low.'
+  for (const key of TASK_OVERRIDE_KEYS) {
+    const value = draft?.[key]
+    if (value === undefined || value === null || value === '') continue
+    const problem = fieldProblem(key, value)
+    if (problem) return problem
+  }
+  return null
 }
 
 const DRAFT_KEYS = ['name', 'adapterType', 'role', 'model', 'reasoningEffort', 'maxTurnsPerRun', 'timeoutSec', 'budgetMonthlyCents', 'subagentsAllowed', 'subagentDepth', 'instructions', 'reportsToAgentId']

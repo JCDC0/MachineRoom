@@ -17,7 +17,7 @@ const BY_NAME = {
 }
 
 export function createParser(agent, ctx) {
-  const factory = BY_NAME[agent.parser] ?? BY_ADAPTER[agent.adapterType]
+  const factory = Object.hasOwn(BY_NAME, agent.parser) ? BY_NAME[agent.parser] : Object.hasOwn(BY_ADAPTER, agent.adapterType) ? BY_ADAPTER[agent.adapterType] : null
   if (!factory) return { push: () => [], flush: () => [] }
   return factory(ctx)
 }

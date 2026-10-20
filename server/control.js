@@ -1,4 +1,4 @@
-import { EFFORTS, cleanAgentDraft, cleanAgentPatch } from '../src/control/agents.js'
+import { CANNOT_TAKE_TASKS, EFFORTS, cleanAgentDraft, cleanAgentPatch, fieldProblem, taskDraftProblem } from '../src/control/agents.js'
 import { MODELS } from './models.js'
 
 const AGENT_STATUS = {
@@ -24,9 +24,18 @@ const EFFORT_KEYS = {
 }
 const TERMINAL_RUN = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const DECISION_ROUTES = { approve: 'approve', reject: 'reject', 'request-revision': 'request-revision' }
+export const UPSTREAM_TIMEOUT_MS = 15000
 
 function plainId(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
+}
+
+function decodedId(text) {
+  try {
+    return decodeURIComponent(text)
+  } catch {
+    return null
+  }
 }
 
 function money(value) {
@@ -303,24 +312,29 @@ export function buildUpdateBody(clean, raw) {
 export function createControlApi(options) {
   const { paperclipUrl, companyId, projectId, projectWorkspaceId, sendJson, readJsonBody, featureOn } = options
   const base = String(paperclipUrl).replace(/\/+$/, '')
+  const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : UPSTREAM_TIMEOUT_MS
 
   async function upstream(method, path, body) {
+    const signal = AbortSignal.timeout(timeoutMs)
+    let response
     try {
-      const response = await fetch(`${base}${path}`, {
+      response = await fetch(`${base}${path}`, {
         method,
         headers: body === undefined ? {} : { 'content-type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
+        signal,
       })
-      let json = null
-      try {
-        json = await response.json()
-      } catch {
-        json = null
-      }
-      return { status: response.status, json }
     } catch {
-      return { status: 0, json: null }
+      return { status: 0, json: null, timedOut: signal.aborted }
     }
+    let json = null
+    try {
+      json = await response.json()
+    } catch {
+      if (signal.aborted) return { status: 0, json: null, timedOut: true }
+      json = null
+    }
+    return { status: response.status, json }
   }
 
   function fail(req, res, status, message) {
@@ -334,7 +348,7 @@ export function createControlApi(options) {
   }
 
   function upstreamFailure(answer, missing, generic) {
-    if (answer.status === 0) return [502, 'Paperclip is not reachable.']
+    if (answer.status === 0) return answer.timedOut ? [504, 'Paperclip did not answer in time.'] : [502, 'Paperclip is not reachable.']
     if (answer.status === 404) return [404, missing]
     if (answer.status >= 500) return [502, 'Paperclip could not complete that.']
     return [400, generic]
@@ -565,8 +579,18 @@ export function createControlApi(options) {
         ? await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
         : { status: 0, json: null }
       const list = Array.isArray(known.json) ? known.json : []
-      if (known.status !== 200 || !list.some((agent) => agent?.id === assigneeAgentId)) {
+      const assignee = known.status === 200 ? list.find((agent) => agent?.id === assigneeAgentId) : null
+      if (!assignee) {
         sendJson(req, res, 400, { error: 'Choose an agent for this task.' })
+        return true
+      }
+      if (CANNOT_TAKE_TASKS.includes(assignee.status)) {
+        sendJson(req, res, 400, { error: 'That agent cannot take tasks yet.' })
+        return true
+      }
+      const problem = taskDraftProblem(draft)
+      if (problem) {
+        sendJson(req, res, 400, { error: problem })
         return true
       }
       const overrides = issueOverrides(draft)
@@ -660,11 +684,15 @@ export function createControlApi(options) {
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const decision = typeof body?.decision === 'string' ? body.decision : ''
-      if (!DECISION_ROUTES[decision]) {
+      if (!Object.hasOwn(DECISION_ROUTES, decision)) {
         sendJson(req, res, 400, { error: `Unknown decision: ${decision}` })
         return true
       }
-      const id = decodeURIComponent(decide[1])
+      const id = decodedId(decide[1])
+      if (id === null) {
+        sendJson(req, res, 404, { error: 'That approval no longer exists.' })
+        return true
+      }
       const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : undefined
       const posted = await upstream('POST', `/api/approvals/${encodeURIComponent(id)}/${DECISION_ROUTES[decision]}`, note ? { decisionNote: note } : {})
       if (posted.status >= 300) {
@@ -687,11 +715,16 @@ export function createControlApi(options) {
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const cents = body?.budgetMonthlyCents
-      if (!Number.isInteger(cents) || cents < 0) {
-        sendJson(req, res, 400, { error: 'The budget must be a whole number of cents, zero or more.' })
+      const problem = fieldProblem('budgetMonthlyCents', cents)
+      if (problem) {
+        sendJson(req, res, 400, { error: problem })
         return true
       }
-      const id = decodeURIComponent(budget[1])
+      const id = decodedId(budget[1])
+      if (id === null) {
+        sendJson(req, res, 404, { error: 'That agent no longer exists.' })
+        return true
+      }
       const patched = await upstream('PATCH', `/api/agents/${encodeURIComponent(id)}/budgets`, { budgetMonthlyCents: cents })
       if (patched.status >= 300) {
         const [code, message] = upstreamFailure(patched, 'That agent no longer exists.', 'Paperclip did not accept that budget.')

@@ -72,7 +72,7 @@ export function parseAnswers(body, questions) {
   }
   const answers = {}
   for (const [name, question] of Object.entries(questions)) {
-    const parser = PARSERS[question.type]
+    const parser = Object.hasOwn(PARSERS, question?.type) ? PARSERS[question.type] : null
     const parsed = parser ? parser(body.answers[name], question) : null
     if (!parsed) return { ok: false, error: `The answer for ${name} is missing or not valid.` }
     answers[name] = parsed

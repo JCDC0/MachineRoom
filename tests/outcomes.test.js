@@ -220,6 +220,46 @@ describe('outcomeTable', () => {
     ])
   })
 
+  it('counts an outcome once per branch, on the newest run that names it', () => {
+    const runs = [
+      { lane: 'hermes', model: 'm', branch: 'feat/a', costUsd: 0.5 },
+      { lane: 'hermes', model: 'm', branch: 'feat/b', costUsd: 1 },
+      { lane: 'hermes', model: 'm', branch: 'feat/a', costUsd: 0.25 },
+      { lane: 'hermes', model: 'm', branch: 'feat/a', costUsd: 0 },
+    ]
+    const outcomes = [
+      { branch: 'feat/a', outcome: 'merged', fixes: 2 },
+      { branch: 'feat/b', outcome: 'rejected', fixes: 0 },
+    ]
+    expect(outcomeTable(runs, outcomes)).toEqual([
+      {
+        lane: 'hermes',
+        model: 'm',
+        runs: 4,
+        merged: 1,
+        rejected: 1,
+        pending: 0,
+        mergeRate: 0.5,
+        averageFixes: 2,
+        costUsd: 1.75,
+        decidedCostUsd: 1.75,
+        costPerMerge: 1.75,
+      },
+    ])
+  })
+
+  it('gives the merge to the model of the newest run on the branch and the older cost to its own model', () => {
+    const runs = [
+      { lane: 'hermes', model: 'first', branch: 'feat/a', costUsd: 0.5 },
+      { lane: 'hermes', model: 'second', branch: 'feat/a', costUsd: 0.25 },
+    ]
+    const rows = outcomeTable(runs, [{ branch: 'feat/a', outcome: 'merged', fixes: 1 }])
+    expect(rows.map(({ model, runs: count, merged, pending, decidedCostUsd, costPerMerge }) => ({ model, count, merged, pending, decidedCostUsd, costPerMerge }))).toEqual([
+      { model: 'first', count: 1, merged: 0, pending: 0, decidedCostUsd: 0.5, costPerMerge: null },
+      { model: 'second', count: 1, merged: 1, pending: 0, decidedCostUsd: 0.25, costPerMerge: 0.25 },
+    ])
+  })
+
   it('answers no rows for no runs and null rates for no merged runs', () => {
     expect(outcomeTable([], [])).toEqual([])
     expect(outcomeTable([{ lane: 'hermes', branch: 'feat/x', costUsd: 1 }], [{ branch: 'feat/x', outcome: 'rejected', fixes: 2 }])).toEqual([

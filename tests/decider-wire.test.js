@@ -54,6 +54,14 @@ describe('parseAnswers', () => {
     expect(result.answers.tier.probabilities).toBeNull()
   })
 
+  it('refuses an answer to a question whose type is only an inherited name', () => {
+    for (const type of ['constructor', 'toString', '__proto__']) {
+      const asked = { tier: { type, instructions: 'Which tier?', criteria: {} } }
+      const result = parseAnswers({ answers: { tier: { anything: 'goes' } } }, asked)
+      expect(result, type).toEqual({ ok: false, error: 'The answer for tier is missing or not valid.' })
+    }
+  })
+
   it('refuses a reply with no answers', () => {
     expect(parseAnswers(null, questions).ok).toBe(false)
     expect(parseAnswers({}, questions).ok).toBe(false)

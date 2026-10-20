@@ -10,6 +10,7 @@ import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
+import { gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
 import { compareSurface, surfaceFeatures } from './surface.js'
 
@@ -20,6 +21,7 @@ const SURFACE_TIMEOUT_MS = 10000
 const SURFACE_EVERY_MS = 15 * 60 * 1000
 const BACKUP_READ_TIMEOUT_MS = 10000
 const BACKUP_RUN_TIMEOUT_MS = 120000
+const AGENTS_TIMEOUT_MS = 15000
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
@@ -33,6 +35,8 @@ const HISTORY_LIMIT = 500
 const LIVE_CHUNK_LIMIT = 8192
 const LOG_RUNS_KEPT = 8
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
+const TREE_MAX_BUFFER = 64 * 1024 * 1024
+const TREE_TIMEOUT_MS = 20000
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules)([/\\]|$)/
 const PARSER_BY_ADAPTER = {
   claude_local: 'claude',
@@ -67,30 +71,36 @@ export function mapAgent(raw, taken = new Set()) {
   return { id, key, name, adapterType, role, parser }
 }
 
-function walkFiles(rootDir, currentDir = rootDir, out = []) {
-  const entries = readdirSync(currentDir, { withFileTypes: true })
+function walkFiles(listDir, currentDir, prefix = '', out = []) {
+  let entries
+  try {
+    entries = listDir(currentDir, { withFileTypes: true })
+  } catch {
+    return out
+  }
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (SKIP_DIRS.has(entry.name)) continue
-      walkFiles(rootDir, join(currentDir, entry.name), out)
+      walkFiles(listDir, join(currentDir, entry.name), `${prefix}${entry.name}/`, out)
     } else if (entry.isFile()) {
-      const full = join(currentDir, entry.name)
-      const rel = full.slice(rootDir.length + 1).replace(/\\/g, '/')
-      out.push(rel)
+      out.push(`${prefix}${entry.name}`)
     }
   }
   return out
 }
 
-export function readTree(projectRoot) {
+export function readTree(projectRoot, { listDir = readdirSync } = {}) {
   if (!projectRoot) return { root: '', files: [], created: [] }
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
   try {
-    const output = execFileSync('git', ['-C', resolved, 'ls-files', '--cached', '--others', '--exclude-standard'], {
+    const output = execFileSync(gitPath(), ['-C', resolved, 'ls-files', '--cached', '--others', '--exclude-standard'], {
       encoding: 'utf8',
       env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
       stdio: ['ignore', 'pipe', 'ignore'],
+      maxBuffer: TREE_MAX_BUFFER,
+      timeout: TREE_TIMEOUT_MS,
+      windowsHide: true,
     })
     const files = output
       .split(/\r?\n/)
@@ -99,7 +109,7 @@ export function readTree(projectRoot) {
       .sort()
     return { root, files, created: [] }
   } catch {
-    const files = walkFiles(resolved).sort()
+    const files = walkFiles(listDir, resolved).sort()
     return { root, files, created: [] }
   }
 }
@@ -219,6 +229,7 @@ export function createBridge(options = {}) {
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
   const surfaceEveryMs = Number(options.surfaceEveryMs ?? SURFACE_EVERY_MS)
+  const upstreamTimeoutMs = Number(options.upstreamTimeoutMs ?? AGENTS_TIMEOUT_MS)
   const env = options.env ?? process.env
 
   const briefs = createBriefsApi({
@@ -253,6 +264,7 @@ export function createBridge(options = {}) {
     sendJson,
     readJsonBody,
     featureOn: (feature) => !featureIsOff(feature),
+    timeoutMs: upstreamTimeoutMs,
   })
   const assistant = createAssistantApi({
     sendJson,
@@ -353,7 +365,7 @@ export function createBridge(options = {}) {
   }
 
   function loadAgents() {
-    fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`)
+    fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, { signal: AbortSignal.timeout(upstreamTimeoutMs) })
       .then(async (upstream) => {
         if (!upstream.ok) return
         rememberAgents(agentListOf(await upstream.json()))
@@ -740,7 +752,9 @@ export function createBridge(options = {}) {
 
     if (req.method === 'GET' && url.pathname === '/api/agents') {
       try {
-        const upstream = await fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`)
+        const upstream = await fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, {
+          signal: AbortSignal.timeout(upstreamTimeoutMs),
+        })
         if (!upstream.ok) {
           sendJson(req, res, 502, { error: `upstream answered ${upstream.status}` })
           return
@@ -801,8 +815,11 @@ export function createBridge(options = {}) {
 
   const server = createServer((req, res) => {
     handleRequest(req, res).catch(() => {
-      if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify({ error: 'The bridge could not answer that.' }))
+      if (res.headersSent) {
+        res.end()
+        return
+      }
+      sendJson(req, res, 500, { error: 'The bridge could not answer that.' })
     })
   })
 

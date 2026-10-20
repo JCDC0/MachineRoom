@@ -453,6 +453,30 @@ describe('merge route', () => {
     expect(git(repo, ['status', '--porcelain'])).toBe('')
   }, 20000)
 
+  it('reads the lane against the main branch even when a tag named main points inside the lane', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    writeFileSync(join(worktree, 'hidden.js'), 'export const y = 2\n')
+    git(worktree, ['add', 'hidden.js'])
+    git(worktree, ['commit', '-m', 'third'])
+    git(worktree, ['tag', 'main', 'HEAD~1'])
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+
+    const { lanes } = await fetch(`${url}/api/control/reviews`).then((r) => r.json())
+    expect(lanes[0]).toMatchObject({ lane: 'opencode', ahead: 2, files: 3 })
+    const diff = await fetch(`${url}/api/control/reviews/opencode/diff`).then((r) => r.json())
+    expect(diff.files.map((file) => file.path)).toEqual(['extra.js', 'hidden.js', 'notes.txt'])
+  }, 20000)
+
+  it('merges a lane whose head a tag named main points at', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    git(worktree, ['tag', 'main', head])
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    expect(res.status).toBe(200)
+    expect(git(repo, ['rev-parse', 'refs/heads/main^2']).trim()).toBe(head)
+  }, 20000)
+
   it('answers the lock sentence to a second merge sent at the same time', async () => {
     const { repo, worktree } = makeLaneRepo()
     const head = git(worktree, ['rev-parse', 'HEAD']).trim()

@@ -39,6 +39,7 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
   if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
   const harness = cli.harness
   if (harness !== 'hermes' && harness !== 'opencode') throw new Error(`The runner does not know the ${harness} command line.`)
+  if (typeof lane.worktree !== 'string' || lane.worktree.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
   const file = expandBin(cli.bin, env)
   const reasoning = lane.reasoning ? String(lane.reasoning) : ''
   if (harness === 'hermes') {

@@ -1,7 +1,7 @@
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
-import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary } from './agents.js'
+import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
 
 export const CLIENT_METHODS = [
   'agents',
@@ -263,6 +263,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const assignee = agentById(draft.assigneeAgentId)
         if (!assignee) throw new Error('Choose an agent for this task.')
         if (CANNOT_TAKE_TASKS.includes(assignee.status)) throw new Error('That agent cannot take tasks yet.')
+        const problem = taskDraftProblem(draft)
+        if (problem) throw new Error(problem)
         issueCounter += 1
         const stamp = new Date(now()).toISOString()
         const issue = {
@@ -283,7 +285,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return issue
       }),
 
-    comments: (issueId) => call('comments', () => state.comments[issueId] ?? []),
+    comments: (issueId) => call('comments', () => (Object.hasOwn(state.comments, issueId) ? state.comments[issueId] : [])),
 
     postComment: (issueId, body) =>
       call('postComment', () => {
@@ -291,7 +293,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!state.issues.some((issue) => issue.id === issueId)) throw new Error('That task no longer exists.')
         commentCounter += 1
         const comment = { id: `comment-${commentCounter}`, issueId, authorAgentId: null, authorName: 'You', body: body.trim(), createdAt: new Date(now()).toISOString() }
-        state.comments[issueId] = [...(state.comments[issueId] ?? []), comment]
+        state.comments[issueId] = [...(Object.hasOwn(state.comments, issueId) ? state.comments[issueId] : []), comment]
         emit({ topic: 'comments', id: issueId })
         return comment
       }),
@@ -302,7 +304,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('decideApproval', () => {
         const approval = state.approvals.find((item) => item.id === id)
         if (!approval) throw new Error('That approval no longer exists.')
-        if (!DECISIONS[decision]) throw new Error(`Unknown decision: ${decision}`)
+        if (!Object.hasOwn(DECISIONS, decision)) throw new Error(`Unknown decision: ${decision}`)
         if (approval.status !== 'pending') throw new Error('That approval is already decided.')
         approval.status = DECISIONS[decision]
         if (note) approval.decisionNote = note
@@ -322,7 +324,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('setAgentBudget', () => {
         const agent = agentById(agentId)
         if (!agent) throw new Error('That agent no longer exists.')
-        if (!Number.isInteger(budgetMonthlyCents) || budgetMonthlyCents < 0) throw new Error('The budget must be a whole number of cents, zero or more.')
+        const problem = fieldProblem('budgetMonthlyCents', budgetMonthlyCents)
+        if (problem) throw new Error(problem)
         agent.budgetMonthlyCents = budgetMonthlyCents
         emit({ topic: 'agents' })
         emit({ topic: 'costs' })

@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.101. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.102. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -197,6 +197,7 @@ Do not rename these classes without changing both sides.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
 - The proxy route needs the dev server. The bridge route works with a production build too, and `npm run serve` serves that build from the bridge on one port.
+- The bridge and the scripts start git by its absolute path from PATH (`gitPath()` in `server/programPath.js`), because Node on Windows runs a `git.exe` from the child's working folder first when `NoDefaultCurrentDirectoryInExePath` is not set, and a lane worktree is such a folder. They name `refs/heads/main`, never `main`, so a tag cannot stand in for the branch. A run and its children stop through `killTree()` in `server/processTree.js` (`taskkill /T /F` on Windows, the process group elsewhere).
 - The bridge only allows pages on `localhost` or `127.0.0.1`, on any port, so another local page could call `POST /api/control/reviews/:lane/merge`. It still needs the lane's exact head sha and `confirmed: true`, refuses a dirty main checkout, and never pushes.
 - Through the proxy route (no bridge), a tool call whose log line is over 8192 characters is missed. A real run lost 3 of 58 calls this way, all reads outside the project.
 - A card's depth plane matches its face, not its tab or the faint folders behind it, so a line can show through those.
@@ -205,4 +206,4 @@ Do not rename these classes without changing both sides.
 
 ## Open work
 
-The orchestrator (Hermes from 0.1.90, Claude before) works from `docs/agents/ORCHESTRATOR.md`: the standing rules, the review and merge loop, who owns what and the review lessons. See `docs/agents/PLAN.md` for the order of work and `docs/agents/TASKS.md` for the briefs. The plan for the planner, orchestrator, budgets and routing is in `docs/agents/CONTROL-PLANE.md`. What Paperclip's code says about database backups (the one backup route, the age in `/api/health`, and restore by hand) is in `docs/agents/BACKUPS.md`.
+The orchestrator (Hermes from 0.1.90, Claude before) works from `docs/agents/ORCHESTRATOR.md`: the standing rules, the review and merge loop, who owns what and the review lessons. See `docs/agents/PLAN.md` for the order of work and `docs/agents/TASKS.md` for the briefs. The plan for the planner, orchestrator, budgets and routing is in `docs/agents/CONTROL-PLANE.md`. The October audit (`docs/agents/AUDIT-2026-10.md`) lists each security finding, its fix and the 17 left open with the reason. What Paperclip's code says about database backups (the one backup route, the age in `/api/health`, and restore by hand) is in `docs/agents/BACKUPS.md`.

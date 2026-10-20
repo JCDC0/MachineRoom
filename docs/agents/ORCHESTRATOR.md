@@ -43,6 +43,8 @@ The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts
 - A thrown error inside an async route handler leaves the request hanging unless something answers 500.
 - A fake runner in a test does not prove a command starts on Windows (`opencode` is an npm shim). Start it for real once.
 - Any `git diff` the bridge runs needs `--no-ext-diff --no-textconv`.
+- Start git through `gitPath()`, never as a bare `git`, when its working folder is a lane worktree: Windows runs a `git.exe` committed there first (checked on this machine in 0.1.102). Name `refs/heads/main`, never `main`.
+- A call to Paperclip from the bridge needs a time limit (`AbortSignal.timeout`), and a lane's code never gets the owner's keys (`laneEnv` in `scripts/candidate.mjs`).
 - Agents pass their own tests and miss odd input. Hermes parser work can pin wrong behaviour in scenario tests: ask it to list every changed scenario line and why.
 - AGY on Flash has skipped by-eye checks and left races (a task created, its thread opened, "not found"). Name the checks in the brief and have the owner look.
 - AGY often uses an old version prefix in its commit. Renumber when you merge.

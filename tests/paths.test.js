@@ -18,6 +18,24 @@ describe('relativeTo', () => {
 
   it('returns an empty string for the project folder itself', () => {
     expect(relativeTo('agent-sandbox', 'C:\\Temp\\agent-sandbox')).toBe('')
+    expect(relativeTo('agent-sandbox', '.')).toBe('')
+  })
+
+  it('returns null for a relative path that climbs out of the project', () => {
+    expect(relativeTo('MachineRoom-hermes', '../MachineRoom/docs/agents/TASKS.md')).toBeNull()
+    expect(relativeTo('agent-sandbox', 'src/../../secret.txt')).toBeNull()
+    expect(relativeTo('agent-sandbox', 'C:\\Temp\\agent-sandbox\\..\\other\\x.js')).toBeNull()
+  })
+
+  it('folds dot folders that stay inside the project', () => {
+    expect(relativeTo('agent-sandbox', 'src/../docs/./notes.md')).toBe('docs/notes.md')
+    expect(relativeTo('agent-sandbox', 'src/')).toBe('src')
+  })
+
+  it('reads a relative path when the project has no name yet', () => {
+    expect(relativeTo('', 'src/')).toBe('src')
+    expect(relativeTo('', 'src/math.js')).toBe('src/math.js')
+    expect(relativeTo('', '/etc/hosts')).toBeNull()
   })
 })
 

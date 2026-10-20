@@ -63,7 +63,7 @@ export function createOpencodeParser(ctx) {
   })
 
   function report(name, input, status, output, id, time) {
-    const tool = TOOLS[name] ?? 'other'
+    const tool = Object.hasOwn(TOOLS, name) ? TOOLS[name] : 'other'
     const callId = id ?? `opencode-${(counter += 1)}`
     let touches = []
     let label = `${name} ${shorten(JSON.stringify(input), 48)}`

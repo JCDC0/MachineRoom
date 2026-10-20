@@ -4,14 +4,15 @@ import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { countLeaks, findLeaks, LEAK_KINDS } from '../src/briefs/audit.js'
+import { gitPath } from '../server/programPath.js'
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024
 const TRACKED = '(tracked)'
-const HISTORY_ARGS = ['log', '-p', '--no-color', '--no-ext-diff', '--no-textconv', 'main', '--tags']
+const HISTORY_ARGS = ['log', '-p', '--no-color', '--no-ext-diff', '--no-textconv', 'refs/heads/main', '--tags']
 
 function runGit(repo, args) {
   return new Promise((done, fail) => {
-    const child = spawn('git', args, { cwd: repo, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(gitPath(), args, { cwd: repo, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
     const chunks = []
     let error = ''
     child.stdout.on('data', (chunk) => chunks.push(chunk))
@@ -40,7 +41,7 @@ function hunkStart(line) {
 }
 
 async function readHistory(repo, profileName, findings) {
-  const child = spawn('git', HISTORY_ARGS, { cwd: repo, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+  const child = spawn(gitPath(), HISTORY_ARGS, { cwd: repo, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   let error = ''
   child.stderr.on('data', (chunk) => { error += chunk })
   const closed = new Promise((done) => {

@@ -54,6 +54,12 @@ describe('commandFor', () => {
   it('refuses a lane with no command line', () => {
     expect(() => commandFor({ lane: lanes.agy, prompt, env, title })).toThrow(/no command line/)
   })
+
+  it('refuses a lane with no worktree, so the harness never starts in the folder the runner was started from', () => {
+    for (const worktree of [undefined, '', '  ', 42]) {
+      expect(() => commandFor({ lane: { ...lanes.hermes, worktree }, prompt, env, title })).toThrow('The lane Hermes has no worktree, so the runner cannot start it.')
+    }
+  })
 })
 
 describe('unattendedPrompt', () => {
@@ -814,7 +820,8 @@ function runTestScript(extra) {
 }
 
 describe('scripts/test.mjs', () => {
-  it('runs the tests again after the crash and keeps the second result', async () => {
+  it('runs the tests again after the crash and keeps the second result', async (context) => {
+    context.skip(process.platform !== 'win32', 'Only Windows keeps a 32 bit exit code. Linux keeps the low 8 bits, so 0xC0000409 arrives as 9.')
     const folder = makeTempDir('machine-room-test-')
     try {
       const counter = join(folder, 'count.txt')

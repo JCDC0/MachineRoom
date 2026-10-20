@@ -654,6 +654,23 @@ function runContractSuite(label, makeHarness) {
       await expect(client.createIssue({ title: 'x', assigneeAgentId: 'nobody' })).rejects.toThrow(/agent/i)
     })
 
+    it('refuses a task outside the agent limits, with a bad priority, or for a waiting or terminated agent', async () => {
+      const { client } = await makeHarness()
+      const task = { title: 'Do it', assigneeAgentId: 'agent-opencode' }
+      await expect(client.createIssue({ ...task, maxTurnsPerRun: 5000 })).rejects.toThrow('Turns per run must be a whole number from 1 to 200.')
+      await expect(client.createIssue({ ...task, maxTurnsPerRun: 2.5 })).rejects.toThrow('Turns per run must be a whole number from 1 to 200.')
+      await expect(client.createIssue({ ...task, timeoutSec: 864000 })).rejects.toThrow('The time limit must be a whole number of seconds from 10 to 7200.')
+      await expect(client.createIssue({ ...task, model: { id: 'x' } })).rejects.toThrow('The model must be 1 to 120 characters, or empty.')
+      await expect(client.createIssue({ ...task, subagentsAllowed: 'yes' })).rejects.toThrow('Subagents must be yes or no.')
+      await expect(client.createIssue({ ...task, priority: 'urgent' })).rejects.toThrow('The priority must be critical, high, medium or low.')
+      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
+      await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agent.id })).rejects.toThrow('That agent cannot take tasks yet.')
+      await client.decideApproval(approval.id, 'reject')
+      await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agent.id })).rejects.toThrow('That agent cannot take tasks yet.')
+      expect(await client.issues()).toHaveLength(5)
+      expect((await client.createIssue({ ...task, priority: 'high', maxTurnsPerRun: 200, timeoutSec: 7200 })).priority).toBe('high')
+    })
+
     it('reads comments oldest first and adds a comment to the end of the thread', async () => {
       const { client } = await makeHarness()
       const initial = await client.comments('issue-22')
@@ -665,6 +682,11 @@ function runContractSuite(label, makeHarness) {
       const thread = await client.comments('issue-18')
       expect(thread.at(-1).body).toBe('Looks good.')
       expect(await client.comments('issue-99')).toEqual([])
+    })
+
+    it('answers an empty thread for a task id that is only an inherited name', async () => {
+      const { client } = await makeHarness()
+      for (const id of ['constructor', 'toString', '__proto__']) expect(await client.comments(id), id).toEqual([])
     })
 
     it('refuses an empty comment and a comment on a missing task', async () => {
@@ -686,6 +708,15 @@ function runContractSuite(label, makeHarness) {
       await expect(client.decideApproval('missing', 'approve')).rejects.toThrow(/exist/i)
     })
 
+    it('refuses a decision that is only an inherited name and leaves the approval pending', async () => {
+      const { client } = await makeHarness()
+      for (const decision of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+        await expect(client.decideApproval('approval-1', decision)).rejects.toThrow(`Unknown decision: ${decision}`)
+      }
+      const list = await client.approvals()
+      expect(list.find((item) => item.id === 'approval-1').status).toBe('pending')
+    })
+
     it('reports costs and quota windows, including one that could not be read', async () => {
       const { client } = await makeHarness()
       const { quota, summary, byAgent } = await client.costs()
@@ -699,6 +730,9 @@ function runContractSuite(label, makeHarness) {
       const { client } = await makeHarness()
       expect((await client.setAgentBudget('agent-claude', 250)).budgetMonthlyCents).toBe(250)
       await expect(client.setAgentBudget('agent-claude', -1)).rejects.toThrow(/cents/i)
+      await expect(client.setAgentBudget('agent-claude', 1000001)).rejects.toThrow('The budget must be a whole number of cents, from 0 to 1,000,000.')
+      await expect(client.setAgentBudget('agent-claude', 1e300)).rejects.toThrow('The budget must be a whole number of cents, from 0 to 1,000,000.')
+      expect((await client.setAgentBudget('agent-claude', 1000000)).budgetMonthlyCents).toBe(1000000)
       await expect(client.setAgentBudget('nobody', 10)).rejects.toThrow(/agent/i)
     })
 

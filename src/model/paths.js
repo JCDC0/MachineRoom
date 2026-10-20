@@ -14,16 +14,29 @@ export function dirname(path) {
   return parts.join('/')
 }
 
+function withoutDots(path) {
+  const kept = []
+  for (const part of path.split('/')) {
+    if (part === '' || part === '.') continue
+    if (part !== '..') kept.push(part)
+    else if (kept.length === 0) return null
+    else kept.pop()
+  }
+  return kept.join('/')
+}
+
 export function relativeTo(rootName, rawPath) {
   const path = normalise(rawPath).replace(/^\.\//, '')
   const lower = path.toLowerCase()
-  const root = rootName.toLowerCase()
-  const marker = `/${root}/`
-  const at = lower.lastIndexOf(marker)
-  if (at !== -1) return path.slice(at + marker.length)
-  if (lower.endsWith(`/${root}`)) return ''
+  const root = String(rootName ?? '').toLowerCase()
+  if (root) {
+    const marker = `/${root}/`
+    const at = lower.lastIndexOf(marker)
+    if (at !== -1) return withoutDots(path.slice(at + marker.length))
+    if (lower.endsWith(`/${root}`)) return ''
+  }
   if (DRIVE.test(path) || path.startsWith('/') || path.startsWith('~')) return null
-  return path
+  return withoutDots(path)
 }
 
 export function ancestors(path) {

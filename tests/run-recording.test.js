@@ -199,7 +199,7 @@ function worktreeWith(files) {
     writeFileSync(path, text)
   }
   git(dir, ['add', '-A'])
-  git(dir, ['-c', 'user.email=test@example.com', '-c', 'user.name=test', 'commit', '-q', '-m', 'one'])
+  git(dir, ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'one'])
   return { dir, sha: git(dir, ['rev-parse', 'HEAD']) }
 }
 

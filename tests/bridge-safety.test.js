@@ -1,4 +1,5 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -53,8 +54,9 @@ describe('briefs route with hostile or broken input', () => {
 
   it('answers 500 for a bug inside a route and keeps running', async () => {
     const url = await startBridge({ agy: goodLane, broken: {} })
-    const response = await fetch(`${url}/api/control/brief-prompt?ids=X1&lane=broken`)
+    const response = await fetch(`${url}/api/control/brief-prompt?ids=X1&lane=broken`, { headers: { Origin: 'http://localhost:5173' } })
     expect(response.status).toBe(500)
+    expect(response.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
     expect(await response.json()).toEqual({ error: 'The bridge could not answer that.' })
     expect((await fetch(`${url}/api/health`)).status).toBe(200)
     expect((await fetch(`${url}/api/control/brief-prompt?ids=X1&lane=agy`)).status).toBe(200)
@@ -75,5 +77,61 @@ describe('prompt builders with hostile lane names', () => {
   it('the mock refuses them in plain words', async () => {
     const client = createMockClient({ latencyMs: 0 })
     for (const lane of ['__proto__', 'constructor']) await expect(client.briefPrompt(['C3e'], lane)).rejects.toThrow(/Choose hermes/)
+  })
+})
+
+describe('a Paperclip that takes the request and never answers', () => {
+  async function startSilentPaperclip() {
+    const server = createServer(() => {})
+    await new Promise((settle) => server.listen(0, '127.0.0.1', settle))
+    cleanups.push(
+      () =>
+        new Promise((settle) => {
+          server.closeAllConnections()
+          server.close(() => settle())
+        })
+    )
+    return `http://127.0.0.1:${server.address().port}`
+  }
+
+  it('answers the page within the time limit instead of holding the request open', async () => {
+    const paperclipUrl = await startSilentPaperclip()
+    const bridge = createBridge({
+      port: 0,
+      projectRoot: '',
+      paperclipUrl,
+      companyId: 'company-1',
+      reconnectMinMs: 60000,
+      reconnectMaxMs: 60000,
+      surfaceEveryMs: 0,
+      upstreamTimeoutMs: 200,
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+    const url = `http://127.0.0.1:${info.port}`
+
+    const agents = await fetch(`${url}/api/control/agents`, { signal: AbortSignal.timeout(3000) })
+    expect(agents.status).toBe(504)
+    expect(await agents.json()).toEqual({ error: 'Paperclip did not answer in time.' })
+
+    const task = await fetch(`${url}/api/control/approvals`, { signal: AbortSignal.timeout(3000) })
+    expect(task.status).toBe(504)
+
+    const list = await fetch(`${url}/api/agents`, { signal: AbortSignal.timeout(3000) })
+    expect(list.status).toBe(502)
+  })
+})
+
+describe('ids that are not valid percent-escapes', () => {
+  it('answers the not-found sentence for an approval or an agent', async () => {
+    const url = await startBridge({ agy: goodLane })
+    const post = (path, body) =>
+      fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    const decided = await post('/api/control/approvals/%E0%A4%A/decide', { decision: 'approve' })
+    expect(decided.status).toBe(404)
+    expect(await decided.json()).toEqual({ error: 'That approval no longer exists.' })
+    const budget = await post('/api/control/agents/%E0%A4%A/budget', { budgetMonthlyCents: 100 })
+    expect(budget.status).toBe(404)
+    expect(await budget.json()).toEqual({ error: 'That agent no longer exists.' })
   })
 })

@@ -4,6 +4,7 @@ import { basename, join } from 'node:path'
 import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
 import { RECORDING_NAME } from '../src/startup.js'
+import { gitPath } from '../server/programPath.js'
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 const TIMEOUT = 120000
@@ -54,7 +55,7 @@ function commitRef(record) {
 }
 
 function gitFiles(worktree, ref) {
-  const result = spawnSync('git', ['ls-tree', '-r', '--name-only', ref], {
+  const result = spawnSync(gitPath(), ['ls-tree', '-r', '--name-only', ref], {
     cwd: worktree,
     encoding: 'utf8',
     windowsHide: true,

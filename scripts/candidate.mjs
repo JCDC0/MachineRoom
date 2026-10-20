@@ -4,12 +4,15 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { killTree as killProcessTree, treeSpawnOptions } from '../server/processTree.js'
+import { gitPath } from '../server/programPath.js'
 
 export const DEFAULT_PORT = 5175
 export const BUILD_TIMEOUT_MS = 5 * 60 * 1000
 const BAD_BUILD_COMMAND = 'MACHINEROOM_BUILD_COMMAND needs a JSON array of the command and its arguments.'
 const BAD_PORT = 'The port must be a whole number from 1 to 65535.'
 const GIT_TIMEOUT_MS = 10 * 1000
+const SECRET_NAME = /(^|_)(KEY|TOKEN|SECRET|PASSWORD)$|API_?KEY/i
 
 const USAGE = [
   'Usage: npm run candidate -- LANE [options]',
@@ -75,6 +78,14 @@ export function parseCandidateArgs(argv) {
   return options
 }
 
+export function laneEnv(env = process.env) {
+  const kept = {}
+  for (const [name, value] of Object.entries(env)) {
+    if (!SECRET_NAME.test(name)) kept[name] = value
+  }
+  return kept
+}
+
 export function candidatePlan({ lanes, lane, port } = {}) {
   const known = lanes && typeof lanes === 'object' && typeof lane === 'string' && lane !== '' && Object.hasOwn(lanes, lane)
   if (!known) throw new Error(`The lane ${lane} is not in lanes.json.`)
@@ -120,15 +131,7 @@ export function buildCommand(env = process.env, execPath = process.execPath) {
 
 function killTree(child) {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
-  if (process.platform === 'win32') {
-    try {
-      spawn('taskkill', ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore', windowsHide: true })
-    } catch {
-      child.kill()
-    }
-    return
-  }
-  child.kill('SIGKILL')
+  killProcessTree(child)
 }
 
 export function runBuild({ command, cwd, env = process.env, shell = false, timeoutMs = BUILD_TIMEOUT_MS }) {
@@ -139,6 +142,7 @@ export function runBuild({ command, cwd, env = process.env, shell = false, timeo
       shell,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...treeSpawnOptions(),
     })
     const lines = []
     let timedOut = false
@@ -174,7 +178,7 @@ export function runBuild({ command, cwd, env = process.env, shell = false, timeo
 function gitText(cwd, args, env) {
   return new Promise((settle, fail) => {
     execFile(
-      'git',
+      gitPath(),
       args,
       {
         cwd,
@@ -294,13 +298,14 @@ export async function runCandidate({
   const state = await worktreeState(plan.worktree, env)
   if (state.dirty) throw new Error('The lane has uncommitted changes. Commit them first.')
   const build = buildCommand(env)
-  const built = await runBuild({ command: build.command, cwd: plan.worktree, env, shell: build.shell })
+  const childEnv = laneEnv(env)
+  const built = await runBuild({ command: build.command, cwd: plan.worktree, env: childEnv, shell: build.shell })
   if (!built.ok) {
     error(built.timedOut ? 'The build ran past 5 minutes.' : 'The build failed.')
     for (const line of built.lines) error(line)
     return 1
   }
-  const child = startCandidate({ plan, options, env, stdio })
+  const child = startCandidate({ plan, options, env: childEnv, stdio })
   if (onChild) onChild(child)
   log(candidateLine(plan, state))
   const stop = () => {
