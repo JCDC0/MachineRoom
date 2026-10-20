@@ -164,8 +164,8 @@ function createSendJson(isAllowed) {
 function createReadJsonBody(sendJson) {
   return function readJsonBody(req, res, limit = BODY_LIMIT) {
     return new Promise((resolveBody) => {
-      const type = String(req.headers['content-type'] ?? '')
-      if (!type.toLowerCase().includes('application/json')) {
+      const type = String(req.headers['content-type'] ?? '').split(';', 1)[0].trim().toLowerCase()
+      if (type !== 'application/json') {
         sendJson(req, res, 415, { error: 'Send JSON.' })
         resolveBody(null)
         return
@@ -182,6 +182,8 @@ function createReadJsonBody(sendJson) {
         if (done) return
         size += chunk.length
         if (size > limit) {
+          res.once('finish', () => req.destroy())
+          res.setHeader('Connection', 'close')
           sendJson(req, res, 413, { error: 'That request is too large.' })
           stop(null)
           return

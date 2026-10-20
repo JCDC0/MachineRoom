@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,6 +9,7 @@ import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
+import { releaseLaneLock, takeLaneLock } from './lane-lock.mjs'
 import { writeRecording } from './recording-files.mjs'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -117,34 +118,6 @@ function printUsage(path) {
   console.log(`tokens cached write: ${count(report.cache_write_tokens)}`)
   console.log(`tokens reasoning: ${count(report.reasoning_tokens)}`)
   console.log(`tokens total: ${count(report.total_tokens)}`)
-}
-
-function processAlive(pid) {
-  if (!Number.isInteger(pid) || pid <= 0) return false
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch (error) {
-    return error?.code === 'EPERM'
-  }
-}
-
-function takeLaneLock(folder, laneKey) {
-  const path = join(folder, `${laneKey}.lock`)
-  try {
-    writeFileSync(path, String(process.pid), { flag: 'wx' })
-    return path
-  } catch (error) {
-    if (error?.code !== 'EEXIST') throw error
-  }
-  const holder = Number.parseInt(readLog(path), 10)
-  if (processAlive(holder)) throw new Error(`The ${laneKey} lane is already running (process ${holder}). Wait for that run to end, or delete ${path} if no run is going.`)
-  writeFileSync(path, String(process.pid))
-  return path
-}
-
-function releaseLaneLock(path) {
-  if (Number.parseInt(readLog(path), 10) === process.pid) rmSync(path, { force: true })
 }
 
 function readRecords() {
