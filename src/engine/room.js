@@ -1,32 +1,33 @@
 import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
-import { ancestors, basename, dirname } from '../model/paths.js'
+import { basename, dirname } from '../model/paths.js'
 import { createAgents } from './agents.js'
-import { createCameraRig, fitDistance } from './camera.js'
-import { createClusters } from './clusters.js'
-import { createCore } from './core.js'
+import { FOV, createCameraRig, fitView } from './camera.js'
+import { createCards } from './cards.js'
+import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createLabels } from './labels.js'
-import { layoutTree, positionsOf, treeFromState } from './layout.js'
-import { RED, WHITE, YELLOW, glowTexture, seeded } from './sprites.js'
+import { GREEN, RED, WHITE, glowTexture } from './sprites.js'
 import { createStrings } from './strings.js'
-import { createTerminals } from './terminals.js'
+import { CHIP_REACH, createTerminals } from './terminals.js'
+import { createVoid } from './void.js'
 
-const OPEN_STEP_MS = 170
 const FOLLOW_HOLD_MS = 2500
-const ZERO = new THREE.Vector3()
+const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
+const REFIT_SHIFT = 150
+const REFIT_RATIO = 0.08
 const overviewCentre = new THREE.Vector3()
 
 export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
   const texture = glowTexture()
   const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x000000)
-  scene.fog = new THREE.FogExp2(0x000000, 0.00005)
+  scene.fog = new THREE.FogExp2(0x000000, 0.00007)
   const cssScene = new THREE.Scene()
 
   let width = surface.clientWidth || window.innerWidth
   let height = surface.clientHeight || window.innerHeight
-  const camera = new THREE.PerspectiveCamera(50, width / height, 1, 60000)
-  const renderer = new THREE.WebGLRenderer({ antialias: true })
+  const camera = new THREE.PerspectiveCamera(FOV, width / height, 1, 60000)
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+  renderer.setClearColor(0x000000, 0)
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.setSize(width, height)
   gl.appendChild(renderer.domElement)
@@ -35,69 +36,54 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   cssRenderer.domElement.style.pointerEvents = 'none'
   css.appendChild(cssRenderer.domElement)
 
-  const next = seeded(9001)
-  const dust = new THREE.Points(
-    new THREE.BufferGeometry().setFromPoints(
-      Array.from({ length: 700 }, () => {
-        const direction = new THREE.Vector3(next() * 2 - 1, next() * 2 - 1, next() * 2 - 1).normalize()
-        return direction.multiplyScalar(7000 + next() * 9000)
-      })
-    ),
-    new THREE.PointsMaterial({ color: WHITE, size: 12, map: texture, transparent: true, opacity: 0.4, depthWrite: false })
-  )
-  scene.add(dust)
-
-  const core = createCore(scene, texture)
-  const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key }))
+  const space = createVoid(scene, texture)
+  const hub = createHub(scene, agents.length)
+  const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
   const agentSet = createAgents(scene, roster)
   const terminals = createTerminals(cssScene, roster)
   const labels = createLabels(scene)
 
   const strings = createStrings(scene)
-  let clusters = null
-  let layout = null
-  const known = { files: -1, dirs: -1 }
-  const centerOf = (path) => clusters.center(path ?? '')
+  const cards = createCards(cssScene, { glScene: scene, rootName, onInspect: (path) => focusPath(path) })
+  let linkKey = ''
+  let fitted = null
+  const centerOf = (path) => cards.center(path ?? '')
   const world = {
     center: centerOf,
-    slot: (dir, file, out) => (file ? clusters.slotPosition(dir, file, out) : out.copy(clusters.center(dir))),
+    slot: (dir, file, out) => (file ? cards.slotPosition(dir, file, out) : out.copy(cards.center(dir))),
+    edge: (dir, file, side, out) => cards.edgePoint(dir, file, side, out),
+    side: (dir) => cards.sideOf(dir ?? ''),
+    reach: (dir) => cards.halfWidth(dir ?? '') + CHIP_REACH,
+    get right() {
+      return cards.vectors().right
+    },
+    get back() {
+      return cards.vectors().back
+    },
   }
 
-  function build(state) {
-    let from = null
-    if (clusters) {
-      from = new Map([...clusters.clusters].map(([path, cluster]) => [path, cluster.group.position.clone()]))
-      clusters.dispose()
+  function relink() {
+    const links = cards.visibleLinks()
+    const key = links.map((link) => `${link.from}>${link.to}`).join('\n')
+    if (key === linkKey) return
+    linkKey = key
+    strings.build(links, centerOf, false)
+  }
+
+  function refit(force = false) {
+    const next = fitView([HUB_SPHERE, ...cards.spheres()], { aspect: width / height })
+    if (!force && fitted) {
+      const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
+      if (shift < REFIT_SHIFT && Math.abs(next.dist - fitted.dist) < fitted.dist * REFIT_RATIO) return
     }
-    layout = layoutTree(treeFromState(state, rootName), layout ? positionsOf(layout) : null)
-    clusters = createClusters(scene, layout, from)
-    strings.build(layout.links, centerOf)
-    known.files = state.files.size
-    known.dirs = state.dirs.size
-    refit()
-    clusters.sync(state)
+    fitted = next
+    rig.setOverviewTarget(overviewCentre.set(next.target.x, next.target.y, next.target.z))
+    rig.setOverviewDistance(next.dist)
   }
-
-  function refit() {
-    if (layout) {
-      const { center, radius } = layout.bounds
-      rig.setOverviewTarget(overviewCentre.set(center.x, center.y, center.z))
-      rig.setOverviewDistance(fitDistance(radius, width / height))
-    }
-  }
-
-  const grown = (state) => state.files.size !== known.files || state.dirs.size !== known.dirs
 
   const pulses = Array.from({ length: 32 }, () => {
     const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: texture,
-        color: YELLOW,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      })
+      new THREE.SpriteMaterial({ map: texture, color: WHITE, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })
     )
     sprite.scale.set(110, 110, 1)
     scene.add(sprite)
@@ -113,18 +99,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     pulse.start = performance.now()
     pulse.duration = duration
     pulse.sprite.material.color.setHex(color)
-  }
-
-  let queue = []
-  function later(ms, fn) {
-    queue.push({ at: performance.now() + ms, fn })
-  }
-  function runQueue(now) {
-    if (queue.length === 0) return
-    const due = queue.filter((item) => item.at <= now).sort((a, b) => a.at - b.at)
-    if (due.length === 0) return
-    queue = queue.filter((item) => item.at > now)
-    due.forEach((item) => item.fn())
   }
 
   const scratch = new THREE.Vector3()
@@ -146,14 +120,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function sync(state) {
-    queue = []
     labels.clear()
     pulses.forEach((pulse) => {
       pulse.active = false
       pulse.sprite.material.opacity = 0
     })
-    if (grown(state)) build(state)
-    else clusters.sync(state)
+    cards.sync(state)
+    relink()
+    refit()
     agentSet.snap(state, world)
   }
 
@@ -166,9 +140,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     focused = key
     const middle = new THREE.Vector3()
     if (style === 'close') {
-      rig.focus(() => middle.copy(view.group.position).lerp(view.touch, view.aim ? 0.5 : 0), 1050, 0.5)
+      rig.focus(() => middle.copy(view.group.position).lerp(view.touch, view.aim ? 0.5 : 0), 1500, 0.3)
     } else {
-      rig.focus(() => middle.copy(view.group.position).add(terminals.positionOf(key)).multiplyScalar(0.5), 2800)
+      rig.focus(() => middle.copy(view.group.position).add(terminals.positionOf(key)).multiplyScalar(0.5), 2400, 0.3)
     }
   }
 
@@ -186,45 +160,41 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (following && (activity.type === 'tool.start' || activity.type === 'run.start')) followTo(activity.agent)
 
     if (activity.type === 'run.start') {
-      core.pulse(YELLOW, 1)
-      firePulse(ZERO, position, YELLOW, 700)
+      hub.pulse(WHITE, 1)
+      firePulse(HUB_CENTER, position, WHITE, 700)
     } else if (activity.type === 'tool.start') {
       for (const touch of activity.touches) {
-        const chain = touch.kind === 'dir' ? ancestors(`${touch.path}/x`) : ancestors(touch.path)
-        chain.forEach((dir, index) => later(index * OPEN_STEP_MS, () => clusters.open(dir)))
-        later(chain.length * OPEN_STEP_MS, () => {
-          if (touch.kind === 'file') {
-            const dir = dirname(touch.path)
-            clusters.flashFile(dir, touch.path, 'white')
-            clusters.slotPosition(dir, touch.path, scratch)
-            labels.show(`${touch.mode === 'read' ? 'read' : 'write'} ${basename(touch.path)}`, scratch, '#ffffff')
-            agentSet.aimAt(activity.agent, dir, touch.path, performance.now())
-          } else {
-            clusters.flashCluster(touch.path, 'white')
-            scratch.copy(clusters.center(touch.path))
-            agentSet.aimAt(activity.agent, touch.path, null, performance.now())
-          }
-          firePulse(view.group.position, scratch, WHITE, 600)
-        })
+        if (touch.kind === 'file') {
+          const dir = dirname(touch.path)
+          cards.flashFile(dir, touch.path, 'white')
+          cards.topPoint(dir, scratch)
+          labels.show(`${touch.mode === 'read' ? 'read' : 'write'} ${basename(touch.path)}`, scratch, '#ffffff')
+          agentSet.aimAt(activity.agent, dir, touch.path, performance.now())
+        } else {
+          cards.flashCluster(touch.path, 'white')
+          scratch.copy(cards.center(touch.path))
+          agentSet.aimAt(activity.agent, touch.path, null, performance.now())
+        }
+        firePulse(position, scratch, WHITE, 600)
       }
     } else if (activity.type === 'tool.end' && !activity.ok) {
       const touches = getState().agents.get(activity.agent)?.calls.get(activity.id) ?? []
       touches.forEach((touch) => {
         if (touch.kind === 'file') {
-          clusters.flashFile(dirname(touch.path), touch.path, 'red')
-          clusters.slotPosition(dirname(touch.path), touch.path, scratch)
+          cards.flashFile(dirname(touch.path), touch.path, 'red')
+          cards.topPoint(dirname(touch.path), scratch)
           labels.show(`failed ${basename(touch.path)}`, scratch, '#ff2a2a')
         } else {
-          clusters.flashCluster(touch.path, 'red')
+          cards.flashCluster(touch.path, 'red')
         }
       })
-      core.pulse(RED, 0.5)
+      hub.pulse(RED, 0.5)
     } else if (activity.type === 'run.end') {
-      const color = activity.ok ? YELLOW : RED
-      core.pulse(color, 1)
-      firePulse(position, ZERO, color, 900)
+      const color = activity.ok ? GREEN : RED
+      hub.pulse(color, 1)
+      firePulse(position, view.home, color, 900)
     } else if (activity.type === 'error') {
-      core.pulse(RED, 0.6)
+      hub.pulse(RED, 0.6)
     }
   }
 
@@ -235,28 +205,37 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
-    refit()
+    refit(true)
   }
   const observer = new ResizeObserver(onResize)
   observer.observe(surface)
 
   let last = performance.now()
   let frameId = 0
+  const anchorOf = (key) => agentSet.views.get(key)?.group.position
+  const chipSideOf = (key) => agentSet.views.get(key)?.chipSide ?? 1
 
   function frame(now) {
     frameId = requestAnimationFrame(frame)
     const delta = Math.min((now - last) / 1000, 0.1)
     last = now
     beforeFrame(delta * 1000)
-    runQueue(now)
 
     const state = getState()
-    if (grown(state)) build(state)
-    core.update(now / 1000, delta)
-    clusters.update(state, delta)
-    if (clusters.moving()) strings.update(centerOf)
+    space.update(delta)
+    hub.update(now / 1000, delta)
+    if (cards.update(state, delta, camera)) {
+      relink()
+      refit()
+    }
+    if (cards.moving()) strings.update(centerOf)
     labels.update(delta)
-    agentSet.update(state, delta, now, world, terminals.positionOf)
+    agentSet.update(state, delta, now, world, terminals)
+    for (const view of agentSet.views.values()) {
+      const status = state.agents.get(view.key)?.status ?? 'idle'
+      const color = status === 'error' ? RED : status === 'done' ? GREEN : WHITE
+      hub.setSlot(view.index, color, status === 'idle' ? 0.25 : status === 'working' || status === 'queued' ? 0.12 : 0.6)
+    }
 
     pulses.forEach((pulse) => {
       if (!pulse.active) return
@@ -271,7 +250,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     })
 
     rig.update(delta)
-    terminals.update(state, now, camera, focused)
+    terminals.update(state, now, camera, focused, anchorOf, delta, chipSideOf)
     renderer.render(scene, camera)
     cssRenderer.render(cssScene, camera)
   }
@@ -286,39 +265,42 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function focusTerminal(key) {
     if (!terminals.terminals.has(key)) return false
+    terminals.setOpen(key, true)
     focused = key
-    rig.focus(() => terminals.positionOf(key), 1000, 0.12)
+    rig.focus(() => terminals.positionOf(key), 1300, 0.12)
     return true
   }
 
   function focusPath(path) {
-    if (!clusters) return false
     const state = getState()
     const isFile = state.files.has(path)
     if (!isFile && path !== '' && !state.dirs.has(path)) return false
     const dir = isFile ? dirname(path) : path
-    const chain = ancestors(isFile ? path : `${path}/x`)
     focused = null
-    chain.forEach((step, index) => later(index * OPEN_STEP_MS, () => clusters.open(step)))
-    later(chain.length * OPEN_STEP_MS, () => {
-      if (isFile) {
-        clusters.flashFile(dir, path, 'white')
-        clusters.slotPosition(dir, path, scratch)
+    cards.pin(dir)
+    if (isFile) {
+      cards.flashFile(dir, path, 'white')
+      later(() => {
+        cards.slotPosition(dir, path, scratch)
         labels.show(basename(path), scratch, '#ffffff')
-      } else {
-        clusters.flashCluster(path, 'white')
-      }
-    })
+      })
+    } else {
+      cards.flashCluster(path, 'white')
+    }
     rig.focus(
       () => {
-        if (isFile) clusters.slotPosition(dir, path, pathTarget)
-        else pathTarget.copy(clusters.center(path))
+        if (isFile) cards.slotPosition(dir, path, pathTarget)
+        else pathTarget.copy(cards.center(path))
         return pathTarget
       },
-      isFile ? 700 : 1500,
-      0.6
+      isFile ? 1100 : 1700,
+      0.25
     )
     return true
+  }
+
+  function later(fn) {
+    setTimeout(fn, 250)
   }
 
   return {
@@ -327,6 +309,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     focus: focusAgent,
     focusTerminal,
     focusPath,
+    toggleTerminal(key) {
+      if (key) terminals.toggle(key)
+      else terminals.openAll(terminals.openKeys().length === 0)
+      return terminals.openKeys()
+    },
+    openTerminals: (open) => terminals.openAll(open),
+    openTerminalKeys: () => terminals.openKeys(),
     overview() {
       focused = null
       rig.overview()
@@ -345,7 +334,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       terminals.dispose()
       labels.dispose()
       strings.dispose()
-      clusters.dispose()
+      cards.dispose()
+      hub.dispose()
+      space.dispose()
       renderer.dispose()
       gl.removeChild(renderer.domElement)
       css.removeChild(cssRenderer.domElement)

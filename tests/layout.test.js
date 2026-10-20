@@ -5,6 +5,10 @@ import {
   MIN_CELL_SCALE,
   Y_HIGH,
   Y_LOW,
+  CARD_DEPTH,
+  CARD_HUB,
+  cardDepth,
+  layoutCards,
   layoutTree,
   positionsOf,
 } from '../src/engine/layout.js'
@@ -158,5 +162,72 @@ describe('layoutTree when the project grows', () => {
     for (const { pair, gap, needed } of spaced(after.nodes)) {
       expect(gap, pair).toBeGreaterThanOrEqual(needed * 0.99)
     }
+  })
+})
+
+describe('layoutCards', () => {
+  const entries = [
+    { path: '', width: 450, height: 120 },
+    { path: 'src', width: 650, height: 800 },
+    { path: 'docs', width: 370, height: 100 },
+    { path: 'test', width: 450, height: 120 },
+    { path: 'src/ui', width: 370, height: 100 },
+    { path: 'src/engine', width: 650, height: 500 },
+    { path: 'src/model', width: 370, height: 100 },
+  ]
+  const size = new Map(entries.map((entry) => [entry.path, entry]))
+  const boxes = (layout) =>
+    [...layout].map(([path, p]) => ({ path, x: p.x, y: p.y, hw: size.get(path).width / 2, hh: size.get(path).height / 2 }))
+  const clash = (a, b) => Math.abs(a.x - b.x) < a.hw + b.hw && Math.abs(a.y - b.y) < a.hh + b.hh
+
+  it('is the same every time', () => {
+    expect([...layoutCards(entries)]).toEqual([...layoutCards(entries)])
+  })
+
+  it('puts the root above the hub, in the middle', () => {
+    const root = layoutCards(entries).get('')
+    expect(root.x).toBe(0)
+    expect(root.y).toBeGreaterThan(CARD_HUB.hh)
+  })
+
+  it('keeps cards apart from each other and from the hub', () => {
+    const placed = boxes(layoutCards(entries))
+    const hub = { x: 0, y: 0, hw: CARD_HUB.hw, hh: CARD_HUB.hh }
+    for (let i = 0; i < placed.length; i++) {
+      expect(clash(placed[i], hub), `${placed[i].path || 'root'} and the hub`).toBe(false)
+      for (let j = i + 1; j < placed.length; j++) {
+        expect(clash(placed[i], placed[j]), `${placed[i].path} and ${placed[j].path}`).toBe(false)
+      }
+    }
+  })
+
+  it('grows each subfolder outward on the side of its parent', () => {
+    const layout = layoutCards(entries)
+    for (const child of ['src/ui', 'src/engine', 'src/model']) {
+      expect(Math.sign(layout.get(child).x)).toBe(Math.sign(layout.get('src').x))
+      expect(Math.abs(layout.get(child).x)).toBeGreaterThan(Math.abs(layout.get('src').x))
+    }
+  })
+
+  it('adds a root card when the list has none', () => {
+    expect(layoutCards([{ path: 'src', width: 400, height: 100 }]).has('')).toBe(true)
+  })
+
+  it('keeps cards near their place when a card is added', () => {
+    const before = layoutCards(entries.slice(0, 4))
+    const after = layoutCards(entries, before)
+    for (const path of ['docs', 'test']) {
+      const a = before.get(path)
+      const b = after.get(path)
+      expect(Math.hypot(a.x - b.x, a.y - b.y)).toBeLessThan(150)
+    }
+  })
+
+  it('brings deeper folders toward the camera, up to a limit', () => {
+    expect(cardDepth('')).toBe(CARD_DEPTH.root)
+    expect(cardDepth('src')).toBeGreaterThan(cardDepth(''))
+    expect(cardDepth('src/ui')).toBeGreaterThan(cardDepth('src'))
+    expect(cardDepth('a/b/c/d/e/f')).toBe(CARD_DEPTH.max)
+    expect(layoutCards(entries).get('src/ui').z).toBe(cardDepth('src/ui'))
   })
 })

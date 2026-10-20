@@ -16,7 +16,7 @@ export const DENSE_FILES = 20
 export const DENSE_COLS = 14
 export const MIN_CELL_SCALE = 0.4
 export const MARGIN = 260
-export const STAGE = { min: { x: -2300, y: -200, z: -300 }, max: { x: 2300, y: 1900, z: 300 } }
+export const STAGE = { min: { x: -1100, y: -200, z: -1100 }, max: { x: 1100, y: 800, z: 1100 } }
 
 const TAU = Math.PI * 2
 const BACK = (Math.PI * 3) / 2
@@ -156,6 +156,156 @@ function relax(list, pos, parents, mobility, iterations) {
 
     if (settling && worst < 0.5) break
   }
+}
+
+export const CARD_HUB = { hw: 900, hh: 320 }
+export const CARD_GAP = 70
+export const CARD_ROW = 520
+export const CARD_V = { low: -1400, high: 1600 }
+export const CARD_DEPTH = { root: -320, step: 260, max: 460 }
+const CARD_PASSES = 260
+
+export function cardDepth(path) {
+  const level = path === '' ? 0 : path.split('/').length
+  return Math.min(CARD_DEPTH.max, CARD_DEPTH.root + level * CARD_DEPTH.step)
+}
+
+function overlap(a, pa, b, pb) {
+  const ox = a.hw + b.hw - Math.abs(pb.x - pa.x)
+  const oy = a.hh + b.hh - Math.abs(pb.y - pa.y)
+  return ox > 0 && oy > 0 ? { ox, oy } : null
+}
+
+function relaxCards(list, pos, parents, mobility) {
+  const hub = { hw: CARD_HUB.hw, hh: CARD_HUB.hh }
+  const centre = { x: 0, y: 0 }
+  for (let pass = 0; pass < CARD_PASSES; pass += 1) {
+    let worst = 0
+    for (let i = 0; i < list.length; i += 1) {
+      const a = list[i]
+      const pa = pos.get(a.path)
+      for (let j = i + 1; j < list.length; j += 1) {
+        const b = list[j]
+        const pb = pos.get(b.path)
+        const hit = overlap(a, pa, b, pb)
+        if (!hit) continue
+        const wa = mobility.get(a.path)
+        const wb = mobility.get(b.path)
+        if (wa + wb === 0) continue
+        worst = Math.max(worst, Math.min(hit.ox, hit.oy))
+        const alongX = hit.ox < hit.oy
+        const push = (alongX ? hit.ox : hit.oy) + 1
+        const sign = alongX ? Math.sign(pb.x - pa.x) || (i % 2 ? 1 : -1) : Math.sign(pb.y - pa.y) || -1
+        const shareA = (push * wa) / (wa + wb)
+        const shareB = (push * wb) / (wa + wb)
+        if (alongX) {
+          pa.x -= sign * shareA
+          pb.x += sign * shareB
+        } else {
+          pa.y -= sign * shareA
+          pb.y += sign * shareB
+        }
+      }
+    }
+    for (const node of list) {
+      const weight = mobility.get(node.path)
+      if (weight === 0) continue
+      const p = pos.get(node.path)
+      const hit = overlap(hub, centre, node, p)
+      if (hit) {
+        worst = Math.max(worst, Math.min(hit.ox, hit.oy))
+        if (hit.ox < hit.oy) p.x += (Math.sign(p.x) || 1) * (hit.ox + 1)
+        else p.y += (Math.sign(p.y) || 1) * (hit.oy + 1)
+      }
+      const parent = parents.get(node.path)
+      if (parent && pass < CARD_PASSES * 0.6) {
+        const pp = pos.get(parent.path)
+        const longest = parent.hw + node.hw + CARD_GAP * 3
+        const dy = p.y - pp.y
+        if (Math.abs(dy) > CARD_ROW * 2) p.y -= dy * 0.05 * weight
+        const dx = p.x - pp.x
+        if (Math.abs(dx) > longest * 1.5) p.x -= dx * 0.05 * weight
+      }
+      p.y = clamp(p.y, CARD_V.low, CARD_V.high)
+    }
+    if (pass > CARD_PASSES * 0.6 && worst < 0.5) break
+  }
+}
+
+export function layoutCards(entries, previous = null) {
+  const list = [...entries]
+    .sort((a, b) => a.path.localeCompare(b.path))
+    .map(({ path, width, height }) => ({ path, hw: width / 2 + CARD_GAP / 2, hh: height / 2 + CARD_GAP / 2 }))
+  const byPath = new Map(list.map((node) => [node.path, node]))
+  if (!byPath.has('')) {
+    const root = { path: '', hw: 220, hh: 80 }
+    list.unshift(root)
+    byPath.set('', root)
+  }
+  const parentOf = (path) => {
+    let at = path
+    while (at !== '') {
+      at = dirname(at)
+      if (byPath.has(at)) return at
+    }
+    return ''
+  }
+  const parents = new Map()
+  const children = new Map(list.map((node) => [node.path, []]))
+  for (const node of list) {
+    if (node.path === '') continue
+    const parent = parentOf(node.path)
+    parents.set(node.path, byPath.get(parent))
+    children.get(parent).push(node.path)
+  }
+
+  const pos = new Map()
+  const mobility = new Map()
+  const known = (path) => previous?.get(path)
+  const root = byPath.get('')
+  pos.set('', { x: 0, y: CARD_HUB.hh + root.hh, z: 0 })
+  mobility.set('', 0)
+
+  const place = (path, x, y) => {
+    const before = known(path)
+    if (before) {
+      pos.set(path, { x: before.x, y: before.y, z: 0 })
+      mobility.set(path, SETTLED)
+    } else {
+      pos.set(path, { x, y: clamp(y, CARD_V.low, CARD_V.high), z: 0 })
+      mobility.set(path, FRESH)
+    }
+  }
+
+  const top = children.get('')
+  top.forEach((path, index) => {
+    const node = byPath.get(path)
+    const side = index % 2 === 0 ? 1 : -1
+    const row = Math.floor(index / 2)
+    place(path, side * (CARD_HUB.hw + node.hw), CARD_HUB.hh * 0.4 - row * CARD_ROW)
+  })
+
+  const queue = [...top]
+  while (queue.length > 0) {
+    const path = queue.shift()
+    const here = pos.get(path)
+    const parent = byPath.get(path)
+    const side = Math.sign(here.x) || 1
+    const kids = children.get(path)
+    kids.forEach((childPath, index) => {
+      queue.push(childPath)
+      const node = byPath.get(childPath)
+      place(childPath, here.x + side * (parent.hw + node.hw), here.y + ((kids.length - 1) / 2 - index) * CARD_ROW * 0.6)
+    })
+  }
+
+  relaxCards(list, pos, parents, mobility)
+  return new Map(
+    list.map((node) => {
+      const p = pos.get(node.path)
+      return [node.path, { x: p.x, y: p.y, z: cardDepth(node.path) }]
+    })
+  )
 }
 
 export function layoutTree(tree, previous = null) {

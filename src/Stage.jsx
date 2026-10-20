@@ -156,6 +156,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         player.toggle()
       } else if (event.key === 'f' || event.key === 'F') {
         setFollow(followRef.current === 'wide' ? 'close' : followRef.current ? false : 'wide')
+      } else if (event.key === 't' || event.key === 'T') {
+        room?.toggleTerminal(room.focused())
       } else if (event.key === '0') {
         setFollow(false)
         room?.overview()
@@ -260,8 +262,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <div className="surface" ref={surfaceRef}>
-      <div className="layer" ref={glRef} aria-hidden="true" />
       <div className="layer" ref={cssRef} aria-hidden="true" />
+      <div className="layer is-over" ref={glRef} aria-hidden="true" />
       {live && (
         <div style={{ ...BADGE, color: snapshot.status === 'live' ? 'var(--yellow)' : 'var(--red)' }} role="status">
           {live.simulated ? 'Demo' : 'Live'} // {snapshot.status === 'live' ? 'connected' : snapshot.status}
