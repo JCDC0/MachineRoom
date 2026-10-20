@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.59. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.60. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -182,7 +182,7 @@ Do not rename these classes without changing both sides.
 ## Known limits
 
 - The card layout compares every pair of drawn cards, which stays small because the folder plan draws only the folders on the agents' paths. The older whole-tree layout (`layoutTree`) took 0.13 seconds for 400 folders and 1.2 seconds for 1600.
-- Hermes read lines carry only a file name. A name shared by two files cannot be resolved.
+- Hermes read lines carry only a file name. When two files share it, the parser picks the one in or nearest the folder of that run's last file; with no folder yet, or a tie, the name lands at the root.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
 - The proxy route needs the dev server. The bridge route works with a production build too.

@@ -33,10 +33,33 @@ describe('resolveKnown', () => {
 
   it('resolves a bare file name when it is unique', () => {
     expect(resolveKnown('strings.js', files)).toBe('src/strings.js')
+    expect(resolveKnown('strings.js', files, 'test')).toBe('src/strings.js')
   })
 
   it('keeps a name that matches nothing', () => {
     expect(resolveKnown('other.js', files)).toBe('other.js')
+  })
+
+  it('picks the match whose folder is near', () => {
+    const shared = ['src/index.js', 'test/index.js']
+    expect(resolveKnown('index.js', shared, 'src')).toBe('src/index.js')
+    expect(resolveKnown('index.js', shared, 'test')).toBe('test/index.js')
+  })
+
+  it('picks the match that shares the longest leading folder path', () => {
+    const shared = ['src/engine/index.js', 'srcx/index.js']
+    expect(resolveKnown('index.js', shared, 'src/ui')).toBe('src/engine/index.js')
+    expect(resolveKnown('index.js', shared, 'srcx/deep')).toBe('srcx/index.js')
+  })
+
+  it('keeps the bare name when the longest shared folder is a tie', () => {
+    const shared = ['src/ui/index.js', 'src/engine/index.js']
+    expect(resolveKnown('index.js', shared, 'src')).toBe('index.js')
+  })
+
+  it('keeps today behaviour without near', () => {
+    const shared = ['src/index.js', 'test/index.js']
+    expect(resolveKnown('index.js', shared)).toBe('index.js')
   })
 })
 
