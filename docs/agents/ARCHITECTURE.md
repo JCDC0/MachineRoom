@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.65. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.66. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -38,7 +38,7 @@ The lint command is the build. There is no separate linter yet.
 src/model/        pure logic, no DOM, fully tested
   paths.js          path cleanup, ancestors, tree builder
   commands.js       files and folders a shell command touches
-  parsers/          one parser per agent type (claude, hermes, opencode, agy), and unreadable.js (lines shaped like a tool call that no parser read)
+  parsers/          one parser per agent type (claude, hermes, opencode, agy), and unreadable.js (lines shaped like a tool call that no parser read, and a counter that joins lines split across chunks)
   pipeline.js       Paperclip frames -> activities (createPipeline for streams, buildActivities for a batch)
   log.js            activities -> event log lines and run markers
   state.js          activities -> room state (agents, files, folders)
