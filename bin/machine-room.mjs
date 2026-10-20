@@ -7,9 +7,11 @@ import { createBridge } from '../server/index.js'
 
 const USAGE = [
   'Usage: machine-room [options]',
+  '       machine-room up [options]',
   '       machine-room doctor [options]',
   '',
   'Commands:',
+  '  up                  run the doctor checks, then serve the room whether they pass or not',
   '  doctor              check Paperclip, its routes, the company, the folder and the backups',
   '',
   'Options:',
@@ -34,6 +36,9 @@ const DOCTOR_OPTION_NAMES = {
   '--company': 'companyId',
   '--root': 'projectRoot',
 }
+
+const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway; features whose routes changed stay off.'
+const PAPERCLIP_NOT_RUNNING = 'Paperclip is not running. Start it yourself with paperclipai run; machine-room never starts it.'
 
 function parseArgs(argv, names = OPTION_NAMES) {
   const options = { help: false }
@@ -67,7 +72,7 @@ function hasIndex(folder) {
   }
 }
 
-async function serve(options) {
+function prepare(options) {
   if (options.port !== undefined) {
     const port = Number(options.port)
     if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -85,6 +90,10 @@ async function serve(options) {
     process.exit(1)
   }
 
+  return dist
+}
+
+async function startRoom(options, dist) {
   const bridge = createBridge({
     paperclipUrl: options.paperclipUrl,
     companyId: options.companyId,
@@ -122,14 +131,31 @@ async function serve(options) {
   })
 }
 
+async function serve(options) {
+  const dist = prepare(options)
+  await startRoom(options, dist)
+}
+
+async function up(options) {
+  const dist = prepare(options)
+  const result = await runDoctor(options)
+  for (const line of result.lines) console.log(line)
+  if (result.paperclipDown) {
+    console.log(PAPERCLIP_NOT_RUNNING)
+  } else if (result.exitCode !== 0) {
+    console.log(SOME_CHECKS_FAILED)
+  }
+  await startRoom(options, dist)
+}
+
 const argv = process.argv.slice(2)
-const command = argv[0] === 'doctor' ? 'doctor' : 'serve'
+const command = argv[0] === 'doctor' || argv[0] === 'up' ? argv[0] : 'serve'
 
 const names = command === 'doctor' ? DOCTOR_OPTION_NAMES : OPTION_NAMES
 
 let options
 try {
-  options = parseArgs(command === 'doctor' ? argv.slice(1) : argv, names)
+  options = parseArgs(command === 'serve' ? argv : argv.slice(1), names)
 } catch (error) {
   console.error(error.message)
   console.error(USAGE)
@@ -145,6 +171,8 @@ if (command === 'doctor') {
   const result = await runDoctor(options)
   for (const line of result.lines) console.log(line)
   process.exitCode = result.exitCode
+} else if (command === 'up') {
+  await up(options)
 } else {
   await serve(options)
 }
