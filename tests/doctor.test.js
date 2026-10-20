@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { PAPERCLIP_SURFACE, compareSurface, describeSurface } from '../server/surface.js'
+import { FEATURES, PAPERCLIP_SURFACE, compareSurface, describeSurface } from '../server/surface.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const script = join(root, 'scripts', 'doctor.mjs')
@@ -72,6 +72,13 @@ describe('the Paperclip surface', () => {
     const hires = PAPERCLIP_SURFACE.find((route) => route.path === '/api/companies/{companyId}/agent-hires')
     expect(hires.fields).toContain('approval')
     expect(hires.body).toContain('metadata')
+  })
+
+  it('gives every route a known feature', () => {
+    const known = new Set(FEATURES)
+    for (const route of PAPERCLIP_SURFACE) {
+      expect(known.has(route.feature), `${route.method} ${route.path}`).toBe(true)
+    }
   })
 
   it('passes a spec that holds every route', () => {

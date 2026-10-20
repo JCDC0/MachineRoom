@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Review fix on U2d: reading the agent list (`GET /api/control/agents`) no longer checks `team`, because it uses the agent list and the spend routes, not the hire and update routes; a changed hire route now stops a hire and leaves the list.
+- Feature switches (task U2d): each route in `server/surface.js` names its feature, `GET /api/health` adds `features` with every name true until a surface check marks one false, and the tasks, approvals, meters and team control routes plus both `/api/backup` methods answer 503 with the feature sentence before they call Paperclip, while the room routes keep working; tests in `tests/bridge.test.js` and `tests/doctor.test.js`.
 - Review fix on P1b: Vite copies `public/` into `dist/`, so a pack held 76 local lane recordings from `dist/recordings/` (agent output and local paths). The `files` list now leaves out `dist/recordings/` and the check forbids it; a pack is 61 files and 737 kB.
 - Pack check (task P1b): `package.json` lists only the files the one-port command needs, and `npm run pack-check` reads `npm pack --dry-run --json` to fail when an imported file is missing from the pack or a secret, test, recording, module or log file is in it.
 - The native test crash found (task T15): a full run dies about half the time with exit code 0xC0000409 inside `node.exe` 24.15.0 at a fixed offset, always while `tests/bridge.test.js` is in flight (7 of 12 full runs, and 7 of 20 runs of that file alone), with `tests/control-contract.test.js` and `tests/bridge-reviews.test.js` in flight too and `tests/run-recording.test.js` sometimes; `--pool=forks` does not stop it (6 of 12) and one worker does (6 of 6) but takes 34 seconds a run against 9, so `vite.config.js` is unchanged.
