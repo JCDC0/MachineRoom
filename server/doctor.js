@@ -132,6 +132,7 @@ export async function runDoctor(options = {}) {
   const now = options.now ?? Date.now()
   const lines = []
   let ok = true
+  let paperclipDown = false
 
   function add(result) {
     if (!result.ok) ok = false
@@ -152,6 +153,7 @@ export async function runDoctor(options = {}) {
     health = await readHealth(base, fetchImpl)
     const version = typeof health?.version === 'string' ? health.version.trim() : ''
     if (!health || version === '') {
+      paperclipDown = true
       add({ ok: false, text: `Paperclip does not answer at ${place}.` })
     } else if (health.status === 'unhealthy') {
       add({ ok: false, text: unhealthyText(health) })
@@ -175,5 +177,5 @@ export async function runDoctor(options = {}) {
 
   if (healthOk) add(backupLine(health.databaseBackup, now))
 
-  return { exitCode: ok ? 0 : 1, lines }
+  return { exitCode: ok ? 0 : 1, lines, paperclipDown }
 }
