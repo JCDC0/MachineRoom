@@ -348,6 +348,107 @@ summary:focus-visible,
   z-index: 1;
 }
 
+.hud-health {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space);
+}
+
+.hud-health-chip {
+  display: block;
+  width: 100%;
+  padding: var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  background: rgb(0 0 0 / 0.78);
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+
+.hud-health.is-red .hud-health-chip {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.hud-health.is-yellow .hud-health-chip {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.hud-health-chip:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
+.hud-health-popover {
+  width: 100%;
+  max-width: 360px;
+  background: rgb(0 0 0 / 0.92);
+  padding: var(--space);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  border: 1px solid var(--line);
+}
+
+.hud-health.is-red .hud-health-popover {
+  border-color: var(--red);
+}
+
+.hud-health.is-yellow .hud-health-popover {
+  border-color: var(--yellow);
+}
+
+.hud-health-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.hud-health.is-red .hud-health-lines {
+  color: var(--red);
+}
+
+.hud-health.is-yellow .hud-health-lines {
+  color: var(--yellow);
+}
+
+.hud-health-close {
+  align-self: flex-end;
+  padding: calc(var(--space) / 2) var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  background: transparent;
+  cursor: pointer;
+}
+
+.hud-health.is-red .hud-health-close {
+  color: var(--red);
+  border: 1px solid var(--red);
+}
+
+.hud-health.is-yellow .hud-health-close {
+  color: var(--yellow);
+  border: 1px solid var(--yellow);
+}
+
+.hud-health-close:hover {
+  background: rgb(255 255 255 / 0.08);
+}
+
 .hud-actions {
   display: flex;
   gap: var(--space);
