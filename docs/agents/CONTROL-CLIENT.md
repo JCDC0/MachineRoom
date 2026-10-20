@@ -83,7 +83,8 @@ OutcomeRow   { lane, model ("model unknown" when a record has none), runs, merge
              pending counts runs whose branch has no outcome, including runs with no branch. mergeRate is merged over
              merged plus rejected; averageFixes is over the merged runs; decidedCostUsd is the cost of the merged and
              rejected runs only, and costPerMerge is decidedCostUsd over merged. A rate is null when there is nothing
-             to divide by.
+             to divide by. An outcome counts once per branch, on the newest run that names the branch; an older run on
+             that branch adds only its cost to decidedCostUsd of its own row.
 BackupStatus { enabled: boolean, status: ok | warning | null, latestAt: string|null, ageHours: number|null, warnings: string[], checkedAt }
              warnings are Paperclip's codes: database_backup_missing | database_backup_stale | database_backup_last_failure | database_backup_check_failed.
              enabled is false and the rest null when Paperclip has automatic backups off.

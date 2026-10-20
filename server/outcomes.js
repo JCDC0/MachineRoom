@@ -33,12 +33,24 @@ function rowOf(row) {
   }
 }
 
+function branchOf(run) {
+  return typeof run?.branch === 'string' ? run.branch.trim() : ''
+}
+
+function usable(run) {
+  return Boolean(run) && typeof run === 'object' && !Array.isArray(run) && typeof run.lane === 'string' && run.lane.trim() !== ''
+}
+
 export function outcomeTable(runs, outcomes) {
   const latest = newestOutcomes(outcomes)
+  const list = Array.isArray(runs) ? runs : []
+  const newestRun = new Map()
+  list.forEach((run, index) => {
+    if (usable(run) && branchOf(run)) newestRun.set(branchOf(run), index)
+  })
   const rows = new Map()
-  for (const run of Array.isArray(runs) ? runs : []) {
-    if (!run || typeof run !== 'object' || Array.isArray(run)) continue
-    if (typeof run.lane !== 'string' || run.lane.trim() === '') continue
+  for (const [index, run] of list.entries()) {
+    if (!usable(run)) continue
     const lane = run.lane.trim()
     const model = typeof run.model === 'string' && run.model.trim() !== '' ? run.model.trim() : MODEL_UNKNOWN
     const key = `${lane}\u0000${model}`
@@ -50,17 +62,19 @@ export function outcomeTable(runs, outcomes) {
     row.runs += 1
     const cost = typeof run.costUsd === 'number' && Number.isFinite(run.costUsd) ? run.costUsd : 0
     row.cost += cost
-    const branch = typeof run.branch === 'string' ? run.branch.trim() : ''
+    const branch = branchOf(run)
     const outcome = branch ? latest.get(branch) : null
-    if (outcome?.outcome === 'merged') {
-      row.merged += 1
-      row.decidedCost += cost
-      if (typeof outcome.fixes === 'number' && Number.isFinite(outcome.fixes)) row.fixes.push(outcome.fixes)
-    } else if (outcome?.outcome === 'rejected') {
-      row.rejected += 1
-      row.decidedCost += cost
-    } else {
+    if (!outcome) {
       row.pending += 1
+      continue
+    }
+    row.decidedCost += cost
+    if (newestRun.get(branch) !== index) continue
+    if (outcome.outcome === 'merged') {
+      row.merged += 1
+      if (typeof outcome.fixes === 'number' && Number.isFinite(outcome.fixes)) row.fixes.push(outcome.fixes)
+    } else {
+      row.rejected += 1
     }
   }
   return [...rows.values()]
