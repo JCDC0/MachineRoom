@@ -1,4 +1,4 @@
-import { CANNOT_TAKE_TASKS, EFFORTS, cleanAgentDraft, cleanAgentPatch, taskDraftProblem } from '../src/control/agents.js'
+import { CANNOT_TAKE_TASKS, EFFORTS, cleanAgentDraft, cleanAgentPatch, fieldProblem, taskDraftProblem } from '../src/control/agents.js'
 import { MODELS } from './models.js'
 
 const AGENT_STATUS = {
@@ -697,8 +697,9 @@ export function createControlApi(options) {
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const cents = body?.budgetMonthlyCents
-      if (!Number.isInteger(cents) || cents < 0) {
-        sendJson(req, res, 400, { error: 'The budget must be a whole number of cents, zero or more.' })
+      const problem = fieldProblem('budgetMonthlyCents', cents)
+      if (problem) {
+        sendJson(req, res, 400, { error: problem })
         return true
       }
       const id = decodeURIComponent(budget[1])

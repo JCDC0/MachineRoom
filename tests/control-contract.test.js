@@ -725,6 +725,9 @@ function runContractSuite(label, makeHarness) {
       const { client } = await makeHarness()
       expect((await client.setAgentBudget('agent-claude', 250)).budgetMonthlyCents).toBe(250)
       await expect(client.setAgentBudget('agent-claude', -1)).rejects.toThrow(/cents/i)
+      await expect(client.setAgentBudget('agent-claude', 1000001)).rejects.toThrow('The budget must be a whole number of cents, from 0 to 1,000,000.')
+      await expect(client.setAgentBudget('agent-claude', 1e300)).rejects.toThrow('The budget must be a whole number of cents, from 0 to 1,000,000.')
+      expect((await client.setAgentBudget('agent-claude', 1000000)).budgetMonthlyCents).toBe(1000000)
       await expect(client.setAgentBudget('nobody', 10)).rejects.toThrow(/agent/i)
     })
 

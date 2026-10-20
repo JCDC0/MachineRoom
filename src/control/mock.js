@@ -1,7 +1,7 @@
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
-import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary, taskDraftProblem } from './agents.js'
+import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
 
 export const CLIENT_METHODS = [
   'agents',
@@ -324,7 +324,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('setAgentBudget', () => {
         const agent = agentById(agentId)
         if (!agent) throw new Error('That agent no longer exists.')
-        if (!Number.isInteger(budgetMonthlyCents) || budgetMonthlyCents < 0) throw new Error('The budget must be a whole number of cents, zero or more.')
+        const problem = fieldProblem('budgetMonthlyCents', budgetMonthlyCents)
+        if (problem) throw new Error(problem)
         agent.budgetMonthlyCents = budgetMonthlyCents
         emit({ topic: 'agents' })
         emit({ topic: 'costs' })
