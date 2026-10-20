@@ -24,6 +24,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `briefs()` | `Brief[]`, in file order (added with task T1a; the mock serves samples) |
 | `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
 | `runs()` | `{ running, recent }`, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
+| `runStats({ since? })` | `RunStats`, runs, minutes and cost per lane and model over every run record, or from `since` (a `YYYY-MM-DD` day, UTC) on; a bad day is refused with `--since needs a date like 2026-10-19.` (T13b; the mock sums its own finished fake runs) |
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
@@ -67,6 +68,8 @@ Review       { lane, worktree, branch, ahead: number (commits on top of main), c
              A worktree that is missing or is not a git repository gives { lane, worktree, error } instead.
 ReviewDiff   { lane, branch, files: [{ path, added, deleted }], patch, truncated: boolean }
              patch is the diff of the lane branch against main, cut at 400 KB (truncated is true when it was cut).
+RunStats     { rows: RunStatsRow[] (sorted by lane, then model), total: RunStatsRow (lane and model are "all") }
+RunStatsRow  { lane, model ("model unknown" when a record has none), runs, finished, killed, failed, minutesTotal, minutesMedian, costTotal (USD), costRuns }
 BackupStatus { enabled: boolean, status: ok | warning | null, latestAt: string|null, ageHours: number|null, warnings: string[], checkedAt }
              warnings are Paperclip's codes: database_backup_missing | database_backup_stale | database_backup_last_failure | database_backup_check_failed.
              enabled is false and the rest null when Paperclip has automatic backups off.

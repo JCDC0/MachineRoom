@@ -1,4 +1,5 @@
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
+import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
 import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary } from './agents.js'
 
 export const CLIENT_METHODS = [
@@ -17,6 +18,7 @@ export const CLIENT_METHODS = [
   'briefs',
   'briefPrompt',
   'runs',
+  'runStats',
   'startRun',
   'reviews',
   'reviewDiff',
@@ -374,6 +376,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       }),
 
     runs: () => call('runs', () => runsState),
+
+    runStats: ({ since } = {}) =>
+      call('runStats', () => {
+        if (since && dayStart(since) === null) throw new Error(SINCE_PROBLEM)
+        return laneStats(runsState.recent, since ? { since } : {})
+      }),
 
     startRun: (lane, briefs) =>
       call('startRun', () => {

@@ -102,6 +102,11 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
 
     runs: () => request('GET', '/api/control/runs'),
 
+    runStats: ({ since } = {}) => {
+      const query = since ? `?since=${encodeURIComponent(since)}` : ''
+      return request('GET', `/api/control/runs/stats${query}`)
+    },
+
     startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs }),
 
     reviews: async () => {
