@@ -312,11 +312,18 @@ export function createAgents(scene, roster, cssScene = null) {
     for (const view of views.values()) {
       view.callout.object.removeFromParent()
       view.callout.element.remove()
-      scene.remove(view.calloutLine)
-      view.calloutLine.geometry.dispose()
-      view.calloutLine.material.dispose()
+      scene.remove(view.group, view.link, view.trace, view.tether, view.calloutLine)
+      for (const root of [view.group, view.link, view.trace, view.tether, view.calloutLine]) {
+        root.traverse((object) => {
+          object.geometry?.dispose()
+          object.material?.map?.dispose()
+          object.material?.dispose()
+        })
+      }
     }
+    views.clear()
+    pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, hubCenter: HUB_CENTER, dispose }
+  return { views, pickables, update, snap, aimAt, dispose, hubCenter: HUB_CENTER }
 }

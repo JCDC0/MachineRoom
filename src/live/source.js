@@ -15,7 +15,7 @@ function slug(text) {
 }
 
 export function parserFor(raw) {
-  if (PARSERS[raw.adapterType]) return PARSERS[raw.adapterType]
+  if (Object.hasOwn(PARSERS, raw.adapterType)) return PARSERS[raw.adapterType]
   if (raw.adapterType === 'process' && /agy/i.test(raw.name)) return 'agy'
   return null
 }
@@ -25,7 +25,7 @@ export function toAgents(rawAgents) {
   const agents = rawAgents.map((raw) => {
     const parser = parserFor(raw)
     const role = typeof raw?.role === 'string' && raw.role !== '' ? raw.role : null
-    let key = PARSERS[raw.adapterType] ?? slug(raw.name)
+    let key = Object.hasOwn(PARSERS, raw.adapterType) ? PARSERS[raw.adapterType] : slug(raw.name)
     if (taken.has(key)) {
       key = slug(raw.name)
       for (let n = 2; taken.has(key); n += 1) key = `${slug(raw.name)}-${n}`
@@ -59,7 +59,7 @@ export async function discover({ base, companyId, root, fetchImpl = fetch }) {
     if (companies.length === 0) throw new Error('Paperclip has no company yet')
     id = companies[0].id
   }
-  const raw = await getJson(fetchImpl, `${base}/api/companies/${id}/agents`)
+  const raw = await getJson(fetchImpl, `${base}/api/companies/${encodeURIComponent(id)}/agents`)
   return { companyId: id, agents: toAgents(raw), rootName: rootNameOf(raw, root) }
 }
 
@@ -70,7 +70,7 @@ export async function loadTree(url, fetchImpl = fetch) {
 
 export function socketUrl(base, companyId) {
   const origin = base.startsWith('http') ? base : `${location.origin}${base}`
-  return `${origin.replace(/^http/, 'ws')}/api/companies/${companyId}/events/ws`
+  return `${origin.replace(/^http/, 'ws')}/api/companies/${encodeURIComponent(companyId)}/events/ws`
 }
 
 export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, setTimer = setTimeout, clearTimer = clearTimeout }) {

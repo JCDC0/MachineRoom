@@ -11,26 +11,60 @@ export async function discoverBridge({ url, root, fetchImpl = fetch }) {
   return { agents: toAgents(agents), rootName: root ?? tree.root, files: tree.files }
 }
 
-export function openBridge({ url, onFrame, onTree, onStatus, EventSourceImpl = EventSource }) {
-  onStatus('connecting')
-  const source = new EventSourceImpl(`${url}/events?history=1`)
-  source.onopen = () => onStatus('live')
-  source.onerror = () => onStatus(source.readyState === 2 ? 'disconnected' : 'reconnecting')
-  source.addEventListener('frame', (event) => {
-    try {
-      onFrame(JSON.parse(event.data))
-    } catch {
-      return
+export const REOPEN_START = 1000
+export const REOPEN_LIMIT = 15000
+
+export function openBridge({ url, onFrame, onTree, onStatus, EventSourceImpl = EventSource, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  let source = null
+  let timer = null
+  let delay = REOPEN_START
+  let closed = false
+
+  function open() {
+    timer = null
+    onStatus('connecting')
+    const current = new EventSourceImpl(`${url}/events?history=1`)
+    source = current
+    current.onopen = () => {
+      delay = REOPEN_START
+      onStatus('live')
     }
-  })
-  source.addEventListener('tree', (event) => {
-    try {
-      onTree(JSON.parse(event.data))
-    } catch {
-      return
+    current.onerror = () => {
+      if (current.readyState !== 2) {
+        onStatus('reconnecting')
+        return
+      }
+      onStatus('disconnected')
+      if (closed || timer !== null || source !== current) return
+      timer = setTimer(open, delay)
+      delay = Math.min(delay * 2, REOPEN_LIMIT)
     }
-  })
-  return { close: () => source.close() }
+    current.addEventListener('frame', (event) => {
+      try {
+        onFrame(JSON.parse(event.data))
+      } catch {
+        return
+      }
+    })
+    current.addEventListener('tree', (event) => {
+      try {
+        onTree(JSON.parse(event.data))
+      } catch {
+        return
+      }
+    })
+  }
+
+  open()
+
+  return {
+    close() {
+      closed = true
+      if (timer !== null) clearTimer(timer)
+      timer = null
+      source?.close()
+    },
+  }
 }
 
 export async function probeLive({ base, bridge, fetchImpl = fetch, timeoutMs = 1500 }) {

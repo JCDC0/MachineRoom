@@ -15,11 +15,11 @@ const YELLOW_WARNINGS = new Set(['database_backup_check_failed'])
 
 function mapWarningLine(warning) {
   if (typeof warning === 'string') {
-    return WARNING_WORDS[warning] ?? warning
+    return Object.hasOwn(WARNING_WORDS, warning) ? WARNING_WORDS[warning] : warning
   }
   if (warning && typeof warning === 'object') {
     const code = warning.code || warning.message
-    if (code) return WARNING_WORDS[code] ?? String(code)
+    if (code) return Object.hasOwn(WARNING_WORDS, code) ? WARNING_WORDS[code] : String(code)
   }
   return String(warning)
 }

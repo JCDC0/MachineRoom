@@ -1,6 +1,12 @@
+import { createElement } from 'react'
+import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
+import MetersPanel from '../src/ui/panels/MetersPanel.jsx'
 import {
+  clampPercent,
   formatCents,
+  listOf,
+  textOf,
   percentOf,
   meterTone,
   timeUntil,
@@ -98,5 +104,53 @@ describe('format helpers for panels', () => {
     expect(approvalTypeLabel('custom_type')).toBe('custom type')
     expect(approvalTypeLabel('')).toBe('')
     expect(approvalTypeLabel(null)).toBe('')
+  })
+})
+
+describe('meter numbers from Paperclip', () => {
+  it('clamps a percent to 0 to 100 and drops one that is not a number', () => {
+    expect(clampPercent(45.4)).toBe(45)
+    expect(clampPercent(5000)).toBe(100)
+    expect(clampPercent(-20)).toBe(0)
+    for (const value of [NaN, Infinity, '50', null, undefined, {}]) expect(clampPercent(value), String(value)).toBeNull()
+  })
+
+  it('keeps only objects in a list and only plain text in a field', () => {
+    expect(listOf([{ a: 1 }, null, 'x', 3])).toEqual([{ a: 1 }])
+    expect(listOf({ length: 2 })).toEqual([])
+    expect(textOf('Hermes')).toBe('Hermes')
+    expect(textOf(42)).toBe('42')
+    expect(textOf({ toString: () => 'x' })).toBe('')
+    expect(textOf(NaN)).toBe('')
+  })
+
+  it('shows a cost that is not finite as zero', () => {
+    expect(formatCents(Infinity)).toBe('$0.00')
+    expect(formatCents('1e400')).toBe('$0.00')
+  })
+
+  it('renders the meters panel from hostile costs without throwing or overflowing a bar', () => {
+    const html = renderToString(
+      createElement(MetersPanel, {
+        client: {},
+        initialBackupStatus: {},
+        initialCosts: {
+          summary: { budgetCents: 10000, spendCents: 4500, utilizationPercent: 5000 },
+          byAgent: { agentId: 'a1' },
+          quota: [
+            null,
+            { ok: true, provider: 'openrouter', windows: [null, { label: 'day', usedPercent: -30 }, { label: { bad: true }, usedPercent: NaN, detail: { bad: true } }] },
+            { ok: true, provider: 'anthropic' },
+            { ok: false, provider: 'gemini', error: { message: 'object' } },
+          ],
+        },
+        initialAgents: [{ id: 'a1', name: { first: 'x' }, role: ['r'], budgetMonthlyCents: 'lots' }],
+      })
+    )
+    expect(html).toContain('width:100%')
+    expect(html).not.toContain('5000%')
+    expect(html).toContain('width:0%')
+    expect(html).not.toContain('-30%')
+    expect(html).not.toContain('NaN')
   })
 })

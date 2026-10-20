@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { formatCents, meterTone, percentOf, timeUntil } from './format.js'
+import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf, timeUntil } from './format.js'
 import { subscribeToNotices } from './notices.js'
 import { backupAgePercent, backupNotice, formatBytes } from './backup.js'
 
@@ -39,8 +39,8 @@ export default function MetersPanel({
         client.costs(),
         client.agents(),
       ])
-      setCosts(costData)
-      setAgents(agentList)
+      setCosts(costData && typeof costData === 'object' ? costData : null)
+      setAgents(listOf(agentList))
     } catch (err) {
       if (isInitial) {
         setLoadError(err.message || 'Could not load meters.')
@@ -95,7 +95,7 @@ export default function MetersPanel({
 
   function startEditing(agent) {
     setEditingAgentId(agent.id)
-    setEditDollarValue((agent.budgetMonthlyCents / 100).toFixed(2))
+    setEditDollarValue(Number.isFinite(agent.budgetMonthlyCents) ? (agent.budgetMonthlyCents / 100).toFixed(2) : '')
     setBudgetError(null)
   }
 
@@ -129,10 +129,12 @@ export default function MetersPanel({
 
   const notice = backupNotice(backupStatus)
   const backupPct = backupAgePercent(backupStatus)
-  const { summary, quota = [] } = costs ?? {}
-  const companyBudget = summary?.budgetCents ?? 0
-  const companySpend = summary?.spendCents ?? 0
-  const companyPercent = summary?.utilizationPercent ?? percentOf(companySpend, companyBudget)
+  const summary = costs?.summary ?? null
+  const quota = listOf(costs?.quota)
+  const byAgent = listOf(costs?.byAgent)
+  const companyBudget = Number.isFinite(summary?.budgetCents) ? summary.budgetCents : 0
+  const companySpend = Number.isFinite(summary?.spendCents) ? summary.spendCents : 0
+  const companyPercent = clampPercent(summary?.utilizationPercent) ?? percentOf(companySpend, companyBudget)
 
   return (
     <div className="meters-panel">
@@ -192,18 +194,18 @@ export default function MetersPanel({
       <section className="meters-section" aria-label="Agent budgets">
         <h4 className="meters-section-title">Agent Budgets</h4>
         <div className="meters-agents-list">
-          {agents.map((agent) => {
+          {listOf(agents).map((agent) => {
             const isEditing = editingAgentId === agent.id
-            const agentCost = costs?.byAgent?.find((c) => c.agentId === agent.id)?.costCents
+            const agentCost = byAgent.find((c) => c?.agentId === agent.id)?.costCents
             const spend = agentCost ?? agent.spentMonthlyCents ?? 0
-            const budget = agent.budgetMonthlyCents ?? 0
+            const budget = Number.isFinite(agent.budgetMonthlyCents) ? agent.budgetMonthlyCents : 0
             const pct = percentOf(spend, budget)
 
             return (
               <div key={agent.id} className="meter-agent-row">
                 <div className="meter-agent-head">
-                  <span className="meter-agent-name">{agent.name}</span>
-                  <span className="meter-agent-role mono">{agent.role}</span>
+                  <span className="meter-agent-name">{textOf(agent.name)}</span>
+                  <span className="meter-agent-role mono">{textOf(agent.role)}</span>
                 </div>
 
                 {budget === 0 ? (
@@ -299,25 +301,26 @@ export default function MetersPanel({
           {quota.map((item) => {
             if (!item.ok) {
               return (
-                <div key={item.provider} className="quota-provider-card is-error">
-                  <div className="quota-provider-name">{item.provider}</div>
+                <div key={textOf(item.provider)} className="quota-provider-card is-error">
+                  <div className="quota-provider-name">{textOf(item.provider)}</div>
                   <div className="quota-error-label">Could not read quota</div>
-                  <div className="quota-error-text mono">{item.error}</div>
+                  <div className="quota-error-text mono">{textOf(item.error)}</div>
                 </div>
               )
             }
 
             return (
-              <div key={item.provider} className="quota-provider-card">
-                <div className="quota-provider-name">{item.provider}</div>
+              <div key={textOf(item.provider)} className="quota-provider-card">
+                <div className="quota-provider-name">{textOf(item.provider)}</div>
                 <div className="quota-windows-list">
-                  {item.windows.map((w, index) => {
-                    const hasPct = w.usedPercent != null
+                  {listOf(item.windows).map((w, index) => {
+                    const usedPercent = clampPercent(w?.usedPercent)
+                    const hasPct = usedPercent !== null
 
                     return (
-                      <div key={w.label ?? index} className="quota-window-row">
+                      <div key={`${textOf(w.label)}-${index}`} className="quota-window-row">
                         <div className="quota-window-head">
-                          <span className="quota-window-label">{w.label}</span>
+                          <span className="quota-window-label">{textOf(w.label)}</span>
                           {hasPct && w.resetsAt && (
                             <span className="quota-window-reset mono">
                               resets in {timeUntil(w.resetsAt)}
@@ -329,14 +332,14 @@ export default function MetersPanel({
                           <div className="meter-bar">
                             <div className="meter-track" aria-hidden="true">
                               <div
-                                className={`meter-fill ${meterTone(w.usedPercent) === 'full' ? 'is-full' : ''}`}
-                                style={{ width: `${w.usedPercent}%` }}
+                                className={`meter-fill ${meterTone(usedPercent) === 'full' ? 'is-full' : ''}`}
+                                style={{ width: `${usedPercent}%` }}
                               />
                             </div>
-                            <span className="quota-percent-label meter-percent mono">{`${w.usedPercent}%`}</span>
+                            <span className="quota-percent-label meter-percent mono">{`${usedPercent}%`}</span>
                           </div>
                         ) : (
-                          <div className="quota-detail-text mono">{w.detail}</div>
+                          <div className="quota-detail-text mono">{textOf(w.detail)}</div>
                         )}
                       </div>
                     )

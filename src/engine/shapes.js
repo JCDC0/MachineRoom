@@ -16,7 +16,8 @@ export function isOrchestrator(agent) {
 export function shapesFor(roster) {
   const used = new Set()
   const names = roster.map((agent) => {
-    const wanted = isOrchestrator(agent) && !used.has(ORCHESTRATOR_SHAPE) ? ORCHESTRATOR_SHAPE : PREFERRED[agent.shape ?? agent.parser ?? agent.key]
+    const kind = agent.shape ?? agent.parser ?? agent.key
+    const wanted = isOrchestrator(agent) && !used.has(ORCHESTRATOR_SHAPE) ? ORCHESTRATOR_SHAPE : Object.hasOwn(PREFERRED, kind) ? PREFERRED[kind] : null
     if (wanted && !used.has(wanted)) {
       used.add(wanted)
       return wanted
@@ -131,7 +132,7 @@ const BUILDERS = {
 
 export function shapeGeometry(name) {
   const out = []
-  ;(BUILDERS[name] ?? BUILDERS.compound)(out)
+  ;(Object.hasOwn(BUILDERS, name) ? BUILDERS[name] : BUILDERS.compound)(out)
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(out, 3))
   return geometry

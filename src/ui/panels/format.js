@@ -1,5 +1,5 @@
 export function formatCents(cents) {
-  if (cents == null || Number.isNaN(Number(cents))) return '$0.00'
+  if (cents == null || !Number.isFinite(Number(cents))) return '$0.00'
   const rounded = Math.round(Number(cents))
   const sign = rounded < 0 ? '-' : ''
   const absolute = Math.abs(rounded)
@@ -11,6 +11,19 @@ export function percentOf(used, total) {
   if (used == null || Number.isNaN(Number(used))) return 0
   const ratio = (Number(used) / Number(total)) * 100
   return Math.min(100, Math.max(0, Math.round(ratio)))
+}
+
+export function clampPercent(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  return Math.min(100, Math.max(0, Math.round(value)))
+}
+
+export function listOf(value) {
+  return Array.isArray(value) ? value.filter((item) => item !== null && typeof item === 'object') : []
+}
+
+export function textOf(value) {
+  return typeof value === 'string' || (typeof value === 'number' && Number.isFinite(value)) ? String(value) : ''
 }
 
 export function meterTone(percent) {
@@ -72,7 +85,7 @@ const STATUS_LABELS = {
 
 export function statusLabel(status) {
   if (!status) return ''
-  return STATUS_LABELS[status] ?? String(status).replace(/_/g, ' ')
+  return Object.hasOwn(STATUS_LABELS, status) ? STATUS_LABELS[status] : String(status).replace(/_/g, ' ')
 }
 
 const APPROVAL_TYPE_LABELS = {
@@ -84,5 +97,5 @@ const APPROVAL_TYPE_LABELS = {
 
 export function approvalTypeLabel(type) {
   if (!type) return ''
-  return APPROVAL_TYPE_LABELS[type] ?? String(type).replace(/_/g, ' ')
+  return Object.hasOwn(APPROVAL_TYPE_LABELS, type) ? APPROVAL_TYPE_LABELS[type] : String(type).replace(/_/g, ' ')
 }

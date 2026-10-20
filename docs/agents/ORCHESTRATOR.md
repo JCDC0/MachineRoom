@@ -74,6 +74,7 @@ The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts
 - AGY on Flash has skipped by-eye checks and left races (a task created, its thread opened, "not found"). Name the checks in the brief and have the owner look.
 - AGY often uses an old version prefix in its commit. Renumber when you merge.
 - CSS3D elements paint over the WebGL canvas unless the canvas sits on top with depth planes. Check depth by orbiting, not from the default angle.
+- The CSS3D renderer sets each element's `display` from its object's `visible` on every frame, so hide a CSS3D element with `object.visible`, never `style.display` (V7b's callouts never hid).
 - Run the brief tests after writing briefs: 0.1.85 shipped a red test because two briefs shared the id W3a.
 - Bash heredocs on this machine eat backslashes. Write files with a tool, not a heredoc, when they hold Windows paths.
 
@@ -84,5 +85,6 @@ The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts
 - **S1**: recording subagent runs (spends money).
 - **G2 and G6**: licence and names, then the private repository and every push. Run G1a (the history audit) first.
 - A Node upgrade would likely end the 0xC0000409 crash. On 2026-10-20 it crashed twice in a row in several full runs, one short of the three tries `npm test` makes.
-- Hermes' OpenRouter workspace has a daily budget of $1.00, which the lane runs and an orchestrator on the same key share. At the limit a run ends with exit 2 and `HTTP 403: Workspace daily budget of $1.00 exceeded`, and it resets at 00:00 UTC. C5a hit it on 2026-10-20 after its commit. Raising it is the owner's call.
+- Hermes' OpenRouter workspace has a daily budget of $2.00 (the owner raised it from $1.00 on 2026-10-20), which the lane runs and an orchestrator on the same key share. At the limit a run ends with exit 2 and `HTTP 403: Workspace daily budget of $2.00 exceeded`, and it resets at 00:00 UTC. C5a hit the old limit on 2026-10-20 after its commit. Raising it is the owner's call.
+- From the UI audit: whether a link may name a bridge or Paperclip on another host at all (it now always stops at the connect screen, and one click on Connect still works), and whether Budget Save, Approve and Reject, comment Post and the agent builder should get a confirm card like lane runs, merges and backups.
 - Whether to set a model for Hermes in Paperclip (it has none and runs on MiMo V2.6 Pro, its own default).

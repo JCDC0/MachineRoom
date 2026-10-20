@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import { cardFirst } from '../assistant/actions.js'
 import { containsSecret, interpret } from '../assistant/intent.js'
 import {
   addToHistory,
@@ -231,7 +232,7 @@ export default function Assistant({
     }
 
     if (isSecret) {
-      const blockedResult = interpret(raw, context)
+      const blockedResult = cardFirst(interpret(raw, context))
       const say = getBlockedSay(blockedResult)
       const blockedEntry = {
         id: `entry-${nextEntryId++}`,
@@ -245,7 +246,7 @@ export default function Assistant({
       return
     }
 
-    const result = interpret(raw, context)
+    const result = cardFirst(interpret(raw, context))
 
     if (result.kind === 'action') {
       const actionEntry = {
@@ -298,7 +299,7 @@ export default function Assistant({
         setEntries((prev) => [...prev, commandEntry, thinkingEntry])
 
         try {
-          const reply = await handleAsk(raw)
+          const reply = cardFirst(await handleAsk(raw))
           handleAsyncReply(thinkingId, commandEntry.id, reply, result.say)
         } catch {
           setEntries((prev) =>
@@ -398,7 +399,7 @@ export default function Assistant({
     const target = entries.find((item) => item.id === id && item.status === 'pending')
     if (!target) return
     if (target.action) {
-      handleAction(target.action)
+      handleAction(target.action, { confirmed: true })
     }
     setEntries((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: 'confirmed' } : item))

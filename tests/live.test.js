@@ -3,7 +3,7 @@ import { treeFromState } from '../src/engine/layout.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
 import { discover, openStream, parserFor, rootNameOf, socketUrl, toAgents } from '../src/live/source.js'
 import { makeTree } from '../src/model/paths.js'
-import { buildActivities, createPipeline } from '../src/model/pipeline.js'
+import { SEEN_LIMIT, buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
 import { createState } from '../src/model/state.js'
 import { loadRecording } from './helpers.js'
@@ -73,6 +73,17 @@ describe('agent discovery', () => {
     expect(found.companyId).toBe('c1')
     expect(found.rootName).toBe('agent-sandbox')
     expect(calls).toEqual(['/paperclip/api/companies', '/paperclip/api/companies/c1/agents'])
+  })
+
+  it('keeps a company id from the link inside its own path segment', async () => {
+    const calls = []
+    const fetchImpl = async (url) => {
+      calls.push(url)
+      return { ok: true, json: async () => raw }
+    }
+    await discover({ base: '/paperclip', companyId: '../../api/health?x=', fetchImpl })
+    expect(calls).toEqual(['/paperclip/api/companies/..%2F..%2Fapi%2Fhealth%3Fx%3D/agents'])
+    expect(socketUrl('http://127.0.0.1:3100', 'a/../b#c')).toBe('ws://127.0.0.1:3100/api/companies/a%2F..%2Fb%23c/events/ws')
   })
 
   it('fails with a clear message when a request fails', async () => {
@@ -182,6 +193,36 @@ describe('incremental pipeline', () => {
     pipeline.learn(['src/math.js'])
     expect(pipeline.context.files).toEqual(['src/math.js'])
     expect(pipeline.context.dirs).toEqual(['', 'src'])
+  })
+
+  it('keeps a bounded memory of the frames it has seen over a long session', () => {
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const agentId = recording.agents[0].id
+    const at = (n) => new Date(Date.parse('2026-10-20T00:00:00Z') + n).toISOString()
+    for (let run = 0; run < 300; run += 1) {
+      const runId = `run-${run}`
+      pipeline.push({ id: `s${run}`, type: 'heartbeat.run.status', createdAt: at(run * 100), payload: { agentId, runId, status: 'running' } })
+      for (let seq = 0; seq < 100; seq += 1) {
+        pipeline.push({ id: `l${run}-${seq}`, type: 'heartbeat.run.log', createdAt: at(run * 100 + seq), payload: { agentId, runId, stream: 'stdout', seq, chunk: 'thinking\n' } })
+      }
+      pipeline.push({ id: `e${run}`, type: 'heartbeat.run.status', createdAt: at(run * 100 + 99), payload: { agentId, runId, status: 'succeeded' } })
+    }
+    expect(pipeline.remembered().keys).toBeLessThanOrEqual(SEEN_LIMIT)
+    expect(pipeline.remembered().runs).toBe(0)
+    const late = { id: 'e299', type: 'heartbeat.run.status', createdAt: at(29999), payload: { agentId, runId: 'run-299', status: 'succeeded' } }
+    expect(pipeline.push(late)).toEqual([])
+  })
+
+  it('learns a large project again and again without slowing the page', () => {
+    const files = Array.from({ length: 40000 }, (_, index) => `pkg${index % 200}/lib/file${index}.js`)
+    const tree = makeTree({ root: 'big', files, created: [] })
+    const pipeline = createPipeline({ agents: recording.agents, tree })
+    const started = performance.now()
+    for (let round = 0; round < 4; round += 1) pipeline.learn([...files, `new/file${round}.js`])
+    expect(performance.now() - started).toBeLessThan(1000)
+    expect(pipeline.context.files).toHaveLength(40004)
+    expect(new Set(pipeline.context.files).size).toBe(40004)
+    expect(pipeline.context.dirs.filter((dir) => dir === 'new')).toEqual(['new'])
   })
 })
 

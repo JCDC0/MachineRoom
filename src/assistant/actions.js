@@ -59,3 +59,16 @@ export function validateAction(action, context) {
   if (!cleaned) return { ok: false, error: `Bad fields for ${action.type}.` }
   return { ok: true, action: { type: action.type, ...cleaned }, confirm: CONFIRMED.has(action.type) }
 }
+
+export const CARD_SAY = 'That changes a task, a budget or an agent. Confirm to go on.'
+
+export function cardFirst(result) {
+  if (!result || typeof result !== 'object') return result
+  const action = result.action
+  if (!action || typeof action !== 'object' || !CONFIRMED.has(action.type)) return result
+  if (result.kind === 'propose') return result
+  if (result.kind === 'action') return { ...result, kind: 'propose', say: CARD_SAY }
+  const rest = { ...result }
+  delete rest.action
+  return rest
+}
