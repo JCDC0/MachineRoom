@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Handoff: ORCHESTRATOR.md gains `Where things stand`, with the cut U8 run and how to start it again, AGY's queue and what is not pushed.
 - Review note on U6: no fixes. Its race test accepts either head, since the read can land before or after the commit; the first test pins the case that matters. U6a (AGY) can start.
 - Review note on U10: no code fixes; a blank line after its changelog entry removed. `visibleText` marks a line feed too, as the brief asks, so U10a must pass it one patch line or one name at a time, never a whole patch.
 - Hidden direction and control characters in names and diff lines (task U10): `visibleText(text)` in `src/model/paths.js` replaces U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069 and the C0 controls except tab with `[U+XXXX]` in upper-case hex, and returns other text unchanged; no panel calls it yet, since the brief keeps the change to the pure helper; tests in `tests/paths.test.js` cover each listed character, a kept tab, plain and non-Latin text, an unlisted character and a mixed line.

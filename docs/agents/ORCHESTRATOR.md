@@ -6,6 +6,14 @@ Start a session with: `hermes` in `C:\GitHub\MachineRoom`, model `deepseek/deeps
 
 Before merging a branch that adds a route that writes (a merge, a backup, any write to Paperclip), ask the owner to have AGY on Gemini 3.8 Flash High (free) read the diff and report problems without changing files, and weigh its answer with your own review. If DeepSeek credit runs low, `minimax/minimax-m3.1-flash:free` ran a Hermes task cleanly at no cost; use it for routine merges only.
 
+## Where things stand (2026-10-21, end of Claude's session)
+
+- `main` is 0.1.123. GitHub has 0.1.121; the U10 and U6 merges and this note are not pushed. Push only on the owner's yes.
+- OpenCode was running **U8** when the owner shut the computer down, so the run was cut. In `C:\GitHub\MachineRoom-opencode` the branch `feat/u8-the-control-client` holds uncommitted changes to `src/control/client.js` and a new `tests/control-client-stream.test.js`, and no commit. Start U8 again in a new session: in that worktree run `git checkout -- .`, delete `tests/control-client-stream.test.js`, run `git switch --detach refs/heads/main` and `git branch -D feat/u8-the-control-client`, then from this checkout run `npm run run-lane -- opencode U8`. A stale `opencode.lock` is taken over by the runner. If the branch does have a commit, review and merge it as usual instead.
+- AGY: the prompt for **M1a** is written (`agy-M1a-prompt.txt` in its worktree); the owner sends it. After M1a, in order: **U7**, **U9**, **U6a**, **U10a**, then **C4c**, **C5c**, **S2b**. Write each prompt with `node scripts/agy-prompt.mjs ID --clean` and record each run with `npm run hand-run`.
+- Hermes has no open brief: S2a and S3a wait on S1. OpenCode has none after U8.
+- Last merges: V7b (0.1.120, grade B, 4 fixes), the cloud UI audit (0.1.121), U10 (0.1.122, A), U6 (0.1.123, A).
+
 ## Standing rules from the owner
 
 - Never push, and never merge into anything but `main` in this checkout. The owner pushes (G6).
