@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createAgyParser } from '../src/model/parsers/agy.js'
 import { createClaudeParser } from '../src/model/parsers/claude.js'
 import { createHermesParser } from '../src/model/parsers/hermes.js'
+import { createParser } from '../src/model/parsers/index.js'
 import { createOpencodeParser } from '../src/model/parsers/opencode.js'
 import { testContext } from './helpers.js'
 
@@ -215,5 +216,40 @@ describe('agy parser', () => {
     const parser = createAgyParser(ctx)
     const out = parser.push(lines(step('ACTIVE', 'write_to_file', { TargetFile: 'C:\\Temp\\agent-sandbox\\docs\\agy-report.md' })), 400)
     expect(out[0].touches).toEqual([{ path: 'docs/agy-report.md', mode: 'write', kind: 'file' }])
+  })
+})
+
+describe('tool names that are only inherited names', () => {
+  const INHERITED = ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']
+
+  it('reads a Hermes verb such as __proto__ or constructor as other', () => {
+    for (const verb of ['__proto__', 'constructor', 'valueof']) {
+      const out = createHermesParser(ctx).push(`  \u250a \u2699 ${verb}  thing  0.5s\n`, 1000)
+      expect(out[0].tool, verb).toBe('other')
+      expect(out[0].touches).toEqual([])
+    }
+  })
+
+  it('reads an OpenCode tool with such a name as other', () => {
+    for (const tool of INHERITED) {
+      const out = createOpencodeParser(ctx).push(lines({ type: 'tool_use', part: { id: 'x', tool, state: { status: 'completed', input: {} } } }), 1000)
+      expect(out[0].tool, tool).toBe('other')
+    }
+  })
+
+  it('reads an agy tool with such a name as other instead of throwing', () => {
+    for (const name of INHERITED) {
+      const out = createAgyParser(ctx).push(lines({ event: 'step_update', step_update: { conversation_id: 'c', step_index: 1, state: 'DONE', step_type: 'tool', tool_name: name, tool_info: {} } }), 1000)
+      expect(out[0].tool, name).toBe('other')
+      expect(out[1]).toMatchObject({ type: 'tool.end', ok: true })
+    }
+  })
+
+  it('gives an agent whose parser or adapter is such a name a parser that reads nothing', () => {
+    for (const name of INHERITED) {
+      const parser = createParser({ parser: name, adapterType: name }, ctx)
+      expect(parser.push(lines({ type: 'tool_use', part: { tool: 'read' } }), 1000), name).toEqual([])
+      expect(parser.flush(1000)).toEqual([])
+    }
   })
 })

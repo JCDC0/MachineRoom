@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Audit fix: the Hermes, OpenCode and agy parsers and `createParser` read their tool and parser tables with `Object.hasOwn`, so a tool named `toString` or `__proto__` in agy output no longer throws while the destructuring runs (which stopped a recording from loading), and Hermes and OpenCode read such names as `other` instead of a function or an object; tests in `tests/parsers.test.js`.
 - Audit fix: the recording writer behind `npm run run-lane` and `npm run run-recording` reads the lane's file list with `gitPath()` too, the last bare `git` that ran in a lane worktree.
 - Audit fix: the mock's `comments(issueId)` and `postComment` read the thread with `Object.hasOwn`, so `comments('constructor')` answers `[]` as the bridge does instead of a function the thread panel cannot list; a contract test runs on both.
 - Audit fix: the bridge, the lane runner, the candidate script and the history audit start git by the absolute path `gitPath()` in `server/programPath.js` finds in the absolute PATH folders; before, Node on Windows looked for `git.com` and `git.exe` in the child's working folder first, so a lane that committed its own `git.com` had it run with the owner's environment the moment the Reviews panel listed the lanes (and on any system whose PATH holds `.`); tests in `tests/program-path.test.js`, including a planted git in a real lane worktree.

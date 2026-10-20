@@ -13,7 +13,7 @@ export function createHermesParser(ctx) {
     const found = LINE.exec(line)
     if (!found) return
     const [, verb, detail, seconds, mark, exit] = found
-    const tool = VERBS[verb] ?? 'other'
+    const tool = Object.hasOwn(VERBS, verb) ? VERBS[verb] : 'other'
     const id = `hermes-${(counter += 1)}`
     const startTime = time - Math.round(Number(seconds) * 1000)
     const ok = !mark || (exit !== undefined && Number(exit) === 0)
