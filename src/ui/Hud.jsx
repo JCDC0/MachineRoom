@@ -3,6 +3,12 @@ import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import Assistant from './Assistant.jsx'
+import {
+  areAllTerminalsOpen,
+  isTerminalOpen,
+  logButtonAriaLabel,
+  toggleAllTerminalsLabel,
+} from './terminalButtons.js'
 
 const STATUS_TEXT = {
   idle: 'idle',
@@ -12,11 +18,12 @@ const STATUS_TEXT = {
   done: 'finished',
 }
 
-const SHORTCUTS = [
+export const SHORTCUTS = [
   ['Space', 'Play or pause replay'],
   ['0', 'Overview camera'],
   ['1 to 9', 'Focus agent 1 to 9'],
   ['F', 'Follow the working agent: wide, close up, off'],
+  ['T', 'Show or hide the log of the selected agent, or of every agent'],
   ['Left and Right arrows', 'Seek backward or forward 5 seconds'],
   ['[ and ]', 'Decrease or increase replay speed'],
   ['/', 'Open assistant terminal'],
@@ -55,6 +62,9 @@ export default function Hud({
   onSpeed,
   onFocus,
   onOverview,
+  openTerminals = [],
+  onToggleTerminal = () => {},
+  onShowTerminals = () => {},
 }) {
   const [logOpen, setLogOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
@@ -205,29 +215,52 @@ export default function Hud({
       </div>
 
       <nav className="hud-agents" aria-label="Agents">
-        {snapshot.agents.map((agent, index) => (
+        {(snapshot?.agents ?? []).map((agent, index) => {
+          const isOpen = isTerminalOpen(openTerminals, agent.key)
+          return (
+            <div key={agent.key} className="hud-agent-row">
+              <button
+                type="button"
+                className={`agent is-${agent.status}`}
+                aria-pressed={focused === agent.key}
+                onClick={() => onFocus(agent.key)}
+              >
+                <span className="dot" aria-hidden="true" />
+                <span className="agent-name">{agent.name}</span>
+                <span className="agent-status mono">{STATUS_TEXT[agent.status] ?? agent.status}</span>
+                <span className="agent-key mono">{index + 1}</span>
+              </button>
+              <button
+                type="button"
+                className="agent-log"
+                aria-pressed={isOpen}
+                aria-label={logButtonAriaLabel(agent.name, isOpen)}
+                onClick={() => onToggleTerminal(agent.key)}
+              >
+                Log
+              </button>
+            </div>
+          )
+        })}
+        <div className="hud-agent-row">
           <button
-            key={agent.key}
             type="button"
-            className={`agent is-${agent.status}`}
-            aria-pressed={focused === agent.key}
-            onClick={() => onFocus(agent.key)}
+            className="overview"
+            aria-pressed={focused === null}
+            onClick={onOverview}
           >
-            <span className="dot" aria-hidden="true" />
-            <span className="agent-name">{agent.name}</span>
-            <span className="agent-status mono">{STATUS_TEXT[agent.status] ?? agent.status}</span>
-            <span className="agent-key mono">{index + 1}</span>
+            <span className="overview-label">Overview</span>
+            <span className="agent-key mono">0</span>
           </button>
-        ))}
-        <button
-          type="button"
-          className="overview"
-          aria-pressed={focused === null}
-          onClick={onOverview}
-        >
-          <span className="overview-label">Overview</span>
-          <span className="agent-key mono">0</span>
-        </button>
+          <button
+            type="button"
+            className="agent-log"
+            aria-pressed={areAllTerminalsOpen(snapshot?.agents, openTerminals)}
+            onClick={() => onShowTerminals(!areAllTerminalsOpen(snapshot?.agents, openTerminals))}
+          >
+            {toggleAllTerminalsLabel(snapshot?.agents, openTerminals)}
+          </button>
+        </div>
       </nav>
 
       {logOpen && (
