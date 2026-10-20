@@ -814,7 +814,8 @@ function runTestScript(extra) {
 }
 
 describe('scripts/test.mjs', () => {
-  it('runs the tests again after the crash and keeps the second result', async () => {
+  it('runs the tests again after the crash and keeps the second result', async (context) => {
+    context.skip(process.platform !== 'win32', 'Only Windows keeps a 32 bit exit code. Linux keeps the low 8 bits, so 0xC0000409 arrives as 9.')
     const folder = makeTempDir('machine-room-test-')
     try {
       const counter = join(folder, 'count.txt')

@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { delimiter, join } from 'node:path'
+import { win32 } from 'node:path'
 
 export const DEFAULT_ASSISTANT_MODEL = 'opencode/deepseek-v4.1-flash-free'
 export const PROMPT_LIMIT = 2000
@@ -64,10 +64,10 @@ export function extractReplyText(output) {
 export function resolveOpencodeBinary({ env = process.env, platform = process.platform, exists = existsSync } = {}) {
   if (env.OPENCODE_BIN) return env.OPENCODE_BIN
   if (platform !== 'win32') return 'opencode'
-  const folders = String(env.PATH ?? env.Path ?? '').split(delimiter)
+  const folders = String(env.PATH ?? env.Path ?? '').split(win32.delimiter)
   for (const folder of folders) {
     if (!folder) continue
-    const candidate = join(folder, 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
+    const candidate = win32.join(folder, 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
     if (exists(candidate)) return candidate
   }
   return 'opencode'

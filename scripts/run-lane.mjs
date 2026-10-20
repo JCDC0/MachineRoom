@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
+import { killTree } from '../server/processTree.js'
 import { writeRecording } from './recording-files.mjs'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -259,7 +260,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   const timer = setTimeout(() => {
     if (!child.pid) return
     killed = true
-    spawnSync('taskkill', ['/T', '/F', '/PID', String(child.pid)], { windowsHide: true })
+    killTree(child)
   }, options.minutes * 60 * 1000)
 
   const result = await new Promise((done) => {

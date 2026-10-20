@@ -1,10 +1,11 @@
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../src/briefs/run.js'
 import { outcomeTable } from './outcomes.js'
+import { killTree, treeSpawnOptions } from './processTree.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
@@ -94,6 +95,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...treeSpawnOptions(),
     })
     item.child = child
     running.set(lane, item)
@@ -116,9 +118,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   function stopAll() {
     stopped = true
     for (const item of running.values()) {
-      if (item.child?.pid) {
-        spawnSync('taskkill', ['/T', '/F', '/PID', String(item.child.pid)], { windowsHide: true })
-      }
+      if (item.child?.pid) killTree(item.child)
     }
     running.clear()
   }

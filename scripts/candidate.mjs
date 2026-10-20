@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { killTree as killProcessTree, treeSpawnOptions } from '../server/processTree.js'
 
 export const DEFAULT_PORT = 5175
 export const BUILD_TIMEOUT_MS = 5 * 60 * 1000
@@ -120,15 +121,7 @@ export function buildCommand(env = process.env, execPath = process.execPath) {
 
 function killTree(child) {
   if (child.pid === undefined || child.exitCode !== null || child.signalCode !== null) return
-  if (process.platform === 'win32') {
-    try {
-      spawn('taskkill', ['/T', '/F', '/PID', String(child.pid)], { stdio: 'ignore', windowsHide: true })
-    } catch {
-      child.kill()
-    }
-    return
-  }
-  child.kill('SIGKILL')
+  killProcessTree(child)
 }
 
 export function runBuild({ command, cwd, env = process.env, shell = false, timeoutMs = BUILD_TIMEOUT_MS }) {
@@ -139,6 +132,7 @@ export function runBuild({ command, cwd, env = process.env, shell = false, timeo
       shell,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      ...treeSpawnOptions(),
     })
     const lines = []
     let timedOut = false
