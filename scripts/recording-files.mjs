@@ -1,11 +1,13 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
-import { agentsFile, framesFromRun, treeFile } from '../src/briefs/recording.js'
+import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
+import { RECORDING_NAME } from '../src/startup.js'
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 const TIMEOUT = 120000
+const INDEX_LIMIT = 50
 
 function refusal(message) {
   return new Error(message)
@@ -82,6 +84,53 @@ function sessionFor({ lane, key, record, env, session, exportSession }) {
   return exportSessionText(expand(lane.cli?.bin, env), sessionId)
 }
 
+function readIndex(folder) {
+  try {
+    const list = JSON.parse(readFileSync(join(folder, 'index.json'), 'utf8'))
+    return Array.isArray(list) ? list : []
+  } catch {
+    return []
+  }
+}
+
+function keptIndex(folder, entries) {
+  return entries.filter((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return true
+    if (typeof item.name !== 'string' || !RECORDING_NAME.test(item.name)) return true
+    return existsSync(join(folder, `${item.name}-run.jsonl`))
+  })
+}
+
+function indexEntry({ name, record, frames, toolCalls }) {
+  const minutes = Number(record.minutes)
+  return {
+    name,
+    lane: String(record.lane ?? ''),
+    briefs: Array.isArray(record.briefs) ? record.briefs.map(String) : [],
+    model: String(record.model ?? ''),
+    start: String(record.startedAt ?? ''),
+    minutes: Number.isFinite(minutes) ? minutes : 0,
+    exitCode: Number.isInteger(record.exitCode) ? record.exitCode : null,
+    frames,
+    toolCalls,
+  }
+}
+
+function writeIndex(folder, entry) {
+  const entries = keptIndex(folder, readIndex(folder))
+  const next = recordingIndex(entries, entry, INDEX_LIMIT)
+  const path = join(folder, 'index.json')
+  const temp = join(folder, `.index-${process.pid}-${Date.now()}.json`)
+  try {
+    writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`)
+    renameSync(temp, path)
+  } catch (error) {
+    rmSync(temp, { force: true })
+    throw error
+  }
+  return next
+}
+
 export function writeRecording({ record, lanes, root, env, session, exportSession } = {}) {
   if (!record || typeof record !== 'object') throw refusal('There is no run record to turn into a recording.')
   if (typeof root !== 'string' || root.trim() === '') throw refusal('The recording needs the project folder.')
@@ -113,5 +162,11 @@ export function writeRecording({ record, lanes, root, env, session, exportSessio
   } catch (error) {
     throw refusal(`The recording could not be written to ${folder}: ${String(error?.message ?? error)}`)
   }
-  return { name, runPath, agentsPath, treePath, frames: frames.length, toolCalls }
+  let indexError = null
+  try {
+    writeIndex(folder, indexEntry({ name, record, frames: frames.length, toolCalls }))
+  } catch (error) {
+    indexError = `The index of the recordings could not be written: ${String(error?.message ?? error)}`
+  }
+  return { name, runPath, agentsPath, treePath, frames: frames.length, toolCalls, indexError }
 }

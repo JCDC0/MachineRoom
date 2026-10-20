@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { agentsFile, framesFromRun, treeFile } from '../src/briefs/recording.js'
+import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
 import { writeRecording } from '../scripts/recording-files.mjs'
 
@@ -215,6 +215,60 @@ function readFrames(path) {
     .map((line) => JSON.parse(line))
 }
 
+function recordingOnce({ root, worktree, sha, name, startedAt = '2026-10-19T15:05:15.000Z', exitCode = 0 }) {
+  const logPath = join(root, `${name}.log`)
+  writeFileSync(logPath, 'the report\n')
+  const record = {
+    lane: 'hermes',
+    briefs: ['T11'],
+    model: 'deepseek/deepseek-v4.1-flash-1017',
+    startedAt,
+    minutes: 4,
+    exitCode,
+    killed: false,
+    log: logPath,
+    branch: 'feat/t11',
+    commits: [`${sha} one`],
+  }
+  return writeRecording({ record, lanes: { hermes: { ...lanes.hermes, worktree } }, root, env: {}, session: sessionFor(worktree) })
+}
+
+describe('recordingIndex', () => {
+  const entry = (name) => ({ name, lane: 'hermes', briefs: [], model: 'm', start: 's', minutes: 1, exitCode: 0, frames: 1, toolCalls: 1 })
+
+  it('puts the new entry first and keeps the older ones in order', () => {
+    const next = recordingIndex([entry('a'), entry('b')], entry('c'))
+    expect(next.map((item) => item.name)).toEqual(['c', 'a', 'b'])
+    expect(next[0].frames).toBe(1)
+  })
+
+  it('replaces an older entry with the same name', () => {
+    const older = { ...entry('a'), minutes: 9 }
+    const next = recordingIndex([older, entry('b')], entry('a'))
+    expect(next.map((item) => item.name)).toEqual(['a', 'b'])
+    expect(next[0].minutes).toBe(1)
+  })
+
+  it('cuts the list to the limit and to 50 by default', () => {
+    const many = Array.from({ length: 60 }, (unused, index) => entry(`r${index}`))
+    expect(recordingIndex(many, entry('new'), 3).map((item) => item.name)).toEqual(['new', 'r0', 'r1'])
+    expect(recordingIndex(many, entry('new'))).toHaveLength(50)
+    expect(recordingIndex(many, entry('new'))[0].name).toBe('new')
+  })
+
+  it('drops junk entries and names that are not plain', () => {
+    const junk = [null, 'x', 42, [], {}, { name: 5 }, { name: '../x' }, { name: 'a/b' }, { name: '' }, { name: '.hidden' }]
+    const next = recordingIndex([...junk, entry('a')], entry('b'))
+    expect(next.map((item) => item.name)).toEqual(['b', 'a'])
+  })
+
+  it('drops a new entry with no plain name and keeps the older list', () => {
+    expect(recordingIndex([entry('a')], { name: '../x' }).map((item) => item.name)).toEqual(['a'])
+    expect(recordingIndex([entry('a')], null).map((item) => item.name)).toEqual(['a'])
+    expect(recordingIndex(null, entry('a')).map((item) => item.name)).toEqual(['a'])
+  })
+})
+
 describe('writeRecording', () => {
   afterEach(() => {
     for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -291,5 +345,75 @@ describe('writeRecording', () => {
     const root = tempFolder()
     expect(() => writeRecording({ record: { lane: 'claude' }, lanes, root, env: {} })).toThrow(/no lane named claude/)
     expect(() => writeRecording({ record: { lane: 'agy' }, lanes, root, env: {} })).toThrow(/no command line/)
+  })
+
+  it('writes an index with the new entry and no index error', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    const written = recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-101010' })
+
+    expect(written.indexError).toBeNull()
+    const index = JSON.parse(readFileSync(join(root, 'public', 'recordings', 'index.json'), 'utf8'))
+    expect(index).toEqual([
+      {
+        name: 'hermes-T11-20261020-101010',
+        lane: 'hermes',
+        briefs: ['T11'],
+        model: 'deepseek/deepseek-v4.1-flash-1017',
+        start: '2026-10-19T15:05:15.000Z',
+        minutes: 4,
+        exitCode: 0,
+        frames: 5,
+        toolCalls: 2,
+      },
+    ])
+  })
+
+  it('puts a second recording first in the index', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-101010' })
+    recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-111111', startedAt: '2026-10-19T16:05:15.000Z' })
+
+    const index = JSON.parse(readFileSync(join(root, 'public', 'recordings', 'index.json'), 'utf8'))
+    expect(index.map((item) => item.name)).toEqual(['hermes-T11-20261020-111111', 'hermes-T11-20261020-101010'])
+    expect(index[0].start).toBe('2026-10-19T16:05:15.000Z')
+  })
+
+  it('drops an entry whose run file is gone', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    const first = recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-101010' })
+    rmSync(first.runPath)
+    recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-111111', startedAt: '2026-10-19T16:05:15.000Z' })
+
+    const index = JSON.parse(readFileSync(join(root, 'public', 'recordings', 'index.json'), 'utf8'))
+    expect(index.map((item) => item.name)).toEqual(['hermes-T11-20261020-111111'])
+  })
+
+  it('replaces an index it cannot read', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    const folder = join(root, 'public', 'recordings')
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, 'index.json'), 'not json at all\n')
+    const written = recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-101010' })
+
+    expect(written.indexError).toBeNull()
+    const index = JSON.parse(readFileSync(join(folder, 'index.json'), 'utf8'))
+    expect(index.map((item) => item.name)).toEqual(['hermes-T11-20261020-101010'])
+  })
+
+  it('keeps the recording and returns an index error when the index cannot be written', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    const folder = join(root, 'public', 'recordings')
+    mkdirSync(join(folder, 'index.json'), { recursive: true })
+    const written = recordingOnce({ root, worktree: dir, sha, name: 'hermes-T11-20261020-101010' })
+
+    expect(written.name).toBe('hermes-T11-20261020-101010')
+    expect(existsSync(written.runPath)).toBe(true)
+    expect(existsSync(written.treePath)).toBe(true)
+    expect(written.indexError).toMatch(/^The index of the recordings could not be written: /)
   })
 })

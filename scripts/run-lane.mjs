@@ -244,6 +244,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   try {
     const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
     console.log(`room: /?recording=${written.name}`)
+    if (written.indexError) console.log(`index: not updated (${written.indexError})`)
   } catch (error) {
     console.log(`room: not recorded (${String(error?.message ?? error)})`)
   }
