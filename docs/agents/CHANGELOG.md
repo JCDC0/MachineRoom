@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- UI audit fix: a link such as `/?bridge=http://other-host` opened a live room fed by that host with no question, showed its agents, tasks and reviews as the owner's, and sent the owner's task titles, comments and merge messages there; `?paperclip=//other-host` and `?tree=` did the same. A link address must now be on this computer or the page's origin (`linkAddressAllowed` in `src/startup.js`), any other opens the connect screen with a notice, and a replay keeps the saved connection; tests in `tests/startup.test.js`.
 - New brief: G1b (placeholders the history audit should not count, Hermes). The fixtures' 76 user paths are the placeholder `C:\Users\user`, not the owner's profile.
 - Review note on C6c: no fixes. Probed on the real `docs/agents/policy.json` with 12 decided runs a side: it moved Hermes ahead of OpenCode in the medium tier with the brief's sentence, left the owner choice and the free small-tier model alone with their notes, and wrote a patch that swaps only the two blocks.
 - Review note on U5c: no code fixes. Both ways a frame arrives, a normal one and a long chunk restored from the log, pass `accept()`, so both are masked before the history and the pages see them. ARCHITECTURE.md now names the `masked` health field and the limit: a key split across two chunks is not masked, and the proxy route masks nothing. `tests/bridge-reviews.test.js` now allows 20 seconds a test: alone its tests take 1 to 4 seconds, but in a full run on this machine git starts slow and two of them passed the 5 second default.

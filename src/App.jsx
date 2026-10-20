@@ -4,7 +4,7 @@ import { loadDemo } from './live/simulated.js'
 import { discover, loadTree } from './live/source.js'
 import { makeTree } from './model/paths.js'
 import { loadReplay } from './model/replay.js'
-import { PROXY_BASE, chooseRoute, recordingName } from './startup.js'
+import { PROXY_BASE, chooseRoute, recordingName, treeAddress } from './startup.js'
 import { store } from './storage.js'
 import Stage from './Stage.jsx'
 import Connect from './ui/Connect.jsx'
@@ -30,7 +30,7 @@ async function loadLive(connection, params) {
   if (connection.source === 'bridge') return loadBridge(params, connection.bridge)
   const base = connection.paperclip || PROXY_BASE
   const found = await discover({ base, companyId: connection.company || params.get('company'), root: params.get('root') })
-  const treeUrl = params.get('tree')
+  const treeUrl = treeAddress(params, window.location.origin)
   const listed = treeUrl ? await loadTree(treeUrl) : { files: [] }
   const tree = makeTree({ root: found.rootName, files: listed.files, created: [] })
   return { agents: found.agents, tree, activities: [], live: { base, companyId: found.companyId } }
@@ -46,7 +46,7 @@ function hasSaved() {
 
 function startRoute() {
   const params = new URLSearchParams(window.location.search)
-  return chooseRoute(params, loadSettings(store()), hasSaved())
+  return chooseRoute(params, loadSettings(store()), hasSaved(), window.location.origin)
 }
 
 function describeFailure(error, connection) {
@@ -69,7 +69,7 @@ function syncUrl(mode) {
 export default function App() {
   const [route, setRoute] = useState(startRoute)
   const [source, setSource] = useState({ status: 'loading' })
-  const [connectError, setConnectError] = useState(null)
+  const [connectError, setConnectError] = useState(() => route.notice ?? null)
   const [attempt, setAttempt] = useState(0)
   const [liveAvailable, setLiveAvailable] = useState(false)
 
@@ -99,6 +99,7 @@ export default function App() {
 
   useEffect(() => {
     const { connection } = route
+    if (route.notice) return undefined
     if (connection.source === 'demo') {
       setLiveAvailable(true)
       return undefined
@@ -113,7 +114,7 @@ export default function App() {
     return () => {
       current = false
     }
-  }, [route.connection])
+  }, [route.connection, route.notice])
 
   const connect = useCallback((settings) => {
     saveSettings(store(), { source: settings.source, bridge: settings.bridge, paperclip: settings.paperclip, company: settings.company })
@@ -129,7 +130,7 @@ export default function App() {
   const replay = useCallback(() => {
     setConnectError(null)
     syncUrl('replay')
-    setRoute((previous) => ({ ...previous, mode: 'replay' }))
+    setRoute((previous) => (previous.notice ? { mode: 'replay', connection: loadSettings(store()) } : { ...previous, mode: 'replay' }))
   }, [])
 
   const switchMode = useCallback((next) => {
