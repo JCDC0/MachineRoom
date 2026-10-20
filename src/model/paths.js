@@ -34,11 +34,38 @@ export function ancestors(path) {
   return chain
 }
 
-export function resolveKnown(name, files) {
+export function resolveKnown(name, files, near) {
   const clean = normalise(name)
   if (files.includes(clean)) return clean
   const matches = files.filter((file) => basename(file) === basename(clean))
-  return matches.length === 1 ? matches[0] : clean
+  if (matches.length === 1) return matches[0]
+  if (matches.length === 0 || typeof near !== 'string') return clean
+  const wanted = folders(near)
+  const same = matches.filter((file) => folders(dirname(file)).join('/') === wanted.join('/'))
+  if (same.length === 1) return same[0]
+  let best = []
+  let bestCount = -1
+  for (const file of matches) {
+    const count = sharedFolders(folders(dirname(file)), wanted)
+    if (count > bestCount) {
+      best = [file]
+      bestCount = count
+    } else if (count === bestCount) {
+      best.push(file)
+    }
+  }
+  return best.length === 1 ? best[0] : clean
+}
+
+function folders(path) {
+  const clean = normalise(path).replace(/^\/+/, '').replace(/\/+$/, '')
+  return clean ? clean.split('/') : []
+}
+
+function sharedFolders(a, b) {
+  let count = 0
+  while (count < a.length && count < b.length && a[count] === b[count]) count += 1
+  return count
 }
 
 export function makeTree(raw) {

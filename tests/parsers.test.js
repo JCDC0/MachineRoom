@@ -107,6 +107,21 @@ describe('hermes parser', () => {
     const passed = parser.push('  \u250a \ud83d\udcbb $         npm test  2.0s [exit 0]\n', 20000)
     expect(summary(passed)).toEqual(['start $ npm test', 'end true'])
   })
+
+  it('resolves a bare name from the folder of the last read', () => {
+    const parser = createHermesParser({ ...ctx, files: [...ctx.files, 'src/a.js', 'src/index.js', 'test/index.js'] })
+    parser.push('  \u250a \ud83d\udcd6 read      src/a.js  0.4s\n', 1000)
+    const out = parser.push('  \u250a \ud83d\udcd6 read      index.js  0.2s\n', 3000)
+    expect(out[0].touches).toEqual([{ path: 'src/index.js', mode: 'read', kind: 'file' }])
+    expect(out[0].label).toBe('read src/index.js')
+  })
+
+  it('keeps a bare name for a first read with no folder yet', () => {
+    const parser = createHermesParser({ ...ctx, files: [...ctx.files, 'src/index.js', 'test/index.js'] })
+    const out = parser.push('  \u250a \ud83d\udcd6 read      index.js  0.2s\n', 1000)
+    expect(out[0].touches).toEqual([{ path: 'index.js', mode: 'read', kind: 'file' }])
+    expect(out[0].label).toBe('read index.js')
+  })
 })
 
 describe('opencode parser', () => {

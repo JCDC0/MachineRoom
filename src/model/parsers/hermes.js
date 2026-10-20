@@ -1,4 +1,4 @@
-import { basename, resolveKnown } from '../paths.js'
+import { basename, dirname, resolveKnown } from '../paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, shorten, toolEnd, toolStart } from './common.js'
 
 const LINE = /^\s*┊\s+\S+\s+(\$|[a-z_]+)\s+(.+?)\s+(\d+(?:\.\d+)?)s(?:\s+\[(exit (\d+)|error)\])?\s*$/u
@@ -7,6 +7,7 @@ const VERBS = { read: 'read', write: 'write', patch: 'edit', find: 'search', sea
 export function createHermesParser(ctx) {
   const out = []
   let counter = 0
+  let near
 
   const reader = createLineReader((line, time) => {
     const found = LINE.exec(line)
@@ -19,9 +20,12 @@ export function createHermesParser(ctx) {
     let touches = []
     let label = `${verb} ${shorten(detail)}`
     if (tool === 'read' || tool === 'write' || tool === 'edit') {
-      const named = resolveKnown(detail, ctx.files)
+      const named = resolveKnown(detail, ctx.files, near)
       const touched = fileTouch(ctx, named, tool)
       touches = touched.touches
+      if (touched.relative && (ctx.files.includes(touched.relative) || dirname(touched.relative) !== '')) {
+        near = dirname(touched.relative)
+      }
       label = labelFor(tool, touched.relative, named)
     } else if (tool === 'shell') {
       const command = detail.replace(/\s+\+\s+\d+\s+commands?$/, '')
