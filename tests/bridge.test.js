@@ -2519,6 +2519,26 @@ describe('decide route', () => {
     expect(fake.seen).toHaveLength(0)
   })
 
+  it('answers 400 for a model or a question name that could not be a name, before the model is called', async () => {
+    const { fake, url } = await startFakeDecisionBridge()
+    for (const model of ['jev\ndecide fake ok 1ms', ' ', '-m', 'x'.repeat(121)]) {
+      const res = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions: QUESTIONS, model })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'The model must be a name.' })
+    }
+    const sentence = { error: 'Each question needs a short name and a type of noul, choice or score.' }
+    for (const questions of [
+      { 'tier\ndecide fake ok 1ms': QUESTIONS.tier },
+      { tier: { ...QUESTIONS.tier, type: 'constructor' } },
+      { tier: null },
+    ]) {
+      const res = await postJson(url, '/api/decide', 'POST', { state: 'Task x', questions })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual(sentence)
+    }
+    expect(fake.seen).toHaveLength(0)
+  })
+
   it('answers 429 when the model is rate limited after its retry', async () => {
     const { fake, url } = await startFakeDecisionBridge({
       answer: () => ({ status: 429, body: { error: { message: 'slow down' } } }),

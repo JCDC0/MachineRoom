@@ -7,13 +7,23 @@ function validState(state) {
   return typeof state === 'string' || (state !== null && typeof state === 'object')
 }
 
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,119}$/
+const QUESTION_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,39}$/
+const QUESTION_TYPES = ['noul', 'choice', 'score']
+
 function validQuestions(questions) {
   return questions !== null && typeof questions === 'object' && !Array.isArray(questions) && Object.keys(questions).length > 0
 }
 
+function wellFormed(questions) {
+  return Object.entries(questions).every(
+    ([name, question]) => QUESTION_NAME.test(name) && question !== null && typeof question === 'object' && QUESTION_TYPES.includes(question.type)
+  )
+}
+
 function modelFor(body, env) {
   if (body.model !== undefined) {
-    if (typeof body.model !== 'string' || !body.model.trim()) return null
+    if (typeof body.model !== 'string' || !MODEL_ID.test(body.model.trim())) return null
     return body.model.trim()
   }
   const configured = typeof env.DECISION_MODEL === 'string' ? env.DECISION_MODEL.trim() : ''
@@ -35,6 +45,10 @@ export function createDecideApi({ sendJson, readJsonBody, env = process.env, dec
     }
     if (!validQuestions(body.questions)) {
       sendJson(req, res, 400, { error: 'Send at least one question.' })
+      return true
+    }
+    if (!wellFormed(body.questions)) {
+      sendJson(req, res, 400, { error: 'Each question needs a short name and a type of noul, choice or score.' })
       return true
     }
     const model = modelFor(body, env)
