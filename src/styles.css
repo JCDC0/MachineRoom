@@ -2331,6 +2331,126 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.6);
 }
 
+.backup-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  border-top: 1px solid var(--line);
+  padding-top: calc(var(--space) * 1.5);
+}
+
+.backup-card {
+  padding: calc(var(--space) * 1.5);
+  border: 1px solid var(--line);
+  background: rgb(0 0 0 / 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.backup-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--white);
+}
+
+.backup-title.is-red {
+  color: var(--red);
+}
+
+.backup-title.is-yellow {
+  color: var(--yellow);
+}
+
+.backup-lines {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 0.5);
+}
+
+.backup-line {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.backup-error {
+  font-size: 12px;
+  color: var(--red);
+  padding: var(--space);
+  border: 1px solid var(--red);
+  background: rgb(255 42 42 / 0.08);
+}
+
+.backup-success {
+  font-size: 12px;
+  color: var(--green, #2aff80);
+}
+
+.backup-actions {
+  display: flex;
+  margin-top: calc(var(--space) * 0.5);
+}
+
+.backup-now-btn {
+  padding: var(--space) calc(var(--space) * 1.5);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.backup-confirm-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding: calc(var(--space) * 1.5);
+  background: rgb(255 255 255 / 0.03);
+  border: 1px solid var(--yellow);
+  margin-top: calc(var(--space) * 0.5);
+}
+
+.backup-confirm-warning {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--white);
+}
+
+.backup-confirm-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+}
+
+.backup-confirm-btn {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+  padding: var(--space) calc(var(--space) * 1.25);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.backup-confirm-btn:hover:not(:disabled) {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.18);
+}
+
+.backup-cancel-btn {
+  padding: var(--space) calc(var(--space) * 1.25);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.backup-confirm-error {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--red);
+}
+
 .mr-assistant {
   position: fixed;
   width: 380px;
