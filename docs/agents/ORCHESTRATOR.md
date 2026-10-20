@@ -4,6 +4,8 @@ From 0.1.90 the orchestrator is Hermes, in its own interactive session in the ma
 
 Start a session with: `hermes` in `C:\GitHub\MachineRoom`, model `deepseek/deepseek-v4.1-flash-1017` at `xhigh`, toolsets `file,terminal`. First message: "You are the MachineRoom orchestrator. Read docs/agents/ORCHESTRATOR.md, then docs/agents/ARCHITECTURE.md and docs/agents/PLAN.md, then tell me what is running, what waits for review and what you will do next."
 
+Before merging a branch that adds a route that writes (a merge, a backup, any write to Paperclip), ask the owner to have AGY on Gemini 4 Argon (free) read the diff and report problems without changing files, and weigh its answer with your own review. If DeepSeek credit runs low, `minimax/minimax-m3.1-flash:free` ran a Hermes task cleanly at no cost; use it for routine merges only.
+
 ## Standing rules from the owner
 
 - Never push, and never merge into anything but `main` in this checkout. The owner pushes (G6).
