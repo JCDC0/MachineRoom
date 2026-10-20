@@ -40,14 +40,19 @@ export default function Waiting({ agents = [], status = 'connecting', children }
       aria-live={copy.tone === 'error' ? 'assertive' : 'polite'}
     >
       <div className="waiting-card">
-        <div className="waiting-header">
+        <div className="waiting-header hud-header-strip">
           <span className="waiting-dot" aria-hidden="true" />
           <span className="waiting-badge mono">{copy.badge}</span>
         </div>
-        <h2 className="waiting-title">{copy.title}</h2>
-        <p className="waiting-detail">{copy.detail}</p>
-        <p className="waiting-agents mono">{agentSummary}</p>
-        {children && <div className="waiting-actions">{children}</div>}
+        <div className="waiting-body">
+          <h2 className="waiting-title">
+            {copy.title}
+            <span className="waiting-cursor" aria-hidden="true">_</span>
+          </h2>
+          <p className="waiting-detail">{copy.detail}</p>
+          <p className="waiting-agents mono">{agentSummary}</p>
+          {children && <div className="waiting-actions">{children}</div>}
+        </div>
       </div>
     </aside>
   )

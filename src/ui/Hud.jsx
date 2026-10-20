@@ -67,10 +67,16 @@ export default function Hud({
   onToggleTerminal = () => {},
   onShowTerminals = () => {},
   health = null,
+  helpOpen: controlledHelpOpen,
+  initialHelpOpen = false,
+  assistantOpen = false,
 }) {
   const [logOpen, setLogOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
-  const [helpOpen, setHelpOpen] = useState(false)
+  const [internalHelpOpen, setHelpOpen] = useState(
+    () => Boolean(initialHelpOpen || controlledHelpOpen)
+  )
+  const helpOpen = controlledHelpOpen !== undefined ? Boolean(controlledHelpOpen) : internalHelpOpen
   const [healthOpen, setHealthOpen] = useState(false)
   const notice = healthNotice(health)
   const logBodyRef = useRef(null)
@@ -138,14 +144,22 @@ export default function Hud({
   return (
     <div className="hud">
       <header className="hud-title">
-        <h1>{name}</h1>
-        <p className="mono">{mode === 'live' ? 'LIVE' : 'REPLAY'} // {rootName}</p>
-        <ul className="hud-legend mono" aria-label="Colour legend">
-          <li className="is-white">activity</li>
-          <li className="is-red">failure</li>
-          <li className="is-yellow">active</li>
-          <li className="is-green">finished</li>
-        </ul>
+        <div className="hud-header-strip">
+          <h1>{name}</h1>
+        </div>
+        <div className="hud-title-body">
+          <p className="hud-status-line mono">
+            <span className="hud-status-tag">{mode === 'live' ? 'LIVE' : 'REPLAY'}</span>
+            <span className="hud-status-sep">: </span>
+            <span className={`hud-status-value ${mode === 'live' ? 'is-live' : ''}`}>{rootName}</span>
+          </p>
+          <ul className="hud-legend mono" aria-label="Colour legend">
+            <li className="is-white">activity</li>
+            <li className="is-red">failure</li>
+            <li className="is-yellow">active</li>
+            <li className="is-green">finished</li>
+          </ul>
+        </div>
       </header>
 
       <div className="hud-top-right">
@@ -259,10 +273,15 @@ export default function Hud({
                 aria-pressed={focused === agent.key}
                 onClick={() => onFocus(agent.key)}
               >
-                <span className="dot" aria-hidden="true" />
-                <span className="agent-name">{agent.name}</span>
-                <span className="agent-status mono">{STATUS_TEXT[agent.status] ?? agent.status}</span>
-                <span className="agent-key mono">{index + 1}</span>
+                <span className="agent-head">
+                  <span className="dot" aria-hidden="true" />
+                  <span className="agent-name">{agent.name}</span>
+                  <span className="agent-key mono">{index + 1}</span>
+                </span>
+                <span className="agent-subtags mono">
+                  <span className="agent-subtag agent-lane">{agent.key}</span>
+                  <span className="agent-subtag agent-status">{STATUS_TEXT[agent.status] ?? agent.status}</span>
+                </span>
               </button>
               <button
                 type="button"
@@ -299,7 +318,7 @@ export default function Hud({
 
       {logOpen && (
         <aside id="hud-log-drawer" className="hud-log" aria-label="Event log">
-          <header className="hud-log-header">
+          <header className="hud-log-header hud-header-strip">
             <span className="hud-log-title">Event Log</span>
             <span className="hud-log-count mono">{visibleLog.length}</span>
           </header>
@@ -341,7 +360,7 @@ export default function Hud({
             aria-labelledby="hud-help-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <header className="hud-help-header">
+            <header className="hud-help-header hud-header-strip">
               <h2 id="hud-help-title">Keyboard Shortcuts</h2>
               <button
                 type="button"
@@ -351,14 +370,16 @@ export default function Hud({
                 Close
               </button>
             </header>
-            <dl className="hud-shortcuts">
-              {visibleShortcuts.map(([keys, description]) => (
-                <div key={keys} className="hud-shortcut-row">
-                  <dt className="mono">{keys}</dt>
-                  <dd>{description}</dd>
-                </div>
+            <ol className="hud-shortcuts hud-index-list">
+              {visibleShortcuts.map(([keys, description], index) => (
+                <li key={keys} className="hud-shortcut-row">
+                  <span className="hud-index-rule mono" aria-hidden="true">│</span>
+                  <span className="hud-index-num mono">{index + 1}</span>
+                  <span className="hud-shortcut-key mono">{keys}</span>
+                  <span className="hud-shortcut-desc">{description}</span>
+                </li>
               ))}
-            </dl>
+            </ol>
           </section>
         </div>
       )}
@@ -369,6 +390,7 @@ export default function Hud({
         onAssistantAction={onAssistantAction}
         ask={askAssistant}
         askAssistant={askAssistant}
+        initialOpen={assistantOpen}
       />
 
       <Transport

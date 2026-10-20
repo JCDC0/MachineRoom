@@ -449,7 +449,7 @@ export default function Assistant({
       style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
       aria-label="Assistant terminal"
     >
-      <header className="mr-assistant-title mono" onPointerDown={handlePointerDown}>
+      <header className="mr-assistant-title hud-header-strip" onPointerDown={handlePointerDown}>
         <span className="mr-assistant-title-text">Assistant</span>
         <button
           type="button"
@@ -586,6 +586,9 @@ export default function Assistant({
           spellCheck="false"
           aria-label="Assistant input"
         />
+        <button type="submit" className="mr-assistant-exec mono">
+          EXEC
+        </button>
       </form>
     </aside>
   )

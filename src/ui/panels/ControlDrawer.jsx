@@ -153,7 +153,7 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
       className="control-drawer"
       aria-label="Control panels"
     >
-      <header className="control-drawer-header">
+      <header className="control-drawer-header hud-header-strip">
         <h2 className="control-drawer-title">Control</h2>
         <button
           type="button"

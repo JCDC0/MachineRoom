@@ -23,8 +23,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   scene.fog = new THREE.FogExp2(0x000000, 0.00007)
   const cssScene = new THREE.Scene()
 
-  let width = surface.clientWidth || window.innerWidth
-  let height = surface.clientHeight || window.innerHeight
+  let width = surface.clientWidth || window.innerWidth || 1
+  let height = surface.clientHeight || window.innerHeight || 1
   const camera = new THREE.PerspectiveCamera(FOV, width / height, 1, 60000)
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
   renderer.setClearColor(0x000000, 0)
@@ -199,8 +199,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function onResize() {
-    width = surface.clientWidth || window.innerWidth
-    height = surface.clientHeight || window.innerHeight
+    const nextWidth = surface.clientWidth || window.innerWidth
+    const nextHeight = surface.clientHeight || window.innerHeight
+    if (!nextWidth || !nextHeight) return
+    width = nextWidth
+    height = nextHeight
     camera.aspect = width / height
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)

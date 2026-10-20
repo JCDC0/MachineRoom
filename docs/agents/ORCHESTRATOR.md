@@ -4,7 +4,7 @@ From 0.1.90 the orchestrator is Hermes, in its own interactive session in the ma
 
 Start a session with: `hermes` in `C:\GitHub\MachineRoom`, model `deepseek/deepseek-v4.1-flash-1017` at `xhigh`, toolsets `file,terminal`. First message: "You are the MachineRoom orchestrator. Read docs/agents/ORCHESTRATOR.md, then docs/agents/ARCHITECTURE.md and docs/agents/PLAN.md, then tell me what is running, what waits for review and what you will do next."
 
-Before merging a branch that adds a route that writes (a merge, a backup, any write to Paperclip), ask the owner to have AGY on Gemini 4 Argon (free) read the diff and report problems without changing files, and weigh its answer with your own review. If DeepSeek credit runs low, `minimax/minimax-m3.1-flash:free` ran a Hermes task cleanly at no cost; use it for routine merges only.
+Before merging a branch that adds a route that writes (a merge, a backup, any write to Paperclip), ask the owner to have AGY on Gemini 3.8 Flash High (free) read the diff and report problems without changing files, and weigh its answer with your own review. If DeepSeek credit runs low, `minimax/minimax-m3.1-flash:free` ran a Hermes task cleanly at no cost; use it for routine merges only.
 
 ## Standing rules from the owner
 
@@ -32,7 +32,7 @@ Before merging a branch that adds a route that writes (a merge, a backup, any wr
 | --- | --- | --- |
 | Hermes (worker runs in `C:\GitHub\MachineRoom-hermes`) | `deepseek/deepseek-v4.1-flash-1017`, xhigh | `src/model/**`, `src/briefs/**`, `src/live/**`, tests, small scripts |
 | OpenCode (`C:\GitHub\MachineRoom-opencode`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/control/**`, `src/assistant/**`, `src/decider/**` |
-| AGY (`C:\GitHub\MachineRoom-agy`) | Gemini 3.8 Flash High, Gemini 4 Argon Medium for design work (free) | `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx`, `src/App.jsx` |
+| AGY (`C:\GitHub\MachineRoom-agy`) | Gemini 3.8 Flash High (free; Gemini 4 Argon is used up for now) | `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx`, `src/App.jsx` |
 | Orchestrator (this checkout) | as Hermes | `docs/agents/**`, merges, versions |
 
 The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts them in every prompt.

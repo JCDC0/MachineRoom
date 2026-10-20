@@ -120,4 +120,29 @@ export function backupNotice(status, { now = Date.now() } = {}) {
   }
 }
 
+export function backupAgePercent(status, { now = Date.now(), limitHours = 24 } = {}) {
+  if (!status || typeof status !== 'object' || Array.isArray(status)) {
+    return null
+  }
+  if (status.enabled !== true) {
+    return null
+  }
+  if (!status.latestAt) {
+    return 100
+  }
+  let age = null
+  if (Number.isFinite(status.ageHours)) {
+    age = status.ageHours
+  } else if (typeof status.latestAt === 'string') {
+    const parsed = Date.parse(status.latestAt)
+    if (!Number.isNaN(parsed)) {
+      age = Math.max(0, (now - parsed) / 3600000)
+    }
+  }
+  if (age == null || !Number.isFinite(age)) {
+    return null
+  }
+  return Math.min(100, Math.max(0, Math.round((age / limitHours) * 100)))
+}
+
 export default backupNotice

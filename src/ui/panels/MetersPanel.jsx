@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
 import { formatCents, meterTone, percentOf, timeUntil } from './format.js'
 import { subscribeToNotices } from './notices.js'
-import { backupNotice, formatBytes } from './backup.js'
+import { backupAgePercent, backupNotice, formatBytes } from './backup.js'
 
-export default function MetersPanel({ client, initialBackupStatus = null }) {
-  const [costs, setCosts] = useState(null)
-  const [agents, setAgents] = useState([])
-  const [loading, setLoading] = useState(true)
+export default function MetersPanel({
+  client,
+  initialBackupStatus = null,
+  initialCosts = null,
+  initialAgents = [],
+}) {
+  const [costs, setCosts] = useState(initialCosts)
+  const [agents, setAgents] = useState(initialAgents)
+  const [loading, setLoading] = useState(() => initialCosts == null)
   const [loadError, setLoadError] = useState(null)
 
   const [editingAgentId, setEditingAgentId] = useState(null)
@@ -123,6 +128,7 @@ export default function MetersPanel({ client, initialBackupStatus = null }) {
   }
 
   const notice = backupNotice(backupStatus)
+  const backupPct = backupAgePercent(backupStatus)
   const { summary, quota = [] } = costs ?? {}
   const companyBudget = summary?.budgetCents ?? 0
   const companySpend = summary?.spendCents ?? 0
@@ -168,13 +174,15 @@ export default function MetersPanel({ client, initialBackupStatus = null }) {
                 <span className="mono">
                   {formatCents(companySpend)} of {formatCents(companyBudget)}
                 </span>
-                <span className="mono">{companyPercent}%</span>
               </div>
-              <div className="meter-track" aria-hidden="true">
-                <div
-                  className={`meter-fill ${meterTone(companyPercent) === 'full' ? 'is-full' : ''}`}
-                  style={{ width: `${companyPercent}%` }}
-                />
+              <div className="meter-bar">
+                <div className="meter-track" aria-hidden="true">
+                  <div
+                    className={`meter-fill ${meterTone(companyPercent) === 'full' ? 'is-full' : ''}`}
+                    style={{ width: `${companyPercent}%` }}
+                  />
+                </div>
+                <span className="meter-percent mono">{`${companyPercent}%`}</span>
               </div>
             </>
           )}
@@ -209,13 +217,15 @@ export default function MetersPanel({ client, initialBackupStatus = null }) {
                       <span className="mono">
                         {formatCents(spend)} of {formatCents(budget)}
                       </span>
-                      <span className="mono">{pct}%</span>
                     </div>
-                    <div className="meter-track" aria-hidden="true">
-                      <div
-                        className={`meter-fill ${meterTone(pct) === 'full' ? 'is-full' : ''}`}
-                        style={{ width: `${pct}%` }}
-                      />
+                    <div className="meter-bar">
+                      <div className="meter-track" aria-hidden="true">
+                        <div
+                          className={`meter-fill ${meterTone(pct) === 'full' ? 'is-full' : ''}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="meter-percent mono">{`${pct}%`}</span>
                     </div>
                   </>
                 )}
@@ -316,15 +326,15 @@ export default function MetersPanel({ client, initialBackupStatus = null }) {
                         </div>
 
                         {hasPct ? (
-                          <>
+                          <div className="meter-bar">
                             <div className="meter-track" aria-hidden="true">
                               <div
                                 className={`meter-fill ${meterTone(w.usedPercent) === 'full' ? 'is-full' : ''}`}
                                 style={{ width: `${w.usedPercent}%` }}
                               />
                             </div>
-                            <div className="quota-percent-label mono">{w.usedPercent}%</div>
-                          </>
+                            <span className="quota-percent-label meter-percent mono">{`${w.usedPercent}%`}</span>
+                          </div>
                         ) : (
                           <div className="quota-detail-text mono">{w.detail}</div>
                         )}
@@ -356,6 +366,17 @@ export default function MetersPanel({ client, initialBackupStatus = null }) {
               >
                 {notice.title}
               </div>
+              {backupPct != null && (
+                <div className="meter-bar backup-age-bar">
+                  <div className="meter-track" aria-hidden="true">
+                    <div
+                      className={`meter-fill ${notice.tone === 'red' || meterTone(backupPct) === 'full' ? 'is-full' : ''}`}
+                      style={{ width: `${backupPct}%` }}
+                    />
+                  </div>
+                  <span className="meter-percent mono">{`${backupPct}%`}</span>
+                </div>
+              )}
               {notice.lines.length > 0 && (
                 <div className="backup-lines">
                   {notice.lines.map((line, idx) => (
