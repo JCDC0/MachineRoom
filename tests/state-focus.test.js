@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeTree } from '../src/model/paths.js'
-import { RECENT_KEEP_MS, RECENT_LIMIT, apply, createState, freshRecent } from '../src/model/state.js'
+import { CALL_LIMIT, RECENT_KEEP_MS, RECENT_LIMIT, apply, createState, freshRecent } from '../src/model/state.js'
 
 const tree = makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js', 'docs/notes.md'] })
 const agents = [{ key: 'hermes', name: 'Hermes' }, { key: 'agy', name: 'agy' }]
@@ -85,5 +85,19 @@ describe('fresh recent paths', () => {
     apply(state, call('hermes', 'c1', [touch('src/a.js')], 1000))
     apply(state, call('hermes', 'c2', [touch('src/b.js'), touch('docs/notes.md')], 2000))
     expect(freshRecent(state, 0)).toEqual(['src/b.js', 'docs/notes.md'])
+  })
+})
+
+describe('tool calls in a long run', () => {
+  it('keeps only the newest calls, so a failure of a recent call still marks its file', () => {
+    const state = createState(tree, agents)
+    apply(state, { type: 'run.start', agent: 'hermes', runId: 'r1', time: 0, order: 0 })
+    for (let index = 0; index < 5000; index += 1) apply(state, call('hermes', `c${index}`, [touch('src/a.js')], index + 1))
+    apply(state, call('hermes', 'last', [touch('src/b.js')], 6000))
+    const calls = state.agents.get('hermes').calls
+    expect(calls.size).toBe(CALL_LIMIT)
+    expect(calls.has('c0')).toBe(false)
+    apply(state, { type: 'tool.end', agent: 'hermes', runId: 'r1', time: 6001, order: 6001, id: 'last', ok: false })
+    expect(state.files.get('src/b.js').failed).toBe(true)
   })
 })

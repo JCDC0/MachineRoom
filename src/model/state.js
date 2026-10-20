@@ -1,6 +1,7 @@
 import { ancestors, dirname } from './paths.js'
 
 const LINE_LIMIT = 80
+export const CALL_LIMIT = 500
 
 export function createState(tree, agents) {
   const files = new Map()
@@ -119,7 +120,9 @@ export function apply(state, activity) {
     case 'tool.start':
       agent.status = 'working'
       agent.label = activity.label
+      agent.calls.delete(activity.id)
       agent.calls.set(activity.id, activity.touches)
+      if (agent.calls.size > CALL_LIMIT) agent.calls.delete(agent.calls.keys().next().value)
       say(agent, activity.label)
       activity.touches.forEach((touch) => applyTouch(state, agent, touch))
       if (activity.touches.length > 0) {
