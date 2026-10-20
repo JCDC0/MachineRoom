@@ -684,6 +684,11 @@ function runContractSuite(label, makeHarness) {
       expect(await client.comments('issue-99')).toEqual([])
     })
 
+    it('answers an empty thread for a task id that is only an inherited name', async () => {
+      const { client } = await makeHarness()
+      for (const id of ['constructor', 'toString', '__proto__']) expect(await client.comments(id), id).toEqual([])
+    })
+
     it('refuses an empty comment and a comment on a missing task', async () => {
       const { client } = await makeHarness()
       await expect(client.postComment('issue-18', '  ')).rejects.toThrow(/comment/i)

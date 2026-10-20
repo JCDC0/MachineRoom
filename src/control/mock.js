@@ -285,7 +285,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return issue
       }),
 
-    comments: (issueId) => call('comments', () => state.comments[issueId] ?? []),
+    comments: (issueId) => call('comments', () => (Object.hasOwn(state.comments, issueId) ? state.comments[issueId] : [])),
 
     postComment: (issueId, body) =>
       call('postComment', () => {
@@ -293,7 +293,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!state.issues.some((issue) => issue.id === issueId)) throw new Error('That task no longer exists.')
         commentCounter += 1
         const comment = { id: `comment-${commentCounter}`, issueId, authorAgentId: null, authorName: 'You', body: body.trim(), createdAt: new Date(now()).toISOString() }
-        state.comments[issueId] = [...(state.comments[issueId] ?? []), comment]
+        state.comments[issueId] = [...(Object.hasOwn(state.comments, issueId) ? state.comments[issueId] : []), comment]
         emit({ topic: 'comments', id: issueId })
         return comment
       }),

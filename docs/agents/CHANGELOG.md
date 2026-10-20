@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Audit fix: the mock's `comments(issueId)` and `postComment` read the thread with `Object.hasOwn`, so `comments('constructor')` answers `[]` as the bridge does instead of a function the thread panel cannot list; a contract test runs on both.
 - Audit fix: the bridge, the lane runner, the candidate script and the history audit start git by the absolute path `gitPath()` in `server/programPath.js` finds in the absolute PATH folders; before, Node on Windows looked for `git.com` and `git.exe` in the child's working folder first, so a lane that committed its own `git.com` had it run with the owner's environment the moment the Reviews panel listed the lanes (and on any system whose PATH holds `.`); tests in `tests/program-path.test.js`, including a planted git in a real lane worktree.
 - Audit fix: `commandFor` in `src/briefs/run.js` refuses a lane with no worktree (`The lane NAME has no worktree, so the runner cannot start it.`); before, a lane in `lanes.json` without `worktree` started its harness in the folder the runner was started from, which is the main checkout; test in `tests/run-lane.test.js`.
 - Audit fix: `npm run candidate` builds and serves a lane's unmerged code with `laneEnv(env)`, the owner's environment without the variables whose names end in `_KEY`, `_TOKEN`, `_SECRET` or `_PASSWORD` or hold `API_KEY`, so a lane's `vite.config.js` or `bin/machine-room.mjs` can no longer read `OPENROUTER_API_KEY` or a GitHub token from the shell; CANDIDATE.md says so; tests in `tests/candidate.test.js`.
