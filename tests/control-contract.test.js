@@ -1063,6 +1063,29 @@ function runContractSuite(label, makeHarness) {
         'Choose a lane from the list.'
       )
     })
+
+    it('asks the planner for a plan and reads its answer', async () => {
+      const { client } = await makeHarness()
+      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local', role: 'pm' })
+      expect(agent.role).toBe('pm')
+      if (approval) await client.decideApproval(approval.id, 'approve')
+
+      await expect(client.askPlanner('')).rejects.toThrow('Write the goal in 1 to 2000 characters.')
+      const created = await client.askPlanner('Split the planner work into briefs with tests.')
+      expect(created.issueId).toBeTruthy()
+      expect(created.identifier).toMatch(/^JC-\d+$/)
+
+      const answer = await client.plan(created.issueId)
+      expect(['waiting', 'ready']).toContain(answer.status)
+      expect(Array.isArray(answer.briefs)).toBe(true)
+      expect(Array.isArray(answer.problems)).toBe(true)
+      if (answer.status === 'waiting') {
+        expect(answer.briefs).toEqual([])
+        expect(answer.problems).toEqual([])
+      } else {
+        expect(answer.briefs.length + answer.problems.length).toBeGreaterThan(0)
+      }
+    })
   })
 }
 

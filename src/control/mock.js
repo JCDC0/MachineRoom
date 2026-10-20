@@ -1,5 +1,6 @@
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
+import { planPrompt } from '../briefs/plan.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
 import { chooseRoute } from '../policy/route.js'
 import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
@@ -27,6 +28,8 @@ export const CLIENT_METHODS = [
   'reviews',
   'reviewDiff',
   'mergeReview',
+  'askPlanner',
+  'plan',
   'decide',
   'backupStatus',
   'backupNow',
@@ -69,6 +72,23 @@ const SAMPLE_RULES = {
   about: 'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
   rules: ['Work only in your own worktree and branch. Never push.', 'Run npm test after every change.'],
   report: 'Give the report in your reply, not in a file.',
+}
+
+const SAMPLE_PLAN = {
+  status: 'ready',
+  briefs: [
+    {
+      id: 'C7a',
+      title: 'Add the plan route',
+      owner: 'opencode',
+      size: 'small',
+      files: ['server/plans.js'],
+      tests: ['tests/plans.test.js'],
+      text: 'Add the plan route in the bridge with tests.',
+      dependsOn: [],
+    },
+  ],
+  problems: ['Brief C7b names no test.'],
 }
 
 export const MOCK_POLICY = {
@@ -532,6 +552,36 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         review.added = 0
         review.deleted = 0
         return { ok: true, lane: review.lane, branch: review.branch, head: review.head, commit: SAMPLE_MERGE_COMMIT }
+      }),
+
+    askPlanner: (goal) =>
+      call('askPlanner', () => {
+        const text = typeof goal === 'string' ? goal.trim() : ''
+        if (text.length < 1 || text.length > 2000) throw new Error('Write the goal in 1 to 2000 characters.')
+        issueCounter += 1
+        const stamp = new Date(now()).toISOString()
+        const issue = {
+          id: `issue-${issueCounter}`,
+          identifier: `JC-${issueCounter}`,
+          title: `Plan: ${text.slice(0, 60)}`,
+          description: planPrompt({ goal: text, lanes: SAMPLE_LANES, rules: SAMPLE_RULES, ids: parseBriefs(SAMPLE_BRIEFS) }),
+          status: 'todo',
+          priority: 'medium',
+          assigneeAgentId: null,
+          parentId: null,
+          overrides: null,
+          createdAt: stamp,
+          updatedAt: stamp,
+        }
+        state.issues.unshift(issue)
+        emit({ topic: 'issues' })
+        return { issueId: issue.id, identifier: issue.identifier }
+      }),
+
+    plan: (issueId) =>
+      call('plan', () => {
+        if (!state.issues.some((issue) => issue.id === issueId)) throw new Error('That task no longer exists.')
+        return SAMPLE_PLAN
       }),
 
     decide: ({ questions } = {}) =>

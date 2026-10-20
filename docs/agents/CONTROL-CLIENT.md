@@ -31,6 +31,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
 | `mergeReview(lane, { head, message })` | `MergeResult`, the new merge commit on `main`. It sends `confirmed: true`, so call it only after the user confirmed; `head` is the sha from `reviews()` (W3b; the mock merges a sample lane once) |
+| `askPlanner(goal)` | `{ issueId, identifier }`, the plan task it created for the agent with the role `pm`. It sends `confirmed: true`, so call it only after the user confirmed (C5b; the mock creates a sample plan task) |
+| `plan(issueId)` | `PlanAnswer`, the planner's answer, or `waiting` with empty lists while no comment from the planner holds a `{` (C5b; the mock answers one good brief and one problem) |
 | `decide({ state, questions, model? })` | `{ ok: true, model, answers, usage, ms, attempts }` from the decision model (D2; see `DECIDER-EVAL.md`). It rejects with `No key is set for the decision model.` when the bridge has no `OPENROUTER_API_KEY`, which is also what the mock always does |
 | `backupStatus()` | `BackupStatus`, the age of Paperclip's newest database backup (W2b) |
 | `backupNow()` | `BackupResult`. It asks Paperclip for a backup at once, so call it only after the user confirmed; it rejects with `A backup is already running.` while one runs (W2b) |
@@ -66,6 +68,8 @@ ModelOption  { id, label, harness, tier: small | medium | large, free: boolean }
 Brief        { id ("C3e"), title, ownerText, owners: (hermes | opencode | agy | claude)[], done: boolean, section, text }
 BriefPrompt  { prompt, lane, model, branch }
 RouteSuggestion { tier, choice: { lane, model, reasoning, provider } | null, reason }
+PlanAnswer   { status: waiting | ready, briefs: PlanBrief[], problems: string[] }
+PlanBrief    { id, title, owner, size: small | medium | large, files: string[], tests: string[], text, dependsOn: string[] }
 RunInfo      { lane, briefs: string[], startedAt, lastLines: string[] (the last 5 lines the run printed) }
 RunRecord    { lane, briefs, model: string|null, reasoning: string|null, startedAt, minutes: number|null, exitCode: number|null,
                killed: boolean, costUsd: number|null, log: string|null, branch, commits: string[] }   (one line of runs.jsonl)
@@ -129,6 +133,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 | `approvals`, `decideApproval` | `GET /api/companies/:id/approvals`, `POST /api/approvals/:id/approve`, `reject`, `request-revision` |
 | `costs` | `costs/summary`, `costs/by-agent`, `costs/quota-windows` |
 | `setAgentBudget` | `PATCH /api/agents/:id/budgets` |
+| `askPlanner`, `plan` | `GET /api/companies/:id/agents` for the agent with the role `pm`, `POST /api/companies/:id/issues` for the plan task, `GET /api/issues/:id/comments` for the answer |
 | `models` | our own list (the routing policy), not Paperclip |
 | `backupStatus`, `backupNow` | the bridge's `GET` and `POST /api/backup`, which read `databaseBackup` from `GET /api/health` and call `POST /api/instance/database-backups` (see `BACKUPS.md`) |
 

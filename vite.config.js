@@ -17,6 +17,8 @@ export default defineConfig({
   test: {
     environment: 'node',
     pool: 'threads',
+    testTimeout: 20000,
+    hookTimeout: 20000,
     globalSetup: ['./tests/helpers/cleanTemp.js'],
     include: ['tests/**/*.test.js'],
   },

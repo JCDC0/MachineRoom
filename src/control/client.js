@@ -129,6 +129,10 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
     mergeReview: (lane, { head, message } = {}) =>
       request('POST', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/merge`, { confirmed: true, head, message }),
 
+    askPlanner: (goal) => request('POST', '/api/control/plans', { goal, confirmed: true }),
+
+    plan: (issueId) => request('GET', `/api/control/plans/${encodeURIComponent(issueId ?? '')}`),
+
     decide: ({ state, questions, model } = {}) =>
       request('POST', '/api/decide', model === undefined ? { state, questions } : { state, questions, model }),
 

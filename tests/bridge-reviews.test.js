@@ -2,11 +2,9 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { makeTempDir as makeTempRoot } from './helpers/tempRoot.js'
-
-vi.setConfig({ testTimeout: 20000 })
 
 const REAL_TMP = tmpdir()
 const NO_GIT_CONFIG = join(REAL_TMP, 'machineroom-reviews-no-git-config')
