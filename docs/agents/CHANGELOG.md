@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Concept details in the room itself (task V7b): pure strandPoints in src/engine/strings.js generates deterministic scattered points along each curved string between folders and turns active strands yellow for 1.5 seconds; working agent tags become CSS3D callouts with thin connecting lines, yellow working borders, red failure bands, and green completion states; failed cards display a red FAILED NAME band across the card face for 2.6 seconds over faint scanlines; tests in tests/strands.test.js.
+
 - Review note on U5e: no fixes. The first branch reviewed with `npm run review-lane`: 10 PASS in 81 seconds, the merged suite 1441 passed; the diff was read by hand as the checker says.
 - Review worktrees of the tests under the test temp folder (task U5e): `reviewLane` and `main` take a `tempRoot` option (default `tmpdir()`), so the merged-result worktree is made there; `tests/review-lane.test.js` passes a `makeTempDir` folder, checks it is empty afterwards and checks the system temp folder gains no `machineroom-review-*` folder.
 - New brief: U5e (review worktrees of the tests under the test temp folder, OpenCode). The leftover folder held no `node_modules` link and was removed by hand.

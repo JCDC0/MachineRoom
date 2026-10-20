@@ -14,7 +14,14 @@ export const CARD_PAD = 8
 export const BACK_STEP = 12
 export const CARD_SCALES = { closed: 1.5, open: 1.8, files: 2.6 }
 const FLASH_MS = 1100
+const FAIL_MS = 2600
 const BASIS = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
+
+let currentActivePath = new Set()
+
+export function isPathActive(path) {
+  return currentActivePath.has(path)
+}
 
 export function planeToWorld(spot, out = new THREE.Vector3()) {
   const { right, up, back } = BASIS
@@ -116,8 +123,9 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const meta = el('div', 'mr-card-meta')
     head.append(tab, name, meta)
     const items = el('div', 'mr-card-items')
+    const band = el('div', 'mr-card-band')
     const face = el('div', 'mr-card-face')
-    face.append(head, items)
+    face.append(head, items, band)
     element.append(backs, face)
     head.addEventListener('click', (event) => {
       event.stopPropagation()
@@ -134,7 +142,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const occluder = new THREE.Mesh(plane, hider)
     occluder.renderOrder = -1
     glScene?.add(occluder)
-    const card = { path, element, backs, meta, items, object, occluder, home: object.position.clone(), scale, rows: [], rowPaths: [], view: null, backCount: -1 }
+    const card = { path, element, backs, meta, items, band, object, occluder, home: object.position.clone(), scale, rows: [], rowPaths: [], view: null, backCount: -1 }
     cards.set(path, card)
     return card
   }
@@ -223,6 +231,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       }
     }
     active = { files, dirs, path: chain }
+    currentActivePath = chain
     return true
   }
 
@@ -261,8 +270,9 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     return out.addScaledVector(right, side * halfWidth(dir))
   }
 
-  function flash(path, tone) {
-    flashes.set(path, { tone, until: performance.now() + FLASH_MS })
+  function flash(path, tone, text = '') {
+    const duration = tone === 'red' ? FAIL_MS : FLASH_MS
+    flashes.set(path, { tone, text, until: performance.now() + duration })
   }
 
   function sync(state) {
@@ -316,6 +326,15 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       card.occluder.scale.set(CARD_W * card.scale, cardHeight(cardRows(view)) * card.scale, 1)
       const flashing = flashes.get(card.path)
       const tone = flashing && flashing.until > now ? flashing.tone : null
+      const failedName = flashing?.text || (card.path === '' ? rootName : basename(card.path))
+      const failedText = tone === 'red' ? `FAILED ${failedName}` : ''
+      if (failedText) {
+        if (card.band.textContent !== failedText) card.band.textContent = failedText
+        if (!card.band.classList.contains('is-failed')) card.band.classList.add('is-failed')
+      } else {
+        if (card.band.textContent !== '') card.band.textContent = ''
+        if (card.band.classList.contains('is-failed')) card.band.classList.remove('is-failed')
+      }
       const classes = ['mr-card', `is-${view.state}`]
       if (active.dirs.has(card.path)) classes.push('is-active')
       else if (active.path.has(card.path)) classes.push('is-path')
@@ -351,6 +370,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     for (const card of [...cards.values()]) removeCard(card)
     plane.dispose()
     hider.dispose()
+    currentActivePath.clear()
   }
 
   function pin(path) {
@@ -370,10 +390,11 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     slotPosition,
     edgePoint,
     flashFile: (dir, file, tone) => {
-      flash(file, tone === 'red' ? 'red' : 'white')
-      flash(dir, tone === 'red' ? 'red' : 'white')
+      const name = basename(file)
+      flash(file, tone === 'red' ? 'red' : 'white', name)
+      flash(dir, tone === 'red' ? 'red' : 'white', name)
     },
-    flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white'),
+    flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
     sync,
     update,
     visibleLinks,
