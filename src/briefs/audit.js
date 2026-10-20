@@ -8,13 +8,37 @@ const GITHUB_TOKEN = /(?<![A-Za-z0-9_])(?:ghp_|gho_|github_pat_)\w{20,}/g
 const AWS_TOKEN = /(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}/g
 const KEY_SETTING = /(?<![A-Za-z0-9_])(OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY)(?![A-Za-z0-9_])\s*(?::|=)(?![=>])\s*(['"]?)([^\s'"]*)\2/g
 const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g
-const USER_PATH = /[A-Za-z]:[\\/]Users[\\/][^\s\\/"'`,;:<>|?*)\]}]+/gi
+const USER_PATH = /[A-Za-z]:[\\/]Users[\\/](<[^<>\s]{1,64}>|\$env:[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|[^\s\\/"'`,;:<>|?*)\]}]+)/gi
 const GRADED_PATH = /(?<![A-Za-z0-9])coursework(?![A-Za-z0-9])/gi
 
 const PLACEHOLDER = /^(?:your[-_ ]?(?:key|token|api[-_ ]?key).*|your[-_ ]?api.*|x{3,}|changeme|change[-_ ]?me|placeholder|redacted|example.*|todo|none|null|secret|key|\*+|\$\{.*\}|\$[A-Za-z_][A-Za-z0-9_]*)$/i
 
 const ALLOWED_EMAILS = new Set(['noreply@anthropic.com'])
 const ALLOWED_EMAIL_DOMAIN = '@users.noreply.github.com'
+
+const PLACEHOLDER_USER_FOLDERS = new Set([
+  'user',
+  'owner',
+  'name',
+  'you',
+  'me',
+  'example',
+  'username',
+  '%username%',
+  '$env:username',
+  '<user>',
+])
+const EXAMPLE_EMAIL_DOMAINS = new Set(['example.com', 'example.org', 'example.net'])
+const EXAMPLE_EMAIL_SUFFIXES = ['.example', '.invalid', '.test', '.localhost']
+
+function isPlaceholderUserFolder(folder) {
+  return PLACEHOLDER_USER_FOLDERS.has(folder.toLowerCase())
+}
+
+function isExampleDomain(domain) {
+  if (EXAMPLE_EMAIL_DOMAINS.has(domain)) return true
+  return EXAMPLE_EMAIL_SUFFIXES.some((suffix) => domain.endsWith(suffix))
+}
 
 function isPlaceholder(value) {
   if (value === '') return true
@@ -90,9 +114,11 @@ function scanLine(line, profileName) {
     const address = match[0].toLowerCase()
     if (ALLOWED_EMAILS.has(address)) return
     if (address.endsWith(ALLOWED_EMAIL_DOMAIN)) return
+    if (isExampleDomain(address.slice(address.lastIndexOf('@') + 1))) return
     found.push({ kind: 'email', index: match.index, sample: windowAround(line, match.index, match[0].length) })
   })
   eachMatch(USER_PATH, line, (match) => {
+    if (isPlaceholderUserFolder(match[1] ?? '')) return
     found.push({ kind: 'userpath', index: match.index, sample: windowAround(line, match.index, match[0].length) })
   })
   if (profileName) {
