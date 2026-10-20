@@ -178,7 +178,7 @@ describe('history-audit script and a tag named main', () => {
     const dir = makeTempDir('history-audit-')
     try {
       git(['init', '-b', 'main'], dir)
-      git(['config', 'user.email', 'tester@users.noreply.github.com'], dir)
+      git(['config', 'user.email', ''], dir)
       git(['config', 'user.name', 'Tester'], dir)
       writeFileSync(join(dir, 'notes.md'), 'first\n')
       git(['add', 'notes.md'], dir)

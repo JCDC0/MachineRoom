@@ -27,9 +27,9 @@ function git(cwd, args) {
       GIT_CONFIG_GLOBAL: NO_GIT_CONFIG,
       GIT_CONFIG_NOSYSTEM: '1',
       GIT_AUTHOR_NAME: 'MachineRoom Test',
-      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_AUTHOR_EMAIL: '',
       GIT_COMMITTER_NAME: 'MachineRoom Test',
-      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_EMAIL: '',
     },
   })
 }
