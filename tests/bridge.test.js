@@ -9,6 +9,7 @@ import { createClient } from '../src/control/client.js'
 import { extractReplyText } from '../server/assistant.js'
 import { FEATURES, PAPERCLIP_SURFACE } from '../server/surface.js'
 import { choice } from '../src/decider/wire.js'
+import { buildActivities } from '../src/model/pipeline.js'
 import { startFakeDecisions } from './fakeDecisions.js'
 import { makeTempDir as makeTempRoot } from './helpers/tempRoot.js'
 
@@ -300,6 +301,19 @@ async function waitUntil(fn, timeoutMs = 3000) {
     await new Promise((r) => setTimeout(r, 20))
   }
   throw new Error('condition not met in time')
+}
+
+const FAKE_KEY = 'sk-or-v1-' + '0123456789abcdef'.repeat(4)
+
+function keyedToolChunk() {
+  return `${JSON.stringify({
+    type: 'tool_use',
+    part: {
+      id: 'p1',
+      tool: 'read',
+      state: { status: 'completed', input: { path: 'docs/notes.md' }, output: `read with ${FAKE_KEY}` },
+    },
+  })}\n`
 }
 
 const cleanups = []
@@ -1305,6 +1319,137 @@ describe('truncated log frames', () => {
 
     expect(replayed.payload.chunk).toBe(big('f'))
     expect(replayed.payload.truncated).toBe(false)
+  })
+})
+
+describe('masked keys', () => {
+  const AGENTS = [{ id: 'a1', key: 'opencode', parser: 'opencode' }]
+  const TREE = { rootName: 'agent-sandbox', files: [], dirs: [] }
+
+  async function startMaskedBridge() {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', [{ id: 'a1', name: 'OpenCode Go', adapterType: 'opencode_local' }])
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: dir, port: 0 })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).paperclip)
+    const health = () => fetch(`${url}/api/health`).then((r) => r.json())
+    return { fake, url, health }
+  }
+
+  function queuedFrame(id) {
+    return { id, companyId: 'comp-1', type: 'heartbeat.run.queued', createdAt: '2026-10-20T13:00:00.000Z', payload: { runId: 'r1' } }
+  }
+
+  function logFrame(id, chunk, seq = 1, truncated = false) {
+    return {
+      id,
+      companyId: 'comp-1',
+      type: 'heartbeat.run.log',
+      createdAt: '2026-10-20T13:00:01.000Z',
+      payload: { runId: 'r1', agentId: 'a1', seq, stream: 'stdout', chunk, truncated },
+    }
+  }
+
+  async function startRestoreBridge() {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      logRetries: 2,
+      logRetryMs: 10,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).paperclip)
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+    return { fake, sse, url }
+  }
+
+  it('masks a key before it reaches the stream, the history and a Last-Event-ID replay', async () => {
+    const { fake, url, health } = await startMaskedBridge()
+    const before = await health()
+    expect(before.masked.total).toBe(0)
+    expect(Number.isNaN(Date.parse(before.masked.since))).toBe(false)
+
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+
+    fake.send(queuedFrame(801))
+    await sse.next((e) => e.event === 'frame' && e.id === '801')
+
+    fake.send(logFrame(802, keyedToolChunk()))
+    const live = await sse.next((e) => e.event === 'frame' && e.id === '802')
+    const masked = JSON.parse(live.data)
+    expect(masked.payload.chunk).toContain('[key]')
+    expect(masked.payload.chunk).not.toContain(FAKE_KEY)
+
+    const activities = buildActivities([masked], { agents: AGENTS, tree: TREE })
+    const start = activities.find((activity) => activity.type === 'tool.start')
+    expect(start).toMatchObject({ tool: 'read' })
+    expect(start.touches).toEqual([{ path: 'docs/notes.md', mode: 'read', kind: 'file' }])
+
+    await waitUntil(async () => (await health()).masked.total === 1)
+    expect((await health()).masked).toMatchObject({ total: 1 })
+
+    const history = await openSse(url, {}, '?history=1')
+    cleanups.push(() => history.close())
+    const fromHistory = await history.next((e) => e.event === 'frame' && e.id === '802')
+    expect(fromHistory.data).toBe(live.data)
+
+    const replay = await openSse(url, { 'Last-Event-ID': '801' })
+    cleanups.push(() => replay.close())
+    const fromReplay = await replay.next((e) => e.event === 'frame' && e.id === '802')
+    expect(fromReplay.data).toBe(live.data)
+  })
+
+  it('masks a key in an error message and a run error', async () => {
+    const { fake, url, health } = await startMaskedBridge()
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+
+    fake.send({
+      id: 804,
+      companyId: 'comp-1',
+      type: 'heartbeat.run.event',
+      createdAt: '2026-10-20T13:00:02.000Z',
+      payload: { runId: 'r1', agentId: 'a1', seq: 1, level: 'error', message: `failed ${FAKE_KEY}` },
+    })
+    const messageEvent = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '804')).data)
+    expect(messageEvent.payload.message).toBe('failed [key]')
+
+    fake.send({
+      id: 805,
+      companyId: 'comp-1',
+      type: 'heartbeat.run.status',
+      createdAt: '2026-10-20T13:00:03.000Z',
+      payload: { runId: 'r1', status: 'failed', error: `boom ${FAKE_KEY}` },
+    })
+    const statusEvent = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '805')).data)
+    expect(statusEvent.payload.error).toBe('boom [key]')
+
+    await waitUntil(async () => (await health()).masked.total === 2)
+  })
+
+  it('masks a key in a restored long chunk', async () => {
+    const { fake, sse, url } = await startRestoreBridge()
+
+    const full = `${keyedToolChunk()}${'x'.repeat(9000)}\n`
+    fake.appendLog('r1', { ts: '2026-10-20T13:00:00.000Z', stream: 'stdout', chunk: full, seq: 1 })
+    fake.send(logFrame(803, full.slice(-8192), 1, true))
+
+    const frame = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '803')).data)
+    expect(frame.payload.chunk).toContain('[key]')
+    expect(frame.payload.chunk).not.toContain(FAKE_KEY)
+    expect(frame.payload.truncated).toBe(false)
+
+    await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).masked.total === 1)
   })
 })
 

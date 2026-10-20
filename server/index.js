@@ -3,6 +3,7 @@ import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { maskKeys } from '../src/briefs/audit.js'
 import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
@@ -348,6 +349,8 @@ export function createBridge(options = {}) {
   let resolving = false
   const unreadable = createUnreadableCounter()
   const unparsedSince = new Date().toISOString()
+  const maskedSince = new Date().toISOString()
+  let maskedTotal = 0
   let parserByAgentId = new Map()
   let agentFetchAt = 0
 
@@ -438,8 +441,21 @@ export function createBridge(options = {}) {
     }
   }
 
+  function maskFrame(parsed) {
+    const payload = parsed.payload
+    if (!payload || typeof payload !== 'object') return
+    for (const field of ['chunk', 'message', 'error']) {
+      if (typeof payload[field] !== 'string') continue
+      const result = maskKeys(payload[field])
+      if (result.count === 0) continue
+      payload[field] = result.text
+      maskedTotal += result.count
+    }
+  }
+
   function accept(parsed) {
     countUnreadable(parsed)
+    maskFrame(parsed)
     if (typeof parsed.id === 'number' && parsed.id > nextId) {
       nextId = parsed.id
     } else {
@@ -711,6 +727,7 @@ export function createBridge(options = {}) {
         surface,
         features: surfaceFeatures(surface),
         unparsed: { ...unreadable.counts(), since: unparsedSince },
+        masked: { total: maskedTotal, since: maskedSince },
       })
       return
     }
