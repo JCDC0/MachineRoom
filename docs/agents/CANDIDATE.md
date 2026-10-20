@@ -13,6 +13,8 @@ The script reads the lane's `worktree` from `docs/agents/lanes.json`, refuses a 
 
 It never starts Paperclip, never writes to the main checkout and never switches a branch.
 
+The build and the candidate room run the lane's code before anyone merged it, so they get your environment without the variables whose names end in `_KEY`, `_TOKEN`, `_SECRET` or `_PASSWORD` or hold `API_KEY`. The candidate's decide route therefore answers that no key is set.
+
 ## Options
 
 - `--port <n>` use another port when 5175 is taken. The script says `Port 5175 is in use. Pass --port.` when it is.

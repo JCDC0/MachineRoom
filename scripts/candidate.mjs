@@ -11,6 +11,7 @@ export const BUILD_TIMEOUT_MS = 5 * 60 * 1000
 const BAD_BUILD_COMMAND = 'MACHINEROOM_BUILD_COMMAND needs a JSON array of the command and its arguments.'
 const BAD_PORT = 'The port must be a whole number from 1 to 65535.'
 const GIT_TIMEOUT_MS = 10 * 1000
+const SECRET_NAME = /(^|_)(KEY|TOKEN|SECRET|PASSWORD)$|API_?KEY/i
 
 const USAGE = [
   'Usage: npm run candidate -- LANE [options]',
@@ -74,6 +75,14 @@ export function parseCandidateArgs(argv) {
   options.port = checkPort(options.port)
   if (!options.help && !options.lane) throw new Error('Give a lane to try, for example npm run candidate -- opencode.')
   return options
+}
+
+export function laneEnv(env = process.env) {
+  const kept = {}
+  for (const [name, value] of Object.entries(env)) {
+    if (!SECRET_NAME.test(name)) kept[name] = value
+  }
+  return kept
 }
 
 export function candidatePlan({ lanes, lane, port } = {}) {
@@ -288,13 +297,14 @@ export async function runCandidate({
   const state = await worktreeState(plan.worktree, env)
   if (state.dirty) throw new Error('The lane has uncommitted changes. Commit them first.')
   const build = buildCommand(env)
-  const built = await runBuild({ command: build.command, cwd: plan.worktree, env, shell: build.shell })
+  const childEnv = laneEnv(env)
+  const built = await runBuild({ command: build.command, cwd: plan.worktree, env: childEnv, shell: build.shell })
   if (!built.ok) {
     error(built.timedOut ? 'The build ran past 5 minutes.' : 'The build failed.')
     for (const line of built.lines) error(line)
     return 1
   }
-  const child = startCandidate({ plan, options, env, stdio })
+  const child = startCandidate({ plan, options, env: childEnv, stdio })
   if (onChild) onChild(child)
   log(candidateLine(plan, state))
   const stop = () => {
