@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ancestors, makeTree, relativeTo, resolveKnown } from '../src/model/paths.js'
+import { ancestors, makeTree, relativeTo, resolveKnown, visibleText } from '../src/model/paths.js'
 
 describe('relativeTo', () => {
   it('strips an absolute Windows path down to the project', () => {
@@ -86,5 +86,41 @@ describe('makeTree', () => {
     const tree = makeTree({ root: 'demo', files: ['b/x.js', 'a/y/z.js'], created: [] })
     expect(tree.dirs).toEqual(['', 'a', 'a/y', 'b'])
     expect(tree.files).toEqual(['a/y/z.js', 'b/x.js'])
+  })
+})
+
+describe('visibleText', () => {
+  const mark = (value) => `[U+${value.toString(16).toUpperCase().padStart(4, '0')}]`
+  const bidi = [0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]
+
+  it('marks each bidi control', () => {
+    for (const value of bidi) {
+      expect(visibleText(`a${String.fromCharCode(value)}b`)).toBe(`a${mark(value)}b`)
+    }
+  })
+
+  it('marks each C0 control except tab', () => {
+    for (let value = 0; value < 0x20; value += 1) {
+      if (value === 0x09) continue
+      expect(visibleText(`x${String.fromCharCode(value)}y`)).toBe(`x${mark(value)}y`)
+    }
+  })
+
+  it('keeps a tab', () => {
+    expect(visibleText('src/\tmath.js')).toBe('src/\tmath.js')
+  })
+
+  it('keeps plain and non-Latin text', () => {
+    expect(visibleText('src/model/paths.js')).toBe('src/model/paths.js')
+    expect(visibleText('données/日本語/Ω')).toBe('données/日本語/Ω')
+  })
+
+  it('keeps characters that are not listed', () => {
+    expect(visibleText('a\u200Bb\u007F')).toBe('a\u200Bb\u007F')
+  })
+
+  it('marks a mixed line and keeps the rest', () => {
+    const line = 'if (a\u202Eb)\u0007 {\n\treturn 1 }'
+    expect(visibleText(line)).toBe(`if (a${mark(0x202e)}b)${mark(0x0007)} {${mark(0x000a)}\treturn 1 }`)
   })
 })
