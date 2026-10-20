@@ -75,9 +75,12 @@ describe('readTree with git', () => {
       writeFileSync(join(dir, '.gitignore'), 'ignored/\n')
       mkdirSync(join(dir, 'ignored'))
       writeFileSync(join(dir, 'ignored', 'skip.txt'), 'x')
-      const stem = 'n'.repeat(130)
-      const count = 8200
-      for (let index = 0; index < count; index += 1) writeFileSync(join(dir, `${stem}${String(index).padStart(5, '0')}.txt`), '')
+      const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: dir, input: '', encoding: 'utf8' }).trim()
+      const count = 4000
+      const stem = `${'d'.repeat(120)}/${'n'.repeat(160)}`
+      const lines = []
+      for (let index = 0; index < count; index += 1) lines.push(`100644 ${blob}\t${stem}${String(index).padStart(5, '0')}.txt`)
+      execFileSync('git', ['update-index', '--index-info'], { cwd: dir, input: `${lines.join('\n')}\n` })
       const { files } = readTree(dir)
       expect(files).toHaveLength(count + 1)
       expect(files).toContain('.gitignore')
@@ -85,5 +88,5 @@ describe('readTree with git', () => {
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
-  }, 60000)
+  }, 30000)
 })
