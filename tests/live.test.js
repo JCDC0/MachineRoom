@@ -75,6 +75,17 @@ describe('agent discovery', () => {
     expect(calls).toEqual(['/paperclip/api/companies', '/paperclip/api/companies/c1/agents'])
   })
 
+  it('keeps a company id from the link inside its own path segment', async () => {
+    const calls = []
+    const fetchImpl = async (url) => {
+      calls.push(url)
+      return { ok: true, json: async () => raw }
+    }
+    await discover({ base: '/paperclip', companyId: '../../api/health?x=', fetchImpl })
+    expect(calls).toEqual(['/paperclip/api/companies/..%2F..%2Fapi%2Fhealth%3Fx%3D/agents'])
+    expect(socketUrl('http://127.0.0.1:3100', 'a/../b#c')).toBe('ws://127.0.0.1:3100/api/companies/a%2F..%2Fb%23c/events/ws')
+  })
+
   it('fails with a clear message when a request fails', async () => {
     const fetchImpl = async () => ({ ok: false, status: 502 })
     await expect(discover({ base: '/p', companyId: 'x', fetchImpl })).rejects.toThrow('answered 502')

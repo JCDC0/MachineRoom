@@ -59,7 +59,7 @@ export async function discover({ base, companyId, root, fetchImpl = fetch }) {
     if (companies.length === 0) throw new Error('Paperclip has no company yet')
     id = companies[0].id
   }
-  const raw = await getJson(fetchImpl, `${base}/api/companies/${id}/agents`)
+  const raw = await getJson(fetchImpl, `${base}/api/companies/${encodeURIComponent(id)}/agents`)
   return { companyId: id, agents: toAgents(raw), rootName: rootNameOf(raw, root) }
 }
 
@@ -70,7 +70,7 @@ export async function loadTree(url, fetchImpl = fetch) {
 
 export function socketUrl(base, companyId) {
   const origin = base.startsWith('http') ? base : `${location.origin}${base}`
-  return `${origin.replace(/^http/, 'ws')}/api/companies/${companyId}/events/ws`
+  return `${origin.replace(/^http/, 'ws')}/api/companies/${encodeURIComponent(companyId)}/events/ws`
 }
 
 export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, setTimer = setTimeout, clearTimer = clearTimeout }) {
