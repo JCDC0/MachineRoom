@@ -1,7 +1,18 @@
-export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl = globalThis.EventSource } = {}) {
+export const STREAM_START = 1000
+export const STREAM_LIMIT = 15000
+
+export function createClient({
+  baseUrl = '',
+  fetchImpl = fetch,
+  EventSourceImpl = globalThis.EventSource,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+} = {}) {
   const base = String(baseUrl ?? '').replace(/\/+$/, '')
   const listeners = new Set()
   let source = null
+  let timer = null
+  let delay = STREAM_START
 
   async function request(method, path, body) {
     let response
@@ -43,14 +54,37 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
     }
   }
 
+  function reopenStream() {
+    timer = null
+    if (listeners.size === 0) return
+    ensureStream()
+  }
+
   function ensureStream() {
-    if (source || typeof EventSourceImpl !== 'function') return
-    source = new EventSourceImpl(`${base}/events`)
-    source.addEventListener('change', handleChange)
+    if (source || timer !== null || typeof EventSourceImpl !== 'function') return
+    const current = new EventSourceImpl(`${base}/events`)
+    source = current
+    current.addEventListener('change', handleChange)
+    current.addEventListener('open', () => {
+      if (source !== current) return
+      delay = STREAM_START
+    })
+    current.addEventListener('error', () => {
+      if (source !== current || current.readyState !== 2) return
+      source = null
+      if (listeners.size === 0 || timer !== null) return
+      timer = setTimer(reopenStream, delay)
+      delay = Math.min(delay * 2, STREAM_LIMIT)
+    })
   }
 
   function closeStreamIfIdle() {
-    if (listeners.size > 0 || !source) return
+    if (listeners.size > 0) return
+    if (timer !== null) {
+      clearTimer(timer)
+      timer = null
+    }
+    if (!source) return
     const current = source
     source = null
     try {
