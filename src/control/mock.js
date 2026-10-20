@@ -1,3 +1,4 @@
+import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
 import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary } from './agents.js'
@@ -19,6 +20,7 @@ export const CLIENT_METHODS = [
   'briefPrompt',
   'runs',
   'runStats',
+  'outcomes',
   'startRun',
   'reviews',
   'reviewDiff',
@@ -138,6 +140,19 @@ const SAMPLE_REVIEWS = {
     lastRun: null,
   },
 }
+
+const SAMPLE_OUTCOME_RUNS = [
+  { lane: 'opencode', model: 'opencode-go/mimo-v2.6-pro', costUsd: 0.42, branch: 'feat/w3a-read-the-lane' },
+  { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', costUsd: 0.18, branch: 'feat/p5-recover-cut-tool-lines' },
+  { lane: 'agy', model: 'Gemini 3.8 Flash (High)', costUsd: 0.31, branch: 'feat/t7-run-a-brief' },
+  { lane: 'opencode', model: 'opencode-go/mimo-v2.6-pro', costUsd: 0.22, branch: 'feat/c3e-hud-polish' },
+]
+
+const SAMPLE_OUTCOMES = [
+  { branch: 'feat/w3a-read-the-lane', outcome: 'merged', grade: 'A-', fixes: 2 },
+  { branch: 'feat/p5-recover-cut-tool-lines', outcome: 'merged', grade: 'B+', fixes: 1 },
+  { branch: 'feat/t7-run-a-brief', outcome: 'rejected', grade: 'C', fixes: 0 },
+]
 
 function overridesOf(draft) {
   const overrides = {}
@@ -390,6 +405,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (since && dayStart(since) === null) throw new Error(SINCE_PROBLEM)
         return laneStats(runsState.recent, since ? { since } : {})
       }),
+
+    outcomes: () => call('outcomes', () => outcomeTable(SAMPLE_OUTCOME_RUNS, SAMPLE_OUTCOMES)),
 
     startRun: (lane, briefs) =>
       call('startRun', () => {

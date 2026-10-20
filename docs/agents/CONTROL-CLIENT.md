@@ -25,6 +25,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
 | `runs()` | `{ running, recent }`, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
 | `runStats({ since? })` | `RunStats`, runs, minutes and cost per lane and model over every run record, or from `since` (a `YYYY-MM-DD` day, UTC) on; a bad day is refused with `--since needs a date like 2026-10-19.` (T13b; the mock sums its own finished fake runs) |
+| `outcomes()` | `OutcomeRow[]`, one row per lane and model with its merged, rejected and pending runs, merge rate, average review fixes and cost per merge (C6a; the newest outcome for a branch wins, and the mock serves rows built from sample runs) |
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
@@ -76,6 +77,11 @@ MergeResult  { ok: true, lane, branch, head, commit }
              The merge stopped on a conflict. Nothing changed.
 RunStats     { rows: RunStatsRow[] (sorted by lane, then model), total: RunStatsRow (lane and model are "all") }
 RunStatsRow  { lane, model ("model unknown" when a record has none), runs, finished, killed, failed, minutesTotal, minutesMedian, costTotal (USD), costRuns }
+OutcomeRow   { lane, model ("model unknown" when a record has none), runs, merged, rejected, pending, mergeRate: number|null,
+               averageFixes: number|null, costUsd (USD), costPerMerge: number|null }
+             pending counts runs whose branch has no outcome, including runs with no branch. mergeRate is merged over
+             merged plus rejected; averageFixes is over the merged runs; costPerMerge is costUsd over merged. Each is
+             null when there is nothing to divide by.
 BackupStatus { enabled: boolean, status: ok | warning | null, latestAt: string|null, ageHours: number|null, warnings: string[], checkedAt }
              warnings are Paperclip's codes: database_backup_missing | database_backup_stale | database_backup_last_failure | database_backup_check_failed.
              enabled is false and the rest null when Paperclip has automatic backups off.

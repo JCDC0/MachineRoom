@@ -107,6 +107,11 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
       return request('GET', `/api/control/runs/stats${query}`)
     },
 
+    outcomes: async () => {
+      const data = await request('GET', '/api/control/runs/outcomes')
+      return Array.isArray(data) ? data : data?.rows ?? []
+    },
+
     startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs }),
 
     reviews: async () => {
