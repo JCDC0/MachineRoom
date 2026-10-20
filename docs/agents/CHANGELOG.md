@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Paperclip route list and doctor (task U1): `server/surface.js` lists every Paperclip route the bridge calls, with the answer fields it reads and the request fields it sends, and `npm run doctor` fetches `/api/openapi.json` from a running Paperclip and prints a plain sentence for each route, method or field the spec does not list.
 - `Stage.jsx` passes `openTerminals`, `onToggleTerminal(key)` and `onShowTerminals(open)` to the HUD and keeps the open chips in step with the `T` key and the assistant. New briefs V5b (terminal buttons in the HUD, AGY) and V6 (folders close after the work ends, Hermes).
 - OpenCode's lane runs DeepSeek V4.1 Flash 1017 at `max` (`opencode-go/deepseek-v4.1-flash#max`), the owner's choice on 2026-10-20, now that OpenCode serves the 1017 version. OpenCode accepts `max` and `high` for this model and refuses `xhigh`. Hermes keeps the same model at `xhigh`.
 - Late join replay (task B6): `/events` sends the kept history to a client that connects without `Last-Event-ID` when it asks with `?history=1`, and the bridge client asks on its first connect, while a reconnect that sends `Last-Event-ID` still resumes after that id.
