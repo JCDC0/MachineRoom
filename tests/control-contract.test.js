@@ -1244,3 +1244,14 @@ describe('mock run confirm', () => {
     expect(entry.lane).toBe('hermes')
   })
 })
+
+describe('the real client on a merge conflict', () => {
+  it('keeps the conflicting files on the error', async () => {
+    const body = { error: 'The merge stopped on a conflict. Nothing changed.', files: ['notes.txt', 7] }
+    const fetchImpl = async () => new Response(JSON.stringify(body), { status: 409, headers: { 'content-type': 'application/json' } })
+    const client = createClient({ baseUrl: 'http://127.0.0.1:1', fetchImpl, EventSourceImpl: null })
+    const error = await client.mergeReview('hermes', { head: 'a'.repeat(40), message: 'Merge it' }).catch((caught) => caught)
+    expect(error.message).toBe('The merge stopped on a conflict. Nothing changed.')
+    expect(error.files).toEqual(['notes.txt'])
+  })
+})

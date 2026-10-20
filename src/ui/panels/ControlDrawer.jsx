@@ -4,6 +4,7 @@ import TasksPanel from './TasksPanel.jsx'
 import ApprovalsPanel from './ApprovalsPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
 import AgentBuilder from './AgentBuilder.jsx'
+import ReviewsPanel from './ReviewsPanel.jsx'
 import { subscribeToNotices } from './notices.js'
 
 const BASE_TABS = [
@@ -13,12 +14,21 @@ const BASE_TABS = [
   { id: 'meters', label: 'Meters' },
 ]
 
-export default function ControlDrawer({ client, open, onClose, controlTarget = null }) {
+export default function ControlDrawer({
+  client,
+  open,
+  onClose,
+  controlTarget = null,
+  activeTab: initialTab = null,
+}) {
   const hasAgentsTab = typeof client?.hireAgent === 'function'
-  const tabs = useMemo(
-    () => (hasAgentsTab ? [...BASE_TABS, { id: 'agents', label: 'Agents' }] : BASE_TABS),
-    [hasAgentsTab]
-  )
+  const hasReviewsTab = typeof client?.reviews === 'function'
+  const tabs = useMemo(() => {
+    const next = [...BASE_TABS]
+    if (hasAgentsTab) next.push({ id: 'agents', label: 'Agents' })
+    if (hasReviewsTab) next.push({ id: 'reviews', label: 'Reviews' })
+    return next
+  }, [hasAgentsTab, hasReviewsTab])
 
   const [internalTarget, setInternalTarget] = useState(null)
   const internalNonceRef = useRef(0)
@@ -30,6 +40,7 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
     const hasId = typeof rawId === 'string' ? rawId.trim().length > 0 : rawId != null && String(rawId).trim().length > 0
     if (hasId) return 'tasks'
     if (controlTarget?.tab && tabs.some((t) => t.id === controlTarget.tab)) return controlTarget.tab
+    if (initialTab && tabs.some((t) => t.id === initialTab)) return initialTab
     return 'dispatch'
   })
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0)
@@ -225,6 +236,9 @@ export default function ControlDrawer({ client, open, onClose, controlTarget = n
             client={client}
             onSelectControlTarget={handleSelectControlTarget}
           />
+        )}
+        {activeTab === 'reviews' && hasReviewsTab && (
+          <ReviewsPanel client={client} />
         )}
       </div>
     </aside>

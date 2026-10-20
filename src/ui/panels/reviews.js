@@ -1,0 +1,140 @@
+export function canMerge(review) {
+  if (!review || typeof review !== 'object' || review.error) return false
+  if (review.dirty) return false
+  return typeof review.ahead === 'number' && Number.isFinite(review.ahead) && review.ahead > 0
+}
+
+export function defaultMergeMessage(review) {
+  if (!review || typeof review !== 'object') return ''
+  const lane = typeof review.lane === 'string' ? review.lane.trim() : ''
+  const branch = typeof review.branch === 'string' ? review.branch.trim() : ''
+  if (!lane || !branch) return ''
+  return `Merge ${lane}'s ${branch}`
+}
+
+function formatRunCost(costUsd) {
+  if (typeof costUsd !== 'number' || !Number.isFinite(costUsd)) {
+    return 'cost unknown'
+  }
+  return `$${costUsd.toFixed(2)}`
+}
+
+export function formatLastRun(lastRun) {
+  if (!lastRun || typeof lastRun !== 'object') {
+    return 'no run yet'
+  }
+  const minutes = Number.isFinite(lastRun.minutes) ? `${lastRun.minutes} min` : '0 min'
+  const cost = formatRunCost(lastRun.costUsd)
+  const exit = lastRun.exitCode != null ? `exit ${lastRun.exitCode}` : 'exit unknown'
+  return `${minutes}, ${cost}, ${exit}`
+}
+
+export function reviewRow(review) {
+  if (!review || typeof review !== 'object') {
+    return {
+      lane: '',
+      branch: '',
+      head: '',
+      headShort: '',
+      ahead: 0,
+      aheadText: '0 commits ahead',
+      files: 0,
+      added: 0,
+      deleted: 0,
+      filesText: '0 files +0 -0',
+      diffCountsText: '+0 -0',
+      dirty: false,
+      dirtyText: null,
+      lastRunText: 'no run yet',
+      error: null,
+      canMerge: false,
+    }
+  }
+
+  const lane = typeof review.lane === 'string' ? review.lane : ''
+  const branch = typeof review.branch === 'string' ? review.branch : ''
+  const head = typeof review.head === 'string' ? review.head : ''
+  const headShort = head.slice(0, 7)
+
+  if (review.error) {
+    return {
+      lane,
+      branch,
+      head,
+      headShort,
+      ahead: 0,
+      aheadText: null,
+      files: 0,
+      added: 0,
+      deleted: 0,
+      filesText: null,
+      diffCountsText: null,
+      dirty: false,
+      dirtyText: null,
+      lastRunText: null,
+      error: String(review.error),
+      canMerge: false,
+    }
+  }
+
+  const ahead = typeof review.ahead === 'number' && Number.isFinite(review.ahead) ? review.ahead : 0
+  const files = typeof review.files === 'number' && Number.isFinite(review.files) ? review.files : 0
+  const added = typeof review.added === 'number' && Number.isFinite(review.added) ? review.added : 0
+  const deleted = typeof review.deleted === 'number' && Number.isFinite(review.deleted) ? review.deleted : 0
+  const dirty = Boolean(review.dirty)
+  const diffCountsText = `+${added} -${deleted}`
+  const filesWord = files === 1 ? 'file' : 'files'
+
+  return {
+    lane,
+    branch,
+    head,
+    headShort,
+    ahead,
+    aheadText: `${ahead} ${ahead === 1 ? 'commit' : 'commits'} ahead`,
+    files,
+    added,
+    deleted,
+    filesText: `${files} ${filesWord} ${diffCountsText}`,
+    diffCountsText,
+    dirty,
+    dirtyText: dirty ? 'uncommitted changes' : null,
+    lastRunText: formatLastRun(review.lastRun),
+    error: null,
+    canMerge: canMerge(review),
+  }
+}
+
+function classifyPatchLine(line) {
+  if (line.startsWith('@@')) return 'hunk'
+  if (
+    line.startsWith('diff --git ') ||
+    line.startsWith('index ') ||
+    line.startsWith('--- ') ||
+    line.startsWith('+++ ') ||
+    line === '---' ||
+    line === '+++' ||
+    line.startsWith('new file mode ') ||
+    line.startsWith('deleted file mode ') ||
+    line.startsWith('similarity index ') ||
+    line.startsWith('rename from ') ||
+    line.startsWith('rename to ')
+  ) {
+    return 'file'
+  }
+  if (line.startsWith('+')) return 'added'
+  if (line.startsWith('-')) return 'removed'
+  return 'context'
+}
+
+export function patchLines(patch) {
+  if (typeof patch !== 'string' || patch.length === 0) return []
+  const raw = patch.split(/\r?\n/)
+  if (raw.length > 0 && raw[raw.length - 1] === '' && /\r?\n$/.test(patch)) {
+    raw.pop()
+  }
+  return raw.map((text) => ({
+    kind: classifyPatchLine(text),
+    text,
+  }))
+}

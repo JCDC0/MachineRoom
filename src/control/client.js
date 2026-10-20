@@ -22,7 +22,9 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
     }
     if (!response.ok) {
       const message = typeof json?.error === 'string' && json.error.trim() ? json.error : 'The request failed.'
-      throw new Error(message)
+      const error = new Error(message)
+      if (Array.isArray(json?.files)) error.files = json.files.filter((file) => typeof file === 'string')
+      throw error
     }
     return json
   }
