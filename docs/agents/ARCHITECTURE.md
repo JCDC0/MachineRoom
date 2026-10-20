@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.69. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.70. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -197,4 +197,4 @@ Do not rename these classes without changing both sides.
 
 ## Open work
 
-See `docs/agents/PLAN.md` for the order of work and `docs/agents/TASKS.md` for the briefs. The plan for the planner, orchestrator, budgets and routing is in `docs/agents/CONTROL-PLANE.md`.
+See `docs/agents/PLAN.md` for the order of work and `docs/agents/TASKS.md` for the briefs. The plan for the planner, orchestrator, budgets and routing is in `docs/agents/CONTROL-PLANE.md`. What Paperclip's code says about database backups (the one backup route, the age in `/api/health`, and restore by hand) is in `docs/agents/BACKUPS.md`.
