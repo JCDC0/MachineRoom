@@ -1,15 +1,15 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { findPackProblems, isForbidden, readPackReport, runPack, walkImports } from '../scripts/pack-check.mjs'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const PACK_BUDGET_MS = 20000
 
 function makeTree(files) {
-  const base = mkdtempSync(join(tmpdir(), 'machine-room-pack-'))
+  const base = makeTempDir('machine-room-pack-')
   for (const [path, text] of Object.entries(files)) {
     const full = join(base, ...path.split('/'))
     mkdirSync(dirname(full), { recursive: true })

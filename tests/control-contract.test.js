@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -8,6 +8,7 @@ import { WebSocketServer } from 'ws'
 import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
 import { CLIENT_METHODS, createMockClient } from '../src/control/mock.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const BASE_TIME = Date.parse('2026-10-18T00:00:00Z')
 const iso = (minutesAgo) => new Date(BASE_TIME - minutesAgo * 60000).toISOString()
@@ -547,7 +548,7 @@ let sharedLaneGit = null
 
 function laneGit() {
   if (sharedLaneGit) return sharedLaneGit
-  const base = mkdtempSync(join(REAL_TMP, 'mr-contract-git-'))
+  const base = makeTempDir('mr-contract-git-')
   const repo = join(base, 'repo')
   const worktree = join(base, 'lane-worktree')
   mkdirSync(repo, { recursive: true })
@@ -569,7 +570,7 @@ afterAll(() => {
 })
 
 function makeSampleProjectDir(lanes = SAMPLE_LANES_JSON) {
-  const dir = mkdtempSync(join(tmpdir(), 'mr-contract-briefs-'))
+  const dir = makeTempDir('mr-contract-briefs-')
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   const agentsDir = join(dir, 'docs', 'agents')
   mkdirSync(agentsDir, { recursive: true })
@@ -948,14 +949,14 @@ runContractSuite('mock', async () => ({
 runContractSuite('real client over bridge and fake Paperclip', async () => {
   const fake = await startFakeControlPaperclip('comp-1')
   cleanups.push(() => fake.close())
-  const runsTemp = mkdtempSync(join(tmpdir(), 'mr-contract-runs-'))
+  const runsTemp = makeTempDir('mr-contract-runs-')
   cleanups.push(() => rmSync(runsTemp, { recursive: true, force: true }))
   const previousTemp = process.env.TEMP
   process.env.TEMP = runsTemp
   cleanups.push(() => {
     process.env.TEMP = previousTemp
   })
-  const runnerDir = mkdtempSync(join(tmpdir(), 'mr-contract-runner-'))
+  const runnerDir = makeTempDir('mr-contract-runner-')
   cleanups.push(() => rmSync(runnerDir, { recursive: true, force: true }))
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
   writeFileSync(runnerPath, TINY_RUNNER)

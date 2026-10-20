@@ -1,11 +1,11 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
 import { writeRecording } from '../scripts/recording-files.mjs'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const scenarioTree = JSON.parse(readFileSync(new URL('../public/fixtures/scenario-a-tree.json', import.meta.url), 'utf8'))
@@ -179,7 +179,7 @@ describe('agentsFile and treeFile', () => {
 const temporary = []
 
 function tempFolder() {
-  const dir = mkdtempSync(join(tmpdir(), 'mr-recording-'))
+  const dir = makeTempDir('mr-recording-')
   temporary.push(dir)
   return dir
 }

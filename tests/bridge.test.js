@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
-import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
@@ -11,6 +10,7 @@ import { extractReplyText } from '../server/assistant.js'
 import { FEATURES, PAPERCLIP_SURFACE } from '../server/surface.js'
 import { choice } from '../src/decider/wire.js'
 import { startFakeDecisions } from './fakeDecisions.js'
+import { makeTempDir as makeTempRoot } from './helpers/tempRoot.js'
 
 function fieldsSchema(fields = []) {
   const root = { type: 'object', properties: {} }
@@ -312,7 +312,7 @@ afterEach(async () => {
 })
 
 function makeTempDir() {
-  const dir = mkdtempSync(join(tmpdir(), 'mr-bridge-test-'))
+  const dir = makeTempRoot('mr-bridge-test-')
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   return dir
 }

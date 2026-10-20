@@ -1,10 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { baselines, formatReport, planEval, runEval } from '../src/decider/eval.js'
 import { main, parseArgs, safeUrl, selectProbes } from '../scripts/decide-eval.mjs'
 import { oracle, startFakeDecisions, truthOf } from './fakeDecisions.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 import { assistantProbes } from './probes/assistant.js'
 import { context } from './probes/context.js'
 import { routingProbes } from './probes/routing.js'
@@ -271,7 +271,7 @@ describe('command line', () => {
   })
 
   it('runs the comparison, prints the report and writes json without the key', async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'decide-eval-'))
+    const dir = makeTempDir('decide-eval-')
     try {
       const seenByState = new Map()
       const server = await serve((request, count) => byModel(request, count, seenByState))
