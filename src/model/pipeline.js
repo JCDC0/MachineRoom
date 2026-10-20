@@ -17,6 +17,7 @@ export function makeContext(tree) {
 }
 
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
+export const SEEN_LIMIT = 20000
 
 export function createPipeline({ agents, tree }) {
   const ctx = makeContext({ ...tree, files: [...tree.files], dirs: [...(tree.dirs ?? [])] })
@@ -26,6 +27,13 @@ export function createPipeline({ agents, tree }) {
   const seen = new Set()
   let order = 0
   let lastTime = 0
+
+  function once(key) {
+    if (seen.has(key)) return false
+    seen.add(key)
+    if (seen.size > SEEN_LIMIT) seen.delete(seen.values().next().value)
+    return true
+  }
 
   function finalise(items) {
     for (const item of items) if (!Number.isFinite(item.time)) item.time = lastTime
@@ -40,9 +48,7 @@ export function createPipeline({ agents, tree }) {
   function push(frame) {
     if (!frame || typeof frame !== 'object') return []
     if (frame.id !== undefined && frame.id !== null) {
-      const frameKey = `frame:${frame.id}`
-      if (seen.has(frameKey)) return []
-      seen.add(frameKey)
+      if (!once(`frame:${frame.id}`)) return []
     }
 
     const payload = frame.payload
@@ -60,9 +66,7 @@ export function createPipeline({ agents, tree }) {
       lastRunTime.set(runId, time)
       emit({ time, type: 'run.queued' })
     } else if (frame.type === 'heartbeat.run.status') {
-      const key = `${runId}:${payload.status}`
-      if (seen.has(key)) return []
-      seen.add(key)
+      if (!once(`${runId}:${payload.status}`)) return []
       lastRunTime.set(runId, time)
       if (payload.status === 'running') {
         emit({ time, type: 'run.start' })
@@ -72,14 +76,13 @@ export function createPipeline({ agents, tree }) {
           entry.parser.flush(time).forEach((activity) => emit(activity))
           parsers.delete(runId)
         }
+        lastRunTime.delete(runId)
         const ok = payload.status === 'succeeded'
         emit({ time, type: 'run.end', ok, error: ok ? null : shorten(payload.error ?? payload.errorCode ?? payload.status, 120) })
       }
     } else if (frame.type === 'heartbeat.run.log' && payload.stream === 'stdout') {
       if (payload.seq !== undefined && payload.seq !== null) {
-        const seqKey = `${runId}:log:${payload.seq}`
-        if (seen.has(seqKey)) return []
-        seen.add(seqKey)
+        if (!once(`${runId}:log:${payload.seq}`)) return []
       }
       let entry = parsers.get(runId)
       if (!entry) {
@@ -90,9 +93,7 @@ export function createPipeline({ agents, tree }) {
       lastRunTime.set(runId, chunkTime)
       entry.parser.push(payload.chunk, chunkTime).forEach((activity) => emit(activity))
     } else if (frame.type === 'heartbeat.run.event' && payload.level === 'error') {
-      const key = `${runId}:error:${payload.seq}`
-      if (seen.has(key)) return []
-      seen.add(key)
+      if (!once(`${runId}:error:${payload.seq}`)) return []
       lastRunTime.set(runId, time)
       emit({ time, type: 'error', text: shorten(payload.message ?? 'error', 120) })
     }
@@ -128,7 +129,7 @@ export function createPipeline({ agents, tree }) {
     }
   }
 
-  return { push, flush, learn, context: ctx }
+  return { push, flush, learn, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size }) }
 }
 
 export function buildActivities(frames, { agents, tree }) {
