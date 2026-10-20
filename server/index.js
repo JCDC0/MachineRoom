@@ -3,6 +3,7 @@ import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
@@ -35,6 +36,8 @@ const PARSER_BY_ADAPTER = {
   hermes_local: 'hermes',
   opencode_local: 'opencode',
 }
+const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
+const AGENT_FETCH_EVERY_MS = 30000
 
 export function slugify(value) {
   return (
@@ -243,6 +246,10 @@ export function createBridge(options = {}) {
   const logs = new Map()
   const waiting = []
   let resolving = false
+  const unreadable = createUnreadableCounter()
+  const unparsedSince = new Date().toISOString()
+  let parserByAgentId = new Map()
+  let agentFetchAt = 0
 
   function writeSseFrame(res, entry) {
     res.write(`id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
@@ -287,7 +294,52 @@ export function createBridge(options = {}) {
     } catch {}
   }
 
+  function agentListOf(raw) {
+    return Array.isArray(raw) ? raw : Array.isArray(raw?.agents) ? raw.agents : Array.isArray(raw?.data) ? raw.data : []
+  }
+
+  function rememberAgents(list) {
+    const taken = new Set()
+    const agents = list.map((entry) => mapAgent(entry, taken))
+    const parsers = new Map()
+    for (const agent of agents) {
+      if (agent.id !== '') parsers.set(String(agent.id), agent.parser)
+    }
+    parserByAgentId = parsers
+    return agents
+  }
+
+  function loadAgents() {
+    fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`)
+      .then(async (upstream) => {
+        if (!upstream.ok) return
+        rememberAgents(agentListOf(await upstream.json()))
+      })
+      .catch(() => {})
+  }
+
+  function countUnreadable(parsed) {
+    const payload = parsed.payload
+    if (parsed.type === 'heartbeat.run.log' && payload?.stream === 'stdout') {
+      const agentId = String(payload.agentId ?? '')
+      if (!parserByAgentId.has(agentId)) {
+        const now = Date.now()
+        if (now - agentFetchAt >= AGENT_FETCH_EVERY_MS) {
+          agentFetchAt = now
+          loadAgents()
+        }
+        return
+      }
+      unreadable.push(parserByAgentId.get(agentId), payload.runId, payload.chunk)
+      return
+    }
+    if (parsed.type === 'heartbeat.run.status' && RUN_END_STATUSES.has(payload?.status)) {
+      unreadable.end(payload.runId)
+    }
+  }
+
   function accept(parsed) {
+    countUnreadable(parsed)
     if (typeof parsed.id === 'number' && parsed.id > nextId) {
       nextId = parsed.id
     } else {
@@ -486,6 +538,7 @@ export function createBridge(options = {}) {
       paperclipOpen = true
       reconnectDelay = reconnectMinMs
       checkSurface().catch(() => {})
+      loadAgents()
     })
     ws.addEventListener('message', (event) => {
       if (socket !== ws) return
@@ -539,7 +592,13 @@ export function createBridge(options = {}) {
     if (await assistant.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      sendJson(req, res, 200, { ok: true, paperclip: paperclipOpen, paperclipVersion, surface })
+      sendJson(req, res, 200, {
+        ok: true,
+        paperclip: paperclipOpen,
+        paperclipVersion,
+        surface,
+        unparsed: { ...unreadable.counts(), since: unparsedSince },
+      })
       return
     }
 
@@ -551,9 +610,7 @@ export function createBridge(options = {}) {
           return
         }
         const raw = await upstream.json()
-        const list = Array.isArray(raw) ? raw : Array.isArray(raw?.agents) ? raw.agents : Array.isArray(raw?.data) ? raw.data : []
-        const taken = new Set()
-        sendJson(req, res, 200, list.map((entry) => mapAgent(entry, taken)))
+        sendJson(req, res, 200, rememberAgents(agentListOf(raw)))
       } catch {
         sendJson(req, res, 502, { error: 'upstream unreachable' })
       }
@@ -617,6 +674,7 @@ export function createBridge(options = {}) {
     startWatcher()
     startSurfaceTimer()
     checkSurface().catch(() => {})
+    loadAgents()
     connectUpstream()
     return new Promise((resolveStart, rejectStart) => {
       server.once('error', rejectStart)
