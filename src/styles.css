@@ -1113,7 +1113,8 @@ summary:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   button,
-  .mr-term {
+  .mr-term,
+  .mr-callout {
     transition: none;
   }
 
@@ -1122,6 +1123,69 @@ summary:focus-visible,
     animation: none;
     opacity: 1;
   }
+}
+
+.mr-callout {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 110px;
+  max-width: 240px;
+  font-family: var(--mono);
+  font-size: 11px;
+  background-color: rgb(0 0 0 / 0.88);
+  background-image: var(--corner-ticks);
+  border: 1px solid rgb(255 255 255 / 0.35);
+  border-radius: 2px;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.7);
+  transition: border-color 200ms, box-shadow 200ms;
+}
+
+.mr-callout.is-working {
+  border-color: var(--yellow);
+}
+
+.mr-callout.is-error {
+  border-color: var(--red);
+  box-shadow: 0 0 16px rgb(255 42 42 / 0.45);
+}
+
+.mr-callout.is-done {
+  border-color: var(--green);
+  box-shadow: 0 0 16px rgb(42 255 128 / 0.42);
+}
+
+.mr-callout-title {
+  padding: 3px 8px;
+  background: var(--white);
+  color: var(--black);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-top-left-radius: 1px;
+  border-top-right-radius: 1px;
+}
+
+.mr-callout.is-error .mr-callout-title {
+  background: var(--red);
+  color: var(--white);
+}
+
+.mr-callout-cmd {
+  padding: 4px 8px;
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .notice {
@@ -3629,6 +3693,31 @@ summary:focus-visible,
   border-color: var(--red);
   background: var(--scanlines-red), var(--corner-ticks), rgb(0 0 0 / 0.88);
   box-shadow: 0 0 24px rgb(255 42 42 / 0.5);
+}
+
+.mr-card-band {
+  display: none;
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 4;
+  padding: 6px 12px;
+  background: var(--red);
+  color: var(--white);
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+  box-shadow: 0 0 16px rgb(255 42 42 / 0.6);
+  pointer-events: none;
+}
+
+.mr-card-band.is-failed {
+  display: block;
 }
 
 .mr-card-backs {

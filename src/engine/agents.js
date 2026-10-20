@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { HUB_CENTER, PARK_LIFT, slotPoint } from './hub.js'
 import { folderRoute } from './route.js'
 import { isOrchestrator, shapeGeometry, shapesFor } from './shapes.js'
@@ -15,49 +16,32 @@ const TRAVEL_SPEED = 3400
 const ARRIVE = 170
 const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
-const TAG_W = 512
-const TAG_H = 64
-const TAG_LIMIT = 34
 const AGENT_FRONT = 220
 
 const heading = new THREE.Vector3()
 const chipNear = new THREE.Vector3()
 const chipFar = new THREE.Vector3()
 const traceEnd = new THREE.Vector3()
+const calloutPos = new THREE.Vector3()
+const camUp = new THREE.Vector3()
+const rotMatrix = new THREE.Matrix4()
 
-function makeTag() {
-  const canvas = document.createElement('canvas')
-  canvas.width = TAG_W
-  canvas.height = TAG_H
-  const texture = new THREE.CanvasTexture(canvas)
-  const sprite = new THREE.Sprite(
-    new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: false, opacity: 0 })
-  )
-  sprite.scale.set(TAG_W * 0.8, TAG_H * 0.8, 1)
-  sprite.position.set(0, 200, 0)
-  sprite.renderOrder = 9
-  return { sprite, canvas, texture, text: '', color: '' }
-}
+function makeCallout(agentName) {
+  const element = document.createElement('div')
+  element.className = 'mr-callout'
 
-function paintTag(tag, text, color) {
-  const shown = text.length > TAG_LIMIT ? `${text.slice(0, TAG_LIMIT - 1)}~` : text
-  const context = tag.canvas.getContext('2d')
-  context.clearRect(0, 0, TAG_W, TAG_H)
-  context.font = '28px "Space Mono", monospace'
-  context.textAlign = 'center'
-  context.textBaseline = 'middle'
-  const plate = Math.ceil(context.measureText(shown).width) + 24
-  context.fillStyle = 'rgba(0,0,0,0.78)'
-  context.fillRect((TAG_W - plate) / 2, 8, plate, TAG_H - 16)
-  context.strokeStyle = color
-  context.globalAlpha = 0.6
-  context.strokeRect((TAG_W - plate) / 2, 8, plate, TAG_H - 16)
-  context.globalAlpha = 1
-  context.fillStyle = color
-  context.fillText(shown, TAG_W / 2, TAG_H / 2 + 1)
-  tag.texture.needsUpdate = true
-  tag.text = text
-  tag.color = color
+  const title = document.createElement('div')
+  title.className = 'mr-callout-title'
+  title.textContent = agentName.toUpperCase()
+
+  const cmd = document.createElement('div')
+  cmd.className = 'mr-callout-cmd'
+
+  element.append(title, cmd)
+
+  const object = new CSS3DObject(element)
+  object.visible = false
+  return { element, title, cmd, object }
 }
 
 function lineBetween(material) {
@@ -87,7 +71,7 @@ function flatRing(radius, opacity, y) {
   return ring
 }
 
-export function createAgents(scene, roster) {
+export function createAgents(scene, roster, cssScene = null) {
   const views = new Map()
   const pickables = []
   const shapes = shapesFor(roster)
@@ -102,8 +86,7 @@ export function createAgents(scene, roster) {
     label.position.set(0, -150, 0)
     const picker = new THREE.Mesh(new THREE.SphereGeometry(170, 8, 8), new THREE.MeshBasicMaterial({ visible: false }))
     picker.userData.key = agent.key
-    const tag = makeTag()
-    group.add(shape, ...rings, label, picker, tag.sprite)
+    group.add(shape, ...rings, label, picker)
 
     const home = slotPoint(index, roster.length).add(new THREE.Vector3(0, PARK_LIFT, 0))
     group.position.copy(home)
@@ -113,7 +96,12 @@ export function createAgents(scene, roster) {
     const tether = lineBetween(lineMaterial(WHITE, 0.3))
     tether.visible = false
 
-    scene.add(group, link, trace, tether)
+    const callout = makeCallout(agent.name)
+    const calloutLine = lineBetween(lineMaterial(YELLOW, 0.6))
+    calloutLine.visible = false
+
+    scene.add(group, link, trace, tether, calloutLine)
+    cssScene?.add(callout.object)
     pickables.push(picker)
     views.set(agent.key, {
       key: agent.key,
@@ -124,7 +112,8 @@ export function createAgents(scene, roster) {
       shape,
       rings,
       label,
-      tag,
+      callout,
+      calloutLine,
       link,
       trace,
       tether,
@@ -144,7 +133,7 @@ export function createAgents(scene, roster) {
   })
 
   function setStatus(view, status, now) {
-    if (view.style !== status && status === 'done') view.doneAt = now
+    if (view.style !== status && (status === 'done' || status === 'error')) view.doneAt = now
     view.style = status
   }
 
@@ -203,6 +192,11 @@ export function createAgents(scene, roster) {
   }
 
   function update(state, delta, now, world, terminals) {
+    if (world.back && world.right) {
+      camUp.crossVectors(world.back, world.right).normalize()
+      rotMatrix.makeBasis(world.right, camUp, world.back)
+    }
+
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
       const status = entry?.status ?? 'idle'
@@ -234,10 +228,46 @@ export function createAgents(scene, roster) {
       view.shape.rotation.y += delta * style.spin
       view.shape.rotation.x += delta * style.spin * 0.4
 
-      const text = working ? entry.label : ''
-      const color = status === 'error' ? '#ff2a2a' : '#e5ff00'
-      if (text && (view.tag.text !== text || view.tag.color !== color)) paintTag(view.tag, text, color)
-      view.tag.sprite.material.opacity += ((text ? 1 : 0) - view.tag.sprite.material.opacity) * Math.min(1, delta * 8)
+      const lastLine = entry?.lines?.[entry.lines.length - 1]
+      const failedFresh = status === 'error' && now - view.doneAt < DONE_GLOW_MS
+      let calloutTone = null
+      let calloutText = ''
+      if (working) {
+        calloutTone = lastLine?.tone === 'error' ? 'error' : 'working'
+        calloutText = entry.label
+      } else if (failedFresh) {
+        calloutTone = 'error'
+        calloutText = entry?.error || 'FAILED'
+      } else if (fresh) {
+        calloutTone = 'done'
+        calloutText = 'FINISHED'
+      }
+
+      if (calloutTone) {
+        view.callout.object.visible = true
+        const calloutClass = `mr-callout is-${calloutTone}`
+        if (view.callout.element.className !== calloutClass) {
+          view.callout.element.className = calloutClass
+        }
+        if (view.callout.cmd.textContent !== calloutText) {
+          view.callout.cmd.textContent = calloutText
+        }
+
+        const calloutSide = -view.chipSide
+        calloutPos.copy(view.group.position)
+        calloutPos.addScaledVector(world.right, calloutSide * 140)
+        calloutPos.addScaledVector(camUp, 180)
+        view.callout.object.position.copy(calloutPos)
+        view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
+
+        setEnds(view.calloutLine, view.group.position, calloutPos)
+        const lineColor = calloutTone === 'error' ? RED : calloutTone === 'done' ? GREEN : YELLOW
+        view.calloutLine.material.color.setHex(lineColor)
+        view.calloutLine.visible = true
+      } else {
+        view.callout.object.visible = false
+        view.calloutLine.visible = false
+      }
 
       terminals.edgePoint(view.key, -view.chipSide, chipNear)
       setEnds(view.link, view.group.position, chipNear)
@@ -278,5 +308,15 @@ export function createAgents(scene, roster) {
     }
   }
 
-  return { views, pickables, update, snap, aimAt, hubCenter: HUB_CENTER }
+  function dispose() {
+    for (const view of views.values()) {
+      view.callout.object.removeFromParent()
+      view.callout.element.remove()
+      scene.remove(view.calloutLine)
+      view.calloutLine.geometry.dispose()
+      view.calloutLine.material.dispose()
+    }
+  }
+
+  return { views, pickables, update, snap, aimAt, hubCenter: HUB_CENTER, dispose }
 }

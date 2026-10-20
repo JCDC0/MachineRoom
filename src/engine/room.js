@@ -39,11 +39,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const space = createVoid(scene, texture)
   const hub = createHub(scene, agents.length)
   const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
-  const agentSet = createAgents(scene, roster)
+  const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster)
   const labels = createLabels(scene)
 
-  const strings = createStrings(scene)
+  const strings = createStrings(scene, { onPath: (path) => cards.onPath(path) })
   const cards = createCards(cssScene, { glScene: scene, rootName, onInspect: (path) => focusPath(path) })
   let linkKey = ''
   let fitted = null
@@ -334,6 +334,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       cancelAnimationFrame(frameId)
       observer.disconnect()
       rig.dispose()
+      agentSet.dispose()
       terminals.dispose()
       labels.dispose()
       strings.dispose()

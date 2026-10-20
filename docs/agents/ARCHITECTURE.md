@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.119. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.120. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -59,11 +59,11 @@ src/model/        pure logic, no DOM, fully tested
 src/engine/       three.js scene, no React
   layout.js         layoutCards: the folder cards in the view plane, no overlap, warm start (pure, tested); layoutTree: the older whole-tree 3D layout, kept for the collapse work
   route.js          the folders an agent passes between two folders (pure, tested)
-  strings.js        curved strings between folders (curvePoint is pure, tested)
+  strings.js        curved strings between folders, each with a strand of seeded points that turns yellow on a working agent's path (curvePoint and strandPoints are pure, tested)
   room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
   cards.js          folder cards from planFolderView, each a CSS3D element with a depth plane, glides and grows, rows for files (cardSize is pure, tested)
   labels.js         file name labels that rise and fade above a card when a file is read, written or fails
-  agents.js         agent shapes, movement, link line to the chip, dashed trace to the file
+  agents.js         agent shapes, movement, link line to the chip, dashed trace to the file, the CSS3D callout with the agent's command
   shapes.js         one distinct wireframe shape per agent, the orchestrator's own shape
   hub.js            the ring in the middle, agent slots, pulses
   void.js           the faint 3D lattice, coordinate labels and far dust
@@ -122,13 +122,14 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 - Card layout: `layoutCards` lays the cards out in the view plane of the overview camera. The root sits above the hub, top-level folders go left and right of it, and deeper folders form columns further out on their parent's side. Box relaxation keeps every card apart and clear of the hub. Deeper folders sit nearer the camera (the root 320 behind the hub, each level 260 nearer, at most 460 in front), so orbiting shows depth. A card that comes back takes its last place, and cards glide and grow to new places and sizes.
 - Clicks: a card's head pins the folder open (its tab turns yellow) or unpins it. A row shows the full path and counts and flies the camera to it; a folder row also pins that folder.
 - Depth: the WebGL canvas sits over the CSS3D layer with a clear background, and each card has an invisible plane that writes only depth. WebGL lines and shapes behind a card are hidden, and those in front of it draw over it.
-- Agents: each has its own wireframe shape (`shapes.js`: Claude a compound, Hermes a knot, OpenCode a stellated solid, agy a geodesic, the orchestrator an armillary with a second ring, spare shapes for more). A working agent travels folder by folder from the root, then stands on the hub side of the card, a little in front of it. Its chip sits between it and the card, and a dashed trace runs from the chip to the row of the file it touches: yellow while working, green for 5 seconds after a good run, red on a failure. A tag above the agent shows its current command.
+- Agents: each has its own wireframe shape (`shapes.js`: Claude a compound, Hermes a knot, OpenCode a stellated solid, agy a geodesic, the orchestrator an armillary with a second ring, spare shapes for more). A working agent travels folder by folder from the root, then stands on the hub side of the card, a little in front of it. Its chip sits between it and the card, and a dashed trace runs from the chip to the row of the file it touches: yellow while working, green for 5 seconds after a good run, red on a failure. A callout, a thin line up and to the side of the agent away from its chip, shows its name on a white block and its current command: yellow border while it works, red while its last tool call failed and for 5 seconds after a failed run, green with `FINISHED` for 5 seconds after a good run. It is hidden through the CSS3D object's `visible`, because the CSS3D renderer sets each element's `display` on every frame.
 - Terminal chips: each chip follows its agent and faces the camera. Collapsed it shows the name and a status ring (yellow working, red error, green done). `T` opens the focused agent's chip to show its log, or opens or closes every chip when no agent is focused. `focusTerminal` opens the chip and flies to it.
 - Camera: the overview fits the hub and every card from the overview angle (`fitView`), never closer than 1800. It refits when the cards change, but only when the frame would move more than 150 or change distance by more than 8 percent. `0` returns to it. `F` cycles follow mode: wide (the agent and its chip), close up (the agent and the file it touches), off. The camera moves to the agent that starts a tool call or a run and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
 - Assistant: `/` opens the floating terminal. Typed requests become actions that `Stage.jsx` runs through `dispatch.js`. The room offers `focus(key, view)`, `focusTerminal(key)` (camera on the agent's terminal) and `focusPath(path)` (opens the folders on the way, flashes the target and flies to it). A toast at the bottom right shows results that need words (a created task, a refusal). Writes (a task, a budget) run only after the confirm card, and the dispatcher refuses them without an explicit `confirmed`. Panels open through the HUD's `controlTarget` prop.
 - Meters panel: a Backups section reads the age of Paperclip's newest backup (`backupStatus()`), names its warnings in words, and offers Back up now behind a confirm card (`backupNow()`).
 - HUD: the scrubber carries run markers (white start, red failed end, green finished end) and clicking one seeks. Each agent row has a Log button that opens or closes its chip, and Overview has Show all, which reads Hide all when every chip is open. Through a bridge, the HUD reads `/api/health` every 60 seconds and shows a chip under the Replay and Live switch only when something is wrong (the bridge not answering, Paperclip not connected, routes changed or not checked); a click lists the routes. `L` opens the event log, built from the same activities as the terminals. `?` lists the keys.
-- Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above its card for 2.6 seconds. Labels that land close together stack upward.
+- Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above its card for 2.6 seconds. Labels that land close together stack upward. A failed tool call also lays a red `FAILED NAME` band across the card's face for 2.6 seconds over red scanlines.
+- Strands: each string between folders carries a strand of small points, about one per 24 units, scattered by a seed from the folder pair, white at low opacity. The strand into a folder on a working agent's path turns yellow and fades back over 1.5 seconds (at once under reduced motion).
 
 ## Activity schema
 
@@ -180,6 +181,11 @@ A shell command touches files only when its text names a known file or folder. S
         .mr-item-note
         .mr-item-detail
       .mr-card-more
+    .mr-card-band[.is-failed]
+
+.mr-callout.is-{working|error|done}
+  .mr-callout-title
+  .mr-callout-cmd
 ```
 
 A chip without `.is-open` hides its body.
