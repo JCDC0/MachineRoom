@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { killTree as killProcessTree, treeSpawnOptions } from '../server/processTree.js'
+import { gitPath } from '../server/programPath.js'
 
 export const DEFAULT_PORT = 5175
 export const BUILD_TIMEOUT_MS = 5 * 60 * 1000
@@ -177,7 +178,7 @@ export function runBuild({ command, cwd, env = process.env, shell = false, timeo
 function gitText(cwd, args, env) {
   return new Promise((settle, fail) => {
     execFile(
-      'git',
+      gitPath(),
       args,
       {
         cwd,

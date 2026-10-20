@@ -10,6 +10,7 @@ import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
+import { gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
 import { compareSurface, surfaceFeatures } from './surface.js'
 
@@ -93,7 +94,7 @@ export function readTree(projectRoot, { listDir = readdirSync } = {}) {
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
   try {
-    const output = execFileSync('git', ['-C', resolved, 'ls-files', '--cached', '--others', '--exclude-standard'], {
+    const output = execFileSync(gitPath(), ['-C', resolved, 'ls-files', '--cached', '--others', '--exclude-standard'], {
       encoding: 'utf8',
       env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
       stdio: ['ignore', 'pipe', 'ignore'],

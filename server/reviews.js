@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { gitPath } from './programPath.js'
 import { readRunRecords, runsFile } from './runs.js'
 
 const GIT_TIMEOUT_MS = 10 * 1000
@@ -26,7 +27,7 @@ function readText(path) {
 function git(worktree, args, extraEnv = null) {
   return new Promise((resolveGit, rejectGit) => {
     execFile(
-      'git',
+      gitPath(),
       args,
       {
         cwd: worktree,
@@ -50,6 +51,7 @@ function git(worktree, args, extraEnv = null) {
 }
 
 function worktreeError(error) {
+  if (error?.code === 'ENOGIT') return 'Git is not on the PATH.'
   if (error?.code === 'ENOENT') return 'That worktree is missing.'
   if (/not a git repository/i.test(String(error?.gitStderr ?? ''))) return 'That folder is not a git repository.'
   return 'The bridge could not read that worktree.'
