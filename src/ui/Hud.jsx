@@ -3,6 +3,7 @@ import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import Assistant from './Assistant.jsx'
+import { healthNotice } from './healthNotice.js'
 import {
   areAllTerminalsOpen,
   isTerminalOpen,
@@ -65,10 +66,13 @@ export default function Hud({
   openTerminals = [],
   onToggleTerminal = () => {},
   onShowTerminals = () => {},
+  health = null,
 }) {
   const [logOpen, setLogOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [helpOpen, setHelpOpen] = useState(false)
+  const [healthOpen, setHealthOpen] = useState(false)
+  const notice = healthNotice(health)
   const logBodyRef = useRef(null)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
@@ -118,6 +122,7 @@ export default function Hud({
         setHelpOpen((open) => !open)
       } else if (event.key === 'Escape') {
         setHelpOpen(false)
+        setHealthOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -161,6 +166,35 @@ export default function Hud({
             Live
           </button>
         </div>
+
+        {notice && (
+          <div className={`hud-health is-${notice.tone}`}>
+            <button
+              type="button"
+              className="hud-health-chip mono"
+              onClick={() => setHealthOpen((open) => !open)}
+              aria-expanded={healthOpen}
+            >
+              {notice.title}
+            </button>
+            {healthOpen && (
+              <div className="hud-health-popover" role="dialog" aria-label="Health details">
+                <ul className="hud-health-lines mono">
+                  {notice.lines.map((line, index) => (
+                    <li key={index}>{line}</li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="hud-health-close mono"
+                  onClick={() => setHealthOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="hud-actions">
           {client && (

@@ -12,6 +12,7 @@ import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
 import { store } from './storage.js'
 import Hud from './ui/Hud.jsx'
+import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { loadSettings, saveSettings } from './ui/settings.js'
 import Waiting from './ui/Waiting.jsx'
 
@@ -51,6 +52,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!live || live.simulated) return createMockClient()
     return live.bridge ? createClient({ baseUrl: live.bridge }) : null
   }, [live])
+  const health = useBridgeHealth(live && !live.simulated ? live.bridge ?? null : null)
   const [snapshot, setSnapshot] = useState(() => player.snapshot())
   const [focused, setFocused] = useState(null)
   const [following, setFollowing] = useState(false)
@@ -315,6 +317,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         openTerminals={openChips}
         onToggleTerminal={toggleTerminal}
         onShowTerminals={showTerminals}
+        health={health}
       />
     </div>
   )
