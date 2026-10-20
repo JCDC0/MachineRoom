@@ -179,7 +179,7 @@ describe('runningLine', () => {
 
 describe('mock client runs lifecycle', () => {
   it('starts a run, refuses a concurrent run on the same lane, and completes into recent', async () => {
-    const client = createMockClient({ latencyMs: 0, runMs: 20 })
+    const client = createMockClient({ latencyMs: 0, runMs: 300 })
     const entry = await client.startRun('hermes', ['P5'])
     expect(entry.lane).toBe('hermes')
     expect(entry.briefs).toEqual(['P5'])
@@ -190,8 +190,12 @@ describe('mock client runs lifecycle', () => {
 
     await expect(client.startRun('hermes', ['P5'])).rejects.toThrow('That lane is already running.')
 
-    await new Promise((resolve) => setTimeout(resolve, 40))
-    const runsAfterDone = await client.runs()
+    const deadline = Date.now() + 3000
+    let runsAfterDone = await client.runs()
+    while (runsAfterDone.running.length > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      runsAfterDone = await client.runs()
+    }
     expect(runsAfterDone.running).toHaveLength(0)
     expect(runsAfterDone.recent).toHaveLength(1)
     expect(resultWord(runsAfterDone.recent[0])).toBe('finished')
