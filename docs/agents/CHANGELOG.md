@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Pack check (task P1b): `package.json` lists only the files the one-port command needs, and `npm run pack-check` reads `npm pack --dry-run --json` to fail when an imported file is missing from the pack or a secret, test, recording, module or log file is in it.
 - Review fixes on D2: the mock client and the contract have `decide`, and the mock answers like a bridge with no key.
 - Decide route in the bridge (task D2): `POST /api/decide` is local pages only, takes `state`, `questions` and an optional `model` with a 32 KB limit, calls `decide()` with `OPENROUTER_API_KEY` and the model from the body, `DECISION_MODEL` or `typesafe/jev-1.14`, answers the model, answers, usage, milliseconds and attempts, maps a missing key to 404 and a rate limit to 429 and any other failure to 502, logs only the model, the question names, the result kind and the milliseconds, and `decide({ state, questions, model })` joins the control client; tests in `tests/bridge.test.js` use a fake Decisions server.
 - Review fixes on T13b: `readRunRecords` reads through `readAllRunRecords` instead of a second copy of the loop, the bridge takes the bad day sentence from `src/briefs/run.js` (`SINCE_PROBLEM`, now exported), and the mock client and the contract have `runStats`.
