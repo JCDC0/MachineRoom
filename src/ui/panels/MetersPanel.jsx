@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { formatCents, meterTone, percentOf, timeUntil } from './format.js'
 import { subscribeToNotices } from './notices.js'
+import { backupNotice, formatBytes } from './backup.js'
 
-export default function MetersPanel({ client }) {
+export default function MetersPanel({ client, initialBackupStatus = null }) {
   const [costs, setCosts] = useState(null)
   const [agents, setAgents] = useState([])
   const [loading, setLoading] = useState(true)
@@ -12,6 +13,16 @@ export default function MetersPanel({ client }) {
   const [editDollarValue, setEditDollarValue] = useState('')
   const [savingBudget, setSavingBudget] = useState(false)
   const [budgetError, setBudgetError] = useState(null)
+
+  const [backupStatus, setBackupStatus] = useState(initialBackupStatus)
+  const [backupLoading, setBackupLoading] = useState(
+    () => initialBackupStatus == null && typeof client?.backupStatus === 'function'
+  )
+  const [backupError, setBackupError] = useState(null)
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [backingUp, setBackingUp] = useState(false)
+  const [backupActionError, setBackupActionError] = useState(null)
+  const [backupSuccess, setBackupSuccess] = useState(null)
 
   async function loadData({ isInitial = false } = {}) {
     if (isInitial) {
@@ -36,8 +47,39 @@ export default function MetersPanel({ client }) {
     }
   }
 
+  async function loadBackup() {
+    if (typeof client?.backupStatus !== 'function') return
+    setBackupLoading(true)
+    setBackupError(null)
+    try {
+      const status = await client.backupStatus()
+      setBackupStatus(status)
+    } catch {
+      setBackupError('Could not read the backup status.')
+    } finally {
+      setBackupLoading(false)
+    }
+  }
+
+  async function handleBackupNow() {
+    if (typeof client?.backupNow !== 'function') return
+    setBackingUp(true)
+    setBackupActionError(null)
+    try {
+      const result = await client.backupNow()
+      setBackupSuccess(`Backed up as ${result?.name ?? 'backup'}, ${formatBytes(result?.sizeBytes)}.`)
+      setShowConfirm(false)
+      await loadBackup()
+    } catch (err) {
+      setBackupActionError(err?.message || 'The backup request failed.')
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
   useEffect(() => {
     loadData({ isInitial: true })
+    loadBackup()
   }, [client])
 
   useEffect(() => {
@@ -80,24 +122,8 @@ export default function MetersPanel({ client }) {
     }
   }
 
-  if (loading) {
-    return <div className="panel-state mono">Loading meters...</div>
-  }
-
-  if (loadError) {
-    return (
-      <div className="panel-state">
-        <div className="panel-error-message">{loadError}</div>
-        <button type="button" onClick={() => loadData({ isInitial: true })}>Retry</button>
-      </div>
-    )
-  }
-
-  if (!costs) {
-    return <div className="panel-state is-dim mono">No cost data available.</div>
-  }
-
-  const { summary, quota = [] } = costs
+  const notice = backupNotice(backupStatus)
+  const { summary, quota = [] } = costs ?? {}
   const companyBudget = summary?.budgetCents ?? 0
   const companySpend = summary?.spendCents ?? 0
   const companyPercent = summary?.utilizationPercent ?? percentOf(companySpend, companyBudget)
@@ -106,8 +132,30 @@ export default function MetersPanel({ client }) {
     <div className="meters-panel">
       <div className="panel-toolbar">
         <span className="panel-count mono">Spend & Quota</span>
-        <button type="button" onClick={() => loadData({ isInitial: false })}>Refresh</button>
+        <button
+          type="button"
+          onClick={() => {
+            loadData({ isInitial: false })
+            loadBackup()
+          }}
+        >
+          Refresh
+        </button>
       </div>
+
+      {loading ? (
+        <div className="panel-state mono">Loading meters...</div>
+      ) : loadError ? (
+        <div className="panel-state">
+          <div className="panel-error-message">{loadError}</div>
+          <button type="button" onClick={() => loadData({ isInitial: true })}>
+            Retry
+          </button>
+        </div>
+      ) : !costs ? (
+        <div className="panel-state is-dim mono">No cost data available.</div>
+      ) : (
+        <>
 
       <section className="meters-section" aria-label="Company budget">
         <h4 className="meters-section-title">Company Budget</h4>
@@ -289,6 +337,98 @@ export default function MetersPanel({ client }) {
           })}
         </div>
       </section>
+        </>
+      )}
+
+      <section className="meters-section backup-section" aria-label="Backups">
+        <h4 className="meters-section-title">Backups</h4>
+        <div className="backup-card">
+          {backupError ? (
+            <div className="backup-error mono" role="alert">
+              {backupError}
+            </div>
+          ) : notice ? (
+            <>
+              <div
+                className={`backup-title mono ${
+                  notice.tone === 'red' ? 'is-red' : notice.tone === 'yellow' ? 'is-yellow' : ''
+                }`}
+              >
+                {notice.title}
+              </div>
+              {notice.lines.length > 0 && (
+                <div className="backup-lines">
+                  {notice.lines.map((line, idx) => (
+                    <div key={idx} className="backup-line mono">
+                      {line}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : backupLoading ? (
+            <div className="meter-label-dim mono">Loading backup status...</div>
+          ) : null}
+
+            {backupSuccess && (
+              <div className="backup-success mono" role="status">
+                {backupSuccess}
+              </div>
+            )}
+
+            {!showConfirm && (
+              <div className="backup-actions">
+                <button
+                  type="button"
+                  className="backup-now-btn"
+                  onClick={() => {
+                    setShowConfirm(true)
+                    setBackupActionError(null)
+                    setBackupSuccess(null)
+                  }}
+                  disabled={backingUp}
+                >
+                  Back up now
+                </button>
+              </div>
+            )}
+
+            {showConfirm && (
+              <div className="backup-confirm-card" role="region" aria-label="Confirm backup">
+                <div className="backup-confirm-warning">
+                  Back up Paperclip's database now? Paperclip writes a file to its backup folder; agents keep working.
+                </div>
+                <div className="backup-confirm-actions">
+                  <button
+                    type="button"
+                    className="backup-confirm-btn"
+                    disabled={backingUp}
+                    onClick={handleBackupNow}
+                  >
+                    {backingUp ? 'Backing up' : 'Back up'}
+                  </button>
+                  <button
+                    type="button"
+                    className="backup-cancel-btn"
+                    disabled={backingUp}
+                    onClick={() => {
+                      setShowConfirm(false)
+                      setBackupActionError(null)
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {backupActionError && (
+                  <div className="backup-confirm-error mono" role="alert">
+                    {backupActionError}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+      </section>
     </div>
   )
 }
+
