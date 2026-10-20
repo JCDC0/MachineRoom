@@ -2,10 +2,10 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 import { writeRecording } from './recording-files.mjs'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -32,6 +32,25 @@ function gitRead(cwd, args) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true })
   if (result.error || result.status !== 0) return null
   return String(result.stdout ?? '').trim()
+}
+
+let mainCheckoutPath = null
+
+function mainCheckout() {
+  if (mainCheckoutPath) return mainCheckoutPath
+  const result = spawnSync('git', ['rev-parse', '--git-common-dir'], {
+    cwd: root, encoding: 'utf8', shell: false, windowsHide: true,
+  })
+  const common = result.error || result.status !== 0 ? '' : String(result.stdout ?? '').trim()
+  mainCheckoutPath = common ? dirname(resolve(root, common)) : root
+  return mainCheckoutPath
+}
+
+function branchExists(name) {
+  const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${name}`], {
+    cwd: mainCheckout(), encoding: 'utf8', shell: false, windowsHide: true,
+  })
+  return !result.error && result.status === 0
 }
 
 function readUsage(path) {
@@ -160,11 +179,18 @@ async function main() {
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
   const briefs = parseBriefs(read('TASKS.md'))
-  const wanted = options.briefs.map((id) => {
-    const brief = briefs.find((item) => item.id.toUpperCase() === id.toUpperCase())
-    if (!brief) throw new Error(`There is no brief named ${id}.`)
-    return brief
+  const problems = briefProblems({
+    briefs,
+    ids: options.briefs,
+    laneKey: options.lane,
+    branchExists,
+    force: options.force === true,
   })
+  if (problems.length > 0) {
+    problems.forEach((sentence) => console.log(sentence))
+    return 1
+  }
+  const wanted = options.briefs.map((id) => briefs.find((item) => item.id.toUpperCase() === id.toUpperCase()))
   const rules = parseRules(read('HOUSE-RULES.md'))
   const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
   const prompt = unattendedPrompt(buildPrompt({ briefs: wanted, laneKey: options.lane, lanes, rules, version }))

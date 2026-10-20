@@ -3,7 +3,8 @@ import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -124,6 +125,99 @@ describe('parseRunArgs', () => {
     expect(() => parseRunArgs(['hermes', 'T2', '--minutes', 'soon'])).toThrow(/minutes/)
     expect(() => parseRunArgs(['hermes', 'T2', '--minutes', '0'])).toThrow(/minutes/)
     expect(() => parseRunArgs(['hermes', 'T2', '--fast'])).toThrow(/Unknown option/)
+  })
+
+  it('takes --force for a run', () => {
+    expect(parseRunArgs(['hermes', 'W3a', '--force'])).toEqual({
+      lane: 'hermes', briefs: ['W3a'], dryRun: false, minutes: 100, list: false, force: true,
+    })
+    expect(parseRunArgs(['hermes', 'W3a'])).not.toHaveProperty('force')
+    expect(parseRunArgs(['hermes', 'W3a', '--dry-run', '--force'])).toMatchObject({ dryRun: true, force: true })
+  })
+})
+
+const sampleBrief = (id, title, ownerText, extra = {}) => ({
+  id,
+  title,
+  ownerText,
+  owners: [],
+  done: false,
+  section: 'Open work',
+  text: '',
+  ...extra,
+})
+
+const mergedW3a = sampleBrief('W3a', 'Read the lane branches from the bridge', 'OpenCode, merged as 0.1.52', { owners: ['opencode'], done: true })
+const repeatedW3a = sampleBrief('W3a', 'Read the lane branches again', 'OpenCode', { owners: ['opencode'] })
+const mergedB6 = sampleBrief('B6', 'Late join replay and agent roles', 'OpenCode, merged as 0.1.57', { owners: ['opencode'], done: true })
+const openB6 = sampleBrief('B6', 'Late join replay and agent roles', 'OpenCode', { owners: ['opencode'] })
+const hermesT2 = sampleBrief('T2', 'Lane runner', 'Hermes', { owners: ['hermes'] })
+const hermesT3 = sampleBrief('T3', 'Run records and summaries', 'Hermes', { owners: ['hermes'] })
+
+describe('briefProblems', () => {
+  it('lets a brief the lane owns through when no branch holds it', () => {
+    expect(briefProblems({ briefs: [openB6], ids: ['B6'], laneKey: 'opencode', branchExists: () => false })).toEqual([])
+  })
+
+  it('names an id that is not in TASKS.md', () => {
+    expect(briefProblems({ briefs: [openB6], ids: ['T99'], laneKey: 'opencode', branchExists: () => false }))
+      .toEqual(['There is no brief named T99.'])
+  })
+
+  it('names an id that appears more than once', () => {
+    expect(briefProblems({ briefs: [mergedW3a, repeatedW3a], ids: ['W3a'], laneKey: 'opencode', branchExists: () => false }))
+      .toEqual(['Brief W3a appears 2 times in TASKS.md. Give each brief its own id.'])
+  })
+
+  it('refuses a brief that is marked done, with its owner text as written', () => {
+    expect(briefProblems({ briefs: [mergedW3a], ids: ['W3a'], laneKey: 'opencode', branchExists: () => false }))
+      .toEqual(['Brief W3a is marked OpenCode, merged as 0.1.52. Pick another brief, or pass --force to run it again.'])
+  })
+
+  it('refuses a brief that belongs to other lanes', () => {
+    const shared = sampleBrief('W3', 'Review and merge', 'OpenCode for the bridge, AGY for the panel', { owners: ['opencode', 'agy'] })
+    expect(briefProblems({ briefs: [shared], ids: ['W3'], laneKey: 'hermes', branchExists: () => false }))
+      .toEqual(['Brief W3 is for opencode and agy, not hermes. Pass --force to run it anyway.'])
+  })
+
+  it('refuses a brief whose branch is already there', () => {
+    const name = branchFor(hermesT3)
+    expect(briefProblems({ briefs: [hermesT3], ids: ['T3'], laneKey: 'hermes', branchExists: (branch) => branch === name }))
+      .toEqual([`The branch ${name} already exists. Rename or delete it first, or pick another brief.`])
+  })
+
+  it('drops only the done and owner sentences with force', () => {
+    const other = sampleBrief('T3', 'Run records and summaries', 'OpenCode, merged as 0.1.44', { owners: ['opencode'], done: true })
+    const name = branchFor(other)
+    expect(briefProblems({ briefs: [other], ids: ['T3'], laneKey: 'hermes', branchExists: () => true, force: true }))
+      .toEqual([`The branch ${name} already exists. Rename or delete it first, or pick another brief.`])
+    expect(briefProblems({ briefs: [other], ids: ['T3'], laneKey: 'hermes', branchExists: () => false, force: true })).toEqual([])
+  })
+
+  it('lists several problems in one fixed order', () => {
+    const briefs = [mergedW3a, repeatedW3a, mergedB6, hermesT2, hermesT3]
+    expect(briefProblems({
+      briefs,
+      ids: ['T3', 'B6', 'T2', 'W3a', 'Z9'],
+      laneKey: 'opencode',
+      branchExists: (branch) => branch === branchFor(hermesT3),
+    })).toEqual([
+      'There is no brief named Z9.',
+      'Brief W3a appears 2 times in TASKS.md. Give each brief its own id.',
+      'Brief B6 is marked OpenCode, merged as 0.1.57. Pick another brief, or pass --force to run it again.',
+      'Brief T3 is for hermes, not opencode. Pass --force to run it anyway.',
+      'Brief T2 is for hermes, not opencode. Pass --force to run it anyway.',
+      `The branch ${branchFor(hermesT3)} already exists. Rename or delete it first, or pick another brief.`,
+    ])
+  })
+
+  it('compares an id without case', () => {
+    expect(briefProblems({ briefs: [mergedB6], ids: ['b6'], laneKey: 'opencode', branchExists: () => false }))
+      .toEqual(['Brief B6 is marked OpenCode, merged as 0.1.57. Pick another brief, or pass --force to run it again.'])
+  })
+
+  it('compares the lane without case', () => {
+    expect(briefProblems({ briefs: [openB6], ids: ['B6'], laneKey: 'OpenCode', branchExists: () => false })).toEqual([])
   })
 })
 
@@ -716,5 +810,46 @@ describe('scripts/test.mjs', () => {
     } finally {
       rmSync(folder, { recursive: true, force: true })
     }
+  })
+})
+
+const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
+const TASKS_MARKDOWN = readFileSync(new URL('../docs/agents/TASKS.md', import.meta.url), 'utf8')
+
+function runLane(args) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => {
+      child.kill()
+      rejectRun(new Error(`run-lane did not exit. stderr: ${stderr}`))
+    }, 30000)
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      rejectRun(error)
+    })
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      resolveRun({ code, stdout, stderr })
+    })
+  })
+}
+
+describe('scripts/run-lane.mjs', () => {
+  it('refuses a merged brief before it prints the dry run', async () => {
+    const merged = parseBriefs(TASKS_MARKDOWN).find((brief) => brief.done)
+    expect(merged).toBeTruthy()
+    const result = await runLane(['hermes', merged.id, '--dry-run'])
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain(`Brief ${merged.id} is marked ${merged.ownerText}.`)
+    expect(result.stdout).not.toContain('args:')
+    expect(result.stdout).not.toContain('cwd:')
   })
 })

@@ -1,6 +1,7 @@
 import { basename } from '../model/paths.js'
 import { createHermesParser } from '../model/parsers/hermes.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
+import { branchFor } from './briefs.js'
 
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
 
@@ -178,6 +179,54 @@ export function formatStats(stats) {
   return [...rows.map(statsLine), statsLine(stats.total)]
 }
 
+export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}) {
+  const list = Array.isArray(briefs) ? briefs : []
+  const lane = String(laneKey ?? '').trim().toLowerCase()
+  const exists = typeof branchExists === 'function' ? branchExists : () => false
+  const asked = []
+  const seen = new Set()
+  for (const value of Array.isArray(ids) ? ids : []) {
+    const id = String(value ?? '').trim()
+    if (!id) continue
+    const key = id.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    asked.push(id)
+  }
+  const missing = []
+  const repeated = []
+  const done = []
+  const owner = []
+  const branch = []
+  for (const askedId of asked) {
+    const key = askedId.toLowerCase()
+    const matches = list.filter((brief) => String(brief?.id ?? '').trim().toLowerCase() === key)
+    if (matches.length === 0) {
+      missing.push(`There is no brief named ${askedId}.`)
+      continue
+    }
+    if (matches.length > 1) {
+      const id = String(matches[0].id).trim()
+      repeated.push(`Brief ${id} appears ${matches.length} times in TASKS.md. Give each brief its own id.`)
+      continue
+    }
+    const brief = matches[0]
+    const id = String(brief.id).trim()
+    const owners = (Array.isArray(brief.owners) ? brief.owners : [])
+      .filter((name) => typeof name === 'string' && name.trim() !== '')
+      .map((name) => name.trim())
+    if (force !== true && brief.done === true) {
+      done.push(`Brief ${id} is marked ${String(brief.ownerText ?? '')}. Pick another brief, or pass --force to run it again.`)
+    }
+    if (force !== true && owners.length > 0 && !owners.some((name) => name.toLowerCase() === lane)) {
+      owner.push(`Brief ${id} is for ${owners.join(' and ')}, not ${String(laneKey ?? '')}. Pass --force to run it anyway.`)
+    }
+    const name = branchFor(brief)
+    if (exists(name) === true) branch.push(`The branch ${name} already exists. Rename or delete it first, or pick another brief.`)
+  }
+  return [...missing, ...repeated, ...done, ...owner, ...branch]
+}
+
 export function parseRunArgs(argv) {
   const args = (Array.isArray(argv) ? argv : []).map((value) => String(value))
   const briefs = []
@@ -185,6 +234,7 @@ export function parseRunArgs(argv) {
   let dryRun = false
   let list = false
   let stats = false
+  let force = false
   let since = ''
   let minutes = DEFAULT_MINUTES
   const overrides = {}
@@ -200,6 +250,10 @@ export function parseRunArgs(argv) {
     }
     if (arg === '--dry-run') {
       dryRun = true
+      continue
+    }
+    if (arg === '--force') {
+      force = true
       continue
     }
     if (arg === '--list') {
@@ -233,7 +287,7 @@ export function parseRunArgs(argv) {
   if (stats) return { lane, briefs, dryRun, minutes, list, stats, ...(since ? { since } : {}) }
   if (!lane) throw new Error('Name a lane to run, for example hermes.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
-  return { lane, briefs, dryRun, minutes, list, ...overrides }
+  return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides }
 }
 
 export function laneWithOverrides(lane, { model, reasoning } = {}) {
