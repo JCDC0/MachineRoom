@@ -52,9 +52,9 @@ The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts
 
 ## Waiting on the owner
 
-- **M1**: the exit test with a real Paperclip (a task from the drawer, the agent works in the room, its reply in the thread). Costs a few cents.
 - **C0 stage 2**: Paperclip's `enableIsolatedWorkspaces`, so Paperclip agents work in their own worktrees.
 - **D1**: `npm run decide-eval` with the owner's key, and the routing labels in `tests/probes/routing.js`.
 - **S1**: recording subagent runs (spends money).
 - **G2 and G6**: licence and names, then the private repository and every push. Run G1a (the history audit) first.
-- A Node upgrade would likely end the 0xC0000409 crash.
+- A Node upgrade would likely end the 0xC0000409 crash. On 2026-10-20 it crashed twice in a row in several full runs, one short of the three tries `npm test` makes.
+- Whether to set a model for Hermes in Paperclip (it has none and runs on MiMo V2.6 Pro, its own default).

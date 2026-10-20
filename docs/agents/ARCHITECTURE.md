@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.96. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.97. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -26,7 +26,7 @@ npm run pack-check what an npm pack would hold: fails when bin/machine-room.mjs 
 npm run doctor     compare the running Paperclip's /api/openapi.json with the routes in server/surface.js; exits 1 and names each route or field that is missing
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
 npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --stats (with --since YYYY-MM-DD) prints runs, minutes and cost per lane and model, --model and --reasoning change the model for that run only; it refuses, before anything starts, a brief that is missing, repeated, marked merged, owned by another lane or whose branch already exists (--force skips the merged and owner checks)
-npm run outcome -- BRANCH merged --grade A- --fixes 0   record what happened to a lane run (merged or rejected, with --note) in outcomes.jsonl beside runs.jsonl; GET /api/control/runs/outcomes and the client's outcomes() give the merge rate and cost per lane and model
+npm run outcome -- BRANCH merged --grade A- --fixes 0   record what happened to a lane run (merged or rejected, with --note; npm run run-lane -- --outcomes [--since] prints the table) in outcomes.jsonl beside runs.jsonl; GET /api/control/runs/outcomes and the client's outcomes() give the merge rate and cost per lane and model
 npm run history-audit   scan main, the tags and the tracked files for keys, e-mail addresses, Windows user paths, the profile name and paths into coursework; a key is never printed (first 4 characters and its length); --json; exits 1 on any finding
 npm run candidate -- opencode   build that lane's worktree and serve it on port 5175 (--port) beside the stable room, with --paperclip, --company and --root passed through; refuses a dirty worktree or a taken port (see CANDIDATE.md)
 node scripts/agy-prompt.mjs V7a   write AGY's prompt for a brief to agy-V7a-prompt.txt in its worktree (--clean removes the older ones)

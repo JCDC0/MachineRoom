@@ -113,6 +113,7 @@ describe('outcome command', () => {
         mergeRate: 0,
         averageFixes: null,
         costUsd: 0.5,
+        decidedCostUsd: 0.5,
         costPerMerge: null,
       },
     ])
@@ -158,7 +159,8 @@ describe('outcomeTable', () => {
         mergeRate: 0.5,
         averageFixes: 1,
         costUsd: 1,
-        costPerMerge: 1,
+        decidedCostUsd: 0.75,
+        costPerMerge: 0.75,
       },
       {
         lane: 'opencode',
@@ -170,6 +172,7 @@ describe('outcomeTable', () => {
         mergeRate: 1,
         averageFixes: 1,
         costUsd: 0.2,
+        decidedCostUsd: 0.2,
         costPerMerge: 0.2,
       },
       {
@@ -182,7 +185,37 @@ describe('outcomeTable', () => {
         mergeRate: 0,
         averageFixes: null,
         costUsd: 0,
+        decidedCostUsd: 0,
         costPerMerge: null,
+      },
+    ])
+  })
+
+  it('leaves a pending run out of the decided cost and cost per merge', () => {
+    const runs = [
+      { lane: 'hermes', model: 'm', branch: 'feat/a', costUsd: 0.5 },
+      { lane: 'hermes', model: 'm', branch: 'feat/b', costUsd: 0.25 },
+      { lane: 'hermes', model: 'm', branch: 'feat/c', costUsd: 0.75 },
+      { lane: 'hermes', model: 'm', branch: '', costUsd: 0.5 },
+    ]
+    const outcomes = [
+      { branch: 'feat/a', outcome: 'merged', fixes: 2 },
+      { branch: 'feat/b', outcome: 'rejected', fixes: 0 },
+    ]
+
+    expect(outcomeTable(runs, outcomes)).toEqual([
+      {
+        lane: 'hermes',
+        model: 'm',
+        runs: 4,
+        merged: 1,
+        rejected: 1,
+        pending: 2,
+        mergeRate: 0.5,
+        averageFixes: 2,
+        costUsd: 2,
+        decidedCostUsd: 0.75,
+        costPerMerge: 0.75,
       },
     ])
   })
@@ -200,6 +233,7 @@ describe('outcomeTable', () => {
         mergeRate: 0,
         averageFixes: null,
         costUsd: 1,
+        decidedCostUsd: 1,
         costPerMerge: null,
       },
     ])
@@ -245,6 +279,7 @@ describe('outcome route', () => {
         mergeRate: 1,
         averageFixes: 2,
         costUsd: 0.4,
+        decidedCostUsd: 0.4,
         costPerMerge: 0.4,
       },
       {
@@ -257,6 +292,7 @@ describe('outcome route', () => {
         mergeRate: 0,
         averageFixes: null,
         costUsd: 0.2,
+        decidedCostUsd: 0.2,
         costPerMerge: null,
       },
     ])

@@ -128,22 +128,23 @@ function bucketRow(bucket) {
   }
 }
 
-export function laneStats(records, { since } = {}) {
+export function filterRunsSince(records, since) {
   const list = Array.isArray(records) ? records : []
   const from = since === undefined || since === null ? null : dayStart(since)
-  const kept = []
-  for (const record of list) {
-    if (!record || typeof record !== 'object' || Array.isArray(record)) continue
-    if (typeof record.lane !== 'string' || record.lane.trim() === '') continue
-    if (from !== null) {
-      const time = startTime(record)
-      if (time === null || time < from) continue
-    }
-    kept.push(record)
-  }
+  return list.filter((record) => {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) return false
+    if (from === null) return true
+    const time = startTime(record)
+    return time !== null && time >= from
+  })
+}
+
+export function laneStats(records, { since } = {}) {
+  const kept = filterRunsSince(records, since)
   const buckets = new Map()
   const total = emptyBucket(ALL, ALL)
   for (const record of kept) {
+    if (typeof record.lane !== 'string' || record.lane.trim() === '') continue
     const lane = record.lane.trim()
     const model = typeof record.model === 'string' && record.model.trim() !== '' ? record.model.trim() : MODEL_UNKNOWN
     const key = `${lane}\u0000${model}`
@@ -177,6 +178,30 @@ export function formatStats(stats) {
   const rows = Array.isArray(stats?.rows) ? stats.rows : []
   if (rows.length === 0 || !stats?.total) return ['No runs recorded.']
   return [...rows.map(statsLine), statsLine(stats.total)]
+}
+
+function outcomePercent(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? `${Math.round(value * 100)}%` : '-'
+}
+
+function outcomeFixes(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-'
+  return String(Math.round(value * 10) / 10)
+}
+
+function outcomeCost(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(2)}` : '-'
+}
+
+export function formatOutcomes(rows) {
+  const list = Array.isArray(rows) ? rows : []
+  if (list.length === 0) return ['No runs yet.']
+  const count = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0)
+  return list.map((row) => {
+    const lane = String(row?.lane ?? '')
+    const model = String(row?.model ?? MODEL_UNKNOWN)
+    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)}, rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)} a merge`
+  })
 }
 
 export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}) {
@@ -234,6 +259,7 @@ export function parseRunArgs(argv) {
   let dryRun = false
   let list = false
   let stats = false
+  let outcomes = false
   let force = false
   let since = ''
   let minutes = DEFAULT_MINUTES
@@ -264,6 +290,10 @@ export function parseRunArgs(argv) {
       stats = true
       continue
     }
+    if (arg === '--outcomes') {
+      outcomes = true
+      continue
+    }
     if (arg === '--since' || arg.startsWith('--since=')) {
       const value = arg === '--since' ? args[index + 1] : arg.slice('--since='.length)
       if (arg === '--since') index += 1
@@ -285,6 +315,7 @@ export function parseRunArgs(argv) {
   }
   if (list) return { lane, briefs, dryRun, minutes, list, ...(since ? { since } : {}) }
   if (stats) return { lane, briefs, dryRun, minutes, list, stats, ...(since ? { since } : {}) }
+  if (outcomes) return { lane, briefs, dryRun, minutes, list, outcomes, ...(since ? { since } : {}) }
   if (!lane) throw new Error('Name a lane to run, for example hermes.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
   return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides }
