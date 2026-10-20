@@ -90,6 +90,9 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
 
     models: () => request('GET', '/api/control/models'),
 
+    suggestRoute: (profile, { failures } = {}) =>
+      request('POST', '/api/control/route', failures === undefined ? { profile } : { profile, failures }),
+
     briefs: async () => {
       const data = await request('GET', '/api/control/briefs')
       return Array.isArray(data) ? data : data?.briefs ?? []

@@ -20,6 +20,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `hireAgent(draft)` | `{ agent, approval }`. `approval` is `null` when no approval is needed (task C3c; the mock has it, the real client waits for C2b) |
 | `updateAgent(agentId, patch)` | `Agent` (C3c, same note) |
 | `models()` | `ModelOption[]` |
+| `suggestRoute(profile, { failures } = {})` | `RouteSuggestion`, the tier, the choice and the reason from `docs/agents/policy.json`, read by the bridge (C4b; the mock holds a copy of the policy) |
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
 | `briefs()` | `Brief[]`, in file order (added with task T1a; the mock serves samples) |
 | `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
@@ -64,6 +65,7 @@ Costs        { summary: { spendCents, budgetCents, utilizationPercent },
 ModelOption  { id, label, harness, tier: small | medium | large, free: boolean }
 Brief        { id ("C3e"), title, ownerText, owners: (hermes | opencode | agy | claude)[], done: boolean, section, text }
 BriefPrompt  { prompt, lane, model, branch }
+RouteSuggestion { tier, choice: { lane, model, reasoning, provider } | null, reason }
 RunInfo      { lane, briefs: string[], startedAt, lastLines: string[] (the last 5 lines the run printed) }
 RunRecord    { lane, briefs, model: string|null, reasoning: string|null, startedAt, minutes: number|null, exitCode: number|null,
                killed: boolean, costUsd: number|null, log: string|null, branch, commits: string[] }   (one line of runs.jsonl)

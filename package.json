@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.107",
+  "version": "0.1.108",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -23,6 +23,7 @@
     "src/model/parsers/hermes.js",
     "src/model/parsers/opencode.js",
     "src/model/parsers/unreadable.js",
+    "src/policy/route.js",
     "dist/",
     "!dist/recordings/",
     "README.md"

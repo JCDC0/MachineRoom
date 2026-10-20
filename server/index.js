@@ -8,6 +8,7 @@ import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
+import { createPolicyApi } from './policy.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
 import { gitPath } from './programPath.js'
@@ -295,6 +296,16 @@ export function createBridge(options = {}) {
     companyId,
     projectId,
     projectWorkspaceId,
+    sendJson,
+    readJsonBody,
+    featureOn: (feature) => !featureIsOff(feature),
+    timeoutMs: upstreamTimeoutMs,
+  })
+  const policy = createPolicyApi({
+    paperclipUrl,
+    companyId,
+    projectRoot,
+    briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
     readJsonBody,
     featureOn: (feature) => !featureIsOff(feature),
@@ -687,6 +698,7 @@ export function createBridge(options = {}) {
     if (await briefs.handle(req, res, url)) return
     if (await runs.handle(req, res, url)) return
     if (await reviews.handle(req, res, url)) return
+    if (await policy.handle(req, res, url)) return
     if (await control.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
     if (await decideApi.handle(req, res, url)) return
