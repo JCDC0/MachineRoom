@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.88. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.89. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -25,7 +25,7 @@ npm run serve      the built viewer and the bridge on one port, no Vite (npm run
 npm run pack-check what an npm pack would hold: fails when bin/machine-room.mjs reaches a file the pack leaves out, or the pack holds .env, tests, recordings, node_modules, .git or logs; tests/pack-start.test.js packs for real, unpacks with scripts/untar.mjs (no shell tar) and starts the room from the unpacked folder with no node_modules
 npm run doctor     compare the running Paperclip's /api/openapi.json with the routes in server/surface.js; exits 1 and names each route or field that is missing
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
-npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --stats (with --since YYYY-MM-DD) prints runs, minutes and cost per lane and model, --model and --reasoning change the model for that run only
+npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --stats (with --since YYYY-MM-DD) prints runs, minutes and cost per lane and model, --model and --reasoning change the model for that run only; it refuses, before anything starts, a brief that is missing, repeated, marked merged, owned by another lane or whose branch already exists (--force skips the merged and owner checks)
 npm run run-recording -- 1      turn run 1 of that list into a recording in public/recordings/ again (run-lane already writes one after each run and prints its /?recording=<name>)
 npm test           vitest through scripts/test.mjs, node environment, threads pool, no browser needed; it runs the tests again (3 tries in all) only when Node itself crashes with 0xC0000409
 npm run build
