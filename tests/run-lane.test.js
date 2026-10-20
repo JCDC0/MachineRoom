@@ -1,10 +1,10 @@
 import { spawn } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const env = { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }
@@ -674,7 +674,7 @@ function runTestScript(extra) {
 
 describe('scripts/test.mjs', () => {
   it('runs the tests again after the crash and keeps the second result', async () => {
-    const folder = mkdtempSync(join(tmpdir(), 'machine-room-test-'))
+    const folder = makeTempDir('machine-room-test-')
     try {
       const counter = join(folder, 'count.txt')
       const fake = join(folder, 'fake-test.mjs')
@@ -697,7 +697,7 @@ describe('scripts/test.mjs', () => {
   })
 
   it('runs a failing test once and keeps its code', async () => {
-    const folder = mkdtempSync(join(tmpdir(), 'machine-room-test-'))
+    const folder = makeTempDir('machine-room-test-')
     try {
       const counter = join(folder, 'count.txt')
       const fake = join(folder, 'fake-test.mjs')

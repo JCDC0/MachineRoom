@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { PAPERCLIP_SURFACE } from '../server/surface.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = dirname(fileURLToPath(import.meta.url))
 const BIN = join(root, '..', 'bin', 'machine-room.mjs')
@@ -24,13 +24,13 @@ afterEach(async () => {
 })
 
 function makeProject() {
-  const folder = mkdtempSync(join(tmpdir(), 'machine-room-up-'))
+  const folder = makeTempDir('machine-room-up-')
   cleanups.push(() => rmSync(folder, { recursive: true, force: true }))
   return folder
 }
 
 function makeDist() {
-  const base = mkdtempSync(join(tmpdir(), 'machine-room-up-dist-'))
+  const base = makeTempDir('machine-room-up-dist-')
   const dist = join(base, 'dist')
   mkdirSync(dist, { recursive: true })
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>Room</title>')

@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
-import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const BIN = join(rootDir, 'bin', 'machine-room.mjs')
@@ -21,7 +21,7 @@ afterEach(async () => {
 })
 
 function makeDist() {
-  const base = mkdtempSync(join(tmpdir(), 'machine-room-serve-'))
+  const base = makeTempDir('machine-room-serve-')
   const dist = join(base, 'dist')
   mkdirSync(dist, { recursive: true })
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>Room</title>')
@@ -35,7 +35,7 @@ function makeDist() {
 }
 
 async function startBridge(staticDir) {
-  const base = mkdtempSync(join(tmpdir(), 'machine-room-bridge-'))
+  const base = makeTempDir('machine-room-bridge-')
   cleanups.push(() => rmSync(base, { recursive: true, force: true }))
   const bridge = createBridge({
     port: 0,

@@ -1,10 +1,10 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { createMockClient } from '../src/control/mock.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const read = (name) => readFileSync(new URL(`../docs/agents/${name}`, import.meta.url), 'utf8')
 const cleanups = []
@@ -14,7 +14,7 @@ afterEach(async () => {
 })
 
 async function startBridge(lanes) {
-  const dir = mkdtempSync(join(tmpdir(), 'bridge-safety-'))
+  const dir = makeTempDir('bridge-safety-')
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   const briefsDir = join(dir, 'docs', 'agents')
   const { mkdirSync } = await import('node:fs')

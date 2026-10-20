@@ -1,9 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { makeTempDir as makeTempRoot } from './helpers/tempRoot.js'
 
 const REAL_TMP = tmpdir()
 const NO_GIT_CONFIG = join(REAL_TMP, 'machineroom-reviews-no-git-config')
@@ -17,7 +18,7 @@ afterEach(async () => {
 })
 
 function makeTempDir() {
-  const dir = mkdtempSync(join(REAL_TMP, 'mr-reviews-'))
+  const dir = makeTempRoot('mr-reviews-')
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
   return dir
 }

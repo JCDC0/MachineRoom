@@ -17,6 +17,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     pool: 'threads',
+    globalSetup: ['./tests/helpers/cleanTemp.js'],
     include: ['tests/**/*.test.js'],
   },
 })

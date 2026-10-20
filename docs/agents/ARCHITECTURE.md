@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.84. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.85. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -76,7 +76,7 @@ src/App.jsx       chooses the first screen (connect, replay or live), loads the 
 src/startup.js    pure: which screen to open from the address and the saved connection (tested)
 src/storage.js    safe access to localStorage
 public/fixtures/  the recorded run, agent list and file tree
-tests/            vitest
+tests/            vitest; tests/helpers/tempRoot.js puts every test temp folder under %TEMP%\machineroom-tests\<process id>, and a run first deletes the folders of test processes that are gone (tests/helpers/cleanTemp.js)
 ```
 
 ## Data flow
