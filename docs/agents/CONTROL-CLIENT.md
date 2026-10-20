@@ -29,7 +29,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `outcomes()` | `OutcomeRow[]`, one row per lane and model with its merged, rejected and pending runs, merge rate, average review fixes and cost per merge from the decided runs (C6a, C6b; the newest outcome for a branch wins, and the mock serves rows built from sample runs) |
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry. It sends `confirmed: true`, so call it only after the user confirmed (U5a); a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
-| `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
+| `reviewDiff(lane)` | `ReviewDiff`, what that lane did at its head on its branch compared with `main` (W3a) |
 | `mergeReview(lane, { head, message })` | `MergeResult`, the new merge commit on `main`. It sends `confirmed: true`, so call it only after the user confirmed; `head` is the sha from `reviews()` (W3b; the mock merges a sample lane once) |
 | `askPlanner(goal)` | `{ issueId, identifier }`, the plan task it created for the agent with the role `pm`. It sends `confirmed: true`, so call it only after the user confirmed (C5b; the mock creates a sample plan task) |
 | `plan(issueId)` | `PlanAnswer`, the planner's answer, or `waiting` with empty lists while no comment from the planner holds a `{` (C5b; the mock answers one good brief and one problem) |
@@ -77,8 +77,9 @@ Review       { lane, worktree, branch, head: string (full sha of the worktree HE
                commits: string[] (at most 50), dirty: boolean, files: number, added: number, deleted: number,
                lastRun: RunRecord | null }
              A worktree that is missing or is not a git repository gives { lane, worktree, error } instead.
-ReviewDiff   { lane, branch, files: [{ path, added, deleted }], patch, truncated: boolean }
-             patch is the diff of the lane branch against main, cut at 400 KB (truncated is true when it was cut).
+ReviewDiff   { lane, branch, head, files: [{ path, added, deleted }], patch, truncated: boolean }
+             head is the sha the patch was read at. patch is the diff of the lane branch at head against main,
+             cut at 400 KB (truncated is true when it was cut).
 MergeResult  { ok: true, lane, branch, head, commit }
              commit is the new sha of main. A merge that stops on a conflict rejects with
              The merge stopped on a conflict. Nothing changed.

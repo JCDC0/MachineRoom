@@ -221,6 +221,44 @@ describe('review routes', () => {
     expect(body.patch).toContain('hello again')
   })
 
+  it('names the head it read and keeps a later commit out of the patch', async () => {
+    const { worktree } = makeLaneRepo()
+    const firstHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } })
+
+    const first = await fetch(`${url}/api/control/reviews/opencode/diff`).then((r) => r.json())
+    expect(first.head).toBe(firstHead)
+    expect(first.patch).not.toContain('later.js')
+
+    writeFileSync(join(worktree, 'later.js'), 'export const later = true\n')
+    git(worktree, ['add', 'later.js'])
+    git(worktree, ['commit', '-m', 'later'])
+
+    const second = await fetch(`${url}/api/control/reviews/opencode/diff`).then((r) => r.json())
+    expect(second.head).toBe(git(worktree, ['rev-parse', 'HEAD']).trim())
+    expect(second.head).not.toBe(firstHead)
+    expect(second.patch).toContain('later.js')
+  })
+
+  it('keeps the patch at the head it names when a commit lands while it reads', async () => {
+    const { worktree } = makeLaneRepo()
+    const before = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } })
+
+    const pending = fetch(`${url}/api/control/reviews/opencode/diff`)
+    writeFileSync(join(worktree, 'late.js'), 'export const late = true\n')
+    git(worktree, ['add', 'late.js'])
+    git(worktree, ['commit', '-m', 'late'])
+    const after = git(worktree, ['rev-parse', 'HEAD']).trim()
+    expect(after).not.toBe(before)
+
+    const body = await pending.then((r) => r.json())
+    expect([before, after]).toContain(body.head)
+    const expected = git(worktree, ['diff', '--no-ext-diff', '--no-textconv', `refs/heads/main...${body.head}`])
+    expect(body.patch).toBe(expected)
+    if (body.head === before) expect(body.patch).not.toContain('late.js')
+  }, 20000)
+
   it('cuts the patch at the patch limit and says so', async () => {
     const { worktree } = makeLaneRepo()
     const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { patchLimit: 120 })

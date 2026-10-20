@@ -1026,6 +1026,8 @@ function runContractSuite(label, makeHarness) {
       const diff = await client.reviewDiff(good.lane)
       expect(diff.lane).toBe(good.lane)
       expect(typeof diff.branch).toBe('string')
+      expect(diff.head, good.lane).toBe(good.head)
+      expect(diff.head, good.lane).toMatch(/^[0-9a-f]{40}$/)
       expect(Array.isArray(diff.files)).toBe(true)
       for (const file of diff.files) {
         expect(typeof file.path).toBe('string')
