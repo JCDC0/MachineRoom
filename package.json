@@ -14,6 +14,7 @@
     "server/",
     "src/briefs/audit.js",
     "src/briefs/briefs.js",
+    "src/briefs/plan.js",
     "src/briefs/run.js",
     "src/control/agents.js",
     "src/decider/decide.js",
