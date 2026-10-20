@@ -56,7 +56,7 @@ const SINCE_PROBLEM = '--since needs a date like 2026-10-19.'
 const MODEL_UNKNOWN = 'model unknown'
 const ALL = 'all'
 
-function dayStart(value) {
+export function dayStart(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''))
   if (!match) return null
   const year = Number(match[1])

@@ -1946,6 +1946,193 @@ describe('run routes', () => {
     return { url, dir, bridge }
   }
 
+  function statsRecord({ lane, model = 'deepseek/v4.1-flash-1017', startedAt, minutes, costUsd = null, exitCode = 0 }) {
+    return JSON.stringify({ lane, model, startedAt, minutes, exitCode, killed: false, costUsd })
+  }
+
+  function writeRuns(tempDir, lines) {
+    const folder = join(tempDir, 'machineroom-runs')
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, 'runs.jsonl'), `${lines.join('\n')}\n`)
+  }
+
+  const EMPTY_STATS = {
+    rows: [],
+    total: {
+      lane: 'all',
+      model: 'all',
+      runs: 0,
+      finished: 0,
+      killed: 0,
+      failed: 0,
+      minutesTotal: 0,
+      minutesMedian: 0,
+      costTotal: 0,
+      costRuns: 0,
+    },
+  }
+
+  it('answers lane totals over every record, not just the last 20', async () => {
+    const tempDir = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const lines = []
+    for (let i = 1; i <= 24; i += 1) {
+      lines.push(
+        statsRecord({
+          lane: i <= 20 ? 'hermes' : 'opencode',
+          startedAt: `2026-10-${String(i).padStart(2, '0')}T12:00:00.000Z`,
+          minutes: 2,
+          costUsd: 0.5,
+        })
+      )
+    }
+    writeRuns(tempDir, lines)
+
+    const res = await fetch(`${url}/api/control/runs/stats`)
+    expect(res.status).toBe(200)
+    const stats = await res.json()
+    expect(stats.rows).toEqual([
+      {
+        lane: 'hermes',
+        model: 'deepseek/v4.1-flash-1017',
+        runs: 20,
+        finished: 20,
+        killed: 0,
+        failed: 0,
+        minutesTotal: 40,
+        minutesMedian: 2,
+        costTotal: 10,
+        costRuns: 20,
+      },
+      {
+        lane: 'opencode',
+        model: 'deepseek/v4.1-flash-1017',
+        runs: 4,
+        finished: 4,
+        killed: 0,
+        failed: 0,
+        minutesTotal: 8,
+        minutesMedian: 2,
+        costTotal: 2,
+        costRuns: 4,
+      },
+    ])
+    expect(stats.total).toEqual({
+      lane: 'all',
+      model: 'all',
+      runs: 24,
+      finished: 24,
+      killed: 0,
+      failed: 0,
+      minutesTotal: 48,
+      minutesMedian: 2,
+      costTotal: 12,
+      costRuns: 24,
+    })
+  })
+
+  it('keeps the runs since a day and refuses a bad day with the runner sentence', async () => {
+    const tempDir = useRunsTemp()
+    const { url } = await startRunsBridge()
+    writeRuns(tempDir, [
+      statsRecord({ lane: 'hermes', startedAt: '2026-10-18T23:59:59.999Z', minutes: 1, costUsd: 1 }),
+      statsRecord({ lane: 'hermes', startedAt: '2026-10-19T00:00:00.000Z', minutes: 2, costUsd: 2 }),
+      statsRecord({ lane: 'opencode', model: 'other/model', startedAt: '2026-10-20T08:00:00.000Z', minutes: 3, costUsd: 3 }),
+    ])
+
+    const res = await fetch(`${url}/api/control/runs/stats?since=2026-10-19`)
+    expect(res.status).toBe(200)
+    const stats = await res.json()
+    expect(stats.rows.map((row) => [row.lane, row.model, row.runs, row.costTotal])).toEqual([
+      ['hermes', 'deepseek/v4.1-flash-1017', 1, 2],
+      ['opencode', 'other/model', 1, 3],
+    ])
+    expect(stats.total).toMatchObject({ runs: 2, minutesTotal: 5, costTotal: 5 })
+
+    const none = await fetch(`${url}/api/control/runs/stats?since=2026-10-21`).then((r) => r.json())
+    expect(none).toEqual(EMPTY_STATS)
+
+    const bad = await fetch(`${url}/api/control/runs/stats?since=2026-02-30`)
+    expect(bad.status).toBe(400)
+    expect(await bad.json()).toEqual({ error: '--since needs a date like 2026-10-19.' })
+
+    const wrongMethod = await fetch(`${url}/api/control/runs/stats`, { method: 'POST' })
+    expect(wrongMethod.status).toBe(405)
+  })
+
+  it('answers the empty result for a missing or empty file and skips junk lines', async () => {
+    const tempDir = useRunsTemp()
+    const { url } = await startRunsBridge()
+
+    const missing = await fetch(`${url}/api/control/runs/stats`)
+    expect(missing.status).toBe(200)
+    expect(await missing.json()).toEqual(EMPTY_STATS)
+
+    const folder = join(tempDir, 'machineroom-runs')
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(join(folder, 'runs.jsonl'), '')
+    const empty = await fetch(`${url}/api/control/runs/stats`)
+    expect(empty.status).toBe(200)
+    expect(await empty.json()).toEqual(EMPTY_STATS)
+
+    writeRuns(tempDir, [
+      statsRecord({ lane: 'hermes', startedAt: '2026-10-19T09:00:00.000Z', minutes: 4, costUsd: 1 }),
+      'not json at all',
+      '{ "lane": ',
+      statsRecord({ lane: 'hermes', startedAt: '2026-10-19T10:00:00.000Z', minutes: 6, costUsd: 2 }),
+      'null',
+      '[]',
+      JSON.stringify({ lane: '', startedAt: '2026-10-19T11:00:00.000Z', minutes: 9, costUsd: 9 }),
+    ])
+    const stats = await fetch(`${url}/api/control/runs/stats`).then((r) => r.json())
+    expect(stats.rows).toEqual([
+      {
+        lane: 'hermes',
+        model: 'deepseek/v4.1-flash-1017',
+        runs: 2,
+        finished: 2,
+        killed: 0,
+        failed: 0,
+        minutesTotal: 10,
+        minutesMedian: 5,
+        costTotal: 3,
+        costRuns: 2,
+      },
+    ])
+    expect(stats.total.runs).toBe(2)
+  })
+
+  it('reads the stats through the control client', async () => {
+    const tempDir = useRunsTemp()
+    const { url } = await startRunsBridge()
+    writeRuns(tempDir, [
+      statsRecord({ lane: 'hermes', startedAt: '2026-10-18T12:00:00.000Z', minutes: 1, costUsd: 0.25 }),
+      statsRecord({ lane: 'opencode', model: 'other/model', startedAt: '2026-10-19T12:00:00.000Z', minutes: 3, costUsd: 0.75 }),
+    ])
+    const client = createClient({ baseUrl: url })
+
+    const all = await client.runStats()
+    expect(all.total).toMatchObject({ runs: 2, minutesTotal: 4, costTotal: 1 })
+
+    const since = await client.runStats({ since: '2026-10-19' })
+    expect(since.rows).toEqual([
+      {
+        lane: 'opencode',
+        model: 'other/model',
+        runs: 1,
+        finished: 1,
+        killed: 0,
+        failed: 0,
+        minutesTotal: 3,
+        minutesMedian: 3,
+        costTotal: 0.75,
+        costRuns: 1,
+      },
+    ])
+
+    await expect(client.runStats({ since: 'yesterday' })).rejects.toThrow('--since needs a date like 2026-10-19.')
+  })
+
   it('answers an empty recent list when the records file is missing', async () => {
     useRunsTemp()
     const { url } = await startRunsBridge()

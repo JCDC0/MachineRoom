@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseBriefs } from '../src/briefs/briefs.js'
+import { dayStart, laneStats } from '../src/briefs/run.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
 export const BRIEF_ID = /^[A-Z]\d+[a-z]?$/
+const SINCE_PROBLEM = '--since needs a date like 2026-10-19.'
 
 export function runsFile() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl')
@@ -29,6 +31,25 @@ export function readRunRecords(file) {
     }
   }
   return records.slice(-RECENT_LIMIT).reverse()
+}
+
+export function readAllRunRecords(file) {
+  let text
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch {
+    return []
+  }
+  const records = []
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim()) continue
+    try {
+      records.push(JSON.parse(line))
+    } catch {
+      continue
+    }
+  }
+  return records
 }
 
 export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {} }) {
@@ -108,6 +129,20 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
+    if (path === '/api/control/runs/stats') {
+      if (method !== 'GET') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      const since = url.searchParams.get('since')
+      if (since !== null && dayStart(since) === null) {
+        sendJson(req, res, 400, { error: SINCE_PROBLEM })
+        return true
+      }
+      const records = readAllRunRecords(runsFile())
+      sendJson(req, res, 200, laneStats(records, since === null ? {} : { since }))
+      return true
+    }
     if (path !== '/api/control/runs') return false
 
     if (method === 'GET') {
