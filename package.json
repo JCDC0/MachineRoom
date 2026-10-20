@@ -37,6 +37,7 @@
     "run-lane": "node scripts/run-lane.mjs",
     "run-recording": "node scripts/run-recording.mjs",
     "outcome": "node scripts/outcome.mjs",
+    "hand-run": "node scripts/hand-run.mjs",
     "candidate": "node scripts/candidate.mjs",
     "doctor": "node scripts/doctor.mjs",
     "pack-check": "node scripts/pack-check.mjs",
