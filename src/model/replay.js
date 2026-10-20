@@ -74,6 +74,64 @@ export function parseRecordingIndex(raw) {
   return entries
 }
 
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function titleOf(lane, briefs) {
+  if (!lane) return 'run'
+  if (briefs.length === 0) return lane
+  return [lane, ...briefs].join(' ')
+}
+
+function detailOf(minutes, toolCalls, exitCode) {
+  const parts = []
+  if (minutes !== null) parts.push(minutes < 1 ? 'under 1 min' : `${Math.round(minutes)} min`)
+  if (toolCalls !== null) parts.push(toolCalls === 1 ? '1 tool call' : `${toolCalls} tool calls`)
+  if (exitCode !== null) parts.push(exitCode === 0 ? 'finished' : 'failed')
+  return parts.join(', ')
+}
+
+function whenOf(start) {
+  if (!start) return ''
+  const date = new Date(start)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`
+}
+
+function objectOrEmpty(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
+}
+
+export function describeRecording(entry) {
+  const item = objectOrEmpty(entry)
+  const lane = textOf(item.lane)
+  return {
+    name: textOf(item.name),
+    title: titleOf(lane, briefsOf(item.briefs)),
+    detail: detailOf(numberOrNull(item.minutes), numberOrNull(item.toolCalls), numberOrNull(item.exitCode)),
+    when: whenOf(textOf(item.start)),
+  }
+}
+
+export function filterRecordings(entries, options) {
+  if (!Array.isArray(entries)) return []
+  const { lane, text } = options !== null && typeof options === 'object' ? options : {}
+  const wanted = typeof lane === 'string' ? lane : ''
+  const needle = typeof text === 'string' ? text.trim().toLowerCase() : ''
+  return entries.filter((entry) => {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return false
+    if (wanted && textOf(entry.lane) !== wanted) return false
+    if (needle) {
+      const haystack = [textOf(entry.name), textOf(entry.lane), ...briefsOf(entry.briefs), textOf(entry.model)]
+        .join(' ')
+        .toLowerCase()
+      if (!haystack.includes(needle)) return false
+    }
+    return true
+  })
+}
+
 function defaultBase() {
   try {
     const env = import.meta.env

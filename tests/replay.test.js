@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadRecordingIndex, parseRecordingIndex, replayFiles } from '../src/model/replay.js'
+import { describeRecording, filterRecordings, loadRecordingIndex, parseRecordingIndex, replayFiles } from '../src/model/replay.js'
 
 const READ_FAILED = 'The list of recordings could not be read.'
 
@@ -106,6 +106,153 @@ describe('parseRecordingIndex', () => {
     for (const raw of [null, undefined, {}, 'run-1', 42, true]) {
       expect(parseRecordingIndex(raw)).toEqual([])
     }
+  })
+})
+
+describe('describeRecording', () => {
+  function localStamp(date) {
+    const pad = (value) => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+  }
+
+  it('names the entry and joins the lane and the briefs in the title', () => {
+    expect(describeRecording(entry('run-1', { lane: 'hermes', briefs: ['T13'] }))).toMatchObject({
+      name: 'run-1',
+      title: 'hermes T13',
+    })
+    expect(describeRecording(entry('run-1', { lane: 'hermes', briefs: ['T13', 'T14'] })).title).toBe('hermes T13 T14')
+  })
+
+  it('gives the lane alone when there are no briefs', () => {
+    expect(describeRecording(entry('run-1', { lane: 'opencode', briefs: [] })).title).toBe('opencode')
+  })
+
+  it('gives run when the lane is empty', () => {
+    expect(describeRecording(entry('run-1', { lane: '', briefs: [] })).title).toBe('run')
+    expect(describeRecording(entry('run-1', { lane: '', briefs: ['T13'] })).title).toBe('run')
+  })
+
+  it('rounds the minutes and counts the tool calls', () => {
+    expect(describeRecording(entry('run-1', { minutes: 8, toolCalls: 42, exitCode: 0 })).detail).toBe(
+      '8 min, 42 tool calls, finished',
+    )
+    expect(describeRecording(entry('run-1', { minutes: 8.4, toolCalls: 42, exitCode: null })).detail).toBe(
+      '8 min, 42 tool calls',
+    )
+    expect(describeRecording(entry('run-1', { minutes: 7.6, toolCalls: null, exitCode: null })).detail).toBe('8 min')
+  })
+
+  it('writes one tool call in the singular', () => {
+    expect(describeRecording(entry('run-1', { minutes: null, toolCalls: 1, exitCode: null })).detail).toBe('1 tool call')
+    expect(describeRecording(entry('run-1', { minutes: null, toolCalls: 0, exitCode: null })).detail).toBe(
+      '0 tool calls',
+    )
+  })
+
+  it('writes under 1 min below one minute', () => {
+    expect(describeRecording(entry('run-1', { minutes: 0.4, toolCalls: 3, exitCode: null })).detail).toBe(
+      'under 1 min, 3 tool calls',
+    )
+    expect(describeRecording(entry('run-1', { minutes: 0, toolCalls: null, exitCode: null })).detail).toBe(
+      'under 1 min',
+    )
+  })
+
+  it('writes failed for an exit code that is not zero', () => {
+    expect(describeRecording(entry('run-1', { minutes: 3, toolCalls: 5, exitCode: 1 })).detail).toBe(
+      '3 min, 5 tool calls, failed',
+    )
+    expect(describeRecording(entry('run-1', { minutes: null, toolCalls: null, exitCode: 130 })).detail).toBe('failed')
+  })
+
+  it('leaves out the numbers it does not have', () => {
+    expect(describeRecording(entry('run-1', { minutes: null, toolCalls: 4, exitCode: 0 })).detail).toBe(
+      '4 tool calls, finished',
+    )
+    expect(describeRecording(entry('run-1', { minutes: 2, toolCalls: null, exitCode: 0 })).detail).toBe('2 min, finished')
+    expect(describeRecording(entry('run-1', { minutes: 2, toolCalls: 4, exitCode: null })).detail).toBe(
+      '2 min, 4 tool calls',
+    )
+    expect(describeRecording(entry('run-1', { minutes: null, toolCalls: null, exitCode: null })).detail).toBe('')
+  })
+
+  it('shows the start in the local time', () => {
+    const start = new Date(2026, 9, 20, 14, 5).toISOString()
+    expect(describeRecording(entry('run-1', { start })).when).toBe(localStamp(new Date(start)))
+  })
+
+  it('shows a start with an offset in the local time', () => {
+    for (const start of ['2026-10-20T23:30:00.000Z', '2026-10-20T06:00:00+08:00']) {
+      expect(describeRecording(entry('run-1', { start })).when).toBe(localStamp(new Date(start)))
+    }
+  })
+
+  it('gives an empty when for a start that is not a time', () => {
+    for (const start of ['', 'not a time', '2026-13-45', 'yesterday']) {
+      expect(describeRecording(entry('run-1', { start })).when).toBe('')
+    }
+    expect(describeRecording(entry('run-1', { start: null })).when).toBe('')
+  })
+
+  it('takes junk for an entry', () => {
+    expect(describeRecording(null)).toEqual({ name: '', title: 'run', detail: '', when: '' })
+  })
+})
+
+describe('filterRecordings', () => {
+  const runs = [
+    entry('hermes-1', { lane: 'hermes', briefs: ['T13'], model: 'deepseek/deepseek-v4.1-flash-1017' }),
+    entry('opencode-1', { lane: 'opencode', briefs: ['T12'], model: 'opencode-go/mimo-v2.6-pro' }),
+    entry('agy-1', { lane: 'agy', briefs: ['V5b'], model: 'gemini-3.8-flash' }),
+    entry('hermes-2', { lane: 'hermes', briefs: ['T14', 'G3b'], model: 'deepseek/deepseek-v4.1-flash-1017' }),
+  ]
+
+  function names(entries) {
+    return entries.map((item) => item.name)
+  }
+
+  it('keeps the order and every entry with no filter', () => {
+    expect(names(filterRecordings(runs))).toEqual(['hermes-1', 'opencode-1', 'agy-1', 'hermes-2'])
+    expect(names(filterRecordings(runs, {}))).toEqual(['hermes-1', 'opencode-1', 'agy-1', 'hermes-2'])
+  })
+
+  it('keeps one lane', () => {
+    expect(names(filterRecordings(runs, { lane: 'hermes' }))).toEqual(['hermes-1', 'hermes-2'])
+    expect(names(filterRecordings(runs, { lane: 'claude' }))).toEqual([])
+  })
+
+  it('matches the text in the name, the lane, a brief and the model', () => {
+    expect(names(filterRecordings(runs, { text: 'agy-1' }))).toEqual(['agy-1'])
+    expect(names(filterRecordings(runs, { text: 'opencode' }))).toEqual(['opencode-1'])
+    expect(names(filterRecordings(runs, { text: 'V5b' }))).toEqual(['agy-1'])
+    expect(names(filterRecordings(runs, { text: 'mimo' }))).toEqual(['opencode-1'])
+  })
+
+  it('ignores case and the space around the text', () => {
+    expect(names(filterRecordings(runs, { text: 'HERMES' }))).toEqual(['hermes-1', 'hermes-2'])
+    expect(names(filterRecordings(runs, { text: '  deepseek  ' }))).toEqual(['hermes-1', 'hermes-2'])
+  })
+
+  it('keeps every entry for a blank text', () => {
+    expect(names(filterRecordings(runs, { text: '' }))).toHaveLength(4)
+    expect(names(filterRecordings(runs, { text: '   ' }))).toHaveLength(4)
+  })
+
+  it('applies the lane and the text together', () => {
+    expect(names(filterRecordings(runs, { lane: 'hermes', text: 'T14' }))).toEqual(['hermes-2'])
+    expect(names(filterRecordings(runs, { lane: 'hermes', text: 'V5b' }))).toEqual([])
+  })
+
+  it('gives an empty list for junk', () => {
+    for (const entries of [null, undefined, 'hermes-1', 42, {}, true]) {
+      expect(filterRecordings(entries, { text: 'hermes' })).toEqual([])
+    }
+  })
+
+  it('skips junk entries and takes junk options', () => {
+    const mixed = [null, 'run', 7, [], runs[0], { name: 'no-lane' }]
+    expect(names(filterRecordings(mixed))).toEqual(['hermes-1', 'no-lane'])
+    expect(names(filterRecordings(runs, null))).toHaveLength(4)
   })
 })
 
