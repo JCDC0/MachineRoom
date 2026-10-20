@@ -15,7 +15,7 @@ function slug(text) {
 }
 
 export function parserFor(raw) {
-  if (PARSERS[raw.adapterType]) return PARSERS[raw.adapterType]
+  if (Object.hasOwn(PARSERS, raw.adapterType)) return PARSERS[raw.adapterType]
   if (raw.adapterType === 'process' && /agy/i.test(raw.name)) return 'agy'
   return null
 }
@@ -25,7 +25,7 @@ export function toAgents(rawAgents) {
   const agents = rawAgents.map((raw) => {
     const parser = parserFor(raw)
     const role = typeof raw?.role === 'string' && raw.role !== '' ? raw.role : null
-    let key = PARSERS[raw.adapterType] ?? slug(raw.name)
+    let key = Object.hasOwn(PARSERS, raw.adapterType) ? PARSERS[raw.adapterType] : slug(raw.name)
     if (taken.has(key)) {
       key = slug(raw.name)
       for (let n = 2; taken.has(key); n += 1) key = `${slug(raw.name)}-${n}`

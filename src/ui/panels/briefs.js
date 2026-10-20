@@ -92,7 +92,7 @@ export function groupBriefsByOwner(briefs) {
     const ownerKey = rawOwner || 'owner'
     let group = byOwner.get(ownerKey)
     if (!group) {
-      const label = OWNER_LABELS[ownerKey] ?? (rawOwner ? rawOwner : 'Owner')
+      const label = Object.hasOwn(OWNER_LABELS, ownerKey) ? OWNER_LABELS[ownerKey] : rawOwner ? rawOwner : 'Owner'
       group = { owner: ownerKey, label, briefs: [] }
       byOwner.set(ownerKey, group)
       groups.push(group)

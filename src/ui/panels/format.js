@@ -85,7 +85,7 @@ const STATUS_LABELS = {
 
 export function statusLabel(status) {
   if (!status) return ''
-  return STATUS_LABELS[status] ?? String(status).replace(/_/g, ' ')
+  return Object.hasOwn(STATUS_LABELS, status) ? STATUS_LABELS[status] : String(status).replace(/_/g, ' ')
 }
 
 const APPROVAL_TYPE_LABELS = {
@@ -97,5 +97,5 @@ const APPROVAL_TYPE_LABELS = {
 
 export function approvalTypeLabel(type) {
   if (!type) return ''
-  return APPROVAL_TYPE_LABELS[type] ?? String(type).replace(/_/g, ' ')
+  return Object.hasOwn(APPROVAL_TYPE_LABELS, type) ? APPROVAL_TYPE_LABELS[type] : String(type).replace(/_/g, ' ')
 }

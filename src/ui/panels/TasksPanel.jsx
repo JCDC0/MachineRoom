@@ -11,6 +11,10 @@ const OPEN_ORDER = {
   backlog: 5,
 }
 
+export function openRank(status) {
+  return Object.hasOwn(OPEN_ORDER, status) ? OPEN_ORDER[status] : 99
+}
+
 export default function TasksPanel({ client, controlTarget = null }) {
   const [issues, setIssues] = useState([])
   const [agents, setAgents] = useState([])
@@ -133,7 +137,7 @@ export default function TasksPanel({ client, controlTarget = null }) {
 
   const openIssues = issues
     .filter((issue) => issue.status !== 'done' && issue.status !== 'cancelled')
-    .sort((a, b) => (OPEN_ORDER[a.status] ?? 99) - (OPEN_ORDER[b.status] ?? 99))
+    .sort((a, b) => openRank(a.status) - openRank(b.status))
 
   const finishedIssues = issues.filter(
     (issue) => issue.status === 'done' || issue.status === 'cancelled'
