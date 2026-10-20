@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../src/briefs/run.js'
+import { outcomeTable } from './outcomes.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
@@ -13,11 +14,11 @@ export function runsFile() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl')
 }
 
-export function readRunRecords(file) {
-  return readAllRunRecords(file).slice(-RECENT_LIMIT).reverse()
+export function outcomesFile() {
+  return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'outcomes.jsonl')
 }
 
-export function readAllRunRecords(file) {
+function readJsonLines(file) {
   let text
   try {
     text = readFileSync(file, 'utf8')
@@ -34,6 +35,18 @@ export function readAllRunRecords(file) {
     }
   }
   return records
+}
+
+export function readRunRecords(file) {
+  return readAllRunRecords(file).slice(-RECENT_LIMIT).reverse()
+}
+
+export function readAllRunRecords(file) {
+  return readJsonLines(file)
+}
+
+export function readOutcomeRecords(file) {
+  return readJsonLines(file)
 }
 
 export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {} }) {
@@ -113,6 +126,16 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
+    if (path === '/api/control/runs/outcomes') {
+      if (method !== 'GET') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      const records = readAllRunRecords(runsFile())
+      const outcomes = readOutcomeRecords(outcomesFile())
+      sendJson(req, res, 200, { rows: outcomeTable(records, outcomes) })
+      return true
+    }
     if (path === '/api/control/runs/stats') {
       if (method !== 'GET') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })

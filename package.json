@@ -36,6 +36,7 @@
     "decide-eval": "node scripts/decide-eval.mjs",
     "run-lane": "node scripts/run-lane.mjs",
     "run-recording": "node scripts/run-recording.mjs",
+    "outcome": "node scripts/outcome.mjs",
     "candidate": "node scripts/candidate.mjs",
     "doctor": "node scripts/doctor.mjs",
     "pack-check": "node scripts/pack-check.mjs",

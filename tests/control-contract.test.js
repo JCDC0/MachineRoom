@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -866,6 +866,48 @@ function runContractSuite(label, makeHarness) {
       expect(running).toEqual([])
     })
 
+    it('answers the outcome table', async () => {
+      const harness = await makeHarness()
+      const { client } = harness
+      if (harness.runsTemp) {
+        const folder = join(harness.runsTemp, 'machineroom-runs')
+        mkdirSync(folder, { recursive: true })
+        appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify({ lane: 'seed-lane', model: 'seed-model', branch: 'feat/seed', costUsd: 0.5 })}\n`)
+        appendFileSync(join(folder, 'outcomes.jsonl'), `${JSON.stringify({ branch: 'feat/seed', outcome: 'merged', grade: 'A', fixes: 2 })}\n`)
+      }
+
+      const rows = await client.outcomes()
+      expect(Array.isArray(rows)).toBe(true)
+      for (const row of rows) {
+        for (const key of ['lane', 'model', 'runs', 'merged', 'rejected', 'pending', 'mergeRate', 'averageFixes', 'costUsd', 'costPerMerge']) {
+          expect(row, `${row.lane} ${key}`).toHaveProperty(key)
+        }
+        expect(row.runs).toBe(row.merged + row.rejected + row.pending)
+        expect(typeof row.lane).toBe('string')
+        expect(typeof row.model).toBe('string')
+        expect(typeof row.costUsd).toBe('number')
+        for (const key of ['mergeRate', 'averageFixes', 'costPerMerge']) {
+          expect(row[key] === null || typeof row[key] === 'number', `${row.lane} ${key}`).toBe(true)
+        }
+      }
+      const keys = rows.map((row) => `${row.lane}\u0000${row.model}`)
+      expect(keys).toEqual([...keys].sort())
+      if (harness.runsTemp) {
+        expect(rows.find((row) => row.lane === 'seed-lane')).toEqual({
+          lane: 'seed-lane',
+          model: 'seed-model',
+          runs: 1,
+          merged: 1,
+          rejected: 0,
+          pending: 0,
+          mergeRate: 1,
+          averageFixes: 2,
+          costUsd: 0.5,
+          costPerMerge: 0.5,
+        })
+      }
+    })
+
     it('notices a run when it starts and when it ends', async () => {
       const { client, settle } = await makeHarness()
       const seen = []
@@ -1010,7 +1052,7 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
     await waitUntil(() => instances.some((item) => item.connected))
     await new Promise((r) => setTimeout(r, 20))
   }
-  return { client, fake, url, instances, settle }
+  return { client, fake, url, instances, settle, runsTemp }
 })
 
 describe('real control client and bridge extras', () => {
