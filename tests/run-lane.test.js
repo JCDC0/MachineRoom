@@ -54,6 +54,12 @@ describe('commandFor', () => {
   it('refuses a lane with no command line', () => {
     expect(() => commandFor({ lane: lanes.agy, prompt, env, title })).toThrow(/no command line/)
   })
+
+  it('refuses a lane with no worktree, so the harness never starts in the folder the runner was started from', () => {
+    for (const worktree of [undefined, '', '  ', 42]) {
+      expect(() => commandFor({ lane: { ...lanes.hermes, worktree }, prompt, env, title })).toThrow('The lane Hermes has no worktree, so the runner cannot start it.')
+    }
+  })
 })
 
 describe('unattendedPrompt', () => {
