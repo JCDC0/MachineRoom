@@ -181,12 +181,15 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
 
   async function laneDiff(lane, worktree) {
     const branch = (await git(worktree, ['branch', '--show-current'])).trim()
-    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', LANE_DIFF]))
-    const full = await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', LANE_DIFF])
+    const head = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
+    const range = `${MAIN_REF}...${head}`
+    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', range]))
+    const full = await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', range])
     const truncated = full.length > limit
     return {
       lane,
       branch,
+      head,
       files: stat.files,
       patch: truncated ? full.slice(0, limit) : full,
       truncated,

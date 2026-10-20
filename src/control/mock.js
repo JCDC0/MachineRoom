@@ -521,6 +521,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return {
           lane: review.lane,
           branch: review.branch,
+          head: review.head,
           files: clone(SAMPLE_REVIEW_DIFF_FILES),
           patch: SAMPLE_REVIEW_PATCH,
           truncated: false,
