@@ -1,4 +1,4 @@
-import { EFFORTS, cleanAgentDraft, cleanAgentPatch } from '../src/control/agents.js'
+import { CANNOT_TAKE_TASKS, EFFORTS, cleanAgentDraft, cleanAgentPatch, taskDraftProblem } from '../src/control/agents.js'
 import { MODELS } from './models.js'
 
 const AGENT_STATUS = {
@@ -565,8 +565,18 @@ export function createControlApi(options) {
         ? await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
         : { status: 0, json: null }
       const list = Array.isArray(known.json) ? known.json : []
-      if (known.status !== 200 || !list.some((agent) => agent?.id === assigneeAgentId)) {
+      const assignee = known.status === 200 ? list.find((agent) => agent?.id === assigneeAgentId) : null
+      if (!assignee) {
         sendJson(req, res, 400, { error: 'Choose an agent for this task.' })
+        return true
+      }
+      if (CANNOT_TAKE_TASKS.includes(assignee.status)) {
+        sendJson(req, res, 400, { error: 'That agent cannot take tasks yet.' })
+        return true
+      }
+      const problem = taskDraftProblem(draft)
+      if (problem) {
+        sendJson(req, res, 400, { error: problem })
         return true
       }
       const overrides = issueOverrides(draft)

@@ -50,7 +50,8 @@ Issue        { id, identifier ("JC-18"), title, description, status, priority, a
                overrides: { model?, maxTurnsPerRun?, timeoutSec?, subagentsAllowed? } | null, createdAt, updatedAt }
              status: backlog | todo | in_progress | in_review | done | blocked | cancelled
              priority: critical | high | medium | low
-IssueDraft   { title, description?, assigneeAgentId, priority?, model?, maxTurnsPerRun?, timeoutSec?, subagentsAllowed? }
+IssueDraft   { title, description?, assigneeAgentId, priority? (critical | high | medium | low), model? (max 120), maxTurnsPerRun? (1..200),
+               timeoutSec? (10..7200), subagentsAllowed? (boolean) }   a value outside these is refused with the AgentDraft sentence
 Comment      { id, issueId, authorAgentId: string|null, authorName, body, createdAt }
 Approval     { id, type, status, summary, requestedByAgentId: string|null, agentId?: string|null, createdAt, decisionNote? }
              agentId names the agent a hire_agent approval is about.

@@ -654,6 +654,23 @@ function runContractSuite(label, makeHarness) {
       await expect(client.createIssue({ title: 'x', assigneeAgentId: 'nobody' })).rejects.toThrow(/agent/i)
     })
 
+    it('refuses a task outside the agent limits, with a bad priority, or for a waiting or terminated agent', async () => {
+      const { client } = await makeHarness()
+      const task = { title: 'Do it', assigneeAgentId: 'agent-opencode' }
+      await expect(client.createIssue({ ...task, maxTurnsPerRun: 5000 })).rejects.toThrow('Turns per run must be a whole number from 1 to 200.')
+      await expect(client.createIssue({ ...task, maxTurnsPerRun: 2.5 })).rejects.toThrow('Turns per run must be a whole number from 1 to 200.')
+      await expect(client.createIssue({ ...task, timeoutSec: 864000 })).rejects.toThrow('The time limit must be a whole number of seconds from 10 to 7200.')
+      await expect(client.createIssue({ ...task, model: { id: 'x' } })).rejects.toThrow('The model must be 1 to 120 characters, or empty.')
+      await expect(client.createIssue({ ...task, subagentsAllowed: 'yes' })).rejects.toThrow('Subagents must be yes or no.')
+      await expect(client.createIssue({ ...task, priority: 'urgent' })).rejects.toThrow('The priority must be critical, high, medium or low.')
+      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
+      await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agent.id })).rejects.toThrow('That agent cannot take tasks yet.')
+      await client.decideApproval(approval.id, 'reject')
+      await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agent.id })).rejects.toThrow('That agent cannot take tasks yet.')
+      expect(await client.issues()).toHaveLength(5)
+      expect((await client.createIssue({ ...task, priority: 'high', maxTurnsPerRun: 200, timeoutSec: 7200 })).priority).toBe('high')
+    })
+
     it('reads comments oldest first and adds a comment to the end of the thread', async () => {
       const { client } = await makeHarness()
       const initial = await client.comments('issue-22')

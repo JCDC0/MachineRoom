@@ -1,7 +1,7 @@
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
-import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary } from './agents.js'
+import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, hireSummary, taskDraftProblem } from './agents.js'
 
 export const CLIENT_METHODS = [
   'agents',
@@ -263,6 +263,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const assignee = agentById(draft.assigneeAgentId)
         if (!assignee) throw new Error('Choose an agent for this task.')
         if (CANNOT_TAKE_TASKS.includes(assignee.status)) throw new Error('That agent cannot take tasks yet.')
+        const problem = taskDraftProblem(draft)
+        if (problem) throw new Error(problem)
         issueCounter += 1
         const stamp = new Date(now()).toISOString()
         const issue = {
