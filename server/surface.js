@@ -353,3 +353,45 @@ export function describeSurface(result) {
   }
   return lines
 }
+
+export function normalizePaperclipUrl(value) {
+  let url
+  try {
+    url = new URL(value)
+  } catch {
+    throw new Error('The Paperclip address must look like http://127.0.0.1:3100.')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('The Paperclip address must start with http:// or https://.')
+  }
+  return url.href.replace(/\/+$/, '')
+}
+
+export function shownPaperclipUrl(value) {
+  const url = new URL(value)
+  url.username = ''
+  url.password = ''
+  return url.href.replace(/\/+$/, '')
+}
+
+export async function readSpec(base, { fetchImpl = fetch, timeoutMs = 10000 } = {}) {
+  const root = String(base).replace(/\/+$/, '')
+  const place = shownPaperclipUrl(root)
+  let response
+  try {
+    response = await fetchImpl(`${root}/api/openapi.json`, { signal: AbortSignal.timeout(timeoutMs) })
+  } catch {
+    throw new Error(`Could not reach Paperclip at ${place}. Start it with paperclipai run.`)
+  }
+  if (!response.ok) throw new Error(`Paperclip answered ${response.status} when asked for its spec.`)
+  let spec
+  try {
+    spec = await response.json()
+  } catch {
+    throw new Error('Paperclip answered something that is not a spec.')
+  }
+  if (!spec || typeof spec !== 'object' || !spec.paths || typeof spec.paths !== 'object') {
+    throw new Error('Paperclip answered a document with no routes. That is not a spec.')
+  }
+  return spec
+}

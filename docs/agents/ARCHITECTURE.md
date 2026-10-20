@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.75. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.76. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -21,7 +21,7 @@ Version 0.1.75. A browser viewer that shows coding agents working on one project
 npm install
 npm run dev        http://localhost:5173
 npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
-npm run serve      the built viewer and the bridge on one port, no Vite (npm run build first); --paperclip, --company, --root, --port, --dist; prints the address to open
+npm run serve      the built viewer and the bridge on one port, no Vite (npm run build first); --paperclip, --company, --root, --port, --dist; prints the address to open; npm run serve -- doctor checks a running Paperclip (it answers, its routes, the company, the project folder, a backup under a day old) and exits 1 on any failure
 npm run doctor     compare the running Paperclip's /api/openapi.json with the routes in server/surface.js; exits 1 and names each route or field that is missing
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
 npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --stats (with --since YYYY-MM-DD) prints runs, minutes and cost per lane and model, --model and --reasoning change the model for that run only
@@ -69,7 +69,7 @@ src/ui/           React HUD: agents, transport with run markers, event log, mode
   panels/           control drawer on `C`: dispatch, tasks and thread, approvals, meters (uses only the control client)
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
 server/           the bridge: Paperclip frames, agent list and file tree for the browser, and the built viewer when started with staticDir (static.js)
-bin/              machine-room.mjs, the one-port command behind npm run serve
+bin/              machine-room.mjs, the one-port command behind npm run serve, and its doctor subcommand (server/doctor.js)
 src/Stage.jsx     wires player, room and HUD together
 src/App.jsx       chooses the first screen (connect, replay or live), loads the data, shows loading, empty and error states
 src/startup.js    pure: which screen to open from the address and the saved connection (tested)
