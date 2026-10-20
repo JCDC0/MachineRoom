@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The folder cards open only for recent touches from the last 90 seconds of run time: `viewInput` in `src/engine/cards.js` uses `freshRecent(state)` for the focus and keeps the full recent list for ranking.
+- Folders close after the work ends (task V6): `src/model/state.js` keeps `state.latest` (the largest activity time applied so far, 0 in a new state) and `state.recentAt` (a map from each path in `state.recent` to the time of the touch that last added it, kept in step with `state.recent`), and exports `RECENT_KEEP_MS` (90000) and `freshRecent(state, keepMs)`, which returns the paths of `state.recent` in the same order whose last touch is at most `keepMs` before `state.latest`. It reads activity times, not `state.now`, so a replay and a seek give the same answer. Claude wires it into the cards.
 - `Stage.jsx` passes `openTerminals`, `onToggleTerminal(key)` and `onShowTerminals(open)` to the HUD and keeps the open chips in step with the `T` key and the assistant. New briefs V5b (terminal buttons in the HUD, AGY) and V6 (folders close after the work ends, Hermes).
 - OpenCode's lane runs DeepSeek V4.1 Flash 1017 at `max` (`opencode-go/deepseek-v4.1-flash#max`), the owner's choice on 2026-10-20, now that OpenCode serves the 1017 version. OpenCode accepts `max` and `high` for this model and refuses `xhigh`. Hermes keeps the same model at `xhigh`.
 - Late join replay (task B6): `/events` sends the kept history to a client that connects without `Last-Event-ID` when it asks with `?history=1`, and the bridge client asks on its first connect, while a reconnect that sends `Last-Event-ID` still resumes after that id.

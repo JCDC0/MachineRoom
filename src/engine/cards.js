@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
 import { basename, dirname } from '../model/paths.js'
+import { freshRecent } from '../model/state.js'
 import { OVERVIEW, viewBasis } from './camera.js'
 import { HUB_CENTER } from './hub.js'
 import { CARD_HUB, cardDepth, layoutCards } from './layout.js'
@@ -29,7 +30,7 @@ export function viewInput(state, pinned = []) {
   for (const file of state.files.values()) if (file.exists) files.push(file.path)
   const focus = ['']
   for (const agent of state.agents.values()) focus.push(...(agent.focus ?? []))
-  focus.push(...(state.recent ?? []), ...pinned)
+  focus.push(...(state.recent ? freshRecent(state) : []), ...pinned)
   return { files, focus, touched: state.recent ?? [] }
 }
 

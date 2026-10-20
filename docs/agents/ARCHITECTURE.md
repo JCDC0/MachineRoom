@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.58. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.59. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -104,7 +104,7 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 
 - Space: black, with a faint lattice in all three axes (2000 unit cells, brighter tick crosses, a few coordinate labels), a far shell of dust and fog. The camera drifts a little with the pointer, eased, and not at all under reduced motion.
 - Hub: a flat ring at the middle, radius 300. Each agent has a slot on it in roster order and parks there when it has no run. A run start pulses the ring white, a run end pulses it green or red, and each slot marker takes its agent's colour.
-- Folders: `planFolderView` (`src/model/folderView.js`) picks the cards from the files, the paths agents touch now and the 8 most recent touches, plus any pinned folder. Closed cards are smallest, open cards larger, and a card that lists files is largest. A card that lists files has a row per item with read and write counts and a `+ N more` line. Cards face the camera.
+- Folders: `planFolderView` (`src/model/folderView.js`) picks the cards from the files, the paths agents touch now, the recent touches (at most 8) made in the last 90 seconds of run time (`freshRecent` in `state.js`, measured against the newest activity, so folders close when later work moves on), plus any pinned folder. Closed cards are smallest, open cards larger, and a card that lists files is largest. A card that lists files has a row per item with read and write counts and a `+ N more` line. Cards face the camera.
 - Card layout: `layoutCards` lays the cards out in the view plane of the overview camera. The root sits above the hub, top-level folders go left and right of it, and deeper folders form columns further out on their parent's side. Box relaxation keeps every card apart and clear of the hub. Deeper folders sit nearer the camera (the root 320 behind the hub, each level 260 nearer, at most 460 in front), so orbiting shows depth. A card that comes back takes its last place, and cards glide and grow to new places and sizes.
 - Clicks: a card's head pins the folder open (its tab turns yellow) or unpins it. A row shows the full path and counts and flies the camera to it; a folder row also pins that folder.
 - Depth: the WebGL canvas sits over the CSS3D layer with a clear background, and each card has an invisible plane that writes only depth. WebGL lines and shapes behind a card are hidden, and those in front of it draw over it.

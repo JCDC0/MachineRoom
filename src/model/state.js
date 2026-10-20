@@ -28,7 +28,7 @@ export function createState(tree, agents) {
       focus: [],
     })
   }
-  return { files, dirs, agents: roster, now: 0, recent: [] }
+  return { files, dirs, agents: roster, now: 0, recent: [], recentAt: new Map(), latest: 0 }
 }
 
 function say(agent, text, tone = 'normal') {
@@ -38,14 +38,25 @@ function say(agent, text, tone = 'normal') {
 }
 
 export const RECENT_LIMIT = 8
+export const RECENT_KEEP_MS = 90000
 
-function remember(state, paths) {
+function remember(state, paths, time) {
   for (const path of paths) {
     const index = state.recent.indexOf(path)
     if (index !== -1) state.recent.splice(index, 1)
     state.recent.push(path)
+    state.recentAt.set(path, time)
   }
   if (state.recent.length > RECENT_LIMIT) state.recent.splice(0, state.recent.length - RECENT_LIMIT)
+  const kept = new Set(state.recent)
+  for (const path of state.recentAt.keys()) {
+    if (!kept.has(path)) state.recentAt.delete(path)
+  }
+}
+
+export function freshRecent(state, keepMs = RECENT_KEEP_MS) {
+  const recentAt = state.recentAt ?? new Map()
+  return state.recent.filter((path) => state.latest - (recentAt.get(path) ?? state.latest) <= keepMs)
 }
 
 function ensureFile(state, path) {
@@ -88,6 +99,7 @@ function applyTouch(state, agent, touch) {
 }
 
 export function apply(state, activity) {
+  if (Number.isFinite(activity.time) && activity.time > (state.latest ?? 0)) state.latest = activity.time
   const agent = state.agents.get(activity.agent)
   if (!agent) return
   switch (activity.type) {
@@ -112,7 +124,7 @@ export function apply(state, activity) {
       activity.touches.forEach((touch) => applyTouch(state, agent, touch))
       if (activity.touches.length > 0) {
         agent.focus = activity.touches.map((touch) => touch.path)
-        remember(state, agent.focus)
+        remember(state, agent.focus, activity.time)
       }
       break
     case 'tool.end':
