@@ -1,6 +1,7 @@
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
+import { chooseRoute } from '../policy/route.js'
 import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
 
 export const CLIENT_METHODS = [
@@ -16,6 +17,7 @@ export const CLIENT_METHODS = [
   'hireAgent',
   'updateAgent',
   'models',
+  'suggestRoute',
   'briefs',
   'briefPrompt',
   'runs',
@@ -67,6 +69,32 @@ const SAMPLE_RULES = {
   about: 'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
   rules: ['Work only in your own worktree and branch. Never push.', 'Run npm test after every change.'],
   report: 'Give the report in your reply, not in a file.',
+}
+
+export const MOCK_POLICY = {
+  tiers: {
+    small: [
+      { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
+      { lane: 'hermes', model: 'minimax/minimax-m3.1-flash:free', reasoning: 'high', provider: 'openrouter' },
+    ],
+    medium: [
+      { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
+    ],
+    large: [
+      { lane: 'agy', model: 'Gemini 4 Argon (Medium)', reasoning: 'medium', provider: 'antigravity' },
+      { lane: 'owner', model: null, reasoning: null, provider: null },
+    ],
+  },
+  limits: {
+    runUsd: 0.25,
+    issueUsd: 1,
+    agentMonthlyUsd: 10,
+    companyMonthlyUsd: 30,
+    maxTurnsPerRun: 200,
+    timeoutSec: 3600,
+  },
+  quotaSkipPercent: 90,
 }
 
 const SAMPLE_REVIEW_PATCH = [
@@ -384,6 +412,21 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       }),
 
     models: () => call('models', () => state.models),
+
+    suggestRoute: (profile, { failures } = {}) =>
+      call('suggestRoute', () => {
+        if (!profile || typeof profile !== 'object' || Array.isArray(profile)) throw new Error('Describe the task first.')
+        if (failures !== undefined && (!Number.isInteger(failures) || failures < 0 || failures > 5)) {
+          throw new Error('Failures must be a whole number from 0 to 5.')
+        }
+        return chooseRoute({
+          policy: MOCK_POLICY,
+          profile,
+          failures,
+          quotas: state.costs.quota,
+          spent: { companyMonthlyUsd: state.costs.summary.spendCents / 100 },
+        })
+      }),
 
     briefs: () => call('briefs', () => parseBriefs(SAMPLE_BRIEFS)),
 

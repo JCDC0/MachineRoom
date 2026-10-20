@@ -7,7 +7,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
-import { CLIENT_METHODS, createMockClient } from '../src/control/mock.js'
+import { CLIENT_METHODS, MOCK_POLICY, createMockClient } from '../src/control/mock.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const BASE_TIME = Date.parse('2026-10-18T00:00:00Z')
@@ -567,6 +567,7 @@ function laneGit() {
     agy: { ...SAMPLE_LANES_JSON.agy, worktree: missing },
   }
   writeFileSync(join(repo, 'docs', 'agents', 'lanes.json'), JSON.stringify(lanes))
+  writeFileSync(join(repo, 'docs', 'agents', 'policy.json'), JSON.stringify(MOCK_POLICY))
   writeFileSync(join(repo, 'notes.txt'), 'hello\n')
   testGit(repo, ['add', '.'])
   testGit(repo, ['commit', '-m', 'first'])
@@ -827,6 +828,24 @@ function runContractSuite(label, makeHarness) {
       const models = await client.models()
       expect(new Set(models.map((model) => model.tier))).toEqual(new Set(['small', 'medium', 'large']))
       expect(models.filter((model) => model.free).map((model) => model.id)).toContain('opencode/deepseek-v4.1-flash-free')
+    })
+
+    it('suggests a route from the policy and refuses a bad profile or failure count', async () => {
+      const { client } = await makeHarness()
+      const profile = { files: 1, hasTests: true, clarity: 'clear', reversible: true, touchesSecrets: false, touchesDeploy: false }
+      const route = await client.suggestRoute(profile)
+      expect(route).toEqual({
+        tier: 'small',
+        choice: { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
+        reason: 'The small tier runs hermes on deepseek/deepseek-v4.1-flash-1017 at xhigh.',
+      })
+
+      const escalated = await client.suggestRoute(profile, { failures: 1 })
+      expect(escalated.tier).toBe('medium')
+      expect(escalated.choice.lane).toBe('opencode')
+
+      await expect(client.suggestRoute('small')).rejects.toThrow('Describe the task first.')
+      await expect(client.suggestRoute(profile, { failures: 9 })).rejects.toThrow('Failures must be a whole number from 0 to 5.')
     })
 
     it('lists briefs and builds a prompt for one or more briefs and one lane', async () => {

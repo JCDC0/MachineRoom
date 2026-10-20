@@ -23,6 +23,7 @@
     "src/model/parsers/hermes.js",
     "src/model/parsers/opencode.js",
     "src/model/parsers/unreadable.js",
+    "src/policy/route.js",
     "dist/",
     "!dist/recordings/",
     "README.md"
