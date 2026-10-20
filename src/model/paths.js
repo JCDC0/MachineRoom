@@ -1,4 +1,5 @@
 const DRIVE = /^[a-zA-Z]:\//
+const HIDDEN = /[\u0000-\u0008\u000A-\u001F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
 
 export function normalise(path) {
   return String(path).replace(/\\/g, '/').replace(/\/+/g, '/')
@@ -91,4 +92,11 @@ export function makeTree(raw) {
     created: raw.created ?? [],
     dirs: [...dirs].sort(),
   }
+}
+
+export function visibleText(text) {
+  return String(text).replace(HIDDEN, (found) => {
+    const code = found.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')
+    return `[U+${code}]`
+  })
 }
