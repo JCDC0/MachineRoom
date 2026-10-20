@@ -258,8 +258,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     cssRenderer.render(cssScene, camera)
   }
 
-  renderer.domElement.addEventListener('webglcontextlost', () => console.warn('machine-room: WebGL context lost'))
-  renderer.domElement.addEventListener('webglcontextrestored', () => console.warn('machine-room: WebGL context restored'))
+  const onContextLost = () => console.warn('machine-room: WebGL context lost')
+  const onContextRestored = () => console.warn('machine-room: WebGL context restored')
+  renderer.domElement.addEventListener('webglcontextlost', onContextLost)
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored)
   rig.snap()
   sync(getState())
   frameId = requestAnimationFrame(frame)
@@ -354,6 +356,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         pulse.sprite.material.dispose()
       }
       texture.dispose()
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
+      renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored)
       renderer.dispose()
       renderer.forceContextLoss()
       gl.removeChild(renderer.domElement)
