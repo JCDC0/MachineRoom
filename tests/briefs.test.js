@@ -90,7 +90,9 @@ describe('lanes', () => {
     expect(lanes.hermes.forbidden).toContain('server/**')
     expect(lanes.opencode.forbidden).toContain('src/ui/**')
     expect(lanes.agy.forbidden).toContain('src/control/**')
-    for (const lane of Object.values(lanes)) expect(lane.forbidden).toContain('src/Stage.jsx')
+    expect(lanes.agy.forbidden).not.toContain('src/Stage.jsx')
+    expect(lanes.agy.forbidden).not.toContain('src/engine/**')
+    for (const key of ['hermes', 'opencode']) expect(lanes[key].forbidden).toContain('src/Stage.jsx')
   })
 })
 

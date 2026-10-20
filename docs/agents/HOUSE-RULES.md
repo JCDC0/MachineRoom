@@ -4,7 +4,7 @@ The bridge builds the prompt for each task from this file, `lanes.json` and the 
 
 ## About
 
-MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room. It follows a local Paperclip instance through a small Node bridge. Several agents work on it in parallel, each in its own git worktree and branch. Claude reviews and merges every branch.
+MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room. It follows a local Paperclip instance through a small Node bridge. Several agents work on it in parallel, each in its own git worktree and branch. The orchestrator (Hermes from 0.1.90, Claude before) reviews and merges every branch.
 
 ## Rules
 

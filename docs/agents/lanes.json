@@ -31,8 +31,8 @@
       "model": "opencode-go/deepseek-v4.1-flash"
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode",
-    "role": "You own the bridge (server/**), scripts/** and src/control/client.js.",
-    "forbidden": ["src/ui/**", "src/styles.css", "src/engine/**", "src/Stage.jsx", "src/App.jsx", "src/assistant/**", "src/decider/**"],
+    "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**.",
+    "forbidden": ["src/ui/**", "src/styles.css", "src/engine/**", "src/Stage.jsx", "src/App.jsx"],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. You may start the real Paperclip (paperclipai run) to check the shape of GET routes. If you start it, stop it when you are done, kill any orphaned postgres worker, and check that ports 3100 and 54329 are free.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start."
@@ -42,10 +42,10 @@
     "name": "agy",
     "harness": "agy",
     "model": "Gemini 3.8 Flash (High)",
-    "models": { "C3d": "Gemini 4 Argon (Medium)", "C3e": "Gemini 4 Argon (Medium)", "T1b": "Gemini 4 Argon (Medium)" },
+    "models": { "C3d": "Gemini 4 Argon (Medium)", "C3e": "Gemini 4 Argon (Medium)", "T1b": "Gemini 4 Argon (Medium)", "V7a": "Gemini 4 Argon (Medium)", "V7b": "Gemini 4 Argon (Medium)" },
     "worktree": "C:\\GitHub\\MachineRoom-agy",
-    "role": "You own the HUD: src/ui/** and src/styles.css.",
-    "forbidden": ["server/**", "src/engine/**", "src/Stage.jsx", "src/App.jsx", "src/control/**", "src/assistant/**", "src/decider/**"],
+    "role": "You own the HUD and the look of the room: src/ui/**, src/styles.css, src/engine/**, src/Stage.jsx and src/App.jsx.",
+    "forbidden": ["server/**", "src/control/**", "src/assistant/**", "src/decider/**"],
     "notes": [
       "Check every visual change by eye: run npm run dev -- --port 5181, open the page, look at it at 1280 by 800 and 1024 by 768, then stop the server. Say in your report what you looked at. Do not report a visual check you did not make.",
       "Fonts: Jost and Space Mono, weights 400 and 500 only, never bold. Colours on black: white for activity, #e5ff00 for active, #ff2a2a for failure, #2aff80 for finished. Spacing on an 8px base."
