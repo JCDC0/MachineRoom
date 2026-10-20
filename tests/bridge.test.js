@@ -107,7 +107,7 @@ function parseSseBlock(block) {
   return out
 }
 
-function openSse(url, headers = {}) {
+function openSse(url, headers = {}, query = '') {
   const events = []
   const waiters = []
   let buffer = ''
@@ -125,7 +125,7 @@ function openSse(url, headers = {}) {
   }
 
   return new Promise((resolveOpen, rejectOpen) => {
-    req = httpRequest(`${url}/events`, { headers }, (res) => {
+    req = httpRequest(`${url}/events${query}`, { headers }, (res) => {
       res.setEncoding('utf8')
       res.on('data', (chunk) => {
         buffer += chunk
@@ -244,12 +244,12 @@ describe('live bridge', () => {
   it('maps Paperclip agents to viewer keys and parsers', async () => {
     const dir = makeTempDir()
     const fake = await startFakePaperclip('comp-1', [
-      { id: 'a1', name: 'Claude Code', adapterType: 'claude_local' },
-      { id: 'a2', name: 'Hermes', adapterType: 'hermes_local' },
-      { id: 'a3', name: 'OpenCode Go', adapterType: 'opencode_local' },
-      { id: 'a4', name: 'agy', adapterType: 'process' },
+      { id: 'a1', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer' },
+      { id: 'a2', name: 'Hermes', adapterType: 'hermes_local', role: 'engineer' },
+      { id: 'a3', name: 'OpenCode Go', adapterType: 'opencode_local', role: 'engineer' },
+      { id: 'a4', name: 'agy', adapterType: 'process', role: 'designer' },
       { id: 'a5', name: 'Custom Runner', adapterType: 'process' },
-      { id: 'a6', name: 'Lint Bot', adapterType: 'webhook' },
+      { id: 'a6', name: 'Lint Bot', adapterType: 'webhook', role: 'qa' },
     ])
     cleanups.push(() => fake.close())
 
@@ -269,18 +269,44 @@ describe('live bridge', () => {
     expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173')
     const list = await res.json()
     expect(list).toEqual([
-      { id: 'a1', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude' },
-      { id: 'a2', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes' },
-      { id: 'a3', key: 'opencode', name: 'OpenCode Go', adapterType: 'opencode_local', parser: 'opencode' },
-      { id: 'a4', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy' },
-      { id: 'a5', key: 'custom-runner', name: 'Custom Runner', adapterType: 'process', parser: null },
-      { id: 'a6', key: 'lint-bot', name: 'Lint Bot', adapterType: 'webhook', parser: null },
+      { id: 'a1', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer', parser: 'claude' },
+      { id: 'a2', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: 'engineer', parser: 'hermes' },
+      { id: 'a3', key: 'opencode', name: 'OpenCode Go', adapterType: 'opencode_local', role: 'engineer', parser: 'opencode' },
+      { id: 'a4', key: 'agy', name: 'agy', adapterType: 'process', role: 'designer', parser: 'agy' },
+      { id: 'a5', key: 'custom-runner', name: 'Custom Runner', adapterType: 'process', role: null, parser: null },
+      { id: 'a6', key: 'lint-bot', name: 'Lint Bot', adapterType: 'webhook', role: 'qa', parser: null },
     ])
 
     const forbidden = await fetch(`${url}/api/health`, {
       headers: { Origin: 'http://example.com' },
     })
     expect(forbidden.status).toBe(403)
+  })
+
+  it('keeps two claude_local agents apart in list order and carries each role', async () => {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', [
+      { id: 'a1', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer' },
+      { id: 'a2', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo' },
+      { id: 'a3', name: 'Orchestrator', adapterType: 'claude_local' },
+    ])
+    cleanups.push(() => fake.close())
+
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const list = await fetch(`${url}/api/agents`).then((r) => r.json())
+    expect(list).toEqual([
+      { id: 'a1', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer', parser: 'claude' },
+      { id: 'a2', key: 'orchestrator', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo', parser: 'claude' },
+      { id: 'a3', key: 'orchestrator-2', name: 'Orchestrator', adapterType: 'claude_local', role: null, parser: 'claude' },
+    ])
   })
 
   it('returns the file tree for both git repositories and plain folders', async () => {
@@ -374,6 +400,119 @@ describe('live bridge', () => {
     expect(JSON.parse(secondEvent.data)).toEqual(frame2)
     expect(thirdEvent.id).toBe('103')
     expect(JSON.parse(thirdEvent.data)).toEqual(frame3)
+  })
+
+  it('sends the kept history to a late join that asks with history=1', async () => {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    await waitUntil(async () => {
+      const health = await fetch(`${url}/api/health`).then((r) => r.json())
+      return health.ok && health.paperclip
+    })
+
+    const frame1 = { id: 401, companyId: 'comp-1', type: 'heartbeat.run.status', createdAt: '2026-10-17T12:10:00.000Z', payload: { runId: 'r4', status: 'running' } }
+    const frame2 = { id: 402, companyId: 'comp-1', type: 'heartbeat.run.status', createdAt: '2026-10-17T12:10:01.000Z', payload: { runId: 'r4', status: 'succeeded' } }
+
+    const early = await openSse(url)
+    cleanups.push(() => early.close())
+    fake.send(frame1)
+    fake.send(frame2)
+    await early.next((e) => e.id === '401' && e.event === 'frame')
+    await early.next((e) => e.id === '402' && e.event === 'frame')
+    early.close()
+
+    const late = await openSse(url, {}, '?history=1')
+    cleanups.push(() => late.close())
+    const first = await late.next((e) => e.event === 'frame')
+    const second = await late.next((e) => e.event === 'frame')
+    expect(first.id).toBe('401')
+    expect(JSON.parse(first.data)).toEqual(frame1)
+    expect(second.id).toBe('402')
+    expect(JSON.parse(second.data)).toEqual(frame2)
+  })
+
+  it('sends no history to a client that does not ask', async () => {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    await waitUntil(async () => {
+      const health = await fetch(`${url}/api/health`).then((r) => r.json())
+      return health.ok && health.paperclip
+    })
+
+    const frame1 = { id: 501, companyId: 'comp-1', type: 'heartbeat.run.status', createdAt: '2026-10-17T12:15:00.000Z', payload: { runId: 'r5', status: 'running' } }
+    const frame2 = { id: 502, companyId: 'comp-1', type: 'heartbeat.run.status', createdAt: '2026-10-17T12:15:01.000Z', payload: { runId: 'r5', status: 'succeeded' } }
+
+    const early = await openSse(url)
+    cleanups.push(() => early.close())
+    fake.send(frame1)
+    await early.next((e) => e.id === '501' && e.event === 'frame')
+    early.close()
+
+    const late = await openSse(url)
+    cleanups.push(() => late.close())
+    fake.send(frame2)
+    const event = await late.next((e) => e.event === 'frame')
+    expect(event.id).toBe('502')
+    expect(JSON.parse(event.data)).toEqual(frame2)
+  })
+
+  it('resumes after Last-Event-ID on a reconnect and does not repeat the history', async () => {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1')
+    cleanups.push(() => fake.close())
+
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    await waitUntil(async () => {
+      const health = await fetch(`${url}/api/health`).then((r) => r.json())
+      return health.ok && health.paperclip
+    })
+
+    const frame1 = { id: 601, companyId: 'comp-1', type: 'heartbeat.run.status', createdAt: '2026-10-17T12:20:00.000Z', payload: { runId: 'r6', status: 'running' } }
+    const frame2 = { id: 602, companyId: 'comp-1', type: 'heartbeat.run.status', createdAt: '2026-10-17T12:20:01.000Z', payload: { runId: 'r6', status: 'succeeded' } }
+
+    const early = await openSse(url)
+    cleanups.push(() => early.close())
+    fake.send(frame1)
+    fake.send(frame2)
+    await early.next((e) => e.id === '601' && e.event === 'frame')
+    await early.next((e) => e.id === '602' && e.event === 'frame')
+    early.close()
+
+    const again = await openSse(url, { 'Last-Event-ID': '601' }, '?history=1')
+    cleanups.push(() => again.close())
+    const event = await again.next((e) => e.event === 'frame')
+    expect(event.id).toBe('602')
+    expect(JSON.parse(event.data)).toEqual(frame2)
   })
 
   it('reconnects when the upstream WebSocket closes and resumes streaming', async () => {

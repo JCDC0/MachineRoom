@@ -24,10 +24,14 @@ export function toAgents(rawAgents) {
   const taken = new Set()
   const agents = rawAgents.map((raw) => {
     const parser = parserFor(raw)
-    let key = slug(raw.name)
-    for (let n = 2; taken.has(key); n += 1) key = `${slug(raw.name)}-${n}`
+    const role = typeof raw?.role === 'string' && raw.role !== '' ? raw.role : null
+    let key = PARSERS[raw.adapterType] ?? slug(raw.name)
+    if (taken.has(key)) {
+      key = slug(raw.name)
+      for (let n = 2; taken.has(key); n += 1) key = `${slug(raw.name)}-${n}`
+    }
     taken.add(key)
-    return { id: raw.id, key, name: raw.name, adapterType: raw.adapterType, parser }
+    return { id: raw.id, key, name: raw.name, adapterType: raw.adapterType, role, parser }
   })
   const rank = (agent) => {
     const index = AGENT_ORDER.indexOf(agent.parser)

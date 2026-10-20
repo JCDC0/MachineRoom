@@ -41,18 +41,20 @@ export function slugify(value) {
   )
 }
 
-export function mapAgent(raw) {
+export function mapAgent(raw, taken = new Set()) {
   const id = raw?.id ?? ''
   const name = raw?.name ?? raw?.key ?? id
   const adapterType = raw?.adapterType ?? raw?.adapter_type ?? ''
+  const role = typeof raw?.role === 'string' && raw.role !== '' ? raw.role : null
   const adapterParser = PARSER_BY_ADAPTER[adapterType]
-  if (adapterParser) {
-    return { id, key: adapterParser, name, adapterType, parser: adapterParser }
+  const parser = adapterParser ?? (adapterType === 'process' && slugify(name) === 'agy' ? 'agy' : null)
+  let key = adapterParser ?? slugify(name)
+  if (taken.has(key)) {
+    key = slugify(name)
+    for (let n = 2; taken.has(key); n += 1) key = `${slugify(name)}-${n}`
   }
-  if (adapterType === 'process' && slugify(name) === 'agy') {
-    return { id, key: 'agy', name, adapterType, parser: 'agy' }
-  }
-  return { id, key: slugify(name), name, adapterType, parser: null }
+  taken.add(key)
+  return { id, key, name, adapterType, role, parser }
 }
 
 function walkFiles(rootDir, currentDir = rootDir, out = []) {
@@ -468,7 +470,8 @@ export function createBridge(options = {}) {
         }
         const raw = await upstream.json()
         const list = Array.isArray(raw) ? raw : Array.isArray(raw?.agents) ? raw.agents : Array.isArray(raw?.data) ? raw.data : []
-        sendJson(req, res, 200, list.map(mapAgent))
+        const taken = new Set()
+        sendJson(req, res, 200, list.map((entry) => mapAgent(entry, taken)))
       } catch {
         sendJson(req, res, 502, { error: 'upstream unreachable' })
       }
@@ -490,6 +493,7 @@ export function createBridge(options = {}) {
       res.flushHeaders()
 
       const lastEventId = req.headers['last-event-id'] !== undefined ? String(req.headers['last-event-id']).trim() : ''
+      const wantsHistory = url.searchParams.get('history') === '1'
       if (lastEventId) {
         const index = history.findIndex((item) => item.id === lastEventId)
         let replay = []
@@ -500,6 +504,10 @@ export function createBridge(options = {}) {
           replay = history.filter((item) => /^\d+$/.test(item.id) && Number(item.id) > threshold)
         }
         for (const entry of replay) {
+          writeSseFrame(res, entry)
+        }
+      } else if (wantsHistory) {
+        for (const entry of history) {
           writeSseFrame(res, entry)
         }
       }

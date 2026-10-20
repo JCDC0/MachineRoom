@@ -43,7 +43,7 @@ describe('openBridge', () => {
 
   it('opens the event stream of the bridge', () => {
     const { source, seen } = harness()
-    expect(source.url).toBe('http://bridge/events')
+    expect(source.url).toBe('http://bridge/events?history=1')
     expect(seen.statuses).toEqual(['connecting'])
   })
 
