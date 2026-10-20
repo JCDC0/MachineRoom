@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { commandFor, formatSummary, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 import { writeRecording } from './recording-files.mjs'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -121,19 +121,23 @@ function releaseLaneLock(path) {
   if (Number.parseInt(readLog(path), 10) === process.pid) rmSync(path, { force: true })
 }
 
-function listRuns() {
+function readRecords() {
   const path = runsFile()
   const records = []
-  if (existsSync(path)) {
-    for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
-      if (!line.trim()) continue
-      try {
-        records.push(JSON.parse(line))
-      } catch {
-        continue
-      }
+  if (!existsSync(path)) return records
+  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    try {
+      records.push(JSON.parse(line))
+    } catch {
+      continue
     }
   }
+  return records
+}
+
+function listRuns() {
+  const records = readRecords()
   if (records.length === 0) {
     console.log('no runs recorded yet')
     return 0
@@ -142,9 +146,15 @@ function listRuns() {
   return 0
 }
 
+function statsRuns(options) {
+  formatStats(laneStats(readRecords(), { since: options.since })).forEach((line) => console.log(line))
+  return 0
+}
+
 async function main() {
   const options = parseRunArgs(process.argv.slice(2))
   if (options.list) return listRuns()
+  if (options.stats) return statsRuns(options)
   const lanes = JSON.parse(read('lanes.json'))
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
   const lane = laneWithOverrides(lanes[options.lane], options)

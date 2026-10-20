@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.73. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.74. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -24,7 +24,7 @@ npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
 npm run serve      the built viewer and the bridge on one port, no Vite (npm run build first); --paperclip, --company, --root, --port, --dist; prints the address to open
 npm run doctor     compare the running Paperclip's /api/openapi.json with the routes in server/surface.js; exits 1 and names each route or field that is missing
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
-npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --model and --reasoning change the model for that run only
+npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --stats (with --since YYYY-MM-DD) prints runs, minutes and cost per lane and model, --model and --reasoning change the model for that run only
 npm run run-recording -- 1      turn run 1 of that list into a recording in public/recordings/ again (run-lane already writes one after each run and prints its /?recording=<name>)
 npm test           vitest, node environment, threads pool, no browser needed
 npm run build

@@ -52,6 +52,131 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
 }
 
 export const DEFAULT_MINUTES = 100
+const SINCE_PROBLEM = '--since needs a date like 2026-10-19.'
+const MODEL_UNKNOWN = 'model unknown'
+const ALL = 'all'
+
+function dayStart(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''))
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const time = Date.UTC(year, month - 1, day)
+  const date = new Date(time)
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null
+  return time
+}
+
+function startTime(record) {
+  const value = record?.startedAt
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value !== 'string' || value.trim() === '') return null
+  const time = Date.parse(value)
+  return Number.isFinite(time) ? time : null
+}
+
+function finiteNumber(value) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function roundTo(value, places) {
+  const factor = 10 ** places
+  return Math.round(value * factor) / factor
+}
+
+function medianOf(values) {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((left, right) => left - right)
+  const middle = Math.floor(sorted.length / 2)
+  if (sorted.length % 2 === 1) return sorted[middle]
+  return (sorted[middle - 1] + sorted[middle]) / 2
+}
+
+function emptyBucket(lane, model) {
+  return { lane, model, runs: 0, finished: 0, killed: 0, failed: 0, minutes: [], costTotal: 0, costRuns: 0 }
+}
+
+function addToBucket(bucket, record) {
+  bucket.runs += 1
+  if (record.killed === true) bucket.killed += 1
+  else if (record.exitCode === 0) bucket.finished += 1
+  else bucket.failed += 1
+  const minutes = finiteNumber(record.minutes)
+  if (minutes !== null) bucket.minutes.push(minutes)
+  const cost = finiteNumber(record.costUsd)
+  if (cost !== null) {
+    bucket.costTotal += cost
+    bucket.costRuns += 1
+  }
+}
+
+function bucketRow(bucket) {
+  const minutesTotal = bucket.minutes.reduce((sum, value) => sum + value, 0)
+  return {
+    lane: bucket.lane,
+    model: bucket.model,
+    runs: bucket.runs,
+    finished: bucket.finished,
+    killed: bucket.killed,
+    failed: bucket.failed,
+    minutesTotal: roundTo(minutesTotal, 1),
+    minutesMedian: roundTo(medianOf(bucket.minutes), 1),
+    costTotal: roundTo(bucket.costTotal, 4),
+    costRuns: bucket.costRuns,
+  }
+}
+
+export function laneStats(records, { since } = {}) {
+  const list = Array.isArray(records) ? records : []
+  const from = since === undefined || since === null ? null : dayStart(since)
+  const kept = []
+  for (const record of list) {
+    if (!record || typeof record !== 'object' || Array.isArray(record)) continue
+    if (typeof record.lane !== 'string' || record.lane.trim() === '') continue
+    if (from !== null) {
+      const time = startTime(record)
+      if (time === null || time < from) continue
+    }
+    kept.push(record)
+  }
+  const buckets = new Map()
+  const total = emptyBucket(ALL, ALL)
+  for (const record of kept) {
+    const lane = record.lane.trim()
+    const model = typeof record.model === 'string' && record.model.trim() !== '' ? record.model.trim() : MODEL_UNKNOWN
+    const key = `${lane}\u0000${model}`
+    let bucket = buckets.get(key)
+    if (!bucket) {
+      bucket = emptyBucket(lane, model)
+      buckets.set(key, bucket)
+    }
+    addToBucket(bucket, record)
+    addToBucket(total, record)
+  }
+  const rows = [...buckets.values()]
+    .sort((left, right) => {
+      if (left.lane !== right.lane) return left.lane < right.lane ? -1 : 1
+      if (left.model !== right.model) return left.model < right.model ? -1 : 1
+      return 0
+    })
+    .map(bucketRow)
+  return { rows, total: bucketRow(total) }
+}
+
+function statsLine(row) {
+  const minutes = Number.isFinite(row.minutesTotal) ? row.minutesTotal : 0
+  const median = Number.isFinite(row.minutesMedian) ? row.minutesMedian : 0
+  const cost = Number.isFinite(row.costTotal) ? row.costTotal : 0
+  const runs = (count) => `${count} ${count === 1 ? 'run' : 'runs'}`
+  return `${row.lane} | ${row.model} | ${runs(row.runs)} | ${row.finished} finished, ${row.killed} killed, ${row.failed} failed | ${minutes.toFixed(1)} min, median ${median.toFixed(1)} | ${cost.toFixed(4)} USD over ${runs(row.costRuns)}`
+}
+
+export function formatStats(stats) {
+  const rows = Array.isArray(stats?.rows) ? stats.rows : []
+  if (rows.length === 0 || !stats?.total) return ['No runs recorded.']
+  return [...rows.map(statsLine), statsLine(stats.total)]
+}
 
 export function parseRunArgs(argv) {
   const args = (Array.isArray(argv) ? argv : []).map((value) => String(value))
@@ -59,6 +184,8 @@ export function parseRunArgs(argv) {
   let lane = ''
   let dryRun = false
   let list = false
+  let stats = false
+  let since = ''
   let minutes = DEFAULT_MINUTES
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
@@ -79,6 +206,17 @@ export function parseRunArgs(argv) {
       list = true
       continue
     }
+    if (arg === '--stats') {
+      stats = true
+      continue
+    }
+    if (arg === '--since' || arg.startsWith('--since=')) {
+      const value = arg === '--since' ? args[index + 1] : arg.slice('--since='.length)
+      if (arg === '--since') index += 1
+      if (dayStart(value) === null) throw new Error(SINCE_PROBLEM)
+      since = value
+      continue
+    }
     if (arg === '--minutes' || arg.startsWith('--minutes=')) {
       const value = arg === '--minutes' ? args[index + 1] : arg.slice('--minutes='.length)
       if (arg === '--minutes') index += 1
@@ -91,7 +229,8 @@ export function parseRunArgs(argv) {
     if (!lane) lane = arg
     else briefs.push(arg)
   }
-  if (list) return { lane, briefs, dryRun, minutes, list }
+  if (list) return { lane, briefs, dryRun, minutes, list, ...(since ? { since } : {}) }
+  if (stats) return { lane, briefs, dryRun, minutes, list, stats, ...(since ? { since } : {}) }
   if (!lane) throw new Error('Name a lane to run, for example hermes.')
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
   return { lane, briefs, dryRun, minutes, list, ...overrides }
