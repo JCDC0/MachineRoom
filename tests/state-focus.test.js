@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { makeTree } from '../src/model/paths.js'
-import { RECENT_LIMIT, apply, createState } from '../src/model/state.js'
+import { RECENT_KEEP_MS, RECENT_LIMIT, apply, createState, freshRecent } from '../src/model/state.js'
 
 const tree = makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js', 'docs/notes.md'] })
 const agents = [{ key: 'hermes', name: 'Hermes' }, { key: 'agy', name: 'agy' }]
@@ -35,5 +35,55 @@ describe('agent focus and recent paths', () => {
     for (let i = 0; i < RECENT_LIMIT + 3; i++) apply(state, call('agy', `x${i}`, [touch(`gen/f${i}.js`)], 10 + i))
     expect(state.recent).toHaveLength(RECENT_LIMIT)
     expect(state.recent.at(-1)).toBe(`gen/f${RECENT_LIMIT + 2}.js`)
+  })
+})
+
+describe('fresh recent paths', () => {
+  const later = (state, time) => apply(state, { type: 'run.end', agent: 'hermes', runId: 'r1', time, order: time, ok: true })
+
+  it('starts a new state with latest 0 and an empty map', () => {
+    const state = createState(tree, agents)
+    expect(state.latest).toBe(0)
+    expect(state.recentAt.size).toBe(0)
+    expect(freshRecent(state)).toEqual([])
+  })
+
+  it('drops an old touch once a later activity moves latest past the window', () => {
+    const state = createState(tree, agents)
+    apply(state, call('hermes', 'c1', [touch('src/a.js')], 1000))
+    later(state, 1000 + RECENT_KEEP_MS + 1)
+    expect(state.latest).toBe(1000 + RECENT_KEEP_MS + 1)
+    expect(state.recent).toEqual(['src/a.js'])
+    expect(freshRecent(state)).toEqual([])
+  })
+
+  it('keeps a touch exactly at the edge of the window', () => {
+    const state = createState(tree, agents)
+    apply(state, call('hermes', 'c1', [touch('src/a.js')], 1000))
+    later(state, 1000 + RECENT_KEEP_MS)
+    expect(freshRecent(state)).toEqual(['src/a.js'])
+  })
+
+  it('refreshes the time of a repeated touch', () => {
+    const state = createState(tree, agents)
+    apply(state, call('hermes', 'c1', [touch('src/a.js')], 1000))
+    apply(state, call('agy', 'c2', [touch('src/a.js')], 5000))
+    later(state, 5000 + RECENT_KEEP_MS)
+    expect(state.recentAt.get('src/a.js')).toBe(5000)
+    expect(freshRecent(state)).toEqual(['src/a.js'])
+  })
+
+  it('holds exactly the paths of recent in the map', () => {
+    const state = createState(tree, agents)
+    for (let i = 0; i < RECENT_LIMIT + 3; i++) apply(state, call('agy', `x${i}`, [touch(`gen/f${i}.js`)], 10 + i))
+    expect(state.recentAt.size).toBe(RECENT_LIMIT)
+    expect([...state.recentAt.keys()].sort()).toEqual([...state.recent].sort())
+  })
+
+  it('keeps only the touches at latest when keepMs is 0', () => {
+    const state = createState(tree, agents)
+    apply(state, call('hermes', 'c1', [touch('src/a.js')], 1000))
+    apply(state, call('hermes', 'c2', [touch('src/b.js'), touch('docs/notes.md')], 2000))
+    expect(freshRecent(state, 0)).toEqual(['src/b.js', 'docs/notes.md'])
   })
 })
