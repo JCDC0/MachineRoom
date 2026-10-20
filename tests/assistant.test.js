@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACTION_TYPES, CONFIRMED, validateAction } from '../src/assistant/actions.js'
+import { ACTION_TYPES, CARD_SAY, CONFIRMED, cardFirst, validateAction } from '../src/assistant/actions.js'
 import { containsSecret, finalizeModelAction, interpret, redact, resolveAgents, resolvePaths } from '../src/assistant/intent.js'
 import { askModel, buildPrompt, parseReply } from '../src/assistant/llm.js'
 import { ACTION_CASES } from './probes/assistant.js'
@@ -304,5 +304,28 @@ describe('model fallback', () => {
   it('finalizes a model action with the same checks', () => {
     expect(finalizeModelAction({ type: 'focus_path', query: 'layout.js' }, context).ok).toBe(true)
     expect(finalizeModelAction({ type: 'focus_path', path: '../secret' }, context).ok).toBe(false)
+  })
+})
+
+describe('cardFirst', () => {
+  const write = { type: 'propose_budget', agent: 'hermes', cents: 500 }
+
+  it('turns a write that came as an action into a confirm card', () => {
+    expect(cardFirst({ kind: 'action', action: write, say: 'Done.' })).toEqual({ kind: 'propose', action: write, say: CARD_SAY })
+    expect(CARD_SAY).toBe('That changes a task, a budget or an agent. Confirm to go on.')
+  })
+
+  it('drops a write that rides on a blocked or ask answer', () => {
+    expect(cardFirst({ kind: 'blocked', action: write, say: 'No.' })).toEqual({ kind: 'blocked', say: 'No.' })
+    expect(cardFirst({ kind: 'ask', action: write, say: 'Which?', options: [] })).toEqual({ kind: 'ask', say: 'Which?', options: [] })
+  })
+
+  it('leaves reads, cards and odd answers alone', () => {
+    const read = { kind: 'action', action: { type: 'overview' }, say: 'Back.' }
+    const card = { kind: 'propose', action: write, say: 'Set it?' }
+    expect(cardFirst(read)).toBe(read)
+    expect(cardFirst(card)).toBe(card)
+    expect(cardFirst(null)).toBe(null)
+    expect(cardFirst({ kind: 'unknown', say: 'Hm.' })).toEqual({ kind: 'unknown', say: 'Hm.' })
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createDispatcher } from './assistant/dispatch.js'
+import { createAssistantRunner, createDispatcher } from './assistant/dispatch.js'
 import { createClient } from './control/client.js'
 import { createMockClient } from './control/mock.js'
 import { createRoom } from './engine/room.js'
@@ -259,8 +259,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     pressKey: (key) => document.body.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })),
   })
 
-  async function runAssistant(action) {
-    const result = await dispatcher.run(action, { confirmed: true })
+  const runAction = createAssistantRunner(dispatcher)
+
+  async function runAssistant(action, options) {
+    const result = await runAction(action, options)
     if (result.message) setToast(result.message)
     return result
   }

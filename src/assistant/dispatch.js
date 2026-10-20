@@ -104,3 +104,7 @@ export function createDispatcher(host) {
 
   return { run }
 }
+
+export function createAssistantRunner(dispatcher) {
+  return (action, options) => dispatcher.run(action, { confirmed: options?.confirmed === true })
+}

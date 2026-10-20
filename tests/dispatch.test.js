@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
-import { createDispatcher } from '../src/assistant/dispatch.js'
+import { createAssistantRunner, createDispatcher } from '../src/assistant/dispatch.js'
 import { context } from './probes/context.js'
 
 function makeHost(overrides = {}) {
@@ -219,5 +219,25 @@ describe('confirmed writes', () => {
     client.failNext('createIssue', 'Paperclip is not reachable.')
     const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_dispatch', assignee: 'agy', title: 'Anything' }, { confirmed: true })
     expect(result).toEqual({ ok: false, message: 'Paperclip is not reachable.' })
+  })
+})
+
+describe('the assistant runner', () => {
+  it('passes a write on only with confirmed true from the card', async () => {
+    const client = fast()
+    const run = createAssistantRunner(createDispatcher(makeHost({ client })))
+    const action = { type: 'propose_budget', agent: 'hermes', cents: 500 }
+    for (const options of [undefined, {}, { confirmed: 'yes' }, { confirmed: 1 }]) {
+      expect(await run(action, options)).toEqual({ ok: false, message: 'That needs your confirmation first.' })
+    }
+    expect((await client.agents()).find((agent) => agent.key === 'hermes').budgetMonthlyCents).toBe(0)
+    expect((await run(action, { confirmed: true })).ok).toBe(true)
+    expect((await client.agents()).find((agent) => agent.key === 'hermes').budgetMonthlyCents).toBe(500)
+  })
+
+  it('runs a read with no options', async () => {
+    const host = makeHost()
+    expect((await createAssistantRunner(createDispatcher(host))({ type: 'overview' })).ok).toBe(true)
+    expect(host.calls).toEqual([['overview']])
   })
 })
