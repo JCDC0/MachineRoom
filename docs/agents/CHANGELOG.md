@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- UI audit (`docs/agents/AUDIT-2026-10-UI.md`): the browser code read as an attacker and a reviewer, 10 findings fixed with a test each, 10 found and not fixed with the reason, and what could not be checked. New briefs in TASKS.md under `Briefs from the UI audit`: U6 (OpenCode), U6a (AGY), U7 (AGY), U8 (OpenCode), U9 (AGY), U10 (Hermes), U10a (AGY).
 - UI audit follow-up: with `forceContextLoss()` in `room.dispose()`, the room's own `webglcontextlost` handler printed `machine-room: WebGL context lost` on every switch between Replay and Live. The room now removes its two context handlers before it releases the context, so the warning still means a real loss. Checked in headless Chromium over 20 switches: one canvas, no errors and no warnings.
 - UI audit fix: `apply` in `src/model/state.js` kept the touches of every tool call of a run until the run ended, and a live run that lasts hours or loses its end frame never ends. Each agent now keeps its newest 500 calls (`CALL_LIMIT`), which is all the room needs to mark the file of a failed call; test in `tests/state-focus.test.js`.
 - UI audit fix: `discover` and `socketUrl` in `src/live/source.js` put the company id from `?company=` into the Paperclip path as it came, so `?live&company=../../api/...` sent the page's first request to another Paperclip route and read its answer as the agent list. Both now encode the id; test in `tests/live.test.js`.
