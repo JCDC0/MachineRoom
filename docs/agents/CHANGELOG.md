@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Review fixes on U1: the doctor matches a route whose path parameter Paperclip renamed (`{id}` and `{agentId}` count as the same place), so only a real change in a path reports it missing, and the route list also holds `GET /api/companies`, which the browser reads on the proxy route to find the company.
+- Paperclip route list and doctor (task U1): `server/surface.js` lists every Paperclip route the bridge calls, with the answer fields it reads and the request fields it sends, and `npm run doctor` fetches `/api/openapi.json` from a running Paperclip and prints a plain sentence for each route, method or field the spec does not list.
 - Review fix on P8: the Hermes parser uses the last folder only for a bare file name. A line that carries a path, such as the full paths in session tool lines, still resolves by that path, so a read of `C:\...\test\index.js` after work in `src/` stays in `test/`.
 - Resolve a bare Hermes file name from the agent's last folder (task P8): `resolveKnown(name, files, near)` in `src/model/paths.js` takes an optional folder path and, when several files share the name, picks the one in that folder, else the one that shares the longest leading folder path with it counted in whole folder names, else keeps the bare name, and `src/model/parsers/hermes.js` remembers the folder of the last read, write or edit that was a known file or had a folder and passes it as `near`.
 - The folder cards open only for recent touches from the last 90 seconds of run time: `viewInput` in `src/engine/cards.js` uses `freshRecent(state)` for the focus and keeps the full recent list for ranking.
