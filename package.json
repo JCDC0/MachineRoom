@@ -38,6 +38,7 @@
     "run-recording": "node scripts/run-recording.mjs",
     "doctor": "node scripts/doctor.mjs",
     "pack-check": "node scripts/pack-check.mjs",
+    "history-audit": "node scripts/history-audit.mjs",
     "bridge": "node server/index.js",
     "serve": "node bin/machine-room.mjs"
   },
