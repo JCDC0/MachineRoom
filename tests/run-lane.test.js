@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { briefProblems, commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -99,6 +99,16 @@ describe('parseRunArgs', () => {
   it('accepts --stats without a lane or a brief', () => {
     expect(parseRunArgs(['--stats'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: 100, list: false, stats: true })
     expect(parseRunArgs(['--stats', '--minutes', '5'])).toMatchObject({ stats: true, minutes: 5 })
+  })
+
+  it('accepts --outcomes without a lane or a brief', () => {
+    expect(parseRunArgs(['--outcomes'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: 100, list: false, outcomes: true })
+    expect(parseRunArgs(['--outcomes', '--minutes', '5'])).toMatchObject({ outcomes: true, minutes: 5 })
+    expect(parseRunArgs(['--outcomes', '--since', '2026-10-19'])).toEqual({
+      lane: '', briefs: [], dryRun: false, minutes: 100, list: false, outcomes: true, since: '2026-10-19',
+    })
+    expect(parseRunArgs(['--outcomes', '--since=2026-01-02'])).toMatchObject({ outcomes: true, since: '2026-01-02' })
+    expect(() => parseRunArgs(['--outcomes', '--since', 'yesterday'])).toThrow('--since needs a date like 2026-10-19.')
   })
 
   it('takes --since with a day', () => {
@@ -693,6 +703,43 @@ describe('formatStats', () => {
   })
 })
 
+describe('formatOutcomes', () => {
+  it('prints one line per row with the merge rate, the fixes and the cost per merge', () => {
+    const rows = [
+      { lane: 'hermes', model: 'deepseek/x', runs: 5, merged: 4, rejected: 1, pending: 0, mergeRate: 0.8, averageFixes: 0.5, costUsd: 0.4, decidedCostUsd: 0.24, costPerMerge: 0.06 },
+      { lane: 'opencode', model: 'model unknown', runs: 1, merged: 0, rejected: 1, pending: 0, mergeRate: 0, averageFixes: null, costUsd: 0.2, decidedCostUsd: 0.2, costPerMerge: null },
+    ]
+
+    expect(formatOutcomes(rows)).toEqual([
+      'hermes  deepseek/x  runs 5, merged 4, rejected 1, pending 0, merge rate 80%, fixes 0.5, $0.06 a merge',
+      'opencode  model unknown  runs 1, merged 0, rejected 1, pending 0, merge rate 0%, fixes -, - a merge',
+    ])
+  })
+
+  it('prints a dash for a null rate and says so with no rows', () => {
+    expect(formatOutcomes([
+      { lane: 'hermes', model: 'm', runs: 1, merged: 1, rejected: 0, pending: 0, mergeRate: null, averageFixes: 1, costPerMerge: 1 },
+    ])).toEqual(['hermes  m  runs 1, merged 1, rejected 0, pending 0, merge rate -, fixes 1, $1.00 a merge'])
+    expect(formatOutcomes([])).toEqual(['No runs yet.'])
+    expect(formatOutcomes(null)).toEqual(['No runs yet.'])
+  })
+})
+
+describe('filterRunsSince', () => {
+  it('keeps the runs that started on or after the day', () => {
+    const records = [
+      { lane: 'hermes', startedAt: '2026-10-18T23:59:59.999Z' },
+      { lane: 'hermes', startedAt: '2026-10-19T00:00:00.000Z' },
+      { lane: 'hermes', startedAt: 'not a time' },
+      null,
+    ]
+
+    expect(filterRunsSince(records, '2026-10-19').map((record) => record.startedAt)).toEqual(['2026-10-19T00:00:00.000Z'])
+    expect(filterRunsSince(records)).toHaveLength(3)
+    expect(filterRunsSince('nope', '2026-10-19')).toEqual([])
+  })
+})
+
 const CRASH = 3221226505
 const CRASH_SIGNED = -1073740791
 const CRASH_RETRY = 'The test worker crashed inside Node (0xC0000409), not in a test. Running the tests again'
@@ -816,9 +863,12 @@ describe('scripts/test.mjs', () => {
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const TASKS_MARKDOWN = readFileSync(new URL('../docs/agents/TASKS.md', import.meta.url), 'utf8')
 
-function runLane(args) {
+function runLane(args, env = {}) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...env },
+    })
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {
@@ -843,6 +893,36 @@ function runLane(args) {
 }
 
 describe('scripts/run-lane.mjs', () => {
+  it('prints the outcome table from a temp runs folder, with --since filtering the runs', async () => {
+    const folder = makeTempDir('machine-room-outcomes-')
+    try {
+      const runsFolder = join(folder, 'machineroom-runs')
+      mkdirSync(runsFolder, { recursive: true })
+      writeFileSync(join(runsFolder, 'runs.jsonl'), [
+        JSON.stringify({ lane: 'hermes', model: 'deepseek/x', branch: 'feat/a', costUsd: 0.5, startedAt: '2026-10-19T10:00:00.000Z' }),
+        JSON.stringify({ lane: 'hermes', model: 'deepseek/x', branch: 'feat/b', costUsd: 0.1, startedAt: '2026-10-19T11:00:00.000Z' }),
+        JSON.stringify({ lane: 'hermes', model: 'deepseek/x', branch: 'feat/c', costUsd: 0.4, startedAt: '2026-10-18T09:00:00.000Z' }),
+      ].join('\n'))
+      writeFileSync(join(runsFolder, 'outcomes.jsonl'), `${JSON.stringify({ branch: 'feat/a', outcome: 'merged', fixes: 1 })}\n`)
+
+      const all = await runLane(['--outcomes'], { TEMP: folder })
+      expect(all.code).toBe(0)
+      expect(all.stdout.trim()).toBe('hermes  deepseek/x  runs 3, merged 1, rejected 0, pending 2, merge rate 100%, fixes 1, $0.50 a merge')
+
+      const since = await runLane(['--outcomes', '--since', '2026-10-19'], { TEMP: folder })
+      expect(since.code).toBe(0)
+      expect(since.stdout.trim()).toBe('hermes  deepseek/x  runs 2, merged 1, rejected 0, pending 1, merge rate 100%, fixes 1, $0.50 a merge')
+
+      const emptyTemp = join(folder, 'empty')
+      mkdirSync(emptyTemp, { recursive: true })
+      const empty = await runLane(['--outcomes'], { TEMP: emptyTemp })
+      expect(empty.code).toBe(0)
+      expect(empty.stdout.trim()).toBe('No runs yet.')
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
   it('refuses a merged brief before it prints the dry run', async () => {
     const merged = parseBriefs(TASKS_MARKDOWN).find((brief) => brief.done)
     expect(merged).toBeTruthy()

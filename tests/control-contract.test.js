@@ -879,13 +879,14 @@ function runContractSuite(label, makeHarness) {
       const rows = await client.outcomes()
       expect(Array.isArray(rows)).toBe(true)
       for (const row of rows) {
-        for (const key of ['lane', 'model', 'runs', 'merged', 'rejected', 'pending', 'mergeRate', 'averageFixes', 'costUsd', 'costPerMerge']) {
+        for (const key of ['lane', 'model', 'runs', 'merged', 'rejected', 'pending', 'mergeRate', 'averageFixes', 'costUsd', 'decidedCostUsd', 'costPerMerge']) {
           expect(row, `${row.lane} ${key}`).toHaveProperty(key)
         }
         expect(row.runs).toBe(row.merged + row.rejected + row.pending)
         expect(typeof row.lane).toBe('string')
         expect(typeof row.model).toBe('string')
         expect(typeof row.costUsd).toBe('number')
+        expect(typeof row.decidedCostUsd).toBe('number')
         for (const key of ['mergeRate', 'averageFixes', 'costPerMerge']) {
           expect(row[key] === null || typeof row[key] === 'number', `${row.lane} ${key}`).toBe(true)
         }
@@ -903,6 +904,7 @@ function runContractSuite(label, makeHarness) {
           mergeRate: 1,
           averageFixes: 2,
           costUsd: 0.5,
+          decidedCostUsd: 0.5,
           costPerMerge: 0.5,
         })
       }

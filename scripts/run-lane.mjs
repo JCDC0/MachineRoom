@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { briefProblems, commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { outcomeTable } from '../server/outcomes.js'
 import { writeRecording } from './recording-files.mjs'
 
 const root = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -19,6 +20,10 @@ function stamp(date = new Date()) {
 
 function runsFile() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl')
+}
+
+function outcomesFile() {
+  return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'outcomes.jsonl')
 }
 
 function gitStatus(cwd) {
@@ -155,6 +160,21 @@ function readRecords() {
   return records
 }
 
+function readOutcomes() {
+  const path = outcomesFile()
+  const records = []
+  if (!existsSync(path)) return records
+  for (const line of readFileSync(path, 'utf8').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    try {
+      records.push(JSON.parse(line))
+    } catch {
+      continue
+    }
+  }
+  return records
+}
+
 function listRuns() {
   const records = readRecords()
   if (records.length === 0) {
@@ -170,10 +190,17 @@ function statsRuns(options) {
   return 0
 }
 
+function outcomeRuns(options) {
+  const runs = filterRunsSince(readRecords(), options.since)
+  formatOutcomes(outcomeTable(runs, readOutcomes())).forEach((line) => console.log(line))
+  return 0
+}
+
 async function main() {
   const options = parseRunArgs(process.argv.slice(2))
   if (options.list) return listRuns()
   if (options.stats) return statsRuns(options)
+  if (options.outcomes) return outcomeRuns(options)
   const lanes = JSON.parse(read('lanes.json'))
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
   const lane = laneWithOverrides(lanes[options.lane], options)
