@@ -7,15 +7,79 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createBridge, isAllowedHost } from '../server/index.js'
 import { extractReplyText } from '../server/assistant.js'
+import { PAPERCLIP_SURFACE } from '../server/surface.js'
 
-function startFakePaperclip(companyId = 'comp-1', agents = []) {
+function fieldsSchema(fields = []) {
+  const root = { type: 'object', properties: {} }
+  for (const field of fields) {
+    let node = root
+    for (const raw of field.split('.')) {
+      const array = raw.endsWith('[]')
+      const name = array ? raw.slice(0, -2) : raw
+      if (!node.properties[name]) {
+        node.properties[name] = array
+          ? { type: 'array', items: { type: 'object', properties: {} } }
+          : { type: 'object', properties: {} }
+      }
+      const target = node.properties[name]
+      node = array ? target.items : target
+    }
+  }
+  return root
+}
+
+function paperclipSpec({ version = '0.1.0', drop = [] } = {}) {
+  const dropped = new Set(drop)
+  const paths = {}
+  for (const route of PAPERCLIP_SURFACE) {
+    if (route.socket || dropped.has(`${route.method} ${route.path}`)) continue
+    const operation = {
+      responses: {
+        200: { content: { 'application/json': { schema: fieldsSchema(route.fields) } } },
+      },
+    }
+    if (route.body) {
+      operation.requestBody = { content: { 'application/json': { schema: fieldsSchema(route.body) } } }
+    }
+    paths[route.path] = { ...(paths[route.path] ?? {}), [route.method.toLowerCase()]: operation }
+  }
+  return { openapi: '3.1.0', info: { version }, paths }
+}
+
+function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
   const sockets = new Set()
   const stored = new Map()
   const logRequests = []
+  const specRequests = []
+  let spec = options.spec ?? null
   let connections = 0
   let logDelayMs = 0
+  const specDelayMs = Number(options.specDelayMs ?? 0)
 
   const server = createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/api/openapi.json') {
+      specRequests.push(req.url)
+      const answer = () => {
+        if (options.specBody !== undefined) {
+          res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+          res.end(options.specBody)
+          return
+        }
+        if (!spec) {
+          res.writeHead(404, { Connection: 'close' })
+          res.end()
+          return
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+        res.end(JSON.stringify(spec))
+      }
+      if (specDelayMs > 0) {
+        setTimeout(answer, specDelayMs)
+      } else {
+        answer()
+      }
+      return
+    }
     if (req.method === 'GET' && req.url === `/api/companies/${companyId}/agents`) {
       const payload = JSON.stringify(agents)
       res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -61,6 +125,12 @@ function startFakePaperclip(companyId = 'comp-1', agents = []) {
         },
         get logRequests() {
           return logRequests
+        },
+        get specRequests() {
+          return specRequests
+        },
+        setSpec(next) {
+          spec = next
         },
         appendLog(runId, entry) {
           stored.set(runId, `${stored.get(runId) ?? ''}${JSON.stringify(entry)}\n`)
@@ -162,6 +232,10 @@ function openSse(url, headers = {}, query = '') {
     req.on('error', rejectOpen)
     req.end()
   })
+}
+
+async function sleep(ms) {
+  await new Promise((resolveWait) => setTimeout(resolveWait, ms))
 }
 
 async function waitUntil(fn, timeoutMs = 3000) {
@@ -578,6 +652,147 @@ describe('live bridge', () => {
     const treeEvent = await sse.next((e) => e.event === 'tree')
     const data = JSON.parse(treeEvent.data)
     expect(data.files).toEqual(['a.js', 'b.js'])
+  })
+})
+
+describe('health surface check', () => {
+  async function startSurfaceBridge({ spec, specBody, specDelayMs, surfaceEveryMs } = {}) {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', [], { spec, specBody, specDelayMs })
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      reconnectMinMs: 40,
+      reconnectMaxMs: 100,
+      ...(surfaceEveryMs === undefined ? {} : { surfaceEveryMs }),
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    return { fake, bridge, url }
+  }
+
+  const healthOf = (url) => fetch(`${url}/api/health`).then((r) => r.json())
+
+  it('says not checked yet before the first spec answer', async () => {
+    const { url } = await startSurfaceBridge({ spec: paperclipSpec(), specDelayMs: 500 })
+
+    const health = await healthOf(url)
+    expect(health.surface).toEqual({ ok: null, checkedAt: null, error: 'not checked yet' })
+    expect(health.paperclipVersion).toBeNull()
+
+    await waitUntil(async () => (await healthOf(url)).surface?.ok === true)
+  })
+
+  it('reports the Paperclip version and a matching spec', async () => {
+    const { url } = await startSurfaceBridge({ spec: paperclipSpec({ version: '1.2.3' }) })
+    await waitUntil(async () => {
+      const health = await healthOf(url)
+      return health.paperclip === true && health.surface?.ok === true
+    })
+
+    const health = await healthOf(url)
+    expect(health.ok).toBe(true)
+    expect(health.paperclip).toBe(true)
+    expect(health.paperclipVersion).toBe('1.2.3')
+    expect(health.surface.ok).toBe(true)
+    expect(typeof health.surface.checkedAt).toBe('string')
+    expect(Number.isNaN(Date.parse(health.surface.checkedAt))).toBe(false)
+  })
+
+  it('names the route a spec drops', async () => {
+    const { url } = await startSurfaceBridge({
+      spec: paperclipSpec({ version: '1.2.3', drop: ['GET /api/companies/{companyId}/issues'] }),
+    })
+    await waitUntil(async () => (await healthOf(url)).surface?.ok === false)
+
+    const health = await healthOf(url)
+    expect(health.paperclipVersion).toBe('1.2.3')
+    expect(health.surface.ok).toBe(false)
+    expect(health.surface.missing).toEqual([{ method: 'GET', path: '/api/companies/{companyId}/issues' }])
+    expect(health.surface.changed).toEqual([])
+    expect(typeof health.surface.checkedAt).toBe('string')
+  })
+
+  it('says when the spec answer is not JSON', async () => {
+    const { url } = await startSurfaceBridge({ specBody: 'not a spec' })
+    await waitUntil(async () => {
+      const health = await healthOf(url)
+      return health.surface?.ok === null && typeof health.surface.checkedAt === 'string'
+    })
+
+    const health = await healthOf(url)
+    expect(health.paperclipVersion).toBeNull()
+    expect(health.surface.ok).toBeNull()
+    expect(health.surface.error).toMatch(/not a spec/i)
+    expect(typeof health.surface.checkedAt).toBe('string')
+  })
+
+  it('says when Paperclip is down', async () => {
+    const dead = createServer((req, res) => {
+      res.writeHead(500)
+      res.end()
+    })
+    const port = await new Promise((resolvePort) => {
+      dead.listen(0, '127.0.0.1', () => resolvePort(dead.address().port))
+    })
+    await new Promise((resolveClose) => dead.close(resolveClose))
+
+    const bridge = createBridge({
+      paperclipUrl: `http://127.0.0.1:${port}`,
+      companyId: 'comp-1',
+      projectRoot: makeTempDir(),
+      port: 0,
+      reconnectMinMs: 40,
+      reconnectMaxMs: 100,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    await waitUntil(async () => {
+      const health = await healthOf(url)
+      return health.surface?.ok === null && typeof health.surface.checkedAt === 'string'
+    })
+
+    const health = await healthOf(url)
+    expect(health.paperclip).toBe(false)
+    expect(health.paperclipVersion).toBeNull()
+    expect(health.surface.ok).toBeNull()
+    expect(health.surface.error).toMatch(/not reachable/i)
+  })
+
+  it('checks the spec again when the Paperclip socket reopens', async () => {
+    const { fake, url } = await startSurfaceBridge({ spec: paperclipSpec({ version: '1.0.0' }) })
+    await waitUntil(async () => {
+      const health = await healthOf(url)
+      return health.paperclip === true && health.paperclipVersion === '1.0.0' && health.surface?.ok === true
+    })
+
+    fake.setSpec(paperclipSpec({ version: '2.0.0', drop: ['GET /api/companies/{companyId}/approvals'] }))
+    fake.dropClients()
+
+    await waitUntil(async () => {
+      const health = await healthOf(url)
+      return fake.connections >= 2 && health.paperclip === true && health.paperclipVersion === '2.0.0'
+    }, 5000)
+
+    const health = await healthOf(url)
+    expect(health.surface.ok).toBe(false)
+    expect(health.surface.missing).toEqual([{ method: 'GET', path: '/api/companies/{companyId}/approvals' }])
+  })
+
+  it('leaves no timer behind after stop', async () => {
+    const { fake, bridge, url } = await startSurfaceBridge({ spec: paperclipSpec(), surfaceEveryMs: 30 })
+    await waitUntil(async () => (await healthOf(url)).surface?.ok === true)
+
+    await bridge.stop()
+    await sleep(200)
+    const count = fake.specRequests.length
+    await sleep(150)
+
+    expect(fake.specRequests.length).toBe(count)
   })
 })
 

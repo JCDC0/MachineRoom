@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.63. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.64. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -87,7 +87,7 @@ tests/            vitest
 The first visit opens a connect screen (`src/ui/Connect.jsx`). The choice is saved in localStorage (`machineroom.settings`) with the replay speed, and the next visit reconnects by itself. A failed live connection returns to the connect screen with a message naming the address. While a live room has had no run yet, or the link is down, a waiting overlay (`Waiting.jsx`) says why. Addresses override the saved choice: `?connect` shows the screen, `?replay` opens the replay. Ways to connect:
 
 - `/?live` goes straight to Paperclip's WebSocket through the Vite proxy. Paperclip's REST endpoints refuse a cross-origin browser, so REST calls go through the proxy at `/paperclip`, which Vite forwards to `http://127.0.0.1:3100`. A production build has no proxy.
-- `/?live&bridge=http://127.0.0.1:5174` goes through the bridge (`npm run bridge`). The bridge holds the Paperclip socket, lists the agents (with their Paperclip `role`, and a unique key each: the first agent of an adapter keeps the adapter key, later ones get the slug of their name), sends the project file list and pushes `tree` events when files appear. No proxy is needed.
+- `/?live&bridge=http://127.0.0.1:5174` goes through the bridge (`npm run bridge`). The bridge holds the Paperclip socket, lists the agents (with their Paperclip `role`, and a unique key each: the first agent of an adapter keeps the adapter key, later ones get the slug of their name), sends the project file list and pushes `tree` events when files appear. No proxy is needed. `GET /api/health` answers `{ ok, paperclip, paperclipVersion, surface }`: the bridge reads Paperclip's `/api/openapi.json` at start, each time its socket opens and every 15 minutes, and `surface` is `{ ok: true }`, `{ ok: false, missing, changed }` (the routes from `server/surface.js` the spec no longer lists) or `{ ok: null, error }` with a plain sentence, each with `checkedAt`.
 - `/?live&simulate&speed=3` plays the recording through the live path with no Paperclip, for testing. The badge reads `Demo`.
 
 Query parameters: `recording` (replay a lane run from `public/recordings/<name>-*`, written by `npm run run-lane` after each run or by `npm run run-recording`; the name is the run's log name, and `public/recordings/index.json` lists the last 50 with lane, briefs, model, start, minutes, exit code and counts, newest first), `company` (company id), `root` (project folder name), `tree` (base URL of a bridge, to start with the full file list over the proxy route), `bridge`, `paperclip` (another Paperclip base URL), `speed` (simulated feed).
