@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { commandFor, formatSummary, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const env = { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }
@@ -89,6 +89,28 @@ describe('parseRunArgs', () => {
   it('accepts --list without a lane or a brief', () => {
     expect(parseRunArgs(['--list'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: 100, list: true })
     expect(parseRunArgs(['--list', '--minutes', '5'])).toMatchObject({ list: true, minutes: 5 })
+  })
+
+  it('accepts --stats without a lane or a brief', () => {
+    expect(parseRunArgs(['--stats'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: 100, list: false, stats: true })
+    expect(parseRunArgs(['--stats', '--minutes', '5'])).toMatchObject({ stats: true, minutes: 5 })
+  })
+
+  it('takes --since with a day', () => {
+    expect(parseRunArgs(['--stats', '--since', '2026-10-19'])).toEqual({
+      lane: '', briefs: [], dryRun: false, minutes: 100, list: false, stats: true, since: '2026-10-19',
+    })
+    expect(parseRunArgs(['--stats', '--since=2026-01-02'])).toMatchObject({ since: '2026-01-02' })
+  })
+
+  it('refuses a since that is not a day', () => {
+    expect(() => parseRunArgs(['--stats', '--since'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--stats', '--since', '19-10-2026'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--stats', '--since', '2026-10-19T00:00:00Z'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--stats', '--since', '2026-13-01'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--stats', '--since', '2026-02-30'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--stats', '--since', 'yesterday'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--stats', '--since', '--list'])).toThrow('--since needs a date like 2026-10-19.')
   })
 
   it('refuses input that names no lane, no brief or a bad time', () => {
@@ -409,5 +431,166 @@ describe('runListLine', () => {
   it('names the model right after the lane', () => {
     const record = runRecord({ lane: 'hermes', briefs: ['T9'], model: 'minimax/minimax-m3.1-flash:free', startedAt: '2026-10-19T12:00:00.000Z', minutes: 3, exitCode: 0, branch: 'feat/t9' })
     expect(runListLine(record)).toBe('2026-10-19T12:00:00.000Z | hermes | minimax/minimax-m3.1-flash:free | T9 | 3 min | exit 0 | not reported | feat/t9')
+  })
+})
+
+const record = (over = {}) => ({
+  lane: 'hermes',
+  model: 'deepseek/deepseek-v4.1-flash-1017',
+  startedAt: '2026-10-19T10:00:00.000Z',
+  minutes: 5,
+  exitCode: 0,
+  killed: false,
+  costUsd: 0.01,
+  ...over,
+})
+
+describe('laneStats', () => {
+  it('groups one row per lane and model, sorted by lane and then model', () => {
+    const stats = laneStats([
+      record({ lane: 'opencode', model: 'opencode-go/mimo-v2.6-pro' }),
+      record({ lane: 'hermes', model: 'minimax/minimax-m3.1-flash:free' }),
+      record({ lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' }),
+      record({ lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' }),
+    ])
+    expect(stats.rows.map((row) => `${row.lane} ${row.model}`)).toEqual([
+      'hermes deepseek/deepseek-v4.1-flash-1017',
+      'hermes minimax/minimax-m3.1-flash:free',
+      'opencode opencode-go/mimo-v2.6-pro',
+    ])
+    expect(stats.rows[0].runs).toBe(2)
+    expect(stats.rows[1].runs).toBe(1)
+  })
+
+  it('counts finished, killed and failed runs', () => {
+    const stats = laneStats([
+      record({ exitCode: 0, killed: false }),
+      record({ exitCode: 0, killed: false }),
+      record({ exitCode: 0, killed: true }),
+      record({ exitCode: 1, killed: false }),
+      record({ exitCode: null, killed: false }),
+    ])
+    expect(stats.rows[0]).toMatchObject({ runs: 5, finished: 2, killed: 1, failed: 2 })
+  })
+
+  it('takes the median of an odd number of runs', () => {
+    const stats = laneStats([record({ minutes: 7 }), record({ minutes: 3 }), record({ minutes: 5 })])
+    expect(stats.rows[0]).toMatchObject({ minutesTotal: 15, minutesMedian: 5 })
+  })
+
+  it('takes the median of an even number of runs', () => {
+    const stats = laneStats([record({ minutes: 9 }), record({ minutes: 3 }), record({ minutes: 7 }), record({ minutes: 5 })])
+    expect(stats.rows[0]).toMatchObject({ minutesTotal: 24, minutesMedian: 6 })
+  })
+
+  it('leaves a minute or a cost that is not a number out of the sums and the median', () => {
+    const stats = laneStats([
+      record({ minutes: 4, costUsd: 0.2 }),
+      record({ minutes: 6, costUsd: 0.1 }),
+      record({ minutes: null, costUsd: null }),
+      record({ minutes: '8', costUsd: '0.5' }),
+      record({ minutes: Number.NaN, costUsd: Number.POSITIVE_INFINITY }),
+    ])
+    expect(stats.rows[0]).toMatchObject({ runs: 5, minutesTotal: 10, minutesMedian: 5, costTotal: 0.3, costRuns: 2 })
+  })
+
+  it('counts a run that reported a cost of zero', () => {
+    const stats = laneStats([record({ costUsd: 0 }), record({ costUsd: 0.5 })])
+    expect(stats.rows[0]).toMatchObject({ costTotal: 0.5, costRuns: 2 })
+  })
+
+  it('counts a run with no model as model unknown', () => {
+    const stats = laneStats([record({ model: undefined }), record({ model: '' }), record({ model: 'deepseek/x' })])
+    expect(stats.rows.map((row) => row.model)).toEqual(['deepseek/x', 'model unknown'])
+    expect(stats.rows[1].runs).toBe(2)
+  })
+
+  it('rounds minutes to one decimal and costs to four', () => {
+    const stats = laneStats([record({ minutes: 0.04, costUsd: 0.00006 }), record({ minutes: 0.04, costUsd: 0.00006 })])
+    expect(stats.rows[0]).toMatchObject({ minutesTotal: 0.1, minutesMedian: 0, costTotal: 0.0001, costRuns: 2 })
+    const thirds = laneStats([record({ costUsd: 0.1 }), record({ costUsd: 0.2 })])
+    expect(thirds.rows[0].costTotal).toBe(0.3)
+  })
+
+  it('leaves out records from before the day and records with no start', () => {
+    const stats = laneStats([
+      record({ startedAt: '2026-10-18T23:59:59.999Z', minutes: 1 }),
+      record({ startedAt: '2026-10-19T00:00:00.000Z', minutes: 2 }),
+      record({ startedAt: '2026-10-20T08:00:00.000Z', minutes: 3 }),
+      record({ startedAt: null, minutes: 4 }),
+      record({ startedAt: 'not a time', minutes: 5 }),
+      record({ startedAt: undefined, minutes: 6 }),
+    ], { since: '2026-10-19' })
+    expect(stats.rows[0]).toMatchObject({ runs: 2, minutesTotal: 5 })
+    expect(laneStats([record({ startedAt: '2026-10-18T23:59:59.999Z' })], { since: '2026-10-19' }).rows).toEqual([])
+  })
+
+  it('keeps every record when there is no since', () => {
+    const records = [record({ startedAt: null }), record({ startedAt: '2020-01-01T00:00:00.000Z' })]
+    expect(laneStats(records).rows[0].runs).toBe(2)
+    expect(laneStats(records, {}).rows[0].runs).toBe(2)
+  })
+
+  it('skips junk records', () => {
+    const stats = laneStats([
+      null,
+      undefined,
+      'a run',
+      42,
+      [],
+      {},
+      { model: 'deepseek/x' },
+      { lane: '' },
+      { lane: '   ' },
+      { lane: null },
+      record({ minutes: 2 }),
+    ])
+    expect(stats.rows).toHaveLength(1)
+    expect(stats.rows[0]).toMatchObject({ lane: 'hermes', runs: 1 })
+    expect(stats.total).toMatchObject({ runs: 1 })
+    expect(laneStats(null).rows).toEqual([])
+    expect(laneStats('nope').rows).toEqual([])
+  })
+
+  it('totals every row', () => {
+    const stats = laneStats([
+      record({ lane: 'hermes', model: 'a', minutes: 4.9, costUsd: 0.2, exitCode: 0 }),
+      record({ lane: 'hermes', model: 'a', minutes: 6.1, costUsd: 0.312, exitCode: 1 }),
+      record({ lane: 'opencode', model: 'b', minutes: 2, costUsd: null, exitCode: 0, killed: true }),
+    ])
+    expect(stats.total).toEqual({
+      lane: 'all',
+      model: 'all',
+      runs: 3,
+      finished: 1,
+      killed: 1,
+      failed: 1,
+      minutesTotal: 13,
+      minutesMedian: 4.9,
+      costTotal: 0.512,
+      costRuns: 2,
+    })
+  })
+})
+
+describe('formatStats', () => {
+  const stats = laneStats([
+    record({ lane: 'hermes', model: 'deepseek/x', minutes: 4.9, costUsd: 0.2, exitCode: 0 }),
+    record({ lane: 'hermes', model: 'deepseek/x', minutes: 6.1, costUsd: 0.312, exitCode: 1 }),
+    record({ lane: 'opencode', model: undefined, minutes: 2, costUsd: null, exitCode: 0, killed: true }),
+  ])
+
+  it('prints one line per row and then the total', () => {
+    expect(formatStats(stats)).toEqual([
+      'hermes | deepseek/x | 2 runs | 1 finished, 0 killed, 1 failed | 11.0 min, median 5.5 | 0.5120 USD over 2 runs',
+      'opencode | model unknown | 1 runs | 0 finished, 1 killed, 0 failed | 2.0 min, median 2.0 | 0.0000 USD over 0 runs',
+      'all | all | 3 runs | 1 finished, 1 killed, 1 failed | 13.0 min, median 4.9 | 0.5120 USD over 2 runs',
+    ])
+  })
+
+  it('says so when there are no runs', () => {
+    expect(formatStats(laneStats([]))).toEqual(['No runs recorded.'])
+    expect(formatStats({ rows: [], total: null })).toEqual(['No runs recorded.'])
+    expect(formatStats(null)).toEqual(['No runs recorded.'])
   })
 })
