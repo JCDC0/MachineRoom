@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Paperclip version and route check in the health answer (task U2a): the bridge fetches `/api/openapi.json` at start, when its socket opens and every 15 minutes (`surfaceEveryMs` shortens that for a test), and `GET /api/health` now carries `paperclipVersion` and `surface` (ok, the missing and changed routes, or a plain sentence when the spec cannot be read) beside the old fields.
 - Review fixes on U1: the doctor matches a route whose path parameter Paperclip renamed (`{id}` and `{agentId}` count as the same place), so only a real change in a path reports it missing, and the route list also holds `GET /api/companies`, which the browser reads on the proxy route to find the company.
 - Paperclip route list and doctor (task U1): `server/surface.js` lists every Paperclip route the bridge calls, with the answer fields it reads and the request fields it sends, and `npm run doctor` fetches `/api/openapi.json` from a running Paperclip and prints a plain sentence for each route, method or field the spec does not list.
 - Review fix on P8: the Hermes parser uses the last folder only for a bare file name. A line that carries a path, such as the full paths in session tool lines, still resolves by that path, so a read of `C:\...\test\index.js` after work in `src/` stays in `test/`.

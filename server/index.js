@@ -8,10 +8,13 @@ import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
+import { compareSurface } from './surface.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 const BODY_LIMIT = 64 * 1024
+const SURFACE_TIMEOUT_MS = 10000
+const SURFACE_EVERY_MS = 15 * 60 * 1000
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
@@ -179,6 +182,7 @@ export function createBridge(options = {}) {
   const logRetries = Number(options.logRetries ?? 3)
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
+  const surfaceEveryMs = Number(options.surfaceEveryMs ?? SURFACE_EVERY_MS)
 
   const briefs = createBriefsApi({
     projectRoot,
@@ -229,6 +233,11 @@ export function createBridge(options = {}) {
   let watcher = null
   let watchTimer = null
   let lastFiles = []
+  let surfaceTimer = null
+  let surfaceChecking = false
+  let surfacePending = false
+  let paperclipVersion = null
+  let surface = { ok: null, checkedAt: null, error: 'not checked yet' }
   const logs = new Map()
   const waiting = []
   let resolving = false
@@ -389,6 +398,76 @@ export function createBridge(options = {}) {
     }, wait)
   }
 
+  function surfaceError(message) {
+    paperclipVersion = null
+    surface = { ok: null, checkedAt: new Date().toISOString(), error: message }
+  }
+
+  async function checkSurface() {
+    if (stopped) return
+    if (surfaceChecking) {
+      surfacePending = true
+      return
+    }
+    surfaceChecking = true
+    try {
+      let response
+      try {
+        response = await fetch(`${paperclipUrl}/api/openapi.json`, { signal: AbortSignal.timeout(SURFACE_TIMEOUT_MS) })
+      } catch {
+        surfaceError('Could not read the Paperclip spec: Paperclip is not reachable.')
+        return
+      }
+      if (!response.ok) {
+        surfaceError(`Paperclip answered ${response.status} when asked for its spec.`)
+        return
+      }
+      let spec
+      try {
+        spec = await response.json()
+      } catch {
+        surfaceError('Paperclip answered something that is not a spec.')
+        return
+      }
+      if (!spec || typeof spec !== 'object' || !spec.paths || typeof spec.paths !== 'object') {
+        surfaceError('Paperclip answered a document with no routes. That is not a spec.')
+        return
+      }
+      const result = compareSurface(spec)
+      paperclipVersion = typeof spec.info?.version === 'string' && spec.info.version ? spec.info.version : null
+      const checkedAt = new Date().toISOString()
+      surface = result.ok
+        ? { ok: true, checkedAt }
+        : {
+            ok: false,
+            checkedAt,
+            missing: result.missing.map(({ method, path }) => ({ method, path })),
+            changed: result.changed.map(({ method, path, answerFields, bodyFields }) => ({
+              method,
+              path,
+              answerFields,
+              bodyFields,
+            })),
+          }
+    } catch {
+      surfaceError('The Paperclip spec could not be read.')
+    } finally {
+      surfaceChecking = false
+      if (surfacePending && !stopped) {
+        surfacePending = false
+        checkSurface().catch(() => {})
+      }
+    }
+  }
+
+  function startSurfaceTimer() {
+    if (!(surfaceEveryMs > 0)) return
+    surfaceTimer = setInterval(() => {
+      checkSurface().catch(() => {})
+    }, surfaceEveryMs)
+    surfaceTimer.unref?.()
+  }
+
   function connectUpstream() {
     if (stopped) return
     let ws
@@ -404,6 +483,7 @@ export function createBridge(options = {}) {
       if (socket !== ws) return
       paperclipOpen = true
       reconnectDelay = reconnectMinMs
+      checkSurface().catch(() => {})
     })
     ws.addEventListener('message', (event) => {
       if (socket !== ws) return
@@ -457,7 +537,7 @@ export function createBridge(options = {}) {
     if (await assistant.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
-      sendJson(req, res, 200, { ok: true, paperclip: paperclipOpen })
+      sendJson(req, res, 200, { ok: true, paperclip: paperclipOpen, paperclipVersion, surface })
       return
     }
 
@@ -531,6 +611,8 @@ export function createBridge(options = {}) {
 
   function start() {
     startWatcher()
+    startSurfaceTimer()
+    checkSurface().catch(() => {})
     connectUpstream()
     return new Promise((resolveStart, rejectStart) => {
       server.once('error', rejectStart)
@@ -550,6 +632,11 @@ export function createBridge(options = {}) {
     waiting.length = 0
     runs.stopAll()
     clearInterval(heartbeatTimer)
+    if (surfaceTimer) {
+      clearInterval(surfaceTimer)
+      surfaceTimer = null
+    }
+    surfacePending = false
     if (watchTimer) {
       clearTimeout(watchTimer)
       watchTimer = null
