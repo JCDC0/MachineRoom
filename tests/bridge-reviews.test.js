@@ -50,6 +50,10 @@ function makeLaneRepo() {
   const worktree = join(base, 'lane-worktree')
   mkdirSync(repo, { recursive: true })
   git(repo, ['init', '-b', 'main'])
+  git(repo, ['config', 'user.name', 'MachineRoom Test'])
+  git(repo, ['config', 'user.email', 'test@example.invalid'])
+  git(repo, ['config', 'commit.gpgsign', 'false'])
+  git(repo, ['config', 'core.autocrlf', 'false'])
   writeFileSync(join(repo, 'notes.txt'), 'hello\n')
   git(repo, ['add', 'notes.txt'])
   git(repo, ['commit', '-m', 'first'])
@@ -71,7 +75,7 @@ function useRunsTemp() {
   return dir
 }
 
-async function startReviewsBridge(lanes, { patchLimit, withFiles = true } = {}) {
+async function startReviewsBridge(lanes, { patchLimit, withFiles = true, projectRoot } = {}) {
   const dir = makeTempDir()
   if (withFiles) {
     const agentsDir = join(dir, 'docs', 'agents')
@@ -80,7 +84,8 @@ async function startReviewsBridge(lanes, { patchLimit, withFiles = true } = {}) 
     writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify(lanes))
   }
   const bridge = createBridge({
-    projectRoot: dir,
+    projectRoot: projectRoot ?? dir,
+    briefsDir: withFiles ? join(dir, 'docs', 'agents') : undefined,
     port: 0,
     paperclipUrl: 'http://127.0.0.1:1',
     companyId: 'company-1',
@@ -91,6 +96,45 @@ async function startReviewsBridge(lanes, { patchLimit, withFiles = true } = {}) 
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
   return { url, dir }
+}
+
+function mergeRequest(url, lane, body) {
+  return fetch(`${url}/api/control/reviews/${encodeURIComponent(lane)}/merge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+function repoState(repo, worktree) {
+  return {
+    refs: git(repo, ['for-each-ref', '--format=%(refname) %(objectname)']),
+    mainStatus: git(repo, ['status', '--porcelain']),
+    laneStatus: git(worktree, ['status', '--porcelain']),
+  }
+}
+
+function gitExit(cwd, args) {
+  try {
+    git(cwd, args)
+    return 0
+  } catch (error) {
+    return error.status ?? 1
+  }
+}
+
+async function expectMergeRefusal(url, lane, body, { status, error, repo, worktree, raw = false }) {
+  const before = repoState(repo, worktree)
+  const res = raw
+    ? await fetch(`${url}/api/control/reviews/${lane}/merge`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    : await mergeRequest(url, lane, body)
+  expect(res.status, lane).toBe(status)
+  expect(await res.json(), lane).toEqual({ error })
+  expect(repoState(repo, worktree), lane).toEqual(before)
 }
 
 describe('review routes', () => {
@@ -119,6 +163,7 @@ describe('review routes', () => {
       lane: 'opencode',
       worktree,
       branch: 'feat/x',
+      head: git(worktree, ['rev-parse', 'HEAD']).trim(),
       ahead: 1,
       dirty: false,
       files: 2,
@@ -209,6 +254,8 @@ describe('review routes', () => {
       const res = await fetch(`${url}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
       expect(res.status, path).toBe(405)
     }
+    const mergeGet = await fetch(`${url}/api/control/reviews/hermes/merge`)
+    expect(mergeGet.status).toBe(405)
   })
 
   it('answers 404 without a path when the lane file is missing', async () => {
@@ -221,4 +268,207 @@ describe('review routes', () => {
       expect(body.error).not.toContain(dir)
     }
   })
+})
+
+describe('merge route', () => {
+  it('merges the checked head into main and answers the new commit', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const oldMain = git(repo, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+
+    const list = await fetch(`${url}/api/control/reviews`).then((r) => r.json())
+    expect(list.lanes[0].head).toBe(head)
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: expect.stringMatching(/^[0-9a-f]{40}$/) })
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(body.commit)
+    expect(git(repo, ['log', '-1', '--format=%s']).trim()).toBe('Merge the lane')
+    expect(git(repo, ['rev-parse', 'HEAD^1']).trim()).toBe(oldMain)
+    expect(git(repo, ['rev-parse', 'HEAD^2']).trim()).toBe(head)
+    expect(git(repo, ['status', '--porcelain'])).toBe('')
+
+    const before = repoState(repo, worktree)
+    const again = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    expect(again.status).toBe(409)
+    expect(await again.json()).toEqual({ error: 'Nothing to merge.' })
+    expect(repoState(repo, worktree)).toEqual(before)
+  }, 20000)
+
+  it('answers 404 for a lane that is not an own key with a worktree, and for a missing worktree', async () => {
+    const { base, repo, worktree } = makeLaneRepo()
+    const missing = join(base, 'gone')
+    const { url } = await startReviewsBridge(
+      {
+        opencode: { name: 'OpenCode', worktree },
+        hermes: { name: 'Hermes', worktree: missing },
+        quiet: { name: 'No worktree here' },
+      },
+      { projectRoot: repo }
+    )
+    const body = { confirmed: true, head: '0'.repeat(40), message: 'Merge the lane' }
+    for (const lane of ['__proto__', 'constructor', '..%2F..', '%ZZ', 'nobody', 'quiet']) {
+      await expectMergeRefusal(url, lane, body, { status: 404, error: 'Choose a lane from the list.', repo, worktree, raw: true })
+    }
+    await expectMergeRefusal(url, 'hermes', body, { status: 404, error: 'That worktree is missing.', repo, worktree })
+  })
+
+  it('refuses a merge that was not confirmed', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    for (const confirmed of [undefined, false, 'true', 1]) {
+      const body = { head, message: 'Merge the lane' }
+      if (confirmed !== undefined) body.confirmed = confirmed
+      await expectMergeRefusal(url, 'opencode', body, { status: 400, error: 'Confirm the merge first.', repo, worktree })
+    }
+  })
+
+  it('refuses a head that is not a sha or a message that is not one short line', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    const bodies = [
+      { confirmed: true, head: 'abc', message: 'Merge the lane' },
+      { confirmed: true, head: head.slice(0, 39), message: 'Merge the lane' },
+      { confirmed: true, head: 'g'.repeat(40), message: 'Merge the lane' },
+      { confirmed: true, head: null, message: 'Merge the lane' },
+      { confirmed: true, head, message: '' },
+      { confirmed: true, head, message: 'x'.repeat(201) },
+      { confirmed: true, head, message: 'one\ntwo' },
+      { confirmed: true, head, message: 42 },
+    ]
+    for (const body of bodies) {
+      await expectMergeRefusal(url, 'opencode', body, {
+        status: 400,
+        error: 'Send the head you read and a message of one line.',
+        repo,
+        worktree,
+      })
+    }
+  })
+
+  it('refuses a merge while the main checkout is not on main', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    git(repo, ['switch', '-c', 'side'])
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    await expectMergeRefusal(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' }, {
+      status: 409,
+      error: 'The main checkout is not on main.',
+      repo,
+      worktree,
+    })
+  })
+
+  it('refuses a merge while the main checkout has uncommitted changes', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    writeFileSync(join(repo, 'notes.txt'), 'changed on main\n')
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    await expectMergeRefusal(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' }, {
+      status: 409,
+      error: 'The main checkout has uncommitted changes.',
+      repo,
+      worktree,
+    })
+  })
+
+  it('refuses a head that is not the lane head any more', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    await expectMergeRefusal(url, 'opencode', { confirmed: true, head: '0'.repeat(40), message: 'Merge the lane' }, {
+      status: 409,
+      error: 'The lane moved since you read it. Read it again.',
+      repo,
+      worktree,
+    })
+  })
+
+  it('refuses a merge while the lane has uncommitted changes', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    writeFileSync(join(worktree, 'extra.js'), 'export const x = 2\n')
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    await expectMergeRefusal(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' }, {
+      status: 409,
+      error: 'The lane has uncommitted changes.',
+      repo,
+      worktree,
+    })
+  })
+
+  it('stops on a conflict, aborts the merge and leaves main as it was', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    writeFileSync(join(repo, 'notes.txt'), 'changed on main\n')
+    git(repo, ['add', 'notes.txt'])
+    git(repo, ['commit', '-m', 'main change'])
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const oldMain = git(repo, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    const before = repoState(repo, worktree)
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'The merge stopped on a conflict. Nothing changed.', files: ['notes.txt'] })
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(oldMain)
+    expect(git(repo, ['status', '--porcelain'])).toBe('')
+    expect(gitExit(repo, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])).not.toBe(0)
+    expect(repoState(repo, worktree)).toEqual(before)
+  }, 20000)
+
+  it('merges two changelog lines through the union driver', async () => {
+    const base = makeTempDir()
+    const repo = join(base, 'repo')
+    const worktree = join(base, 'lane-worktree')
+    mkdirSync(join(repo, 'docs', 'agents'), { recursive: true })
+    git(repo, ['init', '-b', 'main'])
+    git(repo, ['config', 'user.name', 'MachineRoom Test'])
+    git(repo, ['config', 'user.email', 'test@example.invalid'])
+    git(repo, ['config', 'commit.gpgsign', 'false'])
+    git(repo, ['config', 'core.autocrlf', 'false'])
+    writeFileSync(join(repo, '.gitattributes'), 'docs/agents/CHANGELOG.md merge=union\n')
+    writeFileSync(join(repo, 'docs', 'agents', 'CHANGELOG.md'), '# Changelog\n\n## Unreleased\n\n- base line\n')
+    writeFileSync(join(repo, 'notes.txt'), 'hello\n')
+    git(repo, ['add', '.'])
+    git(repo, ['commit', '-m', 'base'])
+    git(repo, ['worktree', 'add', '-b', 'feat/x', worktree])
+    writeFileSync(join(worktree, 'docs', 'agents', 'CHANGELOG.md'), '# Changelog\n\n## Unreleased\n\n- base line\n- lane line\n')
+    git(worktree, ['add', 'docs/agents/CHANGELOG.md'])
+    git(worktree, ['commit', '-m', 'lane line'])
+    writeFileSync(join(repo, 'docs', 'agents', 'CHANGELOG.md'), '# Changelog\n\n## Unreleased\n\n- base line\n- main line\n')
+    git(repo, ['add', 'docs/agents/CHANGELOG.md'])
+    git(repo, ['commit', '-m', 'main line'])
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the changelog' })
+    expect(res.status).toBe(200)
+    const merged = git(repo, ['show', 'HEAD:docs/agents/CHANGELOG.md'])
+    expect(merged).toContain('- base line')
+    expect(merged).toContain('- lane line')
+    expect(merged).toContain('- main line')
+    expect(git(repo, ['status', '--porcelain'])).toBe('')
+  }, 20000)
+
+  it('answers the lock sentence to a second merge sent at the same time', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    for (let i = 0; i < 120; i += 1) {
+      writeFileSync(join(worktree, `file-${i}.txt`), `line ${i}\n`)
+    }
+    git(worktree, ['add', '.'])
+    git(worktree, ['commit', '-m', 'many files'])
+    const manyHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    const body = { confirmed: true, head: manyHead, message: 'Merge the lane' }
+    const [first, second] = await Promise.all([mergeRequest(url, 'opencode', body), mergeRequest(url, 'opencode', body)])
+    const statuses = [first.status, second.status].sort()
+    expect(statuses).toEqual([200, 409])
+    const refused = first.status === 409 ? first : second
+    expect(await refused.json()).toEqual({ error: 'A merge is already running.' })
+    expect(head).not.toBe(manyHead)
+  }, 20000)
 })

@@ -28,6 +28,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
+| `mergeReview(lane, { head, message })` | `MergeResult`, the new merge commit on `main`. It sends `confirmed: true`, so call it only after the user confirmed; `head` is the sha from `reviews()` (W3b; the mock merges a sample lane once) |
 | `decide({ state, questions, model? })` | `{ ok: true, model, answers, usage, ms, attempts }` from the decision model (D2; see `DECIDER-EVAL.md`). It rejects with `No key is set for the decision model.` when the bridge has no `OPENROUTER_API_KEY`, which is also what the mock always does |
 | `backupStatus()` | `BackupStatus`, the age of Paperclip's newest database backup (W2b) |
 | `backupNow()` | `BackupResult`. It asks Paperclip for a backup at once, so call it only after the user confirmed; it rejects with `A backup is already running.` while one runs (W2b) |
@@ -64,11 +65,15 @@ BriefPrompt  { prompt, lane, model, branch }
 RunInfo      { lane, briefs: string[], startedAt, lastLines: string[] (the last 5 lines the run printed) }
 RunRecord    { lane, briefs, model: string|null, reasoning: string|null, startedAt, minutes: number|null, exitCode: number|null,
                killed: boolean, costUsd: number|null, log: string|null, branch, commits: string[] }   (one line of runs.jsonl)
-Review       { lane, worktree, branch, ahead: number (commits on top of main), commits: string[] (at most 50),
-               dirty: boolean, files: number, added: number, deleted: number, lastRun: RunRecord | null }
+Review       { lane, worktree, branch, head: string (full sha of the worktree HEAD), ahead: number (commits on top of main),
+               commits: string[] (at most 50), dirty: boolean, files: number, added: number, deleted: number,
+               lastRun: RunRecord | null }
              A worktree that is missing or is not a git repository gives { lane, worktree, error } instead.
 ReviewDiff   { lane, branch, files: [{ path, added, deleted }], patch, truncated: boolean }
              patch is the diff of the lane branch against main, cut at 400 KB (truncated is true when it was cut).
+MergeResult  { ok: true, lane, branch, head, commit }
+             commit is the new sha of main. A merge that stops on a conflict rejects with
+             The merge stopped on a conflict. Nothing changed.
 RunStats     { rows: RunStatsRow[] (sorted by lane, then model), total: RunStatsRow (lane and model are "all") }
 RunStatsRow  { lane, model ("model unknown" when a record has none), runs, finished, killed, failed, minutesTotal, minutesMedian, costTotal (USD), costRuns }
 BackupStatus { enabled: boolean, status: ok | warning | null, latestAt: string|null, ageHours: number|null, warnings: string[], checkedAt }

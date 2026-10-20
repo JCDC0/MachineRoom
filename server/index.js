@@ -241,6 +241,7 @@ export function createBridge(options = {}) {
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     patchLimit: options.patchLimit,
     sendJson,
+    readJsonBody,
   })
   let surface = { ok: null, checkedAt: null, error: 'not checked yet' }
   const featureIsOff = (feature) => surfaceFeatures(surface)[feature] === false

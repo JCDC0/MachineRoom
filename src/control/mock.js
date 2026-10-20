@@ -22,6 +22,7 @@ export const CLIENT_METHODS = [
   'startRun',
   'reviews',
   'reviewDiff',
+  'mergeReview',
   'decide',
   'backupStatus',
   'backupNow',
@@ -81,11 +82,14 @@ const SAMPLE_REVIEW_PATCH = [
 
 const SAMPLE_REVIEW_DIFF_FILES = [{ path: 'src/control/client.js', added: 2, deleted: 0 }]
 
+const SAMPLE_MERGE_COMMIT = '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a'
+
 const SAMPLE_REVIEWS = {
   hermes: {
     lane: 'hermes',
     worktree: 'C:\\GitHub\\MachineRoom-hermes',
     branch: 'feat/p5-recover-cut-tool-lines',
+    head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
     ahead: 2,
     commits: ['9f1c2a3 P5: take the tool name from the broken line', '4b7d0e8 P5: map the grep line to search'],
     dirty: false,
@@ -98,6 +102,7 @@ const SAMPLE_REVIEWS = {
     lane: 'opencode',
     worktree: 'C:\\GitHub\\MachineRoom-opencode',
     branch: 'feat/w3a-read-the-lane',
+    head: '2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e',
     ahead: 1,
     commits: ['6c49a75 0.1.47: Start a lane on a brief from the bridge'],
     dirty: true,
@@ -123,6 +128,7 @@ const SAMPLE_REVIEWS = {
     lane: 'agy',
     worktree: 'C:\\GitHub\\MachineRoom-agy',
     branch: 'feat/t7-run-a-brief',
+    head: '3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f',
     ahead: 3,
     commits: ['c3a1b2e T7: add the Run now button', '5d6e7f8 T7: confirm card before a run', '0a1b2c3 T7: list the runs under the brief'],
     dirty: false,
@@ -212,6 +218,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   let commentCounter = 3
   const listeners = new Set()
   const runsState = { running: [], recent: [] }
+  const reviewState = clone(SAMPLE_REVIEWS)
   const backupState = { latestMs: now() - 49.5 * HOUR_MS, running: false }
 
   function emit(event) {
@@ -420,11 +427,11 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return entry
       }),
 
-    reviews: () => call('reviews', () => Object.values(SAMPLE_REVIEWS)),
+    reviews: () => call('reviews', () => Object.values(reviewState)),
 
     reviewDiff: (lane) =>
       call('reviewDiff', () => {
-        const review = typeof lane === 'string' && Object.hasOwn(SAMPLE_REVIEWS, lane) ? SAMPLE_REVIEWS[lane] : null
+        const review = typeof lane === 'string' && Object.hasOwn(reviewState, lane) ? reviewState[lane] : null
         if (!review) throw new Error('Choose a lane from the list.')
         return {
           lane: review.lane,
@@ -433,6 +440,33 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           patch: SAMPLE_REVIEW_PATCH,
           truncated: false,
         }
+      }),
+
+    mergeReview: (lane, options = {}) =>
+      call('mergeReview', () => {
+        const review = typeof lane === 'string' && Object.hasOwn(reviewState, lane) ? reviewState[lane] : null
+        if (!review) throw new Error('Choose a lane from the list.')
+        const confirmed = Object.hasOwn(options, 'confirmed') ? options.confirmed : true
+        if (confirmed !== true) throw new Error('Confirm the merge first.')
+        if (
+          typeof options.head !== 'string' ||
+          !/^[0-9a-fA-F]{40}$/.test(options.head) ||
+          typeof options.message !== 'string' ||
+          options.message.length < 1 ||
+          options.message.length > 200 ||
+          /[\r\n]/.test(options.message)
+        ) {
+          throw new Error('Send the head you read and a message of one line.')
+        }
+        if (options.head !== review.head) throw new Error('The lane moved since you read it. Read it again.')
+        if (review.dirty) throw new Error('The lane has uncommitted changes.')
+        if (review.ahead === 0) throw new Error('Nothing to merge.')
+        review.ahead = 0
+        review.commits = []
+        review.files = 0
+        review.added = 0
+        review.deleted = 0
+        return { ok: true, lane: review.lane, branch: review.branch, head: review.head, commit: SAMPLE_MERGE_COMMIT }
       }),
 
     decide: ({ questions } = {}) =>

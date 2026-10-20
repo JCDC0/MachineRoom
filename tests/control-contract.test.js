@@ -551,16 +551,31 @@ function laneGit() {
   const base = makeTempDir('mr-contract-git-')
   const repo = join(base, 'repo')
   const worktree = join(base, 'lane-worktree')
-  mkdirSync(repo, { recursive: true })
+  const missing = join(base, 'gone')
+  mkdirSync(join(repo, 'docs', 'agents'), { recursive: true })
   testGit(repo, ['init', '-b', 'main'])
+  testGit(repo, ['config', 'user.name', 'MachineRoom Test'])
+  testGit(repo, ['config', 'user.email', 'test@example.invalid'])
+  testGit(repo, ['config', 'commit.gpgsign', 'false'])
+  testGit(repo, ['config', 'core.autocrlf', 'false'])
+  writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'machine-room', version: '0.1.35' }))
+  writeFileSync(join(repo, 'docs', 'agents', 'TASKS.md'), SAMPLE_TASKS_MD)
+  writeFileSync(join(repo, 'docs', 'agents', 'HOUSE-RULES.md'), SAMPLE_HOUSE_RULES_MD)
+  const lanes = {
+    hermes: { ...SAMPLE_LANES_JSON.hermes, worktree },
+    opencode: { ...SAMPLE_LANES_JSON.opencode, worktree: repo },
+    agy: { ...SAMPLE_LANES_JSON.agy, worktree: missing },
+  }
+  writeFileSync(join(repo, 'docs', 'agents', 'lanes.json'), JSON.stringify(lanes))
   writeFileSync(join(repo, 'notes.txt'), 'hello\n')
-  testGit(repo, ['add', 'notes.txt'])
+  testGit(repo, ['add', '.'])
   testGit(repo, ['commit', '-m', 'first'])
   testGit(repo, ['worktree', 'add', '-b', 'feat/x', worktree])
   writeFileSync(join(worktree, 'notes.txt'), 'hello again\n')
-  testGit(worktree, ['add', 'notes.txt'])
+  writeFileSync(join(worktree, 'extra.js'), 'export const x = 1\n')
+  testGit(worktree, ['add', '.'])
   testGit(worktree, ['commit', '-m', 'second'])
-  sharedLaneGit = { base, repo, worktree, missing: join(base, 'gone') }
+  sharedLaneGit = { base, repo, worktree, missing, lanes }
   return sharedLaneGit
 }
 
@@ -568,18 +583,6 @@ afterAll(() => {
   if (sharedLaneGit) rmSync(sharedLaneGit.base, { recursive: true, force: true })
   sharedLaneGit = null
 })
-
-function makeSampleProjectDir(lanes = SAMPLE_LANES_JSON) {
-  const dir = makeTempDir('mr-contract-briefs-')
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
-  const agentsDir = join(dir, 'docs', 'agents')
-  mkdirSync(agentsDir, { recursive: true })
-  writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'machine-room', version: '0.1.35' }))
-  writeFileSync(join(agentsDir, 'TASKS.md'), SAMPLE_TASKS_MD)
-  writeFileSync(join(agentsDir, 'HOUSE-RULES.md'), SAMPLE_HOUSE_RULES_MD)
-  writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify(lanes))
-  return dir
-}
 
 afterEach(async () => {
   while (cleanups.length > 0) {
@@ -906,9 +909,10 @@ function runContractSuite(label, makeHarness) {
           expect(typeof review.error).toBe('string')
           expect(Object.keys(review).sort()).toEqual(['error', 'lane', 'worktree'])
         } else {
-          for (const key of ['branch', 'ahead', 'commits', 'dirty', 'files', 'added', 'deleted', 'lastRun']) {
+          for (const key of ['branch', 'head', 'ahead', 'commits', 'dirty', 'files', 'added', 'deleted', 'lastRun']) {
             expect(review, `${review.lane} ${key}`).toHaveProperty(key)
           }
+          expect(review.head, review.lane).toMatch(/^[0-9a-f]{40}$/)
           expect(Array.isArray(review.commits), review.lane).toBe(true)
           expect(Number.isInteger(review.ahead), review.lane).toBe(true)
           expect(typeof review.dirty, review.lane).toBe('boolean')
@@ -938,6 +942,30 @@ function runContractSuite(label, makeHarness) {
         await expect(client.reviewDiff(lane), lane).rejects.toThrow('Choose a lane from the list.')
       }
     })
+
+    it('merges a lane once at the head that was read, then finds nothing left to merge', async () => {
+      const { client } = await makeHarness()
+      const reviews = await client.reviews()
+      const lane = reviews.find((review) => !review.error && review.ahead > 0 && !review.dirty)
+      expect(lane).toBeTruthy()
+      expect(lane.head).toMatch(/^[0-9a-f]{40}$/)
+
+      await expect(client.mergeReview(lane.lane, { head: '0'.repeat(40), message: 'Merge the lane' })).rejects.toThrow(
+        'The lane moved since you read it. Read it again.'
+      )
+      await expect(client.mergeReview(lane.lane, { head: lane.head, message: '' })).rejects.toThrow(
+        'Send the head you read and a message of one line.'
+      )
+
+      const merged = await client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })
+      expect(merged).toMatchObject({ ok: true, lane: lane.lane, branch: lane.branch, head: lane.head })
+      expect(merged.commit).toMatch(/^[0-9a-f]{40}$/)
+
+      await expect(client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })).rejects.toThrow('Nothing to merge.')
+      await expect(client.mergeReview('nobody', { head: lane.head, message: 'Merge the lane' })).rejects.toThrow(
+        'Choose a lane from the list.'
+      )
+    })
   })
 }
 
@@ -961,18 +989,12 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
   writeFileSync(runnerPath, TINY_RUNNER)
   const gitLane = laneGit()
-  const projectDir = makeSampleProjectDir({
-    ...SAMPLE_LANES_JSON,
-    hermes: { ...SAMPLE_LANES_JSON.hermes, worktree: gitLane.worktree },
-    opencode: { ...SAMPLE_LANES_JSON.opencode, worktree: gitLane.repo },
-    agy: { ...SAMPLE_LANES_JSON.agy, worktree: gitLane.missing },
-  })
   const bridge = createBridge({
     paperclipUrl: fake.url,
     companyId: 'comp-1',
     projectId: 'proj-1',
     projectWorkspaceId: 'ws-1',
-    projectRoot: projectDir,
+    projectRoot: gitLane.repo,
     port: 0,
     runnerCommand: { file: process.execPath, args: [runnerPath] },
   })
@@ -1096,5 +1118,21 @@ describe('real control client and bridge extras', () => {
     })
     expect(huge.status).toBe(413)
     expect(await huge.json()).toEqual({ error: 'That request is too large.' })
+  })
+})
+
+describe('mock merge confirm', () => {
+  it('refuses a merge that was not confirmed and merges a sample lane only once', async () => {
+    const client = createMockClient({ latencyMs: 0, now: () => BASE_TIME })
+    const reviews = await client.reviews()
+    const lane = reviews.find((review) => !review.error && review.ahead > 0 && !review.dirty)
+    expect(lane).toBeTruthy()
+    for (const confirmed of [false, undefined]) {
+      await expect(
+        client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane', confirmed })
+      ).rejects.toThrow('Confirm the merge first.')
+    }
+    expect((await client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })).ok).toBe(true)
+    await expect(client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })).rejects.toThrow('Nothing to merge.')
   })
 })
