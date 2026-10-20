@@ -1,0 +1,55 @@
+{
+  "tiers": {
+    "small": [
+      {
+        "lane": "hermes",
+        "model": "deepseek/deepseek-v4.1-flash-1017",
+        "reasoning": "xhigh",
+        "provider": "openrouter"
+      },
+      {
+        "lane": "hermes",
+        "model": "minimax/minimax-m3.1-flash:free",
+        "reasoning": "high",
+        "provider": "openrouter"
+      }
+    ],
+    "medium": [
+      {
+        "lane": "opencode",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "reasoning": "max",
+        "provider": "opencode"
+      },
+      {
+        "lane": "hermes",
+        "model": "deepseek/deepseek-v4.1-flash-1017",
+        "reasoning": "xhigh",
+        "provider": "openrouter"
+      }
+    ],
+    "large": [
+      {
+        "lane": "agy",
+        "model": "Gemini 4 Argon (Medium)",
+        "reasoning": "medium",
+        "provider": "antigravity"
+      },
+      {
+        "lane": "owner",
+        "model": null,
+        "reasoning": null,
+        "provider": null
+      }
+    ]
+  },
+  "limits": {
+    "runUsd": 0.25,
+    "issueUsd": 1,
+    "agentMonthlyUsd": 10,
+    "companyMonthlyUsd": 30,
+    "maxTurnsPerRun": 200,
+    "timeoutSec": 3600
+  },
+  "quotaSkipPercent": 90
+}
