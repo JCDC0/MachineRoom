@@ -8,6 +8,7 @@ import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
+import { createStaticHandler } from './static.js'
 import { compareSurface } from './surface.js'
 
 const LOCAL_ORIGIN = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/
@@ -221,6 +222,7 @@ export function createBridge(options = {}) {
     settingsFile: options.settingsFile ?? process.env.MACHINEROOM_SETTINGS_FILE,
     env: options.env ?? process.env,
   })
+  const serveStatic = createStaticHandler({ staticDir: options.staticDir })
 
   const clients = new Set()
   const history = []
@@ -598,6 +600,8 @@ export function createBridge(options = {}) {
       })
       return
     }
+
+    if (await serveStatic(req, res, url)) return
 
     sendJson(req, res, 404, { error: 'not found' })
   }

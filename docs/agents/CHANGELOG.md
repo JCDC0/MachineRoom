@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge serves the built viewer (task P1a): `createBridge({ staticDir })` answers GET and HEAD for the files under that folder, gives `index.html` at `/` and for a deep link with no file extension, sets a content type from the extension, refuses traversal outside the folder, and leaves API paths and the JSON 404 as they were; `bin/machine-room.mjs` starts it with `--paperclip`, `--company`, `--root`, `--port`, `--dist` and `--help`, prints the one line to open, and `npm run serve` runs it.
 - Review fix on A5a: a cost row with no `agentId` is skipped, so it can never match a roster agent that has no id.
 - Cost board rows (task A5a): `costBoard(costs, roster)` in `src/model/costs.js` joins the control client's `Costs` with the room's agents and returns `{ summary, rows, quota }`, with a row per roster agent in roster order and then the `byAgent` rows no roster agent covers (dearest first, then by name), a `reported` flag that is false when a harness reports no cost and no tokens, shares of the reported cost rounded to 3 decimals, the percent from `utilizationPercent` or from spend over budget, an `over` flag, one quota row per window and one error row per failed provider; junk input gives empty parts and never throws. Tests in `tests/costs.test.js`. It is not wired into the panels or the room yet.
 - Terminal buttons in the HUD (task V5b): each agent row has a Log button that toggles its chip and shows its log state, Overview gains a Show all or Hide all button, and T is added to the shortcut help list.

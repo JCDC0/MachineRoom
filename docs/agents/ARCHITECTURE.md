@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.68. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.69. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -21,6 +21,7 @@ Version 0.1.68. A browser viewer that shows coding agents working on one project
 npm install
 npm run dev        http://localhost:5173
 npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
+npm run serve      the built viewer and the bridge on one port, no Vite (npm run build first); --paperclip, --company, --root, --port, --dist; prints the address to open
 npm run doctor     compare the running Paperclip's /api/openapi.json with the routes in server/surface.js; exits 1 and names each route or field that is missing
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
 npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --model and --reasoning change the model for that run only
@@ -67,7 +68,8 @@ src/assistant/    request router: closed action list, rule based intent, key gua
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
   panels/           control drawer on `C`: dispatch, tasks and thread, approvals, meters (uses only the control client)
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
-server/           the bridge: Paperclip frames, agent list and file tree for the browser
+server/           the bridge: Paperclip frames, agent list and file tree for the browser, and the built viewer when started with staticDir (static.js)
+bin/              machine-room.mjs, the one-port command behind npm run serve
 src/Stage.jsx     wires player, room and HUD together
 src/App.jsx       chooses the first screen (connect, replay or live), loads the data, shows loading, empty and error states
 src/startup.js    pure: which screen to open from the address and the saved connection (tested)
@@ -187,7 +189,7 @@ Do not rename these classes without changing both sides.
 - Hermes read lines carry only a file name. When two files share it, the parser picks the one in or nearest the folder of that run's last file; with no folder yet, or a tie, the name lands at the root.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
-- The proxy route needs the dev server. The bridge route works with a production build too.
+- The proxy route needs the dev server. The bridge route works with a production build too, and `npm run serve` serves that build from the bridge on one port.
 - The bridge only allows pages on `localhost` or `127.0.0.1`.
 - Through the proxy route (no bridge), a tool call whose log line is over 8192 characters is missed. A real run lost 3 of 58 calls this way, all reads outside the project.
 - A card's depth plane matches its face, not its tab or the faint folders behind it, so a line can show through those.
