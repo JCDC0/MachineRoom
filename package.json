@@ -12,6 +12,7 @@
   "files": [
     "bin/",
     "server/",
+    "src/briefs/audit.js",
     "src/briefs/briefs.js",
     "src/briefs/run.js",
     "src/control/agents.js",
