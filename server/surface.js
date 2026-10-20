@@ -35,6 +35,24 @@ export const PAPERCLIP_SURFACE = [
   },
   {
     method: 'GET',
+    path: '/api/health',
+    fields: [
+      'version',
+      'databaseBackup',
+      'databaseBackup.enabled',
+      'databaseBackup.status',
+      'databaseBackup.latestBackup.mtime',
+      'databaseBackup.latestBackup.ageHours',
+      'databaseBackup.warnings[].code',
+    ],
+  },
+  {
+    method: 'POST',
+    path: '/api/instance/database-backups',
+    fields: ['backupFile', 'sizeBytes', 'prunedCount', 'finishedAt'],
+  },
+  {
+    method: 'GET',
     path: '/api/companies/{companyId}',
     fields: ['requireBoardApprovalForNewAgents'],
   },

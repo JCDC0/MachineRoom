@@ -27,6 +27,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry; a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did on its branch compared with `main` (W3a) |
+| `backupStatus()` | `BackupStatus`, the age of Paperclip's newest database backup (W2b) |
+| `backupNow()` | `BackupResult`. It asks Paperclip for a backup at once, so call it only after the user confirmed; it rejects with `A backup is already running.` while one runs (W2b) |
 
 ## Shapes
 
@@ -65,6 +67,10 @@ Review       { lane, worktree, branch, ahead: number (commits on top of main), c
              A worktree that is missing or is not a git repository gives { lane, worktree, error } instead.
 ReviewDiff   { lane, branch, files: [{ path, added, deleted }], patch, truncated: boolean }
              patch is the diff of the lane branch against main, cut at 400 KB (truncated is true when it was cut).
+BackupStatus { enabled: boolean, status: ok | warning | null, latestAt: string|null, ageHours: number|null, warnings: string[], checkedAt }
+             warnings are Paperclip's codes: database_backup_missing | database_backup_stale | database_backup_last_failure | database_backup_check_failed.
+             enabled is false and the rest null when Paperclip has automatic backups off.
+BackupResult { ok: true, name (the file name, never its folder), sizeBytes: number|null, prunedCount: number|null, finishedAt: string|null }
 ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs, id?: string }   (id is the issue id for comments)
 ```
 
@@ -104,5 +110,6 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 | `costs` | `costs/summary`, `costs/by-agent`, `costs/quota-windows` |
 | `setAgentBudget` | `PATCH /api/agents/:id/budgets` |
 | `models` | our own list (the routing policy), not Paperclip |
+| `backupStatus`, `backupNow` | the bridge's `GET` and `POST /api/backup`, which read `databaseBackup` from `GET /api/health` and call `POST /api/instance/database-backups` (see `BACKUPS.md`) |
 
 Details of each call are in `docs/agents/PAPERCLIP-API.md`.

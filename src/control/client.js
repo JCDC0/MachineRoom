@@ -111,6 +111,10 @@ export function createClient({ baseUrl = '', fetchImpl = fetch, EventSourceImpl 
 
     reviewDiff: (lane) => request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/diff`),
 
+    backupStatus: () => request('GET', '/api/backup'),
+
+    backupNow: () => request('POST', '/api/backup', { confirmed: true }),
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()
