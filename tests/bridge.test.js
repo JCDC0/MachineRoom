@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { createBridge, isAllowedHost } from '../server/index.js'
+import { createClient } from '../src/control/client.js'
 import { extractReplyText } from '../server/assistant.js'
 import { PAPERCLIP_SURFACE } from '../server/surface.js'
 
@@ -57,6 +58,9 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
   let logDelayMs = 0
   let agentsFailing = false
   const specDelayMs = Number(options.specDelayMs ?? 0)
+  const healthAnswer = options.health ?? null
+  const backupAnswer = options.backup ?? null
+  const backupRequests = []
 
   const server = createServer((req, res) => {
     if (req.method === 'GET' && req.url === '/api/openapi.json') {
@@ -105,6 +109,23 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
       }, logDelayMs)
       return
     }
+    if (req.method === 'GET' && req.url === '/api/health') {
+      if (healthAnswer === null) {
+        res.writeHead(404, { Connection: 'close' })
+        res.end()
+        return
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+      res.end(JSON.stringify(healthAnswer))
+      return
+    }
+    if (req.method === 'POST' && req.url === '/api/instance/database-backups') {
+      backupRequests.push(req.url)
+      const answer = backupAnswer ?? { status: 201, body: {} }
+      res.writeHead(answer.status, { 'Content-Type': 'application/json', Connection: 'close' })
+      res.end(JSON.stringify(answer.body ?? {}))
+      return
+    }
     res.writeHead(404)
     res.end()
   })
@@ -139,6 +160,9 @@ function startFakePaperclip(companyId = 'comp-1', agents = [], options = {}) {
         },
         get agentRequests() {
           return agentRequests
+        },
+        get backupRequests() {
+          return backupRequests
         },
         setAgentsFailing(next) {
           agentsFailing = next
@@ -807,6 +831,217 @@ describe('health surface check', () => {
     await sleep(150)
 
     expect(fake.specRequests.length).toBe(count)
+  })
+})
+
+describe('backup routes', () => {
+  const BACKUP_FILE = 'C:\\Users\\owner\\.paperclip\\instances\\default\\data\\backups\\paperclip-20261020-120000.sql.gz'
+  const FINISHED_AT = '2026-10-20T12:00:05.000Z'
+
+  async function startBackupBridge(options = {}) {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', [], {
+      spec: paperclipSpec(),
+      health: options.health,
+      backup: options.backup,
+    })
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({
+      paperclipUrl: fake.url,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      ...options.bridge,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    return { fake, url }
+  }
+
+  function healthWith(block) {
+    return { ok: true, paperclipVersion: '2026.1012.0', databaseBackup: block }
+  }
+
+  function healthyBlock() {
+    return {
+      enabled: true,
+      status: 'ok',
+      backupDir: 'C:\\Users\\owner\\.paperclip\\instances\\default\\data\\backups',
+      maxAgeHours: 26,
+      latestBackup: {
+        name: 'paperclip-20261020-090000.sql.gz',
+        path: 'C:\\Users\\owner\\.paperclip\\instances\\default\\data\\backups\\paperclip-20261020-090000.sql.gz',
+        mtime: '2026-10-20T09:00:00.000Z',
+        ageHours: 3.1,
+        sizeBytes: 48123,
+      },
+      lastFailure: null,
+      warnings: [],
+    }
+  }
+
+  function goodBackup() {
+    return {
+      status: 201,
+      body: {
+        backupFile: BACKUP_FILE,
+        sizeBytes: 98765,
+        prunedCount: 2,
+        trigger: 'manual',
+        backupDir: 'C:\\Users\\owner\\.paperclip\\instances\\default\\data\\backups',
+        retention: { dailyDays: 7, weeklyWeeks: 4, monthlyMonths: 1 },
+        startedAt: '2026-10-20T12:00:00.000Z',
+        finishedAt: FINISHED_AT,
+        durationMs: 5000,
+      },
+    }
+  }
+
+  it('answers the age and the warning codes of the last backup from Paperclip health', async () => {
+    const { url } = await startBackupBridge({ health: healthWith(healthyBlock()) })
+
+    const res = await fetch(`${url}/api/backup`)
+    expect(res.status).toBe(200)
+    const answer = await res.json()
+    expect(answer).toMatchObject({
+      enabled: true,
+      status: 'ok',
+      latestAt: '2026-10-20T09:00:00.000Z',
+      ageHours: 3.1,
+      warnings: [],
+    })
+    expect(Number.isNaN(Date.parse(answer.checkedAt))).toBe(false)
+  })
+
+  it('answers disabled with null times when the health answer has no backup block', async () => {
+    const { url } = await startBackupBridge({ health: { ok: true, paperclipVersion: '2026.1012.0' } })
+
+    const res = await fetch(`${url}/api/backup`)
+    expect(res.status).toBe(200)
+    const answer = await res.json()
+    expect(answer).toMatchObject({
+      enabled: false,
+      status: null,
+      latestAt: null,
+      ageHours: null,
+      warnings: [],
+    })
+    expect(Object.keys(answer).sort()).toEqual(['ageHours', 'checkedAt', 'enabled', 'latestAt', 'status', 'warnings'])
+    expect(Number.isNaN(Date.parse(answer.checkedAt))).toBe(false)
+  })
+
+  it('lists only the codes of a stale backup warning', async () => {
+    const block = healthyBlock()
+    block.status = 'warning'
+    block.latestBackup.ageHours = 31.4
+    block.warnings = [
+      { code: 'database_backup_stale', message: 'The last backup is 31.4 hours old.' },
+      { code: 'database_backup_last_failure', message: 'The last backup failed.' },
+    ]
+    const { url } = await startBackupBridge({ health: healthWith(block) })
+
+    const answer = await fetch(`${url}/api/backup`).then((r) => r.json())
+    expect(answer.status).toBe('warning')
+    expect(answer.ageHours).toBe(31.4)
+    expect(answer.warnings).toEqual(['database_backup_stale', 'database_backup_last_failure'])
+  })
+
+  it('refuses a backup without the confirm flag and calls nothing', async () => {
+    const { fake, url } = await startBackupBridge({ health: healthWith(healthyBlock()), backup: goodBackup() })
+
+    const res = await postJson(url, '/api/backup', 'POST', {})
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'Confirm the backup first.' })
+    expect(fake.backupRequests).toEqual([])
+  })
+
+  it('answers the file name and no folder after a good backup', async () => {
+    const { fake, url } = await startBackupBridge({ health: healthWith(healthyBlock()), backup: goodBackup() })
+
+    const res = await postJson(url, '/api/backup', 'POST', { confirmed: true })
+    expect(res.status).toBe(200)
+    const answer = await res.json()
+    expect(answer).toEqual({
+      ok: true,
+      name: 'paperclip-20261020-120000.sql.gz',
+      sizeBytes: 98765,
+      prunedCount: 2,
+      finishedAt: FINISHED_AT,
+    })
+    const text = JSON.stringify(answer)
+    expect(text).not.toContain('C:')
+    expect(text).not.toContain('backups')
+    expect(fake.backupRequests).toEqual(['/api/instance/database-backups'])
+  })
+
+  it('answers 409 when Paperclip is already making a backup', async () => {
+    const { url } = await startBackupBridge({
+      health: healthWith(healthyBlock()),
+      backup: { status: 409, body: { error: 'Database backup already in progress' } },
+    })
+
+    const res = await postJson(url, '/api/backup', 'POST', { confirmed: true })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'A backup is already running.' })
+  })
+
+  it('answers 403 when Paperclip refuses the backup', async () => {
+    const { url } = await startBackupBridge({
+      health: healthWith(healthyBlock()),
+      backup: { status: 403, body: { error: 'Instance admin access required' } },
+    })
+
+    const res = await postJson(url, '/api/backup', 'POST', { confirmed: true })
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'Paperclip refused the backup.' })
+  })
+
+  it('answers 502 on both routes when Paperclip is down', async () => {
+    const dead = createServer((req, res) => {
+      res.writeHead(500)
+      res.end()
+    })
+    const port = await new Promise((resolvePort) => {
+      dead.listen(0, '127.0.0.1', () => resolvePort(dead.address().port))
+    })
+    await new Promise((resolveClose) => dead.close(resolveClose))
+
+    const dir = makeTempDir()
+    const bridge = createBridge({
+      paperclipUrl: `http://127.0.0.1:${port}`,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      reconnectMinMs: 40,
+      reconnectMaxMs: 100,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const read = await fetch(`${url}/api/backup`)
+    expect(read.status).toBe(502)
+    expect(await read.json()).toEqual({ error: 'Paperclip did not answer.' })
+
+    const write = await postJson(url, '/api/backup', 'POST', { confirmed: true })
+    expect(write.status).toBe(502)
+    expect(await write.json()).toEqual({ error: 'Paperclip could not make a backup.' })
+  })
+
+  it('reads the status and makes a backup through the control client', async () => {
+    const { url } = await startBackupBridge({ health: healthWith(healthyBlock()), backup: goodBackup() })
+    const client = createClient({ baseUrl: url })
+
+    const status = await client.backupStatus()
+    expect(status).toMatchObject({ enabled: true, status: 'ok', ageHours: 3.1, warnings: [] })
+
+    const backup = await client.backupNow()
+    expect(backup).toEqual({
+      ok: true,
+      name: 'paperclip-20261020-120000.sql.gz',
+      sizeBytes: 98765,
+      prunedCount: 2,
+      finishedAt: FINISHED_AT,
+    })
   })
 })
 

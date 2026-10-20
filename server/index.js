@@ -17,6 +17,8 @@ const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 const BODY_LIMIT = 64 * 1024
 const SURFACE_TIMEOUT_MS = 10000
 const SURFACE_EVERY_MS = 15 * 60 * 1000
+const BACKUP_READ_TIMEOUT_MS = 10000
+const BACKUP_RUN_TIMEOUT_MS = 120000
 
 function isAllowed(origin) {
   return LOCAL_ORIGIN.test(origin)
@@ -170,6 +172,35 @@ function readJsonBody(req, res) {
     })
     req.on('error', () => stop(null))
   })
+}
+
+function backupWarningCodes(block) {
+  const warnings = Array.isArray(block?.warnings) ? block.warnings : []
+  return warnings
+    .map((warning) => warning?.code)
+    .filter((code) => typeof code === 'string' && code !== '')
+}
+
+function backupStatusAnswer(block) {
+  const checkedAt = new Date().toISOString()
+  if (!block || typeof block !== 'object') {
+    return { enabled: false, status: null, latestAt: null, ageHours: null, warnings: [], checkedAt }
+  }
+  const latest = block.latestBackup && typeof block.latestBackup === 'object' ? block.latestBackup : null
+  return {
+    enabled: block.enabled === true,
+    status: typeof block.status === 'string' && block.status ? block.status : null,
+    latestAt: typeof latest?.mtime === 'string' && latest.mtime ? latest.mtime : null,
+    ageHours: Number.isFinite(latest?.ageHours) ? latest.ageHours : null,
+    warnings: backupWarningCodes(block),
+    checkedAt,
+  }
+}
+
+function backupFileName(path) {
+  const text = typeof path === 'string' ? path.replace(/\\/g, '/') : ''
+  const name = basename(text)
+  return name && name !== '.' ? name : null
 }
 
 export function createBridge(options = {}) {
@@ -598,6 +629,79 @@ export function createBridge(options = {}) {
         paperclipVersion,
         surface,
         unparsed: { ...unreadable.counts(), since: unparsedSince },
+      })
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/backup') {
+      let upstream
+      try {
+        upstream = await fetch(`${paperclipUrl}/api/health`, { signal: AbortSignal.timeout(BACKUP_READ_TIMEOUT_MS) })
+      } catch {
+        sendJson(req, res, 502, { error: 'Paperclip did not answer.' })
+        return
+      }
+      if (!upstream.ok) {
+        sendJson(req, res, 502, { error: 'Paperclip did not answer.' })
+        return
+      }
+      let health
+      try {
+        health = await upstream.json()
+      } catch {
+        sendJson(req, res, 502, { error: 'Paperclip did not answer.' })
+        return
+      }
+      sendJson(req, res, 200, backupStatusAnswer(health?.databaseBackup))
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/backup') {
+      const body = await readJsonBody(req, res)
+      if (body === null) return
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: 'Confirm the backup first.' })
+        return
+      }
+      let upstream
+      try {
+        upstream = await fetch(`${paperclipUrl}/api/instance/database-backups`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(BACKUP_RUN_TIMEOUT_MS),
+        })
+      } catch {
+        sendJson(req, res, 502, { error: 'Paperclip could not make a backup.' })
+        return
+      }
+      if (upstream.status === 409) {
+        sendJson(req, res, 409, { error: 'A backup is already running.' })
+        return
+      }
+      if (upstream.status === 403) {
+        sendJson(req, res, 403, { error: 'Paperclip refused the backup.' })
+        return
+      }
+      if (!upstream.ok) {
+        sendJson(req, res, 502, { error: 'Paperclip could not make a backup.' })
+        return
+      }
+      let answer
+      try {
+        answer = await upstream.json()
+      } catch {
+        answer = null
+      }
+      const name = backupFileName(answer?.backupFile)
+      if (!name) {
+        sendJson(req, res, 502, { error: 'Paperclip could not make a backup.' })
+        return
+      }
+      sendJson(req, res, 200, {
+        ok: true,
+        name,
+        sizeBytes: Number.isFinite(answer?.sizeBytes) ? answer.sizeBytes : null,
+        prunedCount: Number.isFinite(answer?.prunedCount) ? answer.prunedCount : null,
+        finishedAt: typeof answer?.finishedAt === 'string' && answer.finishedAt ? answer.finishedAt : null,
       })
       return
     }

@@ -65,6 +65,8 @@ describe('the Paperclip surface', () => {
     expect(paths.has('/api/companies/{companyId}/agents')).toBe(true)
     expect(paths.has('/api/companies/{companyId}/costs/quota-windows')).toBe(true)
     expect(paths.has('/api/heartbeat-runs/{runId}/log')).toBe(true)
+    expect(paths.has('/api/health')).toBe(true)
+    expect(paths.has('/api/instance/database-backups')).toBe(true)
     const socket = PAPERCLIP_SURFACE.find((route) => route.socket)
     expect(socket.path).toBe('/api/companies/{companyId}/events/ws')
     const hires = PAPERCLIP_SURFACE.find((route) => route.path === '/api/companies/{companyId}/agent-hires')
