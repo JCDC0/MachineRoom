@@ -302,8 +302,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return true
   }
 
+  const pending = new Set()
+
   function later(fn) {
-    setTimeout(fn, 250)
+    const timer = setTimeout(() => {
+      pending.delete(timer)
+      fn()
+    }, 250)
+    pending.add(timer)
   }
 
   return {
@@ -332,15 +338,24 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     focused: () => focused,
     dispose() {
       cancelAnimationFrame(frameId)
+      pending.forEach((timer) => clearTimeout(timer))
+      pending.clear()
       observer.disconnect()
       rig.dispose()
+      agentSet.dispose()
       terminals.dispose()
       labels.dispose()
       strings.dispose()
       cards.dispose()
       hub.dispose()
       space.dispose()
+      for (const pulse of pulses) {
+        scene.remove(pulse.sprite)
+        pulse.sprite.material.dispose()
+      }
+      texture.dispose()
       renderer.dispose()
+      renderer.forceContextLoss()
       gl.removeChild(renderer.domElement)
       css.removeChild(cssRenderer.domElement)
     },

@@ -278,5 +278,20 @@ export function createAgents(scene, roster) {
     }
   }
 
-  return { views, pickables, update, snap, aimAt, hubCenter: HUB_CENTER }
+  function dispose() {
+    for (const view of views.values()) {
+      scene.remove(view.group, view.link, view.trace, view.tether)
+      for (const root of [view.group, view.link, view.trace, view.tether]) {
+        root.traverse((object) => {
+          object.geometry?.dispose()
+          object.material?.map?.dispose()
+          object.material?.dispose()
+        })
+      }
+    }
+    views.clear()
+    pickables.length = 0
+  }
+
+  return { views, pickables, update, snap, aimAt, dispose, hubCenter: HUB_CENTER }
 }
