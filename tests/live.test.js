@@ -4,6 +4,7 @@ import { createLivePlayer } from '../src/live/livePlayer.js'
 import { discover, openStream, parserFor, rootNameOf, socketUrl, toAgents } from '../src/live/source.js'
 import { makeTree } from '../src/model/paths.js'
 import { buildActivities, createPipeline } from '../src/model/pipeline.js'
+import { createPlayer } from '../src/model/player.js'
 import { createState } from '../src/model/state.js'
 import { loadRecording } from './helpers.js'
 
@@ -154,6 +155,20 @@ describe('incremental pipeline', () => {
     const live = [...recording.frames.flatMap((frame) => pipeline.push(frame)), ...pipeline.flush()]
     const batch = buildActivities(recording.frames, { agents: recording.agents, tree: recording.tree })
     expect(live).toEqual(batch)
+  })
+
+  it('gives a frame with a time that does not parse the time before it, so the replay keeps going', () => {
+    const frames = recording.frames.map((frame) => ({ ...frame, payload: { ...frame.payload } }))
+    const bad = frames.findIndex((frame, index) => index > 0 && frame.type === 'heartbeat.run.status' && frame.payload.status === 'running')
+    frames[bad].createdAt = 'not a date'
+    const activities = buildActivities(frames, { agents: recording.agents, tree: recording.tree })
+    expect(activities.every((activity) => Number.isFinite(activity.time))).toBe(true)
+    const player = createPlayer({ activities, tree: recording.tree, agents: recording.agents })
+    expect(Number.isFinite(player.duration)).toBe(true)
+    player.seek(player.duration)
+    const clean = createPlayer({ activities: recording.activities, tree: recording.tree, agents: recording.agents })
+    clean.seek(clean.duration)
+    expect(player.snapshot().agents.map((agent) => agent.status)).toEqual(clean.snapshot().agents.map((agent) => agent.status))
   })
 
   it('ignores frames from agents it does not know', () => {

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Audit fix: the pipeline gives an activity whose frame time does not parse (`createdAt` or a chunk's `ts`) the time of the activity before it; before, one `NaN` time made every later replay stamp `NaN`, so nothing after that frame ever played and the scrubber had no length; test in `tests/live.test.js`.
 - Audit fix: the Hermes, OpenCode and agy parsers and `createParser` read their tool and parser tables with `Object.hasOwn`, so a tool named `toString` or `__proto__` in agy output no longer throws while the destructuring runs (which stopped a recording from loading), and Hermes and OpenCode read such names as `other` instead of a function or an object; tests in `tests/parsers.test.js`.
 - Audit fix: the recording writer behind `npm run run-lane` and `npm run run-recording` reads the lane's file list with `gitPath()` too, the last bare `git` that ran in a lane worktree.
 - Audit fix: the mock's `comments(issueId)` and `postComment` read the thread with `Object.hasOwn`, so `comments('constructor')` answers `[]` as the bridge does instead of a function the thread panel cannot list; a contract test runs on both.

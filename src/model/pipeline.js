@@ -28,6 +28,7 @@ export function createPipeline({ agents, tree }) {
   let lastTime = 0
 
   function finalise(items) {
+    for (const item of items) if (!Number.isFinite(item.time)) item.time = lastTime
     items.sort((a, b) => a.time - b.time || a.order - b.order)
     for (const item of items) {
       if (item.time < lastTime) item.time = lastTime
