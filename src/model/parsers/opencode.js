@@ -19,7 +19,7 @@ function unescape(text) {
   })
 }
 
-function recoverCall(line) {
+export function recoverCall(line) {
   if (!/"type"\s*:\s*"tool_use"/.test(line) || !line.includes(MASK)) return null
   const maskAt = line.indexOf(MASK)
   const tool = BROKEN_TOOL.exec(line)

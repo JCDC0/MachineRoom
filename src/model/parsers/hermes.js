@@ -1,7 +1,7 @@
 import { basename, dirname, resolveKnown } from '../paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, shorten, toolEnd, toolStart } from './common.js'
 
-const LINE = /^\s*┊\s+\S+\s+(\$|[a-z_]+)\s+(.+?)\s+(\d+(?:\.\d+)?)s(?:\s+\[(exit (\d+)|error)\])?\s*$/u
+export const LINE = /^\s*┊\s+\S+\s+(\$|[a-z_]+)\s+(.+?)\s+(\d+(?:\.\d+)?)s(?:\s+\[(exit (\d+)|error)\])?\s*$/u
 const VERBS = { read: 'read', write: 'write', patch: 'edit', find: 'search', search: 'search', grep: 'search', $: 'shell' }
 
 export function createHermesParser(ctx) {
