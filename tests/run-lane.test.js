@@ -1,6 +1,10 @@
-import { readFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { commandFor, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const env = { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }
@@ -592,5 +596,125 @@ describe('formatStats', () => {
     expect(formatStats(laneStats([]))).toEqual(['No runs recorded.'])
     expect(formatStats({ rows: [], total: null })).toEqual(['No runs recorded.'])
     expect(formatStats(null)).toEqual(['No runs recorded.'])
+  })
+})
+
+const CRASH = 3221226505
+const CRASH_SIGNED = -1073740791
+const CRASH_RETRY = 'The test worker crashed inside Node (0xC0000409), not in a test. Running the tests again'
+const CRASH_GAVE_UP = 'The test worker crashed inside Node three times. See Known limits in docs/agents/ARCHITECTURE.md.'
+
+describe('nextTestStep', () => {
+  it('ends with the code of a run that did not crash', () => {
+    expect(nextTestStep(0, 1)).toEqual({ action: 'done', code: 0 })
+    expect(nextTestStep(1, 1)).toEqual({ action: 'done', code: 1 })
+    expect(nextTestStep(2, 2)).toEqual({ action: 'done', code: 2 })
+  })
+
+  it('never retries a test failure', () => {
+    expect(nextTestStep(1, 1)).not.toHaveProperty('message')
+    expect(nextTestStep(2, 1)).not.toHaveProperty('message')
+  })
+
+  it('ends with code 1 when the run has no exit code', () => {
+    expect(nextTestStep(null, 1)).toEqual({ action: 'done', code: 1 })
+  })
+
+  it('asks for another try after a crash', () => {
+    expect(nextTestStep(CRASH, 1)).toEqual({
+      action: 'retry',
+      message: `${CRASH_RETRY} (try 2 of 3).`,
+    })
+    expect(nextTestStep(CRASH_SIGNED, 2)).toEqual({
+      action: 'retry',
+      message: `${CRASH_RETRY} (try 3 of 3).`,
+    })
+  })
+
+  it('gives up after the third crash', () => {
+    expect(nextTestStep(CRASH, 3)).toEqual({ action: 'done', code: 1, message: CRASH_GAVE_UP })
+    expect(nextTestStep(CRASH_SIGNED, 4)).toEqual({ action: 'done', code: 1, message: CRASH_GAVE_UP })
+  })
+})
+
+const TEST_SCRIPT = fileURLToPath(new URL('../scripts/test.mjs', import.meta.url))
+const FAKE_SCRIPT = `import { readFileSync, writeFileSync } from 'node:fs'
+const file = process.env.FAKE_COUNT_FILE
+const count = Number(readFileSync(file, 'utf8')) + 1
+writeFileSync(file, String(count))
+console.log('fake test run ' + count)
+process.exit(Number(count === 1 ? process.env.FAKE_FIRST_EXIT : process.env.FAKE_SECOND_EXIT))
+`
+
+function runTestScript(extra) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(process.execPath, [TEST_SCRIPT], { env: { ...process.env, ...extra }, stdio: ['ignore', 'pipe', 'pipe'] })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => {
+      child.kill()
+      rejectRun(new Error(`the test runner did not exit. stderr: ${stderr}`))
+    }, 20000)
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      rejectRun(error)
+    })
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      resolveRun({ code, stdout, stderr })
+    })
+  })
+}
+
+describe('scripts/test.mjs', () => {
+  it('runs the tests again after the crash and keeps the second result', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'machine-room-test-'))
+    try {
+      const counter = join(folder, 'count.txt')
+      const fake = join(folder, 'fake-test.mjs')
+      writeFileSync(counter, '0')
+      writeFileSync(fake, FAKE_SCRIPT)
+      const result = await runTestScript({
+        MACHINEROOM_TEST_COMMAND: JSON.stringify([process.execPath, fake]),
+        FAKE_COUNT_FILE: counter,
+        FAKE_FIRST_EXIT: String(CRASH),
+        FAKE_SECOND_EXIT: '0',
+      })
+      expect(result.code).toBe(0)
+      expect(readFileSync(counter, 'utf8')).toBe('2')
+      expect(result.stdout).toContain('fake test run 1')
+      expect(result.stdout).toContain(`${CRASH_RETRY} (try 2 of 3).`)
+      expect(result.stdout).toContain('fake test run 2')
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
+  })
+
+  it('runs a failing test once and keeps its code', async () => {
+    const folder = mkdtempSync(join(tmpdir(), 'machine-room-test-'))
+    try {
+      const counter = join(folder, 'count.txt')
+      const fake = join(folder, 'fake-test.mjs')
+      writeFileSync(counter, '0')
+      writeFileSync(fake, FAKE_SCRIPT)
+      const result = await runTestScript({
+        MACHINEROOM_TEST_COMMAND: JSON.stringify([process.execPath, fake]),
+        FAKE_COUNT_FILE: counter,
+        FAKE_FIRST_EXIT: '1',
+        FAKE_SECOND_EXIT: '0',
+      })
+      expect(result.code).toBe(1)
+      expect(readFileSync(counter, 'utf8')).toBe('1')
+      expect(result.stdout).toContain('fake test run 1')
+      expect(result.stdout).not.toContain('crashed inside Node')
+    } finally {
+      rmSync(folder, { recursive: true, force: true })
+    }
   })
 })

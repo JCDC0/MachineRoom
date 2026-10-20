@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.81. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.82. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -27,7 +27,7 @@ npm run doctor     compare the running Paperclip's /api/openapi.json with the ro
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
 npm run run-lane -- hermes T2   start one lane on a brief, add --dry-run to print the command, --list prints the last 10 run records, --stats (with --since YYYY-MM-DD) prints runs, minutes and cost per lane and model, --model and --reasoning change the model for that run only
 npm run run-recording -- 1      turn run 1 of that list into a recording in public/recordings/ again (run-lane already writes one after each run and prints its /?recording=<name>)
-npm test           vitest, node environment, threads pool, no browser needed
+npm test           vitest through scripts/test.mjs, node environment, threads pool, no browser needed; it runs the tests again (3 tries in all) only when Node itself crashes with 0xC0000409
 npm run build
 npm run fixtures -- <raw-events.jsonl> <sandbox-folder> <ids.json>
 ```
@@ -194,7 +194,7 @@ Do not rename these classes without changing both sides.
 - The bridge only allows pages on `localhost` or `127.0.0.1`.
 - Through the proxy route (no bridge), a tool call whose log line is over 8192 characters is missed. A real run lost 3 of 58 calls this way, all reads outside the project.
 - A card's depth plane matches its face, not its tab or the faint folders behind it, so a line can show through those.
-- About half of the full test runs on this machine die inside `node.exe` 24.15.0 with 0xC0000409 (bash shows exit 127) while the test files that start a bridge run (`bridge`, `control-contract`, `bridge-reviews`). The Windows event log names Node itself at a fixed address, and a probe hit the libuv assertion `!(handle->flags & UV_HANDLE_CLOSING)` in `src\win\async.c` when a process exited right after `bridge.stop()`. The forks pool still crashes, and one worker avoids it but is 3.6 times slower (T15). A crashed run leaves its `mr-*` temp folders behind. Run the tests again; it is not a test failure.
+- About half of the full test runs on this machine die inside `node.exe` 24.15.0 with 0xC0000409 (bash shows exit 127) while the test files that start a bridge run (`bridge`, `control-contract`, `bridge-reviews`). The Windows event log names Node itself at a fixed address, and a probe hit the libuv assertion `!(handle->flags & UV_HANDLE_CLOSING)` in `src\win\async.c` when a process exited right after `bridge.stop()`. The forks pool still crashes, and one worker avoids it but is 3.6 times slower (T15). A crashed run leaves its `mr-*` temp folders behind. `npm test` runs them again by itself (T15b); it is not a test failure.
 - The card layout is fitted to the overview angle. From another angle cards can overlap until `0` returns to the overview.
 
 ## Open work

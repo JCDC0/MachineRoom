@@ -492,3 +492,15 @@ export function runListLine(record) {
   const branch = record.branch || 'no branch'
   return `${when} | ${record.lane} | ${model} | ${briefs} | ${minutes} | ${exit}${killed} | ${cost} | ${branch}`
 }
+
+const CRASH_STATUSES = [3221226505, -1073740791]
+const TEST_TRIES = 3
+const CRASH_NOTE = 'The test worker crashed inside Node (0xC0000409), not in a test.'
+const CRASH_GAVE_UP = 'The test worker crashed inside Node three times. See Known limits in docs/agents/ARCHITECTURE.md.'
+
+export function nextTestStep(status, tries) {
+  const attempts = Number.isInteger(tries) && tries > 0 ? tries : 0
+  if (!CRASH_STATUSES.includes(status)) return { action: 'done', code: Number.isInteger(status) ? status : 1 }
+  if (attempts >= TEST_TRIES) return { action: 'done', code: 1, message: CRASH_GAVE_UP }
+  return { action: 'retry', message: `${CRASH_NOTE} Running the tests again (try ${attempts + 1} of ${TEST_TRIES}).` }
+}

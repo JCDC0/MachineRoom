@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.81",
+  "version": "0.1.82",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -31,7 +31,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node scripts/test.mjs",
     "fixtures": "node scripts/build-fixtures.mjs",
     "decide-eval": "node scripts/decide-eval.mjs",
     "run-lane": "node scripts/run-lane.mjs",
