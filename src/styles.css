@@ -3270,6 +3270,228 @@ summary:focus-visible,
   color: var(--white);
 }
 
+.reviews-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.5);
+}
+
+.review-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding: calc(var(--space) * 1.5);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--corner-ticks), rgb(0 0 0 / 0.6);
+}
+
+.review-card.is-selected {
+  border-color: var(--white);
+}
+
+.review-card.is-error {
+  border-color: var(--red);
+}
+
+.review-row {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 0.5);
+  cursor: pointer;
+}
+
+.review-card.is-error .review-row {
+  cursor: default;
+}
+
+.review-row:focus-visible {
+  outline: 2px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+.review-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+}
+
+.review-lane {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--white);
+}
+
+.review-branch {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.78);
+  word-break: break-all;
+}
+
+.review-merge-btn {
+  margin-left: auto;
+  padding: 2px var(--space);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+}
+
+.review-merge-btn:hover:not(:disabled) {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.18);
+}
+
+.review-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: calc(var(--space) * 1.25);
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.82);
+}
+
+.review-dirty {
+  color: var(--yellow);
+}
+
+.review-last-run {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.65);
+}
+
+.review-error {
+  font-size: 12px;
+  color: var(--red);
+  line-height: 1.4;
+}
+
+.review-merged-banner {
+  font-size: 12px;
+  color: var(--green);
+}
+
+.review-confirm-card {
+  margin-top: calc(var(--space) * 0.5);
+}
+
+.review-message-field {
+  margin-bottom: 0;
+}
+
+.review-conflict-files {
+  margin-top: calc(var(--space) * 0.5);
+  padding-left: calc(var(--space) * 2);
+  list-style: disc;
+  text-transform: none;
+}
+
+.review-diff-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding-top: var(--space);
+  border-top: 1px solid var(--line);
+}
+
+.review-diff-state {
+  font-size: 12px;
+  color: rgb(255 255 255 / 0.85);
+}
+
+.review-diff-state.is-dim {
+  color: rgb(255 255 255 / 0.6);
+}
+
+.review-diff-error-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+  padding: var(--space) calc(var(--space) * 1.25);
+  border: 1px solid var(--red);
+  border-radius: 2px;
+  background: var(--red);
+  color: var(--white);
+}
+
+.review-diff-files {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.review-diff-file {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.review-diff-path {
+  color: var(--white);
+  word-break: break-all;
+}
+
+.review-diff-counts {
+  color: rgb(255 255 255 / 0.72);
+  white-space: nowrap;
+}
+
+.review-patch-truncated {
+  font-size: 11px;
+  color: var(--yellow);
+}
+
+.review-patch {
+  margin: 0;
+  padding: var(--space);
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+  background: var(--black);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.review-patch-line {
+  white-space: pre;
+}
+
+.review-patch-line.is-added {
+  color: var(--white);
+}
+
+.review-patch-line.is-removed {
+  color: rgb(255 255 255 / 0.5);
+}
+
+.review-patch-line.is-hunk {
+  color: var(--yellow);
+}
+
+.review-patch-line.is-file {
+  color: rgb(255 255 255 / 0.78);
+}
+
+.review-patch-line.is-context {
+  color: rgb(255 255 255 / 0.72);
+}
+
 .mr-term:not(.is-open) {
   width: 180px;
   background: var(--corner-ticks), rgb(0 0 0 / 0.92);
