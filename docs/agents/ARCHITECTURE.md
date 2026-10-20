@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.104. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.105. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -67,7 +67,7 @@ src/engine/       three.js scene, no React
   camera.js         orbit, zoom, focus, pointer drift, fit the overview to a set of spheres (pure fitView, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/control/      the control client contract, its mock, the real client over the bridge, and `agents.js` (the agent lists and the checks for hire and update; see CONTROL-CLIENT.md)
-src/policy/       route.js: the routing policy, version 1 (readPolicy, tierFor, escalate, chooseRoute) over docs/agents/policy.json; pure, tested, not used by the app yet
+src/policy/       route.js: the routing policy, version 1 (readPolicy, tierFor, escalate, chooseRoute) over docs/agents/policy.json; profile.js: profileFromBrief, the profile tierFor reads, from a brief; pure, tested, not used by the app yet
 src/briefs/       parses the briefs in TASKS.md and builds the full prompt for an agent from HOUSE-RULES.md and lanes.json (pure, tested)
 src/decider/      decision model seam: Decisions API wire shape, `decide()`, fixed questions, stats, baselines and the comparison runner (see DECIDER-EVAL.md; not used by the app yet)
 src/assistant/    request router: closed action list, rule based intent, key guard, model reply parser, and `dispatch.js` which runs a validated action against a host (the room, the HUD, the control client). Pure, tested; see CONTROL-PLANE.md

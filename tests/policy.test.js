@@ -48,6 +48,16 @@ describe('tierFor', () => {
     expect(tierFor({ hasTests: true })).toBe('medium')
   })
 
+  it('sends a task that needs a new test to medium', () => {
+    expect(tierFor({ ...SMALL, newTest: true })).toBe('medium')
+    expect(tierFor({ files: 1, hasTests: true, clarity: 'clear', reversible: true, newTest: true })).toBe('medium')
+  })
+
+  it('sends a design task and a task that touches data to large', () => {
+    expect(tierFor({ ...SMALL, kind: 'design' })).toBe('large')
+    expect(tierFor({ ...SMALL, touchesData: true })).toBe('large')
+  })
+
   it('gives large the last word over small', () => {
     expect(tierFor({ files: 1, hasTests: true, clarity: 'unclear', reversible: true })).toBe('large')
   })
