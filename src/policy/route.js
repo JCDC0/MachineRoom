@@ -107,10 +107,12 @@ export function tierFor(profile) {
     source.clarity === 'unclear' ||
     source.touchesSecrets === true ||
     source.touchesDeploy === true ||
+    source.touchesData === true ||
+    source.kind === 'design' ||
     source.reversible === false
   if (risky) return 'large'
   const files = source.files
-  if (source.hasTests === true && isNumber(files) && files <= 2) return 'small'
+  if (source.newTest !== true && source.hasTests === true && isNumber(files) && files <= 2) return 'small'
   return 'medium'
 }
 
