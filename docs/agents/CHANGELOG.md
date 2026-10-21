@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Brief W6a (which task is running now, for the cloud session).
 - Review note on A5c: no fixes. It also changed `src/engine/cards.js`, the only caller of `layoutCards`, which the brief failed to name. Checked in the browser with the mock, two minutes into the replay: at 1280 by 800 the board sits under the hub and reads, and no card overlaps it; at 1024 by 768 no card overlaps it and its bottom comes close to the transport bar; at 880 it is hidden and the cards stay.
 - Review fix on P3d (the cloud's option A): `openBridge` opens `/events?history=1&tree=folders`, so a page gets its first tree event in the folder shape; the two expected URLs in `tests/bridge-client.test.js` follow. Checked on Windows: Chromium sends the `Accept` value from port 5179 to a bridge on 5174 with no preflight, and the 67 replay digests from before P3d are unchanged.
 - Fix found in the P3d review: `readTree` lists a git project with `git ls-files -z`, so a name such as `données/été.md` no longer arrives as `"donn/303/251es//303/251t/303/251.md"` (git quoted it, and the backslash rule turned the escapes into slashes); a test in `tests/tree.test.js`. `scripts/build-fixtures.mjs` still lists without `-z`.
