@@ -32,7 +32,7 @@ describe('planPrompt', () => {
     expect(prompt).toContain('- Work only in your own worktree and branch.')
     expect(prompt).toContain('- hermes (Hermes): You take cheap tasks with named files and clear tests.')
     expect(prompt).toContain('server/**')
-    expect(prompt).toContain('  Forbidden: src/ui/**, src/styles.css')
+    expect(prompt).toContain('  Forbidden: server/**, src/ui/**, src/styles.css')
   })
 
   it('holds the used ids and the answer format', () => {
@@ -71,7 +71,8 @@ describe('pathAllowed', () => {
   })
 
   it('reads each lane of the real lanes.json', () => {
-    expect(pathAllowed('src/ui/Hud.jsx', lanes.opencode.forbidden)).toBe(false)
+    expect(pathAllowed('src/ui/Hud.jsx', lanes.opencode.forbidden)).toBe(true)
+    expect(pathAllowed('src/Stage.jsx', lanes.opencode.forbidden)).toBe(false)
     expect(pathAllowed('server/index.js', lanes.opencode.forbidden)).toBe(true)
     expect(pathAllowed('src/engine/room.js', lanes.agy.forbidden)).toBe(true)
     expect(pathAllowed('server/plans.js', lanes.agy.forbidden)).toBe(false)
@@ -95,8 +96,8 @@ describe('pathAllowed', () => {
   })
 
   it('reads a Windows path and a leading ./', () => {
-    expect(pathAllowed('src\\ui\\Hud.jsx', lanes.opencode.forbidden)).toBe(false)
-    expect(pathAllowed('./src/ui/Hud.jsx', lanes.opencode.forbidden)).toBe(false)
+    expect(pathAllowed('src\\Stage.jsx', lanes.opencode.forbidden)).toBe(false)
+    expect(pathAllowed('./src/App.jsx', lanes.opencode.forbidden)).toBe(false)
     expect(pathAllowed('src/briefs/plan.js', [])).toBe(true)
     expect(pathAllowed('src/briefs/plan.js', undefined)).toBe(true)
   })

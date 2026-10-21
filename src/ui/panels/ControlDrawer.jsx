@@ -5,6 +5,7 @@ import ApprovalsPanel from './ApprovalsPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
 import AgentBuilder from './AgentBuilder.jsx'
 import ReviewsPanel from './ReviewsPanel.jsx'
+import PanelBoundary from './PanelBoundary.jsx'
 import { subscribeToNotices } from './notices.js'
 
 const BASE_TABS = [
@@ -215,31 +216,33 @@ export default function ControlDrawer({
         tabIndex={0}
         className="control-panel-content"
       >
-        {activeTab === 'dispatch' && (
-          <DispatchPanel
-            client={client}
-            onCreated={() => {
-              loadPendingCount()
-            }}
-          />
-        )}
-        {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={effectiveTarget} />}
-        {activeTab === 'approvals' && (
-          <ApprovalsPanel
-            client={client}
-            onPendingCountChange={setPendingApprovalsCount}
-          />
-        )}
-        {activeTab === 'meters' && <MetersPanel client={client} />}
-        {activeTab === 'agents' && hasAgentsTab && (
-          <AgentBuilder
-            client={client}
-            onSelectControlTarget={handleSelectControlTarget}
-          />
-        )}
-        {activeTab === 'reviews' && hasReviewsTab && (
-          <ReviewsPanel client={client} />
-        )}
+        <PanelBoundary key={activeTab}>
+          {activeTab === 'dispatch' && (
+            <DispatchPanel
+              client={client}
+              onCreated={() => {
+                loadPendingCount()
+              }}
+            />
+          )}
+          {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={effectiveTarget} />}
+          {activeTab === 'approvals' && (
+            <ApprovalsPanel
+              client={client}
+              onPendingCountChange={setPendingApprovalsCount}
+            />
+          )}
+          {activeTab === 'meters' && <MetersPanel client={client} />}
+          {activeTab === 'agents' && hasAgentsTab && (
+            <AgentBuilder
+              client={client}
+              onSelectControlTarget={handleSelectControlTarget}
+            />
+          )}
+          {activeTab === 'reviews' && hasReviewsTab && (
+            <ReviewsPanel client={client} />
+          )}
+        </PanelBoundary>
       </div>
     </aside>
   )

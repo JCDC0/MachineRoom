@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- One broken panel no longer blanks the room (task U7): `PanelBoundary` wraps the active control drawer panel, keyed by the tab so a switch starts clean, and shows one red line with the error's message cut to 120 characters; `panelStoppedText` is pure, and tests in `tests/panel-boundary.test.js` cover the sentence, the error state and every drawer tab on the mock client.
+- `tests/plan.test.js` follows the lane move in 0.1.126: OpenCode may edit `src/ui`, Hermes may not, and the forbidden-path checks use `src/Stage.jsx` and `src/App.jsx`; main was red on the old expectations.
 - U7, U9, U6a and U10a moved from AGY to OpenCode at the owner's word: OpenCode may now change `src/ui/**`, `src/styles.css` and `src/engine/**`, and leaves the by-eye checks to the orchestrator.
 - Merged the fake Paperclip, the end-to-end loop test and the soak test from a cloud Claude Opus 5.5 session (branch `claude/inspiring-hopper-onh5my`, 7 commits on 0.1.124, about 8 dollars). No fixes; the suite passed on Windows (1513 tests) on the second full run. The first run crashed once in Node and then failed `gains no machineroom-review-* folder` in `tests/review-lane.test.js`, which passed alone; a process left by the crashed try is the likely cause. Its bridge findings (the spec and version read apart, retries after a 404) go back to the same cloud session.
 - Review note on P11: no fixes.
