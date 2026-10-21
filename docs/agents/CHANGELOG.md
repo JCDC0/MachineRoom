@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Handoff in ORCHESTRATOR.md for the next session: W6a runs in the cloud, the other lanes are idle, AGY's model.
 - Review fix on C5e: `briefMarkdown` dropped a planner brief's `tests`, so a brief added from the Plan tab whose text named no test file read as unclear in `TASKS.md` and routed to the large tier (C7a showed the small tier in the Plan tab and the large tier in Dispatch), and its Files list left out the test file. It now adds `Tests in ...` when the text names none and lists the tests and `docs/agents/CHANGELOG.md` in the Files list; tests in `tests/plan.test.js` and `tests/plans.test.js`. Checked in the browser with the mock at 1280 by 800: ask, add C7a, `Dispatch C7a` opens Dispatch with C7a picked, its title, the OpenCode agent and the same route as the Plan tab. The review checker's merged result failed only from the Node crash; the full suite passed on the merge.
 - Brief W6a (which task is running now, for the cloud session).
 - Review note on A5c: no fixes. It also changed `src/engine/cards.js`, the only caller of `layoutCards`, which the brief failed to name. Checked in the browser with the mock, two minutes into the replay: at 1280 by 800 the board sits under the hub and reads, and no card overlaps it; at 1024 by 768 no card overlaps it and its bottom comes close to the transport bar; at 880 it is hidden and the cards stay.

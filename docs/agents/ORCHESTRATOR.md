@@ -6,13 +6,14 @@ Start a session with: `hermes` in `C:\GitHub\MachineRoom`, model `deepseek/deeps
 
 Before merging a branch that adds a route that writes (a merge, a backup, any write to Paperclip), ask the owner to have AGY on Gemini 3.8 Flash High (free) read the diff and report problems without changing files, and weigh its answer with your own review. If DeepSeek credit runs low, `minimax/minimax-m3.1-flash:free` ran a Hermes task cleanly at no cost; use it for routine merges only.
 
-## Where things stand (2026-10-21, end of Claude's session)
+## Where things stand (2026-10-22, end of Claude's session)
 
-- `main` is 0.1.134, and GitHub has it too (pushed 2026-10-22).
-- U8 had committed before the shutdown cut its run, so it was reviewed and merged as 0.1.124 (no run record, so no outcome line). AGY's cut M1a start (one uncommitted file) was cleared and its prompt written again.
-- AGY: A5b is merged (0.1.138). C5e is merged (0.1.143). AGY has no open brief; S2b is held. U7, U9, U6a and U10a moved to OpenCode at the owner's word, since AGY was slow and OpenCode's budget is larger. Write each prompt with `node scripts/agy-prompt.mjs ID --clean` and record each run with `npm run hand-run`.
-- S1 was recorded for Hermes and OpenCode on their CLIs (S1a in TASKS.md): a log names a child only after it ends, so S2a, S3a and S2b are held. P11 is merged. U7, U9, U6a and U10a are merged (0.1.129 to 0.1.132). C5d and C4e are merged (0.1.136, 0.1.137). V8 and A5c are merged (0.1.140, 0.1.142); OpenCode has no open brief. Hermes's T18 is merged (0.1.135); Hermes has no open brief. C5c moved to OpenCode and is merged (0.1.133). The cloud session's P3c (large project pass) is merged (0.1.139); P3d (a smaller file list) is merged (0.1.141); its next task is **W6a** (which task is running now).
-- Last merges: V7b (0.1.120, grade B, 4 fixes), the cloud UI audit (0.1.121), U10 (0.1.122, A), U6 (0.1.123, A).
+- `main` is 0.1.143, and GitHub has it too (pushed 2026-10-22). Push only on the owner's yes, main only.
+- The cloud session (Claude, in its own VM) runs **W6a** (which task is running now) from 0.1.143 and commits as 0.1.144 on a `claude/...` branch it pushes. The owner pastes its report. To review: `git fetch -q origin BRANCH`, read `git diff refs/heads/main...FETCH_HEAD`, merge with `git merge --no-ff --no-commit FETCH_HEAD`, check the `running AGENT` mark in the Tasks panel against `npm run fake-paperclip` (or the mock in replay mode), and renumber at merge. Cloud branches have no run record, so they get no outcome line.
+- Hermes, OpenCode and AGY have no open brief. W6a touches the bridge's task routes, `server/surface.js`, `changeEvents` in `server/index.js`, the fake Paperclip, the control client and mock, `TasksPanel.jsx` and `src/styles.css`; keep new lane briefs off those files until it is merged. S2a, S3a and S2b stay held after S1a.
+- AGY normally runs Gemini 4 Argon; it runs Gemini 3.8 Flash (High) only while Argon's quota is exhausted (the owner, 2026-10-22). `docs/agents/policy.json` stays on Argon, and `lanes.json` names the model AGY's prompts use.
+- The planner loop now runs in the drawer: the Plan tab asks PLANNER (C5c), adds the ticked briefs to `TASKS.md` behind a confirm card (C5d, never committed), and `Dispatch ID` opens Dispatch with the brief picked and its route (C5e). The cost board sits below the hub and the layout keeps cards clear of it (A5b, A5c). The bridge sends the file list in the folder shape (P3c, P3d) and lists git files with `-z`.
+- Merged on 2026-10-22: C4c (0.1.134, AGY, A), T18 (0.1.135, Hermes, A), C5d (0.1.136, OpenCode, A-, 1 fix), C4e (0.1.137, OpenCode, A), A5b (0.1.138, AGY, A-, 1 fix), P3c (0.1.139, cloud), V8 (0.1.140, OpenCode, A), A5c (0.1.142, OpenCode, A), P3d (0.1.141, cloud, option A and the `-z` fix), C5e (0.1.143, AGY, A; the `briefMarkdown` tests fix).
 
 ## Standing rules from the owner
 
