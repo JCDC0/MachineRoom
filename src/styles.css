@@ -2075,6 +2075,123 @@ summary:focus-visible,
   border-radius: 2px;
 }
 
+.plan-panel {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.5);
+}
+
+.plan-goal-field {
+  margin-bottom: 0;
+}
+
+.plan-goal-count {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.plan-actions {
+  justify-content: flex-start;
+  margin-top: 0;
+}
+
+.plan-confirm-card {
+  margin-bottom: 0;
+}
+
+.plan-waiting {
+  color: var(--yellow);
+}
+
+.plan-result {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.5);
+  padding-top: calc(var(--space) * 1.5);
+  border-top: 1px solid var(--line);
+}
+
+.plan-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.plan-copy-btn {
+  padding: 2px var(--space);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.plan-briefs {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 1.5);
+}
+
+.plan-brief {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding: calc(var(--space) * 1.5);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--corner-ticks), rgb(0 0 0 / 0.6);
+}
+
+.plan-brief-heading {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--white);
+}
+
+.plan-brief-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.75);
+  word-break: break-word;
+}
+
+.plan-brief-route {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--yellow);
+}
+
+.plan-brief-route.is-error {
+  color: var(--red);
+}
+
+.plan-problems {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+  padding: calc(var(--space) * 1.25);
+  border: 1px solid var(--red);
+  border-radius: 2px;
+  background: rgb(255 42 42 / 0.06);
+}
+
+.plan-problem {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--red);
+}
+
+.plan-copy-message {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--green);
+}
+
 .runs-section {
   display: flex;
   flex-direction: column;
