@@ -179,22 +179,26 @@ function overlap(a, pa, b, pb) {
 function relaxCards(list, pos, parents, mobility) {
   const hub = { hw: CARD_HUB.hw, hh: CARD_HUB.hh }
   const centre = { x: 0, y: 0 }
+  const points = list.map((node) => pos.get(node.path))
+  const weights = list.map((node) => mobility.get(node.path))
   for (let pass = 0; pass < CARD_PASSES; pass += 1) {
     let worst = 0
     for (let i = 0; i < list.length; i += 1) {
       const a = list[i]
-      const pa = pos.get(a.path)
+      const pa = points[i]
+      const wa = weights[i]
       for (let j = i + 1; j < list.length; j += 1) {
         const b = list[j]
-        const pb = pos.get(b.path)
-        const hit = overlap(a, pa, b, pb)
-        if (!hit) continue
-        const wa = mobility.get(a.path)
-        const wb = mobility.get(b.path)
+        const pb = points[j]
+        const ox = a.hw + b.hw - Math.abs(pb.x - pa.x)
+        if (!(ox > 0)) continue
+        const oy = a.hh + b.hh - Math.abs(pb.y - pa.y)
+        if (!(oy > 0)) continue
+        const wb = weights[j]
         if (wa + wb === 0) continue
-        worst = Math.max(worst, Math.min(hit.ox, hit.oy))
-        const alongX = hit.ox < hit.oy
-        const push = (alongX ? hit.ox : hit.oy) + 1
+        worst = Math.max(worst, Math.min(ox, oy))
+        const alongX = ox < oy
+        const push = (alongX ? ox : oy) + 1
         const sign = alongX ? Math.sign(pb.x - pa.x) || (i % 2 ? 1 : -1) : Math.sign(pb.y - pa.y) || -1
         const shareA = (push * wa) / (wa + wb)
         const shareB = (push * wb) / (wa + wb)

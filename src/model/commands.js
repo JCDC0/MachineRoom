@@ -56,6 +56,7 @@ function escape(text) {
 }
 
 function tokenAt(segment, token, folder = false) {
+  if (!segment.includes(token)) return -1
   const tail = folder ? '(?![\\w-])(?!/[\\w.-])' : '(?![\\w-])'
   const found = new RegExp(`(?<![\\w.-])${escape(token)}${tail}`).exec(segment)
   return found ? found.index : -1

@@ -51,7 +51,8 @@ export function ancestors(path) {
 export function resolveKnown(name, files, near) {
   const clean = normalise(name)
   if (files.includes(clean)) return clean
-  const matches = files.filter((file) => basename(file) === basename(clean))
+  const base = basename(clean)
+  const matches = files.filter((file) => String(file).includes(base) && basename(file) === base)
   if (matches.length === 1) return matches[0]
   if (matches.length === 0 || typeof near !== 'string') return clean
   const wanted = folders(near)
