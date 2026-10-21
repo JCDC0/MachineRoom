@@ -81,7 +81,7 @@ export function buildPrompt({ briefs, laneKey, lanes, rules, version }) {
   lines.push(`Model to select in ${lane.harness}: ${header}${hint}${reasoning}.`)
   lines.push('')
   lines.push(`You are ${lane.name}, one of the coding agents building MachineRoom in parallel. ${lane.role}`)
-  lines.push(`Your worktree is ${lane.worktree}. Run: git switch -c ${branchFor(briefs[0])} main`)
+  lines.push(`Your worktree is ${lane.worktree}. Run: git switch -c ${branchFor(briefs[0])} refs/heads/main`)
   lines.push('')
   lines.push(rules.about)
   lines.push('')
