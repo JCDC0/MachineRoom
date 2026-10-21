@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { visibleText } from '../../model/paths.js'
 import IssueThread from './IssueThread.jsx'
 import { statusLabel } from './format.js'
 import { resolveIssue, subscribeToNotices } from './notices.js'
@@ -15,10 +16,19 @@ export function openRank(status) {
   return Object.hasOwn(OPEN_ORDER, status) ? OPEN_ORDER[status] : 99
 }
 
-export default function TasksPanel({ client, controlTarget = null }) {
-  const [issues, setIssues] = useState([])
-  const [agents, setAgents] = useState([])
-  const [loading, setLoading] = useState(true)
+export function liveRunMark(issueId, runs, agents = []) {
+  const mine = (Array.isArray(runs) ? runs : []).filter((run) => run?.issueId === issueId && (run.status === 'running' || run.status === 'queued'))
+  const run = mine.find((item) => item.status === 'running') ?? mine[0]
+  if (!run) return null
+  const name = run.agentName ?? agents.find((agent) => agent.id === run.agentId)?.name ?? 'agent'
+  return { status: run.status, text: `${run.status} ${visibleText(name)}` }
+}
+
+export default function TasksPanel({ client, controlTarget = null, initialIssues = null, initialAgents = null, initialLiveRuns = null }) {
+  const [issues, setIssues] = useState(() => (Array.isArray(initialIssues) ? initialIssues : []))
+  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
+  const [liveRuns, setLiveRuns] = useState(() => (Array.isArray(initialLiveRuns) ? initialLiveRuns : []))
+  const [loading, setLoading] = useState(() => initialIssues == null)
   const [loadError, setLoadError] = useState(null)
   const [selectedIssueId, setSelectedIssueId] = useState(null)
   const [notice, setNotice] = useState(null)
@@ -55,6 +65,15 @@ export default function TasksPanel({ client, controlTarget = null }) {
     }
   }
 
+  async function refreshLiveRuns() {
+    try {
+      const runs = await client.liveRuns()
+      if (mountedRef.current) setLiveRuns(Array.isArray(runs) ? runs : [])
+    } catch {
+      if (mountedRef.current) setLiveRuns([])
+    }
+  }
+
   async function refreshIssues() {
     try {
       const issueList = await client.issues()
@@ -65,7 +84,14 @@ export default function TasksPanel({ client, controlTarget = null }) {
   }
 
   useEffect(() => {
-    loadData({ isInitial: true })
+    if (initialIssues == null) loadData({ isInitial: true })
+    refreshLiveRuns()
+  }, [client])
+
+  useEffect(() => {
+    return subscribeToNotices(client, 'liveRuns', () => {
+      refreshLiveRuns()
+    })
   }, [client])
 
   useEffect(() => {
@@ -146,6 +172,7 @@ export default function TasksPanel({ client, controlTarget = null }) {
   const agentName = (id) => agents.find((a) => a.id === id)?.name ?? 'Unassigned'
 
   function renderRow(issue) {
+    const mark = liveRunMark(issue.id, liveRuns, agents)
     return (
       <button
         key={issue.id}
@@ -159,6 +186,7 @@ export default function TasksPanel({ client, controlTarget = null }) {
         <div className="task-row-top">
           <span className="task-identifier mono">{issue.identifier}</span>
           <span className="task-status mono">{statusLabel(issue.status)}</span>
+          {mark && <span className={`task-live mono is-${mark.status}`}>{mark.text}</span>}
           <span className="task-priority mono">{issue.priority}</span>
         </div>
         <div className="task-title">{issue.title}</div>

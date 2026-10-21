@@ -24,6 +24,7 @@ export const CLIENT_METHODS = [
   'runs',
   'runStats',
   'outcomes',
+  'liveRuns',
   'startRun',
   'reviews',
   'reviewDiff',
@@ -242,6 +243,9 @@ function seed(at) {
       { id: 'approval-2', type: 'hire_agent', status: 'pending', summary: 'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).', requestedByAgentId: 'agent-orchestrator', createdAt: iso(7) },
       { id: 'approval-3', type: 'request_board_approval', status: 'approved', summary: 'Run the recording scenarios on the free model.', requestedByAgentId: 'agent-claude', createdAt: iso(300) },
     ],
+    liveRuns: [
+      { runId: 'run-live-1', agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', status: 'running', issueId: 'issue-19', startedAt: iso(3), lastOutputAt: iso(1) },
+    ],
     costs: {
       summary: { spendCents: 299, budgetCents: 1000, utilizationPercent: 29 },
       byAgent: [
@@ -303,6 +307,36 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   }
 
   const agentById = (id) => state.agents.find((agent) => agent.id === id)
+  let liveRunCounter = 1
+
+  function startLiveRun(lane) {
+    const agent = state.agents.find((item) => item.key === lane || String(item.key ?? '').startsWith(`${lane}-`))
+    if (!agent) return null
+    const issue = state.issues.find((item) => item.assigneeAgentId === agent.id && item.status !== 'done' && item.status !== 'cancelled')
+    const busy = state.liveRuns.some((run) => run.agentId === agent.id && run.status === 'running')
+    const stamp = new Date(now()).toISOString()
+    liveRunCounter += 1
+    const run = {
+      runId: `run-live-${liveRunCounter}`,
+      agentId: agent.id,
+      agentName: agent.name,
+      adapterType: agent.adapterType,
+      status: busy ? 'queued' : 'running',
+      issueId: issue ? issue.id : null,
+      startedAt: busy ? null : stamp,
+      lastOutputAt: null,
+    }
+    state.liveRuns.unshift(run)
+    emit({ topic: 'liveRuns' })
+    return run
+  }
+
+  function endLiveRun(run) {
+    const index = state.liveRuns.indexOf(run)
+    if (index === -1) return
+    state.liveRuns.splice(index, 1)
+    emit({ topic: 'liveRuns' })
+  }
 
   const client = {
     agents: () => call('agents', () => state.agents),
@@ -478,6 +512,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     outcomes: () => call('outcomes', () => outcomeTable(SAMPLE_OUTCOME_RUNS, SAMPLE_OUTCOMES)),
 
+    liveRuns: () => call('liveRuns', () => state.liveRuns),
+
     startRun: (lane, briefs, options = {}) =>
       call('startRun', () => {
         const confirmed = Object.hasOwn(options, 'confirmed') ? options.confirmed : true
@@ -492,10 +528,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
         runsState.running.push(entry)
         emit({ topic: 'runs' })
+        const liveRun = startLiveRun(lane)
         setTimeout(() => {
           const index = runsState.running.indexOf(entry)
           if (index === -1) return
           runsState.running.splice(index, 1)
+          endLiveRun(liveRun)
           runsState.recent.unshift({
             lane,
             briefs: [...entry.briefs],

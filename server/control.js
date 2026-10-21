@@ -23,6 +23,9 @@ const EFFORT_KEYS = {
   pi_local: 'thinking',
 }
 const TERMINAL_RUN = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
+const LIVE_RUN = new Set(['queued', 'running'])
+const RUN_NOTICES = new Set(['heartbeat.run.queued', 'heartbeat.run.status'])
+export const LIVE_RUN_LIMIT = 50
 const DECISION_ROUTES = { approve: 'approve', reject: 'reject', 'request-revision': 'request-revision' }
 export const UPSTREAM_TIMEOUT_MS = 15000
 
@@ -91,9 +94,10 @@ function mergedSubagents(changes, raw) {
 export function changeEvents(frame) {
   const type = frame?.type
   const payload = frame?.payload ?? {}
-  if (type === 'agent.status' || type === 'heartbeat.run.queued') return [{ topic: 'agents' }]
-  if (type === 'heartbeat.run.status') {
-    return TERMINAL_RUN.has(payload.status) ? [{ topic: 'agents' }, { topic: 'costs' }] : [{ topic: 'agents' }]
+  if (type === 'agent.status') return [{ topic: 'agents' }]
+  if (RUN_NOTICES.has(type)) {
+    const costs = type === 'heartbeat.run.status' && TERMINAL_RUN.has(payload.status) ? [{ topic: 'costs' }] : []
+    return [{ topic: 'agents' }, ...costs, { topic: 'liveRuns' }]
   }
   if (type !== 'activity.logged') return []
   const action = String(payload.action ?? '')
@@ -162,6 +166,34 @@ export function mapIssue(raw) {
     createdAt: String(raw?.createdAt ?? ''),
     updatedAt: String(raw?.updatedAt ?? ''),
   }
+}
+
+function textOrNull(value) {
+  return typeof value === 'string' && value ? value : null
+}
+
+export function mapLiveRun(raw) {
+  return {
+    runId: textOrNull(raw?.id),
+    agentId: textOrNull(raw?.agentId),
+    agentName: textOrNull(raw?.agentName),
+    adapterType: textOrNull(raw?.adapterType),
+    status: textOrNull(raw?.status),
+    issueId: textOrNull(raw?.issueId),
+    startedAt: textOrNull(raw?.startedAt),
+    lastOutputAt: textOrNull(raw?.lastOutputAt),
+  }
+}
+
+function createdTime(raw) {
+  const time = Date.parse(raw?.createdAt ?? '')
+  return Number.isFinite(time) ? time : -Infinity
+}
+
+export function liveRunList(list) {
+  const live = (Array.isArray(list) ? list : []).filter((raw) => LIVE_RUN.has(raw?.status))
+  live.sort((a, b) => createdTime(b) - createdTime(a) || 0)
+  return live.slice(0, LIVE_RUN_LIMIT).map(mapLiveRun)
 }
 
 export function mapComment(raw, agentNames = new Map()) {
@@ -561,6 +593,18 @@ export function createControlApi(options) {
       const list = (Array.isArray(answer.json) ? answer.json : []).map(mapIssue)
       list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
       sendJson(req, res, 200, list)
+      return true
+    }
+
+    if (method === 'GET' && path === '/api/control/live-runs') {
+      if (featureOff(req, res, 'tasks')) return true
+      const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/live-runs?limit=${LIVE_RUN_LIMIT}`)
+      if (answer.status !== 200) {
+        const [code, message] = upstreamFailure(answer, 'Paperclip has no live runs route.', 'Paperclip could not read the live runs.')
+        sendJson(req, res, code, { error: message })
+        return true
+      }
+      sendJson(req, res, 200, { runs: liveRunList(answer.json) })
       return true
     }
 

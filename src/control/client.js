@@ -151,6 +151,11 @@ export function createClient({
       return Array.isArray(data) ? data : data?.rows ?? []
     },
 
+    liveRuns: async () => {
+      const data = await request('GET', '/api/control/live-runs')
+      return Array.isArray(data?.runs) ? data.runs : []
+    },
+
     startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs, confirmed: true }),
 
     reviews: async () => {

@@ -161,6 +161,12 @@ export const PAPERCLIP_SURFACE = [
   },
   {
     method: 'GET',
+    path: '/api/companies/{companyId}/live-runs',
+    feature: 'tasks',
+    fields: ['id', 'agentId', 'agentName', 'adapterType', 'status', 'issueId', 'startedAt', 'lastOutputAt', 'createdAt'],
+  },
+  {
+    method: 'GET',
     path: '/api/issues/{id}/comments',
     feature: 'tasks',
     fields: ['id', 'issueId', 'authorAgentId', 'authorName', 'body', 'createdAt'],

@@ -27,6 +27,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `runs()` | `{ running, recent }`, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
 | `runStats({ since? })` | `RunStats`, runs, minutes and cost per lane and model over every run record, or from `since` (a `YYYY-MM-DD` day, UTC) on; a bad day is refused with `--since needs a date like 2026-10-19.` (T13b; the mock sums its own finished fake runs) |
 | `outcomes()` | `OutcomeRow[]`, one row per lane and model with its merged, rejected and pending runs, merge rate, average review fixes and cost per merge from the decided runs (C6a, C6b; the newest outcome for a branch wins, and the mock serves rows built from sample runs) |
+| `liveRuns()` | `LiveRun[]`, the queued and running Paperclip runs, newest first, at most 50 (W6a; a `liveRuns` change notice goes out on each `heartbeat.run.queued` and `heartbeat.run.status` frame; the mock serves one running run and adds one for the lane's agent while its own sample run from `startRun` lasts) |
 | `startRun(lane, briefs)` | `RunInfo`, the new running entry. It sends `confirmed: true`, so call it only after the user confirmed (U5a); a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did at its head on its branch compared with `main` (W3a) |
@@ -97,7 +98,9 @@ BackupStatus { enabled: boolean, status: ok | warning | null, latestAt: string|n
              warnings are Paperclip's codes: database_backup_missing | database_backup_stale | database_backup_last_failure | database_backup_check_failed.
              enabled is false and the rest null when Paperclip has automatic backups off.
 BackupResult { ok: true, name (the file name, never its folder), sizeBytes: number|null, prunedCount: number|null, finishedAt: string|null }
-ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs, id?: string }   (id is the issue id for comments)
+LiveRun      { runId, agentId, agentName, adapterType, status: queued | running, issueId: string|null, startedAt: string|null,
+               lastOutputAt: string|null }   a field Paperclip leaves out is null; a queued run has no startedAt yet
+ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs | liveRuns, id?: string }   (id is the issue id for comments)
 ```
 
 Times are ISO strings. Money is whole cents. A budget of `0` means no budget is set. A quota window with `usedPercent: null` has no number (show its `detail`). A quota provider with `ok: false` could not be read (show `error`).
@@ -136,6 +139,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 | `costs` | `costs/summary`, `costs/by-agent`, `costs/quota-windows` |
 | `setAgentBudget` | `PATCH /api/agents/:id/budgets` |
 | `askPlanner`, `plan` | `GET /api/companies/:id/agents` for the agent with the role `pm`, `POST /api/companies/:id/issues` for the plan task, `GET /api/issues/:id/comments` for the answer |
+| `liveRuns` | `GET /api/companies/:id/live-runs?limit=50`; Paperclip answers only queued and running runs by default (`minCount` 0), and the bridge drops any other status it pads with |
 | `models` | our own list (the routing policy), not Paperclip |
 | `backupStatus`, `backupNow` | the bridge's `GET` and `POST /api/backup`, which read `databaseBackup` from `GET /api/health` and call `POST /api/instance/database-backups` (see `BACKUPS.md`) |
 
