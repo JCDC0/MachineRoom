@@ -493,10 +493,10 @@ export function createBridge(options = {}) {
     const response = await fetch(`${paperclipUrl}/api/heartbeat-runs/${encodeURIComponent(runId)}/log?offset=${state.offset}`, {
       signal: AbortSignal.timeout(logTimeoutMs),
     })
-    if (!response.ok) return
+    if (!response.ok) return response.status
     const body = await response.json()
     const end = typeof body?.content === 'string' ? body.content.lastIndexOf('\n') : -1
-    if (end === -1) return
+    if (end === -1) return response.status
     const complete = body.content.slice(0, end + 1)
     for (const line of complete.split('\n')) {
       if (!line) continue
@@ -508,6 +508,7 @@ export function createBridge(options = {}) {
       } catch {}
     }
     state.offset += Buffer.byteLength(complete, 'utf8')
+    return response.status
   }
 
   async function fullChunk(payload) {
@@ -519,10 +520,11 @@ export function createBridge(options = {}) {
     }
     for (let attempt = 0; attempt < logRetries && !stopped; attempt += 1) {
       if (state.chunks.has(payload.seq)) break
+      let status = 0
       try {
-        await pullLog(state, payload.runId)
+        status = await pullLog(state, payload.runId)
       } catch {}
-      if (state.chunks.has(payload.seq)) break
+      if (state.chunks.has(payload.seq) || status === 404) break
       await new Promise((resolveWait) => setTimeout(resolveWait, logRetryMs))
     }
     return state.chunks.get(payload.seq) ?? null

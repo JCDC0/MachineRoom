@@ -180,6 +180,22 @@ describe('the whole loop through the bridge and the fake Paperclip', () => {
     expect(restored.payload).toMatchObject({ truncated: false, chunk: long })
   })
 
+  it('lets a cut chunk through at once when the run log answers 404', async () => {
+    const { url, fake } = await loop({ bridge: { logRetries: 3, logRetryMs: 2000 } })
+    await waitForPaperclip(url)
+    await waitFor(() => fake.connected() > 0, { what: 'the bridge socket' })
+    const payload = { runId: 'gone-run', agentId: fake.agents[1].id, stream: 'stdout', seq: 7, chunk: 'z'.repeat(LIVE_CHUNK_LIMIT), truncated: true }
+    const started = Date.now()
+    fake.sendFrame({ id: 900, type: 'heartbeat.run.log', createdAt: new Date().toISOString(), payload })
+    fake.sendFrame({ id: 901, type: 'heartbeat.run.log', createdAt: new Date().toISOString(), payload: { ...payload, seq: 8, chunk: 'after\n', truncated: false } })
+    const frames = await readFrames(url, (seen) => seen.some((frame) => frame.id === 901))
+    const took = Date.now() - started
+    expect(frames.filter((frame) => frame.payload?.runId === 'gone-run').map((frame) => frame.payload.seq)).toEqual([7, 8])
+    expect(frames.find((frame) => frame.id === 900).payload).toMatchObject({ truncated: true, chunk: payload.chunk })
+    expect(fake.requests().filter((entry) => entry.path === '/api/heartbeat-runs/gone-run/log')).toHaveLength(1)
+    expect(took).toBeLessThan(1500)
+  })
+
   it('answers 504 within its limit when Paperclip never answers the agents route', async () => {
     const { slow } = parseFakeArgs(['--slow', '/api/companies/{companyId}/agents'])
     const { url } = await loop({ fake: { slow }, bridge: { upstreamTimeoutMs: 400 } })
