@@ -84,13 +84,14 @@ function rowNote(file) {
   return parts.join(' · ') || 'not touched'
 }
 
-export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {} } = {}) {
+export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, obstacles = [] } = {}) {
   const cards = new Map()
   const plane = new THREE.PlaneGeometry(1, 1)
   const hider = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })
   const homes = new Map()
   const pinned = new Set()
   const flashes = new Map()
+  let boardObstacles = obstacles
   const right = new THREE.Vector3(1, 0, 0)
   const up = new THREE.Vector3(0, 1, 0)
   const back = new THREE.Vector3(0, 0, 1)
@@ -204,7 +205,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       paintRows(card, view)
       card.meta.textContent = metaText(view)
     }
-    const placed = layoutCards(views.map((view) => ({ path: view.path, ...cardSize(view) })), homes)
+    const placed = layoutCards(views.map((view) => ({ path: view.path, ...cardSize(view) })), homes, { obstacles: boardObstacles })
     for (const [path, spot] of placed) {
       homes.set(path, spot)
       const card = cards.get(path)
@@ -272,6 +273,11 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     flashes.clear()
     planKey = ''
     recompute(state)
+  }
+
+  function setObstacles(list) {
+    boardObstacles = Array.isArray(list) ? list : []
+    planKey = ''
   }
 
   function visibleLinks() {
@@ -389,6 +395,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     onPath: (path) => active.path.has(path),
     flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
     sync,
+    setObstacles,
     update,
     visibleLinks,
     spheres,

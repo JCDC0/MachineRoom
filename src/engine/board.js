@@ -1,11 +1,23 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { visibleText } from '../model/paths.js'
+import { OVERVIEW, viewBasis } from './camera.js'
+import { HUB_CENTER } from './hub.js'
 
-const OVERVIEW_YAW = 0.42
-const OVERVIEW_DIST = 540
-const HUB_Y = 200
-const SCALE = 1.2
+export const BOARD_WIDTH = 280
+export const BOARD_HEIGHT = 460
+export const BOARD_SCALE = 2.4
+export const BOARD_Y = -700
+const BASIS = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
+const BOARD_AT = new THREE.Vector3(
+  HUB_CENTER.x + BASIS.up.x * BOARD_Y,
+  HUB_CENTER.y + BASIS.up.y * BOARD_Y,
+  HUB_CENTER.z + BASIS.up.z * BOARD_Y
+)
+
+export function boardBox(scale = BOARD_SCALE) {
+  return { x: 0, y: BOARD_Y, hw: (BOARD_WIDTH / 2) * scale, hh: (BOARD_HEIGHT / 2) * scale }
+}
 
 function formatMoney(cents) {
   const value = typeof cents === 'number' && Number.isFinite(cents) ? cents : 0
@@ -130,8 +142,8 @@ export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
   element.append(title, summaryEl, rowsContainer, quotaContainer, emptyEl)
 
   const object = new CSS3DObject(element)
-  object.scale.setScalar(SCALE)
-  object.position.set(Math.cos(OVERVIEW_YAW) * OVERVIEW_DIST, HUB_Y, -Math.sin(OVERVIEW_YAW) * OVERVIEW_DIST)
+  object.scale.setScalar(BOARD_SCALE)
+  object.position.copy(BOARD_AT)
   cssScene.add(object)
 
   function update(board) {
@@ -216,6 +228,15 @@ export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
     object.visible = Boolean(visible)
   }
 
+  function box() {
+    return boardBox(object.scale.x)
+  }
+
+  function sphere() {
+    const b = box()
+    return { x: object.position.x, y: object.position.y, z: object.position.z, r: Math.hypot(b.hw, b.hh) }
+  }
+
   function dispose() {
     cssScene.remove(object)
     element.remove()
@@ -225,6 +246,8 @@ export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
 
   return {
     object,
+    box,
+    sphere,
     update,
     setVisible,
     dispose,
