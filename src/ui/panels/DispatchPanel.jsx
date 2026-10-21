@@ -5,13 +5,23 @@ import {
   groupBriefsByOwner,
   ownerToLane,
 } from './briefs.js'
+import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
 import { recordLine, resultWord, timeSinceStart } from './runs.js'
 
-export default function DispatchPanel({ client, onCreated }) {
-  const [agents, setAgents] = useState([])
-  const [models, setModels] = useState([])
-  const [loading, setLoading] = useState(true)
+export default function DispatchPanel({
+  client,
+  onCreated,
+  initialAgents,
+  initialModels,
+  initialAssigneeAgentId,
+  initialModel,
+}) {
+  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
+  const [models, setModels] = useState(() => (Array.isArray(initialModels) ? initialModels : []))
+  const [loading, setLoading] = useState(
+    () => !(Array.isArray(initialAgents) && Array.isArray(initialModels))
+  )
   const [loadError, setLoadError] = useState(null)
 
   const [briefs, setBriefs] = useState([])
@@ -37,8 +47,8 @@ export default function DispatchPanel({ client, onCreated }) {
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
-  const [assigneeAgentId, setAssigneeAgentId] = useState('')
-  const [model, setModel] = useState('')
+  const [assigneeAgentId, setAssigneeAgentId] = useState(() => initialAssigneeAgentId || '')
+  const [model, setModel] = useState(() => initialModel || '')
   const [priority, setPriority] = useState('')
   const [maxTurnsPerRun, setMaxTurnsPerRun] = useState('')
   const [timeoutSec, setTimeoutSec] = useState('')
@@ -57,6 +67,7 @@ export default function DispatchPanel({ client, onCreated }) {
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(briefLane)
 
   async function loadData() {
+    if (!client || (Array.isArray(initialAgents) && Array.isArray(initialModels))) return
     setLoading(true)
     setLoadError(null)
     try {
@@ -143,6 +154,15 @@ export default function DispatchPanel({ client, onCreated }) {
     })
   }, [client])
 
+  useEffect(() => {
+    if (loading || !model) return
+    const currentAgent = agents.find((item) => item.id === assigneeAgentId) || null
+    const nextModel = resetModel(currentAgent, model, models)
+    if (nextModel !== model) {
+      setModel(nextModel)
+    }
+  }, [loading, assigneeAgentId, agents, models, model])
+
   async function loadPromptForBrief(briefId, briefObj) {
     const brief = briefObj ?? briefs.find((item) => item.id === briefId)
     if (!brief) return
@@ -222,6 +242,8 @@ export default function DispatchPanel({ client, onCreated }) {
     if (matchedAssignee && fieldErrors.agent) {
       setFieldErrors((prev) => ({ ...prev, agent: null }))
     }
+    const nextAgent = agents.find((item) => item.id === matchedAssignee) || null
+    setModel((prevModel) => resetModel(nextAgent, prevModel, models))
 
     loadPromptForBrief(id, brief)
   }
@@ -360,9 +382,16 @@ export default function DispatchPanel({ client, onCreated }) {
   }
 
   const briefGroups = hasBriefs ? groupBriefsByOwner(briefs) : []
-  const smallModels = models.filter((item) => item.tier === 'small')
-  const mediumModels = models.filter((item) => item.tier === 'medium')
-  const largeModels = models.filter((item) => item.tier === 'large')
+  const selectedAgent = agents.find((item) => item.id === assigneeAgentId) || null
+  const offeredModels = modelsFor(selectedAgent, models)
+  const defaultOption = offeredModels[0]
+  const availableModels = offeredModels.slice(1)
+  const smallModels = availableModels.filter((item) => item.tier === 'small')
+  const mediumModels = availableModels.filter((item) => item.tier === 'medium')
+  const largeModels = availableModels.filter((item) => item.tier === 'large')
+  const otherModels = availableModels.filter(
+    (item) => !item.tier || !['small', 'medium', 'large'].includes(item.tier)
+  )
 
   return (
     <form className="dispatch-form" onSubmit={handleSubmit} noValidate>
@@ -621,10 +650,13 @@ export default function DispatchPanel({ client, onCreated }) {
           id="dispatch-agent"
           value={assigneeAgentId}
           onChange={(event) => {
-            setAssigneeAgentId(event.target.value)
+            const nextAgentId = event.target.value
+            setAssigneeAgentId(nextAgentId)
             if (fieldErrors.agent) {
               setFieldErrors((prev) => ({ ...prev, agent: null }))
             }
+            const nextAgent = agents.find((item) => item.id === nextAgentId) || null
+            setModel((prevModel) => resetModel(nextAgent, prevModel, models))
           }}
           aria-invalid={Boolean(fieldErrors.agent)}
           required
@@ -645,7 +677,7 @@ export default function DispatchPanel({ client, onCreated }) {
           value={model}
           onChange={(event) => setModel(event.target.value)}
         >
-          <option value="">Default model</option>
+          <option value="">{defaultOption?.label || 'Default model'}</option>
           {smallModels.length > 0 && (
             <optgroup label="Small">
               {smallModels.map((item) => (
@@ -676,6 +708,24 @@ export default function DispatchPanel({ client, onCreated }) {
               ))}
             </optgroup>
           )}
+          {otherModels.length > 0 &&
+            (smallModels.length > 0 || mediumModels.length > 0 || largeModels.length > 0 ? (
+              <optgroup label="Other">
+                {otherModels.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.label}
+                    {item.free && !item.label.toLowerCase().includes('free') ? ' (free)' : ''}
+                  </option>
+                ))}
+              </optgroup>
+            ) : (
+              otherModels.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                  {item.free && !item.label.toLowerCase().includes('free') ? ' (free)' : ''}
+                </option>
+              ))
+            ))}
         </select>
       </div>
 
