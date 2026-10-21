@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Models offered per agent in the dispatch form (task M1a): pure modelsFor in src/ui/panels/dispatchModels.js filters options by adapterType and harness (claude_local to claude, hermes_local to hermes, opencode_local to opencode, process to agy), shows Default model (MODEL) or Default model (set in the harness), and falls back to Default model when no agent is chosen or the model no longer fits; tests in tests/dispatch-models.test.js.
 - Review note on U8: no fixes. The run was cut by a shutdown after its commit, so it has no run record; the files were checked against the brief by hand.
 - Handoff: ORCHESTRATOR.md gains `Where things stand`, with the cut U8 run and how to start it again, AGY's queue and what is not pushed.
 - The control client opens its change stream again (task U8): `createClient` in `src/control/client.js` drops a stream the browser gave up on (`readyState` 2) and opens a new one after 1 second, doubling up to 15 seconds and back to 1 second after an `open` event, only while a listener is subscribed; the last unsubscribe cancels a waiting reopen; `setTimer` and `clearTimer` join its options, and tests in `tests/control-client-stream.test.js` cover the delays, the reset, no listener and the cancel.
