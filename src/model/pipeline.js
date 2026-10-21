@@ -94,7 +94,7 @@ export function createPipeline({ agents, tree }) {
       entry.parser.push(payload.chunk, chunkTime).forEach((activity) => emit(activity))
     } else if (frame.type === 'heartbeat.run.event' && payload.level === 'error') {
       if (!once(`${runId}:error:${payload.seq}`)) return []
-      lastRunTime.set(runId, time)
+      if (lastRunTime.has(runId)) lastRunTime.set(runId, time)
       emit({ time, type: 'error', text: shorten(payload.message ?? 'error', 120) })
     }
 

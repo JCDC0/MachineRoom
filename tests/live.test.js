@@ -213,6 +213,25 @@ describe('incremental pipeline', () => {
     expect(pipeline.push(late)).toEqual([])
   })
 
+  it('shows an error event that comes after the run ended without keeping the run open', () => {
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const agent = recording.agents[0]
+    const at = (n) => new Date(Date.parse('2026-10-20T00:00:00Z') + n).toISOString()
+    for (let run = 0; run < 50; run += 1) {
+      const runId = `run-${run}`
+      pipeline.push({ id: `q${run}`, type: 'heartbeat.run.queued', createdAt: at(run * 10), payload: { agentId: agent.id, runId } })
+      pipeline.push({ id: `f${run}`, type: 'heartbeat.run.status', createdAt: at(run * 10 + 1), payload: { agentId: agent.id, runId, status: 'failed' } })
+      const late = pipeline.push({
+        id: `x${run}`,
+        type: 'heartbeat.run.event',
+        createdAt: at(run * 10 + 2),
+        payload: { agentId: agent.id, runId, seq: 1, level: 'error', message: 'spawn failed' },
+      })
+      expect(late).toEqual([expect.objectContaining({ type: 'error', agent: agent.key, text: 'spawn failed' })])
+    }
+    expect(pipeline.remembered().runs).toBe(0)
+  })
+
   it('learns a large project again and again without slowing the page', () => {
     const files = Array.from({ length: 40000 }, (_, index) => `pkg${index % 200}/lib/file${index}.js`)
     const tree = makeTree({ root: 'big', files, created: [] })
