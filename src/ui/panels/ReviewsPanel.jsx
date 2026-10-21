@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { visibleText } from '../../model/paths.js'
 import { subscribeToNotices } from './notices.js'
 import { canMerge, defaultMergeMessage, patchLines, reviewRow } from './reviews.js'
 
@@ -308,7 +309,7 @@ export default function ReviewsPanel({
                           <ul className="review-diff-files mono">
                             {diff.files.map((file) => (
                               <li key={file.path} className="review-diff-file">
-                                <span className="review-diff-path">{file.path}</span>
+                                <span className="review-diff-path">{visibleText(file.path)}</span>
                                 <span className="review-diff-counts">{`+${file.added} -${file.deleted}`}</span>
                               </li>
                             ))}
@@ -330,7 +331,7 @@ export default function ReviewsPanel({
                                 key={idx}
                                 className={`review-patch-line is-${line.kind}`}
                               >
-                                {line.text}
+                                {visibleText(line.text)}
                               </div>
                             ))}
                           </pre>

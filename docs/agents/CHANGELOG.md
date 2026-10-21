@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Use `visibleText` in the cards and the Reviews panel (task U10a): card names, row names, the inspected detail, the failure band, diff file paths and every patch line mark direction and control characters, while the merge message stays as typed; tests in `tests/reviews-panel.test.js` cover U+202E in a patch line.
 - Merged the bridge follow-up from the cloud session (branch `claude/bridge-pair-and-404`, 4 commits on 0.1.127, about 2 dollars). No fixes. The late-chunk drop was checked on Windows against every recording here: 56 lane recordings and 5 fixtures replay to the same activities as before.
 - C4c brief: `useRoute` renamed `routeFields` (it is not a hook), and the by-eye check picks any two briefs of different lanes, since C6b and M1a are merged.
 - The model list names the models the lanes run: `server/models.js` and the mock client's copy add `deepseek/deepseek-v4.1-flash-1017` (DeepSeek v4.1 Flash (OpenRouter), Hermes) and `opencode-go/deepseek-v4.1-flash` (DeepSeek v4.1 Flash (Go), OpenCode), both tier medium and not free, and keep the other six; no test counted the list, so the contract suite now checks both entries on both clients and `tests/dispatch-models.test.js` checks that the dispatch form offers each only to its own harness.

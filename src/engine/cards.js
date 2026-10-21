@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
-import { basename, dirname } from '../model/paths.js'
+import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
 import { OVERVIEW, viewBasis } from './camera.js'
 import { HUB_CENTER } from './hub.js'
@@ -113,7 +113,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const backs = el('div', 'mr-card-backs')
     const head = el('div', 'mr-card-head')
     const tab = el('div', 'mr-card-tab')
-    const name = el('div', 'mr-card-name', path === '' ? `${rootName}/` : `${basename(path)}/`)
+    const name = el('div', 'mr-card-name', visibleText(path === '' ? `${rootName}/` : `${basename(path)}/`))
     const meta = el('div', 'mr-card-meta')
     head.append(tab, name, meta)
     const items = el('div', 'mr-card-items')
@@ -163,7 +163,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     card.rowKey = key
     card.rows = wanted.map((item) => {
       const row = el('div', `mr-item is-${item.kind}`)
-      const label = el('span', 'mr-item-name', item.kind === 'dir' ? `${basename(item.path)}/` : basename(item.path))
+      const label = el('span', 'mr-item-name', visibleText(item.kind === 'dir' ? `${basename(item.path)}/` : basename(item.path)))
       const note = el('span', 'mr-item-note')
       const detail = el('div', 'mr-item-detail')
       row.append(label, note, detail)
@@ -319,7 +319,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       card.occluder.scale.set(CARD_W * card.scale, cardHeight(cardRows(view)) * card.scale, 1)
       const flashing = flashes.get(card.path)
       const tone = flashing && flashing.until > now ? flashing.tone : null
-      const failedName = flashing?.text || (card.path === '' ? rootName : basename(card.path))
+      const failedName = visibleText(flashing?.text || (card.path === '' ? rootName : basename(card.path)))
       const failedText = tone === 'red' ? `FAILED ${failedName}` : ''
       if (failedText) {
         if (card.band.textContent !== failedText) card.band.textContent = failedText
@@ -351,7 +351,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         const note = entry.item.kind === 'file' ? rowNote(file) : ''
         const short = note === 'not touched' ? '' : note.replace('written', 'w').replace('read', 'r')
         if (entry.note.textContent !== short) entry.note.textContent = short
-        const detail = inspected === path ? `${path}  ${note}` : ''
+        const detail = inspected === path ? `${visibleText(path)}  ${note}` : ''
         if (entry.detail.textContent !== detail) entry.detail.textContent = detail
       }
     }

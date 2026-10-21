@@ -136,6 +136,32 @@ describe('ReviewsPanel and ControlDrawer', () => {
     expect(drawerHtml).toContain('<span class="panel-count mono">Reviews</span>')
   })
 
+  it('marks a direction control in a patch line', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const initialReviews = await client.reviews()
+    const baseDiff = await client.reviewDiff('hermes')
+    const initialDiff = {
+      ...baseDiff,
+      patch: [
+        'diff --git a/src/a.js b/src/a.js',
+        '+++ b/src/a.js',
+        '@@ -1 +1 @@',
+        '+const label = "a\u202Eb"',
+      ].join('\n'),
+    }
+
+    const html = renderToString(
+      createElement(ReviewsPanel, {
+        client,
+        initialReviews,
+        initialDiff,
+      })
+    )
+
+    expect(html).toContain('[U+202E]')
+    expect(html).not.toContain('\u202E')
+  })
+
   it('renders lane rows, diff lines, truncation notice and error rows', async () => {
     const client = createMockClient({ latencyMs: 0 })
     const initialReviews = [
