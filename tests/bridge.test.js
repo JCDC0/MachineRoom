@@ -875,6 +875,86 @@ describe('health surface check', () => {
     expect(health.surface.error).toMatch(/not reachable/i)
   })
 
+  it('never reports a new version with the surface of the old spec', async () => {
+    let spec = paperclipSpec({ version: '1.0.0' })
+    const next = paperclipSpec({ version: '2.0.0', drop: ['GET /api/companies/{companyId}/approvals'] })
+    let specReads = 0
+    const server = createServer((req, res) => {
+      if (req.url === '/api/openapi.json') {
+        specReads += 1
+        res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+        res.end(JSON.stringify(spec))
+        spec = next
+        return
+      }
+      if (req.url === '/api/health') {
+        res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+        res.end(JSON.stringify({ status: 'ok', version: spec.info.version }))
+        return
+      }
+      res.writeHead(404, { Connection: 'close' })
+      res.end()
+    })
+    await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen))
+    cleanups.push(() => new Promise((resolveClose) => server.close(resolveClose)))
+    server.on('upgrade', (req, socket) => socket.destroy())
+    const bridge = createBridge({
+      paperclipUrl: `http://127.0.0.1:${server.address().port}`,
+      companyId: 'comp-1',
+      projectRoot: makeTempDir(),
+      port: 0,
+      reconnectMinMs: 5000,
+      surfaceEveryMs: 0,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    await waitUntil(async () => Boolean((await healthOf(url)).surface?.checkedAt))
+    const health = await healthOf(url)
+    expect(health.paperclipVersion).toBe('2.0.0')
+    expect(health.surface.ok).toBe(false)
+    expect(health.surface.missing).toEqual([{ method: 'GET', path: '/api/companies/{companyId}/approvals' }])
+    expect(specReads).toBe(2)
+  })
+
+  it('gives up with a sentence when the version changes on every read', async () => {
+    let healthReads = 0
+    const server = createServer((req, res) => {
+      if (req.url === '/api/openapi.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+        res.end(JSON.stringify(paperclipSpec()))
+        return
+      }
+      if (req.url === '/api/health') {
+        healthReads += 1
+        res.writeHead(200, { 'Content-Type': 'application/json', Connection: 'close' })
+        res.end(JSON.stringify({ status: 'ok', version: `1.0.${healthReads}` }))
+        return
+      }
+      res.writeHead(404, { Connection: 'close' })
+      res.end()
+    })
+    await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen))
+    cleanups.push(() => new Promise((resolveClose) => server.close(resolveClose)))
+    server.on('upgrade', (req, socket) => socket.destroy())
+    const bridge = createBridge({
+      paperclipUrl: `http://127.0.0.1:${server.address().port}`,
+      companyId: 'comp-1',
+      projectRoot: makeTempDir(),
+      port: 0,
+      reconnectMinMs: 5000,
+      surfaceEveryMs: 0,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    await waitUntil(async () => Boolean((await healthOf(url)).surface?.checkedAt))
+    const health = await healthOf(url)
+    expect(health.paperclipVersion).toBeNull()
+    expect(health.surface).toMatchObject({ ok: null, error: 'Paperclip changed while the bridge read its spec. The bridge checks again when its socket opens.' })
+    expect(healthReads).toBe(6)
+  })
+
   it('checks the spec again when the Paperclip socket reopens', async () => {
     const { fake, url } = await startSurfaceBridge({ spec: paperclipSpec({ version: '1.0.0' }) })
     await waitUntil(async () => {
@@ -887,7 +967,7 @@ describe('health surface check', () => {
 
     await waitUntil(async () => {
       const health = await healthOf(url)
-      return fake.connections >= 2 && health.paperclip === true && health.paperclipVersion === '2.0.0' && health.surface?.ok === false
+      return fake.connections >= 2 && health.paperclip === true && health.paperclipVersion === '2.0.0'
     }, 5000)
 
     const health = await healthOf(url)
