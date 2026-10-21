@@ -2,9 +2,11 @@
 
 ## Unreleased
 
+- Review note on U10a: no fixes; its test and U6a's met at the end of `tests/reviews-panel.test.js`, and both were kept. The four moved briefs were checked in the browser where the brief asked (the Reviews card shows the open diff's short head).
 - Review fix on U6a: `handleOpenConfirm` calls `clearMoved` instead of a copy of it.
 - Review note on U9: no fixes.
 - Review note on U7: no code fixes. It branched before 0.1.127 fixed `tests/plan.test.js` and fixed it again its own way; main's copy was kept and its changelog line dropped.
+- Use `visibleText` in the cards and the Reviews panel (task U10a): card names, row names, the inspected detail, the failure band, diff file paths and every patch line mark direction and control characters, while the merge message stays as typed; tests in `tests/reviews-panel.test.js` cover U+202E in a patch line.
 - Merged the bridge follow-up from the cloud session (branch `claude/bridge-pair-and-404`, 4 commits on 0.1.127, about 2 dollars). No fixes. The late-chunk drop was checked on Windows against every recording here: 56 lane recordings and 5 fixtures replay to the same activities as before.
 - Long agent names stay short in the room (task U9): pure `nameLabel` in `src/engine/agents.js` uppercases a text name, keeps 32 characters and cuts a longer one to 31 plus `~`, answers empty text for a name that is not text, and the label under each agent uses it; `min-width: 0` on `.mr-term-title` lets the grid item shrink so the chip title's existing CSS ellipsis cuts at the chip width; tests in `tests/agent-label.test.js` cover a short name, exactly 32 characters, a 60 character name and `null`.
 - Merge the head whose diff the owner read (task U6a): `mergeHead` in `src/ui/panels/reviews.js` keeps the list head with no diff or another lane's diff, uses the diff's head when it matches, and answers the moved branch sentence when they differ; the Reviews confirm card shows the diff's short head, and the row shows that sentence in the error style and does not open a card.
