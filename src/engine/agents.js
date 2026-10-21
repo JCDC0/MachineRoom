@@ -18,6 +18,12 @@ const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
 const AGENT_FRONT = 220
 
+export function nameLabel(name) {
+  if (typeof name !== 'string') return ''
+  const label = name.toUpperCase()
+  return label.length > 32 ? `${label.slice(0, 31)}~` : label
+}
+
 const heading = new THREE.Vector3()
 const chipNear = new THREE.Vector3()
 const chipFar = new THREE.Vector3()
@@ -82,7 +88,7 @@ export function createAgents(scene, roster, cssScene = null) {
     const orchestrator = isOrchestrator(agent)
     const rings = [flatRing(130, 0.2, -110)]
     if (orchestrator) rings.push(flatRing(158, 0.14, -110))
-    const label = textSprite(agent.name.toUpperCase(), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
+    const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
     label.position.set(0, -150, 0)
     const picker = new THREE.Mesh(new THREE.SphereGeometry(170, 8, 8), new THREE.MeshBasicMaterial({ visible: false }))
     picker.userData.key = agent.key

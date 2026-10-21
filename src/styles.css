@@ -982,6 +982,7 @@ summary:focus-visible,
 .mr-term-title {
   grid-column: 1 / -1;
   grid-row: 1;
+  min-width: 0;
   padding: 4px 8px;
   background: var(--white);
   color: var(--black);
