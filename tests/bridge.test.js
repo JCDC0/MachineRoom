@@ -887,7 +887,7 @@ describe('health surface check', () => {
 
     await waitUntil(async () => {
       const health = await healthOf(url)
-      return fake.connections >= 2 && health.paperclip === true && health.paperclipVersion === '2.0.0'
+      return fake.connections >= 2 && health.paperclip === true && health.paperclipVersion === '2.0.0' && health.surface?.ok === false
     }, 5000)
 
     const health = await healthOf(url)

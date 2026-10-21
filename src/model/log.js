@@ -2,6 +2,12 @@ import { shorten } from './parsers/common.js'
 
 const LIMIT = 50
 const TEXT_LIMIT = 140
+export const LIVE_LOG_LIMIT = 200
+
+export function appendLiveLog(previous, added, limit = LIVE_LOG_LIMIT) {
+  if (added.length === 0) return previous
+  return [...previous, ...added].slice(-limit)
+}
 
 export function createLogger(agents) {
   const names = new Map(agents.map((agent) => [agent.key, agent.name]))

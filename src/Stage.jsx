@@ -7,7 +7,7 @@ import { openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
 import { openStream, socketUrl } from './live/source.js'
-import { buildTimeline, createLogger, entriesUpTo } from './model/log.js'
+import { appendLiveLog, buildTimeline, createLogger, entriesUpTo } from './model/log.js'
 import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
 import { store } from './storage.js'
@@ -18,7 +18,6 @@ import Waiting from './ui/Waiting.jsx'
 
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
-const LIVE_LOG_LIMIT = 200
 const BADGE = {
   position: 'fixed',
   bottom: 96,
@@ -136,7 +135,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
             return entry && { ...entry, time: new Date(activity.time).toLocaleTimeString('en-GB') }
           })
           .filter(Boolean)
-        if (added.length > 0) setLiveLog((previous) => [...previous, ...added].slice(-LIVE_LOG_LIMIT))
+        if (added.length > 0) setLiveLog((previous) => appendLiveLog(previous, added))
       },
       onTree: (tree) => {
         player.addFiles(tree.files)
