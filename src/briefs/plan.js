@@ -266,7 +266,11 @@ export function briefMarkdown(brief, lanes) {
   const name = textOf(lane?.name).trim() || owner
   const text = textOf(brief?.text).trim()
   const files = listOf(brief?.files)
-  const listed = files.length > 0 && !FILES_MARKER.test(text) ? `Files: ${files.map((file) => `\`${file}\``).join(', ')}.` : ''
-  const body = [text, listed].filter(Boolean).join(' ')
+  const tests = listOf(brief?.tests)
+  const tick = (path) => `\`${path}\``
+  const named = tests.length > 0 && !tests.some((test) => text.includes(test)) ? `Tests in ${tests.map(tick).join(', ')}.` : ''
+  const allFiles = [...new Set([...files, ...tests, 'docs/agents/CHANGELOG.md'])]
+  const listed = files.length > 0 && !FILES_MARKER.test(text) ? `Files: ${allFiles.map(tick).join(', ')}.` : ''
+  const body = [text, named, listed].filter(Boolean).join(' ')
   return `**${id}. ${title} (${name}).** ${body}`.replace(/\s+/g, ' ').trim()
 }

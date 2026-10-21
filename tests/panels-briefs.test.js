@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
 import {
+  briefTarget,
   chooseAssignee,
   formatBriefTitle,
   getFirstOwner,
@@ -139,5 +140,32 @@ describe('groupBriefsByOwner', () => {
     expect(getFirstOwner({ owners: ['Hermes'] })).toBe('hermes')
     expect(getFirstOwner({ owner: 'Claude' })).toBe('claude')
     expect(getFirstOwner({})).toBe('')
+  })
+})
+
+describe('briefTarget', () => {
+  const LIST = [
+    { id: 'C7a', title: 'Add the plan route', owner: 'opencode' },
+    { id: 'C7b', title: 'Read the plan', owner: 'hermes' },
+  ]
+
+  it('finds the brief by id', () => {
+    expect(briefTarget(LIST, 'C7b')).toEqual({ brief: LIST[1] })
+    expect(briefTarget(LIST, ' C7a ')).toEqual({ brief: LIST[0] })
+  })
+
+  it('names a missing id', () => {
+    expect(briefTarget(LIST, 'C9z')).toEqual({ problem: 'Brief C9z is not in the brief list.' })
+    expect(briefTarget([], 'C7a')).toEqual({ problem: 'Brief C7a is not in the brief list.' })
+  })
+
+  it('answers a problem for junk ids and junk lists without throwing', () => {
+    for (const id of [undefined, null, 42, {}, [], '', '   ']) {
+      expect(briefTarget(LIST, id)).toHaveProperty('problem')
+    }
+    for (const list of [null, undefined, 'C7a', 7, {}, [null, 3, 'x']]) {
+      expect(briefTarget(list, 'C7a')).toEqual({ problem: 'Brief C7a is not in the brief list.' })
+    }
+    expect(briefTarget(Object.create(null), '__proto__')).toHaveProperty('problem')
   })
 })

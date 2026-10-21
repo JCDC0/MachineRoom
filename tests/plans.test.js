@@ -476,7 +476,7 @@ describe('plans routes', () => {
     expect(after).toContain('## Briefs from the planner\n\n**C7a. Add the plan route (OpenCode).**')
     expect(after).toContain('\n\n**C7b. Plan the room work (OpenCode).**')
     expect(after.indexOf('**C7a.')).toBeLessThan(after.indexOf('**C7b.'))
-    expect(after).toContain('Files: `server/plans.js`.')
+    expect(after).toContain('Tests in `tests/plans.test.js`. Files: `server/plans.js`, `tests/plans.test.js`, `docs/agents/CHANGELOG.md`.')
   })
 
   it('keeps one heading when a second accept adds another brief, and refuses an id taken since the plan was read', async () => {

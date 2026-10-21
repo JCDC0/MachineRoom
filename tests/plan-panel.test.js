@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
+import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import ControlDrawer from '../src/ui/panels/ControlDrawer.jsx'
 import PlanPanel, { addConfirmText, addedText } from '../src/ui/panels/PlanPanel.jsx'
 import { canAsk, copyNote, copyText, planRows } from '../src/ui/panels/plan.js'
@@ -267,5 +268,68 @@ describe('PlanPanel and ControlDrawer', () => {
     expect(html).toContain('id="tab-plan"')
     expect(html).toContain('<span>Plan</span>')
     expect(html).toContain('id="plan-goal"')
+  })
+
+  it('shows a Dispatch button for each added id and none before an add', () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const onSelectControlTarget = () => {}
+    const before = renderToString(
+      createElement(PlanPanel, { client, initialAnswer: ANSWER, onSelectControlTarget })
+    )
+    expect(before).not.toContain('Dispatch C7')
+    expect(before).not.toContain('plan-dispatch-btn')
+
+    const after = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialAnswer: ANSWER,
+        initialAdded: 'Added C7a, C7b.',
+        initialAddedIds: ['C7a', 'C7b'],
+        onSelectControlTarget,
+      })
+    )
+    expect(after).toContain('>Dispatch C7a</button>')
+    expect(after).toContain('>Dispatch C7b</button>')
+    expect((after.match(/plan-dispatch-btn/g) ?? [])).toHaveLength(2)
+  })
+
+  it('shows no Dispatch button when the panel has no way to open Dispatch', () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const html = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialAnswer: ANSWER,
+        initialAdded: 'Added C7a.',
+        initialAddedIds: ['C7a'],
+      })
+    )
+    expect(html).not.toContain('plan-dispatch-btn')
+  })
+
+  it('shows the missing brief sentence in DispatchPanel and picks nothing', () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const html = renderToString(
+      createElement(DispatchPanel, {
+        client,
+        initialAgents: [{ id: 'agent-opencode', name: 'OpenCode Go', role: 'engineer' }],
+        initialModels: [],
+        initialBriefs: [BRIEF_ONE],
+        targetBriefId: 'C9z',
+      })
+    )
+    expect(html).toContain('Brief C9z is not in the brief list.')
+    expect(html).toContain('class="brief-target-problem mono"')
+    expect(html).not.toContain('Route</label>')
+
+    const found = renderToString(
+      createElement(DispatchPanel, {
+        client,
+        initialAgents: [{ id: 'agent-opencode', name: 'OpenCode Go', role: 'engineer' }],
+        initialModels: [],
+        initialBriefs: [BRIEF_ONE],
+        targetBriefId: 'C7a',
+      })
+    )
+    expect(found).not.toContain('is not in the brief list.')
   })
 })

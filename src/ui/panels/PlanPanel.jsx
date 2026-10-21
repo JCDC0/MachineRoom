@@ -33,6 +33,8 @@ export default function PlanPanel({
   initialAdded = null,
   initialAcceptError = null,
   initialSelected = null,
+  initialAddedIds = null,
+  onSelectControlTarget,
 }) {
   const [goal, setGoal] = useState(initialGoal)
   const [confirmOpen, setConfirmOpen] = useState(initialConfirmOpen)
@@ -51,6 +53,7 @@ export default function PlanPanel({
   const [accepting, setAccepting] = useState(false)
   const [acceptError, setAcceptError] = useState(initialAcceptError)
   const [added, setAdded] = useState(initialAdded)
+  const [addedIds, setAddedIds] = useState(() => (Array.isArray(initialAddedIds) ? initialAddedIds : []))
 
   const mountedRef = useRef(false)
   const askRef = useRef(false)
@@ -179,6 +182,7 @@ export default function PlanPanel({
     setAcceptOpen(false)
     setAcceptError(null)
     setAdded(null)
+    setAddedIds([])
     setSelected(Object.create(null))
     selectionAnswerRef.current = null
     setPhase('waiting')
@@ -222,11 +226,13 @@ export default function PlanPanel({
     setAccepting(true)
     setAcceptError(null)
     setAdded(null)
+    setAddedIds([])
     try {
       const result = await client.acceptPlan(issue.issueId, selectedIds)
       if (!mountedRef.current) return
       const ids = Array.isArray(result?.added) && result.added.length > 0 ? result.added : selectedIds
       setAdded(addedText(ids))
+      setAddedIds(ids.filter((id) => typeof id === 'string' && id.trim()))
       setAcceptOpen(false)
     } catch (err) {
       if (!mountedRef.current) return
@@ -404,6 +410,21 @@ export default function PlanPanel({
             </div>
           )}
 
+          {added && addedIds.length > 0 && typeof onSelectControlTarget === 'function' && (
+            <div className="plan-added-actions">
+              {addedIds.map((id) => (
+                <button
+                  type="button"
+                  className="plan-dispatch-btn"
+                  key={id}
+                  onClick={() => onSelectControlTarget({ tab: 'dispatch', briefId: id })}
+                >
+                  {`Dispatch ${id}`}
+                </button>
+              ))}
+            </div>
+          )}
+
           {rows.length === 0 ? (
             <div className="panel-state is-dim mono">The plan has no briefs.</div>
           ) : (
@@ -428,6 +449,7 @@ export default function PlanPanel({
                                 return next
                               })
                               setAdded(null)
+                              setAddedIds([])
                             }}
                           />
                           <span>Add</span>

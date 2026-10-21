@@ -2,6 +2,8 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { briefMarkdown, parsePlan, pathAllowed, planPrompt } from '../src/briefs/plan.js'
+import { profileFromBrief } from '../src/policy/profile.js'
+import { tierFor } from '../src/policy/route.js'
 
 const read = (name) => readFileSync(new URL(`../docs/agents/${name}`, import.meta.url), 'utf8')
 const lanes = JSON.parse(read('lanes.json'))
@@ -221,19 +223,31 @@ describe('parsePlan', () => {
 describe('briefMarkdown', () => {
   it('writes the line and adds the files when the text has none', () => {
     expect(briefMarkdown(good(), lanes)).toBe(
-      '**C7a. A plan (Hermes).** Do the thing. Files: `src/briefs/plan.js`.',
+      '**C7a. A plan (Hermes).** Do the thing. Tests in `tests/plan.test.js`. Files: `src/briefs/plan.js`, `tests/plan.test.js`, `docs/agents/CHANGELOG.md`.',
     )
   })
 
   it('keeps a Files: list that the text already has', () => {
     const brief = good({ text: 'Do it. Files: `src/a.js`.' })
-    expect(briefMarkdown(brief, lanes)).toBe('**C7a. A plan (Hermes).** Do it. Files: `src/a.js`.')
+    expect(briefMarkdown(brief, lanes)).toBe('**C7a. A plan (Hermes).** Do it. Files: `src/a.js`. Tests in `tests/plan.test.js`.')
+  })
+
+  it('names no test twice when the text already names it', () => {
+    const brief = good({ text: 'Do it. Tests in `tests/plan.test.js`.' })
+    expect(briefMarkdown(brief, lanes)).toBe(
+      '**C7a. A plan (Hermes).** Do it. Tests in `tests/plan.test.js`. Files: `src/briefs/plan.js`, `tests/plan.test.js`, `docs/agents/CHANGELOG.md`.',
+    )
+  })
+
+  it('routes a planned small brief as small once it is in TASKS.md', () => {
+    const [brief] = parseBriefs(briefMarkdown(good(), lanes))
+    expect(tierFor(profileFromBrief(brief))).toBe('small')
   })
 
   it('reads back through parseBriefs with the id, the title and the owner', () => {
     const [brief] = parseBriefs(briefMarkdown(good(), lanes))
     expect(brief).toMatchObject({ id: 'C7a', title: 'A plan', owners: ['hermes'] })
-    expect(brief.text).toBe('Do the thing. Files: `src/briefs/plan.js`.')
+    expect(brief.text).toBe('Do the thing. Tests in `tests/plan.test.js`. Files: `src/briefs/plan.js`, `tests/plan.test.js`, `docs/agents/CHANGELOG.md`.')
   })
 
   it('writes one line, so a blank line in the text cannot start a brief of its own', () => {
