@@ -50,17 +50,17 @@ const AGENT_DEFAULTS = { reasoningEffort: null, maxTurnsPerRun: null, timeoutSec
 const SAMPLE_BRIEFS = [
   '## Open work',
   '',
-  '**B6. Late join replay (OpenCode).** Let the event stream send the kept history to a viewer that connects without Last-Event-ID, behind a history query. Test it in tests/bridge.test.js.',
+  '**B6. Late join replay (OpenCode).** Let the event stream send the kept history to a viewer that connects without Last-Event-ID, behind a history query. Files: `server/index.js`, `tests/bridge.test.js`. Tests in `tests/bridge.test.js`.',
   '',
-  '**U4. Reject a foreign Host header in the bridge (OpenCode).** Answer 403 when the Host header is not localhost, 127.0.0.1 or [::1]. Add tests for each.',
+  '**U4. Reject a foreign Host header in the bridge (OpenCode).** Answer 403 when the Host header is not localhost, 127.0.0.1 or [::1]. Files: `server/index.js`, `tests/bridge-safety.test.js`. Add tests for each in `tests/bridge-safety.test.js`.',
   '',
-  '**C3e. HUD polish (AGY).** Move the assistant window above the transport bar and check the result by eye at two window sizes.',
+  '**C3e. HUD polish (AGY).** Move the assistant window above the transport bar and check the result by eye at two window sizes. Files: `src/ui/Assistant.jsx`, `tests/assistant-ui.test.js`. Tests in `tests/assistant-ui.test.js`.',
   '',
-  '**P5. Recover cut and redacted tool lines (Hermes).** Recover the tool name and path from a broken OpenCode log line, with tests.',
+  '**P5. Recover cut and redacted tool lines (Hermes).** Recover the tool name and path from a broken OpenCode log line. Files: `src/model/parsers/opencode.js`, `tests/parsers.test.js`. Tests in `tests/parsers.test.js`.',
   '',
-  '**M1. Exit test with a real Paperclip (Claude and the owner).** Create a task for Hermes from the drawer and read its comment in the thread.',
+  '**M1. Exit test with a real Paperclip (Claude and the owner).** Create a task for Hermes from the drawer and read its comment in the thread. Files: `src/ui/panels/DispatchPanel.jsx`, `src/ui/panels/IssueThread.jsx`, `src/control/client.js`, `tests/dispatch.test.js`. Tests in `tests/dispatch.test.js`.',
   '',
-  '**C2. Control client (OpenCode, merged as 0.1.34).** Make the contract real.',
+  '**C2. Control client (OpenCode, merged as 0.1.34).** Make the contract real. Files: `src/control/client.js`, `tests/control-contract.test.js`. Tests in `tests/control-contract.test.js`.',
 ].join('\n')
 
 const SAMPLE_LANES = {

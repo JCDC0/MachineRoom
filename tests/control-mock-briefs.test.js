@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
+import { profileFromBrief } from '../src/policy/profile.js'
+import { tierFor } from '../src/policy/route.js'
 
 const fast = () => createMockClient({ latencyMs: 0 })
 
@@ -12,6 +14,20 @@ describe('mock briefs', () => {
     }
     expect(briefs.find((brief) => brief.id === 'C2').done).toBe(true)
     expect(briefs.find((brief) => brief.id === 'M1').owners).toEqual(['claude'])
+  })
+
+  it('gives the sample briefs a small, a medium and a large tier', async () => {
+    const briefs = await fast().briefs()
+    const tiers = briefs.map((brief) => tierFor(profileFromBrief(brief)))
+    expect(tiers).toContain('small')
+    expect(tiers).toContain('medium')
+    expect(tiers).toContain('large')
+    for (const brief of briefs) {
+      const profile = profileFromBrief(brief)
+      expect(profile.clarity, brief.id).toBe('clear')
+      expect(profile.hasTests, brief.id).toBe(true)
+      expect(profile.files, brief.id).toBeGreaterThan(0)
+    }
   })
 
   it('builds the prompt for one brief and one lane', async () => {
