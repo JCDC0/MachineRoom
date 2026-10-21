@@ -48,6 +48,7 @@
     "history-audit": "node scripts/history-audit.mjs",
     "review-lane": "node scripts/review-lane.mjs",
     "bump": "node scripts/bump.mjs",
+    "fake-paperclip": "node scripts/fake-paperclip.mjs",
     "bridge": "node server/index.js",
     "serve": "node bin/machine-room.mjs"
   },
