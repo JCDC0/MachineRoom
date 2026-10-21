@@ -268,5 +268,5 @@ export function briefMarkdown(brief, lanes) {
   const files = listOf(brief?.files)
   const listed = files.length > 0 && !FILES_MARKER.test(text) ? `Files: ${files.map((file) => `\`${file}\``).join(', ')}.` : ''
   const body = [text, listed].filter(Boolean).join(' ')
-  return `**${id}. ${title} (${name}).** ${body}`.trim()
+  return `**${id}. ${title} (${name}).** ${body}`.replace(/\s+/g, ' ').trim()
 }

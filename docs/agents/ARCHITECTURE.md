@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.135. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.136. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -77,7 +77,7 @@ src/briefs/       parses the briefs in TASKS.md and builds the full prompt for a
 src/decider/      decision model seam: Decisions API wire shape, `decide()`, fixed questions, stats, baselines and the comparison runner (see DECIDER-EVAL.md; not used by the app yet)
 src/assistant/    request router: closed action list, rule based intent, key guard, model reply parser, and `dispatch.js` which runs a validated action against a host (the room, the HUD, the control client). Pure, tested; see CONTROL-PLANE.md
 src/ui/           React HUD: agents, transport with run markers, event log, mode switch, help
-  panels/           control drawer on `C`: dispatch, tasks and thread, approvals, meters, agents, reviews (read a lane's branch and diff, merge it after a confirm card) (uses only the control client)
+  panels/           control drawer on `C`: dispatch, tasks and thread, approvals, meters, agents, reviews (read a lane's branch and diff, merge it after a confirm card), plan (ask the planner, then add the ticked briefs to TASKS.md after a confirm card, never committed) (uses only the control client)
 src/live/         live mode: agent discovery, socket, bridge client, live player, simulated feed
 server/           the bridge: Paperclip frames, agent list and file tree for the browser, and the built viewer when started with staticDir (static.js)
 bin/              machine-room.mjs, the one-port command behind npm run serve, and its doctor and up subcommands (server/doctor.js)

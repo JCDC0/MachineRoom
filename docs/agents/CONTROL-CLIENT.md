@@ -33,6 +33,7 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `mergeReview(lane, { head, message })` | `MergeResult`, the new merge commit on `main`. It sends `confirmed: true`, so call it only after the user confirmed; `head` is the sha from `reviews()` (W3b; the mock merges a sample lane once) |
 | `askPlanner(goal)` | `{ issueId, identifier }`, the plan task it created for the agent with the role `pm`. It sends `confirmed: true`, so call it only after the user confirmed (C5b; the mock creates a sample plan task) |
 | `plan(issueId)` | `PlanAnswer`, the planner's answer, or `waiting` with empty lists while no comment from the planner holds a `{` (C5b; the mock answers one good brief and one problem) |
+| `acceptPlan(issueId, ids)` | `{ added }`, the ids of the briefs it added to `docs/agents/TASKS.md` in plan order. It sends `confirmed: true`, so call it only after the user confirmed (C5d; the mock adds the briefs to its own list) |
 | `decide({ state, questions, model? })` | `{ ok: true, model, answers, usage, ms, attempts }` from the decision model (D2; see `DECIDER-EVAL.md`). It rejects with `No key is set for the decision model.` when the bridge has no `OPENROUTER_API_KEY`, which is also what the mock always does |
 | `backupStatus()` | `BackupStatus`, the age of Paperclip's newest database backup (W2b) |
 | `backupNow()` | `BackupResult`. It asks Paperclip for a backup at once, so call it only after the user confirmed; it rejects with `A backup is already running.` while one runs (W2b) |

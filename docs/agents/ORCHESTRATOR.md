@@ -11,7 +11,7 @@ Before merging a branch that adds a route that writes (a merge, a backup, any wr
 - `main` is 0.1.134, and GitHub has it too (pushed 2026-10-22).
 - U8 had committed before the shutdown cut its run, so it was reviewed and merged as 0.1.124 (no run record, so no outcome line). AGY's cut M1a start (one uncommitted file) was cleared and its prompt written again.
 - AGY: C4c is merged (0.1.134). Next: **A5b** (cost board in the room); S2b is held. U7, U9, U6a and U10a moved to OpenCode at the owner's word, since AGY was slow and OpenCode's budget is larger. Write each prompt with `node scripts/agy-prompt.mjs ID --clean` and record each run with `npm run hand-run`.
-- S1 was recorded for Hermes and OpenCode on their CLIs (S1a in TASKS.md): a log names a child only after it ends, so S2a, S3a and S2b are held. P11 is merged. U7, U9, U6a and U10a are merged (0.1.129 to 0.1.132). OpenCode runs **C5d**, then **C4e**. Hermes's T18 is merged (0.1.135); Hermes has no open brief. C5c moved to OpenCode and is merged (0.1.133). The cloud session runs **P3c** (large project pass) from main once it is pushed.
+- S1 was recorded for Hermes and OpenCode on their CLIs (S1a in TASKS.md): a log names a child only after it ends, so S2a, S3a and S2b are held. P11 is merged. U7, U9, U6a and U10a are merged (0.1.129 to 0.1.132). C5d is merged (0.1.136); C4e waits for review. Hermes's T18 is merged (0.1.135); Hermes has no open brief. C5c moved to OpenCode and is merged (0.1.133). The cloud session runs **P3c** (large project pass) from main once it is pushed.
 - Last merges: V7b (0.1.120, grade B, 4 fixes), the cloud UI audit (0.1.121), U10 (0.1.122, A), U6 (0.1.123, A).
 
 ## Standing rules from the owner
@@ -84,6 +84,7 @@ The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts
 - CSS3D elements paint over the WebGL canvas unless the canvas sits on top with depth planes. Check depth by orbiting, not from the default angle.
 - The CSS3D renderer sets each element's `display` from its object's `visible` on every frame, so hide a CSS3D element with `object.visible`, never `style.display` (V7b's callouts never hid).
 - A chain of lane runs branches each run from main as it was when the run started, so a fix merged to main mid-chain reaches only the later runs, and an earlier run may fix the same thing its own way (U7 and `tests/plan.test.js`). Keep main's copy.
+- Text from a model that we write into a file we parse again must be one line. A planner brief whose text held a blank line and `**Z9. ... (Hermes).**` became a second brief in `TASKS.md` that `parsePlan` never checked (C5d); `briefMarkdown` now writes one line.
 - Run the brief tests after writing briefs: 0.1.85 shipped a red test because two briefs shared the id W3a.
 - Bash heredocs on this machine eat backslashes. Write files with a tool, not a heredoc, when they hold Windows paths.
 
