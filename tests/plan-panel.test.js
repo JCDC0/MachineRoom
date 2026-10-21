@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
 import ControlDrawer from '../src/ui/panels/ControlDrawer.jsx'
-import PlanPanel from '../src/ui/panels/PlanPanel.jsx'
+import PlanPanel, { addConfirmText, addedText } from '../src/ui/panels/PlanPanel.jsx'
 import { canAsk, copyNote, copyText, planRows } from '../src/ui/panels/plan.js'
 
 const BRIEF_ONE = {
@@ -32,6 +32,12 @@ const ANSWER = {
   status: 'ready',
   briefs: [BRIEF_ONE, BRIEF_TWO],
   problems: ['Brief C7b names no test.'],
+}
+
+const ONE_BRIEF_ANSWER = {
+  status: 'ready',
+  briefs: [BRIEF_ONE],
+  problems: [],
 }
 
 const LANES = {
@@ -96,6 +102,17 @@ describe('plan helpers', () => {
     expect(copyNote(1)).toBe('Copied 1 briefs. Paste them into TASKS.md and run the brief tests.')
     expect(copyNote(3)).toBe('Copied 3 briefs. Paste them into TASKS.md and run the brief tests.')
   })
+
+  it('addConfirmText names one or more briefs and the file, and addedText lists the ids', () => {
+    expect(addConfirmText(1)).toBe(
+      'Add 1 brief to docs/agents/TASKS.md? Lanes can run them after that. Nothing is committed.'
+    )
+    expect(addConfirmText(2)).toBe(
+      'Add 2 briefs to docs/agents/TASKS.md? Lanes can run them after that. Nothing is committed.'
+    )
+    expect(addedText(['C7a'])).toBe('Added C7a.')
+    expect(addedText(['C7a', 'C7b'])).toBe('Added C7a, C7b.')
+  })
 })
 
 describe('PlanPanel and ControlDrawer', () => {
@@ -155,6 +172,87 @@ describe('PlanPanel and ControlDrawer', () => {
     expect(html).toContain('Copy as Markdown')
     expect(html).toContain('Brief C7b names no test.')
     expect(html).toContain('class="plan-problem"')
+  })
+
+  it('gives every ready brief a ticked checkbox and an Add to TASKS.md button', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const created = await client.askPlanner('Plan the room work')
+    const answer = await client.plan(created.issueId)
+    const html = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialIssue: created,
+        initialAnswer: { ...answer, briefs: [BRIEF_ONE, BRIEF_TWO] },
+      })
+    )
+    expect((html.match(/type="checkbox"/g) ?? [])).toHaveLength(2)
+    expect((html.match(/checked=""/g) ?? [])).toHaveLength(2)
+    expect(html).toContain('Add to TASKS.md')
+    expect(html).not.toContain('>Add</button>')
+  })
+
+  it('turns the Add to TASKS.md button off when no brief is ticked', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const created = await client.askPlanner('Plan the room work')
+    const answer = await client.plan(created.issueId)
+    const html = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialIssue: created,
+        initialAnswer: { ...answer, briefs: [BRIEF_ONE, BRIEF_TWO] },
+        initialSelected: [],
+      })
+    )
+    expect((html.match(/checked=""/g) ?? [])).toHaveLength(0)
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Add to TASKS\.md<\/button>/)
+  })
+
+  it('reads the confirm sentence for one brief and for two briefs', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const one = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialAnswer: ONE_BRIEF_ANSWER,
+        initialAcceptOpen: true,
+      })
+    )
+    expect(one).toContain('Add 1 brief to docs/agents/TASKS.md? Lanes can run them after that. Nothing is committed.')
+
+    const two = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialAnswer: ANSWER,
+        initialAcceptOpen: true,
+      })
+    )
+    expect(two).toContain('Add 2 briefs to docs/agents/TASKS.md? Lanes can run them after that. Nothing is committed.')
+  })
+
+  it('shows the added line in a status line', () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const html = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialAnswer: ANSWER,
+        initialAdded: 'Added C7a, C7b.',
+      })
+    )
+    expect(html).toContain('class="plan-added mono"')
+    expect(html).toContain('Added C7a, C7b.')
+  })
+
+  it('shows an accept error in red', () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const html = renderToString(
+      createElement(PlanPanel, {
+        client,
+        initialAnswer: ANSWER,
+        initialAcceptOpen: true,
+        initialAcceptError: 'Brief C7b is not in the plan, or has a problem now.',
+      })
+    )
+    expect(html).toContain('class="plan-problem mono plan-accept-error"')
+    expect(html).toContain('Brief C7b is not in the plan, or has a problem now.')
   })
 
   it('adds the Plan tab to the control drawer when the client can ask the planner', () => {

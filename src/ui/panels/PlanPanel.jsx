@@ -4,6 +4,24 @@ import { subscribeToNotices } from './notices.js'
 
 const POLL_MS = 10000
 
+export function addConfirmText(count) {
+  const briefs = count === 1 ? '1 brief' : `${count} briefs`
+  return `Add ${briefs} to docs/agents/TASKS.md? Lanes can run them after that. Nothing is committed.`
+}
+
+export function addedText(ids) {
+  return `Added ${ids.join(', ')}.`
+}
+
+function selectionFor(rows, ids = null) {
+  const table = Object.create(null)
+  const wanted = Array.isArray(ids) ? ids : null
+  for (const row of rows) {
+    if (wanted === null || wanted.includes(row.id)) table[row.id] = true
+  }
+  return table
+}
+
 export default function PlanPanel({
   client,
   lanes = null,
@@ -11,6 +29,10 @@ export default function PlanPanel({
   initialIssue = null,
   initialAnswer = null,
   initialConfirmOpen = false,
+  initialAcceptOpen = false,
+  initialAdded = null,
+  initialAcceptError = null,
+  initialSelected = null,
 }) {
   const [goal, setGoal] = useState(initialGoal)
   const [confirmOpen, setConfirmOpen] = useState(initialConfirmOpen)
@@ -25,13 +47,24 @@ export default function PlanPanel({
   const [planError, setPlanError] = useState(null)
   const [routes, setRoutes] = useState({})
   const [copyMessage, setCopyMessage] = useState(null)
+  const [acceptOpen, setAcceptOpen] = useState(initialAcceptOpen)
+  const [accepting, setAccepting] = useState(false)
+  const [acceptError, setAcceptError] = useState(initialAcceptError)
+  const [added, setAdded] = useState(initialAdded)
 
   const mountedRef = useRef(false)
   const askRef = useRef(false)
   const planRef = useRef(false)
+  const acceptRef = useRef(false)
   const timerRef = useRef(null)
+  const selectionAnswerRef = useRef(answer)
 
   const rows = useMemo(() => planRows(answer, lanes), [answer, lanes])
+  const [selected, setSelected] = useState(() => selectionFor(rows, initialSelected))
+  const selectedIds = useMemo(
+    () => rows.filter((row) => Object.hasOwn(selected, row.id)).map((row) => row.id),
+    [rows, selected]
+  )
   const problems = useMemo(() => {
     const list = answer !== null && typeof answer === 'object' && Array.isArray(answer.problems) ? answer.problems : []
     return list.filter((problem) => typeof problem === 'string' && problem.trim()).map((problem) => problem.trim())
@@ -77,6 +110,12 @@ export default function PlanPanel({
       clearTimer()
     }
   }, [clearTimer])
+
+  useEffect(() => {
+    if (phase !== 'ready' || selectionAnswerRef.current === answer) return
+    selectionAnswerRef.current = answer
+    setSelected(selectionFor(rows))
+  }, [phase, answer, rows])
 
   useEffect(() => {
     if (!issue?.issueId || phase !== 'waiting' || typeof client?.plan !== 'function') return undefined
@@ -137,6 +176,11 @@ export default function PlanPanel({
     setIssue(null)
     setRoutes({})
     setCopyMessage(null)
+    setAcceptOpen(false)
+    setAcceptError(null)
+    setAdded(null)
+    setSelected(Object.create(null))
+    selectionAnswerRef.current = null
     setPhase('waiting')
     try {
       const created = await client.askPlanner(text)
@@ -168,6 +212,31 @@ export default function PlanPanel({
     }
   }
 
+  async function handleAccept() {
+    if (acceptRef.current || selectedIds.length === 0) return
+    if (!issue?.issueId || typeof client?.acceptPlan !== 'function') {
+      setAcceptError('The planner is not available.')
+      return
+    }
+    acceptRef.current = true
+    setAccepting(true)
+    setAcceptError(null)
+    setAdded(null)
+    try {
+      const result = await client.acceptPlan(issue.issueId, selectedIds)
+      if (!mountedRef.current) return
+      const ids = Array.isArray(result?.added) && result.added.length > 0 ? result.added : selectedIds
+      setAdded(addedText(ids))
+      setAcceptOpen(false)
+    } catch (err) {
+      if (!mountedRef.current) return
+      setAcceptError(err?.message || 'Could not add the briefs.')
+    } finally {
+      if (mountedRef.current) setAccepting(false)
+      acceptRef.current = false
+    }
+  }
+
   function routeLine(row) {
     const entry = Object.hasOwn(routes, row.id) ? routes[row.id] : null
     if (!entry) return { error: false, text: 'Reading the route.' }
@@ -179,6 +248,8 @@ export default function PlanPanel({
 
   const waiting = asking || phase === 'waiting'
   const askDisabled = !canAsk(goal) || waiting
+  const canAccept = typeof client?.acceptPlan === 'function'
+  const acceptDisabled = selectedIds.length === 0 || accepting
 
   return (
     <div className="plan-panel">
@@ -271,12 +342,67 @@ export default function PlanPanel({
         <div className="plan-result">
           <div className="plan-result-head">
             <span className="panel-count mono">{`${rows.length} ${rows.length === 1 ? 'brief' : 'briefs'}`}</span>
-            {rows.length > 0 && (
-              <button type="button" className="plan-copy-btn" onClick={handleCopy}>
-                Copy as Markdown
-              </button>
-            )}
+            <div className="plan-result-actions">
+              {canAccept && rows.length > 0 && (
+                <button
+                  type="button"
+                  className="plan-add-btn"
+                  disabled={acceptDisabled}
+                  onClick={() => {
+                    setAcceptOpen(true)
+                    setAcceptError(null)
+                  }}
+                >
+                  Add to TASKS.md
+                </button>
+              )}
+              {rows.length > 0 && (
+                <button type="button" className="plan-copy-btn" onClick={handleCopy}>
+                  Copy as Markdown
+                </button>
+              )}
+            </div>
           </div>
+
+          {acceptOpen && canAccept && (
+            <div className="brief-confirm-card plan-confirm-card" role="region" aria-label="Confirm adding the briefs">
+              <div className="brief-confirm-warning">
+                {addConfirmText(selectedIds.length)}
+              </div>
+              <div className="brief-confirm-actions">
+                <button
+                  type="button"
+                  className="brief-confirm-btn"
+                  disabled={accepting || selectedIds.length === 0}
+                  onClick={handleAccept}
+                >
+                  {accepting ? 'Adding' : 'Add'}
+                </button>
+                <button
+                  type="button"
+                  className="brief-cancel-btn"
+                  disabled={accepting}
+                  onClick={() => {
+                    setAcceptOpen(false)
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {acceptError && (
+            <div className="plan-problem mono plan-accept-error" role="alert">
+              {acceptError}
+            </div>
+          )}
+
+          {added && (
+            <div className="plan-added mono" role="status">
+              {added}
+            </div>
+          )}
 
           {rows.length === 0 ? (
             <div className="panel-state is-dim mono">The plan has no briefs.</div>
@@ -286,7 +412,28 @@ export default function PlanPanel({
                 const line = routeLine(row)
                 return (
                   <article className="plan-brief" key={row.id}>
-                    <h3 className="plan-brief-heading">{row.heading}</h3>
+                    <div className="plan-brief-head">
+                      <h3 className="plan-brief-heading">{row.heading}</h3>
+                      {canAccept && (
+                        <label className="plan-brief-check">
+                          <input
+                            type="checkbox"
+                            aria-label={`Add ${row.id} to TASKS.md`}
+                            checked={Object.hasOwn(selected, row.id)}
+                            onChange={() => {
+                              setSelected((current) => {
+                                const next = { ...current }
+                                if (Object.hasOwn(next, row.id)) delete next[row.id]
+                                else next[row.id] = true
+                                return next
+                              })
+                              setAdded(null)
+                            }}
+                          />
+                          <span>Add</span>
+                        </label>
+                      )}
+                    </div>
                     <div className="plan-brief-meta mono">
                       <span>{`Size: ${row.size || 'unknown'}`}</span>
                       <span>{`Files: ${row.files.length > 0 ? row.files.join(', ') : 'none'}`}</span>

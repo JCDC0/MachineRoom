@@ -1,6 +1,6 @@
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
-import { planPrompt } from '../briefs/plan.js'
+import { briefMarkdown, planPrompt } from '../briefs/plan.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
 import { chooseRoute } from '../policy/route.js'
 import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
@@ -30,6 +30,7 @@ export const CLIENT_METHODS = [
   'mergeReview',
   'askPlanner',
   'plan',
+  'acceptPlan',
   'decide',
   'backupStatus',
   'backupNow',
@@ -277,6 +278,7 @@ function seed(at) {
 export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now = Date.now, requireApproval = true } = {}) {
   const state = seed(now())
   state.agents = state.agents.map((agent) => ({ ...AGENT_DEFAULTS, ...agent }))
+  let briefsText = SAMPLE_BRIEFS
   let approvalCounter = 3
   const failures = new Map()
   let issueCounter = 22
@@ -450,11 +452,11 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         })
       }),
 
-    briefs: () => call('briefs', () => parseBriefs(SAMPLE_BRIEFS)),
+    briefs: () => call('briefs', () => parseBriefs(briefsText)),
 
     briefPrompt: (ids, lane) =>
       call('briefPrompt', () => {
-        const all = parseBriefs(SAMPLE_BRIEFS)
+        const all = parseBriefs(briefsText)
         const picked = (ids ?? []).map((id) => all.find((brief) => brief.id === id))
         if (picked.length === 0 || picked.some((brief) => !brief)) throw new Error('Choose a brief from the list.')
         if (!Object.hasOwn(SAMPLE_LANES, lane)) throw new Error('Choose hermes, opencode or agy.')
@@ -484,7 +486,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!info || typeof info !== 'object') throw new Error('Choose a lane from the list.')
         if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
         if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 5) throw new Error('Choose one to five briefs.')
-        const known = new Set(parseBriefs(SAMPLE_BRIEFS).map((brief) => brief.id))
+        const known = new Set(parseBriefs(briefsText).map((brief) => brief.id))
         if (briefs.some((id) => typeof id !== 'string' || !RUN_ID.test(id) || !known.has(id))) throw new Error('Choose a brief from the list.')
         if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
@@ -567,7 +569,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           id: `issue-${issueCounter}`,
           identifier: `JC-${issueCounter}`,
           title: `Plan: ${text.slice(0, 60)}`,
-          description: planPrompt({ goal: text, lanes: SAMPLE_LANES, rules: SAMPLE_RULES, ids: parseBriefs(SAMPLE_BRIEFS) }),
+          description: planPrompt({ goal: text, lanes: SAMPLE_LANES, rules: SAMPLE_RULES, ids: parseBriefs(briefsText) }),
           status: 'todo',
           priority: 'medium',
           assigneeAgentId: null,
@@ -585,6 +587,33 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('plan', () => {
         if (!state.issues.some((issue) => issue.id === issueId)) throw new Error('That task no longer exists.')
         return SAMPLE_PLAN
+      }),
+
+    acceptPlan: (issueId, ids) =>
+      call('acceptPlan', () => {
+        if (!state.issues.some((issue) => issue.id === issueId)) throw new Error('That task no longer exists.')
+        if (!Array.isArray(ids) || ids.length < 1 || ids.length > 8 || ids.some((id) => typeof id !== 'string' || !id.trim())) {
+          throw new Error('Choose 1 to 8 briefs.')
+        }
+        const clean = ids.map((id) => id.trim())
+        const chosen = Object.create(null)
+        for (const id of clean) chosen[id] = true
+        const planned = Object.create(null)
+        for (const brief of SAMPLE_PLAN.briefs) planned[brief.id] = true
+        const known = Object.create(null)
+        for (const brief of parseBriefs(briefsText)) known[brief.id] = true
+        const missing = clean.find((id) => !Object.hasOwn(planned, id) || Object.hasOwn(known, id))
+        if (missing) throw new Error(`Brief ${missing} is not in the plan, or has a problem now.`)
+        const selected = SAMPLE_PLAN.briefs.filter((brief) => Object.hasOwn(chosen, brief.id))
+        if (selected.length > 0) {
+          const heading = /^## Briefs from the planner[ \t]*\r?$/m.test(briefsText)
+          let base = briefsText
+          if (!base.endsWith('\n')) base += '\n'
+          if (!base.endsWith('\n\n')) base += '\n'
+          const lines = selected.map((brief) => briefMarkdown(brief, SAMPLE_LANES))
+          briefsText = `${base}${heading ? '' : '## Briefs from the planner\n\n'}${lines.join('\n\n')}\n`
+        }
+        return { added: selected.map((brief) => brief.id) }
       }),
 
     decide: ({ questions } = {}) =>

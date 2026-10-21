@@ -1,4 +1,4 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -49,6 +49,22 @@ const GOOD_PLAN = {
       files: ['server/plans.js'],
       tests: ['tests/plans.test.js'],
       text: 'Add the plan route in the bridge with tests.',
+      dependsOn: [],
+    },
+  ],
+}
+
+const TWO_BRIEFS_PLAN = {
+  briefs: [
+    GOOD_PLAN.briefs[0],
+    {
+      id: 'C7b',
+      title: 'Plan the room work',
+      owner: 'opencode',
+      size: 'medium',
+      files: ['server/plans.js'],
+      tests: ['tests/plans.test.js'],
+      text: 'Plan the room work in the drawer with tests.',
       dependsOn: [],
     },
   ],
@@ -178,28 +194,35 @@ afterEach(async () => {
   }
 })
 
-function writeDocs() {
+function writeDocs(tasks = SAMPLE_TASKS_MD) {
   const root = makeTempDir('mr-plans-')
   cleanups.push(() => rmSync(root, { recursive: true, force: true }))
   mkdirSync(join(root, 'docs', 'agents'), { recursive: true })
-  writeFileSync(join(root, 'docs', 'agents', 'TASKS.md'), SAMPLE_TASKS_MD)
+  writeFileSync(join(root, 'docs', 'agents', 'TASKS.md'), tasks)
   writeFileSync(join(root, 'docs', 'agents', 'HOUSE-RULES.md'), SAMPLE_HOUSE_RULES_MD)
   writeFileSync(join(root, 'docs', 'agents', 'lanes.json'), JSON.stringify(SAMPLE_LANES))
   return root
 }
 
-async function setup(fakeOptions = {}) {
+function writeEmptyRoot() {
+  const root = makeTempDir('mr-plans-empty-')
+  cleanups.push(() => rmSync(root, { recursive: true, force: true }))
+  return root
+}
+
+async function setup(fakeOptions = {}, { briefs = true, tasks = SAMPLE_TASKS_MD } = {}) {
   const fake = await startFakePlanner(fakeOptions)
   cleanups.push(() => fake.close())
+  const root = briefs ? writeDocs(tasks) : writeEmptyRoot()
   const bridge = createBridge({
     paperclipUrl: fake.url,
     companyId: 'comp-1',
-    projectRoot: writeDocs(),
+    projectRoot: root,
     port: 0,
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  return { url, fake }
+  return { url, fake, root, tasksPath: join(root, 'docs', 'agents', 'TASKS.md') }
 }
 
 async function postPlan(url, body) {
@@ -214,6 +237,21 @@ async function postPlan(url, body) {
 async function getPlan(url, issueId) {
   const response = await fetch(`${url}/api/control/plans/${encodeURIComponent(issueId)}`)
   return { status: response.status, body: await response.json() }
+}
+
+async function acceptPlan(url, issueId, body) {
+  const response = await fetch(`${url}/api/control/plans/${encodeURIComponent(issueId)}/accept`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  return { status: response.status, body: await response.json() }
+}
+
+async function createReadyPlan(url, fake, plan = GOOD_PLAN) {
+  const created = await postPlan(url, { goal: 'Plan the next work', confirmed: true })
+  fake.addComment(created.body.issueId, PLANNER.id, JSON.stringify(plan))
+  return created.body.issueId
 }
 
 async function waitUntil(fn, timeoutMs = 3000) {
@@ -346,7 +384,141 @@ describe('plans routes', () => {
     expect(answer.body).toEqual({ error: 'That task no longer exists.' })
   })
 
-  it('turns both routes off when Paperclip no longer has the tasks routes', async () => {
+  it('refuses an accept that was not confirmed or with bad ids and writes nothing', async () => {
+    const { url, fake, tasksPath } = await setup()
+    const issueId = await createReadyPlan(url, fake)
+    const before = readFileSync(tasksPath, 'utf8')
+
+    for (const confirmed of [false, undefined, 'yes', 1]) {
+      const answer = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed })
+      expect(answer.status, String(confirmed)).toBe(400)
+      expect(answer.body).toEqual({ error: 'Confirm adding the briefs first.' })
+    }
+
+    const badIds = [
+      undefined,
+      [],
+      'C7a',
+      {},
+      [1],
+      [''],
+      ['   '],
+      ['C7a', 'C7b', 'C7c', 'C7d', 'C7e', 'C7f', 'C7g', 'C7h', 'C7i'],
+    ]
+    for (const ids of badIds) {
+      const answer = await acceptPlan(url, issueId, { ids, confirmed: true })
+      expect(answer.status, JSON.stringify(ids)).toBe(400)
+      expect(answer.body).toEqual({ error: 'Choose 1 to 8 briefs.' })
+    }
+    expect(readFileSync(tasksPath, 'utf8')).toBe(before)
+  })
+
+  it('refuses an accept when the bridge has no briefs folder', async () => {
+    const { url } = await setup({}, { briefs: false })
+    const answer = await acceptPlan(url, 'issue-1', { ids: ['C7a'], confirmed: true })
+    expect(answer.status).toBe(404)
+    expect(answer.body).toEqual({ error: 'The bridge has no briefs folder.' })
+  })
+
+  it('refuses an accept while the plan is still waiting and writes nothing', async () => {
+    const { url, tasksPath } = await setup()
+    const created = await postPlan(url, { goal: 'Plan the next work', confirmed: true })
+    const before = readFileSync(tasksPath, 'utf8')
+    const answer = await acceptPlan(url, created.body.issueId, { ids: ['C7a'], confirmed: true })
+    expect(answer.status).toBe(409)
+    expect(answer.body).toEqual({ error: 'The plan is not ready.' })
+    expect(readFileSync(tasksPath, 'utf8')).toBe(before)
+  })
+
+  it('refuses an id that is not in the plan or has a problem now and writes nothing', async () => {
+    const { url, fake, tasksPath } = await setup()
+    const issueId = await createReadyPlan(url, fake)
+    const before = readFileSync(tasksPath, 'utf8')
+
+    const missing = await acceptPlan(url, issueId, { ids: ['C7b'], confirmed: true })
+    expect(missing.status).toBe(400)
+    expect(missing.body).toEqual({ error: 'Brief C7b is not in the plan, or has a problem now.' })
+
+    const second = await acceptPlan(url, issueId, { ids: ['C7a', 'C7b'], confirmed: true })
+    expect(second.status).toBe(400)
+    expect(second.body).toEqual({ error: 'Brief C7b is not in the plan, or has a problem now.' })
+    expect(readFileSync(tasksPath, 'utf8')).toBe(before)
+
+    const brokenPlan = {
+      briefs: [
+        GOOD_PLAN.briefs[0],
+        {
+          ...GOOD_PLAN.briefs[0],
+          id: 'C7c',
+          title: 'Broken brief',
+          tests: [],
+        },
+      ],
+    }
+    const brokenIssue = await createReadyPlan(url, fake, brokenPlan)
+    const broken = await acceptPlan(url, brokenIssue, { ids: ['C7c'], confirmed: true })
+    expect(broken.status).toBe(400)
+    expect(broken.body).toEqual({ error: 'Brief C7c is not in the plan, or has a problem now.' })
+    expect(readFileSync(tasksPath, 'utf8')).toBe(before)
+  })
+
+  it('adds two chosen briefs in plan order under one new heading', async () => {
+    const { url, fake, tasksPath } = await setup()
+    const issueId = await createReadyPlan(url, fake, TWO_BRIEFS_PLAN)
+    const before = readFileSync(tasksPath, 'utf8')
+    const answer = await acceptPlan(url, issueId, { ids: ['C7b', 'C7a'], confirmed: true })
+    expect(answer.status).toBe(201)
+    expect(answer.body).toEqual({ added: ['C7a', 'C7b'] })
+
+    const after = readFileSync(tasksPath, 'utf8')
+    expect(after.startsWith(before)).toBe(true)
+    expect((after.match(/^## Briefs from the planner[ \t]*\r?$/gm) ?? [])).toHaveLength(1)
+    expect(after).toContain('## Briefs from the planner\n\n**C7a. Add the plan route (OpenCode).**')
+    expect(after).toContain('\n\n**C7b. Plan the room work (OpenCode).**')
+    expect(after.indexOf('**C7a.')).toBeLessThan(after.indexOf('**C7b.'))
+    expect(after).toContain('Files: `server/plans.js`.')
+  })
+
+  it('keeps one heading when a second accept adds another brief, and refuses an id taken since the plan was read', async () => {
+    const { url, fake, tasksPath } = await setup()
+    const issueId = await createReadyPlan(url, fake, TWO_BRIEFS_PLAN)
+
+    const first = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true })
+    expect(first.status).toBe(201)
+    expect(first.body).toEqual({ added: ['C7a'] })
+    const afterFirst = readFileSync(tasksPath, 'utf8')
+
+    const second = await acceptPlan(url, issueId, { ids: ['C7b'], confirmed: true })
+    expect(second.status).toBe(201)
+    expect(second.body).toEqual({ added: ['C7b'] })
+    const afterSecond = readFileSync(tasksPath, 'utf8')
+    expect((afterSecond.match(/^## Briefs from the planner[ \t]*\r?$/gm) ?? [])).toHaveLength(1)
+    expect((afterSecond.match(/\*\*C7a\./g) ?? [])).toHaveLength(1)
+    expect((afterSecond.match(/\*\*C7b\./g) ?? [])).toHaveLength(1)
+
+    const taken = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true })
+    expect(taken.status).toBe(400)
+    expect(taken.body).toEqual({ error: 'Brief C7a is not in the plan, or has a problem now.' })
+    expect(readFileSync(tasksPath, 'utf8')).toBe(afterSecond)
+    expect(afterFirst.length).toBeLessThan(afterSecond.length)
+  })
+
+  it('keeps the line endings of TASKS.md when it adds the briefs', async () => {
+    const crlfTasks = SAMPLE_TASKS_MD.split('\n').join('\r\n')
+    const { url, fake, tasksPath } = await setup({}, { tasks: crlfTasks })
+    const issueId = await createReadyPlan(url, fake)
+    const before = readFileSync(tasksPath, 'utf8')
+    expect(before).toContain('\r\n')
+
+    const answer = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true })
+    expect(answer.status).toBe(201)
+    const after = readFileSync(tasksPath, 'utf8')
+    expect(after.startsWith(before)).toBe(true)
+    expect(after.replace(/\r\n/g, '')).not.toContain('\n')
+    expect(after).toContain('## Briefs from the planner\r\n\r\n**C7a.')
+  })
+
+  it('turns the plan routes off when Paperclip no longer has the tasks routes', async () => {
     const { url } = await setup({ openapi: { openapi: '3.0.0', info: { version: 'test' }, paths: {} } })
     await waitUntil(async () => {
       const health = await fetch(`${url}/api/health`).then((response) => response.json())
@@ -358,5 +530,8 @@ describe('plans routes', () => {
     const get = await getPlan(url, 'issue-1')
     expect(get.status).toBe(503)
     expect(get.body.error).toContain('tasks is off')
+    const accept = await acceptPlan(url, 'issue-1', { ids: ['C7a'], confirmed: true })
+    expect(accept.status).toBe(503)
+    expect(accept.body.error).toContain('tasks is off')
   })
 })

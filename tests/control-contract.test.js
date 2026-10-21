@@ -443,6 +443,7 @@ function startFakeControlPaperclip(companyId = 'comp-1', { requireApproval = tru
       const { port } = server.address()
       resolve({
         url: `http://127.0.0.1:${port}`,
+        state,
         createdIssues,
         createdHires,
         agentPatches,
@@ -1091,6 +1092,51 @@ function runContractSuite(label, makeHarness) {
       } else {
         expect(answer.briefs.length + answer.problems.length).toBeGreaterThan(0)
       }
+    })
+
+    it('adds the plan briefs it accepted to the brief list', async () => {
+      const harness = await makeHarness()
+      const { client } = harness
+      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local', role: 'pm' })
+      if (approval) await client.decideApproval(approval.id, 'approve')
+      const created = await client.askPlanner('Split the notes work into briefs with tests.')
+
+      if (harness.fake) {
+        harness.fake.state.comments[created.issueId] = [
+          {
+            id: 'comment-plan',
+            issueId: created.issueId,
+            authorAgentId: agent.id,
+            body: JSON.stringify({
+              briefs: [
+                {
+                  id: 'C8a',
+                  title: 'Write the notes',
+                  owner: 'opencode',
+                  size: 'small',
+                  files: ['notes.txt'],
+                  tests: ['tests/notes.test.js'],
+                  text: 'Write the notes in the repository with tests.',
+                  dependsOn: [],
+                },
+              ],
+            }),
+            createdAt: new Date(BASE_TIME).toISOString(),
+          },
+        ]
+      }
+
+      const answer = await client.plan(created.issueId)
+      expect(answer.status).toBe('ready')
+      const ids = answer.briefs.map((brief) => brief.id)
+      expect(ids.length).toBeGreaterThan(0)
+      const added = await client.acceptPlan(created.issueId, ids)
+      expect(added).toEqual({ added: ids })
+      const briefs = await client.briefs()
+      expect(briefs.some((brief) => brief.id === ids[0])).toBe(true)
+      await expect(client.acceptPlan(created.issueId, ids)).rejects.toThrow(
+        `Brief ${ids[0]} is not in the plan, or has a problem now.`
+      )
     })
   })
 }

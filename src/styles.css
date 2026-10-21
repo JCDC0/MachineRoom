@@ -2118,11 +2118,35 @@ summary:focus-visible,
   gap: var(--space);
 }
 
-.plan-copy-btn {
+.plan-result-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+}
+
+.plan-copy-btn,
+.plan-add-btn {
   padding: 2px var(--space);
   font-size: 11px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+}
+
+.plan-add-btn {
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+}
+
+.plan-add-btn:hover:not(:disabled) {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.18);
+}
+
+.plan-added {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--green);
 }
 
 .plan-briefs {
@@ -2141,6 +2165,13 @@ summary:focus-visible,
   background: var(--corner-ticks), rgb(0 0 0 / 0.6);
 }
 
+.plan-brief-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
 .plan-brief-heading {
   margin: 0;
   font-family: var(--sans);
@@ -2148,6 +2179,25 @@ summary:focus-visible,
   font-weight: 500;
   line-height: 1.35;
   color: var(--white);
+}
+
+.plan-brief-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--yellow);
+}
+
+.plan-brief-check input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--yellow);
 }
 
 .plan-brief-meta {
