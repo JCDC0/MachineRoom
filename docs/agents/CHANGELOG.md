@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Send the file list in a folder shape (task P3d): `packTree` in `server/index.js` names each folder once as its parent and its name and each file as a run of names in its folder, in the list's own order, and falls back to the list of paths when a path would not read back the same. `GET /api/tree` uses it when the page sends `Accept: application/json; shape=folders`, and the first `tree` event uses it for a page that opens `/events?tree=folders`; later events stay a short list of paths. `readFileList` in the new `src/live/tree.js` reads both shapes for `discoverBridge`, the `tree` event and `loadTree`, refuses anything else with a sentence and never throws, so a page and a bridge of different versions still agree. Tests in `tests/tree-format.test.js`.
 - Review note on V8: no fixes.
 - Brief P3d (a smaller file list, for the cloud session).
 - Review note on P3c (Claude in the cloud): no fixes. On Windows, `npm run scale-probe -- --replay` gives identical digests on main and on the merge for all 68 replays (5 fixtures and 63 recordings); the probe passes every budget but the first tree event (2.4 MB), with the warm layout at 13.8 ms; the full suite passed twice while a lane ran its own. The planCollapse shortcut was compared with the old code on odd paths (trailing slash, `./`, leading slash, `..`, a space) and matches.

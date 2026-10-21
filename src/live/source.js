@@ -1,5 +1,6 @@
 import { basename } from '../model/paths.js'
 import { AGENT_ORDER } from '../model/pipeline.js'
+import { FOLDER_SHAPE_ACCEPT, readFileList } from './tree.js'
 
 const BACKOFF_START = 1000
 const BACKOFF_LIMIT = 15000
@@ -46,8 +47,8 @@ export function rootNameOf(rawAgents, override) {
   return folders.length > 0 ? basename(folders[0]) : 'project'
 }
 
-async function getJson(fetchImpl, url) {
-  const response = await fetchImpl(url)
+async function getJson(fetchImpl, url, init) {
+  const response = await fetchImpl(url, init)
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
   return response.json()
 }
@@ -64,8 +65,9 @@ export async function discover({ base, companyId, root, fetchImpl = fetch }) {
 }
 
 export async function loadTree(url, fetchImpl = fetch) {
-  const data = await getJson(fetchImpl, `${url}/api/tree`)
-  return { root: data.root, files: data.files }
+  const list = readFileList(await getJson(fetchImpl, `${url}/api/tree`, { headers: { Accept: FOLDER_SHAPE_ACCEPT } }))
+  if (list.error) throw new Error(list.error)
+  return list
 }
 
 export function socketUrl(base, companyId) {

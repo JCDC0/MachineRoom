@@ -136,10 +136,51 @@ export function readTree(projectRoot, { listDir = readdirSync } = {}) {
   }
 }
 
-export function treeEvent(tree, sent = null) {
-  const known = sent ? new Set(sent) : null
-  const files = known ? tree.files.filter((file) => !known.has(file)) : tree.files
-  if (known && files.length === 0) return ''
+export const FOLDER_SHAPE = 'folders'
+
+function joinPath(folder, name) {
+  return folder === '' ? name : `${folder}/${name}`
+}
+
+function splitPath(path) {
+  const at = path.lastIndexOf('/')
+  return { folder: at === -1 ? '' : path.slice(0, at), name: path.slice(at + 1) }
+}
+
+export function packTree(tree) {
+  const paths = { root: tree.root, files: tree.files }
+  const ids = new Map([['', 0]])
+  const folders = []
+  const runs = []
+  const folderId = (path) => {
+    if (ids.has(path)) return ids.get(path)
+    const { folder, name } = splitPath(path)
+    const parent = folderId(folder)
+    if (parent === null || joinPath(folder, name) !== path) return null
+    folders.push([parent, name])
+    ids.set(path, folders.length)
+    return folders.length
+  }
+  for (const file of tree.files) {
+    if (typeof file !== 'string') return paths
+    const { folder, name } = splitPath(file)
+    const id = folderId(folder)
+    if (id === null || joinPath(folder, name) !== file) return paths
+    const last = runs.at(-1)
+    if (last && last[0] === id) last.push(name)
+    else runs.push([id, name])
+  }
+  return { root: tree.root, shape: FOLDER_SHAPE, folders, files: runs }
+}
+
+export function treeEvent(tree, sent = null, shape = null) {
+  if (!sent) {
+    const body = shape === FOLDER_SHAPE ? packTree(tree) : { root: tree.root, files: tree.files }
+    return `event: tree\ndata: ${JSON.stringify(body)}\n\n`
+  }
+  const known = new Set(sent)
+  const files = tree.files.filter((file) => !known.has(file))
+  if (files.length === 0) return ''
   return `event: tree\ndata: ${JSON.stringify({ root: tree.root, files })}\n\n`
 }
 
@@ -354,6 +395,7 @@ export function createBridge(options = {}) {
 
   const clients = new Set()
   const treeSent = new WeakMap()
+  const folderClients = new WeakSet()
   const history = []
   let nextId = 0
   let socket = null
@@ -397,9 +439,11 @@ export function createBridge(options = {}) {
     const events = new Map()
     for (const client of clients) {
       const sent = treeSent.get(client) ?? null
-      if (!events.has(sent)) events.set(sent, treeEvent(current, sent))
+      const shape = folderClients.has(client) ? FOLDER_SHAPE : null
+      const key = sent ?? shape
+      if (!events.has(key)) events.set(key, treeEvent(current, sent, shape))
       treeSent.set(client, current.files)
-      if (events.get(sent)) client.write(events.get(sent))
+      if (events.get(key)) client.write(events.get(key))
     }
   }
 
@@ -871,7 +915,9 @@ export function createBridge(options = {}) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/tree') {
-      sendJson(req, res, 200, readTree(projectRoot))
+      const tree = readTree(projectRoot)
+      const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
+      sendJson(req, res, 200, wantsFolders ? { ...packTree(tree), created: tree.created } : tree)
       return
     }
 
@@ -905,6 +951,7 @@ export function createBridge(options = {}) {
       }
 
       clients.add(res)
+      if (url.searchParams.get('tree') === FOLDER_SHAPE) folderClients.add(res)
       req.on('close', () => {
         clients.delete(res)
       })
