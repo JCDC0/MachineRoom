@@ -828,6 +828,10 @@ function runContractSuite(label, makeHarness) {
       const models = await client.models()
       expect(new Set(models.map((model) => model.tier))).toEqual(new Set(['small', 'medium', 'large']))
       expect(models.filter((model) => model.free).map((model) => model.id)).toContain('opencode/deepseek-v4.1-flash-free')
+      expect(models.filter((model) => model.id.includes('deepseek-v4.1-flash') && !model.free)).toEqual([
+        { id: 'deepseek/deepseek-v4.1-flash-1017', label: 'DeepSeek v4.1 Flash (OpenRouter)', harness: 'hermes', tier: 'medium', free: false },
+        { id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek v4.1 Flash (Go)', harness: 'opencode', tier: 'medium', free: false },
+      ])
     })
 
     it('suggests a route from the policy and refuses a bad profile or failure count', async () => {

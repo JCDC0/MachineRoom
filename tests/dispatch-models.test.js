@@ -1,6 +1,7 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
+import { MODELS } from '../server/models.js'
 import { createMockClient } from '../src/control/mock.js'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import {
@@ -64,6 +65,15 @@ describe('modelsFor', () => {
 
     const listWhitespace = modelsFor('   ', SAMPLE_MODELS)
     expect(listWhitespace).toEqual([{ id: '', label: 'Default model' }])
+  })
+
+  it('offers the models the Hermes and OpenCode lanes run, each to its own harness only', () => {
+    const hermes = modelsFor({ adapterType: 'hermes_local', model: null }, MODELS).map((item) => item.id)
+    const opencode = modelsFor({ adapterType: 'opencode_local', model: null }, MODELS).map((item) => item.id)
+    expect(hermes).toEqual(['', 'xiaomi/mimo-v2.6-pro', 'deepseek/deepseek-v4.1-flash-1017'])
+    expect(opencode).toContain('opencode-go/deepseek-v4.1-flash')
+    expect(opencode).not.toContain('deepseek/deepseek-v4.1-flash-1017')
+    expect(hermes).not.toContain('opencode-go/deepseek-v4.1-flash')
   })
 
   it('lists only claude models for claude_local', () => {
