@@ -2324,6 +2324,78 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.5);
 }
 
+.dispatch-route-row {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 0.5);
+}
+
+.dispatch-route-card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 0.75);
+  padding: var(--space) calc(var(--space) * 1.25);
+  border: 1px solid var(--line);
+  background: rgb(0 0 0 / 0.4);
+}
+
+.dispatch-route-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.dispatch-route-reason {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.9);
+}
+
+.dispatch-route-error {
+  padding: var(--space) calc(var(--space) * 1.25);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--red);
+  border: 1px solid rgb(255 42 42 / 0.4);
+  background: rgb(255 42 42 / 0.08);
+}
+
+.dispatch-route-state {
+  padding: var(--space) calc(var(--space) * 1.25);
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.6);
+  border: 1px solid var(--line);
+  background: rgb(0 0 0 / 0.4);
+}
+
+.dispatch-route-note {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--yellow);
+}
+
+.dispatch-route-use-btn {
+  padding: calc(var(--space) * 0.5) var(--space);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.dispatch-route-use-btn:hover:not(:disabled) {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.18);
+}
+
 .tasks-list {
   display: flex;
   flex-direction: column;
