@@ -1,7 +1,21 @@
+export const MOVED_BRANCH_ERROR = 'The branch moved since you read the diff. Open it again.'
+
 export function canMerge(review) {
   if (!review || typeof review !== 'object' || review.error) return false
   if (review.dirty) return false
   return typeof review.ahead === 'number' && Number.isFinite(review.ahead) && review.ahead > 0
+}
+
+export function mergeHead(row, diff) {
+  const rowHead = typeof row?.head === 'string' ? row.head : ''
+  if (!diff || typeof diff !== 'object') return { head: rowHead }
+  const diffLane = typeof diff.lane === 'string' ? diff.lane : ''
+  const rowLane = typeof row?.lane === 'string' ? row.lane : ''
+  if (!diffLane || diffLane !== rowLane) return { head: rowHead }
+  const diffHead = typeof diff.head === 'string' ? diff.head : ''
+  if (!diffHead) return { head: rowHead }
+  if (diffHead !== rowHead) return { error: MOVED_BRANCH_ERROR }
+  return { head: diffHead }
 }
 
 export function defaultMergeMessage(review) {

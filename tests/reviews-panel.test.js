@@ -3,13 +3,16 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
 import ControlDrawer from '../src/ui/panels/ControlDrawer.jsx'
-import ReviewsPanel from '../src/ui/panels/ReviewsPanel.jsx'
+import ReviewsPanel, { MergeConfirmCard } from '../src/ui/panels/ReviewsPanel.jsx'
 import {
   canMerge,
   defaultMergeMessage,
+  mergeHead,
   patchLines,
   reviewRow,
 } from '../src/ui/panels/reviews.js'
+
+const MOVED_BRANCH_ERROR = 'The branch moved since you read the diff. Open it again.'
 
 describe('reviews helpers', () => {
   it('canMerge allows only a clean lane with commits ahead and no error', () => {
@@ -95,6 +98,49 @@ describe('reviews helpers', () => {
     })
   })
 
+  it('mergeHead keeps the list head with no diff and when the diff is for another lane', () => {
+    const row = reviewRow({
+      lane: 'hermes',
+      branch: 'feat/p5-recover-cut-tool-lines',
+      head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
+      ahead: 2,
+      dirty: false,
+    })
+
+    expect(mergeHead(row, null)).toEqual({ head: row.head })
+    expect(mergeHead(row, undefined)).toEqual({ head: row.head })
+    expect(
+      mergeHead(row, {
+        lane: 'opencode',
+        head: '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c',
+      })
+    ).toEqual({ head: row.head })
+  })
+
+  it('mergeHead answers the diff head when it matches and says so when the branch moved', () => {
+    const row = reviewRow({
+      lane: 'hermes',
+      branch: 'feat/p5-recover-cut-tool-lines',
+      head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
+      ahead: 2,
+      dirty: false,
+    })
+
+    expect(
+      mergeHead(row, {
+        lane: 'hermes',
+        head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
+      })
+    ).toEqual({ head: row.head })
+
+    expect(
+      mergeHead(row, {
+        lane: 'hermes',
+        head: '9f8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c',
+      })
+    ).toEqual({ error: MOVED_BRANCH_ERROR })
+  })
+
   it('patchLines tags file, hunk, added, removed and context lines', () => {
     const patch = [
       'diff --git a/src/a.js b/src/a.js',
@@ -134,6 +180,40 @@ describe('ReviewsPanel and ControlDrawer', () => {
     expect(drawerHtml).toContain('id="tab-reviews"')
     expect(drawerHtml).toContain('<span>Reviews</span>')
     expect(drawerHtml).toContain('<span class="panel-count mono">Reviews</span>')
+  })
+
+  it('renders the confirm card with the short head from the diff', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const reviews = await client.reviews()
+    const review = reviews.find((item) => item.lane === 'hermes')
+    const row = reviewRow(review)
+    const diff = await client.reviewDiff('hermes')
+    const picked = mergeHead(row, diff)
+
+    expect(picked.head).toBe(diff.head)
+
+    const html = renderToString(
+      createElement(MergeConfirmCard, {
+        target: {
+          lane: row.lane,
+          branch: row.branch,
+          head: picked.head,
+          headShort: picked.head.slice(0, 7),
+        },
+        message: defaultMergeMessage(review),
+        messageValid: true,
+        merging: false,
+        mergedBanner: null,
+        mergeError: null,
+        conflictFiles: [],
+        onMessageChange: () => {},
+        onConfirm: () => {},
+        onCancel: () => {},
+      })
+    )
+
+    expect(html).toContain(`(${diff.head.slice(0, 7)})`)
+    expect(html).toContain('Confirm merge for hermes')
   })
 
   it('renders lane rows, diff lines, truncation notice and error rows', async () => {
