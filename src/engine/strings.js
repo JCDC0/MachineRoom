@@ -64,6 +64,16 @@ function stringHash(str) {
   return h >>> 0
 }
 
+function fillStrand(strand, points) {
+  const geometry = strand.mesh.geometry
+  if (geometry.getAttribute('position')?.count === points.length) {
+    geometry.setFromPoints(points)
+    return
+  }
+  geometry.dispose()
+  strand.mesh.geometry = new THREE.BufferGeometry().setFromPoints(points)
+}
+
 export function createStrings(scene, { onPath = () => false } = {}) {
   const still = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const from = new THREE.Vector3()
@@ -115,7 +125,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         strand.from.copy(from)
         strand.to.copy(to)
         const pts = strandPoints({ a: from, b: to }, 24, strand.seed)
-        strand.mesh.geometry.setFromPoints(pts)
+        fillStrand(strand, pts)
       }
     }
     line.geometry.attributes.position.needsUpdate = true
