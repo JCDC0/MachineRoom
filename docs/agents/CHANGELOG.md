@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- U7, U9, U6a and U10a moved from AGY to OpenCode at the owner's word: OpenCode may now change `src/ui/**`, `src/styles.css` and `src/engine/**`, and leaves the by-eye checks to the orchestrator.
 - Merged the fake Paperclip, the end-to-end loop test and the soak test from a cloud Claude Opus 5.5 session (branch `claude/inspiring-hopper-onh5my`, 7 commits on 0.1.124, about 8 dollars). No fixes; the suite passed on Windows (1513 tests) on the second full run. The first run crashed once in Node and then failed `gains no machineroom-review-* folder` in `tests/review-lane.test.js`, which passed alone; a process left by the crashed try is the likely cause. Its bridge findings (the spec and version read apart, retries after a 404) go back to the same cloud session.
 - Review note on P11: no fixes.
 - Name an OpenCode subagent call by its task (task P11): `opencode.js` labels a `subagent` tool call `subagent: DESCRIPTION` from `part.state.input.description` cut with `shorten`, or `subagent` when there is none, keeps the tool kind `other`, touches no file (the `prompt` names files but is not read) and keeps the same start and end times; tests in `tests/parsers.test.js` cover the recorded line, an error status and no description.

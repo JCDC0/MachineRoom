@@ -80,7 +80,7 @@ describe('lanes', () => {
   it('have every field a prompt needs', () => {
     for (const [key, lane] of Object.entries(lanes)) {
       for (const field of ['name', 'harness', 'model', 'worktree', 'role']) expect(typeof lane[field], `${key} ${field}`).toBe('string')
-      expect(lane.forbidden.length, key).toBeGreaterThan(3)
+      expect(lane.forbidden.length, key).toBeGreaterThan(1)
       expect(lane.worktree, key).toMatch(/^C:\\GitHub\\MachineRoom-/)
     }
     expect(new Set(Object.values(lanes).map((lane) => lane.worktree)).size).toBe(Object.keys(lanes).length)
@@ -88,7 +88,7 @@ describe('lanes', () => {
 
   it('keep each agent out of the files another agent owns', () => {
     expect(lanes.hermes.forbidden).toContain('server/**')
-    expect(lanes.opencode.forbidden).toContain('src/ui/**')
+    expect(lanes.opencode.forbidden).not.toContain('src/ui/**')
     expect(lanes.agy.forbidden).toContain('src/control/**')
     expect(lanes.agy.forbidden).not.toContain('src/Stage.jsx')
     expect(lanes.agy.forbidden).not.toContain('src/engine/**')
@@ -107,7 +107,7 @@ describe('buildPrompt', () => {
     expect(prompt).toContain(byId('U4').text)
     expect(prompt).toContain('Commit with the prefix 0.1.36 and one plain sentence. Do not push.')
     expect(prompt).toContain('Never push.')
-    expect(prompt).toContain('Do not touch these paths: src/ui/**')
+    expect(prompt).toContain('Do not touch these paths: src/Stage.jsx')
     expect(prompt).toContain('Test anything that starts a process')
     expect(prompt).toMatch(/Report: Give the report in your reply/)
     expect(prompt).not.toContain('undefined')
