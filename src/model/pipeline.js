@@ -18,6 +18,7 @@ export function makeContext(tree) {
 
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 export const SEEN_LIMIT = 20000
+export const ENDED_LIMIT = 1000
 
 export function createPipeline({ agents, tree }) {
   const ctx = makeContext({ ...tree, files: [...tree.files], dirs: [...(tree.dirs ?? [])] })
@@ -25,6 +26,7 @@ export function createPipeline({ agents, tree }) {
   const parsers = new Map()
   const lastRunTime = new Map()
   const seen = new Set()
+  const ended = new Set()
   let order = 0
   let lastTime = 0
 
@@ -77,6 +79,8 @@ export function createPipeline({ agents, tree }) {
           parsers.delete(runId)
         }
         lastRunTime.delete(runId)
+        ended.add(runId)
+        if (ended.size > ENDED_LIMIT) ended.delete(ended.values().next().value)
         const ok = payload.status === 'succeeded'
         emit({ time, type: 'run.end', ok, error: ok ? null : shorten(payload.error ?? payload.errorCode ?? payload.status, 120) })
       }
@@ -84,6 +88,7 @@ export function createPipeline({ agents, tree }) {
       if (payload.seq !== undefined && payload.seq !== null) {
         if (!once(`${runId}:log:${payload.seq}`)) return []
       }
+      if (ended.has(runId)) return []
       let entry = parsers.get(runId)
       if (!entry) {
         entry = { parser: createParser(agent, ctx), agent, runId }
@@ -129,7 +134,7 @@ export function createPipeline({ agents, tree }) {
     }
   }
 
-  return { push, flush, learn, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size }) }
+  return { push, flush, learn, context: ctx, remembered: () => ({ keys: seen.size, runs: lastRunTime.size, parsers: parsers.size }) }
 }
 
 export function buildActivities(frames, { agents, tree }) {

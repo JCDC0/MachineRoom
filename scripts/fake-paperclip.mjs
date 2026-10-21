@@ -397,6 +397,7 @@ export async function startFakePaperclip(options = {}) {
   const sockets = new Set()
   const timers = new Set()
   const hanging = new Set()
+  const requests = []
   const queues = new Map()
   let frameId = 0
   let stopped = false
@@ -982,6 +983,7 @@ export async function startFakePaperclip(options = {}) {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     const method = req.method ?? 'GET'
     const path = url.pathname
+    requests.push({ method, path, query: url.search })
     if (missing.some((entry) => matches(entry, method, path))) {
       sendJson(res, 404, { error: 'API route not found' })
       return
@@ -1098,6 +1100,7 @@ export async function startFakePaperclip(options = {}) {
       for (const socket of sockets) if (socket.readyState === 1) socket.send(text)
     },
     connected: () => sockets.size,
+    requests: () => [...requests],
     stop,
   }
 }

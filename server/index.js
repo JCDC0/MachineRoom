@@ -23,6 +23,7 @@ const VITE_PORT = 5173
 const BODY_LIMIT = 64 * 1024
 const SURFACE_TIMEOUT_MS = 10000
 const SURFACE_EVERY_MS = 15 * 60 * 1000
+const SURFACE_PAIR_TRIES = 3
 const BACKUP_READ_TIMEOUT_MS = 10000
 const BACKUP_RUN_TIMEOUT_MS = 120000
 const AGENTS_TIMEOUT_MS = 15000
@@ -492,10 +493,10 @@ export function createBridge(options = {}) {
     const response = await fetch(`${paperclipUrl}/api/heartbeat-runs/${encodeURIComponent(runId)}/log?offset=${state.offset}`, {
       signal: AbortSignal.timeout(logTimeoutMs),
     })
-    if (!response.ok) return
+    if (!response.ok) return response.status
     const body = await response.json()
     const end = typeof body?.content === 'string' ? body.content.lastIndexOf('\n') : -1
-    if (end === -1) return
+    if (end === -1) return response.status
     const complete = body.content.slice(0, end + 1)
     for (const line of complete.split('\n')) {
       if (!line) continue
@@ -507,6 +508,7 @@ export function createBridge(options = {}) {
       } catch {}
     }
     state.offset += Buffer.byteLength(complete, 'utf8')
+    return response.status
   }
 
   async function fullChunk(payload) {
@@ -518,10 +520,11 @@ export function createBridge(options = {}) {
     }
     for (let attempt = 0; attempt < logRetries && !stopped; attempt += 1) {
       if (state.chunks.has(payload.seq)) break
+      let status = 0
       try {
-        await pullLog(state, payload.runId)
+        status = await pullLog(state, payload.runId)
       } catch {}
-      if (state.chunks.has(payload.seq)) break
+      if (state.chunks.has(payload.seq) || status === 404) break
       await new Promise((resolveWait) => setTimeout(resolveWait, logRetryMs))
     }
     return state.chunks.get(payload.seq) ?? null
@@ -598,6 +601,37 @@ export function createBridge(options = {}) {
     }
   }
 
+  async function readSurfaceSpec() {
+    let response
+    try {
+      response = await fetch(`${paperclipUrl}/api/openapi.json`, { signal: AbortSignal.timeout(SURFACE_TIMEOUT_MS) })
+    } catch {
+      return { error: 'Could not read the Paperclip spec: Paperclip is not reachable.' }
+    }
+    if (!response.ok) return { error: `Paperclip answered ${response.status} when asked for its spec.` }
+    let spec
+    try {
+      spec = await response.json()
+    } catch {
+      return { error: 'Paperclip answered something that is not a spec.' }
+    }
+    if (!spec || typeof spec !== 'object' || !spec.paths || typeof spec.paths !== 'object') {
+      return { error: 'Paperclip answered a document with no routes. That is not a spec.' }
+    }
+    return { spec }
+  }
+
+  async function readSurfacePair() {
+    for (let attempt = 0; attempt < SURFACE_PAIR_TRIES; attempt += 1) {
+      const before = await readPaperclipVersion()
+      const read = await readSurfaceSpec()
+      if (read.error) return read
+      const after = await readPaperclipVersion()
+      if (before === after) return { spec: read.spec, version: after }
+    }
+    return { error: 'Paperclip changed while the bridge read its spec. The bridge checks again when its socket opens.' }
+  }
+
   async function checkSurface() {
     if (stopped) return
     if (surfaceChecking) {
@@ -606,30 +640,13 @@ export function createBridge(options = {}) {
     }
     surfaceChecking = true
     try {
-      let response
-      try {
-        response = await fetch(`${paperclipUrl}/api/openapi.json`, { signal: AbortSignal.timeout(SURFACE_TIMEOUT_MS) })
-      } catch {
-        surfaceError('Could not read the Paperclip spec: Paperclip is not reachable.')
+      const pair = await readSurfacePair()
+      if (pair.error) {
+        surfaceError(pair.error)
         return
       }
-      if (!response.ok) {
-        surfaceError(`Paperclip answered ${response.status} when asked for its spec.`)
-        return
-      }
-      let spec
-      try {
-        spec = await response.json()
-      } catch {
-        surfaceError('Paperclip answered something that is not a spec.')
-        return
-      }
-      if (!spec || typeof spec !== 'object' || !spec.paths || typeof spec.paths !== 'object') {
-        surfaceError('Paperclip answered a document with no routes. That is not a spec.')
-        return
-      }
-      const result = compareSurface(spec)
-      paperclipVersion = await readPaperclipVersion()
+      const result = compareSurface(pair.spec)
+      paperclipVersion = pair.version
       const checkedAt = new Date().toISOString()
       surface = result.ok
         ? { ok: true, checkedAt }

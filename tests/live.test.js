@@ -213,6 +213,35 @@ describe('incremental pipeline', () => {
     expect(pipeline.push(late)).toEqual([])
   })
 
+  it('drops a log chunk that comes after the run ended instead of opening the run again', () => {
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const agent = recording.agents.find((entry) => entry.key === 'opencode')
+    const at = (n) => new Date(Date.parse('2026-10-20T00:00:00Z') + n).toISOString()
+    const read = `${JSON.stringify({ type: 'tool_use', part: { id: 'late', tool: 'read', state: { status: 'completed', input: { path: 'C:\\Temp\\agent-sandbox\\src\\math.js' }, output: 'x' } } })}\n`
+    for (let run = 0; run < 50; run += 1) {
+      const runId = `run-${run}`
+      const base = { agentId: agent.id, runId }
+      pipeline.push({ id: `q${run}`, type: 'heartbeat.run.queued', createdAt: at(run * 10), payload: base })
+      pipeline.push({ id: `r${run}`, type: 'heartbeat.run.status', createdAt: at(run * 10 + 1), payload: { ...base, status: 'running' } })
+      const live = pipeline.push({ id: `l${run}`, type: 'heartbeat.run.log', createdAt: at(run * 10 + 2), payload: { ...base, stream: 'stdout', seq: 1, chunk: read } })
+      expect(live.map((activity) => activity.type)).toContain('tool.start')
+      pipeline.push({ id: `s${run}`, type: 'heartbeat.run.status', createdAt: at(run * 10 + 3), payload: { ...base, status: 'succeeded' } })
+      const late = pipeline.push({ id: `x${run}`, type: 'heartbeat.run.log', createdAt: at(run * 10 + 4), payload: { ...base, stream: 'stdout', seq: 2, chunk: read } })
+      expect(late).toEqual([])
+    }
+    expect(pipeline.remembered()).toMatchObject({ runs: 0, parsers: 0 })
+    expect(pipeline.flush()).toEqual([])
+  })
+
+  it('still reads the log of a run it joined after the start', () => {
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const agent = recording.agents.find((entry) => entry.key === 'opencode')
+    const read = `${JSON.stringify({ type: 'tool_use', part: { id: 'mid', tool: 'read', state: { status: 'completed', input: { path: 'C:\\Temp\\agent-sandbox\\src\\math.js' }, output: 'x' } } })}\n`
+    const out = pipeline.push({ id: 'm1', type: 'heartbeat.run.log', createdAt: '2026-10-20T00:00:00Z', payload: { agentId: agent.id, runId: 'joined', stream: 'stdout', seq: 40, chunk: read } })
+    expect(out.find((activity) => activity.type === 'tool.start').touches).toEqual([{ path: 'src/math.js', mode: 'read', kind: 'file' }])
+    expect(pipeline.remembered()).toMatchObject({ runs: 1, parsers: 1 })
+  })
+
   it('shows an error event that comes after the run ended without keeping the run open', () => {
     const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
     const agent = recording.agents[0]
