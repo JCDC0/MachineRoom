@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Cost board in the room (task A5b): pure `boardLines` and `createCostBoard` in `src/engine/board.js` show room costs and provider quotas on a CSS3D billboard panel beside the hub ring, hidden under 900px width, with click to focus an agent; wired in `src/engine/room.js` and `src/Stage.jsx` with costs notices, styles in `src/styles.css`, tests in `tests/cost-board.test.js` (8).
 - Briefs A5b (the cost board in the room, AGY) and P3c (a large project pass, Claude in the cloud).
 - Review note on C4c: no fixes. Checked in the browser with the mock at 1280 by 800 and 1024 by 768: the Route row under Agent, `Use` sets agy and keeps the default model with the yellow note, and the row goes with no brief. Every mock brief routes to the large tier because the mock's sample briefs have no `Files:` list, so `profileFromBrief` calls them unclear; real briefs carry one.
 - Review fix on C5c: `routeLine` reads a brief's route with `Object.hasOwn`, since the id comes from the planner's text, and the count reads `1 brief`. Checked in the browser with the mock at 1280 by 800: the empty tab, the confirm sentence, `Waiting for PLANNER.`, the ready brief with its route, the problem in red. Copy shows `Copy failed.` there because the built-in pane denies clipboard writes, as it does for the dispatch prompt copy.

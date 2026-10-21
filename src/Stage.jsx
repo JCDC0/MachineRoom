@@ -6,13 +6,15 @@ import { createRoom } from './engine/room.js'
 import { openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
-import { openStream, socketUrl } from './live/source.js'
+import { openStream, socketUrl, toAgents } from './live/source.js'
 import { appendLiveLog, buildTimeline, createLogger, entriesUpTo } from './model/log.js'
 import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
+import { costBoard } from './model/costs.js'
 import { store } from './storage.js'
 import Hud from './ui/Hud.jsx'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
+import { subscribeToNotices } from './ui/panels/notices.js'
 import { loadSettings, saveSettings } from './ui/settings.js'
 import Waiting from './ui/Waiting.jsx'
 
@@ -61,6 +63,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const targetCount = useRef(0)
+  const latestBoardRef = useRef(null)
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
   const assistantPaths = useMemo(
@@ -97,6 +100,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       },
     })
     roomRef.current = room
+    if (latestBoardRef.current) {
+      room.setCosts(latestBoardRef.current)
+    }
     setOpenChips(NONE)
     if (!live) {
       const saved = loadSettings(store()).speed
@@ -112,6 +118,40 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       roomRef.current = null
     }
   }, [data, player])
+
+  useEffect(() => {
+    if (!client) {
+      latestBoardRef.current = null
+      roomRef.current?.setCosts(null)
+      return undefined
+    }
+    let active = true
+
+    async function updateCosts() {
+      try {
+        const [agentsRaw, costsRaw] = await Promise.all([client.agents(), client.costs()])
+        if (!active) return
+        const roster = toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
+        const board = costBoard(costsRaw, roster)
+        latestBoardRef.current = board
+        roomRef.current?.setCosts(board)
+      } catch {
+        if (!active) return
+        latestBoardRef.current = null
+        roomRef.current?.setCosts(null)
+      }
+    }
+
+    updateCosts()
+    const timer = setInterval(updateCosts, 60000)
+    const unsubscribe = subscribeToNotices(client, ['agents', 'costs'], updateCosts)
+
+    return () => {
+      active = false
+      clearInterval(timer)
+      unsubscribe()
+    }
+  }, [client])
 
   useEffect(() => {
     if (!live) return undefined
