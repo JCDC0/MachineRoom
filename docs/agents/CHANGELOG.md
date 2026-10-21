@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Review fix on C5c: `routeLine` reads a brief's route with `Object.hasOwn`, since the id comes from the planner's text, and the count reads `1 brief`. Checked in the browser with the mock at 1280 by 800: the empty tab, the confirm sentence, `Waiting for PLANNER.`, the ready brief with its route, the problem in red. Copy shows `Copy failed.` there because the built-in pane denies clipboard writes, as it does for the dispatch prompt copy.
+- Add the Plan tab to the control drawer (task C5c): a goal of 1 to 2000 characters, a confirm card, `Waiting for PLANNER.` while the plan task runs, the briefs with their size, files, tests and route, the problems in red, and `Copy as Markdown` with the copied sentence; pure helpers in `src/ui/panels/plan.js`, tests in `tests/plan-panel.test.js` (10).
 - C5c moved from AGY to OpenCode, so it runs beside AGY's C4c.
 - Review note on U10a: no fixes; its test and U6a's met at the end of `tests/reviews-panel.test.js`, and both were kept. The four moved briefs were checked in the browser where the brief asked (the Reviews card shows the open diff's short head).
 - Review fix on U6a: `handleOpenConfirm` calls `clearMoved` instead of a copy of it.

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import DispatchPanel from './DispatchPanel.jsx'
+import PlanPanel from './PlanPanel.jsx'
 import TasksPanel from './TasksPanel.jsx'
 import ApprovalsPanel from './ApprovalsPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
@@ -24,12 +25,14 @@ export default function ControlDrawer({
 }) {
   const hasAgentsTab = typeof client?.hireAgent === 'function'
   const hasReviewsTab = typeof client?.reviews === 'function'
+  const hasPlanTab = typeof client?.askPlanner === 'function' && typeof client?.plan === 'function'
   const tabs = useMemo(() => {
     const next = [...BASE_TABS]
+    if (hasPlanTab) next.push({ id: 'plan', label: 'Plan' })
     if (hasAgentsTab) next.push({ id: 'agents', label: 'Agents' })
     if (hasReviewsTab) next.push({ id: 'reviews', label: 'Reviews' })
     return next
-  }, [hasAgentsTab, hasReviewsTab])
+  }, [hasAgentsTab, hasReviewsTab, hasPlanTab])
 
   const [internalTarget, setInternalTarget] = useState(null)
   const internalNonceRef = useRef(0)
@@ -225,6 +228,7 @@ export default function ControlDrawer({
               }}
             />
           )}
+          {activeTab === 'plan' && hasPlanTab && <PlanPanel client={client} />}
           {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={effectiveTarget} />}
           {activeTab === 'approvals' && (
             <ApprovalsPanel
