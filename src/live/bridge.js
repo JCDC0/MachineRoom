@@ -1,4 +1,5 @@
 import { toAgents } from './source.js'
+import { FOLDER_SHAPE, FOLDER_SHAPE_ACCEPT, readFileList } from './tree.js'
 
 async function getJson(fetchImpl, url, init) {
   const response = await fetchImpl(url, init)
@@ -7,7 +8,12 @@ async function getJson(fetchImpl, url, init) {
 }
 
 export async function discoverBridge({ url, root, fetchImpl = fetch }) {
-  const [agents, tree] = await Promise.all([getJson(fetchImpl, `${url}/api/agents`), getJson(fetchImpl, `${url}/api/tree`)])
+  const [agents, raw] = await Promise.all([
+    getJson(fetchImpl, `${url}/api/agents`),
+    getJson(fetchImpl, `${url}/api/tree`, { headers: { Accept: FOLDER_SHAPE_ACCEPT } }),
+  ])
+  const tree = readFileList(raw)
+  if (tree.error) throw new Error(tree.error)
   return { agents: toAgents(agents), rootName: root ?? tree.root, files: tree.files }
 }
 
@@ -23,7 +29,7 @@ export function openBridge({ url, onFrame, onTree, onStatus, EventSourceImpl = E
   function open() {
     timer = null
     onStatus('connecting')
-    const current = new EventSourceImpl(`${url}/events?history=1`)
+    const current = new EventSourceImpl(`${url}/events?history=1&tree=${FOLDER_SHAPE}`)
     source = current
     current.onopen = () => {
       delay = REOPEN_START
@@ -47,11 +53,13 @@ export function openBridge({ url, onFrame, onTree, onStatus, EventSourceImpl = E
       }
     })
     current.addEventListener('tree', (event) => {
+      let tree
       try {
-        onTree(JSON.parse(event.data))
+        tree = readFileList(JSON.parse(event.data))
       } catch {
         return
       }
+      if (!tree.error) onTree(tree)
     })
   }
 

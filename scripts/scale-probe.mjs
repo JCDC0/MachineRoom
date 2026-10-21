@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname as folderOf, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { performance } from 'node:perf_hooks'
-import { readTree, treeEvent } from '../server/index.js'
+import { FOLDER_SHAPE, packTree, readTree, treeEvent } from '../server/index.js'
 import { planCollapse } from '../src/model/collapse.js'
 import { planFolderView } from '../src/model/folderView.js'
 import { ancestors, dirname, makeTree } from '../src/model/paths.js'
@@ -15,7 +15,7 @@ import { cardSize, viewInput } from '../src/engine/cards.js'
 import { layoutCards } from '../src/engine/layout.js'
 
 export const DEFAULTS = { files: 40000, folders: 4000, seed: 20261021, depth: 12, activities: 5000 }
-export const BUDGET = { frame: 16, load: 1000, event: 2 * 1024 * 1024 }
+export const BUDGET = { frame: 16, load: 1000, event: 2 * 1024 * 1024, firstEvent: 1024 * 1024 }
 
 const WORDS = [
   'src', 'lib', 'core', 'util', 'utils', 'model', 'view', 'views', 'api', 'client', 'server', 'shared', 'common',
@@ -190,11 +190,14 @@ export function runProbe(options = {}) {
   const listDir = fakeListDir(resolve(rootDir), scale.files)
   const read = timeIt(() => readTree(rootDir, { listDir }), 3)
   row('readTree (fake listDir)', 'load', read.ms, `${read.result.files.length} files`)
-  const sizeRow = (stage, text) => {
+  const sizeRow = (stage, text, budget = BUDGET.event) => {
     const bytes = Buffer.byteLength(text)
-    rows.push({ stage, runsAt: 'change', ms: null, budget: BUDGET.event, size: `${bytes} bytes`, bytes })
+    rows.push({ stage, runsAt: 'change', ms: null, budget, size: `${bytes} bytes`, bytes })
   }
-  sizeRow('tree event, first to a page', treeEvent(read.result))
+  const packed = timeIt(() => packTree(read.result), 3)
+  row('packTree', 'load', packed.ms, `${packed.result.folders.length} folders named`)
+  sizeRow('tree event, first to a page', treeEvent(read.result, null, FOLDER_SHAPE), BUDGET.firstEvent)
+  sizeRow('GET /api/tree, folder shape', JSON.stringify({ ...packed.result, created: [] }), BUDGET.firstEvent)
   const grownTree = { root: read.result.root, files: [...read.result.files, 'probe/new-file.js'].sort() }
   const delta = timeIt(() => treeEvent(grownTree, read.result.files), 3)
   sizeRow('tree event, one new file', delta.result)

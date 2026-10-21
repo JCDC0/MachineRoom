@@ -43,7 +43,7 @@ describe('openBridge', () => {
 
   it('opens the event stream of the bridge', () => {
     const { source, seen } = harness()
-    expect(source.url).toBe('http://bridge/events?history=1')
+    expect(source.url).toBe('http://bridge/events?history=1&tree=folders')
     expect(seen.statuses).toEqual(['connecting'])
   })
 
@@ -96,7 +96,7 @@ describe('openBridge', () => {
       giveUp()
     }
     expect(sources).toHaveLength(7)
-    expect(sources.at(-1).url).toBe('http://bridge/events?history=1')
+    expect(sources.at(-1).url).toBe('http://bridge/events?history=1&tree=folders')
     expect(timers.map((timer) => timer.ms)).toEqual([1000, 2000, 4000, 8000, REOPEN_LIMIT, REOPEN_LIMIT, REOPEN_LIMIT])
     timers.at(-1).fn()
     sources.at(-1).onopen()

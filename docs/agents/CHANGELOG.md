@@ -2,7 +2,11 @@
 
 ## Unreleased
 
+- Review fix on P3d (the cloud's option A): `openBridge` opens `/events?history=1&tree=folders`, so a page gets its first tree event in the folder shape; the two expected URLs in `tests/bridge-client.test.js` follow. Checked on Windows: Chromium sends the `Accept` value from port 5179 to a bridge on 5174 with no preflight, and the 67 replay digests from before P3d are unchanged.
+- Fix found in the P3d review: `readTree` lists a git project with `git ls-files -z`, so a name such as `données/été.md` no longer arrives as `"donn/303/251es//303/251t/303/251.md"` (git quoted it, and the backslash rule turned the escapes into slashes); a test in `tests/tree.test.js`. `scripts/build-fixtures.mjs` still lists without `-z`.
 - Brief C5e (from the Plan tab to Dispatch) for AGY.
+- Send the file list in a folder shape (task P3d): `packTree` in `server/index.js` names each folder once as its parent and its name and each file as a run of names in its folder, in the list's own order, and falls back to the list of paths when a path would not read back the same. `GET /api/tree` uses it when the page sends `Accept: application/json; shape=folders`, and the first `tree` event uses it for a page that opens `/events?tree=folders`; later events stay a short list of paths. `readFileList` in the new `src/live/tree.js` reads both shapes for `discoverBridge`, the `tree` event and `loadTree`, refuses anything else with a sentence and never throws, so a page and a bridge of different versions still agree. Tests in `tests/tree-format.test.js`.
+- The probe (task P3d) times `packTree` and measures the first `tree` event and `GET /api/tree` in the folder shape against 1 MB: 613597 bytes each for 40000 files, down from 2415832. The 5 fixtures replay to the same digests.
 - Review note on V8: no fixes.
 - Brief P3d (a smaller file list, for the cloud session).
 - Review note on P3c (Claude in the cloud): no fixes. On Windows, `npm run scale-probe -- --replay` gives identical digests on main and on the merge for all 68 replays (5 fixtures and 63 recordings); the probe passes every budget but the first tree event (2.4 MB), with the warm layout at 13.8 ms; the full suite passed twice while a lane ran its own. The planCollapse shortcut was compared with the old code on odd paths (trailing slash, `./`, leading slash, `..`, a space) and matches.

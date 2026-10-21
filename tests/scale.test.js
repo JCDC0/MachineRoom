@@ -16,6 +16,7 @@ const MEASURED_MS = {
   planCollapse: 16,
   'pipeline, Hermes read or shell line (mean)': 2.7,
   'pipeline, Hermes read or shell line (worst)': 9,
+  packTree: 48,
 }
 
 describe('the scale tree', () => {
@@ -73,6 +74,11 @@ describe('each fixed stage at 40000 files', () => {
       expect(rows.get(stage).ms).toBeLessThan(measured * 10)
     })
   }
+
+  it('sends the first tree event and the file list route in under 1 MB', () => {
+    expect(rows.get('tree event, first to a page').bytes).toBeLessThan(BUDGET.firstEvent)
+    expect(rows.get('GET /api/tree, folder shape').bytes).toBeLessThan(BUDGET.firstEvent)
+  })
 
   it('sends only the new file in a later tree event', () => {
     expect(rows.get('tree event, one new file').bytes).toBeLessThan(BUDGET.event)

@@ -89,4 +89,18 @@ describe('readTree with git', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   }, 30000)
+
+  it('keeps non-ASCII letters and spaces in tracked and untracked names', () => {
+    const dir = makeTempDir('mr-tree-')
+    try {
+      git(dir, ['init', '-b', 'main'])
+      mkdirSync(join(dir, 'données'))
+      writeFileSync(join(dir, 'données', 'été.md'), 'x')
+      writeFileSync(join(dir, 'with space.txt'), 'x')
+      git(dir, ['add', 'données'])
+      expect(readTree(dir).files).toEqual(['données/été.md', 'with space.txt'])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
 })
