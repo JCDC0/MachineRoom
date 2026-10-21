@@ -5,8 +5,14 @@ const DEFAULT_MAX_ITEMS = 10
 const DEFAULT_BACK_LAYERS = 3
 
 function clean(raw) {
+  if (typeof raw === 'string' && raw !== '.' && !raw.includes('\\') && !raw.includes('//') && !raw.startsWith('./') && !raw.endsWith('/')) return raw
   const value = normalise(raw).replace(/^\.\//, '').replace(/\/+$/, '')
   return value === '.' ? '' : value
+}
+
+function parentOf(path) {
+  const at = path.lastIndexOf('/')
+  return at === -1 ? '' : path.slice(0, at)
 }
 
 function byName(a, b) {
@@ -24,6 +30,54 @@ function rankOf(path, first, second) {
   return 2
 }
 
+function addFolder(path, has, add, kids) {
+  const missing = []
+  for (let at = path; !has(at); at = parentOf(at)) missing.push(at)
+  missing.forEach(add)
+  missing.forEach((at) => {
+    const parent = parentOf(at)
+    const list = kids.get(parent)
+    if (list) list.push(at)
+    else kids.set(parent, [at])
+  })
+}
+
+function addFile(index, raw) {
+  const path = clean(raw)
+  if (!path || index.fileSet.has(path)) return
+  index.fileSet.add(path)
+  const parent = parentOf(path)
+  addFolder(parent, (at) => index.folders.has(at), (at) => index.folders.add(at), index.children)
+  const list = index.filesIn.get(parent)
+  if (list) list.push(path)
+  else index.filesIn.set(parent, [path])
+}
+
+function extendIndex(index, files) {
+  const before = index.source
+  if (files.length < before.length) return false
+  const added = []
+  let kept = 0
+  for (const raw of files) {
+    if (kept < before.length && raw === before[kept]) kept += 1
+    else added.push(raw)
+  }
+  if (kept !== before.length) return false
+  added.forEach((raw) => addFile(index, raw))
+  index.source = [...files]
+  return true
+}
+
+let lastIndex = null
+
+function indexFiles(files) {
+  if (lastIndex && extendIndex(lastIndex, files)) return lastIndex
+  const index = { source: [...files], fileSet: new Set(), folders: new Set(['']), filesIn: new Map(), children: new Map() }
+  files.forEach((raw) => addFile(index, raw))
+  lastIndex = index
+  return index
+}
+
 export function planFolderView({
   files = [],
   focus = [],
@@ -36,26 +90,18 @@ export function planFolderView({
   const itemLimit = count(maxItems)
   const layerLimit = count(backLayers)
 
-  const fileSet = new Set()
-  const folderSet = new Set([''])
-
-  const addChain = (path) => {
-    ancestors(path).forEach((part) => folderSet.add(part))
-  }
-
-  files.forEach((raw) => {
-    const path = clean(raw)
-    if (!path) return
-    fileSet.add(path)
-    addChain(path)
-  })
+  const { fileSet, folders, filesIn, children: fileChildren } = indexFiles(files)
+  const extraFolders = new Set()
+  const extraChildren = new Map()
+  const isFolder = (path) => folders.has(path) || extraFolders.has(path)
+  const addExtra = (path) => addFolder(path, isFolder, (at) => extraFolders.add(at), extraChildren)
 
   const focusPaths = [...new Set(focus.map(clean))]
   const touchedPaths = [...new Set(touched.map(clean))]
 
   const addPath = (path) => {
-    addChain(path)
-    if (!fileSet.has(path)) folderSet.add(path)
+    addExtra(parentOf(path))
+    if (!fileSet.has(path)) addExtra(path)
   }
 
   focusPaths.forEach(addPath)
@@ -67,13 +113,13 @@ export function planFolderView({
   const focusFolders = new Set()
   focusPaths.forEach((path) => {
     ancestors(path).forEach((part) => focusFolders.add(part))
-    if (folderSet.has(path) && !fileSet.has(path)) focusFolders.add(path)
+    if (isFolder(path) && !fileSet.has(path)) focusFolders.add(path)
   })
 
   const touchedFolders = new Set()
   touchedPaths.forEach((path) => {
     ancestors(path).forEach((part) => touchedFolders.add(part))
-    if (folderSet.has(path)) touchedFolders.add(path)
+    if (isFolder(path)) touchedFolders.add(path)
   })
 
   const fileFolders = new Set()
@@ -81,11 +127,9 @@ export function planFolderView({
     if (fileSet.has(path)) fileFolders.add(dirname(path))
   })
 
-  const children = new Map()
-  folderSet.forEach((path) => children.set(path, []))
-  folderSet.forEach((path) => {
-    if (path !== '') children.get(dirname(path)).push(path)
-  })
+  const children = {
+    get: (path) => [...(fileChildren.get(path) ?? []), ...(extraChildren.get(path) ?? [])],
+  }
 
   const sortedChildren = (path) =>
     [...children.get(path)].sort(
@@ -94,9 +138,7 @@ export function planFolderView({
 
   const itemsFor = (path) => {
     const entries = children.get(path).map((child) => ({ path: child, kind: 'dir' }))
-    fileSet.forEach((file) => {
-      if (dirname(file) === path) entries.push({ path: file, kind: 'file' })
-    })
+    for (const file of filesIn.get(path) ?? []) entries.push({ path: file, kind: 'file' })
     const rank = (item) => {
       if (focusSet.has(item.path)) return 0
       if (item.kind === 'dir' && focusFolders.has(item.path)) return 0

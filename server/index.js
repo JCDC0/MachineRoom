@@ -136,6 +136,13 @@ export function readTree(projectRoot, { listDir = readdirSync } = {}) {
   }
 }
 
+export function treeEvent(tree, sent = null) {
+  const known = sent ? new Set(sent) : null
+  const files = known ? tree.files.filter((file) => !known.has(file)) : tree.files
+  if (known && files.length === 0) return ''
+  return `event: tree\ndata: ${JSON.stringify({ root: tree.root, files })}\n\n`
+}
+
 function toWsUrl(paperclipUrl, companyId) {
   const base = String(paperclipUrl).replace(/\/+$/, '').replace(/^http/i, 'ws')
   return `${base}/api/companies/${encodeURIComponent(companyId)}/events/ws`
@@ -346,6 +353,7 @@ export function createBridge(options = {}) {
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
 
   const clients = new Set()
+  const treeSent = new WeakMap()
   const history = []
   let nextId = 0
   let socket = null
@@ -374,11 +382,6 @@ export function createBridge(options = {}) {
     res.write(`id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
   }
 
-  function writeSseTree(res, tree) {
-    const data = JSON.stringify({ root: tree.root, files: tree.files })
-    res.write(`event: tree\ndata: ${data}\n\n`)
-  }
-
   function writeSseChange(res, event) {
     res.write(`event: change\ndata: ${JSON.stringify(event)}\n\n`)
   }
@@ -391,8 +394,12 @@ export function createBridge(options = {}) {
       current.files.some((file, index) => file !== lastFiles[index])
     if (!changed) return
     lastFiles = current.files
+    const events = new Map()
     for (const client of clients) {
-      writeSseTree(client, current)
+      const sent = treeSent.get(client) ?? null
+      if (!events.has(sent)) events.set(sent, treeEvent(current, sent))
+      treeSent.set(client, current.files)
+      if (events.get(sent)) client.write(events.get(sent))
     }
   }
 

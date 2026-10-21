@@ -14,12 +14,17 @@ function chainOf(path) {
 export function planCollapse({ folders = [], fileCounts = new Map(), hot = [], maxTiles = DEFAULT_MAX_TILES } = {}) {
   const tree = new Set([''])
   folders.forEach((folder) => {
-    chainOf(folder).forEach((part) => tree.add(part))
+    if (typeof folder !== 'string' || folder.includes('\\') || folder.includes('//')) {
+      chainOf(folder).forEach((part) => tree.add(part))
+      return
+    }
+    for (let at = folder; !tree.has(at); at = parentOf(at)) tree.add(at)
   })
 
-  const depth = new Map()
-  tree.forEach((path) => depth.set(path, path === '' ? 0 : path.split('/').length))
-  const byDepthThenPath = (a, b) => depth.get(a) - depth.get(b) || (a < b ? -1 : a > b ? 1 : 0)
+  const shallowestFirst = [...tree]
+    .map((path) => ({ path, depth: path === '' ? 0 : path.split('/').length }))
+    .sort((a, b) => a.depth - b.depth || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    .map((entry) => entry.path)
 
   const children = new Map()
   tree.forEach((path) => children.set(path, []))
@@ -34,7 +39,7 @@ export function planCollapse({ folders = [], fileCounts = new Map(), hot = [], m
 
   const subtreeFolders = new Map()
   const subtreeFiles = new Map()
-  const deepestFirst = [...tree].sort((a, b) => byDepthThenPath(b, a))
+  const deepestFirst = [...shallowestFirst].reverse()
   deepestFirst.forEach((path) => {
     let folderCount = 1
     let fileCount = fileCounts.get(path) ?? 0
@@ -54,7 +59,6 @@ export function planCollapse({ folders = [], fileCounts = new Map(), hot = [], m
   const overBudget = tiles > maxTiles
 
   if (!overBudget) {
-    const shallowestFirst = [...tree].sort(byDepthThenPath)
     shallowestFirst.forEach((path) => {
       if (open.has(path) || !open.has(parentOf(path))) return
       const childCount = children.get(path).length
