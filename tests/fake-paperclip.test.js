@@ -17,7 +17,7 @@ import { makeTempDir } from './helpers/tempRoot.js'
 const fakes = []
 
 async function fake(options = {}) {
-  const started = await startFakePaperclip({ port: 0, speed: 1000, ...options })
+  const started = await startFakePaperclip({ speed: 1000, ...options, port: 0 })
   fakes.push(started)
   return started
 }

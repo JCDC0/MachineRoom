@@ -20,7 +20,7 @@ export function makeSandbox() {
 }
 
 export async function startLoop({ fake: fakeOptions = {}, bridge: bridgeOptions = {} } = {}) {
-  const fake = await startFakePaperclip({ port: 0, speed: 1000, ...fakeOptions })
+  const fake = await startFakePaperclip({ speed: 1000, ...fakeOptions, port: 0 })
   const bridge = createBridge({
     paperclipUrl: fake.url,
     companyId: fake.companyId,
