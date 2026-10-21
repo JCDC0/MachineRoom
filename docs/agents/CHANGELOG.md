@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- C5c moved from AGY to OpenCode, so it runs beside AGY's C4c.
 - Review note on U10a: no fixes; its test and U6a's met at the end of `tests/reviews-panel.test.js`, and both were kept. The four moved briefs were checked in the browser where the brief asked (the Reviews card shows the open diff's short head).
 - Review fix on U6a: `handleOpenConfirm` calls `clearMoved` instead of a copy of it.
 - Review note on U9: no fixes.
