@@ -10,8 +10,8 @@ Before merging a branch that adds a route that writes (a merge, a backup, any wr
 
 - `main` is 0.1.123. GitHub has 0.1.121; the U10 and U6 merges and this note are not pushed. Push only on the owner's yes.
 - U8 had committed before the shutdown cut its run, so it was reviewed and merged as 0.1.124 (no run record, so no outcome line). AGY's cut M1a start (one uncommitted file) was cleared and its prompt written again.
-- AGY: the prompt for **M1a** is written (`agy-M1a-prompt.txt` in its worktree); the owner sends it. After M1a, in order: **U7**, **U9**, **U6a**, **U10a**, then **C4c**, **C5c**, **S2b**. Write each prompt with `node scripts/agy-prompt.mjs ID --clean` and record each run with `npm run hand-run`.
-- Hermes has no open brief: S2a and S3a wait on S1. OpenCode has none after U8.
+- AGY: the prompt for **M1a** is written (`agy-M1a-prompt.txt` in its worktree); the owner sends it. After M1a, in order: **U7**, **U9**, **U6a**, **U10a**, then **C4c** and **C5c** (S2b is held). The prompts for M1a, U7, U9 and U6a are written; the owner runs them one at a time. Write each prompt with `node scripts/agy-prompt.mjs ID --clean` and record each run with `npm run hand-run`.
+- S1 was recorded for Hermes and OpenCode on their CLIs (S1a in TASKS.md): a log names a child only after it ends, so S2a, S3a and S2b are held. Hermes runs P11. OpenCode has no open brief.
 - Last merges: V7b (0.1.120, grade B, 4 fixes), the cloud UI audit (0.1.121), U10 (0.1.122, A), U6 (0.1.123, A).
 
 ## Standing rules from the owner
@@ -90,7 +90,7 @@ The forbidden paths per lane are in `docs/agents/lanes.json`; `buildPrompt` puts
 
 - **C0 stage 2**: Paperclip's `enableIsolatedWorkspaces`, so Paperclip agents work in their own worktrees.
 - **D1**: `npm run decide-eval` with the owner's key, and the routing labels in `tests/probes/routing.js`.
-- **S1**: recording subagent runs (spends money).
+- **S1** for Claude Code, agy and Paperclip's own delegation (spends money); Hermes and OpenCode were recorded as S1a.
 - **G2 and G6**: licence and names, then the private repository and every push. Run G1a (the history audit) first.
 - A Node upgrade would likely end the 0xC0000409 crash. On 2026-10-20 it crashed twice in a row in several full runs, one short of the three tries `npm test` makes.
 - Hermes' OpenRouter workspace has a daily budget of $2.00 (the owner raised it from $1.00 on 2026-10-20), which the lane runs and an orchestrator on the same key share. At the limit a run ends with exit 2 and `HTTP 403: Workspace daily budget of $2.00 exceeded`, and it resets at 00:00 UTC. C5a hit the old limit on 2026-10-20 after its commit. Raising it is the owner's call.

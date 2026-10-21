@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- S1a: subagent runs recorded for Hermes and OpenCode on their CLIs. Both name a child only once it has ended and never show its calls, so S2a, S3a and S2b are held. New brief: P11 (name an OpenCode subagent call by its task, Hermes).
 - Review note on U8: no fixes. The run was cut by a shutdown after its commit, so it has no run record; the files were checked against the brief by hand.
 - Handoff: ORCHESTRATOR.md gains `Where things stand`, with the cut U8 run and how to start it again, AGY's queue and what is not pushed.
 - The control client opens its change stream again (task U8): `createClient` in `src/control/client.js` drops a stream the browser gave up on (`readyState` 2) and opens a new one after 1 second, doubling up to 15 seconds and back to 1 second after an `open` event, only while a listener is subscribed; the last unsubscribe cancels a waiting reopen; `setTimer` and `clearTimer` join its options, and tests in `tests/control-client-stream.test.js` cover the delays, the reset, no listener and the cancel.
