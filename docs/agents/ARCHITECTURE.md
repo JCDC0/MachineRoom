@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.137. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.138. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -69,6 +69,7 @@ src/engine/       three.js scene, no React
   hub.js            the ring in the middle, agent slots, pulses
   void.js           the faint 3D lattice, coordinate labels and far dust
   terminals.js      CSS3D terminal chips beside their agents
+  board.js          the cost board: boardLines (pure, tested) and the CSS3D panel right of the hub, fed by costBoard
   camera.js         orbit, zoom, focus, pointer drift, fit the overview to a set of spheres (pure fitView, tested)
   sprites.js        colours and helpers (copied from the portfolio void engine)
 src/control/      the control client contract, its mock, the real client over the bridge, and `agents.js` (the agent lists and the checks for hire and update; see CONTROL-CLIENT.md)
@@ -127,6 +128,7 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 - Terminal chips: each chip follows its agent and faces the camera. Collapsed it shows the name and a status ring (yellow working, red error, green done). `T` opens the focused agent's chip to show its log, or opens or closes every chip when no agent is focused. `focusTerminal` opens the chip and flies to it.
 - Camera: the overview fits the hub and every card from the overview angle (`fitView`), never closer than 1800. It refits when the cards change, but only when the frame would move more than 150 or change distance by more than 8 percent. `0` returns to it. `F` cycles follow mode: wide (the agent and its chip), close up (the agent and the file it touches), off. The camera moves to the agent that starts a tool call or a run and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
 - Assistant: `/` opens the floating terminal. Typed requests become actions that `Stage.jsx` runs through `dispatch.js`. The room offers `focus(key, view)`, `focusTerminal(key)` (camera on the agent's terminal) and `focusPath(path)` (opens the folders on the way, flashes the target and flies to it). A toast at the bottom right shows results that need words (a created task, a refusal). Writes (a task, a budget) run only after the confirm card, and the dispatcher refuses them without an explicit `confirmed`. Panels open through the HUD's `controlTarget` prop.
+- Cost board: when there is a control client, Stage reads `agents()` and `costs()` at start, every 60 seconds and on an `agents` or `costs` notice, joins them with `costBoard` and hands the result to `room.setCosts`. The board floats right of the hub and faces the camera: the spend against the budget (red when over), a row per agent with cost, tokens and a share bar (`not reported` in dim white), the quota windows (an error in red), and `Costs not available.` when the read fails. A row click flies to that agent. It is hidden below 900 pixels wide, where the Meters tab covers costs. At the overview it is too small to read, and the layout does not keep cards clear of it (A5c).
 - Meters panel: a Backups section reads the age of Paperclip's newest backup (`backupStatus()`), names its warnings in words, and offers Back up now behind a confirm card (`backupNow()`).
 - HUD: the scrubber carries run markers (white start, red failed end, green finished end) and clicking one seeks. Each agent row has a Log button that opens or closes its chip, and Overview has Show all, which reads Hide all when every chip is open. Through a bridge, the HUD reads `/api/health` every 60 seconds and shows a chip under the Replay and Live switch only when something is wrong (the bridge not answering, Paperclip not connected, routes changed or not checked); a click lists the routes. `L` opens the event log, built from the same activities as the terminals. `?` lists the keys.
 - Labels: a file touch shows `read NAME` or `write NAME` in white and `failed NAME` in red above its card for 2.6 seconds. Labels that land close together stack upward. A failed tool call also lays a red `FAILED NAME` band across the card's face for 2.6 seconds over red scanlines.
@@ -187,6 +189,22 @@ A shell command touches files only when its text names a known file or folder. S
 .mr-callout.is-{working|error|done}
   .mr-callout-title
   .mr-callout-cmd
+
+.mr-board
+  .mr-board-title
+  .mr-board-summary[.is-over]
+  .mr-board-rows
+    .mr-board-row[.is-dim]
+      .mr-board-row-head
+        .mr-board-name
+        .mr-board-cost
+      .mr-board-row-meta
+        .mr-board-tokens
+      .mr-board-bar-track
+        .mr-board-bar
+  .mr-board-quotas
+    .mr-board-quota[.is-error]
+  .mr-board-empty
 ```
 
 A chip without `.is-open` hides its body.

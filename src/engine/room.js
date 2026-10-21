@@ -4,6 +4,7 @@ import { basename, dirname } from '../model/paths.js'
 import { createAgents } from './agents.js'
 import { FOV, createCameraRig, fitView } from './camera.js'
 import { createCards } from './cards.js'
+import { createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createLabels } from './labels.js'
 import { GREEN, RED, WHITE, glowTexture } from './sprites.js'
@@ -41,6 +42,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
   const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster)
+  const board = createCostBoard(cssScene, { onPick })
+  board.setVisible(width >= 900)
   const labels = createLabels(scene)
 
   const strings = createStrings(scene, { onPath: (path) => cards.onPath(path) })
@@ -208,6 +211,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
+    board.setVisible(width >= 900)
     refit(true)
   }
   const observer = new ResizeObserver(onResize)
@@ -254,6 +258,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
     rig.update(delta)
     terminals.update(state, now, camera, focused, anchorOf, delta, chipSideOf)
+    board.object.quaternion.copy(camera.quaternion)
     renderer.render(scene, camera)
     cssRenderer.render(cssScene, camera)
   }
@@ -338,6 +343,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     },
     following: () => following,
     focused: () => focused,
+    setCosts(costBoardData) {
+      board.update(costBoardData)
+    },
     dispose() {
       cancelAnimationFrame(frameId)
       pending.forEach((timer) => clearTimeout(timer))
@@ -346,6 +354,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       rig.dispose()
       agentSet.dispose()
       terminals.dispose()
+      board.dispose()
       labels.dispose()
       strings.dispose()
       cards.dispose()
