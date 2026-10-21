@@ -102,7 +102,7 @@ describe('buildPrompt', () => {
   it('builds a prompt for one task', () => {
     const prompt = make(['U4'], 'opencode')
     expect(prompt.split('\n')[0]).toBe("Model to select in OpenCode: DeepSeek V4.1 Flash 1017 (in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash), reasoning max.")
-    expect(prompt).toContain('Your worktree is C:\\GitHub\\MachineRoom-opencode. Run: git switch -c feat/u4-reject-a-foreign main')
+    expect(prompt).toContain('Your worktree is C:\\GitHub\\MachineRoom-opencode. Run: git switch -c feat/u4-reject-a-foreign refs/heads/main')
     expect(prompt).toContain('Task U4: Reject a foreign Host header in the bridge.')
     expect(prompt).toContain(byId('U4').text)
     expect(prompt).toContain('Commit with the prefix 0.1.36 and one plain sentence. Do not push.')
@@ -117,13 +117,20 @@ describe('buildPrompt', () => {
     const prompt = make(['G5', 'P5'], 'hermes')
     expect(prompt).toContain('Model to select in Hermes: deepseek/deepseek-v4.1-flash-1017 (the OpenRouter id')
     expect(prompt.split('\n')[0]).toBe("Model to select in Hermes: deepseek/deepseek-v4.1-flash-1017 (the OpenRouter id; pick it from Hermes' own model list), reasoning xhigh.")
-    expect(prompt).toContain('git switch -c feat/g5-ci-workflow main')
+    expect(prompt).toContain('git switch -c feat/g5-ci-workflow refs/heads/main')
     expect(prompt).toContain('Task G5: CI workflow.')
     expect(prompt).toContain('Task P5: Recover cut and redacted tool lines.')
     expect(prompt).toContain('Do the tasks in order.')
     expect(prompt).toContain('Report once, at the end.')
     expect(prompt).toContain('Run one command per tool call.')
     expect(prompt.indexOf('Task G5')).toBeLessThan(prompt.indexOf('Task P5'))
+  })
+
+  it('never ends a prompt line in the bare main branch', () => {
+    for (const laneKey of Object.keys(lanes)) {
+      const prompt = make(['U4', 'G5'], laneKey)
+      for (const line of prompt.split('\n')) expect(line, `${laneKey}: ${line}`).not.toMatch(/ main$/)
+    }
   })
 
   it('names the stronger model for a task that needs it and leaves out the hint', () => {
