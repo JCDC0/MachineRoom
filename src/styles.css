@@ -1757,6 +1757,13 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.6);
 }
 
+.panel-boundary-message {
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 .panel-error-message {
   color: var(--white);
   font-size: 12px;
