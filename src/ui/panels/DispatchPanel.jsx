@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  briefTarget,
   chooseAssignee,
   formatBriefTitle,
   groupBriefsByOwner,
@@ -14,6 +15,7 @@ import { profileFromBrief } from '../../policy/profile.js'
 export default function DispatchPanel({
   client,
   onCreated,
+  targetBriefId,
   initialAgents,
   initialModels,
   initialAssigneeAgentId,
@@ -25,6 +27,8 @@ export default function DispatchPanel({
   initialRouteError,
   initialRouteNote,
 }) {
+  const [targetDismissed, setTargetDismissed] = useState(false)
+  const pickedTargetRef = useRef(false)
   const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
   const [models, setModels] = useState(() => (Array.isArray(initialModels) ? initialModels : []))
   const [loading, setLoading] = useState(
@@ -270,8 +274,7 @@ export default function DispatchPanel({
     setRouteNote(note || null)
   }
 
-  function handleBriefChange(event) {
-    const id = event.target.value
+  function pickBrief(id) {
     setSelectedBriefId(id)
     setCopyStatus(null)
     setShowConfirm(false)
@@ -313,6 +316,22 @@ export default function DispatchPanel({
     loadPromptForBrief(id, brief)
     loadRouteForBrief(brief)
   }
+
+  function handleBriefChange(event) {
+    setTargetDismissed(true)
+    pickBrief(event.target.value)
+  }
+
+  const targetResult =
+    typeof targetBriefId === 'string' && targetBriefId.trim() && !briefsLoading && !briefsError
+      ? briefTarget(briefs, targetBriefId)
+      : null
+
+  useEffect(() => {
+    if (!targetResult?.brief || loading || loadError || pickedTargetRef.current) return
+    pickedTargetRef.current = true
+    pickBrief(targetResult.brief.id)
+  })
 
   async function handleConfirmRun() {
     if (!selectedBriefId || !briefLane || typeof client?.startRun !== 'function') return
@@ -507,6 +526,12 @@ export default function DispatchPanel({
                 </optgroup>
               ))}
             </select>
+          )}
+
+          {targetResult?.problem && !targetDismissed && (
+            <div className="brief-target-problem mono" role="alert">
+              {targetResult.problem}
+            </div>
           )}
 
           {notForAgent && (

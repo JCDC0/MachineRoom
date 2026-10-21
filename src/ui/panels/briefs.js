@@ -104,3 +104,13 @@ export function groupBriefsByOwner(briefs) {
 }
 
 export const groupBriefs = groupBriefsByOwner
+
+export function briefTarget(briefs, id) {
+  const wanted = typeof id === 'string' ? id.trim() : ''
+  const list = Array.isArray(briefs) ? briefs : []
+  const brief = wanted
+    ? list.find((item) => item && typeof item === 'object' && item.id === wanted)
+    : undefined
+  if (brief) return { brief }
+  return { problem: `Brief ${wanted} is not in the brief list.` }
+}

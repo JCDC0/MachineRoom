@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Brief C5e (from the Plan tab to Dispatch) for AGY.
+- C5e: the Plan tab shows a `Dispatch C7a` button for each added brief. It opens Dispatch with that brief picked (title, agent, model, prompt, Route row), or says in red that the brief is not in the list.
 - Review note on V8: no fixes.
 - Brief P3d (a smaller file list, for the cloud session).
 - Review note on P3c (Claude in the cloud): no fixes. On Windows, `npm run scale-probe -- --replay` gives identical digests on main and on the merge for all 68 replays (5 fixtures and 63 recordings); the probe passes every budget but the first tree event (2.4 MB), with the warm layout at 13.8 ms; the full suite passed twice while a lane ran its own. The planCollapse shortcut was compared with the old code on odd paths (trailing slash, `./`, leading slash, `..`, a space) and matches.

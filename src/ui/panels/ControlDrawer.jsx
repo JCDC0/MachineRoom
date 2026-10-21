@@ -160,6 +160,11 @@ export default function ControlDrawer({
     }
   }
 
+  const dispatchBriefId =
+    effectiveTarget?.tab === 'dispatch' && typeof effectiveTarget.briefId === 'string' && effectiveTarget.briefId.trim()
+      ? effectiveTarget.briefId.trim()
+      : undefined
+
   if (!open) return null
 
   return (
@@ -223,12 +228,15 @@ export default function ControlDrawer({
           {activeTab === 'dispatch' && (
             <DispatchPanel
               client={client}
+              targetBriefId={dispatchBriefId}
               onCreated={() => {
                 loadPendingCount()
               }}
             />
           )}
-          {activeTab === 'plan' && hasPlanTab && <PlanPanel client={client} />}
+          {activeTab === 'plan' && hasPlanTab && (
+            <PlanPanel client={client} onSelectControlTarget={handleSelectControlTarget} />
+          )}
           {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={effectiveTarget} />}
           {activeTab === 'approvals' && (
             <ApprovalsPanel

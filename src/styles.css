@@ -2316,6 +2316,24 @@ summary:focus-visible,
   color: var(--green);
 }
 
+.plan-added-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space);
+}
+
+.plan-dispatch-btn {
+  padding: 2px var(--space);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.brief-target-problem {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--red);
+}
+
 .plan-briefs {
   display: flex;
   flex-direction: column;
