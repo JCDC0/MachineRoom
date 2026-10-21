@@ -43,11 +43,17 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster)
   const board = createCostBoard(cssScene, { onPick })
-  board.setVisible(width >= 900)
+  let boardShown = width >= 900
+  board.setVisible(boardShown)
   const labels = createLabels(scene)
 
   const strings = createStrings(scene, { onPath: (path) => cards.onPath(path) })
-  const cards = createCards(cssScene, { glScene: scene, rootName, onInspect: (path) => focusPath(path) })
+  const cards = createCards(cssScene, {
+    glScene: scene,
+    rootName,
+    onInspect: (path) => focusPath(path),
+    obstacles: boardShown ? [board.box()] : [],
+  })
   let linkKey = ''
   let fitted = null
   const centerOf = (path) => cards.center(path ?? '')
@@ -74,7 +80,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function refit(force = false) {
-    const next = fitView([HUB_SPHERE, ...cards.spheres()], { aspect: width / height })
+    const spheres = [HUB_SPHERE, ...cards.spheres()]
+    if (boardShown) spheres.push(board.sphere())
+    const next = fitView(spheres, { aspect: width / height })
     if (!force && fitted) {
       const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
       if (shift < REFIT_SHIFT && Math.abs(next.dist - fitted.dist) < fitted.dist * REFIT_RATIO) return
@@ -211,7 +219,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
-    board.setVisible(width >= 900)
+    const shown = width >= 900
+    if (shown !== boardShown) {
+      boardShown = shown
+      board.setVisible(shown)
+      cards.setObstacles(shown ? [board.box()] : [])
+    }
     refit(true)
   }
   const observer = new ResizeObserver(onResize)

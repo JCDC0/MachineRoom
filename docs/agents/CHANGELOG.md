@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Make room for the cost board (task A5c): it sits below the hub at scale 2.4, exports its view-plane box, and `layoutCards` keeps cards clear of optional obstacle boxes while the overview fit includes the board only while it is shown; tests in `tests/layout.test.js` and `tests/cost-board.test.js`.
 - Review note on V8: no fixes.
 - Brief P3d (a smaller file list, for the cloud session).
 - Review note on P3c (Claude in the cloud): no fixes. On Windows, `npm run scale-probe -- --replay` gives identical digests on main and on the merge for all 68 replays (5 fixtures and 63 recordings); the probe passes every budget but the first tree event (2.4 MB), with the warm layout at 13.8 ms; the full suite passed twice while a lane ran its own. The planCollapse shortcut was compared with the old code on odd paths (trailing slash, `./`, leading slash, `..`, a space) and matches.

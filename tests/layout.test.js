@@ -179,6 +179,7 @@ describe('layoutCards', () => {
   const boxes = (layout) =>
     [...layout].map(([path, p]) => ({ path, x: p.x, y: p.y, hw: size.get(path).width / 2, hh: size.get(path).height / 2 }))
   const clash = (a, b) => Math.abs(a.x - b.x) < a.hw + b.hw && Math.abs(a.y - b.y) < a.hh + b.hh
+  const places = (layout) => [...layout].map(([path, p]) => [path, Math.round(p.x), Math.round(p.y), p.z])
 
   it('is the same every time', () => {
     expect([...layoutCards(entries)]).toEqual([...layoutCards(entries)])
@@ -199,6 +200,26 @@ describe('layoutCards', () => {
         expect(clash(placed[i], placed[j]), `${placed[i].path} and ${placed[j].path}`).toBe(false)
       }
     }
+  })
+
+  it('keeps every card clear of an obstacle box', () => {
+    const obstacle = { x: 0, y: -500, hw: 900, hh: 400 }
+    const placed = boxes(layoutCards(entries, null, { obstacles: [obstacle] }))
+    for (const card of placed) {
+      expect(clash(card, obstacle), `${card.path || 'root'} and the obstacle`).toBe(false)
+    }
+  })
+
+  it('places the cards as before when no obstacles are given', () => {
+    expect(places(layoutCards(entries))).toEqual([
+      ['', 0, 415, CARD_DEPTH.root],
+      ['docs', 1121, 128, -60],
+      ['src', -1260, 128, -60],
+      ['src/engine', -1981, 470, 200],
+      ['src/model', -1840, 99, 200],
+      ['src/ui', -1840, -184, 200],
+      ['test', 1047, -416, -60],
+    ])
   })
 
   it('grows each subfolder outward on the side of its parent', () => {

@@ -1,6 +1,16 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { boardLines, createCostBoard } from '../src/engine/board.js'
+import {
+  BOARD_HEIGHT,
+  BOARD_SCALE,
+  BOARD_WIDTH,
+  BOARD_Y,
+  boardBox,
+  boardLines,
+  createCostBoard,
+} from '../src/engine/board.js'
+import { OVERVIEW, viewBasis } from '../src/engine/camera.js'
+import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import { costBoard } from '../src/model/costs.js'
 import { createMockClient } from '../src/control/mock.js'
 import { toAgents } from '../src/live/source.js'
@@ -304,5 +314,34 @@ describe('createCostBoard', () => {
     board.dispose()
     expect(scene.children).toHaveLength(0)
     expect(board.object.element.removed).toBe(true)
+  })
+
+  it('exports the box it fills in the view plane', () => {
+    const scene = new THREE.Scene()
+    const board = createCostBoard(scene)
+    const box = board.box()
+    const scale = board.object.scale.x
+
+    expect(scale).toBe(BOARD_SCALE)
+    expect(box).toEqual(boardBox(scale))
+    expect(box.x).toBe(0)
+    expect(box.y).toBe(BOARD_Y)
+    expect(box.y + box.hh).toBeLessThan(-HUB_RADIUS * Math.sin(OVERVIEW.pitch))
+    expect(box.hw).toBeCloseTo((BOARD_WIDTH / 2) * scale)
+    expect(box.hh).toBeCloseTo((BOARD_HEIGHT / 2) * scale)
+
+    const { right, up } = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
+    const at = board.object.position
+    expect(at.x).toBeCloseTo(HUB_CENTER.x + right.x * box.x + up.x * box.y)
+    expect(at.y).toBeCloseTo(HUB_CENTER.y + right.y * box.x + up.y * box.y)
+    expect(at.z).toBeCloseTo(HUB_CENTER.z + right.z * box.x + up.z * box.y)
+
+    const sphere = board.sphere()
+    expect(sphere.x).toBeCloseTo(at.x)
+    expect(sphere.y).toBeCloseTo(at.y)
+    expect(sphere.z).toBeCloseTo(at.z)
+    expect(sphere.r).toBeCloseTo(Math.hypot(box.hw, box.hh))
+
+    board.dispose()
   })
 })

@@ -176,7 +176,7 @@ function overlap(a, pa, b, pb) {
   return ox > 0 && oy > 0 ? { ox, oy } : null
 }
 
-function relaxCards(list, pos, parents, mobility) {
+function relaxCards(list, pos, parents, mobility, obstacles = []) {
   const hub = { hw: CARD_HUB.hw, hh: CARD_HUB.hh }
   const centre = { x: 0, y: 0 }
   const points = list.map((node) => pos.get(node.path))
@@ -221,6 +221,13 @@ function relaxCards(list, pos, parents, mobility) {
         if (hit.ox < hit.oy) p.x += (Math.sign(p.x) || 1) * (hit.ox + 1)
         else p.y += (Math.sign(p.y) || 1) * (hit.oy + 1)
       }
+      for (const box of obstacles) {
+        const blocked = overlap(box, { x: box.x, y: box.y }, node, p)
+        if (!blocked) continue
+        worst = Math.max(worst, Math.min(blocked.ox, blocked.oy))
+        if (blocked.ox < blocked.oy) p.x += (Math.sign(p.x - box.x) || 1) * (blocked.ox + 1)
+        else p.y += (Math.sign(p.y - box.y) || -1) * (blocked.oy + 1)
+      }
       const parent = parents.get(node.path)
       if (parent && pass < CARD_PASSES * 0.6) {
         const pp = pos.get(parent.path)
@@ -236,7 +243,7 @@ function relaxCards(list, pos, parents, mobility) {
   }
 }
 
-export function layoutCards(entries, previous = null) {
+export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
   const list = [...entries]
     .sort((a, b) => a.path.localeCompare(b.path))
     .map(({ path, width, height }) => ({ path, hw: width / 2 + CARD_GAP / 2, hh: height / 2 + CARD_GAP / 2 }))
@@ -303,7 +310,7 @@ export function layoutCards(entries, previous = null) {
     })
   }
 
-  relaxCards(list, pos, parents, mobility)
+  relaxCards(list, pos, parents, mobility, obstacles)
   return new Map(
     list.map((node) => {
       const p = pos.get(node.path)
