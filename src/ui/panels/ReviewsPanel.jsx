@@ -1,6 +1,74 @@
 import { useEffect, useRef, useState } from 'react'
 import { subscribeToNotices } from './notices.js'
-import { canMerge, defaultMergeMessage, patchLines, reviewRow } from './reviews.js'
+import { canMerge, defaultMergeMessage, mergeHead, patchLines, reviewRow } from './reviews.js'
+
+export function MergeConfirmCard({
+  target,
+  message,
+  messageValid,
+  merging,
+  mergedBanner,
+  mergeError,
+  conflictFiles,
+  onMessageChange,
+  onConfirm,
+  onCancel,
+}) {
+  if (!target) return null
+  return (
+    <div className="brief-confirm-card review-confirm-card" role="region" aria-label={`Confirm merge for ${target.lane}`}>
+      <div className="brief-confirm-warning">
+        {`Merge ${target.lane}'s ${target.branch} (${target.headShort}) into main? It merges in the main checkout and never pushes.`}
+      </div>
+      <div className="panel-field review-message-field">
+        <label htmlFor={`merge-msg-${target.lane}`}>Message</label>
+        <input
+          id={`merge-msg-${target.lane}`}
+          type="text"
+          className="mono"
+          value={message}
+          onChange={(e) => onMessageChange(e.target.value)}
+          disabled={merging}
+        />
+      </div>
+      <div className="brief-confirm-actions">
+        <button
+          type="button"
+          className="brief-confirm-btn"
+          disabled={merging || !messageValid}
+          onClick={onConfirm}
+        >
+          {merging ? 'Merging' : 'Merge'}
+        </button>
+        <button
+          type="button"
+          className="brief-cancel-btn"
+          disabled={merging}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+      </div>
+      {mergedBanner && !mergeError && (
+        <div className="review-merged-banner mono" role="status">
+          {mergedBanner}
+        </div>
+      )}
+      {mergeError && (
+        <div className="brief-confirm-error review-merge-error mono" role="alert">
+          <div>{mergeError}</div>
+          {conflictFiles.length > 0 && (
+            <ul className="review-conflict-files">
+              {conflictFiles.map((file) => (
+                <li key={file}>{file}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function ReviewsPanel({
   client,
@@ -23,6 +91,16 @@ export default function ReviewsPanel({
   const [mergeError, setMergeError] = useState(null)
   const [mergeConflictFiles, setMergeConflictFiles] = useState([])
   const [mergeSuccessByLane, setMergeSuccessByLane] = useState({})
+  const [movedByLane, setMovedByLane] = useState({})
+
+  function clearMoved(lane) {
+    setMovedByLane((prev) => {
+      if (!prev[lane]) return prev
+      const next = { ...prev }
+      delete next[lane]
+      return next
+    })
+  }
 
   async function loadReviews({ isInitial = false } = {}) {
     if (typeof client?.reviews !== 'function') {
@@ -61,6 +139,7 @@ export default function ReviewsPanel({
     if (!lane || typeof client?.reviewDiff !== 'function') return
     const reqId = ++diffReqRef.current
     setSelectedLane(lane)
+    clearMoved(lane)
     setDiffLoading(true)
     setDiffError(null)
     setDiff(null)
@@ -80,7 +159,8 @@ export default function ReviewsPanel({
 
   function handleRowClick(review) {
     if (!review?.lane || review.error) return
-    if (selectedLane === review.lane && !diffError) {
+    const moved = movedByLane[review.lane]
+    if (selectedLane === review.lane && !diffError && !moved) {
       diffReqRef.current += 1
       setSelectedLane(null)
       setDiff(null)
@@ -94,11 +174,23 @@ export default function ReviewsPanel({
   function handleOpenConfirm(event, review, row) {
     event.stopPropagation()
     if (!canMerge(review)) return
+    const result = mergeHead(row, diff)
+    if (result.error) {
+      setMovedByLane((prev) => ({ ...prev, [row.lane]: result.error }))
+      setConfirmTarget((current) => (current?.lane === row.lane ? null : current))
+      return
+    }
+    setMovedByLane((prev) => {
+      if (!prev[row.lane]) return prev
+      const next = { ...prev }
+      delete next[row.lane]
+      return next
+    })
     setConfirmTarget({
       lane: row.lane,
       branch: row.branch,
-      head: row.head,
-      headShort: row.headShort,
+      head: result.head,
+      headShort: result.head.slice(0, 7),
     })
     setMergeMessage(defaultMergeMessage(review))
     setMergeError(null)
@@ -227,6 +319,11 @@ export default function ReviewsPanel({
                       <div className="review-last-run mono">
                         {row.lastRunText}
                       </div>
+                      {movedByLane[row.lane] && (
+                        <div className="review-error mono" role="alert">
+                          {movedByLane[row.lane]}
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -238,57 +335,18 @@ export default function ReviewsPanel({
                 )}
 
                 {isConfirmOpen && (
-                  <div className="brief-confirm-card review-confirm-card" role="region" aria-label={`Confirm merge for ${confirmTarget.lane}`}>
-                    <div className="brief-confirm-warning">
-                      {`Merge ${confirmTarget.lane}'s ${confirmTarget.branch} (${confirmTarget.headShort}) into main? It merges in the main checkout and never pushes.`}
-                    </div>
-                    <div className="panel-field review-message-field">
-                      <label htmlFor={`merge-msg-${confirmTarget.lane}`}>Message</label>
-                      <input
-                        id={`merge-msg-${confirmTarget.lane}`}
-                        type="text"
-                        className="mono"
-                        value={mergeMessage}
-                        onChange={(e) => setMergeMessage(e.target.value)}
-                        disabled={merging}
-                      />
-                    </div>
-                    <div className="brief-confirm-actions">
-                      <button
-                        type="button"
-                        className="brief-confirm-btn"
-                        disabled={merging || !isMessageValid}
-                        onClick={handleConfirmMerge}
-                      >
-                        {merging ? 'Merging' : 'Merge'}
-                      </button>
-                      <button
-                        type="button"
-                        className="brief-cancel-btn"
-                        disabled={merging}
-                        onClick={handleCancelConfirm}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    {mergedBanner && !mergeError && (
-                      <div className="review-merged-banner mono" role="status">
-                        {mergedBanner}
-                      </div>
-                    )}
-                    {mergeError && (
-                      <div className="brief-confirm-error review-merge-error mono" role="alert">
-                        <div>{mergeError}</div>
-                        {mergeConflictFiles.length > 0 && (
-                          <ul className="review-conflict-files">
-                            {mergeConflictFiles.map((file) => (
-                              <li key={file}>{file}</li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <MergeConfirmCard
+                    target={confirmTarget}
+                    message={mergeMessage}
+                    messageValid={isMessageValid}
+                    merging={merging}
+                    mergedBanner={mergedBanner}
+                    mergeError={mergeError}
+                    conflictFiles={mergeConflictFiles}
+                    onMessageChange={setMergeMessage}
+                    onConfirm={handleConfirmMerge}
+                    onCancel={handleCancelConfirm}
+                  />
                 )}
 
                 {isSelected && (

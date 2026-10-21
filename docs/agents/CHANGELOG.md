@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Merge the head whose diff the owner read (task U6a): `mergeHead` in `src/ui/panels/reviews.js` keeps the list head with no diff or another lane's diff, uses the diff's head when it matches, and answers the moved branch sentence when they differ; the Reviews confirm card shows the diff's short head, and the row shows that sentence in the error style and does not open a card.
 - C4c brief: `useRoute` renamed `routeFields` (it is not a hook), and the by-eye check picks any two briefs of different lanes, since C6b and M1a are merged.
 - Review note on M1a: no fixes. Checked in the browser at 1280 by 800: with no agent only `Default model`, Claude Code and the Orchestrator get the three Claude models, Hermes MiMo, OpenCode its two, agy only the default, each default labelled with the agent's model or `set in the harness`. It shows that `server/models.js` is stale: it lacks the DeepSeek V4.1 Flash 1017 models Hermes and OpenCode run. Left in: a string form in `normalizeAgent` and an `Other` group no listed model falls into.
 - Fix for 0.1.126: `tests/plan.test.js` still pinned OpenCode out of `src/ui/**`; it now checks `src/Stage.jsx`.
