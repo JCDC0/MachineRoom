@@ -11,7 +11,7 @@ Before merging a branch that adds a route that writes (a merge, a backup, any wr
 - `main` is 0.1.123. GitHub has 0.1.121; the U10 and U6 merges and this note are not pushed. Push only on the owner's yes.
 - U8 had committed before the shutdown cut its run, so it was reviewed and merged as 0.1.124 (no run record, so no outcome line). AGY's cut M1a start (one uncommitted file) was cleared and its prompt written again.
 - AGY: the prompt for **M1a** is written (`agy-M1a-prompt.txt` in its worktree); the owner sends it. After M1a, in order: **U7**, **U9**, **U6a**, **U10a**, then **C4c** and **C5c** (S2b is held). The prompts for M1a, U7, U9 and U6a are written; the owner runs them one at a time. Write each prompt with `node scripts/agy-prompt.mjs ID --clean` and record each run with `npm run hand-run`.
-- S1 was recorded for Hermes and OpenCode on their CLIs (S1a in TASKS.md): a log names a child only after it ends, so S2a, S3a and S2b are held. Hermes runs P11. OpenCode has no open brief.
+- S1 was recorded for Hermes and OpenCode on their CLIs (S1a in TASKS.md): a log names a child only after it ends, so S2a, S3a and S2b are held. P11 is merged. Hermes and OpenCode have no open brief.
 - Last merges: V7b (0.1.120, grade B, 4 fixes), the cloud UI audit (0.1.121), U10 (0.1.122, A), U6 (0.1.123, A).
 
 ## Standing rules from the owner
