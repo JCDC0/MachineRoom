@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge sends a page the whole file list in its first `tree` event and only the files that page has not had in each later one (task P3c), so a new file in a 40000 file project sends about 100 bytes instead of 2.4 MB; the page only adds files, so it ends with the same list.
 - Make the room fast on a large project (task P3c): `planFolderView` keeps an index of the file list and adds new files to it, so a plan over 40000 files takes about 2 ms instead of 800; `layoutCards` reads positions from arrays in its pair loop (31 ms to about 11 for 122 cards); `planCollapse` builds its tree with a parent walk and sorts once (25 ms to about 10); `touchesForCommand` and `resolveKnown` test for the plain text before they build a regular expression or split a path (137 ms to about 2 a Hermes line). The 5 fixtures replay to the same activities, folder plans and layouts as before.
 - Briefs A5b (the cost board in the room, AGY) and P3c (a large project pass, Claude in the cloud).
 - Review note on C4c: no fixes. Checked in the browser with the mock at 1280 by 800 and 1024 by 768: the Route row under Agent, `Use` sets agy and keeps the default model with the yellow note, and the row goes with no brief. Every mock brief routes to the large tier because the mock's sample briefs have no `Files:` list, so `profileFromBrief` calls them unclear; real briefs carry one.
