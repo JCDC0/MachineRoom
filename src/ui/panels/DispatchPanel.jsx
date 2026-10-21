@@ -7,7 +7,9 @@ import {
 } from './briefs.js'
 import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
+import { agentForLane, routeFields } from './route.js'
 import { recordLine, resultWord, timeSinceStart } from './runs.js'
+import { profileFromBrief } from '../../policy/profile.js'
 
 export default function DispatchPanel({
   client,
@@ -16,6 +18,12 @@ export default function DispatchPanel({
   initialModels,
   initialAssigneeAgentId,
   initialModel,
+  initialBriefs,
+  initialSelectedBriefId,
+  initialRouteAnswer,
+  initialRouteLoading,
+  initialRouteError,
+  initialRouteNote,
 }) {
   const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
   const [models, setModels] = useState(() => (Array.isArray(initialModels) ? initialModels : []))
@@ -24,10 +32,12 @@ export default function DispatchPanel({
   )
   const [loadError, setLoadError] = useState(null)
 
-  const [briefs, setBriefs] = useState([])
-  const [briefsLoading, setBriefsLoading] = useState(() => typeof client?.briefs === 'function')
+  const [briefs, setBriefs] = useState(() => (Array.isArray(initialBriefs) ? initialBriefs : []))
+  const [briefsLoading, setBriefsLoading] = useState(
+    () => !Array.isArray(initialBriefs) && typeof client?.briefs === 'function'
+  )
   const [briefsError, setBriefsError] = useState(null)
-  const [selectedBriefId, setSelectedBriefId] = useState('')
+  const [selectedBriefId, setSelectedBriefId] = useState(() => initialSelectedBriefId || '')
   const [promptText, setPromptText] = useState('')
   const [promptModel, setPromptModel] = useState('')
   const [promptLoading, setPromptLoading] = useState(false)
@@ -38,12 +48,18 @@ export default function DispatchPanel({
   const [startingRun, setStartingRun] = useState(false)
   const [runError, setRunError] = useState(null)
 
+  const [routeLoading, setRouteLoading] = useState(() => Boolean(initialRouteLoading))
+  const [routeError, setRouteError] = useState(() => initialRouteError || null)
+  const [routeAnswer, setRouteAnswer] = useState(() => initialRouteAnswer || null)
+  const [routeNote, setRouteNote] = useState(() => initialRouteNote || null)
+
   const [runsState, setRunsState] = useState({ running: [], recent: [] })
   const [runsLoading, setRunsLoading] = useState(() => typeof client?.runs === 'function')
   const [runsError, setRunsError] = useState(null)
 
   const promptReqRef = useRef(0)
   const promptBoxRef = useRef(null)
+  const routeReqRef = useRef(0)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -210,6 +226,50 @@ export default function DispatchPanel({
     }
   }
 
+  async function loadRouteForBrief(brief) {
+    if (!brief) return
+    const reqId = ++routeReqRef.current
+    setRouteLoading(true)
+    setRouteError(null)
+    setRouteAnswer(null)
+    setRouteNote(null)
+
+    if (typeof client?.suggestRoute !== 'function') {
+      setRouteLoading(false)
+      setRouteError('Could not suggest route.')
+      return
+    }
+
+    try {
+      const profile = profileFromBrief(brief)
+      const result = await client.suggestRoute(profile)
+      if (routeReqRef.current !== reqId) return
+      setRouteAnswer(result)
+    } catch (err) {
+      if (routeReqRef.current !== reqId) return
+      setRouteError(err.message || 'Could not suggest route.')
+    } finally {
+      if (routeReqRef.current === reqId) {
+        setRouteLoading(false)
+      }
+    }
+  }
+
+  function handleUseRoute() {
+    if (!routeAnswer?.choice) return
+    const { agentId, model: nextModel, note } = routeFields(routeAnswer.choice, agents, models)
+    if (agentId) {
+      setAssigneeAgentId(agentId)
+      if (fieldErrors.agent) {
+        setFieldErrors((prev) => ({ ...prev, agent: null }))
+      }
+    }
+    if (nextModel !== null && nextModel !== undefined) {
+      setModel(nextModel)
+    }
+    setRouteNote(note || null)
+  }
+
   function handleBriefChange(event) {
     const id = event.target.value
     setSelectedBriefId(id)
@@ -217,14 +277,19 @@ export default function DispatchPanel({
     setShowConfirm(false)
     setRunError(null)
     setStartingRun(false)
+    setRouteNote(null)
 
     if (!id) {
       promptReqRef.current += 1
+      routeReqRef.current += 1
       setNotForAgent(false)
       setPromptLoading(false)
       setPromptError(null)
       setPromptText('')
       setPromptModel('')
+      setRouteLoading(false)
+      setRouteError(null)
+      setRouteAnswer(null)
       return
     }
 
@@ -246,6 +311,7 @@ export default function DispatchPanel({
     setModel((prevModel) => resetModel(nextAgent, prevModel, models))
 
     loadPromptForBrief(id, brief)
+    loadRouteForBrief(brief)
   }
 
   async function handleConfirmRun() {
@@ -341,6 +407,11 @@ export default function DispatchPanel({
       setPromptLoading(false)
       setNotForAgent(false)
       setCopyStatus(null)
+      setRouteLoading(false)
+      setRouteError(null)
+      setRouteAnswer(null)
+      setRouteNote(null)
+      routeReqRef.current += 1
       setTitle('')
       setDescription('')
       setAssigneeAgentId('')
@@ -669,6 +740,47 @@ export default function DispatchPanel({
           ))}
         </select>
       </div>
+
+      {selectedBriefId && (
+        <div className="panel-field dispatch-route-row">
+          <label>Route</label>
+          {routeLoading || (!routeError && !routeAnswer) ? (
+            <div className="dispatch-route-state mono" role="status">
+              Reading the policy.
+            </div>
+          ) : routeError ? (
+            <div className="dispatch-route-error mono" role="alert">
+              {routeError}
+            </div>
+          ) : !routeAnswer?.choice ? (
+            <div className="dispatch-route-error mono" role="alert">
+              {routeAnswer?.reason}
+            </div>
+          ) : routeAnswer.choice.lane === 'owner' ? (
+            <div className="dispatch-route-card">
+              <span className="dispatch-route-reason mono">{routeAnswer.reason}</span>
+            </div>
+          ) : (
+            <div className="dispatch-route-card">
+              <div className="dispatch-route-main">
+                <span className="dispatch-route-reason mono">{routeAnswer.reason}</span>
+                <button
+                  type="button"
+                  className="dispatch-route-use-btn"
+                  onClick={handleUseRoute}
+                >
+                  Use
+                </button>
+              </div>
+              {routeNote && (
+                <div className="dispatch-route-note mono" role="status">
+                  {routeNote}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="panel-field">
         <label htmlFor="dispatch-model">Model</label>
