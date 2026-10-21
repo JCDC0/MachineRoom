@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The mock's sample briefs name their files and a test (task C4e), so replay mode routes them to the small, medium and large tiers instead of the large tier for every one; tests in `tests/control-mock-briefs.test.js`.
 - Briefs C5d (add a plan's briefs to TASKS.md) and C4e (the mock's sample briefs name their files) for OpenCode, and T18 (prompts name `refs/heads/main`) for Hermes.
 - Briefs A5b (the cost board in the room, AGY) and P3c (a large project pass, Claude in the cloud).
 - Review note on C4c: no fixes. Checked in the browser with the mock at 1280 by 800 and 1024 by 768: the Route row under Agent, `Use` sets agy and keeps the default model with the yellow note, and the row goes with no brief. Every mock brief routes to the large tier because the mock's sample briefs have no `Files:` list, so `profileFromBrief` calls them unclear; real briefs carry one.
