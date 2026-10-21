@@ -190,6 +190,50 @@ describe('opencode parser', () => {
     const cut = '{"type":"tool_use","part":{"id":"p13","tool":"shell","state":{"input":{"command":"cat docs/notes.md"'
     expect(parser.push(cut + '\n', 1)).toEqual([])
   })
+
+  it('names a subagent call by its description and touches no file', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(
+      lines({
+        type: 'tool_use',
+        timestamp: 8000,
+        sessionID: 'ses_a',
+        part: {
+          type: 'tool',
+          tool: 'subagent',
+          id: 'call_1',
+          state: {
+            status: 'completed',
+            input: { agent: 'general', description: 'Count exported functions', prompt: 'Read src/model/paths.js and src/model/commands.js' },
+            metadata: { sessionID: 'ses_b' },
+            time: { start: 1000, end: 8000 },
+          },
+        },
+      }),
+      8000
+    )
+    expect(summary(out)).toEqual(['start subagent: Count exported functions', 'end true'])
+    expect(out[0].tool).toBe('other')
+    expect(out[0].touches).toEqual([])
+    expect(out[0].time).toBe(7700)
+    expect(out[1]).toMatchObject({ type: 'tool.end', id: 'call_1', ok: true, time: 8000 })
+  })
+
+  it('fails a subagent call whose status is error', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(
+      lines({ type: 'tool_use', part: { id: 'call_2', tool: 'subagent', state: { status: 'error', input: { agent: 'general', description: 'Count exported functions' } } } }),
+      8000
+    )
+    expect(out[1]).toMatchObject({ type: 'tool.end', ok: false })
+  })
+
+  it('labels a subagent call with no description as subagent', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(lines({ type: 'tool_use', part: { id: 'call_3', tool: 'subagent', state: { status: 'completed', input: { agent: 'general' } } } }), 8000)
+    expect(out[0].label).toBe('subagent')
+    expect(out[0].touches).toEqual([])
+  })
 })
 
 describe('agy parser', () => {

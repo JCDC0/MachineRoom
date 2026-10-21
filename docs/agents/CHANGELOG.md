@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Name an OpenCode subagent call by its task (task P11): `opencode.js` labels a `subagent` tool call `subagent: DESCRIPTION` from `part.state.input.description` cut with `shorten`, or `subagent` when there is none, keeps the tool kind `other`, touches no file (the `prompt` names files but is not read) and keeps the same start and end times; tests in `tests/parsers.test.js` cover the recorded line, an error status and no description.
 - S1a: subagent runs recorded for Hermes and OpenCode on their CLIs. Both name a child only once it has ended and never show its calls, so S2a, S3a and S2b are held. New brief: P11 (name an OpenCode subagent call by its task, Hermes).
 - Review note on U8: no fixes. The run was cut by a shutdown after its commit, so it has no run record; the files were checked against the brief by hand.
 - Handoff: ORCHESTRATOR.md gains `Where things stand`, with the cut U8 run and how to start it again, AGY's queue and what is not pushed.

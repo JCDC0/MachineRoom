@@ -81,6 +81,9 @@ export function createOpencodeParser(ctx) {
       label = `$ ${shorten(command)}`
     } else if (tool === 'search') {
       label = `${name} ${shorten(input.pattern ?? input.path ?? '')}`
+    } else if (name === 'subagent') {
+      const description = shorten(typeof input.description === 'string' ? input.description : '')
+      label = description ? `subagent: ${description}` : 'subagent'
     }
     const failed = status === 'error' || (tool === 'shell' && looksFailed(output))
     out.push(toolStart({ time: time - 300, id: callId, tool, label, touches }))
