@@ -404,6 +404,7 @@ export function createBridge(options = {}) {
   const clients = new Set()
   const treeSent = new WeakMap()
   const folderClients = new WeakSet()
+  const treeClients = new WeakSet()
   const history = []
   let nextId = 0
   let socket = null
@@ -455,6 +456,7 @@ export function createBridge(options = {}) {
     lastFiles = current.files
     const events = new Map()
     for (const client of clients) {
+      if (!treeClients.has(client)) continue
       const sent = treeSent.get(client) ?? null
       const shape = folderClients.has(client) ? FOLDER_SHAPE : null
       const key = sent ?? shape
@@ -1019,6 +1021,7 @@ export function createBridge(options = {}) {
       }
 
       clients.add(res)
+      if (url.searchParams.has('tree')) treeClients.add(res)
       if (url.searchParams.get('tree') === FOLDER_SHAPE) folderClients.add(res)
       req.on('close', () => {
         clients.delete(res)

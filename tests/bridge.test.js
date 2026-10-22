@@ -730,7 +730,7 @@ describe('live bridge', () => {
     expect(JSON.parse(event.data)).toEqual(frame)
   })
 
-  it('emits a tree SSE event when the watched project file list changes', async () => {
+  it('emits a tree SSE event only to a stream that asks for one', async () => {
     const dir = makeTempDir()
     writeFileSync(join(dir, 'a.js'), '1\n')
 
@@ -747,13 +747,17 @@ describe('live bridge', () => {
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
 
-    const sse = await openSse(url)
-    cleanups.push(() => sse.close())
+    const withTree = await openSse(url, {}, '?tree=1')
+    cleanups.push(() => withTree.close())
+    const withoutTree = await openSse(url)
+    cleanups.push(() => withoutTree.close())
+    await sleep(50)
 
     writeFileSync(join(dir, 'b.js'), '2\n')
-    const treeEvent = await sse.next((e) => e.event === 'tree')
+    const treeEvent = await withTree.next((e) => e.event === 'tree')
     const data = JSON.parse(treeEvent.data)
     expect(data.files).toEqual(['a.js', 'b.js'])
+    await expect(withoutTree.next((e) => e.event === 'tree', 400)).rejects.toThrow('timed out waiting for SSE event')
   })
 })
 
