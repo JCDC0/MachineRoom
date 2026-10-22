@@ -2,6 +2,14 @@ import { orderAgents } from '../model/pipeline.js'
 import { parseFrames } from '../model/source.js'
 
 const START_DELAY_MS = 400
+const MIN_SPEED = 0.25
+const MAX_SPEED = 64
+
+export function simulatedSpeed(value) {
+  const speed = Number(value)
+  if (!Number.isFinite(speed) || speed <= 0) return 1
+  return Math.min(Math.max(speed, MIN_SPEED), MAX_SPEED)
+}
 
 export function openSimulated({ frames, onFrame, onStatus, idleCapMs = 2500, speed = 1, setTimer = setTimeout, clearTimer = clearTimeout }) {
   const times = frames.map((frame) => Date.parse(frame.createdAt))

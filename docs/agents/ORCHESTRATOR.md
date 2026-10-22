@@ -8,12 +8,12 @@ Before merging a branch that adds a route that writes (a merge, a backup, any wr
 
 ## Where things stand (2026-10-22, end of Claude's session)
 
-- `main` is 0.1.144; GitHub has 0.1.143 (pushed 2026-10-22). Push only on the owner's yes, main only.
+- `main` is 0.1.145; GitHub has 0.1.144 (pushed 2026-10-22). Push only on the owner's yes, main only.
 - W6a from the cloud session is merged (0.1.144). The cloud session (Claude, in its own VM) commits on a `claude/...` branch it pushes, and the owner pastes its report. To review: `git fetch -q origin BRANCH`, read `git diff refs/heads/main...FETCH_HEAD`, merge with `git merge --no-ff --no-commit FETCH_HEAD`, check what it changed by eye where the brief asks, and renumber at merge. Cloud branches have no run record, so they get no outcome line.
-- Hermes runs **U11** (UI audit N7 and N10), OpenCode runs **U12** (N9), AGY runs **W6b** (the room names the task each agent runs; check the callout by eye with the mock in replay mode) and the cloud runs **E2a** (can the room ship as a Paperclip plugin page; research only, one new doc). S2a, S3a and S2b stay held after S1a.
+- U11 is merged (0.1.145) and Hermes has no open brief. OpenCode runs **U12** (N9), AGY runs **W6b** (the room names the task each agent runs; check the callout by eye with the mock in replay mode) and the cloud runs **E2a** (can the room ship as a Paperclip plugin page; research only, one new doc). S2a, S3a and S2b stay held after S1a.
 - AGY normally runs Gemini 4 Argon; it runs Gemini 3.8 Flash (High) only while Argon's quota is exhausted (the owner, 2026-10-22). `docs/agents/policy.json` stays on Argon, and `lanes.json` names the model AGY's prompts use.
 - The planner loop now runs in the drawer: the Plan tab asks PLANNER (C5c), adds the ticked briefs to `TASKS.md` behind a confirm card (C5d, never committed), and `Dispatch ID` opens Dispatch with the brief picked and its route (C5e). The cost board sits below the hub and the layout keeps cards clear of it (A5b, A5c). The bridge sends the file list in the folder shape (P3c, P3d) and lists git files with `-z`.
-- Merged on 2026-10-22: W6a (0.1.144, cloud, no fixes), C4c (0.1.134, AGY, A), T18 (0.1.135, Hermes, A), C5d (0.1.136, OpenCode, A-, 1 fix), C4e (0.1.137, OpenCode, A), A5b (0.1.138, AGY, A-, 1 fix), P3c (0.1.139, cloud), V8 (0.1.140, OpenCode, A), A5c (0.1.142, OpenCode, A), P3d (0.1.141, cloud, option A and the `-z` fix), C5e (0.1.143, AGY, A; the `briefMarkdown` tests fix).
+- Merged on 2026-10-22: U11 (0.1.145, Hermes, A), W6a (0.1.144, cloud, no fixes), C4c (0.1.134, AGY, A), T18 (0.1.135, Hermes, A), C5d (0.1.136, OpenCode, A-, 1 fix), C4e (0.1.137, OpenCode, A), A5b (0.1.138, AGY, A-, 1 fix), P3c (0.1.139, cloud), V8 (0.1.140, OpenCode, A), A5c (0.1.142, OpenCode, A), P3d (0.1.141, cloud, option A and the `-z` fix), C5e (0.1.143, AGY, A; the `briefMarkdown` tests fix).
 
 ## Standing rules from the owner
 

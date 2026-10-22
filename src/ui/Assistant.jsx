@@ -15,6 +15,13 @@ import { loadAssistantPosition, saveAssistantPosition } from './settings.js'
 
 let nextEntryId = 1
 
+export const MAX_ENTRIES = 200
+
+export function appendEntries(list, ...items) {
+  const next = [...(Array.isArray(list) ? list : []), ...items]
+  return next.length > MAX_ENTRIES ? next.slice(next.length - MAX_ENTRIES) : next
+}
+
 export default function Assistant({
   context = { agents: [], paths: [] },
   onAction,
@@ -239,7 +246,7 @@ export default function Assistant({
         kind: 'blocked',
         say,
       }
-      setEntries((prev) => [...prev, commandEntry, blockedEntry])
+      setEntries((prev) => appendEntries(prev, commandEntry, blockedEntry))
       if (blockedResult.action) {
         handleAction(blockedResult.action)
       }
@@ -254,7 +261,7 @@ export default function Assistant({
         kind: 'action',
         say: result.say,
       }
-      setEntries((prev) => [...prev, commandEntry, actionEntry])
+      setEntries((prev) => appendEntries(prev, commandEntry, actionEntry))
       if (result.action) {
         handleAction(result.action)
       }
@@ -266,7 +273,7 @@ export default function Assistant({
         action: result.action,
         status: 'pending',
       }
-      setEntries((prev) => [...prev, commandEntry, proposeEntry])
+      setEntries((prev) => appendEntries(prev, commandEntry, proposeEntry))
     } else if (result.kind === 'ask') {
       const askEntry = {
         id: `entry-${nextEntryId++}`,
@@ -274,7 +281,7 @@ export default function Assistant({
         say: result.say,
         options: Array.isArray(result.options) ? result.options : [],
       }
-      setEntries((prev) => [...prev, commandEntry, askEntry])
+      setEntries((prev) => appendEntries(prev, commandEntry, askEntry))
     } else if (result.kind === 'blocked') {
       const say = getBlockedSay(result)
       const maskedCommandEntry = { ...commandEntry, text: BLOCKED_MASK, isBlocked: true }
@@ -284,7 +291,7 @@ export default function Assistant({
         kind: 'blocked',
         say,
       }
-      setEntries((prev) => [...prev, maskedCommandEntry, blockedEntry])
+      setEntries((prev) => appendEntries(prev, maskedCommandEntry, blockedEntry))
       if (result.action) {
         handleAction(result.action)
       }
@@ -296,7 +303,7 @@ export default function Assistant({
           kind: 'thinking',
           say: 'Thinking...',
         }
-        setEntries((prev) => [...prev, commandEntry, thinkingEntry])
+        setEntries((prev) => appendEntries(prev, commandEntry, thinkingEntry))
 
         try {
           const reply = cardFirst(await handleAsk(raw))
@@ -320,7 +327,7 @@ export default function Assistant({
           kind: 'unknown',
           say: result.say,
         }
-        setEntries((prev) => [...prev, commandEntry, unknownEntry])
+        setEntries((prev) => appendEntries(prev, commandEntry, unknownEntry))
       }
     } else {
       const fallbackEntry = {
@@ -328,7 +335,7 @@ export default function Assistant({
         kind: 'unknown',
         say: result.say ?? 'Unknown command.',
       }
-      setEntries((prev) => [...prev, commandEntry, fallbackEntry])
+      setEntries((prev) => appendEntries(prev, commandEntry, fallbackEntry))
     }
   }
 
