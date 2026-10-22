@@ -15,7 +15,7 @@ import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud from './ui/Hud.jsx'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
-import { subscribeToNotices } from './ui/panels/notices.js'
+import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
 import { loadSettings, saveSettings } from './ui/settings.js'
 import Waiting from './ui/Waiting.jsx'
 
@@ -131,17 +131,19 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       return undefined
     }
     let active = true
+    const latest = latestOnly()
 
     async function updateCosts() {
+      const isLatest = latest()
       try {
         const [agentsRaw, costsRaw] = await Promise.all([client.agents(), client.costs()])
-        if (!active) return
+        if (!active || !isLatest()) return
         const roster = toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
         const board = costBoard(costsRaw, roster)
         latestBoardRef.current = board
         roomRef.current?.setCosts(board)
       } catch {
-        if (!active) return
+        if (!active || !isLatest()) return
         latestBoardRef.current = null
         roomRef.current?.setCosts(null)
       }
@@ -165,21 +167,23 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       return undefined
     }
     let active = true
+    const latest = latestOnly()
 
     async function updateTasks() {
+      const isLatest = latest()
       try {
         const [agentsRaw, issuesRaw, liveRunsRaw] = await Promise.all([
           client.agents(),
           client.issues(),
           client.liveRuns(),
         ])
-        if (!active) return
+        if (!active || !isLatest()) return
         const roster = toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
         const tasks = agentTasks(liveRunsRaw, issuesRaw, roster)
         latestTasksRef.current = tasks
         roomRef.current?.setTasks(tasks)
       } catch {
-        if (!active) return
+        if (!active || !isLatest()) return
         latestTasksRef.current = null
         roomRef.current?.setTasks(null)
       }

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createNoticeBatcher,
   findIssueByIdentifier,
+  latestOnly,
   matchesNotice,
   subscribeToNotices,
 } from '../src/ui/panels/notices.js'
@@ -309,3 +310,125 @@ describe('findIssueByIdentifier', () => {
     expect(findIssueByIdentifier([], 'JC-18')).toBeNull()
   })
 })
+
+describe('latestOnly', () => {
+  it('tells whether an answer is still the newest one started', () => {
+    const latest = latestOnly()
+    const isFirst = latest()
+    expect(isFirst()).toBe(true)
+    const isSecond = latest()
+    expect(isFirst()).toBe(false)
+    expect(isSecond()).toBe(true)
+  })
+
+  it('drops an answer that arrives after a newer one and applies the newest', async () => {
+    const latest = latestOnly()
+    let currentBoard = null
+
+    async function fetchCosts(delayMs, boardData) {
+      const isLatest = latest()
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      if (!isLatest()) return
+      currentBoard = boardData
+    }
+
+    const slowRead = fetchCosts(50, { spendCents: 100 })
+    const fastRead = fetchCosts(10, { spendCents: 200 })
+
+    await Promise.all([slowRead, fastRead])
+
+    expect(currentBoard).toEqual({ spendCents: 200 })
+  })
+
+  it('does not clear a newer board on error from an older read', async () => {
+    const latest = latestOnly()
+    let currentBoard = null
+
+    async function fetchCosts(delayMs, shouldFail, boardData) {
+      const isLatest = latest()
+      try {
+        await new Promise((resolve, reject) => {
+          setTimeout(() => {
+            if (shouldFail) reject(new Error('fetch failed'))
+            else resolve()
+          }, delayMs)
+        })
+        if (!isLatest()) return
+        currentBoard = boardData
+      } catch {
+        if (!isLatest()) return
+        currentBoard = null
+      }
+    }
+
+    const failingSlowRead = fetchCosts(50, true, null)
+    const succeedingFastRead = fetchCosts(10, false, { spendCents: 500 })
+
+    await Promise.all([failingSlowRead, succeedingFastRead])
+
+    expect(currentBoard).toEqual({ spendCents: 500 })
+  })
+
+  it('clears board when error is from the newest read', async () => {
+    const latest = latestOnly()
+    let currentBoard = { spendCents: 300 }
+
+    async function fetchCosts(delayMs, shouldFail, boardData) {
+      const isLatest = latest()
+      try {
+        await new Promise((resolve, reject) => {
+          setTimeout(() => {
+            if (shouldFail) reject(new Error('network error'))
+            else resolve()
+          }, delayMs)
+        })
+        if (!isLatest()) return
+        currentBoard = boardData
+      } catch {
+        if (!isLatest()) return
+        currentBoard = null
+      }
+    }
+
+    const fastSuccess = fetchCosts(10, false, { spendCents: 400 })
+    const slowFailure = fetchCosts(30, true, null)
+
+    await Promise.all([fastSuccess, slowFailure])
+
+    expect(currentBoard).toBeNull()
+  })
+
+  it('keeps the newest started value across multiple out-of-order completions', async () => {
+    const latest = latestOnly()
+    let currentTask = null
+
+    async function fetchTasks(delayMs, value) {
+      const isLatest = latest()
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      if (!isLatest()) return
+      currentTask = value
+    }
+
+    const first = fetchTasks(80, 'TASK-1')
+    const second = fetchTasks(20, 'TASK-2')
+    const third = fetchTasks(50, 'TASK-3')
+
+    await Promise.all([first, second, third])
+
+    expect(currentTask).toBe('TASK-3')
+  })
+
+  it('isolates counters between different latestOnly instances', () => {
+    const firstInstance = latestOnly()
+    const secondInstance = latestOnly()
+
+    const readA1 = firstInstance()
+    const readB1 = secondInstance()
+    const readA2 = firstInstance()
+
+    expect(readA1()).toBe(false)
+    expect(readA2()).toBe(true)
+    expect(readB1()).toBe(true)
+  })
+})
+

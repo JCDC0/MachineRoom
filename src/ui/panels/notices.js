@@ -69,6 +69,14 @@ export function subscribeToNotices(client, filter, onNotice, delayMs = 100) {
   }
 }
 
+export function latestOnly() {
+  let current = 0
+  return () => {
+    const id = ++current
+    return () => id === current
+  }
+}
+
 export async function resolveIssue(identifier, issues, reload) {
   const found = findIssueByIdentifier(issues, identifier)
   if (found) return { issue: found, issues }
