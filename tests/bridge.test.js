@@ -1533,6 +1533,37 @@ describe('masked keys', () => {
     await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).masked.total === 1)
   })
 
+  it('starts a new line after the Paperclip socket opens again, so a key at the start of the next chunk is masked', async () => {
+    const dir = makeTempDir()
+    const fake = await startFakePaperclip('comp-1', [{ id: 'a1', name: 'OpenCode Go', adapterType: 'opencode_local' }])
+    cleanups.push(() => fake.close())
+    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: dir, port: 0, reconnectMinMs: 40, reconnectMaxMs: 200 })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const health = () => fetch(`${url}/api/health`).then((r) => r.json())
+    await waitUntil(async () => (await health()).paperclip)
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+
+    fake.send(logFrame(841, 'progress 40', 1))
+    const before = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '841')).data)
+    expect(before.payload.chunk).toBe('progress 40')
+
+    fake.dropClients()
+    await waitUntil(async () => fake.connections >= 2 && (await health()).paperclip === true)
+
+    fake.send(logFrame(842, `${FAKE_KEY} printed\n`, 2))
+    const after = await sse.next((e) => e.event === 'frame' && e.id === '842')
+    expect(JSON.parse(after.data).payload.chunk).toBe('[key] printed\n')
+    expect(after.data).not.toContain(FAKE_KEY.slice(3))
+    await waitUntil(async () => (await health()).masked.total === 1)
+
+    const history = await openSse(url, {}, '?history=1')
+    cleanups.push(() => history.close())
+    const replayed = await history.next((e) => e.event === 'frame' && e.id === '842')
+    expect(replayed.data).toBe(after.data)
+  })
+
   it('masks a key that Paperclip splits across two chunks on the stream and in the history', async () => {
     const { fake, url, health } = await startMaskedBridge()
     const sse = await openSse(url)

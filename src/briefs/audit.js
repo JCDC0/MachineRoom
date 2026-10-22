@@ -290,6 +290,7 @@ function streamKeyOf(payload) {
 
 export function createSplitMasker({ holdMs = SPLIT_HOLD_MS } = {}) {
   const streams = new Map()
+  const lastSeq = new Map()
   const queue = []
   let count = 0
 
@@ -348,6 +349,29 @@ export function createSplitMasker({ holdMs = SPLIT_HOLD_MS } = {}) {
     releaseOpen(state, heldLine(state), heldPieces(state))
   }
 
+  function restartStream(state) {
+    releaseStream(state)
+    state.context = ''
+    state.keyEnded = false
+  }
+
+  function restartRun(runId) {
+    const prefix = `${runId}\n`
+    for (const [key, state] of streams) {
+      if (key.startsWith(prefix)) restartStream(state)
+    }
+  }
+
+  function seqGap(payload) {
+    if (typeof payload.seq !== 'number') return false
+    const runId = payload.runId
+    const gap = lastSeq.has(runId) && payload.seq !== lastSeq.get(runId) + 1
+    lastSeq.delete(runId)
+    lastSeq.set(runId, payload.seq)
+    if (lastSeq.size > STREAMS_KEPT) lastSeq.delete(lastSeq.keys().next().value)
+    return gap
+  }
+
   function stateFor(key) {
     let state = streams.get(key)
     if (state) {
@@ -368,8 +392,10 @@ export function createSplitMasker({ holdMs = SPLIT_HOLD_MS } = {}) {
   function pushLog(frame, now) {
     const masked = maskFields(frame, ['message', 'error'])
     const entry = { frame: masked, ready: false }
+    if (seqGap(masked.payload)) restartRun(masked.payload.runId)
     queue.push(entry)
     const state = stateFor(streamKeyOf(masked.payload))
+    if (masked.payload.truncated === true) restartStream(state)
     const parts = masked.payload.chunk.split(LINE_BREAK)
     const first = parts[0]
     const line = heldLine(state) + first
@@ -408,6 +434,7 @@ export function createSplitMasker({ holdMs = SPLIT_HOLD_MS } = {}) {
       releaseStream(state)
       streams.delete(key)
     }
+    lastSeq.delete(runId)
   }
 
   function drain() {
@@ -454,6 +481,13 @@ export function createSplitMasker({ holdMs = SPLIT_HOLD_MS } = {}) {
 
     flush() {
       for (const state of streams.values()) releaseStream(state)
+      return drain()
+    },
+
+    reset() {
+      for (const state of streams.values()) releaseStream(state)
+      streams.clear()
+      lastSeq.clear()
       return drain()
     },
 

@@ -116,7 +116,7 @@ export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, 
     socket.onclose = () => {
       if (closed) return
       try {
-        release(masker.flush())
+        release(masker.reset())
       } catch {}
       if (closed) return
       onStatus('reconnecting')

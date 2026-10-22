@@ -24,8 +24,8 @@ function seeded(seed) {
   }
 }
 
-function log(id, chunk, { runId = 'r1', stream = 'stdout', seq = id } = {}) {
-  return { id, companyId: 'comp-1', type: 'heartbeat.run.log', createdAt: '2026-10-22T10:00:00.000Z', payload: { runId, agentId: 'a1', seq, stream, chunk, truncated: false } }
+function log(id, chunk, { runId = 'r1', stream = 'stdout', seq = id, truncated = false } = {}) {
+  return { id, companyId: 'comp-1', type: 'heartbeat.run.log', createdAt: '2026-10-22T10:00:00.000Z', payload: { runId, agentId: 'a1', seq, stream, chunk, truncated } }
 }
 
 function status(id, runId, value) {
@@ -113,10 +113,10 @@ describe('a key split across chunks', () => {
 
   it('keeps two interleaved runs apart', () => {
     const frames = [
-      log(1, `one ${SK.slice(0, 8)}`, { runId: 'r1' }),
-      log(2, `two ${GITHUB.slice(0, 8)}`, { runId: 'r2' }),
-      log(3, `${SK.slice(8)}\n`, { runId: 'r1' }),
-      log(4, `${GITHUB.slice(8)}\n`, { runId: 'r2' }),
+      log(1, `one ${SK.slice(0, 8)}`, { runId: 'r1', seq: 1 }),
+      log(2, `two ${GITHUB.slice(0, 8)}`, { runId: 'r2', seq: 1 }),
+      log(3, `${SK.slice(8)}\n`, { runId: 'r1', seq: 2 }),
+      log(4, `${GITHUB.slice(8)}\n`, { runId: 'r2', seq: 2 }),
     ]
     const out = run(frames)
     expect(out.frames.map((frame) => frame.id)).toEqual([1, 2, 3, 4])
@@ -223,6 +223,72 @@ describe('a key split across chunks', () => {
   })
 })
 
+describe('a chunk after a gap starts a new line', () => {
+  it('joins a key to the line before it when nothing was missed, as maskKeys of the whole text does', () => {
+    const out = run([log(1, 'progress 40', { seq: 1 }), log(2, `${SK} printed\n`, { seq: 2 })])
+    expect(joined(out.frames)).toBe(maskKeys(`progress 40${SK} printed\n`).text)
+  })
+
+  it('masks a key at the start of a chunk whose seq skips one', () => {
+    const out = run([log(1, 'progress 40', { seq: 1 }), log(2, `${SK} printed\n`, { seq: 3 })])
+    expect(chunks(out.frames)).toEqual(['progress 40', '[key] printed\n'])
+    expect(out.frames.map((frame) => frame.payload.seq)).toEqual([1, 3])
+    expect(out.count).toBe(1)
+  })
+
+  it('masks a key at the start of a chunk whose seq goes back', () => {
+    const out = run([log(1, 'progress 40', { seq: 5 }), log(2, `${GITHUB} printed\n`, { seq: 5 })])
+    expect(chunks(out.frames)).toEqual(['progress 40', '[key] printed\n'])
+  })
+
+  it('masks a key at the start of a chunk still marked truncated', () => {
+    const out = run([log(1, 'progress 40', { seq: 1 }), log(2, `${SK} printed\n`, { seq: 2, truncated: true })])
+    expect(chunks(out.frames)).toEqual(['progress 40', '[key] printed\n'])
+    expect(out.frames[1].payload.truncated).toBe(true)
+    expect(out.count).toBe(1)
+  })
+
+  it('masks a key at the start of the first chunk after reset()', () => {
+    const masker = createSplitMasker()
+    expect(chunks(masker.push(log(1, 'progress 40', { seq: 1 }), 0).frames)).toEqual(['progress 40'])
+    expect(masker.reset()).toEqual({ frames: [], count: 0 })
+    const out = masker.push(log(2, `${SETTING} printed\n`, { seq: 2 }), 0)
+    expect(chunks(out.frames)).toEqual(['OPENROUTER_API_KEY' + '=[key] printed\n'])
+    expect(out.count).toBe(1)
+  })
+
+  it('releases what it holds on reset(), in order, and holds nothing after', () => {
+    const masker = createSplitMasker()
+    expect(masker.push(log(1, `key ${SK}`, { seq: 1 }), 0).frames).toEqual([])
+    expect(masker.push(status(2, 'r9', 'running'), 0).frames).toEqual([])
+    const out = masker.reset()
+    expect(out.frames.map((frame) => frame.id)).toEqual([1, 2])
+    expect(out.frames[0].payload.chunk).toBe('key [key]')
+    expect(out.count).toBe(1)
+    expect(masker.nextDue()).toBeNull()
+    expect(masker.holding()).toBe(0)
+  })
+
+  it('releases the held frames of every stream of the run when a gap comes', () => {
+    const masker = createSplitMasker()
+    expect(masker.push(log(1, 'out sk-ab', { seq: 1, stream: 'stdout' }), 0).frames).toEqual([])
+    const out = masker.push(log(2, `${SK} err\n`, { seq: 4, stream: 'stderr' }), 0)
+    expect(out.frames.map((frame) => frame.id)).toEqual([1, 2])
+    expect(chunks(out.frames)).toEqual(['out sk-ab', '[key] err\n'])
+    const next = masker.push(log(3, 'cdef\n', { seq: 5, stream: 'stdout' }), 0)
+    expect(chunks(next.frames)).toEqual(['cdef\n'])
+  })
+
+  it('keeps another run joined when one run has a gap', () => {
+    const masker = createSplitMasker()
+    masker.push(log(1, `one ${SK.slice(0, 8)}`, { runId: 'r1', seq: 1 }), 0)
+    masker.push(log(2, 'two', { runId: 'r2', seq: 1 }), 0)
+    masker.push(log(3, 'skip\n', { runId: 'r2', seq: 9 }), 0)
+    const out = masker.push(log(4, `${SK.slice(8)}\n`, { runId: 'r1', seq: 2 }), 0)
+    expect(joined(out.frames, 'r1')).toBe('one [key]\n')
+  })
+})
+
 function recordings() {
   const found = []
   for (const folder of ['fixtures', 'recordings']) {
@@ -264,7 +330,8 @@ function cutFrames(frames, random, keys = []) {
     for (const at of [...cuts, chunk.length]) {
       const seq = (seqs.get(payload.runId) ?? 0) + 1
       seqs.set(payload.runId, seq)
-      out.push({ ...frame, id: out.length + 1, payload: { ...payload, seq, chunk: chunk.slice(from, at) } })
+      const truncated = from === 0 ? payload.truncated : false
+      out.push({ ...frame, id: out.length + 1, payload: { ...payload, seq, truncated, chunk: chunk.slice(from, at) } })
       from = at
     }
   }
