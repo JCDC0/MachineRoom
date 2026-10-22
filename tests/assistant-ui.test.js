@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { appendEntries, MAX_ENTRIES } from '../src/ui/Assistant.jsx'
 import {
   addToHistory,
   BLOCKED_MASK,
@@ -137,6 +138,44 @@ describe('position clamp', () => {
       x: 1280 - 380 - 16,
       y: 800 - 280 - 88,
     })
+  })
+})
+
+describe('assistant log entries', () => {
+  it('keeps the order of the entries it is given', () => {
+    const list = [{ id: 'a' }, { id: 'b' }]
+    expect(appendEntries(list, { id: 'c' }, { id: 'd' })).toEqual([
+      { id: 'a' },
+      { id: 'b' },
+      { id: 'c' },
+      { id: 'd' },
+    ])
+  })
+
+  it('drops the oldest entries past the limit', () => {
+    expect(MAX_ENTRIES).toBe(200)
+    const list = Array.from({ length: MAX_ENTRIES }, (_, i) => ({ id: `old-${i}` }))
+    const next = appendEntries(list, { id: 'new-1' }, { id: 'new-2' })
+    expect(next).toHaveLength(MAX_ENTRIES)
+    expect(next[0]).toEqual({ id: 'old-2' })
+    expect(next[MAX_ENTRIES - 2]).toEqual({ id: 'new-1' })
+    expect(next[MAX_ENTRIES - 1]).toEqual({ id: 'new-2' })
+  })
+
+  it('drops the oldest entries of a list that is already past the limit', () => {
+    const list = Array.from({ length: MAX_ENTRIES + 50 }, (_, i) => ({ id: `old-${i}` }))
+    const next = appendEntries(list)
+    expect(next).toHaveLength(MAX_ENTRIES)
+    expect(next[0]).toEqual({ id: 'old-50' })
+    expect(next[MAX_ENTRIES - 1]).toEqual({ id: 'old-249' })
+  })
+
+  it('does not change the list it is given', () => {
+    const list = [{ id: 'a' }]
+    const next = appendEntries(list, { id: 'b' })
+    expect(list).toEqual([{ id: 'a' }])
+    expect(next).not.toBe(list)
+    expect(next).toHaveLength(2)
   })
 })
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createPipeline } from '../src/model/pipeline.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
-import { openSimulated } from '../src/live/simulated.js'
+import { openSimulated, simulatedSpeed } from '../src/live/simulated.js'
 import { makeTree } from '../src/model/paths.js'
 import { loadRecording } from './helpers.js'
 
@@ -30,6 +30,28 @@ function harness(frames, options = {}) {
 }
 
 const frame = (at) => ({ type: 'x', createdAt: new Date(at).toISOString(), payload: {} })
+
+describe('simulatedSpeed', () => {
+  it('keeps a speed inside the range', () => {
+    expect(simulatedSpeed('3')).toBe(3)
+  })
+
+  it('answers 1 for a speed that is not a finite number above 0', () => {
+    expect(simulatedSpeed('0')).toBe(1)
+    expect(simulatedSpeed('-2')).toBe(1)
+    expect(simulatedSpeed('abc')).toBe(1)
+    expect(simulatedSpeed('')).toBe(1)
+    expect(simulatedSpeed(null)).toBe(1)
+  })
+
+  it('clamps a tiny speed up to a quarter', () => {
+    expect(simulatedSpeed('1e-300')).toBe(0.25)
+  })
+
+  it('clamps a huge speed down to 64', () => {
+    expect(simulatedSpeed('1e9')).toBe(64)
+  })
+})
 
 describe('openSimulated', () => {
   it('starts with a short delay and then sends every frame in order', () => {

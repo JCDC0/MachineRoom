@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { discoverBridge, probeLive } from './live/bridge.js'
-import { loadDemo } from './live/simulated.js'
+import { loadDemo, simulatedSpeed } from './live/simulated.js'
 import { discover, loadTree } from './live/source.js'
 import { makeTree } from './model/paths.js'
 import { loadReplay } from './model/replay.js'
@@ -15,7 +15,7 @@ import { SETTINGS_KEY, loadSettings, saveSettings } from './ui/settings.js'
 async function loadSimulated(params) {
   const demo = await loadDemo()
   const tree = makeTree({ root: params.get('root') ?? demo.rootName, files: [], created: [] })
-  const speed = Number(params.get('speed')) || 1
+  const speed = simulatedSpeed(params.get('speed'))
   return { agents: demo.agents, tree, activities: [], live: { simulated: true, frames: demo.frames, speed } }
 }
 
