@@ -1,3 +1,4 @@
+import { indexFor } from './fileIndex.js'
 import { createParser } from './parsers/index.js'
 import { shorten } from './parsers/common.js'
 import { ancestors } from './paths.js'
@@ -22,6 +23,8 @@ export const ENDED_LIMIT = 1000
 
 export function createPipeline({ agents, tree }) {
   const ctx = makeContext({ ...tree, files: [...tree.files], dirs: [...(tree.dirs ?? [])] })
+  indexFor(ctx.files)
+  indexFor(ctx.dirs)
   const byId = new Map(agents.map((agent) => [agent.id, agent]))
   const parsers = new Map()
   const lastRunTime = new Map()

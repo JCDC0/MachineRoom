@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.171. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.172. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -57,6 +57,7 @@ src/model/        pure logic, no DOM, fully tested
   player.js         replay clock, seek, speed, idle compression
   source.js         parse and prepare a recording
   costs.js          costBoard: the control client's costs joined with the room's agents (rows, shares, quota windows)
+  fileIndex.js      indexFor: a set and a base name map per file or folder list, kept in a WeakMap and caught up with entries pushed later, so a shell command (commands.js) or a Hermes read (resolveKnown) costs the same at any repo size
   replay.js         fetch the recording from public/fixtures or public/recordings, and read public/recordings/index.json (parseRecordingIndex, loadRecordingIndex, describeRecording, filterRecordings)
 src/engine/       three.js scene, no React
   layout.js         layoutCards: the folder cards in the view plane, no overlap, warm start (pure, tested); layoutTree: the older whole-tree 3D layout, kept for the collapse work

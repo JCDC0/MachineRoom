@@ -1,3 +1,5 @@
+import { indexFor } from './fileIndex.js'
+
 const DRIVE = /^[a-zA-Z]:\//
 const HIDDEN = /[\u0000-\u0008\u000A-\u001F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
 
@@ -50,9 +52,10 @@ export function ancestors(path) {
 
 export function resolveKnown(name, files, near) {
   const clean = normalise(name)
-  if (files.includes(clean)) return clean
+  const index = indexFor(files)
+  if (index.has(clean)) return clean
   const base = basename(clean)
-  const matches = files.filter((file) => String(file).includes(base) && basename(file) === base)
+  const matches = index.pathsWithBase(base)
   if (matches.length === 1) return matches[0]
   if (matches.length === 0 || typeof near !== 'string') return clean
   const wanted = folders(near)

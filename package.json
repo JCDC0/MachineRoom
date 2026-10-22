@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.171",
+  "version": "0.1.172",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -20,6 +20,7 @@
     "src/decider/decide.js",
     "src/decider/wire.js",
     "src/model/commands.js",
+    "src/model/fileIndex.js",
     "src/model/paths.js",
     "src/model/parsers/common.js",
     "src/model/parsers/hermes.js",

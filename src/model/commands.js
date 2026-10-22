@@ -1,3 +1,4 @@
+import { indexFor } from './fileIndex.js'
 import { normalise } from './paths.js'
 
 const WRITE_OPERATOR = /(>>|(?<![>=-])>(?![&=])|\bSet-Content\b|\bAdd-Content\b|\bOut-File\b|\btee\b|\bsed\s+-i\b)/
@@ -52,10 +53,6 @@ function withoutHereStrings(command) {
   return out + text.slice(copied)
 }
 
-function escape(text) {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 function outsideQuotedText(text) {
   let out = ''
   let cursor = 0
@@ -74,15 +71,43 @@ function outsideQuotedText(text) {
   return out
 }
 
-function tokenSpans(segment, token, folder = false) {
-  if (!token || !segment.includes(token)) return []
-  const tail = folder ? '(?![\\w-])(?!/[\\w.-])' : '(?![\\w-])'
+function word(code) {
+  return (
+    (code >= 48 && code <= 57) ||
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    code === 95
+  )
+}
+
+function wordDash(code) {
+  return word(code) || code === 45
+}
+
+function wordDotDash(code) {
+  return wordDash(code) || code === 46
+}
+
+function afterAllowed(segment, at, folder) {
+  if (at < segment.length && wordDash(segment.charCodeAt(at))) return false
+  if (!folder || at >= segment.length) return true
+  if (segment.charCodeAt(at) !== 47) return true
+  return at + 1 >= segment.length || !wordDotDash(segment.charCodeAt(at + 1))
+}
+
+function namedSpans(segment, index, folder = false) {
   const spans = []
-  const pattern = new RegExp(`(?<![\\w.-])${escape(token)}${tail}`, 'g')
-  let found
-  while ((found = pattern.exec(segment))) {
-    spans.push({ at: found.index, end: found.index + token.length })
-    pattern.lastIndex = found.index + token.length
+  const longest = index.longest
+  if (!longest || !segment.length) return spans
+  for (let at = 0; at < segment.length; at += 1) {
+    if (at > 0 && wordDotDash(segment.charCodeAt(at - 1))) continue
+    const most = Math.min(longest, segment.length - at)
+    for (let size = 1; size <= most; size += 1) {
+      const end = at + size
+      if (!afterAllowed(segment, end, folder)) continue
+      const token = segment.slice(at, end)
+      if (index.has(token)) spans.push({ path: token, at, end })
+    }
   }
   return spans
 }
@@ -122,33 +147,24 @@ export function touchesForCommand(command, files, dirs) {
   for (const segment of segments) {
     const operator = WRITE_OPERATOR.exec(outsideQuotedText(segment))
     const mutator = MUTATOR.exec(segment)
-    const fileSpans = []
-    for (const file of files) {
-      for (const span of tokenSpans(segment, file)) fileSpans.push({ path: file, ...span })
-    }
-    const firstFiles = firstSpans(withoutNested(fileSpans))
-    for (const file of files) {
-      const span = firstFiles.get(file)
-      if (!span) continue
+    const fileIndex = indexFor(files)
+    const firstFiles = firstSpans(withoutNested(namedSpans(segment, fileIndex)))
+    const namedFiles = [...firstFiles].sort((a, b) => fileIndex.rankOf(a[0]) - fileIndex.rankOf(b[0]))
+    for (const [file, span] of namedFiles) {
       const mode = mutator || (operator && operator.index < span.at) ? 'write' : 'read'
       add({ path: file, mode, kind: 'file' })
     }
     const lister = LISTER.exec(segment)
     if (!lister) continue
-    const dirSpans = []
-    for (const dir of dirs) {
-      if (dir === '') continue
-      for (const span of tokenSpans(segment, dir, true)) dirSpans.push({ path: dir, ...span })
-    }
-    const firstDirs = firstSpans(withoutNested(dirSpans))
+    const dirIndex = indexFor(dirs)
+    const firstDirs = firstSpans(withoutNested(namedSpans(segment, dirIndex, true)))
+    const namedDirs = [...firstDirs]
+      .filter(([dir, span]) => dir !== '' && span.at > lister.index)
+      .sort((a, b) => dirIndex.rankOf(a[0]) - dirIndex.rankOf(b[0]))
     let named = false
-    for (const dir of dirs) {
-      if (dir === '') continue
-      const span = firstDirs.get(dir)
-      if (span && span.at > lister.index) {
-        add({ path: dir, mode: 'list', kind: 'dir' })
-        named = true
-      }
+    for (const [dir] of namedDirs) {
+      add({ path: dir, mode: 'list', kind: 'dir' })
+      named = true
     }
     if (!named && firstFiles.size === 0) {
       add({ path: '', mode: 'list', kind: 'dir' })
