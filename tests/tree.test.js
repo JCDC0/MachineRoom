@@ -24,7 +24,7 @@ function entry(name, kind) {
 }
 
 describe('readTree without git', () => {
-  it('skips a folder it cannot read and keeps the rest', () => {
+  it('skips a folder it cannot read and keeps the rest', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       mkdirSync(join(dir, 'open'), { recursive: true })
@@ -38,37 +38,40 @@ describe('readTree without git', () => {
         if (folder.endsWith('gone')) throw Object.assign(new Error('no such folder'), { code: 'ENOENT' })
         return readdirSync(folder, options)
       }
-      expect(readTree(dir, { listDir }).files).toEqual(['open/a.js', 'top.txt'])
+      const { files } = await readTree(dir, { listDir })
+      expect(files).toEqual(['open/a.js', 'top.txt'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   })
 
-  it('answers an empty list when the root itself cannot be read', () => {
+  it('answers an empty list when the root itself cannot be read', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       const listDir = () => {
         throw Object.assign(new Error('permission denied'), { code: 'EACCES' })
       }
-      expect(readTree(dir, { listDir }).files).toEqual([])
+      const { files } = await readTree(dir, { listDir })
+      expect(files).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
   })
 
-  it('keeps every letter of a path when the root is a drive or the file system root', () => {
+  it('keeps every letter of a path when the root is a drive or the file system root', async () => {
     const root = resolve('/')
     const listDir = (folder) => {
       if (folder === root) return [entry('src', 'dir'), entry('readme.md', 'file')]
       if (folder === join(root, 'src')) return [entry('main.js', 'file')]
       return []
     }
-    expect(readTree(root, { listDir }).files).toEqual(['readme.md', 'src/main.js'])
+    const { files } = await readTree(root, { listDir })
+    expect(files).toEqual(['readme.md', 'src/main.js'])
   })
 })
 
 describe('readTree with git', () => {
-  it('keeps ignored files out of a list longer than one megabyte', () => {
+  it('keeps ignored files out of a list longer than one megabyte', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       git(dir, ['init', '-b', 'main'])
@@ -81,7 +84,7 @@ describe('readTree with git', () => {
       const lines = []
       for (let index = 0; index < count; index += 1) lines.push(`100644 ${blob}\t${stem}${String(index).padStart(5, '0')}.txt`)
       execFileSync('git', ['update-index', '--index-info'], { cwd: dir, input: `${lines.join('\n')}\n` })
-      const { files } = readTree(dir)
+      const { files } = await readTree(dir)
       expect(files).toHaveLength(count + 1)
       expect(files).toContain('.gitignore')
       expect(files).not.toContain('ignored/skip.txt')
@@ -90,7 +93,7 @@ describe('readTree with git', () => {
     }
   }, 30000)
 
-  it('keeps non-ASCII letters and spaces in tracked and untracked names', () => {
+  it('keeps non-ASCII letters and spaces in tracked and untracked names', async () => {
     const dir = makeTempDir('mr-tree-')
     try {
       git(dir, ['init', '-b', 'main'])
@@ -98,7 +101,8 @@ describe('readTree with git', () => {
       writeFileSync(join(dir, 'données', 'été.md'), 'x')
       writeFileSync(join(dir, 'with space.txt'), 'x')
       git(dir, ['add', 'données'])
-      expect(readTree(dir).files).toEqual(['données/été.md', 'with space.txt'])
+      const { files } = await readTree(dir)
+      expect(files).toEqual(['données/été.md', 'with space.txt'])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
