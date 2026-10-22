@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { readTree, treeEvent } from '../server/index.js'
@@ -59,6 +59,14 @@ describe('the probe options and replays', () => {
       expect(result.plans).toBe(result.activities)
       expect(result.layouts).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('the probe tree stage', () => {
+  it('reads a fresh folder and leaves none behind', async () => {
+    const result = await runProbe({ files: 40, folders: 4, seed: 424242, activities: 20 })
+    expect(result.treeRoot).toContain('machineroom-scale-probe-424242-')
+    expect(existsSync(result.treeRoot)).toBe(false)
   })
 })
 
@@ -134,7 +142,7 @@ describe('the bridge tree event', () => {
     const timer = setTimeout(() => controller.abort(), 15000)
     const trees = []
     try {
-      const response = await fetch(`${url}/events`, { signal: controller.signal })
+      const response = await fetch(`${url}/events?tree=1`, { signal: controller.signal })
       onOpen()
       const decoder = new TextDecoder()
       let buffer = ''

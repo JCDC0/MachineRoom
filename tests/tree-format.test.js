@@ -223,7 +223,7 @@ describe('the bridge', () => {
     })
     const asking = readFirstTree(loop.url, `?tree=${FOLDER_SHAPE}`, () => opened())
     await ready
-    const plain = readFirstTree(loop.url, '', () => writeFileSync(join(root, 'src', 'c.js'), 'x\n'))
+    const plain = readFirstTree(loop.url, '?tree=1', () => writeFileSync(join(root, 'src', 'c.js'), 'x\n'))
     const [packed, paths] = await Promise.all([asking, plain])
     expect(paths).toEqual({ root: 'project', files: ['a.js', 'src/b.js', 'src/c.js'] })
     expect(packed.shape).toBe(FOLDER_SHAPE)

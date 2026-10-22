@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname as folderOf, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -198,9 +198,14 @@ export async function runProbe(options = {}) {
   const row = (stage, runsAt, ms, size = '') => rows.push({ stage, runsAt, ms, budget: runsAt === 'load' ? BUDGET.load : BUDGET.frame, size })
 
   const scale = makeScaleTree(settings)
-  const rootDir = join(tmpdir(), `machineroom-scale-probe-${settings.seed}-not-there`)
-  const listDir = fakeListDir(resolve(rootDir), scale.files)
-  const read = await timeItAsync(() => readTree(rootDir, { listDir }), 3)
+  const rootDir = mkdtempSync(join(tmpdir(), `machineroom-scale-probe-${settings.seed}-`))
+  let read
+  try {
+    const listDir = fakeListDir(resolve(rootDir), scale.files)
+    read = await timeItAsync(() => readTree(rootDir, { listDir }), 3)
+  } finally {
+    rmSync(rootDir, { recursive: true, force: true })
+  }
   row('readTree (fake listDir)', 'load', read.ms, `${read.result.files.length} files`)
   const sizeRow = (stage, text, budget = BUDGET.event) => {
     const bytes = Buffer.byteLength(text)
@@ -265,7 +270,7 @@ export async function runProbe(options = {}) {
   row('pipeline, Hermes read or shell line (mean)', 'activity', lines.mean)
   row('pipeline, Hermes read or shell line (worst)', 'activity', lines.worst)
 
-  return { settings, scale, rows }
+  return { settings, scale, rows, treeRoot: rootDir }
 }
 
 const PUBLIC_DIR = join(folderOf(fileURLToPath(import.meta.url)), '..', 'public')
