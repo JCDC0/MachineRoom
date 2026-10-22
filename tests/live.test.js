@@ -161,12 +161,12 @@ describe('openStream', () => {
 
   const KEY = 'sk-' + 'q'.repeat(40)
 
-  function logFrame(id, chunk, { runId = 'run-1', stream = 'stdout' } = {}) {
+  function logFrame(id, chunk, { runId = 'run-1', stream = 'stdout', seq = id } = {}) {
     return {
       id,
       type: 'heartbeat.run.log',
       createdAt: '2026-10-22T10:00:00.000Z',
-      payload: { runId, agentId: 'agent-1', seq: id, stream, chunk },
+      payload: { runId, agentId: 'agent-1', seq, stream, chunk },
     }
   }
 
@@ -260,7 +260,7 @@ describe('openStream', () => {
     sockets[0].onmessage({ data: JSON.stringify(logFrame(1, `reading ${KEY.slice(0, 12)}`)) })
     sockets[0].onmessage({ data: JSON.stringify(statusFrame(2)) })
     expect(frames).toEqual([])
-    sockets[0].onmessage({ data: JSON.stringify(logFrame(3, `${KEY.slice(12)} now`)) })
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(3, `${KEY.slice(12)} now`, { seq: 2 })) })
     expect(frames.map((frame) => frame.id)).toEqual([1, 2, 3])
     expect(frames[0].payload.chunk).toBe('reading [key]')
   })
@@ -296,6 +296,18 @@ describe('openStream', () => {
     expect(sockets).toHaveLength(2)
     sockets[1].onmessage({ data: JSON.stringify(statusFrame(2)) })
     expect(frames.map((frame) => frame.id)).toEqual([1, 2])
+  })
+
+  it('starts a new line on the new socket, so a key at the start of its first chunk is masked', () => {
+    const { sockets, timers, frames } = maskingHarness()
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(1, 'progress 40')) })
+    expect(frames.map((frame) => frame.payload.chunk)).toEqual(['progress 40'])
+    sockets[0].onclose()
+    const reconnect = [...timers.values()][0]
+    reconnect.fn()
+    sockets[1].onmessage({ data: JSON.stringify(logFrame(2, `${KEY} printed`)) })
+    expect(frames.map((frame) => frame.payload.chunk)).toEqual(['progress 40', '[key] printed'])
+    expect(JSON.stringify(frames)).not.toContain(KEY.slice(3))
   })
 })
 

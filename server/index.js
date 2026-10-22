@@ -430,6 +430,7 @@ export function createBridge(options = {}) {
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
   const masker = createSplitMasker()
+  const maskReset = {}
   let maskTimer = null
   let parserByAgentId = new Map()
   let agentFetchAt = 0
@@ -661,7 +662,19 @@ export function createBridge(options = {}) {
     while (waiting.length > 0 && !resolving && !stopped) dispatch(waiting.shift())
   }
 
+  function resetMasker() {
+    if (resolving) {
+      waiting.push(maskReset)
+      return
+    }
+    release(masker.reset())
+  }
+
   function dispatch(parsed) {
+    if (parsed === maskReset) {
+      release(masker.reset())
+      return
+    }
     const payload = parsed.payload
     const cut =
       parsed.type === 'heartbeat.run.log' &&
@@ -812,6 +825,7 @@ export function createBridge(options = {}) {
       if (socket !== ws) return
       paperclipOpen = true
       reconnectDelay = reconnectMinMs
+      resetMasker()
       checkSurface().catch(() => {})
       loadAgents()
     })
