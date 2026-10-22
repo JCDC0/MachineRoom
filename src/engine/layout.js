@@ -25,7 +25,6 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5))
 const LEVELS = [0, 1, -1]
 const FRESH = 1
 const SETTLED = 0.12
-const WARM = Symbol('warm')
 
 const norm = (v) => {
   const length = Math.hypot(v.x, v.y, v.z) || 1
@@ -165,6 +164,9 @@ export const CARD_ROW = 520
 export const CARD_V = { low: -1400, high: 1600 }
 export const CARD_DEPTH = { root: -320, step: 260, max: 460 }
 const CARD_PASSES = 260
+const CARD_REPAIR_PASSES = 240
+const CARD_SPLIT = 0.25
+const CARD_ROOM = 0.6
 
 export function cardDepth(path) {
   const level = path === '' ? 0 : path.split('/').length
@@ -212,75 +214,166 @@ export function cardOverlaps(entries, placed, obstacles = []) {
   return out
 }
 
-function dropClear(node, x, y, obstacles) {
-  let at = y
-  let moved = true
-  while (moved) {
-    moved = false
-    for (const box of obstacles) {
-      const ox = node.hw + box.hw - Math.abs(x - box.x)
-      if (ox <= 1) continue
-      const oy = node.hh + box.hh - Math.abs(at - box.y)
-      if (oy <= 1) continue
-      at = box.y - box.hh - node.hh
-      moved = true
+function nearestFreeY(node, x, atY, list, pos, skip, obstacles) {
+  const spans = []
+  const consider = (hw, hh, boxX, boxY) => {
+    if (Math.abs(boxX - x) >= hw + node.hw) return
+    spans.push([boxY - hh - node.hh - 1, boxY + hh + node.hh + 1])
+  }
+  for (const other of list) {
+    if (other.path === skip) continue
+    const p = pos.get(other.path)
+    consider(other.hw, other.hh, p.x, p.y)
+  }
+  consider(CARD_HUB.hw, CARD_HUB.hh, 0, 0)
+  for (const box of obstacles) consider(box.hw, box.hh, box.x, box.y)
+  spans.sort((a, b) => a[0] - b[0])
+  const merged = []
+  for (const span of spans) {
+    const last = merged[merged.length - 1]
+    if (last && span[0] <= last[1]) last[1] = Math.max(last[1], span[1])
+    else merged.push([span[0], span[1]])
+  }
+  let low = atY
+  let high = atY
+  for (const [start, end] of merged) {
+    if (atY < start) {
+      high = Math.min(high, start)
+      break
+    }
+    if (atY <= end) {
+      low = start
+      high = end
+      break
     }
   }
-  return at
+  if (low === atY && high === atY) return atY
+  const below = low - 1
+  const above = high + 1
+  return atY - below <= above - atY ? below : above
 }
 
-function liftClear(node, x, y, obstacles) {
-  let at = y
-  let moved = true
-  while (moved) {
-    moved = false
-    for (const box of obstacles) {
-      const ox = node.hw + box.hw - Math.abs(x - box.x)
-      if (ox <= 1) continue
-      const oy = node.hh + box.hh - Math.abs(at - box.y)
-      if (oy <= 1) continue
-      at = box.y + box.hh + node.hh
-      moved = true
+function placeNearestFree(node, list, pos, parents, obstacles) {
+  const at = pos.get(node.path)
+  const parent = parents.get(node.path)
+  const parentAt = parent ? pos.get(parent.path) : { x: 0, y: 0 }
+  const side = Math.sign(parentAt.x) || Math.sign(at.x) || 1
+  const minAbs = Math.abs(parentAt.x) + 1
+  const columns = new Set()
+  const add = (abs) => {
+    if (abs > minAbs) columns.add(Math.round(abs * 1000) / 1000)
+  }
+  add(Math.abs(at.x))
+  add(Math.abs(parentAt.x) + parent.hw + node.hw)
+  let outer = 0
+  const edges = []
+  for (const other of list) {
+    if (other.path === node.path) continue
+    const p = pos.get(other.path)
+    if (Math.sign(p.x) !== side) continue
+    const edge = Math.abs(p.x) + other.hw
+    edges.push(edge)
+    outer = Math.max(outer, edge)
+  }
+  edges.sort((a, b) => a - b)
+  let cluster = null
+  for (const edge of edges) {
+    if (cluster !== null && edge - cluster > 160) {
+      add(cluster + node.hw)
+      cluster = edge
+    } else {
+      cluster = cluster === null ? edge : Math.max(cluster, edge)
     }
   }
-  return at
+  if (cluster !== null) add(cluster + node.hw)
+  add(outer + node.hw + 1)
+
+  const ordered = [...columns].sort((a, b) => Math.abs(a - Math.abs(at.x)) - Math.abs(b - Math.abs(at.x)))
+  let best = null
+  for (const abs of ordered) {
+    const x = side * abs
+    if (best && Math.abs(x - at.x) >= best.distance) break
+    const y = nearestFreeY(node, x, at.y, list, pos, node.path, obstacles)
+    const distance = Math.hypot(x - at.x, y - at.y)
+    if (!best || distance < best.distance) best = { x, y, distance }
+  }
+  return best
 }
 
-function packCards(list, obstacles, sides) {
-  const root = list.find((node) => node.path === '')
-  const out = new Map()
-  let rootY = CARD_HUB.hh + root.hh
-  rootY = liftClear(root, 0, rootY, obstacles)
-  out.set('', { x: 0, y: rootY, z: 0 })
+function applyPlace(node, pos, place) {
+  if (!place) return false
+  const at = pos.get(node.path)
+  at.x = place.x
+  at.y = place.y
+  return true
+}
 
-  const columns = new Map()
-  for (const node of list) {
-    if (node.path === '') continue
-    const side = sides.get(node.path) || 1
-    const depth = node.path.split('/').length
-    const key = `${side}:${depth}`
-    if (!columns.has(key)) columns.set(key, { side, depth, nodes: [] })
-    columns.get(key).nodes.push(node)
-  }
-  const bySide = new Map([[-1, []], [1, []]])
-  for (const column of columns.values()) bySide.get(column.side).push(column)
-  for (const side of [-1, 1]) {
-    let outer = Math.max(CARD_HUB.hw, root.hw)
-    for (const column of bySide.get(side).sort((a, b) => a.depth - b.depth)) {
-      column.nodes.sort((a, b) => a.path.localeCompare(b.path))
-      const widest = Math.max(...column.nodes.map((node) => node.hw))
-      const x = side * (outer + widest)
-      const total = column.nodes.reduce((sum, node) => sum + node.hh * 2, 0)
-      let cursor = total / 2
-      for (const node of column.nodes) {
-        const y = dropClear(node, x, cursor - node.hh, obstacles)
-        out.set(node.path, { x, y, z: 0 })
-        cursor = y - node.hh
+function repairCards(list, pos, parents, obstacles) {
+  const exact = list.map((node) => ({ path: node.path, width: node.hw * 2 - CARD_GAP, height: node.hh * 2 - CARD_GAP }))
+  const byPath = new Map(list.map((node) => [node.path, node]))
+  const parentOf = (node) => parents.get(node.path)
+  for (let round = 0; round < CARD_REPAIR_PASSES; round += 1) {
+    const found = cardOverlaps(exact, pos, obstacles)
+    if (found.length === 0) break
+    let movedNow = 0
+    for (const hit of found) {
+      const first = hit.a === '' ? null : byPath.get(hit.a)
+      const second = hit.b === '' ? null : byPath.get(hit.b)
+      if (!first || !second) {
+        const node = first ?? second
+        if (!node) continue
+        applyPlace(node, pos, placeNearestFree(node, list, pos, parents, obstacles))
+        movedNow += 1
+        continue
       }
-      outer = Math.abs(x) + widest
+      const pa = pos.get(first.path)
+      const pb = pos.get(second.path)
+      const ox = first.hw + second.hw - Math.abs(pb.x - pa.x)
+      const oy = first.hh + second.hh - Math.abs(pb.y - pa.y)
+      if (oy <= ox) {
+        const lower = pa.y <= pb.y ? first : second
+        const upper = lower === first ? second : first
+        if (lower.path === '') {
+          pos.get(upper.path).y += oy + 1
+        } else if (upper.path === '') {
+          pos.get(lower.path).y -= oy + 1
+        } else {
+          pos.get(lower.path).y -= oy * (1 - CARD_SPLIT) + 0.5
+          pos.get(upper.path).y += oy * CARD_SPLIT + 0.5
+        }
+        movedNow += 1
+      } else {
+        const outer = Math.abs(pa.x) > Math.abs(pb.x) ? first : second
+        const inner = outer === first ? second : first
+        const sign = Math.sign(pos.get(outer.path).x) || 1
+        const parent = parentOf(inner)
+        const parentX = parent ? pos.get(parent.path).x : 0
+        const probe = pos.get(inner.path).x - sign * (ox * CARD_ROOM + 0.5)
+        const stays = parent ? Math.abs(probe) > Math.abs(parentX) && (parent.path !== '' || Math.sign(probe) === sign) : false
+        if (outer.path === '') {
+          pos.get(inner.path).x += (Math.sign(pos.get(inner.path).x) || 1) * (ox + 1)
+        } else if (inner.path === '' || !stays) {
+          pos.get(outer.path).x += sign * (ox + 1)
+        } else {
+          pos.get(inner.path).x -= sign * (ox * CARD_SPLIT + 0.5)
+          pos.get(outer.path).x += sign * (ox * (1 - CARD_SPLIT) + 0.5)
+        }
+        movedNow += 1
+      }
     }
+    if (movedNow === 0) break
   }
-  return out
+  const left = cardOverlaps(exact, pos, obstacles)
+  if (left.length === 0) return
+  const selected = new Set()
+  for (const hit of left) {
+    if (hit.a !== '') selected.add(hit.a)
+    if (hit.b && hit.b !== '') selected.add(hit.b)
+  }
+  for (const path of selected) {
+    const node = byPath.get(path)
+    applyPlace(node, pos, placeNearestFree(node, list, pos, parents, obstacles))
+  }
 }
 
 function relaxCards(list, pos, parents, mobility, obstacles = [], isWarm = false) {
@@ -391,8 +484,7 @@ export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
   const place = (path, x, y) => {
     const before = known(path)
     if (before) {
-      const warm = before[WARM]
-      pos.set(path, { x: warm ? warm.x : before.x, y: warm ? warm.y : before.y, z: 0 })
+      pos.set(path, { x: before.x, y: before.y, z: 0 })
       mobility.set(path, SETTLED)
     } else {
       pos.set(path, { x, y: clamp(y, CARD_V.low, CARD_V.high), z: 0 })
@@ -408,9 +500,6 @@ export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
     place(path, side * (CARD_HUB.hw + node.hw), CARD_HUB.hh * 0.4 - row * CARD_ROW)
   })
 
-  const sides = new Map()
-  top.forEach((path, index) => sides.set(path, index % 2 === 0 ? 1 : -1))
-
   const queue = [...top]
   while (queue.length > 0) {
     const path = queue.shift()
@@ -420,27 +509,17 @@ export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
     const kids = children.get(path)
     kids.forEach((childPath, index) => {
       queue.push(childPath)
-      sides.set(childPath, sides.get(path) || side)
       const node = byPath.get(childPath)
       place(childPath, here.x + side * (parent.hw + node.hw), here.y + ((kids.length - 1) / 2 - index) * CARD_ROW * 0.6)
     })
   }
 
   relaxCards(list, pos, parents, mobility, obstacles, previous !== null)
-  const exact = list.map((node) => ({ path: node.path, width: node.hw * 2 - CARD_GAP, height: node.hh * 2 - CARD_GAP }))
-  const didOverlap = cardOverlaps(exact, pos, obstacles).length > 0
-  let relaxed = null
-  if (didOverlap) {
-    relaxed = new Map(list.map((node) => [node.path, { x: pos.get(node.path).x, y: pos.get(node.path).y }]))
-    const packed = packCards(list, obstacles, sides)
-    for (const [path, place] of packed) pos.set(path, place)
-  }
+  repairCards(list, pos, parents, obstacles)
   return new Map(
     list.map((node) => {
       const p = pos.get(node.path)
-      const spot = { x: p.x, y: p.y, z: cardDepth(node.path) }
-      if (relaxed) Object.defineProperty(spot, WARM, { value: relaxed.get(node.path), enumerable: false })
-      return [node.path, spot]
+      return [node.path, { x: p.x, y: p.y, z: cardDepth(node.path) }]
     })
   )
 }
