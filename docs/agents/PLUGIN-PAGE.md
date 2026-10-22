@@ -1,5 +1,7 @@
 # Can the room ship as a page inside Paperclip? (E2a)
 
+Decision (the owner, 2026-10-22): keep the separate app and do not build the plugin page for now. It adds nothing to the way the owner works, it would let a key reach the browser before masking and turn the confirm rule into a page-only check, and Paperclip's plugin runtime is early. Come back to it if the owner starts working inside Paperclip's own UI often, or if people ask for it after the public release.
+
 Research only, on the installed `paperclipai` 2026.1012.0 (`@paperclipai/server`, `@paperclipai/plugin-sdk` and `@paperclipai/shared`, all 2026.1012.0). Nothing here was run against a real Paperclip. The short answer: yes for the viewer, through a small plugin whose page holds the built room in a same-origin iframe; no for lane runs, reviews and merges, which stay with the bridge on this machine. The separate app stays the main window.
 
 ## 1. What a plugin page is
