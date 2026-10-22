@@ -51,10 +51,25 @@ export function recordingName(params) {
   return name && RECORDING_NAME.test(name) ? name : null
 }
 
+export function scaleSize(params) {
+  const raw = typeof params?.get === 'function' ? params.get('scale') : (params && typeof params === 'object' ? params.scale : null)
+  if (typeof raw === 'number' && Number.isInteger(raw)) {
+    return raw >= 1000 && raw <= 500000 ? raw : null
+  }
+  if (typeof raw !== 'string' || !/^\d+$/.test(raw)) return null
+  const value = Number(raw)
+  if (!Number.isSafeInteger(value) || value < 1000 || value > 500000) return null
+  return value
+}
+
+export function fpsEnabled(params) {
+  return typeof params?.has === 'function' ? params.has('fps') : false
+}
+
 export function chooseRoute(params, saved, hasSaved, origin = '') {
   const connection = connectionFrom(params, saved)
   const foreign = linkAddresses(params).find((address) => !linkAddressAllowed(address, origin))
-  if (params.has('replay') || params.has('recording')) return { mode: 'replay', connection: foreign === undefined ? connection : saved }
+  if (params.has('replay') || params.has('recording') || scaleSize(params) !== null) return { mode: 'replay', connection: foreign === undefined ? connection : saved }
   if (foreign !== undefined) return { mode: 'connect', connection, notice: foreignLinkNotice(foreign) }
   if (LIVE_PARAMS.some((key) => params.has(key))) return { mode: 'live', connection }
   if (params.has('connect') || !hasSaved) return { mode: 'connect', connection }

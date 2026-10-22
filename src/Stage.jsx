@@ -35,7 +35,7 @@ const BADGE = {
   background: 'rgb(0 0 0 / 0.7)',
 }
 
-export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode }) {
+export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode, fps = false }) {
   const surfaceRef = useRef(null)
   const glRef = useRef(null)
   const cssRef = useRef(null)
@@ -66,10 +66,15 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
+  const framesRef = useRef([])
+  const allDeltasRef = useRef([])
+  const lastFrameRef = useRef(0)
+  const firstFrameRecorded = useRef(false)
+  const [fpsStats, setFpsStats] = useState(() => (fps ? { median: 0, p95: 0 } : null))
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
   const assistantPaths = useMemo(
-    () => [...new Set(['', ...player.state.dirs.keys(), ...player.state.files.keys()])],
+    () => (fileCount > 20000 ? [] : [...new Set(['', ...player.state.dirs.keys(), ...player.state.files.keys()])]),
     [player, fileCount, dirCount]
   )
   const pathsRef = useRef(assistantPaths)
@@ -94,7 +99,29 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       rootName: data.tree.rootName,
       agents: data.agents,
       getState: () => player.state,
-      beforeFrame: (ms) => player.tick(ms),
+      beforeFrame: (ms) => {
+        if (!firstFrameRecorded.current) {
+          firstFrameRecorded.current = true
+          if (typeof window !== 'undefined') {
+            window.__FIRST_FRAME_MS__ = Math.round(performance.now())
+          }
+        }
+        if (fps) {
+          const now = performance.now()
+          if (lastFrameRef.current > 0) {
+            const dt = now - lastFrameRef.current
+            const list = framesRef.current
+            list.push(dt)
+            if (list.length > 120) list.shift()
+            allDeltasRef.current.push(dt)
+            if (typeof window !== 'undefined') {
+              window.__ALL_DELTAS__ = allDeltasRef.current
+            }
+          }
+          lastFrameRef.current = now
+        }
+        player.tick(ms)
+      },
       onPick: (key) => {
         setFollow(false)
         room.focus(key)
@@ -110,8 +137,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
     setOpenChips(NONE)
     if (!live) {
+      const paramSpeed = Number(new URLSearchParams(window.location.search).get('speed'))
       const saved = loadSettings(store()).speed
-      if (SPEEDS.includes(saved)) player.setSpeed(saved)
+      const initialSpeed = SPEEDS.includes(paramSpeed) ? paramSpeed : (SPEEDS.includes(saved) ? saved : 1)
+      player.setSpeed(initialSpeed)
     }
     player.play()
     const timer = setInterval(() => setSnapshot(player.snapshot()), 120)
@@ -123,6 +152,22 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       roomRef.current = null
     }
   }, [data, player])
+
+  useEffect(() => {
+    if (!fps) return undefined
+    const timer = setInterval(() => {
+      const list = framesRef.current
+      if (list.length === 0) return
+      const sorted = [...list].sort((a, b) => a - b)
+      const median = sorted[Math.floor(sorted.length / 2)]
+      const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
+      setFpsStats({ median, p95 })
+      if (typeof window !== 'undefined') {
+        window.__FPS_STATS__ = { median, p95 }
+      }
+    }, 500)
+    return () => clearInterval(timer)
+  }, [fps])
 
   useEffect(() => {
     if (!client) {
@@ -386,6 +431,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         focused={focused}
         speeds={SPEEDS}
         rootName={data.tree.rootName}
+        fpsStats={fpsStats}
         mode={mode}
         client={client}
         assistantPaths={assistantPaths}

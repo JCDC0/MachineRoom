@@ -34,10 +34,19 @@ function viewFocus(state, pinned) {
   return focus
 }
 
+let cachedFiles = null
+let cachedCount = -1
+let cachedMap = null
+
 export function viewInput(state, pinned = []) {
-  const files = []
-  for (const file of state.files.values()) if (file.exists) files.push(file.path)
-  return { files, focus: viewFocus(state, pinned), touched: state.recent ?? [] }
+  if (cachedMap !== state.files || cachedCount !== state.existingFiles) {
+    const files = []
+    for (const file of state.files.values()) if (file.exists) files.push(file.path)
+    cachedFiles = files
+    cachedCount = state.existingFiles
+    cachedMap = state.files
+  }
+  return { files: cachedFiles, focus: viewFocus(state, pinned), touched: state.recent ?? [] }
 }
 
 export function viewKey(state, pinned = []) {
@@ -106,6 +115,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   const back = new THREE.Vector3(0, 0, 1)
   const rootHome = planeToWorld({ x: 0, y: CARD_HUB.hh + 80, z: cardDepth('') })
   let planKey = ''
+  let layoutKey = ''
   let plan = new Map()
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let movingNow = false
@@ -214,11 +224,16 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       paintRows(card, view)
       card.meta.textContent = metaText(view)
     }
-    const placed = layoutCards(views.map((view) => ({ path: view.path, ...cardSize(view) })), homes, { obstacles: boardObstacles })
-    for (const [path, spot] of placed) {
-      homes.set(path, spot)
-      const card = cards.get(path)
-      if (card) planeToWorld(spot, card.home)
+    const nextLayoutKey = views.map((view) => `${view.path}:${view.state}:${view.items?.length ?? 0}:${view.folders?.length ?? 0}`).join(';')
+    const layoutChanged = nextLayoutKey !== layoutKey
+    if (layoutChanged) {
+      layoutKey = nextLayoutKey
+      const placed = layoutCards(views.map((view) => ({ path: view.path, ...cardSize(view) })), homes, { obstacles: boardObstacles })
+      for (const [path, spot] of placed) {
+        homes.set(path, spot)
+        const card = cards.get(path)
+        if (card) planeToWorld(spot, card.home)
+      }
     }
     const focusPaths = new Set()
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
@@ -235,7 +250,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       }
     }
     active = { files, dirs, path: chain }
-    return true
+    return layoutChanged
   }
 
   function center(path) {
