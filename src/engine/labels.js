@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { still } from './sprites.js'
 
 const WIDTH = 512
 const HEIGHT = 64
@@ -54,6 +55,7 @@ export function createLabels(scene, count = 16) {
   }
 
   function update(delta) {
+    const isStill = still()
     for (const item of items) {
       if (item.life <= 0) continue
       item.life -= delta
@@ -61,7 +63,9 @@ export function createLabels(scene, count = 16) {
         item.sprite.visible = false
         continue
       }
-      item.sprite.position.y += delta * RISE
+      if (!isStill) {
+        item.sprite.position.y += delta * RISE
+      }
       item.sprite.material.opacity = Math.min(1, item.life / FADE)
     }
   }

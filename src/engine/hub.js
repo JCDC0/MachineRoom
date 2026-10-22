@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WHITE, lineMaterial } from './sprites.js'
+import { WHITE, lineMaterial, still } from './sprites.js'
 
 export const HUB_RADIUS = 300
 export const HUB_Y = 200
@@ -90,12 +90,15 @@ export function createHub(scene, count) {
   }
 
   function update(time, delta) {
+    const isStill = still()
     boost = Math.max(0, boost - delta * 1.2)
     main.material.opacity = REST_OPACITY + boost * 0.5
     if (boost <= 0.01) main.material.color.setHex(WHITE)
-    dashes.rotation.y += delta * 0.04
+    if (!isStill) {
+      dashes.rotation.y += delta * 0.04
+    }
     slots.forEach((marker, index) => {
-      marker.scale.setScalar(1 + 0.04 * Math.sin(time * 1.6 + index))
+      marker.scale.setScalar(isStill ? 1 : 1 + 0.04 * Math.sin(time * 1.6 + index))
     })
   }
 

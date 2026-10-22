@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reduced motion across the room (task V9): pure easeRate and the reducedMotion helper in src/engine/sprites.js answer still() from prefers-reduced-motion; the camera, folder cards, agents and pulses jump, shapes, the dash ring and dust stop turning, labels fade without rising, and tests in tests/motion.test.js cover easeRate and the helper with matchMedia stubs.
+
 - Briefs U14 (mask a key that Paperclip splits across two chunks, the cloud session) and V9 (reduced motion across the room, AGY). The owner kept the separate app and skipped the plugin page; `PLUGIN-PAGE.md` records the decision.
 - Review note on W6b: no fixes. `agentTasks` also falls back to a task's `title` when it has no identifier and reads a few more time fields than the brief asked for; harmless, left as written. Checked in the browser with the mock in replay mode at 1280 by 800: seeking to a third and to two thirds, OpenCode Go's callout read `JC-19` under its name in Space Mono 400 at white 0.7, and the callouts of Claude Code, Hermes and agy had an empty task line hidden by `:empty`. The mock's live run stays `running` after the replay's OpenCode run fails, so the failed callout keeps `JC-19`; in live mode the line follows Paperclip. Full suite on the merge: 99 files, 1705 tests.
 - Review note on E2a: no fixes. Spot-checked in the installed 2026.1012.0: a plugin worker starts through `fork` in `plugin-worker-manager.js`, `listPluginLocalFolderEntries` caps at 5000 entries, the UI folder is served at `/_plugins/:pluginId/ui/*`, and nothing outside its own file imports `plugin-runtime-sandbox.js`. Briefs E2b to E2d stay in `PLUGIN-PAGE.md` until the owner decides whether a plugin page is worth it.

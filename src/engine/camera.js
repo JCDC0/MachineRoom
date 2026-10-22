@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { easeRate, reducedMotion, still } from './sprites.js'
 
 const MIN_DIST = 500
 const MAX_DIST = 26000
@@ -71,7 +72,7 @@ export function createCameraRig(camera, surface) {
   const overviewTarget = new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
   let adjusted = false
   const drift = { x: 0, y: 0, sx: 0, sy: 0 }
-  const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const motion = reducedMotion()
 
   function hover(event) {
     const rect = surface.getBoundingClientRect()
@@ -134,7 +135,8 @@ export function createCameraRig(camera, surface) {
   function update(delta) {
     if (follow) goal.target.copy(follow())
     if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
-    const rate = 1 - Math.exp(-delta * 5)
+    const isStill = motion.still()
+    const rate = easeRate(delta, 5, isStill)
     view.target.lerp(goal.target, rate)
     view.yaw += (goal.yaw - view.yaw) * rate
     view.pitch += (goal.pitch - view.pitch) * rate
@@ -146,7 +148,7 @@ export function createCameraRig(camera, surface) {
       view.target.z + Math.cos(view.yaw) * horizontal
     )
     camera.lookAt(view.target)
-    if (!still) {
+    if (!isStill) {
       drift.sx += (drift.x - drift.sx) * Math.min(1, delta * 3)
       drift.sy += (drift.y - drift.sy) * Math.min(1, delta * 3)
       driftRight.set(1, 0, 0).applyQuaternion(camera.quaternion)

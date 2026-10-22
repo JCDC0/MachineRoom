@@ -18,6 +18,43 @@ export function easeInOut(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
 }
 
+export function easeRate(delta, speed, still = false) {
+  return still ? 1 : 1 - Math.exp(-delta * speed)
+}
+
+export function reducedMotion(win = (typeof window !== 'undefined' ? window : null)) {
+  let mql = null
+  try {
+    if (win && typeof win.matchMedia === 'function') {
+      mql = win.matchMedia('(prefers-reduced-motion: reduce)')
+    }
+  } catch {
+    mql = null
+  }
+  const helper = () => Boolean(mql?.matches)
+  helper.still = () => Boolean(mql?.matches)
+  helper.mql = mql
+  return helper
+}
+
+export const motionHelper = reducedMotion
+export const createMotionHelper = reducedMotion
+
+let defaultHelper = null
+let lastWindow = undefined
+let lastMatchMedia = undefined
+
+export function still() {
+  const currentWindow = typeof window !== 'undefined' ? window : null
+  const currentMatchMedia = currentWindow ? currentWindow.matchMedia : null
+  if (!defaultHelper || lastWindow !== currentWindow || lastMatchMedia !== currentMatchMedia) {
+    defaultHelper = reducedMotion(currentWindow)
+    lastWindow = currentWindow
+    lastMatchMedia = currentMatchMedia
+  }
+  return defaultHelper.still()
+}
+
 export function glowTexture() {
   const canvas = document.createElement('canvas')
   canvas.width = canvas.height = 128

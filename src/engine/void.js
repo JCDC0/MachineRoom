@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WHITE, seeded, textSprite } from './sprites.js'
+import { WHITE, seeded, still, textSprite } from './sprites.js'
 
 export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
@@ -79,7 +79,9 @@ export function createVoid(scene, texture) {
   scene.add(group)
 
   function update(delta) {
-    dust.rotation.y += delta * 0.004
+    if (!still()) {
+      dust.rotation.y += delta * 0.004
+    }
   }
 
   function dispose() {

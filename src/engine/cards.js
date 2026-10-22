@@ -6,6 +6,7 @@ import { freshRecent } from '../model/state.js'
 import { OVERVIEW, viewBasis } from './camera.js'
 import { HUB_CENTER } from './hub.js'
 import { CARD_HUB, cardDepth, layoutCards } from './layout.js'
+import { easeRate, still } from './sprites.js'
 
 export const CARD_W = 248
 export const HEAD_H = 56
@@ -308,7 +309,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)
     const changed = recompute(state)
     const now = performance.now()
-    const ease = 1 - Math.exp(-delta * 3)
+    const ease = easeRate(delta, 3, still())
     movingNow = false
     for (const card of cards.values()) {
       const position = card.object.position
