@@ -103,6 +103,7 @@ Issue write fields (the create body is not typed in the spec; the update body is
 - `executionPolicy: { mode: normal|auto, commentRequired, stages: [{ type: review|approval, participants, approvalsNeeded }], maxReviewRounds, monitor }` sets review gates.
 - Planning mode: an issue with `workMode: planning` produces a plan document. Documents live at `/api/issues/:id/documents/:key` with `/revisions` and restore. `POST /api/issues/:id/accepted-plan-decompositions` with `{ acceptedPlanRevisionId, children: [...] }` creates the child issues from an accepted plan. `GET` lists them (now empty). Interactions on an issue (`/interactions`, `accept`, `reject`, `respond`) carry plan confirmations. This is switched off by the instance flag `enableIssuePlanDecompositions` (`false` now).
 - `GET /api/issues/:id/children` lists sub-issues.
+- `GET /api/companies/:id/live-runs` answers the queued and running heartbeat runs, newest first, with `agentName`, `adapterType`, `issueId` (from the run's context), `startedAt`, `lastOutputAt`, `createdAt` and the runtime status (`currentToolName`, `currentStatusMessage`, `lastAssistantSnippet`). `limit` defaults to 50 and cannot go higher; `minCount` defaults to 0 and, when set, pads the list with ended runs; `distinctTasks=true` picks one run per task for Paperclip's dashboard instead. `GET /api/issues/:issueId/live-runs` gives the same rows for one issue, with no limit and no `issueId` field. The bridge reads the company route (W6a, read in the installed 2026.1012.0 on 2026-10-22).
 
 ## Paperclip's own decision features
 

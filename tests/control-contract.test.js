@@ -96,6 +96,10 @@ function seedPaperclipState() {
       { id: 'approval-2', type: 'hire_agent', status: 'pending', payload: { summary: 'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).' }, requestedByAgentId: 'agent-orchestrator', createdAt: iso(7), decisionNote: null },
       { id: 'approval-3', type: 'request_board_approval', status: 'approved', payload: { summary: 'Run the recording scenarios on the free model.' }, requestedByAgentId: 'agent-claude', createdAt: iso(300), decisionNote: null },
     ],
+    liveRuns: [
+      { id: 'run-live-1', companyId: 'comp-1', status: 'running', invocationSource: 'assignment', startedAt: iso(3), finishedAt: null, createdAt: iso(3), agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', issueId: 'issue-19', lastOutputAt: iso(1), logBytes: 2048 },
+      { id: 'run-old-1', companyId: 'comp-1', status: 'succeeded', invocationSource: 'assignment', startedAt: iso(90), finishedAt: iso(88), createdAt: iso(90), agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', issueId: 'issue-18', lastOutputAt: iso(88), logBytes: 512 },
+    ],
     costsSummary: { companyId: 'comp-1', spendCents: 299, budgetCents: 1000, utilizationPercent: 29 },
     costsByAgent: [
       { agentId: 'agent-orchestrator', agentName: 'Orchestrator', costCents: 291, inputTokens: 412000, outputTokens: 38000 },
@@ -382,6 +386,11 @@ function startFakeControlPaperclip(companyId = 'comp-1', { requireApproval = tru
 
     if (method === 'GET' && path === `/api/companies/${companyId}/costs/by-agent`) {
       sendJson(res, 200, state.costsByAgent)
+      return
+    }
+
+    if (method === 'GET' && path === `/api/companies/${companyId}/live-runs`) {
+      sendJson(res, 200, state.liveRuns)
       return
     }
 
@@ -695,6 +704,22 @@ function runContractSuite(label, makeHarness) {
       const { client } = await makeHarness()
       await expect(client.postComment('issue-18', '  ')).rejects.toThrow(/comment/i)
       await expect(client.postComment('issue-99', 'hi')).rejects.toThrow(/exist/i)
+    })
+
+    it('lists the live runs with the contract fields, newest first', async () => {
+      const { client } = await makeHarness()
+      expect(await client.liveRuns()).toEqual([
+        {
+          runId: 'run-live-1',
+          agentId: 'agent-opencode',
+          agentName: 'OpenCode Go',
+          adapterType: 'opencode_local',
+          status: 'running',
+          issueId: 'issue-19',
+          startedAt: iso(3),
+          lastOutputAt: iso(1),
+        },
+      ])
     })
 
     it('lists approvals and decides an approval once', async () => {
@@ -1209,9 +1234,9 @@ describe('real control client and bridge extras', () => {
 
     await waitUntil(() => Boolean(instances[0].connected))
     fake.broadcast('heartbeat.run.status', { runId: 'r1', agentId: 'agent-opencode', status: 'succeeded' })
-    await waitUntil(() => first.length >= 2 && second.length >= 2)
-    expect(first).toEqual([{ topic: 'agents' }, { topic: 'costs' }])
-    expect(second).toEqual([{ topic: 'agents' }, { topic: 'costs' }])
+    await waitUntil(() => first.length >= 3 && second.length >= 3)
+    expect(first).toEqual([{ topic: 'agents' }, { topic: 'costs' }, { topic: 'liveRuns' }])
+    expect(second).toEqual([{ topic: 'agents' }, { topic: 'costs' }, { topic: 'liveRuns' }])
 
     stop1()
     expect(instances[0].closed).toBe(false)
@@ -1317,6 +1342,37 @@ describe('mock run confirm', () => {
     expect(running).toEqual([])
     const entry = await client.startRun('hermes', ['C3e'])
     expect(entry.lane).toBe('hermes')
+  })
+})
+
+describe('mock live runs', () => {
+  it('adds a run for the lane agent while its sample run lasts and sends liveRuns as it starts and ends', async () => {
+    const client = createMockClient({ latencyMs: 0, runMs: 30, now: () => BASE_TIME })
+    const notices = []
+    client.subscribe((event) => notices.push(event.topic))
+    expect((await client.liveRuns()).map((run) => run.runId)).toEqual(['run-live-1'])
+    await client.startRun('hermes', ['C3e'])
+    const during = await client.liveRuns()
+    expect(during[0]).toMatchObject({ agentId: 'agent-hermes', agentName: 'Hermes', adapterType: 'hermes_local', status: 'running', issueId: 'issue-20', startedAt: iso(0), lastOutputAt: null })
+    expect(during).toHaveLength(2)
+    expect(notices).toEqual(['runs', 'liveRuns'])
+    await waitUntil(() => notices.length >= 4)
+    expect(notices).toEqual(['runs', 'liveRuns', 'liveRuns', 'runs'])
+    expect((await client.liveRuns()).map((run) => run.runId)).toEqual(['run-live-1'])
+  })
+
+  it('queues the run of an agent that is already running', async () => {
+    const client = createMockClient({ latencyMs: 0, runMs: 1000, now: () => BASE_TIME })
+    await client.startRun('opencode', ['C3e'])
+    const [queued] = await client.liveRuns()
+    expect(queued).toMatchObject({ agentId: 'agent-opencode', status: 'queued', issueId: 'issue-19', startedAt: null })
+  })
+
+  it('rejects once when told to fail', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    client.failNext('liveRuns', 'Paperclip could not read the live runs.')
+    await expect(client.liveRuns()).rejects.toThrow('Paperclip could not read the live runs.')
+    expect(await client.liveRuns()).toHaveLength(1)
   })
 })
 

@@ -179,6 +179,12 @@ export function fakeSpec({ missing = [] } = {}) {
   return { openapi: '3.0.0', info: { title: 'Fake Paperclip', version: '1.0.0' }, paths }
 }
 
+export function liveRunsQueryInt(value, max, fallback) {
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback
+  return Math.min(max, Math.trunc(parsed))
+}
+
 function readJsonFile(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
@@ -561,7 +567,7 @@ export async function startFakePaperclip(options = {}) {
 
   async function playRun(issue, agent) {
     const runId = state.next('run')
-    const run = { id: runId, agentId: agent.id, issueId: issue.id, status: 'queued', log: '' }
+    const run = { id: runId, agentId: agent.id, issueId: issue.id, status: 'queued', log: '', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, lastOutputAt: null }
     state.runs.set(runId, run)
     const script = scripts.get(agent.adapterType) ?? builtInScript(issue.title)
     emit('heartbeat.run.queued', {
@@ -574,6 +580,7 @@ export async function startFakePaperclip(options = {}) {
     if (!(await later(STEP_MS / speed))) return
     const startedAt = new Date().toISOString()
     run.status = 'running'
+    run.startedAt = startedAt
     issue.status = 'in_progress'
     touch(issue)
     activity('issue.updated', 'issue', issue.id, { status: 'in_progress', identifier: issue.identifier })
@@ -597,6 +604,7 @@ export async function startFakePaperclip(options = {}) {
         payload.ts = ts
         const chunk = String(step.payload.chunk ?? '')
         logLine(run, { ts, stream: payload.stream, chunk, seq: payload.seq })
+        run.lastOutputAt = ts
         if (chunk.length > LIVE_CHUNK_LIMIT) {
           payload.chunk = chunk.slice(-LIVE_CHUNK_LIMIT)
           payload.truncated = true
@@ -609,6 +617,7 @@ export async function startFakePaperclip(options = {}) {
     if (!(await later(STEP_MS / speed))) return
     const finishedAt = new Date().toISOString()
     run.status = 'succeeded'
+    run.finishedAt = finishedAt
     bookUsage(agent)
     emit('heartbeat.run.status', {
       runId,
@@ -665,6 +674,34 @@ export async function startFakePaperclip(options = {}) {
       if (agent && decision === 'rejected') setAgentStatus(agent, 'terminated')
     }
     activity(`approval.${decision}`, 'approval', approval.id, { type: approval.type })
+  }
+
+  function liveRunRow(run) {
+    const agent = agentById(run.agentId)
+    return {
+      id: run.id,
+      companyId: company.id,
+      status: run.status,
+      invocationSource: 'assignment',
+      triggerDetail: 'system',
+      startedAt: run.startedAt,
+      finishedAt: run.finishedAt,
+      createdAt: run.createdAt,
+      agentId: run.agentId,
+      agentName: agent?.name ?? null,
+      adapterType: agent?.adapterType ?? null,
+      issueId: run.issueId,
+      lastOutputAt: run.lastOutputAt,
+    }
+  }
+
+  function liveRuns(url) {
+    const minCount = liveRunsQueryInt(url.searchParams.get('minCount'), 50, 0)
+    const limit = liveRunsQueryInt(url.searchParams.get('limit'), 50, 50)
+    const newest = [...state.runs.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const live = newest.filter((run) => run.status === 'queued' || run.status === 'running').slice(0, limit)
+    const padding = live.length < minCount ? newest.filter((run) => !live.includes(run)).slice(0, minCount - live.length) : []
+    return [...live, ...padding].map(liveRunRow)
   }
 
   const handlers = [
@@ -934,6 +971,7 @@ export async function startFakePaperclip(options = {}) {
         })
       },
     ],
+    ['GET', '/api/companies/{companyId}/live-runs', (req, res, params, body, url) => sendJson(res, 200, liveRuns(url))],
     ['GET', '/api/companies/{companyId}/costs/by-agent', (req, res) => sendJson(res, 200, state.agents.map(costRow))],
     ['GET', '/api/companies/{companyId}/costs/quota-windows', (req, res) => sendJson(res, 200, quotaWindows())],
     [

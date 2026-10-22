@@ -2679,6 +2679,15 @@ summary:focus-visible,
   color: rgb(255 255 255 / 0.7);
 }
 
+.task-live {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+  color: var(--yellow);
+}
+
 .task-priority {
   margin-left: auto;
   letter-spacing: 0.04em;
