@@ -11,6 +11,7 @@ export const DEFAULT_PORT = 5175
 export const BUILD_TIMEOUT_MS = 5 * 60 * 1000
 const BAD_BUILD_COMMAND = 'MACHINEROOM_BUILD_COMMAND needs a JSON array of the command and its arguments.'
 const BAD_PORT = 'The port must be a whole number from 1 to 65535.'
+const NPM_NOT_FOUND = 'npm was not found. Run this as npm run candidate.'
 const GIT_TIMEOUT_MS = 10 * 1000
 const SECRET_NAME = /(^|_)(KEY|TOKEN|SECRET|PASSWORD)$|API_?KEY/i
 
@@ -126,7 +127,7 @@ export function buildCommand(env = process.env, execPath = process.execPath) {
   }
   const npmCli = npmCliPath(env, execPath)
   if (npmCli) return { command: [execPath, npmCli, 'run', 'build'], shell: false }
-  return { command: ['npm', 'run', 'build'], shell: process.platform === 'win32' }
+  throw new Error(NPM_NOT_FOUND)
 }
 
 function killTree(child) {

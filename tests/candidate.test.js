@@ -184,6 +184,11 @@ describe('buildCommand', () => {
     expect(() => buildCommand({ MACHINEROOM_BUILD_COMMAND: 'nope' })).toThrow('MACHINEROOM_BUILD_COMMAND needs a JSON array')
     expect(() => buildCommand({ MACHINEROOM_BUILD_COMMAND: '[]' })).toThrow('MACHINEROOM_BUILD_COMMAND needs a JSON array')
   })
+
+  it('refuses when npm cannot be found instead of starting it by name', () => {
+    const folder = tempDir('mr-candidate-npm-')
+    expect(() => buildCommand({}, join(folder, 'node.exe'))).toThrow('npm was not found. Run this as npm run candidate.')
+  })
 })
 
 describe('runCandidate', () => {

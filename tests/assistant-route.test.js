@@ -4,12 +4,36 @@ import { createAssistantApi, resolveOpencodeBinary } from '../server/assistant.j
 const slashes = (path) => path.split('/').join('\\')
 
 describe('resolveOpencodeBinary', () => {
-  it('uses OPENCODE_BIN when it is set', () => {
-    expect(resolveOpencodeBinary({ env: { OPENCODE_BIN: 'C:\\tools\\opencode.exe', PATH: '' }, platform: 'win32' })).toBe('C:\\tools\\opencode.exe')
+  it('uses OPENCODE_BIN before the shim and the PATH', () => {
+    const touched = []
+    const found = resolveOpencodeBinary({
+      env: { OPENCODE_BIN: 'C:\\tools\\opencode.exe', PATH: 'C:\\Users\\me\\AppData\\Roaming\\npm' },
+      platform: 'win32',
+      exists: () => {
+        touched.push('shim')
+        return true
+      },
+      check: () => {
+        touched.push('path')
+        return true
+      },
+    })
+    expect(found).toBe('C:\\tools\\opencode.exe')
+    expect(touched).toEqual([])
   })
 
-  it('uses the plain name away from Windows', () => {
-    expect(resolveOpencodeBinary({ env: { PATH: '/usr/bin' }, platform: 'linux' })).toBe('opencode')
+  it('finds an absolute path from the PATH through a check', () => {
+    expect(resolveOpencodeBinary({
+      env: { PATH: '/usr/local/bin:/opt/tools/bin' },
+      platform: 'linux',
+      check: (candidate) => candidate === '/opt/tools/bin/opencode',
+    })).toBe('/opt/tools/bin/opencode')
+    expect(resolveOpencodeBinary({
+      env: { PATH: 'C:\\Windows;C:\\Tools' },
+      platform: 'win32',
+      exists: () => false,
+      check: (candidate) => candidate === 'C:\\Tools\\opencode.exe',
+    })).toBe('C:\\Tools\\opencode.exe')
   })
 
   it('finds the real executable behind the npm shim on Windows, because Node cannot start a cmd file', () => {
@@ -23,9 +47,11 @@ describe('resolveOpencodeBinary', () => {
     expect(slashes(found)).toBe(wanted)
   })
 
-  it('falls back to the plain name when no shim folder is on the path', () => {
-    expect(resolveOpencodeBinary({ env: { PATH: 'C:\\Windows' }, platform: 'win32', exists: () => false })).toBe('opencode')
-    expect(resolveOpencodeBinary({ env: {}, platform: 'win32', exists: () => false })).toBe('opencode')
+  it('returns null when nothing is found on Windows or Linux', () => {
+    expect(resolveOpencodeBinary({ env: { PATH: 'C:\\Windows' }, platform: 'win32', exists: () => false, check: () => false })).toBe(null)
+    expect(resolveOpencodeBinary({ env: {}, platform: 'win32', exists: () => false, check: () => false })).toBe(null)
+    expect(resolveOpencodeBinary({ env: { PATH: '/usr/bin' }, platform: 'linux', check: () => false })).toBe(null)
+    expect(resolveOpencodeBinary({ env: {}, platform: 'linux', check: () => false })).toBe(null)
   })
 })
 
