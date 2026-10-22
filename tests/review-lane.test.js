@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { dirname, join, resolve } from 'node:path'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { main, parseReviewArgs, removeReviewTree, reviewLane } from '../scripts/review-lane.mjs'
 import {
   briefCheck,
@@ -23,7 +23,11 @@ import {
 import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-review-lane-no-git-config')
+const SYSTEM_TEMP = makeTempDir('mr-review-system-')
+const SAVED_TEMP = { TEMP: process.env.TEMP, TMP: process.env.TMP }
+process.env.TEMP = SYSTEM_TEMP
+process.env.TMP = SYSTEM_TEMP
+const NO_GIT_CONFIG = join(SYSTEM_TEMP, 'machineroom-review-lane-no-git-config')
 const EM_DASH = '\u2014'
 const fakeKey = 'sk-' + 'q'.repeat(40)
 const fakeMail = 'someone' + '@' + 'site.com'
@@ -31,15 +35,21 @@ const fakeHome = 'C:' + '\\Users\\' + 'mira'
 const cleanups = []
 
 function systemReviewFolders() {
-  return readdirSync(tmpdir(), { withFileTypes: true })
+  return readdirSync(SYSTEM_TEMP, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && entry.name.startsWith('machineroom-review-'))
     .map((entry) => entry.name)
 }
 
-const SYSTEM_REVIEW_FOLDERS = new Set(systemReviewFolders())
-
 afterEach(() => {
   while (cleanups.length > 0) cleanups.pop()()
+})
+
+afterAll(() => {
+  for (const name of ['TEMP', 'TMP']) {
+    if (SAVED_TEMP[name] === undefined) delete process.env[name]
+    else process.env[name] = SAVED_TEMP[name]
+  }
+  rmSync(SYSTEM_TEMP, { recursive: true, force: true })
 })
 
 function added(path, lines, start = 1) {
@@ -501,9 +511,12 @@ describe('reviewLane on real repositories', () => {
   }, 60000)
 })
 
-describe('the system temp folder', () => {
+describe('the test temp folder', () => {
+  it('is the folder the review checker falls back to', () => {
+    expect(resolve(tmpdir())).toBe(resolve(SYSTEM_TEMP))
+  })
+
   it('gains no machineroom-review-* folder during this file', () => {
-    const gained = systemReviewFolders().filter((name) => !SYSTEM_REVIEW_FOLDERS.has(name))
-    expect(gained).toEqual([])
+    expect(systemReviewFolders()).toEqual([])
   })
 })
