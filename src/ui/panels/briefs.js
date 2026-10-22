@@ -50,6 +50,42 @@ export function ownerToLane(briefOrOwner) {
 
 export const laneForBrief = ownerToLane
 
+function runningLaneNames(running) {
+  const list = Array.isArray(running) ? running : []
+  const names = []
+  for (const item of list) {
+    const name = typeof item === 'string' ? item : item && typeof item === 'object' ? item.lane : ''
+    if (typeof name === 'string' && name.trim()) names.push(name.trim())
+  }
+  return names
+}
+
+function laneNames(lanes) {
+  if (Array.isArray(lanes)) {
+    return lanes
+      .filter((name) => typeof name === 'string' && name.trim())
+      .map((name) => name.trim())
+  }
+  if (lanes && typeof lanes === 'object') return Object.keys(lanes)
+  return [...VALID_LANES]
+}
+
+function harnessName(lane) {
+  return String(lane).replace(/\d+$/, '')
+}
+
+export function runLaneFor(brief, running, lanes) {
+  const owner = ownerToLane(brief)
+  if (!owner) return null
+  const busy = new Set(runningLaneNames(running))
+  if (!busy.has(owner)) return owner
+  const harness = harnessName(owner)
+  const free = laneNames(lanes).find(
+    (name) => name !== owner && harnessName(name) === harness && !busy.has(name)
+  )
+  return free || owner
+}
+
 export function chooseAssignee(briefOrOwner, agents) {
   let target = briefOrOwner
   let list = agents
