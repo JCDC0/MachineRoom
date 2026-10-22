@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -112,28 +112,35 @@ function walkFiles(listDir, currentDir, prefix = '', out = []) {
 }
 
 export function readTree(projectRoot, { listDir = readdirSync } = {}) {
-  if (!projectRoot) return { root: '', files: [], created: [] }
+  if (!projectRoot) return Promise.resolve({ root: '', files: [], created: [] })
   const resolved = resolve(projectRoot)
   const root = basename(resolved)
-  try {
-    const output = execFileSync(gitPath(), ['-C', resolved, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
-      encoding: 'utf8',
-      env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
-      stdio: ['ignore', 'pipe', 'ignore'],
-      maxBuffer: TREE_MAX_BUFFER,
-      timeout: TREE_TIMEOUT_MS,
-      windowsHide: true,
-    })
-    const files = output
-      .split('\0')
-      .filter(Boolean)
-      .map((line) => line.replace(/\\/g, '/'))
-      .sort()
-    return { root, files, created: [] }
-  } catch {
-    const files = walkFiles(listDir, resolved).sort()
-    return { root, files, created: [] }
-  }
+  return new Promise((resolveTree) => {
+    execFile(
+      gitPath(),
+      ['-C', resolved, 'ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      {
+        encoding: 'utf8',
+        env: { ...process.env, GIT_CEILING_DIRECTORIES: dirname(resolved) },
+        maxBuffer: TREE_MAX_BUFFER,
+        timeout: TREE_TIMEOUT_MS,
+        windowsHide: true,
+      },
+      (error, stdout) => {
+        if (error) {
+          const files = walkFiles(listDir, resolved).sort()
+          resolveTree({ root, files, created: [] })
+          return
+        }
+        const files = stdout
+          .split('\0')
+          .filter(Boolean)
+          .map((line) => line.replace(/\\/g, '/'))
+          .sort()
+        resolveTree({ root, files, created: [] })
+      }
+    )
+  })
 }
 
 export const FOLDER_SHAPE = 'folders'
@@ -296,6 +303,7 @@ export function createBridge(options = {}) {
   const projectId = options.projectId ?? process.env.PAPERCLIP_PROJECT_ID ?? ''
   const projectWorkspaceId = options.projectWorkspaceId ?? process.env.PAPERCLIP_WORKSPACE_ID ?? ''
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
+  const treeReader = options.readTree ?? readTree
   const port = Number(options.port ?? process.env.PORT ?? 5174)
   const reconnectMinMs = Number(options.reconnectMinMs ?? 1000)
   const reconnectMaxMs = Number(options.reconnectMaxMs ?? 15000)
@@ -406,6 +414,9 @@ export function createBridge(options = {}) {
   let watcher = null
   let watchTimer = null
   let lastFiles = []
+  let treePrimed = false
+  let treeReading = null
+  let treeDirty = false
   let surfaceTimer = null
   let surfaceChecking = false
   let surfacePending = false
@@ -428,9 +439,13 @@ export function createBridge(options = {}) {
     res.write(`event: change\ndata: ${JSON.stringify(event)}\n\n`)
   }
 
-  function checkTreeChange() {
+  function publishTree(current) {
     if (stopped) return
-    const current = readTree(projectRoot)
+    if (!treePrimed) {
+      treePrimed = true
+      lastFiles = current.files
+      return
+    }
     const changed =
       current.files.length !== lastFiles.length ||
       current.files.some((file, index) => file !== lastFiles[index])
@@ -447,9 +462,49 @@ export function createBridge(options = {}) {
     }
   }
 
+  function startTreeRead() {
+    if (stopped) return Promise.resolve(null)
+    if (treeReading) return treeReading
+    const read = (async () => {
+      let tree
+      try {
+        tree = await treeReader(projectRoot)
+      } catch {
+        tree = { root: '', files: [], created: [] }
+      }
+      if (!tree || !Array.isArray(tree.files)) tree = { root: '', files: [], created: [] }
+      if (stopped) return tree
+      publishTree(tree)
+      return tree
+    })()
+    treeReading = read
+    const done = () => {
+      if (treeReading === read) treeReading = null
+      if (treeDirty && !stopped) {
+        treeDirty = false
+        startTreeRead().catch(() => {})
+      }
+    }
+    read.then(done, done)
+    return read
+  }
+
+  function checkTreeChange() {
+    if (stopped) return
+    if (treeReading) {
+      treeDirty = true
+      return
+    }
+    startTreeRead().catch(() => {})
+  }
+
   function startWatcher() {
-    if (!projectRoot || stopped) return
-    lastFiles = readTree(projectRoot).files
+    if (!projectRoot) {
+      treePrimed = true
+      return
+    }
+    if (stopped) return
+    const read = startTreeRead().catch(() => {})
     try {
       watcher = watch(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
         if (stopped) return
@@ -462,6 +517,7 @@ export function createBridge(options = {}) {
       })
       watcher.on('error', () => {})
     } catch {}
+    return read
   }
 
   function agentListOf(raw) {
@@ -915,7 +971,11 @@ export function createBridge(options = {}) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/tree') {
-      const tree = readTree(projectRoot)
+      const tree = await startTreeRead()
+      if (stopped || !tree) {
+        res.destroy()
+        return
+      }
       const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
       sendJson(req, res, 200, wantsFolders ? { ...packTree(tree), created: tree.created } : tree)
       return
@@ -973,8 +1033,9 @@ export function createBridge(options = {}) {
     })
   })
 
-  function start() {
-    startWatcher()
+  async function start() {
+    await startWatcher()
+    if (stopped) throw new Error('The bridge stopped before it started.')
     startSurfaceTimer()
     checkSurface().catch(() => {})
     loadAgents()

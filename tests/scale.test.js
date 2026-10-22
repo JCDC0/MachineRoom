@@ -37,10 +37,10 @@ describe('the scale tree', () => {
     expect(Math.max(...depths)).toBe(12)
   })
 
-  it('reads back through readTree with the fake listDir', () => {
+  it('reads back through readTree with the fake listDir', async () => {
     const tree = makeScaleTree({ files: 2000, folders: 200, seed: 3 })
     const root = join(makeTempDir('mr-scale-'), 'not-there')
-    const read = readTree(root, { listDir: fakeListDir(root, tree.files) })
+    const read = await readTree(root, { listDir: fakeListDir(root, tree.files) })
     expect(read.files).toEqual([...tree.files].sort())
   })
 })
@@ -65,8 +65,8 @@ describe('the probe options and replays', () => {
 describe('each fixed stage at 40000 files', () => {
   let rows
 
-  beforeAll(() => {
-    rows = new Map(runProbe().rows.map((row) => [row.stage, row]))
+  beforeAll(async () => {
+    rows = new Map((await runProbe()).rows.map((row) => [row.stage, row]))
   }, 120000)
 
   for (const [stage, measured] of Object.entries(MEASURED_MS)) {

@@ -168,6 +168,18 @@ export function timeIt(fn, runs = 5) {
   return { ms: median(times), result }
 }
 
+export async function timeItAsync(fn, runs = 5) {
+  await fn()
+  const times = []
+  let result
+  for (let i = 0; i < runs; i += 1) {
+    const started = performance.now()
+    result = await fn()
+    times.push(performance.now() - started)
+  }
+  return { ms: median(times), result }
+}
+
 export function perCall(items, fn) {
   let worst = 0
   const started = performance.now()
@@ -180,7 +192,7 @@ export function perCall(items, fn) {
   return { total, mean: total / Math.max(items.length, 1), worst }
 }
 
-export function runProbe(options = {}) {
+export async function runProbe(options = {}) {
   const settings = { ...DEFAULTS, ...options }
   const rows = []
   const row = (stage, runsAt, ms, size = '') => rows.push({ stage, runsAt, ms, budget: runsAt === 'load' ? BUDGET.load : BUDGET.frame, size })
@@ -188,7 +200,7 @@ export function runProbe(options = {}) {
   const scale = makeScaleTree(settings)
   const rootDir = join(tmpdir(), `machineroom-scale-probe-${settings.seed}-not-there`)
   const listDir = fakeListDir(resolve(rootDir), scale.files)
-  const read = timeIt(() => readTree(rootDir, { listDir }), 3)
+  const read = await timeItAsync(() => readTree(rootDir, { listDir }), 3)
   row('readTree (fake listDir)', 'load', read.ms, `${read.result.files.length} files`)
   const sizeRow = (stage, text, budget = BUDGET.event) => {
     const bytes = Buffer.byteLength(text)
@@ -353,7 +365,7 @@ if (isMain) {
       for (const result of results) console.log(`${result.name}  ${result.activities} activities  ${result.plans} plans  ${result.layouts} layouts  ${Object.entries(result.digest).map(([name, value]) => `${name} ${value}`).join('  ')}`)
       console.log(`${results.length} replays`)
     } else {
-      const { settings, rows } = runProbe(options)
+      const { settings, rows } = await runProbe(options)
       console.log(`scale probe: ${settings.files} files in ${settings.folders} folders, up to ${settings.depth} deep, seed ${settings.seed}`)
       console.log(formatRows(rows))
     }
