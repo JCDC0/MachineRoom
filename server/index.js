@@ -3,7 +3,7 @@ import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { maskKeys } from '../src/briefs/audit.js'
+import { createSplitMasker } from '../src/briefs/audit.js'
 import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
@@ -428,6 +428,8 @@ export function createBridge(options = {}) {
   const unparsedSince = new Date().toISOString()
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
+  const masker = createSplitMasker()
+  let maskTimer = null
   let parserByAgentId = new Map()
   let agentFetchAt = 0
 
@@ -564,21 +566,7 @@ export function createBridge(options = {}) {
     }
   }
 
-  function maskFrame(parsed) {
-    const payload = parsed.payload
-    if (!payload || typeof payload !== 'object') return
-    for (const field of ['chunk', 'message', 'error']) {
-      if (typeof payload[field] !== 'string') continue
-      const result = maskKeys(payload[field])
-      if (result.count === 0) continue
-      payload[field] = result.text
-      maskedTotal += result.count
-    }
-  }
-
-  function accept(parsed) {
-    countUnreadable(parsed)
-    maskFrame(parsed)
+  function emit(parsed) {
     if (typeof parsed.id === 'number' && parsed.id > nextId) {
       nextId = parsed.id
     } else {
@@ -594,6 +582,26 @@ export function createBridge(options = {}) {
       writeSseFrame(client, entry)
       for (const notice of notices) writeSseChange(client, notice)
     }
+  }
+
+  function release(out) {
+    maskedTotal += out.count
+    for (const frame of out.frames) emit(frame)
+    if (maskTimer) {
+      clearTimeout(maskTimer)
+      maskTimer = null
+    }
+    const at = masker.nextDue()
+    if (at === null || stopped) return
+    maskTimer = setTimeout(() => {
+      maskTimer = null
+      if (!stopped) release(masker.due(Date.now()))
+    }, Math.max(0, at - Date.now()))
+  }
+
+  function accept(parsed) {
+    countUnreadable(parsed)
+    release(masker.push(parsed, Date.now()))
   }
 
   async function pullLog(state, runId) {
@@ -1058,6 +1066,10 @@ export function createBridge(options = {}) {
   function stop() {
     stopped = true
     waiting.length = 0
+    if (maskTimer) {
+      clearTimeout(maskTimer)
+      maskTimer = null
+    }
     runs.stopAll()
     clearInterval(heartbeatTimer)
     if (surfaceTimer) {
