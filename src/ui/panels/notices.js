@@ -69,6 +69,34 @@ export function subscribeToNotices(client, filter, onNotice, delayMs = 100) {
   }
 }
 
+export function latestOnly() {
+  let current = 0
+
+  function next() {
+    const id = ++current
+    function isLatest(arg) {
+      if (arg !== undefined) {
+        const checkId = (typeof arg === 'object' || typeof arg === 'function') && arg !== null && 'id' in arg ? arg.id : arg
+        return checkId === current
+      }
+      return id === current
+    }
+    isLatest.id = id
+    isLatest.valueOf = () => id
+    return isLatest
+  }
+
+  next.next = next
+  next.start = next
+  next.isLatest = (arg) => {
+    const checkId = (typeof arg === 'object' || typeof arg === 'function') && arg !== null && 'id' in arg ? arg.id : arg
+    return checkId === current
+  }
+  next.current = () => current
+
+  return next
+}
+
 export async function resolveIssue(identifier, issues, reload) {
   const found = findIssueByIdentifier(issues, identifier)
   if (found) return { issue: found, issues }
