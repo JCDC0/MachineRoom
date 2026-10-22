@@ -1532,6 +1532,59 @@ describe('masked keys', () => {
 
     await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).masked.total === 1)
   })
+
+  it('masks a key that Paperclip splits across two chunks on the stream and in the history', async () => {
+    const { fake, url, health } = await startMaskedBridge()
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+
+    fake.send(queuedFrame(811))
+    fake.send(logFrame(812, `reading ${FAKE_KEY.slice(0, 12)}`, 1))
+    fake.send(logFrame(813, `${FAKE_KEY.slice(12)} done\n`, 2))
+    const first = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '812')).data)
+    const second = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '813')).data)
+    expect(first.payload).toMatchObject({ seq: 1, chunk: 'reading [key]' })
+    expect(second.payload).toMatchObject({ seq: 2, chunk: ' done\n' })
+    await waitUntil(async () => (await health()).masked.total === 1)
+
+    const history = await openSse(url, {}, '?history=1')
+    cleanups.push(() => history.close())
+    const seen = []
+    for (const id of ['811', '812', '813']) seen.push((await history.next((e) => e.event === 'frame' && e.id === id)).data)
+    expect(seen.join('')).toContain('[key]')
+    expect(seen.join('')).not.toContain(FAKE_KEY.slice(0, 12))
+    expect(seen.join('')).not.toContain(FAKE_KEY.slice(12))
+  })
+
+  it('releases a held tail unchanged within a second when no chunk follows', async () => {
+    const { fake, url } = await startMaskedBridge()
+    const sse = await openSse(url)
+    cleanups.push(() => sse.close())
+
+    const sent = Date.now()
+    fake.send(logFrame(821, 'export sk-ab', 1))
+    fake.send(queuedFrame(822))
+    const held = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '821')).data)
+    const after = await sse.next((e) => e.event === 'frame' && e.id === '822')
+    expect(held.payload.chunk).toBe('export sk-ab')
+    expect(Date.now() - sent).toBeLessThan(2000)
+    expect(after.id).toBe('822')
+  })
+
+  it('masks a key split between a restored long chunk and the next chunk', async () => {
+    const { fake, sse } = await startRestoreBridge()
+
+    const full = `${'x'.repeat(9000)}\nkey ${FAKE_KEY.slice(0, 20)}`
+    fake.appendLog('r1', { ts: '2026-10-20T13:00:00.000Z', stream: 'stdout', chunk: full, seq: 1 })
+    fake.send(logFrame(831, full.slice(-8192), 1, true))
+    fake.send(logFrame(832, `${FAKE_KEY.slice(20)}\n`, 2))
+
+    const first = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '831')).data)
+    const second = JSON.parse((await sse.next((e) => e.event === 'frame' && e.id === '832')).data)
+    expect(first.payload.truncated).toBe(false)
+    expect(first.payload.chunk).toBe(`${'x'.repeat(9000)}\nkey [key]`)
+    expect(second.payload.chunk).toBe('\n')
+  })
 })
 
 describe('unreadable counter', () => {

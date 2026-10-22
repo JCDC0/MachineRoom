@@ -207,3 +207,258 @@ export function countLeaks(findings) {
   }
   return counts
 }
+
+export const SPLIT_HOLD_MS = 1000
+export const KEY_LONGEST = 256
+const CONTEXT_KEPT = 4096
+const STREAMS_KEPT = 256
+const TAIL_SCAN = 1024
+const RUN_ENDS = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
+const LINE_BREAK = /(\r\n|\r|\n)/
+const TOKEN_CHAR = /[A-Za-z0-9_-]/
+const SETTING_NAMES = ['OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
+const GITHUB_HEADS = ['ghp_', 'gho_', 'github_pat_']
+const OPEN_SETTING = /(?<![A-Za-z0-9_])(?:OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY)\s*(?:[:=]\s*['"]?[^\s'"]*)?$/
+const OPEN_SK = /^(?:s|sk|sk-[A-Za-z0-9_-]*)$/
+const OPEN_GOOGLE = /^(?:A|AI|AIz|AIza[0-9A-Za-z_-]{0,34})$/
+const OPEN_GITHUB = /^(?:ghp_|gho_|github_pat_)\w*$/
+const OPEN_AWS = /^(?:A|AK|AKI|AKIA[0-9A-Z]{0,15})$/
+
+function isHeadOf(words, text) {
+  return words.some((word) => word.startsWith(text))
+}
+
+function openToken(word) {
+  for (let index = 0; index < word.length; index += 1) {
+    const before = index === 0 ? '' : word[index - 1]
+    if (index > 0 && before !== '-' && before !== '_') continue
+    const rest = word.slice(index)
+    if (index === 0 && (OPEN_SK.test(rest) || OPEN_GOOGLE.test(rest))) return index
+    if (before !== '_' && (OPEN_GITHUB.test(rest) || isHeadOf(GITHUB_HEADS, rest) || isHeadOf(SETTING_NAMES, rest))) return index
+    if (OPEN_AWS.test(rest)) return index
+  }
+  return -1
+}
+
+export function openKeyStart(line) {
+  if (typeof line !== 'string' || line === '') return -1
+  const offset = Math.max(0, line.length - TAIL_SCAN)
+  const tail = line.slice(offset)
+  let wordStart = tail.length
+  while (wordStart > 0 && TOKEN_CHAR.test(tail[wordStart - 1])) wordStart -= 1
+  const token = openToken(tail.slice(wordStart))
+  const setting = OPEN_SETTING.exec(tail)
+  const starts = [token === -1 ? -1 : wordStart + token, setting ? setting.index : -1].filter((start) => start !== -1)
+  return starts.length === 0 ? -1 : offset + Math.min(...starts)
+}
+
+function lineCuts(line, base, keyEnded) {
+  const cuts = []
+  for (const [start, end] of keyRanges(line)) {
+    if (end <= base) continue
+    const place = start >= base ? start : keyEnded ? null : base
+    cuts.push({ from: Math.max(start, base), to: end, place })
+  }
+  return cuts
+}
+
+function cutText(line, from, to, cuts) {
+  let text = ''
+  let at = from
+  for (const cut of cuts) {
+    if (cut.to <= from || cut.from >= to) continue
+    const start = Math.max(cut.from, at)
+    text += line.slice(at, start)
+    if (cut.place !== null && cut.place >= from && cut.place < to) text += KEY_MASK
+    at = Math.max(at, Math.min(cut.to, to))
+  }
+  return text + line.slice(at, to)
+}
+
+function keptContext(line) {
+  return line.length > CONTEXT_KEPT ? line.slice(-CONTEXT_KEPT) : line
+}
+
+function isSplitLog(frame) {
+  const payload = frame?.payload
+  return frame?.type === 'heartbeat.run.log' && payload !== null && typeof payload === 'object' && typeof payload.runId === 'string' && typeof payload.chunk === 'string'
+}
+
+function streamKeyOf(payload) {
+  return `${payload.runId}\n${typeof payload.stream === 'string' ? payload.stream : ''}`
+}
+
+export function createSplitMasker({ holdMs = SPLIT_HOLD_MS } = {}) {
+  const streams = new Map()
+  const queue = []
+  let count = 0
+
+  function maskFields(frame, fields) {
+    const payload = frame?.payload
+    if (!payload || typeof payload !== 'object') return frame
+    let copy = null
+    for (const field of fields) {
+      if (typeof payload[field] !== 'string') continue
+      const result = maskKeys(payload[field])
+      if (result.count === 0) continue
+      copy = copy ?? { ...payload }
+      copy[field] = result.text
+      count += result.count
+    }
+    return copy ? { ...frame, payload: copy } : frame
+  }
+
+  function finish(entry, chunk) {
+    entry.frame = { ...entry.frame, payload: { ...entry.frame.payload, chunk } }
+    entry.ready = true
+  }
+
+  function settle(state, line, pieces) {
+    const base = state.context.length
+    const cuts = lineCuts(line, base, state.keyEnded)
+    let at = base
+    for (const piece of pieces) {
+      piece.text = cutText(line, at, at + piece.seg.length, cuts)
+      at += piece.seg.length
+    }
+    count += cuts.filter((cut) => cut.place !== null).length
+    return cuts
+  }
+
+  function releaseOpen(state, line, pieces) {
+    const cuts = settle(state, line, pieces)
+    for (const piece of pieces) {
+      if (piece.item) finish(piece.item.entry, piece.item.done + piece.text)
+    }
+    state.held = []
+    state.context = keptContext(line)
+    state.keyEnded = cuts.some((cut) => cut.to === line.length)
+  }
+
+  function heldPieces(state) {
+    return state.held.map((item) => ({ item, seg: item.seg }))
+  }
+
+  function heldLine(state) {
+    return state.context + state.held.map((item) => item.seg).join('')
+  }
+
+  function releaseStream(state) {
+    if (state.held.length === 0) return
+    releaseOpen(state, heldLine(state), heldPieces(state))
+  }
+
+  function stateFor(key) {
+    let state = streams.get(key)
+    if (state) {
+      streams.delete(key)
+    } else {
+      state = { context: '', keyEnded: false, held: [] }
+    }
+    streams.set(key, state)
+    if (streams.size > STREAMS_KEPT) {
+      for (const [oldKey, old] of streams) {
+        if (streams.size <= STREAMS_KEPT) break
+        if (old.held.length === 0) streams.delete(oldKey)
+      }
+    }
+    return state
+  }
+
+  function pushLog(frame, now) {
+    const masked = maskFields(frame, ['message', 'error'])
+    const entry = { frame: masked, ready: false }
+    queue.push(entry)
+    const state = stateFor(streamKeyOf(masked.payload))
+    const parts = masked.payload.chunk.split(LINE_BREAK)
+    const first = parts[0]
+    const line = heldLine(state) + first
+    const pieces = heldPieces(state)
+    if (parts.length === 1) {
+      const start = openKeyStart(line)
+      if (start !== -1 && line.length - start <= KEY_LONGEST) {
+        state.held.push({ entry, done: '', seg: first, since: now })
+        return
+      }
+      releaseOpen(state, line, [...pieces, { item: { entry, done: '' }, seg: first }])
+      return
+    }
+    const own = { seg: first }
+    settle(state, line, [...pieces, own])
+    for (const piece of pieces) finish(piece.item.entry, piece.item.done + piece.text)
+    const middle = maskKeys(parts.slice(1, -1).join(''))
+    count += middle.count
+    const done = own.text + middle.text
+    const last = parts[parts.length - 1]
+    state.held = []
+    state.context = ''
+    state.keyEnded = false
+    const start = openKeyStart(last)
+    if (start !== -1 && last.length - start <= KEY_LONGEST) {
+      state.held.push({ entry, done, seg: last, since: now })
+      return
+    }
+    releaseOpen(state, last, [{ item: { entry, done }, seg: last }])
+  }
+
+  function endRun(runId) {
+    const prefix = `${runId}\n`
+    for (const [key, state] of streams) {
+      if (!key.startsWith(prefix)) continue
+      releaseStream(state)
+      streams.delete(key)
+    }
+  }
+
+  function drain() {
+    const frames = []
+    while (queue.length > 0 && queue[0].ready) frames.push(queue.shift().frame)
+    const result = { frames, count }
+    count = 0
+    return result
+  }
+
+  return {
+    push(frame, now = Date.now()) {
+      if (!frame || typeof frame !== 'object') {
+        queue.push({ frame, ready: true })
+        return drain()
+      }
+      if (isSplitLog(frame)) {
+        pushLog(frame, now)
+        return drain()
+      }
+      if (frame.type === 'heartbeat.run.status' && RUN_ENDS.has(frame.payload?.status) && typeof frame.payload?.runId === 'string') {
+        endRun(frame.payload.runId)
+      }
+      queue.push({ frame: maskFields(frame, ['chunk', 'message', 'error']), ready: true })
+      return drain()
+    },
+
+    due(now = Date.now()) {
+      for (const state of streams.values()) {
+        if (state.held.length > 0 && now - state.held[0].since >= holdMs) releaseStream(state)
+      }
+      return drain()
+    },
+
+    nextDue() {
+      let next = null
+      for (const state of streams.values()) {
+        if (state.held.length === 0) continue
+        const at = state.held[0].since + holdMs
+        if (next === null || at < next) next = at
+      }
+      return next
+    },
+
+    flush() {
+      for (const state of streams.values()) releaseStream(state)
+      return drain()
+    },
+
+    holding() {
+      return queue.filter((entry) => !entry.ready).length
+    },
+  }
+}
