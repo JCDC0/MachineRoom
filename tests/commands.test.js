@@ -89,6 +89,51 @@ describe('touchesForCommand', () => {
     expect(run('cat "src/math.js"')).toEqual(['read:src/math.js'])
   })
 
+  it('reads a file when the write mark is inside a quoted pattern', () => {
+    const known = ['index.html', 'src/x.js']
+    const read = (command) =>
+      touchesForCommand(command, known, [])
+        .map((touch) => `${touch.mode}:${touch.path}`)
+        .sort()
+    expect(read('grep "<div>" index.html')).toEqual(['read:index.html'])
+    expect(read("rg 'a>b' src/x.js")).toEqual(['read:src/x.js'])
+  })
+
+  it('writes when a quoted command string holds the write', () => {
+    const known = ['notes.md', 'out.txt']
+    const write = (command, path) => {
+      const touched = touchesForCommand(command, known, []).filter((touch) => touch.path === path)
+      expect(touched).toEqual([{ path, mode: 'write', kind: 'file' }])
+    }
+    write('powershell -Command "Set-Content notes.md x"', 'notes.md')
+    write('pwsh -c "Set-Content notes.md x"', 'notes.md')
+    write('bash -c "echo hi > out.txt"', 'out.txt')
+    write("sh -c 'echo hi > out.txt'", 'out.txt')
+    write('cmd /c "echo hi > out.txt"', 'out.txt')
+  })
+
+  it('touches only the longer known file when one lies inside another', () => {
+    const known = ['src/a.js', 'lib/src/a.js']
+    const read = (command) =>
+      touchesForCommand(command, known, [])
+        .map((touch) => `${touch.mode}:${touch.path}`)
+        .sort()
+    expect(read('cat lib/src/a.js')).toEqual(['read:lib/src/a.js'])
+    expect(read('cat src/a.js lib/src/a.js')).toEqual(['read:lib/src/a.js', 'read:src/a.js'])
+    expect(read('cat C:/proj/src/a.js')).toEqual(['read:src/a.js'])
+  })
+
+  it('lists only the longer known folder when one lies inside another', () => {
+    const dirs = ['', 'lib', 'lib/src', 'src']
+    const list = (command) =>
+      touchesForCommand(command, [], dirs)
+        .map((touch) => `${touch.mode}:${touch.path}`)
+        .sort()
+    expect(list('ls lib/src')).toEqual(['list:lib/src'])
+    expect(list('ls src lib/src')).toEqual(['list:lib/src', 'list:src'])
+    expect(list('ls C:/proj/src')).toEqual(['list:src'])
+  })
+
   it('reads the rest of the command after a message', () => {
     expect(run('git commit -m "add src/math.js"; cat docs/notes.md')).toEqual(['read:docs/notes.md'])
   })
