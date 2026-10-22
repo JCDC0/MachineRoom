@@ -20,6 +20,7 @@
     "src/decider/decide.js",
     "src/decider/wire.js",
     "src/model/commands.js",
+    "src/model/fileIndex.js",
     "src/model/paths.js",
     "src/model/parsers/common.js",
     "src/model/parsers/hermes.js",
