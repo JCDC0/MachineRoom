@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Brief G3d (the README for the room as it is now, OpenCode).
+- README for the room as it is now (task G3d): the agent callouts, the cost board below the hub, the drawer tab by tab, the lane run and recording path, the Reviews merge after a confirm card, the Plan and Route rows, `npm run serve -- doctor` and `up`, and the key masking in the bridge.
 - Review note on U15 and U16: one fix. U16 set the review list's limit to 160 seconds from three lanes of five git calls at 10 seconds each, read one lane after another in `server/reviews.js`; with `opencode2` there are four lanes, so it is now 210 seconds. U15 changed one activity over the 74 recorded runs, the one it meant to: `grep -o '<title>[^<]*</title>' dist/index.html` in `hermes-P1c` now reads `index.html` instead of writing it. Full suite on the merge: 101 files, 1893 tests.
 - Brief U17 (a retired lane does not start, and Run brief picks the free OpenCode lane, for OpenCode 2).
 - Review note on C4f: no fixes. The first run of the second OpenCode lane, beside the first lane's U15 and U16. It also changed one expectation in `tests/control-contract.test.js`, which reads the mock policy and which the brief failed to name, and said so. It ran only the policy, route and contract tests, so the full suite and the build ran at merge: 100 files, 1881 tests. The tiers now read small `opencode2` then `agy`, medium `opencode` then `agy`, large `agy` then the owner.
