@@ -359,6 +359,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     setCosts(costBoardData) {
       board.update(costBoardData)
     },
+    setTasks(tasksMap) {
+      agentSet.setTasks(tasksMap)
+    },
     dispose() {
       cancelAnimationFrame(frameId)
       pending.forEach((timer) => clearTimeout(timer))
