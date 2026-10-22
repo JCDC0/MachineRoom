@@ -1,5 +1,25 @@
 export const STREAM_START = 1000
 export const STREAM_LIMIT = 15000
+export const REQUEST_TIMEOUT_MS = 30000
+
+export const REQUEST_LIMITS = {
+  createIssue: 40000,
+  postComment: 40000,
+  decideApproval: 40000,
+  setAgentBudget: 40000,
+  hireAgent: 70000,
+  updateAgent: 85000,
+  askPlanner: 40000,
+  reviewDiff: 50000,
+  reviews: 160000,
+  mergeReview: 140000,
+  backupNow: 130000,
+  decide: 10000,
+}
+
+function timeoutError(timeoutMs) {
+  return new Error(`The bridge did not answer within ${Math.round(timeoutMs / 1000)} seconds.`)
+}
 
 export function createClient({
   baseUrl = '',
@@ -14,30 +34,43 @@ export function createClient({
   let timer = null
   let delay = STREAM_START
 
-  async function request(method, path, body) {
-    let response
+  async function request(method, path, body, timeoutMs = REQUEST_TIMEOUT_MS) {
+    const controller = new AbortController()
+    let expired = false
+    const timer = setTimer(() => {
+      expired = true
+      controller.abort()
+    }, timeoutMs)
     try {
-      response = await fetchImpl(`${base}${path}`, {
-        method,
-        headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      })
-    } catch {
-      throw new Error('The bridge is not reachable.')
+      let response
+      try {
+        response = await fetchImpl(`${base}${path}`, {
+          method,
+          headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+          body: body === undefined ? undefined : JSON.stringify(body),
+          signal: controller.signal,
+        })
+      } catch {
+        if (expired) throw timeoutError(timeoutMs)
+        throw new Error('The bridge is not reachable.')
+      }
+      let json = null
+      try {
+        json = await response.json()
+      } catch {
+        if (expired) throw timeoutError(timeoutMs)
+        json = null
+      }
+      if (!response.ok) {
+        const message = typeof json?.error === 'string' && json.error.trim() ? json.error : 'The request failed.'
+        const error = new Error(message)
+        if (Array.isArray(json?.files)) error.files = json.files.filter((file) => typeof file === 'string')
+        throw error
+      }
+      return json
+    } finally {
+      clearTimer(timer)
     }
-    let json = null
-    try {
-      json = await response.json()
-    } catch {
-      json = null
-    }
-    if (!response.ok) {
-      const message = typeof json?.error === 'string' && json.error.trim() ? json.error : 'The request failed.'
-      const error = new Error(message)
-      if (Array.isArray(json?.files)) error.files = json.files.filter((file) => typeof file === 'string')
-      throw error
-    }
-    return json
   }
 
   function handleChange(event) {
@@ -100,11 +133,11 @@ export function createClient({
       return request('GET', `/api/control/issues${query}`)
     },
 
-    createIssue: (draft) => request('POST', '/api/control/issues', draft ?? {}),
+    createIssue: (draft) => request('POST', '/api/control/issues', draft ?? {}, REQUEST_LIMITS.createIssue),
 
     comments: (issueId) => request('GET', `/api/control/comments?issueId=${encodeURIComponent(issueId ?? '')}`),
 
-    postComment: (issueId, body) => request('POST', '/api/control/comments', { issueId, body }),
+    postComment: (issueId, body) => request('POST', '/api/control/comments', { issueId, body }, REQUEST_LIMITS.postComment),
 
     approvals: () => request('GET', '/api/control/approvals'),
 
@@ -112,17 +145,24 @@ export function createClient({
       request(
         'POST',
         `/api/control/approvals/${encodeURIComponent(id ?? '')}/decide`,
-        note !== undefined ? { decision, note } : { decision }
+        note !== undefined ? { decision, note } : { decision },
+        REQUEST_LIMITS.decideApproval
       ),
 
     costs: () => request('GET', '/api/control/costs'),
 
     setAgentBudget: (agentId, budgetMonthlyCents) =>
-      request('POST', `/api/control/agents/${encodeURIComponent(agentId ?? '')}/budget`, { budgetMonthlyCents }),
+      request(
+        'POST',
+        `/api/control/agents/${encodeURIComponent(agentId ?? '')}/budget`,
+        { budgetMonthlyCents },
+        REQUEST_LIMITS.setAgentBudget
+      ),
 
-    hireAgent: (draft) => request('POST', '/api/control/agents', draft ?? {}),
+    hireAgent: (draft) => request('POST', '/api/control/agents', draft ?? {}, REQUEST_LIMITS.hireAgent),
 
-    updateAgent: (agentId, patch) => request('PATCH', `/api/control/agents/${encodeURIComponent(agentId ?? '')}`, patch ?? {}),
+    updateAgent: (agentId, patch) =>
+      request('PATCH', `/api/control/agents/${encodeURIComponent(agentId ?? '')}`, patch ?? {}, REQUEST_LIMITS.updateAgent),
 
     models: () => request('GET', '/api/control/models'),
 
@@ -159,16 +199,22 @@ export function createClient({
     startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs, confirmed: true }),
 
     reviews: async () => {
-      const data = await request('GET', '/api/control/reviews')
+      const data = await request('GET', '/api/control/reviews', undefined, REQUEST_LIMITS.reviews)
       return Array.isArray(data) ? data : data?.lanes ?? []
     },
 
-    reviewDiff: (lane) => request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/diff`),
+    reviewDiff: (lane) =>
+      request('GET', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/diff`, undefined, REQUEST_LIMITS.reviewDiff),
 
     mergeReview: (lane, { head, message } = {}) =>
-      request('POST', `/api/control/reviews/${encodeURIComponent(lane ?? '')}/merge`, { confirmed: true, head, message }),
+      request(
+        'POST',
+        `/api/control/reviews/${encodeURIComponent(lane ?? '')}/merge`,
+        { confirmed: true, head, message },
+        REQUEST_LIMITS.mergeReview
+      ),
 
-    askPlanner: (goal) => request('POST', '/api/control/plans', { goal, confirmed: true }),
+    askPlanner: (goal) => request('POST', '/api/control/plans', { goal, confirmed: true }, REQUEST_LIMITS.askPlanner),
 
     plan: (issueId) => request('GET', `/api/control/plans/${encodeURIComponent(issueId ?? '')}`),
 
@@ -176,11 +222,16 @@ export function createClient({
       request('POST', `/api/control/plans/${encodeURIComponent(issueId ?? '')}/accept`, { ids, confirmed: true }),
 
     decide: ({ state, questions, model } = {}) =>
-      request('POST', '/api/decide', model === undefined ? { state, questions } : { state, questions, model }),
+      request(
+        'POST',
+        '/api/decide',
+        model === undefined ? { state, questions } : { state, questions, model },
+        REQUEST_LIMITS.decide
+      ),
 
     backupStatus: () => request('GET', '/api/backup'),
 
-    backupNow: () => request('POST', '/api/backup', { confirmed: true }),
+    backupNow: () => request('POST', '/api/backup', { confirmed: true }, REQUEST_LIMITS.backupNow),
 
     subscribe(listener) {
       listeners.add(listener)

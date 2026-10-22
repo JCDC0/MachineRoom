@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The control client gives up on a request that never answers (task U16): every request gets an `AbortController` whose abort is scheduled through the injected `setTimer` and cleared through `clearTimer`, passed to `fetchImpl` as `signal` and kept until the body is read, with 30 seconds by default and a longer limit for the routes the bridge can take longer over, so a panel no longer stays on its loading state for ever; tests in `tests/client-timeout.test.js`.
 - A quoted `>` no longer turns a read into a write, and a known path inside a longer known path is no longer touched twice (task U15): `touchesForCommand` looks for the write operator outside quoted text but keeps a quoted command string after PowerShell, pwsh, bash, sh or cmd, and keeps only the longest match when one known path lies inside another; tests in `tests/commands.test.js`.
 - Briefs U15 (a quoted `>` is not a write, and the longer path wins; the security audit's N13) and U16 (the control client gives up on a request that never answers; N15), both for OpenCode in one run.
 - Briefs U14 (mask a key that Paperclip splits across two chunks, the cloud session) and V9 (reduced motion across the room, AGY). The owner kept the separate app and skipped the plugin page; `PLUGIN-PAGE.md` records the decision.

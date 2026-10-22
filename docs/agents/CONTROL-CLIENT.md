@@ -126,6 +126,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 - Show a loading state, an empty state and an error state for every call.
 - A call can fail. The mock can be told to: `client.failNext('createIssue', 'message')` makes the next call of that method reject once.
 - Disable the submit button while a call is running and do not send twice.
+- Every call has a time limit: 30 seconds by default, and a longer one for the routes the bridge may take longer over (the backup, a merge, the review list and diff, a plan request, agent writes, the decision model); a call that runs out rejects with `The bridge did not answer within N seconds.`, which panels show as they show other errors, and the change stream keeps its own reconnect and gets no limit.
 - The mock waits 120 ms per call and keeps its data in memory. A reload resets it.
 
 ## How it maps to Paperclip (task C2, for the real client)
