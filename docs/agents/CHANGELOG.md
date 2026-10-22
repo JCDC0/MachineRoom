@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The review checker's temp test reads a folder of its own (task T20): `tests/review-lane.test.js` points `TEMP` and `TMP` at a fresh `makeTempDir` folder before anything reads `tmpdir()`, puts them back and removes the folder in `afterAll`, and the check looks for `machineroom-review-*` in that folder only, so a review run elsewhere on the machine no longer fails it while a call without `tempRoot` still does.
+
 - Review note on T19: no fixes. `node scripts/build-fixtures.mjs` with no arguments prints the usage line and exits 1, so the entry point guard works when run directly. Full suite on the merge: 97 files, 1693 tests. Hermes lost two full runs to `tests/review-lane.test.js`, whose last test reads the shared system temp folder; brief T20 points it at its own folder.
 - Brief T20 (the review checker's temp test looks only at its own folder, Hermes).
 - The fixture builder starts git through `gitPath()` and lists with `-z` (task T19): the new exported `sandboxFiles(sandbox)` in `scripts/build-fixtures.mjs` runs `ls-files`, `rev-list` and `ls-tree` by the absolute path from `server/programPath.js` and splits the `ls-files` and `ls-tree` output on `\0`, so a name such as `données/été.md` arrives as it is; the script's work runs only when it is the entry point, so a test can import it; tests in `tests/build-fixtures.test.js`.
