@@ -39,7 +39,7 @@ No High finding was found. No text reaches the DOM as HTML: there is no `innerHT
 | N6 | `server/index.js`, proxy route | Keys are masked one chunk at a time, so a key split across two chunks reaches the page, and the proxy route masks nothing. | Known limit in ARCHITECTURE.md since U5c. |
 | N7 | `src/App.jsx:18`, `src/live/simulated.js:20` | `?simulate&speed=` takes any number: 0 or a negative speed plays every frame at once, and a tiny one makes a delay that overflows the browser's timer and fires at once. | Fixed in 0.1.145 (U11): `simulatedSpeed` clamps it to 0.25 through 64. |
 | N8 | `src/model/pipeline.js:86` | A log chunk that arrives after its run's end makes a new parser that a live page never flushes or drops. | Fixed in 0.1.127: the pipeline drops a log chunk that arrives after its run ended. |
-| N9 | `src/engine/cards.js:30`, `:292` | `cards.update` rebuilds the list of every file each frame to make the plan key, so a large project costs work on every frame. | Part of P3 (large repositories). Not measured. Brief U12. |
+| N9 | `src/engine/cards.js:30`, `:292` | `cards.update` rebuilds the list of every file each frame to make the plan key, so a large project costs work on every frame. | Fixed in 0.1.146 (U12): the key reads a count the state keeps, and the file list is built only when the key changes. |
 | N10 | `src/ui/Assistant.jsx:38` | The assistant's log keeps every entry for as long as the page is open. | Fixed in 0.1.145 (U11): the log keeps its newest 200 entries. |
 
 ## What this session could not check
