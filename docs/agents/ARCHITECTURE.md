@@ -189,6 +189,7 @@ A shell command touches files only when its text names a known file or folder. S
 
 .mr-callout.is-{working|error|done}
   .mr-callout-title
+  .mr-callout-task
   .mr-callout-cmd
 
 .mr-board

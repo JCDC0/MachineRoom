@@ -11,6 +11,7 @@ import { appendLiveLog, buildTimeline, createLogger, entriesUpTo } from './model
 import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
 import { costBoard } from './model/costs.js'
+import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud from './ui/Hud.jsx'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
@@ -64,6 +65,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [openChips, setOpenChips] = useState(NONE)
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
+  const latestTasksRef = useRef(null)
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
   const assistantPaths = useMemo(
@@ -102,6 +104,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     roomRef.current = room
     if (latestBoardRef.current) {
       room.setCosts(latestBoardRef.current)
+    }
+    if (latestTasksRef.current) {
+      room.setTasks(latestTasksRef.current)
     }
     setOpenChips(NONE)
     if (!live) {
@@ -149,6 +154,42 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     return () => {
       active = false
       clearInterval(timer)
+      unsubscribe()
+    }
+  }, [client])
+
+  useEffect(() => {
+    if (!client) {
+      latestTasksRef.current = null
+      roomRef.current?.setTasks(null)
+      return undefined
+    }
+    let active = true
+
+    async function updateTasks() {
+      try {
+        const [agentsRaw, issuesRaw, liveRunsRaw] = await Promise.all([
+          client.agents(),
+          client.issues(),
+          client.liveRuns(),
+        ])
+        if (!active) return
+        const roster = toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
+        const tasks = agentTasks(liveRunsRaw, issuesRaw, roster)
+        latestTasksRef.current = tasks
+        roomRef.current?.setTasks(tasks)
+      } catch {
+        if (!active) return
+        latestTasksRef.current = null
+        roomRef.current?.setTasks(null)
+      }
+    }
+
+    updateTasks()
+    const unsubscribe = subscribeToNotices(client, ['agents', 'issues', 'liveRuns'], updateTasks)
+
+    return () => {
+      active = false
       unsubscribe()
     }
   }, [client])

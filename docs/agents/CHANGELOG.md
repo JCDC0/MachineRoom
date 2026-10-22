@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The room names the task each agent runs (task W6b): pure agentTasks in src/model/liveTasks.js maps room agent keys to the task identifier from running live runs, cut to 16 characters and filtered through visibleText; Stage reads live runs, issues and agents on notices and hands the map to room.setTasks, which passes it to agents; callouts show .mr-callout-task under the title, hidden when empty via CSS; tests in tests/live-tasks.test.js.
+
 - Briefs W6b (the room names the task each agent runs, AGY), E2a (can the room ship as a Paperclip plugin page, the cloud session), U11 (UI audit N7 and N10, Hermes) and U12 (N9, OpenCode). The UI audit's N8 was fixed in 0.1.127; its row now says so.
 - Review note on W6a: no fixes. Read Paperclip's two live-runs handlers in the installed 2026.1012.0: the defaults match the report (`minCount` 0, `limit` 50 and at most 50, only queued and running runs, newest first), and the runtime status decorator adds fields but never changes `status`, so the bridge's filter drops nothing live. The issue route adds nothing the company route lacks, so W6 is done; `PAPERCLIP-API.md` now notes both routes. Checked in the browser with the mock in replay mode at 1280 by 800: JC-19 reads `running OpenCode Go` in yellow beside `in progress`; at 880 the mark fits its row. Full suite on the merge: 96 files, 1675 tests.
 - Handoff in ORCHESTRATOR.md for the next session: W6a runs in the cloud, the other lanes are idle, AGY's model.

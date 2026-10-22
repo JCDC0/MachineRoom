@@ -40,14 +40,17 @@ function makeCallout(agentName) {
   title.className = 'mr-callout-title'
   title.textContent = agentName.toUpperCase()
 
+  const task = document.createElement('div')
+  task.className = 'mr-callout-task'
+
   const cmd = document.createElement('div')
   cmd.className = 'mr-callout-cmd'
 
-  element.append(title, cmd)
+  element.append(title, task, cmd)
 
   const object = new CSS3DObject(element)
   object.visible = false
-  return { element, title, cmd, object }
+  return { element, title, task, cmd, object }
 }
 
 function lineBetween(material) {
@@ -141,6 +144,12 @@ export function createAgents(scene, roster, cssScene = null) {
   function setStatus(view, status, now) {
     if (view.style !== status && (status === 'done' || status === 'error')) view.doneAt = now
     view.style = status
+  }
+
+  let currentTasks = null
+
+  function setTasks(tasksMap) {
+    currentTasks = tasksMap instanceof Map ? tasksMap : null
   }
 
   function aimAt(key, dir, file, now) {
@@ -255,6 +264,10 @@ export function createAgents(scene, roster, cssScene = null) {
         if (view.callout.element.className !== calloutClass) {
           view.callout.element.className = calloutClass
         }
+        const taskText = currentTasks?.get(view.key) ?? ''
+        if (view.callout.task.textContent !== taskText) {
+          view.callout.task.textContent = taskText
+        }
         if (view.callout.cmd.textContent !== calloutText) {
           view.callout.cmd.textContent = calloutText
         }
@@ -331,5 +344,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, dispose, hubCenter: HUB_CENTER }
+  return { views, pickables, update, snap, aimAt, setTasks, dispose, hubCenter: HUB_CENTER }
 }
