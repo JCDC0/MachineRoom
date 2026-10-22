@@ -1155,11 +1155,14 @@ function runContractSuite(label, makeHarness) {
       expect(answer.status).toBe('ready')
       const ids = answer.briefs.map((brief) => brief.id)
       expect(ids.length).toBeGreaterThan(0)
-      const added = await client.acceptPlan(created.issueId, ids)
+      await expect(client.acceptPlan(created.issueId, ids, 'comment-old')).rejects.toThrow(
+        'The plan changed since you read it. Read it again.'
+      )
+      const added = await client.acceptPlan(created.issueId, ids, answer.planId)
       expect(added).toEqual({ added: ids })
       const briefs = await client.briefs()
       expect(briefs.some((brief) => brief.id === ids[0])).toBe(true)
-      await expect(client.acceptPlan(created.issueId, ids)).rejects.toThrow(
+      await expect(client.acceptPlan(created.issueId, ids, answer.planId)).rejects.toThrow(
         `Brief ${ids[0]} is not in the plan, or has a problem now.`
       )
     })

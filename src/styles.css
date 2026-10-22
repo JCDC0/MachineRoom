@@ -2411,6 +2411,13 @@ summary:focus-visible,
   word-break: break-word;
 }
 
+.plan-brief-text {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.7);
+  word-break: break-word;
+}
+
 .plan-brief-route {
   font-size: 11px;
   line-height: 1.45;

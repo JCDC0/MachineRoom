@@ -1,7 +1,10 @@
+import { parseBriefs } from './briefs.js'
+
 const ID_SHAPE = /^[A-Z]\d+[a-z]?$/
 const SIZES = ['small', 'medium', 'large']
 const EM_DASH = /\u2014/
 const FILES_MARKER = /\bFiles:/
+const TITLE_BREAK = /[*()\r\n]/
 const MAX_BRIEFS = 8
 
 function textOf(value) {
@@ -179,24 +182,27 @@ function loopIds(idsInPlan, entries) {
 function briefProblem(entry, id, { laneTable, used, counts, idsInPlan }) {
   if (Object.hasOwn(used, id)) return `Brief ${id} uses an id that is taken.`
   if (counts[id] > 1) return `Brief ${id} appears twice.`
+  const title = textOf(entry?.title).trim()
+  if (TITLE_BREAK.test(title) || FILES_MARKER.test(title)) return `Brief ${id} has a title the brief list cannot read.`
   const owner = textOf(entry?.owner).trim()
   if (!Object.hasOwn(laneTable, owner)) return `Brief ${id} names an owner that is not a lane: ${owner}.`
   const size = textOf(entry?.size).trim().toLowerCase()
   if (!SIZES.includes(size)) return `Brief ${id} has no size of small, medium or large.`
   const files = listOf(entry?.files)
   if (files.length === 0) return `Brief ${id} lists no files.`
+  const tests = listOf(entry?.tests)
   const lane = laneTable[owner]
   const forbidden = Array.isArray(lane?.forbidden) ? lane.forbidden : []
-  for (const file of [...files, ...listedPaths(textOf(entry?.text))]) {
+  for (const file of [...files, ...tests, ...listedPaths(textOf(entry?.text))]) {
     if (!pathAllowed(file, forbidden)) return `Brief ${id} lets ${owner} touch ${file}, which lanes.json forbids.`
   }
-  const tests = listOf(entry?.tests)
   if (tests.length === 0) return `Brief ${id} names no test.`
   const dashes = [textOf(entry?.title), textOf(entry?.text), ...files, ...tests]
   if (dashes.some((line) => EM_DASH.test(line))) return `Brief ${id} has an em dash.`
   for (const dep of listOf(entry?.dependsOn)) {
     if (!Object.hasOwn(idsInPlan, dep)) return `Brief ${id} depends on ${dep}, which is not in the plan.`
   }
+  if (!briefMarkdown({ ...entry, id }, laneTable)) return `Brief ${id} cannot be written as one line of the brief list.`
   return ''
 }
 
@@ -272,5 +278,10 @@ export function briefMarkdown(brief, lanes) {
   const allFiles = [...new Set([...files, ...tests, 'docs/agents/CHANGELOG.md'])]
   const listed = files.length > 0 && !FILES_MARKER.test(text) ? `Files: ${allFiles.map(tick).join(', ')}.` : ''
   const body = [text, named, listed].filter(Boolean).join(' ')
-  return `**${id}. ${title} (${name}).** ${body}`.replace(/\s+/g, ' ').trim()
+  const line = `**${id}. ${title} (${name}).** ${body}`.replace(/\s+/g, ' ').trim()
+  const readBack = parseBriefs(line)
+  if (readBack.length !== 1) return ''
+  const [parsed] = readBack
+  if (parsed.id !== id || parsed.title !== title.replace(/\s+/g, ' ') || parsed.ownerText !== name) return ''
+  return line
 }

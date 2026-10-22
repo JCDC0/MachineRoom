@@ -250,8 +250,8 @@ async function acceptPlan(url, issueId, body) {
 
 async function createReadyPlan(url, fake, plan = GOOD_PLAN) {
   const created = await postPlan(url, { goal: 'Plan the next work', confirmed: true })
-  fake.addComment(created.body.issueId, PLANNER.id, JSON.stringify(plan))
-  return created.body.issueId
+  const comment = fake.addComment(created.body.issueId, PLANNER.id, JSON.stringify(plan))
+  return { issueId: created.body.issueId, planId: comment.id }
 }
 
 async function waitUntil(fn, timeoutMs = 3000) {
@@ -349,16 +349,17 @@ describe('plans routes', () => {
     fake.addComment(issueId, PLANNER.id, 'I am working on it.')
     expect((await getPlan(url, issueId)).body).toEqual({ status: 'waiting', briefs: [], problems: [] })
 
-    fake.addComment(issueId, PLANNER.id, 'Here is a plan.\n```json\n' + JSON.stringify(GOOD_PLAN) + '\n```')
+    const firstComment = fake.addComment(issueId, PLANNER.id, 'Here is a plan.\n```json\n' + JSON.stringify(GOOD_PLAN) + '\n```')
     const first = await getPlan(url, issueId)
     expect(first.status).toBe(200)
-    expect(first.body).toEqual({ status: 'ready', briefs: GOOD_PLAN.briefs, problems: [] })
+    expect(first.body).toEqual({ status: 'ready', briefs: GOOD_PLAN.briefs, problems: [], planId: firstComment.id })
 
     const secondPlan = { briefs: [{ ...GOOD_PLAN.briefs[0], id: 'C7b', title: 'Plan the room work' }] }
-    fake.addComment(issueId, PLANNER.id, JSON.stringify(secondPlan))
+    const secondComment = fake.addComment(issueId, PLANNER.id, JSON.stringify(secondPlan))
     const second = await getPlan(url, issueId)
     expect(second.body.briefs.map((brief) => brief.id)).toEqual(['C7b'])
     expect(second.body.problems).toEqual([])
+    expect(second.body.planId).toBe(secondComment.id)
   })
 
   it('answers ready with a problem when the planner comment holds no readable plan', async () => {
@@ -369,11 +370,12 @@ describe('plans routes', () => {
     fake.addComment(issueId, PLANNER.id, 'I will send a plan soon.')
     expect((await getPlan(url, issueId)).body).toEqual({ status: 'waiting', briefs: [], problems: [] })
 
-    fake.addComment(issueId, PLANNER.id, 'Here: { not json')
+    const comment = fake.addComment(issueId, PLANNER.id, 'Here: { not json')
     expect((await getPlan(url, issueId)).body).toEqual({
       status: 'ready',
       briefs: [],
       problems: ['The plan is not JSON.'],
+      planId: comment.id,
     })
   })
 
@@ -386,7 +388,7 @@ describe('plans routes', () => {
 
   it('refuses an accept that was not confirmed or with bad ids and writes nothing', async () => {
     const { url, fake, tasksPath } = await setup()
-    const issueId = await createReadyPlan(url, fake)
+    const { issueId } = await createReadyPlan(url, fake)
     const before = readFileSync(tasksPath, 'utf8')
 
     for (const confirmed of [false, undefined, 'yes', 1]) {
@@ -432,14 +434,14 @@ describe('plans routes', () => {
 
   it('refuses an id that is not in the plan or has a problem now and writes nothing', async () => {
     const { url, fake, tasksPath } = await setup()
-    const issueId = await createReadyPlan(url, fake)
+    const { issueId, planId } = await createReadyPlan(url, fake)
     const before = readFileSync(tasksPath, 'utf8')
 
-    const missing = await acceptPlan(url, issueId, { ids: ['C7b'], confirmed: true })
+    const missing = await acceptPlan(url, issueId, { ids: ['C7b'], confirmed: true, planId })
     expect(missing.status).toBe(400)
     expect(missing.body).toEqual({ error: 'Brief C7b is not in the plan, or has a problem now.' })
 
-    const second = await acceptPlan(url, issueId, { ids: ['C7a', 'C7b'], confirmed: true })
+    const second = await acceptPlan(url, issueId, { ids: ['C7a', 'C7b'], confirmed: true, planId })
     expect(second.status).toBe(400)
     expect(second.body).toEqual({ error: 'Brief C7b is not in the plan, or has a problem now.' })
     expect(readFileSync(tasksPath, 'utf8')).toBe(before)
@@ -455,18 +457,39 @@ describe('plans routes', () => {
         },
       ],
     }
-    const brokenIssue = await createReadyPlan(url, fake, brokenPlan)
-    const broken = await acceptPlan(url, brokenIssue, { ids: ['C7c'], confirmed: true })
+    const brokenReady = await createReadyPlan(url, fake, brokenPlan)
+    const broken = await acceptPlan(url, brokenReady.issueId, { ids: ['C7c'], confirmed: true, planId: brokenReady.planId })
     expect(broken.status).toBe(400)
     expect(broken.body).toEqual({ error: 'Brief C7c is not in the plan, or has a problem now.' })
     expect(readFileSync(tasksPath, 'utf8')).toBe(before)
   })
 
+  it('refuses an accept when the plan changed since it was read and writes nothing', async () => {
+    const { url, fake, tasksPath } = await setup()
+    const { issueId, planId } = await createReadyPlan(url, fake)
+    const before = readFileSync(tasksPath, 'utf8')
+    const newer = fake.addComment(
+      issueId,
+      PLANNER.id,
+      JSON.stringify({ briefs: [{ ...GOOD_PLAN.briefs[0], text: 'Write the newer text.' }] })
+    )
+
+    const stale = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true, planId })
+    expect(stale.status).toBe(409)
+    expect(stale.body).toEqual({ error: 'The plan changed since you read it. Read it again.' })
+    expect(readFileSync(tasksPath, 'utf8')).toBe(before)
+
+    const fresh = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true, planId: newer.id })
+    expect(fresh.status).toBe(201)
+    expect(fresh.body).toEqual({ added: ['C7a'] })
+    expect(readFileSync(tasksPath, 'utf8')).toContain('Write the newer text.')
+  })
+
   it('adds two chosen briefs in plan order under one new heading', async () => {
     const { url, fake, tasksPath } = await setup()
-    const issueId = await createReadyPlan(url, fake, TWO_BRIEFS_PLAN)
+    const { issueId, planId } = await createReadyPlan(url, fake, TWO_BRIEFS_PLAN)
     const before = readFileSync(tasksPath, 'utf8')
-    const answer = await acceptPlan(url, issueId, { ids: ['C7b', 'C7a'], confirmed: true })
+    const answer = await acceptPlan(url, issueId, { ids: ['C7b', 'C7a'], confirmed: true, planId })
     expect(answer.status).toBe(201)
     expect(answer.body).toEqual({ added: ['C7a', 'C7b'] })
 
@@ -481,14 +504,14 @@ describe('plans routes', () => {
 
   it('keeps one heading when a second accept adds another brief, and refuses an id taken since the plan was read', async () => {
     const { url, fake, tasksPath } = await setup()
-    const issueId = await createReadyPlan(url, fake, TWO_BRIEFS_PLAN)
+    const { issueId, planId } = await createReadyPlan(url, fake, TWO_BRIEFS_PLAN)
 
-    const first = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true })
+    const first = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true, planId })
     expect(first.status).toBe(201)
     expect(first.body).toEqual({ added: ['C7a'] })
     const afterFirst = readFileSync(tasksPath, 'utf8')
 
-    const second = await acceptPlan(url, issueId, { ids: ['C7b'], confirmed: true })
+    const second = await acceptPlan(url, issueId, { ids: ['C7b'], confirmed: true, planId })
     expect(second.status).toBe(201)
     expect(second.body).toEqual({ added: ['C7b'] })
     const afterSecond = readFileSync(tasksPath, 'utf8')
@@ -496,7 +519,7 @@ describe('plans routes', () => {
     expect((afterSecond.match(/\*\*C7a\./g) ?? [])).toHaveLength(1)
     expect((afterSecond.match(/\*\*C7b\./g) ?? [])).toHaveLength(1)
 
-    const taken = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true })
+    const taken = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true, planId })
     expect(taken.status).toBe(400)
     expect(taken.body).toEqual({ error: 'Brief C7a is not in the plan, or has a problem now.' })
     expect(readFileSync(tasksPath, 'utf8')).toBe(afterSecond)
@@ -506,11 +529,11 @@ describe('plans routes', () => {
   it('keeps the line endings of TASKS.md when it adds the briefs', async () => {
     const crlfTasks = SAMPLE_TASKS_MD.split('\n').join('\r\n')
     const { url, fake, tasksPath } = await setup({}, { tasks: crlfTasks })
-    const issueId = await createReadyPlan(url, fake)
+    const { issueId, planId } = await createReadyPlan(url, fake)
     const before = readFileSync(tasksPath, 'utf8')
     expect(before).toContain('\r\n')
 
-    const answer = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true })
+    const answer = await acceptPlan(url, issueId, { ids: ['C7a'], confirmed: true, planId })
     expect(answer.status).toBe(201)
     const after = readFileSync(tasksPath, 'utf8')
     expect(after.startsWith(before)).toBe(true)

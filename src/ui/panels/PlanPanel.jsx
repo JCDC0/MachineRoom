@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { visibleText } from '../../model/paths.js'
 import { canAsk, copyNote, copyText, planRows } from './plan.js'
 import { subscribeToNotices } from './notices.js'
 
@@ -228,7 +229,7 @@ export default function PlanPanel({
     setAdded(null)
     setAddedIds([])
     try {
-      const result = await client.acceptPlan(issue.issueId, selectedIds)
+      const result = await client.acceptPlan(issue.issueId, selectedIds, answer?.planId)
       if (!mountedRef.current) return
       const ids = Array.isArray(result?.added) && result.added.length > 0 ? result.added : selectedIds
       setAdded(addedText(ids))
@@ -461,6 +462,7 @@ export default function PlanPanel({
                       <span>{`Files: ${row.files.length > 0 ? row.files.join(', ') : 'none'}`}</span>
                       <span>{`Tests: ${row.tests.length > 0 ? row.tests.join(', ') : 'none'}`}</span>
                     </div>
+                    <div className="plan-brief-text mono">{visibleText(row.text)}</div>
                     <div className={`plan-brief-route mono${line.error ? ' is-error' : ''}`}>
                       {line.text}
                     </div>

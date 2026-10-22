@@ -218,8 +218,8 @@ export function createClient({
 
     plan: (issueId) => request('GET', `/api/control/plans/${encodeURIComponent(issueId ?? '')}`),
 
-    acceptPlan: (issueId, ids) =>
-      request('POST', `/api/control/plans/${encodeURIComponent(issueId ?? '')}/accept`, { ids, confirmed: true }),
+    acceptPlan: (issueId, ids, planId) =>
+      request('POST', `/api/control/plans/${encodeURIComponent(issueId ?? '')}/accept`, { ids, planId, confirmed: true }),
 
     decide: ({ state, questions, model } = {}) =>
       request(

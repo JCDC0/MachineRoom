@@ -17,6 +17,7 @@ const CONFIRM_ADD_PROBLEM = 'Confirm adding the briefs first.'
 const IDS_PROBLEM = 'Choose 1 to 8 briefs.'
 const NO_BRIEFS_FOLDER = 'The bridge has no briefs folder.'
 const NOT_READY = 'The plan is not ready.'
+const PLAN_CHANGED = 'The plan changed since you read it. Read it again.'
 const ACCEPT_HEADING = '## Briefs from the planner'
 const ACCEPT_HEADING_LINE = /^## Briefs from the planner[ \t]*\r?$/m
 const WRITE_PROBLEM = 'Could not write TASKS.md.'
@@ -238,7 +239,7 @@ export function createPlansApi(options) {
     const files = readBriefs()
     if (files.problem) return { problem: [files.problem === MISSING_FILES ? 404 : 400, files.problem] }
     const answer = parsePlan(newest.body, { lanes: files.lanes, ids: parseBriefs(files.tasksText) })
-    return { files, answer }
+    return { files, answer, planId: newest.id }
   }
 
   async function readPlan(req, res, issueId) {
@@ -251,7 +252,7 @@ export function createPlansApi(options) {
       sendJson(req, res, 200, { status: 'waiting', briefs: [], problems: [] })
       return
     }
-    sendJson(req, res, 200, { status: 'ready', briefs: plan.answer.briefs, problems: plan.answer.problems })
+    sendJson(req, res, 200, { status: 'ready', briefs: plan.answer.briefs, problems: plan.answer.problems, planId: plan.planId })
   }
 
   async function acceptPlan(req, res, issueId) {
@@ -284,6 +285,11 @@ export function createPlansApi(options) {
       fail(req, res, 409, NOT_READY)
       return
     }
+    const planId = typeof body?.planId === 'string' ? body.planId.trim() : ''
+    if (!planId || planId !== plan.planId) {
+      fail(req, res, 409, PLAN_CHANGED)
+      return
+    }
     const ids = rawIds.map((id) => id.trim())
     const chosen = Object.create(null)
     for (const id of ids) chosen[id] = true
@@ -296,6 +302,10 @@ export function createPlansApi(options) {
     }
     const selected = plan.answer.briefs.filter((brief) => Object.hasOwn(chosen, brief.id))
     const lines = selected.map((brief) => briefMarkdown(brief, plan.files.lanes))
+    if (lines.some((line) => !line)) {
+      fail(req, res, 400, WRITE_PROBLEM)
+      return
+    }
     const written = writeTasks(plan.files.tasksText, lines)
     if (!written) {
       fail(req, res, 500, WRITE_PROBLEM)

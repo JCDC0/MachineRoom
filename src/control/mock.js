@@ -79,6 +79,7 @@ const SAMPLE_RULES = {
 
 const SAMPLE_PLAN = {
   status: 'ready',
+  planId: 'comment-plan-1',
   briefs: [
     {
       id: 'C7a',
@@ -628,11 +629,14 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return SAMPLE_PLAN
       }),
 
-    acceptPlan: (issueId, ids) =>
+    acceptPlan: (issueId, ids, planId) =>
       call('acceptPlan', () => {
         if (!state.issues.some((issue) => issue.id === issueId)) throw new Error('That task no longer exists.')
         if (!Array.isArray(ids) || ids.length < 1 || ids.length > 8 || ids.some((id) => typeof id !== 'string' || !id.trim())) {
           throw new Error('Choose 1 to 8 briefs.')
+        }
+        if (typeof planId !== 'string' || planId !== SAMPLE_PLAN.planId) {
+          throw new Error('The plan changed since you read it. Read it again.')
         }
         const clean = ids.map((id) => id.trim())
         const chosen = Object.create(null)
