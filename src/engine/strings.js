@@ -102,7 +102,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
   function update(centerOf) {
     if (!line) return
     const array = line.geometry.attributes.position.array
-    let k = 0
+    let lineChanged = false
     for (let i = 0; i < ends.length; i += 1) {
       const link = ends[i]
       if (link.from === null) from.set(0, 0, 0)
@@ -110,25 +110,36 @@ export function createStrings(scene, { onPath = () => false } = {}) {
       to.copy(centerOf(link.to))
       from.y += STRING_LIFT
       to.y += STRING_LIFT
-      for (let segment = 0; segment < SEGMENTS; segment += 1) {
-        curvePoint(from, to, segment / SEGMENTS, start)
-        curvePoint(from, to, (segment + 1) / SEGMENTS, end)
-        array[k++] = start.x
-        array[k++] = start.y
-        array[k++] = start.z
-        array[k++] = end.x
-        array[k++] = end.y
-        array[k++] = end.z
-      }
+
       const strand = strands[i]
-      if (strand) {
-        strand.from.copy(from)
-        strand.to.copy(to)
-        const pts = strandPoints({ a: from, b: to }, 24, strand.seed)
-        fillStrand(strand, pts)
+      const moved = !strand || Number.isNaN(strand.from.x) ||
+        strand.from.distanceToSquared(from) > 0.01 ||
+        strand.to.distanceToSquared(to) > 0.01
+
+      if (moved) {
+        lineChanged = true
+        for (let segment = 0; segment < SEGMENTS; segment += 1) {
+          curvePoint(from, to, segment / SEGMENTS, start)
+          curvePoint(from, to, (segment + 1) / SEGMENTS, end)
+          const base = (i * SEGMENTS + segment) * 6
+          array[base] = start.x
+          array[base + 1] = start.y
+          array[base + 2] = start.z
+          array[base + 3] = end.x
+          array[base + 4] = end.y
+          array[base + 5] = end.z
+        }
+        if (strand) {
+          strand.from.copy(from)
+          strand.to.copy(to)
+          const pts = strandPoints({ a: from, b: to }, 24, strand.seed)
+          fillStrand(strand, pts)
+        }
       }
     }
-    line.geometry.attributes.position.needsUpdate = true
+    if (lineChanged) {
+      line.geometry.attributes.position.needsUpdate = true
+    }
   }
 
   function build(links, centerOf, anchor = true) {
@@ -161,8 +172,8 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         seed,
         mesh,
         yellowLevel: 0,
-        from: new THREE.Vector3(),
-        to: new THREE.Vector3(),
+        from: new THREE.Vector3(NaN, NaN, NaN),
+        to: new THREE.Vector3(NaN, NaN, NaN),
       }
       mesh.onBeforeRender = () => {
         const now = performance.now()

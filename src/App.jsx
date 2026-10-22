@@ -4,7 +4,8 @@ import { loadDemo, simulatedSpeed } from './live/simulated.js'
 import { discover, loadTree } from './live/source.js'
 import { makeTree } from './model/paths.js'
 import { loadReplay } from './model/replay.js'
-import { PROXY_BASE, chooseRoute, recordingName, treeAddress } from './startup.js'
+import { createScaleReplay } from './model/scaleTree.js'
+import { PROXY_BASE, chooseRoute, fpsEnabled, recordingName, scaleSize, treeAddress } from './startup.js'
 import { store } from './storage.js'
 import Stage from './Stage.jsx'
 import Connect from './ui/Connect.jsx'
@@ -78,7 +79,12 @@ export default function App() {
     let current = true
     setSource({ status: 'loading' })
     const params = new URLSearchParams(window.location.search)
-    const wanted = route.mode === 'live' ? loadLive(route.connection, params) : loadReplay({ recording: recordingName(params) })
+    const scale = route.mode === 'replay' ? scaleSize(params) : null
+    const wanted = route.mode === 'live'
+      ? loadLive(route.connection, params)
+      : scale !== null
+        ? Promise.resolve(createScaleReplay(scale))
+        : loadReplay({ recording: recordingName(params) })
     wanted
       .then((data) => {
         if (current) setSource({ status: data.live || data.activities.length > 0 ? 'ready' : 'empty', data })
@@ -152,7 +158,10 @@ export default function App() {
     )
   }
 
-  if (source.status === 'ready') return <Stage data={source.data} mode={route.mode} liveAvailable={liveAvailable} onMode={switchMode} />
+  if (source.status === 'ready') {
+    const fps = fpsEnabled(new URLSearchParams(window.location.search))
+    return <Stage data={source.data} mode={route.mode} liveAvailable={liveAvailable} onMode={switchMode} fps={fps} />
+  }
   const failed = source.status === 'error'
   return <Notice status={source.status} message={source.message} onRetry={failed ? () => setAttempt((count) => count + 1) : undefined} />
 }

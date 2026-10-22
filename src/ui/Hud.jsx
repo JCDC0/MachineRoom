@@ -48,6 +48,7 @@ export default function Hud({
   focused,
   speeds,
   rootName,
+  fpsStats = null,
   markers = [],
   log = [],
   mode = 'replay',
@@ -153,6 +154,11 @@ export default function Hud({
             <span className="hud-status-sep">: </span>
             <span className={`hud-status-value ${mode === 'live' ? 'is-live' : ''}`}>{rootName}</span>
           </p>
+          {fpsStats ? (
+            <p className="hud-fps-line mono">
+              {`frame ${Math.round(fpsStats.median)} ms, p95 ${Math.round(fpsStats.p95)} ms`}
+            </p>
+          ) : null}
           <ul className="hud-legend mono" aria-label="Colour legend">
             <li className="is-white">activity</li>
             <li className="is-red">failure</li>

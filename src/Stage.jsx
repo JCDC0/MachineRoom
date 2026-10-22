@@ -35,7 +35,7 @@ const BADGE = {
   background: 'rgb(0 0 0 / 0.7)',
 }
 
-export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode }) {
+export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode, fps = false }) {
   const surfaceRef = useRef(null)
   const glRef = useRef(null)
   const cssRef = useRef(null)
@@ -66,6 +66,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
+  const framesRef = useRef([])
+  const lastFrameRef = useRef(0)
+  const [fpsStats, setFpsStats] = useState(() => (fps ? { median: 0, p95: 0 } : null))
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
   const assistantPaths = useMemo(
@@ -94,7 +97,18 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       rootName: data.tree.rootName,
       agents: data.agents,
       getState: () => player.state,
-      beforeFrame: (ms) => player.tick(ms),
+      beforeFrame: (ms) => {
+        if (fps) {
+          const now = performance.now()
+          if (lastFrameRef.current > 0) {
+            const list = framesRef.current
+            list.push(now - lastFrameRef.current)
+            if (list.length > 120) list.shift()
+          }
+          lastFrameRef.current = now
+        }
+        player.tick(ms)
+      },
       onPick: (key) => {
         setFollow(false)
         room.focus(key)
@@ -123,6 +137,19 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       roomRef.current = null
     }
   }, [data, player])
+
+  useEffect(() => {
+    if (!fps) return undefined
+    const timer = setInterval(() => {
+      const list = framesRef.current
+      if (list.length === 0) return
+      const sorted = [...list].sort((a, b) => a - b)
+      const median = sorted[Math.floor(sorted.length / 2)]
+      const p95 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.95))]
+      setFpsStats({ median, p95 })
+    }, 500)
+    return () => clearInterval(timer)
+  }, [fps])
 
   useEffect(() => {
     if (!client) {
@@ -386,6 +413,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         focused={focused}
         speeds={SPEEDS}
         rootName={data.tree.rootName}
+        fpsStats={fpsStats}
         mode={mode}
         client={client}
         assistantPaths={assistantPaths}

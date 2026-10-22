@@ -176,7 +176,7 @@ function overlap(a, pa, b, pb) {
   return ox > 0 && oy > 0 ? { ox, oy } : null
 }
 
-function relaxCards(list, pos, parents, mobility, obstacles = []) {
+function relaxCards(list, pos, parents, mobility, obstacles = [], isWarm = false) {
   const hub = { hw: CARD_HUB.hw, hh: CARD_HUB.hh }
   const centre = { x: 0, y: 0 }
   const points = list.map((node) => pos.get(node.path))
@@ -188,12 +188,16 @@ function relaxCards(list, pos, parents, mobility, obstacles = []) {
       const pa = points[i]
       const wa = weights[i]
       for (let j = i + 1; j < list.length; j += 1) {
-        const b = list[j]
         const pb = points[j]
-        const ox = a.hw + b.hw - Math.abs(pb.x - pa.x)
-        if (!(ox > 0)) continue
-        const oy = a.hh + b.hh - Math.abs(pb.y - pa.y)
-        if (!(oy > 0)) continue
+        const b = list[j]
+        const maxH = a.hh + b.hh
+        const dy = Math.abs(pb.y - pa.y)
+        if (dy >= maxH) continue
+        const maxW = a.hw + b.hw
+        const dx = Math.abs(pb.x - pa.x)
+        if (dx >= maxW) continue
+        const ox = maxW - dx
+        const oy = maxH - dy
         const wb = weights[j]
         if (wa + wb === 0) continue
         worst = Math.max(worst, Math.min(ox, oy))
@@ -239,7 +243,7 @@ function relaxCards(list, pos, parents, mobility, obstacles = []) {
       }
       p.y = clamp(p.y, CARD_V.low, CARD_V.high)
     }
-    if (pass > CARD_PASSES * 0.6 && worst < 0.5) break
+    if (worst < 0.5 && (isWarm || pass > CARD_PASSES * 0.6)) break
   }
 }
 
@@ -310,7 +314,7 @@ export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
     })
   }
 
-  relaxCards(list, pos, parents, mobility, obstacles)
+  relaxCards(list, pos, parents, mobility, obstacles, previous !== null)
   return new Map(
     list.map((node) => {
       const p = pos.get(node.path)
