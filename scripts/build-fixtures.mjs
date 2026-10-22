@@ -3,11 +3,12 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { userInfo } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { findLeaks } from '../src/briefs/audit.js'
 import { gitPath } from '../server/programPath.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-const SECRET = /eyJ[A-Za-z0-9_-]{40,}\.|\bsk-[A-Za-z0-9]{16,}|Bearer [A-Za-z0-9._~+/=-]{16,}|AIza[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{20,}|xox[bp]-|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/
+const SECRET = /eyJ[A-Za-z0-9_-]{40,}\.|Bearer [A-Za-z0-9._~+/=-]{16,}|xox[bp]-|[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/
 
 const ACCOUNT = userInfo().username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const ACCOUNT_PATHS = new RegExp(ACCOUNT, 'gi')
@@ -28,6 +29,13 @@ function gitList(sandbox, args) {
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
+}
+
+export function fixtureLeak(lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    if (findLeaks(lines[index]).some((leak) => leak.kind === 'key')) return index + 1
+  }
+  return 0
 }
 
 export function sandboxFiles(sandbox) {
@@ -59,9 +67,14 @@ function main(argv) {
     .map(scrub)
 
   const lines = frames.map((frame) => JSON.stringify(frame))
-  const leak = lines.findIndex((line) => SECRET.test(line))
-  if (leak !== -1) {
-    console.error(`possible secret in frame ${leak + 1}; fixture not written`)
+  const leak = fixtureLeak(lines)
+  if (leak !== 0) {
+    console.error(`possible key in frame ${leak}; fixture not written`)
+    return 2
+  }
+  const secret = lines.findIndex((line) => SECRET.test(line))
+  if (secret !== -1) {
+    console.error(`possible secret in frame ${secret + 1}; fixture not written`)
     return 2
   }
   writeFileSync(join(root, 'public', 'fixtures', `${safeName}-run.jsonl`), lines.join('\n') + '\n')
