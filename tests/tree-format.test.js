@@ -145,11 +145,11 @@ describe('the page side', () => {
     const files = ['a.js', 'src/b.js']
     const fetchImpl = async (url, init) => {
       asked.push([url, init?.headers?.Accept])
-      const body = url.endsWith('/api/agents') ? [] : { ...packTree({ root: 'p', files }), created: [] }
+      const body = url.endsWith('/api/agents') ? [] : { ...packTree({ root: 'p', files }), created: [], version: 9 }
       return { ok: true, status: 200, json: async () => body }
     }
     expect((await discoverBridge({ url: 'http://bridge', fetchImpl })).files).toEqual(files)
-    expect(await loadTree('http://bridge', fetchImpl)).toEqual({ root: 'p', files })
+    expect(await loadTree('http://bridge', fetchImpl)).toEqual({ root: 'p', files, version: 9 })
     expect(asked.filter(([url]) => url.endsWith('/api/tree')).map(([, accept]) => accept)).toEqual([FOLDER_SHAPE_ACCEPT, FOLDER_SHAPE_ACCEPT])
   })
 
@@ -208,6 +208,8 @@ describe('the bridge', () => {
     const packed = (await getJson(`${loop.url}/api/tree`, { headers: { Accept: FOLDER_SHAPE_ACCEPT } })).body
     expect(packed.shape).toBe(FOLDER_SHAPE)
     expect(packed.created).toEqual([])
+    expect(Number.isInteger(packed.version)).toBe(true)
+    expect(packed.version).toBeGreaterThan(0)
     expect(readFileList(packed)).toEqual({ root: 'project', files: plain.files })
     expect((await discoverBridge({ url: loop.url })).files).toEqual(plain.files)
   })

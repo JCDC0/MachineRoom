@@ -1,5 +1,5 @@
 import { toAgents } from './source.js'
-import { FOLDER_SHAPE, FOLDER_SHAPE_ACCEPT, readFileList } from './tree.js'
+import { FOLDER_SHAPE, FOLDER_SHAPE_ACCEPT, readFileList, readTreeVersion, rememberTreeVersion, treeVersionFor } from './tree.js'
 
 async function getJson(fetchImpl, url, init) {
   const response = await fetchImpl(url, init)
@@ -14,22 +14,26 @@ export async function discoverBridge({ url, root, fetchImpl = fetch }) {
   ])
   const tree = readFileList(raw)
   if (tree.error) throw new Error(tree.error)
-  return { agents: toAgents(agents), rootName: root ?? tree.root, files: tree.files }
+  const version = readTreeVersion(raw)
+  rememberTreeVersion(url, version)
+  return { agents: toAgents(agents), rootName: root ?? tree.root, files: tree.files, version }
 }
 
 export const REOPEN_START = 1000
 export const REOPEN_LIMIT = 15000
 
-export function openBridge({ url, onFrame, onTree, onStatus, EventSourceImpl = EventSource, setTimer = setTimeout, clearTimer = clearTimeout }) {
+export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceImpl = EventSource, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let source = null
   let timer = null
   let delay = REOPEN_START
   let closed = false
+  const version = since ?? treeVersionFor(url)
+  const streamUrl = `${url}/events?history=1&tree=${FOLDER_SHAPE}${version === undefined ? '' : `&since=${version}`}`
 
   function open() {
     timer = null
     onStatus('connecting')
-    const current = new EventSourceImpl(`${url}/events?history=1&tree=${FOLDER_SHAPE}`)
+    const current = new EventSourceImpl(streamUrl)
     source = current
     current.onopen = () => {
       delay = REOPEN_START

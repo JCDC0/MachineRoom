@@ -86,6 +86,9 @@ describe('each fixed stage at 40000 files', () => {
   it('sends the first tree event and the file list route in under 1 MB', () => {
     expect(rows.get('tree event, first to a page').bytes).toBeLessThan(BUDGET.firstEvent)
     expect(rows.get('GET /api/tree, folder shape').bytes).toBeLessThan(BUDGET.firstEvent)
+    expect(rows.get('GET /api/tree, folder shape, gzip').bytes).toBeLessThan(rows.get('GET /api/tree, folder shape').bytes)
+    expect(rows.get('GET /api/tree, folder shape, gzip').bytes).toBeLessThan(BUDGET.firstEvent)
+    expect(rows.get('tree event, first with since').bytes).toBeLessThan(BUDGET.firstEvent)
   })
 
   it('sends only the new file in a later tree event', () => {

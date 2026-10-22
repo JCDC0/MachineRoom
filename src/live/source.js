@@ -1,7 +1,7 @@
 import { createSplitMasker } from '../briefs/audit.js'
 import { basename } from '../model/paths.js'
 import { AGENT_ORDER } from '../model/pipeline.js'
-import { FOLDER_SHAPE_ACCEPT, readFileList } from './tree.js'
+import { FOLDER_SHAPE_ACCEPT, readFileList, readTreeVersion, rememberTreeVersion } from './tree.js'
 
 const BACKOFF_START = 1000
 const BACKOFF_LIMIT = 15000
@@ -66,9 +66,12 @@ export async function discover({ base, companyId, root, fetchImpl = fetch }) {
 }
 
 export async function loadTree(url, fetchImpl = fetch) {
-  const list = readFileList(await getJson(fetchImpl, `${url}/api/tree`, { headers: { Accept: FOLDER_SHAPE_ACCEPT } }))
+  const raw = await getJson(fetchImpl, `${url}/api/tree`, { headers: { Accept: FOLDER_SHAPE_ACCEPT } })
+  const list = readFileList(raw)
   if (list.error) throw new Error(list.error)
-  return list
+  const version = readTreeVersion(raw)
+  rememberTreeVersion(url, version)
+  return version === null ? list : { ...list, version }
 }
 
 export function socketUrl(base, companyId) {
