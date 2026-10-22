@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Brief Q1 (a security review of what changed since the two October audits, report only, for the cloud session).
 - Review note on U14: no fixes. On Windows `tests/mask-split.test.js` ran 168 tests, the 30 of the cloud plus the recording cases over the 69 recordings in `public/recordings` that its VM lacked, and all passed. Over the 74 recorded runs (4934 log chunks, recordings and fixtures as recorded) no chunk was held. The bridge test that a held tail goes out in under 2 seconds passed in the full suite while OpenCode ran its own. Full suite on the merge: 100 files, 1876 tests.
 - Briefs U15 (a quoted `>` is not a write, and the longer path wins; the security audit's N13) and U16 (the control client gives up on a request that never answers; N15), both for OpenCode in one run.
 - The bridge masks a key that Paperclip splits across two or more chunks of a run (U14): `createSplitMasker` in `src/briefs/audit.js` holds a chunk whose last line could still grow into a key, with every later frame, until the next chunk on that run and stream, the run's end or 1 second, and keeps the number, ids, `seq` and order of frames. `tests/mask-split.test.js` cuts every recording at seeded points.
