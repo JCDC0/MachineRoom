@@ -53,5 +53,5 @@ No High finding was found. No text reaches the DOM as HTML: there is no `innerHT
 ## Needs the owner's decision
 
 - Finding 1 sends every link that names another host to the connect screen. A bridge on another machine on the owner's network still works, after one click on Connect, and Connect saves it as before. Whether a link should be able to name another host at all is the owner's call.
-- The drawer panels write through their own buttons with no confirm card: Save on a budget, Approve and Reject, Post on a comment, Hire and Save in the agent builder. Lane runs, merges and backups have cards. The card rule in ARCHITECTURE.md is written for the assistant only.
+- The drawer's writes ask first (owner, 2026-10-22): Save on a budget, Approve, Request changes and Reject, and Hire agent and Save in the agent builder open a confirm card, as lane runs, merges, backups and planner requests do (U20). Post on a comment stays one click.
 - This container had Node 22. The tests ran on Node 24.22.0 fetched with `npx node@24`, and `npm install` under Node 22 rewrote `package-lock.json`, which was put back and is not in any commit.
