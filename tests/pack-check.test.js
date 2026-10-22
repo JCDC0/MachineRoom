@@ -37,7 +37,7 @@ describe('walkImports', () => {
         missing: ['bin/missing.js'],
       })
     } finally {
-      rmSync(base, { recursive: true, force: true })
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 })

@@ -41,7 +41,7 @@ function withTemp(work) {
   try {
     return work(base)
   } finally {
-    rmSync(base, { recursive: true, force: true })
+    rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }
 }
 

@@ -24,7 +24,7 @@ afterEach(async () => {
 
 function makeProject() {
   const folder = makeTempDir('machine-room-doctor-')
-  cleanups.push(() => rmSync(folder, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return folder
 }
 

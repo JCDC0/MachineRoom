@@ -30,13 +30,13 @@ function makeDist() {
   writeFileSync(join(dist, 'data.jsonl'), '{"a":1}\n')
   writeFileSync(join(dist, 'blob.bin'), Buffer.from([0, 1, 2, 3]))
   writeFileSync(join(base, 'outside.txt'), 'outside secret')
-  cleanups.push(() => rmSync(base, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return { base, dist }
 }
 
 async function startBridge(staticDir) {
   const base = makeTempDir('machine-room-bridge-')
-  cleanups.push(() => rmSync(base, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   const bridge = createBridge({
     port: 0,
     projectRoot: base,

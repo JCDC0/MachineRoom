@@ -41,7 +41,7 @@ describe('readTree without git', () => {
       const { files } = await readTree(dir, { listDir })
       expect(files).toEqual(['open/a.js', 'top.txt'])
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 
@@ -54,7 +54,7 @@ describe('readTree without git', () => {
       const { files } = await readTree(dir, { listDir })
       expect(files).toEqual([])
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 
@@ -89,7 +89,7 @@ describe('readTree with git', () => {
       expect(files).toContain('.gitignore')
       expect(files).not.toContain('ignored/skip.txt')
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   }, 30000)
 
@@ -104,7 +104,7 @@ describe('readTree with git', () => {
       const { files } = await readTree(dir)
       expect(files).toEqual(['données/été.md', 'with space.txt'])
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 })

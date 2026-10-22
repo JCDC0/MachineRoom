@@ -591,7 +591,7 @@ function laneGit() {
 }
 
 afterAll(() => {
-  if (sharedLaneGit) rmSync(sharedLaneGit.base, { recursive: true, force: true })
+  if (sharedLaneGit) rmSync(sharedLaneGit.base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   sharedLaneGit = null
 })
 
@@ -1178,14 +1178,14 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
   const fake = await startFakeControlPaperclip('comp-1')
   cleanups.push(() => fake.close())
   const runsTemp = makeTempDir('mr-contract-runs-')
-  cleanups.push(() => rmSync(runsTemp, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(runsTemp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   const previousTemp = process.env.TEMP
   process.env.TEMP = runsTemp
   cleanups.push(() => {
     process.env.TEMP = previousTemp
   })
   const runnerDir = makeTempDir('mr-contract-runner-')
-  cleanups.push(() => rmSync(runnerDir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(runnerDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
   writeFileSync(runnerPath, TINY_RUNNER)
   const gitLane = laneGit()

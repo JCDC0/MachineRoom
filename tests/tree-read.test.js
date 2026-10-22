@@ -75,7 +75,7 @@ function startBridge({ readTree, root, debounceMs = 15 }) {
 
 afterEach(async () => {
   while (bridges.length > 0) await bridges.pop().stop()
-  while (roots.length > 0) rmSync(roots.pop(), { recursive: true, force: true })
+  while (roots.length > 0) rmSync(roots.pop(), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
 describe('a tree read in flight', () => {

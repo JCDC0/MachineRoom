@@ -19,7 +19,7 @@ afterEach(async () => {
 
 function tempDir(prefix) {
   const dir = makeTempDir(prefix)
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return dir
 }
 

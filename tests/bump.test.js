@@ -28,7 +28,7 @@ const ARCHITECTURE = '# MachineRoom architecture\n\nVersion 0.1.112. A browser v
 
 function project({ pkg = PKG, lock = LOCK, architecture = ARCHITECTURE } = {}) {
   const dir = makeTempDir('mr-bump-')
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   mkdirSync(join(dir, 'docs', 'agents'), { recursive: true })
   writeFileSync(join(dir, 'package.json'), pkg)
   writeFileSync(join(dir, 'package-lock.json'), lock)

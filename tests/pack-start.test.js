@@ -106,9 +106,9 @@ describe('a pack starts the room', () => {
         await stop(child)
       }
     } finally {
-      rmSync(packDir, { recursive: true, force: true })
-      rmSync(unpackDir, { recursive: true, force: true })
-      rmSync(emptyRoot, { recursive: true, force: true })
+      rmSync(packDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      rmSync(unpackDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      rmSync(emptyRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   }, 120000)
 })

@@ -328,7 +328,7 @@ afterEach(async () => {
 
 function makeTempDir() {
   const dir = makeTempRoot('mr-bridge-test-')
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return dir
 }
 

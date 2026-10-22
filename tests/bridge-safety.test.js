@@ -16,7 +16,7 @@ afterEach(async () => {
 
 async function startBridge(lanes) {
   const dir = makeTempDir('bridge-safety-')
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   const briefsDir = join(dir, 'docs', 'agents')
   const { mkdirSync } = await import('node:fs')
   mkdirSync(briefsDir, { recursive: true })

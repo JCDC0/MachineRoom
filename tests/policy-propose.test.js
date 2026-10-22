@@ -21,7 +21,7 @@ afterEach(() => {
 
 function useTemp() {
   const dir = makeTempDir('mr-policy-propose-')
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return dir
 }
 

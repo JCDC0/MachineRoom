@@ -7,6 +7,7 @@ import {
   TEXT_LIMITS,
   fieldProblem,
 } from '../../control/agents.js'
+import { visibleText } from '../../model/paths.js'
 import {
   draftFromForm,
   groupModelsByTier,
@@ -16,6 +17,36 @@ import {
 } from './agentForm.js'
 import { statusLabel } from './format.js'
 import { subscribeToNotices } from './notices.js'
+
+export function hireConfirmText(form) {
+  const name = visibleText(String(form?.name ?? '').trim())
+  const harness = visibleText(String(form?.adapterType ?? '').trim())
+  const model = typeof form?.model === 'string' && form.model.trim()
+    ? visibleText(form.model.trim())
+    : 'the default model'
+  return `Hire ${name} on ${harness} with ${model}? Paperclip can start it on the next task it gets.`
+}
+
+export function saveConfirmText(name) {
+  return `Save the changes to ${visibleText(name)} in Paperclip?`
+}
+
+function startingForm(initialForm, initialAgents, initialEditingAgentId) {
+  if (initialForm) return initialForm
+  const agent = Array.isArray(initialAgents)
+    ? initialAgents.find((item) => item.id === initialEditingAgentId)
+    : null
+  return agent ? initialAgentForm(agent) : newAgentForm()
+}
+
+function startingConfirm(initialConfirmOpen, editingAgent, form) {
+  if (!initialConfirmOpen) return null
+  const draft = draftFromForm(form)
+  if (editingAgent) {
+    return { kind: 'save', draft, patch: patchFromChange(editingAgent, form), form: { ...form } }
+  }
+  return { kind: 'hire', draft, form: { ...form } }
+}
 
 const FIELD_KEYS = [
   'name',
@@ -43,18 +74,33 @@ function buildDepthOptions() {
 
 const DEPTH_OPTIONS = buildDepthOptions()
 
-export default function AgentBuilder({ client, onSelectControlTarget }) {
-  const [agents, setAgents] = useState([])
-  const [models, setModels] = useState([])
-  const [loading, setLoading] = useState(true)
+export default function AgentBuilder({
+  client,
+  onSelectControlTarget,
+  initialAgents = null,
+  initialModels = null,
+  initialEditingAgentId = null,
+  initialForm = null,
+  initialConfirmOpen = false,
+}) {
+  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
+  const [models, setModels] = useState(() => (Array.isArray(initialModels) ? initialModels : []))
+  const [loading, setLoading] = useState(() => !(Array.isArray(initialAgents) && Array.isArray(initialModels)))
   const [loadError, setLoadError] = useState(null)
 
-  const [editingAgentId, setEditingAgentId] = useState(null)
-  const [form, setForm] = useState(() => newAgentForm())
+  const [editingAgentId, setEditingAgentId] = useState(initialEditingAgentId)
+  const [form, setForm] = useState(() => startingForm(initialForm, initialAgents, initialEditingAgentId))
   const [fieldErrors, setFieldErrors] = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState(null)
   const [resultBanner, setResultBanner] = useState(null)
+  const [confirm, setConfirm] = useState(() => {
+    const firstForm = startingForm(initialForm, initialAgents, initialEditingAgentId)
+    const firstAgent = Array.isArray(initialAgents)
+      ? initialAgents.find((item) => item.id === initialEditingAgentId) ?? null
+      : null
+    return startingConfirm(initialConfirmOpen, firstAgent, firstForm)
+  })
 
   async function loadData({ isInitial = false } = {}) {
     if (isInitial) {
@@ -110,6 +156,7 @@ export default function AgentBuilder({ client, onSelectControlTarget }) {
     setFieldErrors({})
     setSubmitError(null)
     setResultBanner(null)
+    setConfirm(null)
   }
 
   function selectExistingAgent(agent) {
@@ -118,6 +165,7 @@ export default function AgentBuilder({ client, onSelectControlTarget }) {
     setFieldErrors({})
     setSubmitError(null)
     setResultBanner(null)
+    setConfirm(null)
   }
 
   function updateField(fieldName, value, problemKey = fieldName) {
@@ -154,58 +202,41 @@ export default function AgentBuilder({ client, onSelectControlTarget }) {
     return { draft, nextErrors, hasErrors: Object.keys(nextErrors).length > 0 }
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault()
-    setSubmitError(null)
-    setResultBanner(null)
-
-    const isEditing = Boolean(editingAgent)
-    const { draft, hasErrors } = validateAllFields(form, isEditing)
-    if (hasErrors) {
-      const formElement = event.currentTarget
-      requestAnimationFrame(() => formElement.querySelector('[aria-invalid="true"]')?.focus())
-      return
-    }
-
-    if (isEditing) {
-      const patch = patchFromChange(editingAgent, form)
-      if (Object.keys(patch).length === 0) {
-        return
-      }
-      setSubmitting(true)
-      try {
-        const updated = await client.updateAgent(editingAgent.id, patch)
-        setAgents((prev) =>
-          prev.map((item) => (item.id === updated.id ? updated : item))
-        )
-        setForm(initialAgentForm(updated))
-        setFieldErrors({})
-        setResultBanner({
-          kind: 'updated',
-          text: `${updated.name} updated.`,
-        })
-      } catch (err) {
-        const message = err.message || 'Could not update agent.'
-        let matchedField = false
-        for (const key of FIELD_KEYS) {
-          if (key === 'adapterType') continue
-          if (key === 'subagentDepth' && !draft.subagentsAllowed) continue
-          const problem = fieldProblem(key, draft[key])
-          if (problem && problem === message) {
-            setFieldErrors((prev) => ({ ...prev, [key]: problem }))
-            matchedField = true
-          }
-        }
-        if (!matchedField) {
-          setSubmitError(message)
-        }
-      } finally {
-        setSubmitting(false)
-      }
-      return
-    }
-
+  async function commitUpdate(draft, patch) {
+    if (!editingAgent) return
     setSubmitting(true)
+    setSubmitError(null)
+    try {
+      const updated = await client.updateAgent(editingAgent.id, patch)
+      setAgents((prev) =>
+        prev.map((item) => (item.id === updated.id ? updated : item))
+      )
+      setForm(initialAgentForm(updated))
+      setFieldErrors({})
+      setResultBanner({
+        kind: 'updated',
+        text: `${updated.name} updated.`,
+      })
+      setConfirm(null)
+    } catch (err) {
+      const message = err.message || 'Could not update agent.'
+      for (const key of FIELD_KEYS) {
+        if (key === 'adapterType') continue
+        if (key === 'subagentDepth' && !draft.subagentsAllowed) continue
+        const problem = fieldProblem(key, draft[key])
+        if (problem && problem === message) {
+          setFieldErrors((prev) => ({ ...prev, [key]: problem }))
+        }
+      }
+      setSubmitError(message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function commitHire(draft) {
+    setSubmitting(true)
+    setSubmitError(null)
     try {
       const result = await client.hireAgent(draft)
       const hiredAgent = result?.agent
@@ -225,22 +256,53 @@ export default function AgentBuilder({ client, onSelectControlTarget }) {
           text: `${hiredAgent?.name ?? draft.name} is ready.`,
         })
       }
+      setConfirm(null)
     } catch (err) {
       const message = err.message || 'Could not hire agent.'
-      let matchedField = false
       for (const key of FIELD_KEYS) {
         if (key === 'subagentDepth' && !draft.subagentsAllowed) continue
         const problem = fieldProblem(key, draft[key])
         if (problem && problem === message) {
           setFieldErrors((prev) => ({ ...prev, [key]: problem }))
-          matchedField = true
         }
       }
-      if (!matchedField) {
-        setSubmitError(message)
-      }
+      setSubmitError(message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    setSubmitError(null)
+    setResultBanner(null)
+
+    const isEditing = Boolean(editingAgent)
+    const { draft, hasErrors } = validateAllFields(form, isEditing)
+    if (hasErrors) {
+      const formElement = event.currentTarget
+      requestAnimationFrame(() => formElement.querySelector('[aria-invalid="true"]')?.focus())
+      return
+    }
+
+    if (isEditing) {
+      const patch = patchFromChange(editingAgent, form)
+      if (Object.keys(patch).length === 0) {
+        return
+      }
+      setConfirm({ kind: 'save', draft, patch, form: { ...form } })
+      return
+    }
+
+    setConfirm({ kind: 'hire', draft, form: { ...form } })
+  }
+
+  function handleConfirm() {
+    if (!confirm || submitting) return
+    if (confirm.kind === 'save') {
+      commitUpdate(confirm.draft, confirm.patch)
+    } else {
+      commitHire(confirm.draft)
     }
   }
 
@@ -641,9 +703,49 @@ export default function AgentBuilder({ client, onSelectControlTarget }) {
           )}
         </div>
 
-        {submitError && (
+        {submitError && !confirm && (
           <div className="panel-banner is-error" role="alert">
             {submitError}
+          </div>
+        )}
+
+        {confirm && (
+          <div
+            className="brief-confirm-card agent-builder-confirm-card"
+            role="region"
+            aria-label={confirm.kind === 'save' ? 'Confirm agent changes' : 'Confirm hire agent'}
+          >
+            <div className="brief-confirm-warning">
+              {confirm.kind === 'save'
+                ? saveConfirmText(confirm.form.name)
+                : hireConfirmText(confirm.form)}
+            </div>
+            <div className="brief-confirm-actions">
+              <button
+                type="button"
+                className="brief-confirm-btn"
+                disabled={submitting}
+                onClick={handleConfirm}
+              >
+                {confirm.kind === 'save' ? 'Save' : 'Hire agent'}
+              </button>
+              <button
+                type="button"
+                className="brief-cancel-btn"
+                disabled={submitting}
+                onClick={() => {
+                  setConfirm(null)
+                  setSubmitError(null)
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            {submitError && (
+              <div className="brief-confirm-error mono" role="alert">
+                {submitError}
+              </div>
+            )}
           </div>
         )}
 

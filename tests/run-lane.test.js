@@ -847,7 +847,7 @@ describe('scripts/test.mjs', () => {
       expect(result.stdout).toContain(`${CRASH_RETRY} (try 2 of 3).`)
       expect(result.stdout).toContain('fake test run 2')
     } finally {
-      rmSync(folder, { recursive: true, force: true })
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 
@@ -869,7 +869,7 @@ describe('scripts/test.mjs', () => {
       expect(result.stdout).toContain('fake test run 1')
       expect(result.stdout).not.toContain('crashed inside Node')
     } finally {
-      rmSync(folder, { recursive: true, force: true })
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 })
@@ -933,7 +933,7 @@ describe('scripts/run-lane.mjs', () => {
       expect(empty.code).toBe(0)
       expect(empty.stdout.trim()).toBe('No runs yet.')
     } finally {
-      rmSync(folder, { recursive: true, force: true })
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 

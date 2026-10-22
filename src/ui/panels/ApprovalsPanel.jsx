@@ -1,16 +1,54 @@
 import { useEffect, useState } from 'react'
+import { visibleText } from '../../model/paths.js'
 import { approvalTypeLabel, statusLabel, timeAgo } from './format.js'
 import { subscribeToNotices } from './notices.js'
 
-export default function ApprovalsPanel({ client, onPendingCountChange }) {
-  const [approvals, setApprovals] = useState([])
-  const [agents, setAgents] = useState([])
-  const [loading, setLoading] = useState(true)
+const DECISION_LABELS = {
+  approve: 'Approve',
+  'request-revision': 'Request changes',
+  reject: 'Reject',
+}
+
+function decisionLabel(decision) {
+  return Object.hasOwn(DECISION_LABELS, decision) ? DECISION_LABELS[decision] : 'Approve'
+}
+
+export function decisionConfirmText(decision, title, note = '') {
+  const action = decisionLabel(decision)
+  const quoted = `"${visibleText(title)}"`
+  const question = action === 'Request changes' ? `${action} on ${quoted}?` : `${action} ${quoted}?`
+  const withNote = typeof note === 'string' && note.trim() ? ' Your note goes with it.' : ''
+  return `${question}${withNote}`
+}
+
+function startingDecision(initialConfirmOpen, approvals) {
+  if (!initialConfirmOpen) return null
+  if (typeof initialConfirmOpen === 'object' && initialConfirmOpen.id) {
+    return {
+      id: initialConfirmOpen.id,
+      decision: initialConfirmOpen.decision || 'approve',
+    }
+  }
+  const pending = approvals.find((item) => item.status === 'pending')
+  return pending ? { id: pending.id, decision: 'approve' } : null
+}
+
+export default function ApprovalsPanel({
+  client,
+  onPendingCountChange,
+  initialApprovals = null,
+  initialAgents = null,
+  initialConfirmOpen = null,
+}) {
+  const [approvals, setApprovals] = useState(() => (Array.isArray(initialApprovals) ? initialApprovals : []))
+  const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
+  const [loading, setLoading] = useState(() => initialApprovals == null)
   const [loadError, setLoadError] = useState(null)
 
   const [notes, setNotes] = useState({})
   const [decidingId, setDecidingId] = useState(null)
   const [decisionErrors, setDecisionErrors] = useState({})
+  const [confirming, setConfirming] = useState(() => startingDecision(initialConfirmOpen, Array.isArray(initialApprovals) ? initialApprovals : []))
 
   async function loadData({ isInitial = false, preserveDecided = false } = {}) {
     if (isInitial) {
@@ -94,6 +132,7 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
       setApprovals((prev) =>
         prev.map((item) => (item.id === id ? { ...updated, justDecided: true } : item))
       )
+      setConfirming(null)
     } catch (err) {
       setDecisionErrors((prev) => ({ ...prev, [id]: err.message || 'Decision failed.' }))
     } finally {
@@ -164,12 +203,6 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
                       </div>
                     ) : (
                       <>
-                        {error && (
-                          <div className="panel-banner is-error" role="alert">
-                            {error}
-                          </div>
-                        )}
-
                         <div className="panel-field">
                           <label htmlFor={`approval-note-${item.id}`}>Note (optional)</label>
                           <input
@@ -189,7 +222,10 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
                             type="button"
                             className="approval-btn is-approve"
                             disabled={isDeciding}
-                            onClick={() => handleDecision(item.id, 'approve')}
+                            onClick={() => {
+                              setDecisionErrors((prev) => ({ ...prev, [item.id]: null }))
+                              setConfirming({ id: item.id, decision: 'approve' })
+                            }}
                           >
                             Approve
                           </button>
@@ -197,7 +233,10 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
                             type="button"
                             className="approval-btn"
                             disabled={isDeciding}
-                            onClick={() => handleDecision(item.id, 'request-revision')}
+                            onClick={() => {
+                              setDecisionErrors((prev) => ({ ...prev, [item.id]: null }))
+                              setConfirming({ id: item.id, decision: 'request-revision' })
+                            }}
                           >
                             Request changes
                           </button>
@@ -205,11 +244,48 @@ export default function ApprovalsPanel({ client, onPendingCountChange }) {
                             type="button"
                             className="approval-btn is-reject"
                             disabled={isDeciding}
-                            onClick={() => handleDecision(item.id, 'reject')}
+                            onClick={() => {
+                              setDecisionErrors((prev) => ({ ...prev, [item.id]: null }))
+                              setConfirming({ id: item.id, decision: 'reject' })
+                            }}
                           >
                             Reject
                           </button>
                         </div>
+
+                        {confirming?.id === item.id && (
+                          <div className="brief-confirm-card approvals-confirm-card" role="region" aria-label="Confirm approval decision">
+                            <div className="brief-confirm-warning">
+                              {decisionConfirmText(confirming.decision, item.summary, notes[item.id] ?? '')}
+                            </div>
+                            <div className="brief-confirm-actions">
+                              <button
+                                type="button"
+                                className="brief-confirm-btn"
+                                disabled={isDeciding}
+                                onClick={() => handleDecision(item.id, confirming.decision)}
+                              >
+                                {decisionLabel(confirming.decision)}
+                              </button>
+                              <button
+                                type="button"
+                                className="brief-cancel-btn"
+                                disabled={isDeciding}
+                                onClick={() => {
+                                  setConfirming(null)
+                                  setDecisionErrors((prev) => ({ ...prev, [item.id]: null }))
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                            {error && (
+                              <div className="brief-confirm-error mono" role="alert">
+                                {error}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

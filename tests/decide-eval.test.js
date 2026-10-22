@@ -291,7 +291,7 @@ describe('command line', () => {
       expect(saved).not.toContain(KEY)
       expect(result.out + result.err).not.toContain(KEY)
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 

@@ -25,7 +25,7 @@ afterEach(async () => {
 
 function makeProject() {
   const folder = makeTempDir('machine-room-up-')
-  cleanups.push(() => rmSync(folder, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return folder
 }
 
@@ -34,7 +34,7 @@ function makeDist() {
   const dist = join(base, 'dist')
   mkdirSync(dist, { recursive: true })
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>Room</title>')
-  cleanups.push(() => rmSync(base, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return { base, dist }
 }
 

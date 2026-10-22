@@ -196,7 +196,7 @@ afterEach(async () => {
 
 function writeDocs(tasks = SAMPLE_TASKS_MD) {
   const root = makeTempDir('mr-plans-')
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   mkdirSync(join(root, 'docs', 'agents'), { recursive: true })
   writeFileSync(join(root, 'docs', 'agents', 'TASKS.md'), tasks)
   writeFileSync(join(root, 'docs', 'agents', 'HOUSE-RULES.md'), SAMPLE_HOUSE_RULES_MD)
@@ -206,7 +206,7 @@ function writeDocs(tasks = SAMPLE_TASKS_MD) {
 
 function writeEmptyRoot() {
   const root = makeTempDir('mr-plans-empty-')
-  cleanups.push(() => rmSync(root, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return root
 }
 

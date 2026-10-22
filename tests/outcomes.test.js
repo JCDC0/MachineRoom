@@ -20,7 +20,7 @@ function useTemp() {
   process.env.TEMP = dir
   cleanups.push(() => {
     process.env.TEMP = previous
-    rmSync(dir, { recursive: true, force: true })
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
   return dir
 }

@@ -28,7 +28,7 @@ afterEach(() => {
 
 function tempDir() {
   const dir = makeTempDir('mr-fixtures-')
-  cleanups.push(() => rmSync(dir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return dir
 }
 

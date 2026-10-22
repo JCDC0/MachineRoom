@@ -78,7 +78,7 @@ async function startPaperclip({ summary = { spendCents: 0, budgetCents: 100000 }
 
 async function startRouteBridge({ policy = JSON.stringify(POLICY), paperclipUrl }) {
   const briefsDir = makeTempDir('mr-policy-')
-  cleanups.push(() => rmSync(briefsDir, { recursive: true, force: true }))
+  cleanups.push(() => rmSync(briefsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   if (policy !== null) writeFileSync(join(briefsDir, 'policy.json'), policy)
   const bridge = createBridge({
     paperclipUrl,

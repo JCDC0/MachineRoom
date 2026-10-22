@@ -49,7 +49,7 @@ afterAll(() => {
     if (SAVED_TEMP[name] === undefined) delete process.env[name]
     else process.env[name] = SAVED_TEMP[name]
   }
-  rmSync(SYSTEM_TEMP, { recursive: true, force: true })
+  rmSync(SYSTEM_TEMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
 function added(path, lines, start = 1) {
@@ -351,7 +351,7 @@ function setup() {
   const runs = makeTempDir('mr-review-runs-')
   const tempRoot = makeTempDir('mr-review-temp-')
   cleanups.push(() => {
-    for (const dir of [repo, dirname(lane), runs, tempRoot]) rmSync(dir, { recursive: true, force: true })
+    for (const dir of [repo, dirname(lane), runs, tempRoot]) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
   git(repo, ['init', '-q', '-b', 'main'])
   write(repo, 'package.json', `${JSON.stringify({ name: 'fixture', version: '0.1.1', private: true, scripts: { test: 'node fake-test.mjs', build: 'node -e "console.log(\'built\')"' }, dependencies: { three: '1.0.0' } }, null, 2)}\n`)

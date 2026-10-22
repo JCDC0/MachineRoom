@@ -209,7 +209,7 @@ describe('history-audit script', () => {
       expect(hits[0].sample).toBe('sk-a… (43 characters)')
       expect(hits[0].sample).not.toContain(fakeSk)
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   }, 30000)
 })
@@ -235,7 +235,7 @@ describe('history-audit script and a tag named main', () => {
       expect(result.status).toBe(1)
       expect(JSON.parse(result.stdout).counts.key).toBeGreaterThanOrEqual(1)
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   }, 30000)
 })

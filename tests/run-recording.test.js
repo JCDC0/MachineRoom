@@ -271,7 +271,7 @@ describe('recordingIndex', () => {
 
 describe('writeRecording', () => {
   afterEach(() => {
-    for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true })
+    for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
 
   it('writes the three recording files for a Hermes record from the session export it is given', () => {

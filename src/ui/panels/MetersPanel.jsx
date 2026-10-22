@@ -1,23 +1,32 @@
 import { useEffect, useState } from 'react'
+import { visibleText } from '../../model/paths.js'
 import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf, timeUntil } from './format.js'
 import { subscribeToNotices } from './notices.js'
 import { backupAgePercent, backupNotice, formatBytes } from './backup.js'
+
+export function budgetConfirmText(name, cents) {
+  return `Set ${visibleText(name)}'s monthly budget to ${formatCents(cents)} in Paperclip?`
+}
 
 export default function MetersPanel({
   client,
   initialBackupStatus = null,
   initialCosts = null,
   initialAgents = [],
+  initialEditingAgentId = null,
+  initialEditDollarValue = '',
+  initialConfirmOpen = false,
 }) {
   const [costs, setCosts] = useState(initialCosts)
   const [agents, setAgents] = useState(initialAgents)
   const [loading, setLoading] = useState(() => initialCosts == null)
   const [loadError, setLoadError] = useState(null)
 
-  const [editingAgentId, setEditingAgentId] = useState(null)
-  const [editDollarValue, setEditDollarValue] = useState('')
+  const [editingAgentId, setEditingAgentId] = useState(initialEditingAgentId)
+  const [editDollarValue, setEditDollarValue] = useState(initialEditDollarValue)
   const [savingBudget, setSavingBudget] = useState(false)
   const [budgetError, setBudgetError] = useState(null)
+  const [budgetConfirmOpen, setBudgetConfirmOpen] = useState(Boolean(initialConfirmOpen))
 
   const [backupStatus, setBackupStatus] = useState(initialBackupStatus)
   const [backupLoading, setBackupLoading] = useState(
@@ -103,15 +112,25 @@ export default function MetersPanel({
     setEditingAgentId(null)
     setEditDollarValue('')
     setBudgetError(null)
+    setBudgetConfirmOpen(false)
   }
 
-  async function saveBudget(agentId) {
+  function requestBudgetSave() {
     const parsed = parseFloat(editDollarValue)
     if (Number.isNaN(parsed) || parsed < 0) {
       setBudgetError('Enter a valid dollar amount zero or greater.')
       return
     }
-    const cents = Math.round(parsed * 100)
+    setBudgetError(null)
+    setBudgetConfirmOpen(true)
+  }
+
+  async function saveBudget(agentId, cents) {
+    if (!Number.isFinite(cents) || cents < 0) {
+      setBudgetError('Enter a valid dollar amount zero or greater.')
+      setBudgetConfirmOpen(false)
+      return
+    }
     setSavingBudget(true)
     setBudgetError(null)
     try {
@@ -120,6 +139,7 @@ export default function MetersPanel({
         prev.map((a) => (a.id === agentId ? { ...a, budgetMonthlyCents: updated.budgetMonthlyCents } : a))
       )
       setEditingAgentId(null)
+      setBudgetConfirmOpen(false)
     } catch (err) {
       setBudgetError(err.message || 'Could not update budget.')
     } finally {
@@ -200,6 +220,8 @@ export default function MetersPanel({
             const spend = agentCost ?? agent.spentMonthlyCents ?? 0
             const budget = Number.isFinite(agent.budgetMonthlyCents) ? agent.budgetMonthlyCents : 0
             const pct = percentOf(spend, budget)
+            const parsedBudget = parseFloat(editDollarValue)
+            const pendingCents = Number.isNaN(parsedBudget) ? null : Math.round(parsedBudget * 100)
 
             return (
               <div key={agent.id} className="meter-agent-row">
@@ -234,7 +256,7 @@ export default function MetersPanel({
 
                 {isEditing ? (
                   <div className="meter-inline-edit">
-                    {budgetError && (
+                    {budgetError && !budgetConfirmOpen && (
                       <div className="panel-banner is-error" role="alert">
                         {budgetError}
                       </div>
@@ -250,7 +272,7 @@ export default function MetersPanel({
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault()
-                            saveBudget(agent.id)
+                            requestBudgetSave()
                           } else if (e.key === 'Escape') {
                             e.preventDefault()
                             e.stopPropagation()
@@ -259,15 +281,15 @@ export default function MetersPanel({
                         }}
                         placeholder="0.00"
                         autoFocus
-                        disabled={savingBudget}
+                        disabled={savingBudget || budgetConfirmOpen}
                         aria-label={`Budget in dollars for ${agent.name}`}
                       />
                       <button
                         type="button"
-                        onClick={() => saveBudget(agent.id)}
-                        disabled={savingBudget}
+                        onClick={requestBudgetSave}
+                        disabled={savingBudget || budgetConfirmOpen}
                       >
-                        {savingBudget ? 'Saving...' : 'Save'}
+                        Save
                       </button>
                       <button
                         type="button"
@@ -277,6 +299,39 @@ export default function MetersPanel({
                         Cancel
                       </button>
                     </div>
+                    {budgetConfirmOpen && (
+                      <div className="brief-confirm-card meter-confirm-card" role="region" aria-label="Confirm budget">
+                        <div className="brief-confirm-warning">
+                          {budgetConfirmText(agent.name, pendingCents)}
+                        </div>
+                        <div className="brief-confirm-actions">
+                          <button
+                            type="button"
+                            className="brief-confirm-btn"
+                            disabled={savingBudget || pendingCents == null || pendingCents < 0}
+                            onClick={() => saveBudget(agent.id, pendingCents)}
+                          >
+                            Set budget
+                          </button>
+                          <button
+                            type="button"
+                            className="brief-cancel-btn"
+                            disabled={savingBudget}
+                            onClick={() => {
+                              setBudgetConfirmOpen(false)
+                              setBudgetError(null)
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                        {budgetError && (
+                          <div className="brief-confirm-error mono" role="alert">
+                            {budgetError}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="meter-edit-action">
