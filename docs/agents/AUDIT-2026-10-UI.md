@@ -37,10 +37,10 @@ No High finding was found. No text reaches the DOM as HTML: there is no `innerHT
 | N4 | `src/engine/agents.js:101`, `src/engine/sprites.js:53` | The name label is a canvas as wide as the agent's name. A name of 2,000 characters asks for a canvas over 32,767 pixels wide, which the browser refuses. | Agent names come from the owner's own Paperclip. Brief U9 (AGY) with a by-eye check. |
 | N5 | `src/engine/cards.js:115`, `:164`, `src/ui/panels/ReviewsPanel.jsx:311`, `:333` | File names, diff paths and patch lines are shown as text, which is safe from markup, but a right-to-left override (U+202E) or another direction control can make a name or a code line read differently from what it is, in the panel where the owner decides on a merge. | Needs a helper and a choice of how to show the characters. Briefs U10 (Hermes) and U10a (AGY). |
 | N6 | `server/index.js`, proxy route | Keys are masked one chunk at a time, so a key split across two chunks reaches the page, and the proxy route masks nothing. | Known limit in ARCHITECTURE.md since U5c. |
-| N7 | `src/App.jsx:18`, `src/live/simulated.js:20` | `?simulate&speed=` takes any number: 0 or a negative speed plays every frame at once, and a tiny one makes a delay that overflows the browser's timer and fires at once. | Demo only, no data leaves the page. |
-| N8 | `src/model/pipeline.js:86` | A log chunk that arrives after its run's end makes a new parser that a live page never flushes or drops. | Needs a late chunk after `succeeded`; not seen in the recordings. |
-| N9 | `src/engine/cards.js:30`, `:292` | `cards.update` rebuilds the list of every file each frame to make the plan key, so a large project costs work on every frame. | Part of P3 (large repositories). Not measured. |
-| N10 | `src/ui/Assistant.jsx:38` | The assistant's log keeps every entry for as long as the page is open. | Only the owner's own typing adds to it. |
+| N7 | `src/App.jsx:18`, `src/live/simulated.js:20` | `?simulate&speed=` takes any number: 0 or a negative speed plays every frame at once, and a tiny one makes a delay that overflows the browser's timer and fires at once. | Demo only, no data leaves the page. Brief U11. |
+| N8 | `src/model/pipeline.js:86` | A log chunk that arrives after its run's end makes a new parser that a live page never flushes or drops. | Fixed in 0.1.127: the pipeline drops a log chunk that arrives after its run ended. |
+| N9 | `src/engine/cards.js:30`, `:292` | `cards.update` rebuilds the list of every file each frame to make the plan key, so a large project costs work on every frame. | Part of P3 (large repositories). Not measured. Brief U12. |
+| N10 | `src/ui/Assistant.jsx:38` | The assistant's log keeps every entry for as long as the page is open. | Only the owner's own typing adds to it. Brief U11. |
 
 ## What this session could not check
 
