@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
+import { easeRate, still } from './sprites.js'
 
 const VISIBLE_LINES = 7
 const SCALE = 1.2
@@ -79,7 +80,7 @@ export function createTerminals(cssScene, roster) {
   function update(state, now, camera, focusKey, anchorOf, delta, sideOf = () => 1) {
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
-    const rate = 1 - Math.exp(-delta * FOLLOW_RATE)
+    const rate = easeRate(delta, FOLLOW_RATE, still())
     for (const term of terminals.values()) {
       const anchor = anchorOf(term.key)
       if (anchor) {

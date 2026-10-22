@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WHITE, YELLOW, glowTexture, lineMaterial, seeded } from './sprites.js'
+import { WHITE, YELLOW, glowTexture, lineMaterial, reducedMotion, seeded } from './sprites.js'
 
 const SEGMENTS = 16
 const SAG = 0.12
@@ -75,7 +75,7 @@ function fillStrand(strand, points) {
 }
 
 export function createStrings(scene, { onPath = () => false } = {}) {
-  const still = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const motion = reducedMotion()
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()
   const start = new THREE.Vector3()
@@ -169,7 +169,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         const delta = Math.min((now - lastTime) / 1000, 0.1)
         lastTime = now
         const active = onPath(strand.link.to)
-        if (still) {
+        if (motion.still()) {
           strand.yellowLevel = active ? 1 : 0
         } else if (active) {
           strand.yellowLevel = 1

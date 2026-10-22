@@ -7,7 +7,7 @@ import { createCards } from './cards.js'
 import { createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createLabels } from './labels.js'
-import { GREEN, RED, WHITE, glowTexture } from './sprites.js'
+import { GREEN, RED, WHITE, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, createTerminals } from './terminals.js'
 import { createVoid } from './void.js'
@@ -257,6 +257,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       hub.setSlot(view.index, color, status === 'idle' ? 0.25 : status === 'working' || status === 'queued' ? 0.12 : 0.6)
     }
 
+    const isStill = still()
     pulses.forEach((pulse) => {
       if (!pulse.active) return
       const t = (now - pulse.start) / pulse.duration
@@ -265,7 +266,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         pulse.sprite.material.opacity = 0
         return
       }
-      pulse.sprite.position.lerpVectors(pulse.from, pulse.to, t)
+      if (isStill) {
+        pulse.sprite.position.copy(pulse.to)
+      } else {
+        pulse.sprite.position.lerpVectors(pulse.from, pulse.to, t)
+      }
       pulse.sprite.material.opacity = t < 0.1 ? t * 10 : t > 0.85 ? (1 - t) / 0.15 : 1
     })
 

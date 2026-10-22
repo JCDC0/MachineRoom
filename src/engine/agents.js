@@ -3,7 +3,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { HUB_CENTER, PARK_LIFT, slotPoint } from './hub.js'
 import { folderRoute } from './route.js'
 import { isOrchestrator, shapeGeometry, shapesFor } from './shapes.js'
-import { GREEN, RED, WHITE, YELLOW, lineMaterial, textSprite } from './sprites.js'
+import { GREEN, RED, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 
 const STYLE = {
   idle: { color: WHITE, opacity: 0.35, spin: 0.15 },
@@ -172,13 +172,21 @@ export function createAgents(scene, roster, cssScene = null) {
     return standoff(view, view.touch, view.dest, world, out)
   }
 
-  function chase(view, entry, delta, now, world) {
+  function chase(view, entry, delta, now, world, isStill = false) {
     const dest = entry.target ?? ''
     if (view.dest !== dest) {
       view.dest = dest
       const route = folderRoute(view.at ?? '', dest)
       view.legs = [...route.slice(0, -1).map((path) => ({ kind: 'folder', path })), { kind: 'final' }]
       view.leg = 0
+    }
+    if (isStill) {
+      view.legs = [{ kind: 'final' }]
+      view.leg = 0
+      view.at = view.dest
+      legPoint(view, view.legs[0], world, now, view.goal)
+      view.group.position.copy(view.goal)
+      return true
     }
     const leg = view.legs[Math.min(view.leg, view.legs.length - 1)]
     legPoint(view, leg, world, now, view.goal)
@@ -211,6 +219,7 @@ export function createAgents(scene, roster, cssScene = null) {
       camUp.crossVectors(world.back, world.right).normalize()
       rotMatrix.makeBasis(world.right, camUp, world.back)
     }
+    const isStill = still()
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
@@ -221,14 +230,14 @@ export function createAgents(scene, roster, cssScene = null) {
       const working = (status === 'working' || status === 'queued') && Boolean(entry?.label)
       let arrived = false
       if (working) {
-        arrived = chase(view, entry, delta, now, world)
+        arrived = chase(view, entry, delta, now, world, isStill)
       } else {
         view.at = null
         view.dest = null
         view.aim = null
         view.side = -1
         view.goal.copy(view.home)
-        view.group.position.lerp(view.goal, 1 - Math.exp(-delta * 2.6))
+        view.group.position.lerp(view.goal, easeRate(delta, 2.6, isStill))
       }
       view.chipSide = -view.side
 
@@ -240,8 +249,10 @@ export function createAgents(scene, roster, cssScene = null) {
         ring.material.color.setHex(style.color)
         ring.material.opacity = opacity * (index === 0 ? 0.55 : 0.4)
       })
-      view.shape.rotation.y += delta * style.spin
-      view.shape.rotation.x += delta * style.spin * 0.4
+      if (!isStill) {
+        view.shape.rotation.y += delta * style.spin
+        view.shape.rotation.x += delta * style.spin * 0.4
+      }
 
       const lastLine = entry?.lines?.[entry.lines.length - 1]
       const failedFresh = status === 'error' && now - view.doneAt < DONE_GLOW_MS
