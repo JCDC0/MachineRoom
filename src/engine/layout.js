@@ -25,6 +25,7 @@ const GOLDEN = Math.PI * (3 - Math.sqrt(5))
 const LEVELS = [0, 1, -1]
 const FRESH = 1
 const SETTLED = 0.12
+const WARM = Symbol('warm')
 
 const norm = (v) => {
   const length = Math.hypot(v.x, v.y, v.z) || 1
@@ -176,6 +177,112 @@ function overlap(a, pa, b, pb) {
   return ox > 0 && oy > 0 ? { ox, oy } : null
 }
 
+function crosses(a, b) {
+  const ox = a.hw + b.hw - Math.abs(b.x - a.x)
+  const oy = a.hh + b.hh - Math.abs(b.y - a.y)
+  return ox > 1 && oy > 1 ? Math.min(ox, oy) : 0
+}
+
+export function cardOverlaps(entries, placed, obstacles = []) {
+  const boxes = []
+  for (const entry of entries) {
+    const at = placed.get(entry.path)
+    if (!at) continue
+    boxes.push({ path: entry.path, x: at.x, y: at.y, hw: entry.width / 2, hh: entry.height / 2 })
+  }
+  const out = []
+  for (let i = 0; i < boxes.length; i += 1) {
+    const a = boxes[i]
+    for (let j = i + 1; j < boxes.length; j += 1) {
+      const b = boxes[j]
+      const cross = crosses(a, b)
+      if (cross) out.push({ a: a.path, b: b.path, kind: 'card', overlap: cross })
+    }
+  }
+  const blockers = [{ x: 0, y: 0, hw: CARD_HUB.hw, hh: CARD_HUB.hh, kind: 'hub' }]
+  obstacles.forEach((box, index) => blockers.push({ ...box, kind: 'obstacle', index }))
+  for (const a of boxes) {
+    for (const blocker of blockers) {
+      const cross = crosses(a, blocker)
+      if (!cross) continue
+      if (blocker.kind === 'hub') out.push({ a: a.path, b: null, kind: 'hub', overlap: cross })
+      else out.push({ a: a.path, b: null, kind: 'obstacle', index: blocker.index, overlap: cross })
+    }
+  }
+  return out
+}
+
+function dropClear(node, x, y, obstacles) {
+  let at = y
+  let moved = true
+  while (moved) {
+    moved = false
+    for (const box of obstacles) {
+      const ox = node.hw + box.hw - Math.abs(x - box.x)
+      if (ox <= 1) continue
+      const oy = node.hh + box.hh - Math.abs(at - box.y)
+      if (oy <= 1) continue
+      at = box.y - box.hh - node.hh
+      moved = true
+    }
+  }
+  return at
+}
+
+function liftClear(node, x, y, obstacles) {
+  let at = y
+  let moved = true
+  while (moved) {
+    moved = false
+    for (const box of obstacles) {
+      const ox = node.hw + box.hw - Math.abs(x - box.x)
+      if (ox <= 1) continue
+      const oy = node.hh + box.hh - Math.abs(at - box.y)
+      if (oy <= 1) continue
+      at = box.y + box.hh + node.hh
+      moved = true
+    }
+  }
+  return at
+}
+
+function packCards(list, obstacles, sides) {
+  const root = list.find((node) => node.path === '')
+  const out = new Map()
+  let rootY = CARD_HUB.hh + root.hh
+  rootY = liftClear(root, 0, rootY, obstacles)
+  out.set('', { x: 0, y: rootY, z: 0 })
+
+  const columns = new Map()
+  for (const node of list) {
+    if (node.path === '') continue
+    const side = sides.get(node.path) || 1
+    const depth = node.path.split('/').length
+    const key = `${side}:${depth}`
+    if (!columns.has(key)) columns.set(key, { side, depth, nodes: [] })
+    columns.get(key).nodes.push(node)
+  }
+  const bySide = new Map([[-1, []], [1, []]])
+  for (const column of columns.values()) bySide.get(column.side).push(column)
+  for (const side of [-1, 1]) {
+    let outer = Math.max(CARD_HUB.hw, root.hw)
+    for (const column of bySide.get(side).sort((a, b) => a.depth - b.depth)) {
+      column.nodes.sort((a, b) => a.path.localeCompare(b.path))
+      const widest = Math.max(...column.nodes.map((node) => node.hw))
+      const x = side * (outer + widest)
+      const total = column.nodes.reduce((sum, node) => sum + node.hh * 2, 0)
+      let cursor = total / 2
+      for (const node of column.nodes) {
+        const y = dropClear(node, x, cursor - node.hh, obstacles)
+        out.set(node.path, { x, y, z: 0 })
+        cursor = y - node.hh
+      }
+      outer = Math.abs(x) + widest
+    }
+  }
+  return out
+}
+
 function relaxCards(list, pos, parents, mobility, obstacles = [], isWarm = false) {
   const hub = { hw: CARD_HUB.hw, hh: CARD_HUB.hh }
   const centre = { x: 0, y: 0 }
@@ -284,7 +391,8 @@ export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
   const place = (path, x, y) => {
     const before = known(path)
     if (before) {
-      pos.set(path, { x: before.x, y: before.y, z: 0 })
+      const warm = before[WARM]
+      pos.set(path, { x: warm ? warm.x : before.x, y: warm ? warm.y : before.y, z: 0 })
       mobility.set(path, SETTLED)
     } else {
       pos.set(path, { x, y: clamp(y, CARD_V.low, CARD_V.high), z: 0 })
@@ -300,6 +408,9 @@ export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
     place(path, side * (CARD_HUB.hw + node.hw), CARD_HUB.hh * 0.4 - row * CARD_ROW)
   })
 
+  const sides = new Map()
+  top.forEach((path, index) => sides.set(path, index % 2 === 0 ? 1 : -1))
+
   const queue = [...top]
   while (queue.length > 0) {
     const path = queue.shift()
@@ -309,16 +420,27 @@ export function layoutCards(entries, previous = null, { obstacles = [] } = {}) {
     const kids = children.get(path)
     kids.forEach((childPath, index) => {
       queue.push(childPath)
+      sides.set(childPath, sides.get(path) || side)
       const node = byPath.get(childPath)
       place(childPath, here.x + side * (parent.hw + node.hw), here.y + ((kids.length - 1) / 2 - index) * CARD_ROW * 0.6)
     })
   }
 
   relaxCards(list, pos, parents, mobility, obstacles, previous !== null)
+  const exact = list.map((node) => ({ path: node.path, width: node.hw * 2 - CARD_GAP, height: node.hh * 2 - CARD_GAP }))
+  const didOverlap = cardOverlaps(exact, pos, obstacles).length > 0
+  let relaxed = null
+  if (didOverlap) {
+    relaxed = new Map(list.map((node) => [node.path, { x: pos.get(node.path).x, y: pos.get(node.path).y }]))
+    const packed = packCards(list, obstacles, sides)
+    for (const [path, place] of packed) pos.set(path, place)
+  }
   return new Map(
     list.map((node) => {
       const p = pos.get(node.path)
-      return [node.path, { x: p.x, y: p.y, z: cardDepth(node.path) }]
+      const spot = { x: p.x, y: p.y, z: cardDepth(node.path) }
+      if (relaxed) Object.defineProperty(spot, WARM, { value: relaxed.get(node.path), enumerable: false })
+      return [node.path, spot]
     })
   )
 }

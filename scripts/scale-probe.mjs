@@ -14,7 +14,7 @@ import { createPipeline } from '../src/model/pipeline.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
 import { cardSize, viewInput } from '../src/engine/cards.js'
-import { layoutCards } from '../src/engine/layout.js'
+import { cardOverlaps, layoutCards } from '../src/engine/layout.js'
 import {
   AGENTS,
   DEFAULTS,
@@ -119,6 +119,28 @@ export function perCall(items, fn) {
   return { total, mean: total / Math.max(items.length, 1), worst }
 }
 
+export function overlappingLayouts(activities, tree, agents = AGENTS) {
+  const state = createState(tree, agents)
+  let homes = new Map()
+  let key = ''
+  let layouts = 0
+  let overlapping = 0
+  for (const activity of activities) {
+    apply(state, activity)
+    const input = viewInput(state, [])
+    const views = planFolderView(input)
+    const next = `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
+    if (next === key) continue
+    key = next
+    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
+    const placed = layoutCards(entries, homes)
+    homes = new Map([...homes, ...placed])
+    layouts += 1
+    if (cardOverlaps(entries, placed).length > 0) overlapping += 1
+  }
+  return { layouts, overlapping }
+}
+
 export async function runProbe(options = {}) {
   const settings = { ...DEFAULTS, ...options }
   const rows = []
@@ -191,6 +213,15 @@ export async function runProbe(options = {}) {
   row('layoutCards (cold)', 'activity', first.ms, `${entries.length} cards`)
   const warm = timeIt(() => layoutCards(entries, first.result), 5)
   row('layoutCards (warm)', 'activity', warm.ms)
+
+  const overlapChain = overlappingLayouts(activities, tree)
+  rows.push({
+    stage: 'layoutCards, overlapping layouts',
+    runsAt: 'chain',
+    ms: overlapChain.overlapping,
+    budget: 0,
+    size: `${overlapChain.overlapping} of ${overlapChain.layouts} layouts`,
+  })
 
   const fileCounts = new Map()
   for (const file of tree.files) fileCounts.set(dirname(file), (fileCounts.get(dirname(file)) ?? 0) + 1)
