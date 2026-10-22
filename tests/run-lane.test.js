@@ -956,7 +956,7 @@ describe('scripts/run-lane.mjs', () => {
     expect(refused.stdout).not.toContain('args:')
     expect(refused.stdout).not.toContain('cwd:')
 
-    const forced = await runLane(['hermes', 'S2a', '--dry-run', '--force'])
+    const forced = await runLane(['hermes', 'S2a', '--dry-run', '--force'], env)
     expect(forced.code).toBe(0)
     expect(forced.stdout).toContain('file:')
     expect(forced.stdout).toContain('args:')
