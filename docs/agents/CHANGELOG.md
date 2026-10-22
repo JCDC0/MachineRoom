@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A runner replaces a stale lane lock only under `LANE.lock.takeover`, and a takeover file left by a dead start is cleared with `Another start of the LANE lane stopped half way. Start it again.` (task U18, N9).
+- `npm run candidate` refuses with `npm was not found. Run this as npm run candidate.` when neither `npm_execpath` nor `npm-cli.js` beside Node exists, instead of running npm through a shell (task U18, N10).
+- The assistant finds `opencode` by its absolute path with `programPath` after `OPENCODE_BIN` and the shim search, and starts nothing when it is missing (task U18, N11).
+
 - Brief U18 (one runner replaces a stale lock, and nothing starts by its bare name, for OpenCode 2). The audit table now records that N7, N8 and N9 were fixed in 0.1.116 (U5d), and that a narrower race is left of N9.
 - Review note on U17: one fix. The mock client had no `opencode2` lane, so in the demo Run brief on a second OpenCode brief failed with `Choose a lane from the list.`; `SAMPLE_LANES` in `src/control/mock.js` now has it. Checked by eye at 1280 by 800 in the replay with the mock: with the mock's `opencode` run going, the confirm card for U4 reads `Lane: opencode2`, and with no run it reads `Lane: opencode`. Full suite on the merge: 101 files, 1902 tests.
 - Brief G3d (the README for the room as it is now, OpenCode).

@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { win32 } from 'node:path'
+import { programPath } from './programPath.js'
 
 export const DEFAULT_ASSISTANT_MODEL = 'opencode/deepseek-v4.1-flash-free'
 export const PROMPT_LIMIT = 2000
@@ -61,22 +62,28 @@ export function extractReplyText(output) {
   return text
 }
 
-export function resolveOpencodeBinary({ env = process.env, platform = process.platform, exists = existsSync } = {}) {
+export function resolveOpencodeBinary({ env = process.env, platform = process.platform, exists = existsSync, check } = {}) {
   if (env.OPENCODE_BIN) return env.OPENCODE_BIN
-  if (platform !== 'win32') return 'opencode'
-  const folders = String(env.PATH ?? env.Path ?? '').split(win32.delimiter)
-  for (const folder of folders) {
-    if (!folder) continue
-    const candidate = win32.join(folder, 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
-    if (exists(candidate)) return candidate
+  if (platform === 'win32') {
+    const folders = String(env.PATH ?? env.Path ?? '').split(win32.delimiter)
+    for (const folder of folders) {
+      if (!folder) continue
+      const candidate = win32.join(folder, 'node_modules', '@opencode', 'cli', 'bin', 'opencode.exe')
+      if (exists(candidate)) return candidate
+    }
   }
-  return 'opencode'
+  return programPath('opencode', { platform, env, check })
 }
 
 export function runOpencode({ model, prompt, timeoutMs }) {
   return new Promise((resolve, reject) => {
+    const binary = resolveOpencodeBinary()
+    if (!binary) {
+      reject(new Error('the assistant run failed'))
+      return
+    }
     execFile(
-      resolveOpencodeBinary(),
+      binary,
       ['run', '-m', model, '--format', 'json', prompt],
       { timeout: timeoutMs, maxBuffer: 1024 * 1024, windowsHide: true },
       (error, stdout) => {
