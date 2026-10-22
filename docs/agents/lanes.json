@@ -38,7 +38,8 @@
       "Do not start an agent run and do not change any Paperclip setting. You may start the real Paperclip (paperclipai run) to check the shape of GET routes. If you start it, stop it when you are done, kill any orphaned postgres worker, and check that ports 3100 and 54329 are free.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
       "You cannot see the screen. When a brief asks for a check by eye, do not start a dev server for it; say in your report that it is left to the orchestrator, who checks it in a browser.",
-      "Another OpenCode lane runs at the same time in C:\\GitHub\\MachineRoom-opencode2. Touch only the files your brief names."
+      "Another OpenCode lane runs at the same time in C:\\GitHub\\MachineRoom-opencode2. Touch only the files your brief names.",
+      "Your shell may start in C:\\GitHub\\MachineRoom, the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-opencode && (forward slashes; bash drops backslashes), never write or run anything in C:\\GitHub\\MachineRoom, and send unwanted output to /dev/null, never nul."
     ]
   },
   "opencode2": {
@@ -59,7 +60,8 @@
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the other OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
       "You cannot see the screen. When a brief asks for a check by eye, do not start a dev server for it; say in your report that it is left to the orchestrator, who checks it in a browser.",
-      "Another OpenCode lane runs at the same time in C:\\GitHub\\MachineRoom-opencode. Touch only the files your brief names."
+      "Another OpenCode lane runs at the same time in C:\\GitHub\\MachineRoom-opencode. Touch only the files your brief names.",
+      "Your shell may start in C:\\GitHub\\MachineRoom, the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-opencode2 && (forward slashes; bash drops backslashes), never write or run anything in C:\\GitHub\\MachineRoom, and send unwanted output to /dev/null, never nul."
     ]
   },
   "agy": {
