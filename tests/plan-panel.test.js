@@ -70,6 +70,7 @@ describe('plan helpers', () => {
       size: 'small',
       files: ['server/plans.js'],
       tests: ['tests/plans.test.js'],
+      text: 'Add the plan route in the bridge with tests.',
     })
     expect(rows[0].profile).toMatchObject({
       files: 1,
@@ -169,10 +170,27 @@ describe('PlanPanel and ControlDrawer', () => {
     expect(html).toContain('Size: small')
     expect(html).toContain('server/plans.js')
     expect(html).toContain('tests/plans.test.js')
+    expect(html).toContain('Add the plan route in the bridge with tests.')
     expect(html).toContain('Reading the route.')
     expect(html).toContain('Copy as Markdown')
     expect(html).toContain('Brief C7b names no test.')
     expect(html).toContain('class="plan-problem"')
+  })
+
+  it('shows each brief text below its meta line through visibleText', () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const html = renderToString(createElement(PlanPanel, { client, initialAnswer: ANSWER }))
+    expect(html).toContain('class="plan-brief-text mono"')
+    expect(html).toContain('Add the plan route in the bridge with tests.')
+    expect(html).toContain('Add the tab. Keep the panel read only.')
+
+    const hidden = {
+      status: 'ready',
+      briefs: [{ ...BRIEF_ONE, text: 'Do it.\u202Enow' }],
+      problems: [],
+    }
+    const escaped = renderToString(createElement(PlanPanel, { client, initialAnswer: hidden }))
+    expect(escaped).toContain('[U+202E]now')
   })
 
   it('gives every ready brief a ticked checkbox and an Add to TASKS.md button', async () => {

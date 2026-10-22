@@ -71,6 +71,7 @@ export function planRows(answer, lanes) {
       size: textOf(brief.size).trim(),
       files: listOf(brief.files),
       tests: listOf(brief.tests),
+      text: textOf(brief.text).trim(),
       profile: profileFromBrief({
         text: profileText(brief, table),
         owners: owner ? [owner] : [],
