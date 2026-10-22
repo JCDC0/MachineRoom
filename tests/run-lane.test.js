@@ -938,12 +938,28 @@ describe('scripts/run-lane.mjs', () => {
   })
 
   it('refuses a merged brief before it prints the dry run', async () => {
-    const merged = parseBriefs(TASKS_MARKDOWN).find((brief) => brief.done)
+    const merged = parseBriefs(TASKS_MARKDOWN).find(
+      (brief) => brief.done && Array.isArray(brief.owners) && brief.owners.includes('opencode')
+    )
     expect(merged).toBeTruthy()
-    const result = await runLane(['hermes', merged.id, '--dry-run'])
+    const result = await runLane(['opencode', merged.id, '--dry-run'])
     expect(result.code).toBe(1)
     expect(result.stdout).toContain(`Brief ${merged.id} is marked ${merged.ownerText}.`)
     expect(result.stdout).not.toContain('args:')
     expect(result.stdout).not.toContain('cwd:')
+  })
+
+  it('refuses a retired lane before anything starts, and runs it with --force', async () => {
+    const refused = await runLane(['hermes', 'S2a', '--dry-run'])
+    expect(refused.code).toBe(1)
+    expect(refused.stdout).toContain('The hermes lane is retired.')
+    expect(refused.stdout).not.toContain('args:')
+    expect(refused.stdout).not.toContain('cwd:')
+
+    const forced = await runLane(['hermes', 'S2a', '--dry-run', '--force'])
+    expect(forced.code).toBe(0)
+    expect(forced.stdout).toContain('file:')
+    expect(forced.stdout).toContain('args:')
+    expect(forced.stdout).toContain('cwd:')
   })
 })

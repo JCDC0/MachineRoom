@@ -196,6 +196,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       sendJson(req, res, 400, { error: 'Choose a lane from the list.' })
       return true
     }
+    if (lanes[lane].retired === true) {
+      sendJson(req, res, 400, { error: `The ${lane} lane is retired.` })
+      return true
+    }
     if (!Object.hasOwn(lanes[lane], 'cli') || !lanes[lane].cli || typeof lanes[lane].cli !== 'object') {
       sendJson(req, res, 400, { error: 'That lane has no command line.' })
       return true

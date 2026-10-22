@@ -180,6 +180,10 @@ async function main() {
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
+  if (lane.retired === true && options.force !== true) {
+    console.log(`The ${options.lane} lane is retired.`)
+    return 1
+  }
   const briefs = parseBriefs(read('TASKS.md'))
   const problems = briefProblems({
     briefs,

@@ -9,6 +9,7 @@ import {
   laneForBrief,
   ownerToLane,
   pickAssignee,
+  runLaneFor,
 } from '../src/ui/panels/briefs.js'
 
 const SAMPLE_AGENTS = [
@@ -61,6 +62,37 @@ describe('ownerToLane', () => {
   it('uses only the first owner even when another owner follows', () => {
     expect(ownerToLane({ owners: ['claude', 'agy'] })).toBeNull()
     expect(ownerToLane({ owners: ['agy', 'claude'] })).toBe('agy')
+  })
+})
+
+describe('runLaneFor', () => {
+  const LANES = ['hermes', 'opencode', 'opencode2', 'agy']
+
+  it('keeps the owner lane when it is free', () => {
+    expect(runLaneFor({ owners: ['opencode'] }, [], LANES)).toBe('opencode')
+    expect(runLaneFor({ owners: ['opencode'] }, [{ lane: 'opencode2' }], LANES)).toBe('opencode')
+  })
+
+  it('gives the free lane of the same harness when the owner lane runs', () => {
+    expect(runLaneFor({ owners: ['opencode'] }, [{ lane: 'opencode' }], LANES)).toBe('opencode2')
+    expect(runLaneFor({ owners: ['opencode2'] }, ['opencode2'], LANES)).toBe('opencode')
+    expect(runLaneFor({ owners: ['opencode'] }, ['opencode'], { opencode: {}, opencode2: {} })).toBe('opencode2')
+  })
+
+  it('keeps the owner lane when both lanes run', () => {
+    expect(runLaneFor({ owners: ['opencode'] }, ['opencode', 'opencode2'], LANES)).toBe('opencode')
+    expect(runLaneFor({ owners: ['opencode2'] }, [{ lane: 'opencode' }, { lane: 'opencode2' }], LANES)).toBe('opencode2')
+  })
+
+  it('keeps a lane that has no twin', () => {
+    expect(runLaneFor({ owners: ['agy'] }, ['agy'], LANES)).toBe('agy')
+    expect(runLaneFor({ owners: ['agy'] }, ['agy'], ['agy'])).toBe('agy')
+  })
+
+  it('answers null for a brief with no owner lane', () => {
+    expect(runLaneFor({ owners: ['claude'] }, [], LANES)).toBeNull()
+    expect(runLaneFor({}, ['opencode'], LANES)).toBeNull()
+    expect(runLaneFor(null, [], LANES)).toBeNull()
   })
 })
 

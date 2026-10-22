@@ -2384,8 +2384,9 @@ describe('run routes', () => {
     writeFileSync(
       join(agents, 'lanes.json'),
       JSON.stringify({
-        hermes: { name: 'Hermes', harness: 'Hermes', cli: { harness: 'hermes', bin: 'hermes.exe', model: 'deepseek/deepseek-v4.1-flash-1017' } },
+        hermes: { name: 'Hermes', harness: 'Hermes', retired: true, cli: { harness: 'hermes', bin: 'hermes.exe', model: 'deepseek/deepseek-v4.1-flash-1017' } },
         opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
+        opencode2: { name: 'OpenCode 2', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
         agy: { name: 'agy', harness: 'agy' },
       })
     )
@@ -2641,10 +2642,10 @@ describe('run routes', () => {
   it('starts the runner with an argument list, keeps the last five lines and records the run when it ends', async () => {
     useRunsTemp()
     const { url } = await startRunsBridge()
-    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e', 'B6'], confirmed: true })
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['C3e', 'B6'], confirmed: true })
     expect(res.status).toBe(202)
     const entry = await res.json()
-    expect(entry.lane).toBe('hermes')
+    expect(entry.lane).toBe('opencode')
     expect(entry.briefs).toEqual(['C3e', 'B6'])
     expect(typeof entry.startedAt).toBe('string')
     expect(entry.lastLines).toEqual([])
@@ -2661,7 +2662,7 @@ describe('run routes', () => {
       return state.running.length === 0 && state.recent.length === 1
     })
     const done = await fetch(`${url}/api/control/runs`).then((r) => r.json())
-    expect(done.recent[0]).toMatchObject({ lane: 'hermes', briefs: ['C3e', 'B6'], exitCode: 0, killed: false })
+    expect(done.recent[0]).toMatchObject({ lane: 'opencode', briefs: ['C3e', 'B6'], exitCode: 0, killed: false })
   })
 
   it('refuses a bad lane, a bad brief and a second run on a busy lane with plain sentences', async () => {
@@ -2677,15 +2678,15 @@ describe('run routes', () => {
     expect(noCli.status).toBe(400)
     expect(await noCli.json()).toEqual({ error: 'That lane has no command line.' })
 
-    const empty = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: [], confirmed: true })
+    const empty = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: [], confirmed: true })
     expect(await empty.json()).toEqual({ error: 'Choose one to five briefs.' })
-    const tooMany = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'], confirmed: true })
+    const tooMany = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'], confirmed: true })
     expect(await tooMany.json()).toEqual({ error: 'Choose one to five briefs.' })
-    const notAList = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: 'C3e', confirmed: true })
+    const notAList = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: 'C3e', confirmed: true })
     expect(await notAList.json()).toEqual({ error: 'Choose one to five briefs.' })
 
     for (const briefs of [['c3e'], ['C3e&calc'], ['Z9'], ['C3e', 42]]) {
-      const badId = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs, confirmed: true })
+      const badId = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs, confirmed: true })
       expect(badId.status).toBe(400)
       expect(await badId.json()).toEqual({ error: 'Choose a brief from the list.' })
     }
@@ -2693,13 +2694,23 @@ describe('run routes', () => {
     const wrongMethod = await fetch(`${url}/api/control/runs`, { method: 'DELETE' })
     expect(wrongMethod.status).toBe(405)
 
-    const started = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'], confirmed: true })
+    const started = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['C3e'], confirmed: true })
     expect(started.status).toBe(202)
-    const busy = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['B6'], confirmed: true })
+    const busy = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['B6'], confirmed: true })
     expect(busy.status).toBe(409)
     expect(await busy.json()).toEqual({ error: 'That lane is already running.' })
-    const otherLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['B6'], confirmed: true })
+    const otherLane = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode2', briefs: ['B6'], confirmed: true })
     expect(otherLane.status).toBe(202)
+  })
+
+  it('refuses a retired lane before it starts', async () => {
+    useRunsTemp()
+    const { url } = await startRunsBridge()
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'], confirmed: true })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual({ error: 'The hermes lane is retired.' })
+    const { running } = await fetch(`${url}/api/control/runs`).then((r) => r.json())
+    expect(running).toEqual([])
   })
 
   it('refuses a run that was not confirmed', async () => {
@@ -2707,7 +2718,7 @@ describe('run routes', () => {
     const { url } = await startRunsBridge()
 
     for (const confirmed of [undefined, false, 'true', 1]) {
-      const body = { lane: 'hermes', briefs: ['C3e'] }
+      const body = { lane: 'opencode', briefs: ['C3e'] }
       if (confirmed !== undefined) body.confirmed = confirmed
       const res = await postJson(url, '/api/control/runs', 'POST', body)
       expect(res.status, String(confirmed)).toBe(400)
@@ -2733,7 +2744,7 @@ describe('run routes', () => {
   it('keeps the run going after the request and kills it when the bridge stops', async () => {
     useRunsTemp()
     const { url, bridge } = await startRunsBridge({ script: TINY_SLEEPER })
-    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'hermes', briefs: ['C3e'], confirmed: true })
+    const res = await postJson(url, '/api/control/runs', 'POST', { lane: 'opencode', briefs: ['C3e'], confirmed: true })
     expect(res.status).toBe(202)
     await res.arrayBuffer()
 

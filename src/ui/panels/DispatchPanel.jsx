@@ -5,6 +5,8 @@ import {
   formatBriefTitle,
   groupBriefsByOwner,
   ownerToLane,
+  runLaneFor,
+  VALID_LANES,
 } from './briefs.js'
 import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
@@ -83,8 +85,8 @@ export default function DispatchPanel({
   const hasRuns = typeof client?.runs === 'function'
 
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
-  const briefLane = selectedBrief ? ownerToLane(selectedBrief) : null
-  const canRunBrief = typeof client?.startRun === 'function' && Boolean(briefLane)
+  const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, VALID_LANES) : null
+  const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
 
   async function loadData() {
     if (!client || (Array.isArray(initialAgents) && Array.isArray(initialModels))) return
@@ -334,11 +336,11 @@ export default function DispatchPanel({
   })
 
   async function handleConfirmRun() {
-    if (!selectedBriefId || !briefLane || typeof client?.startRun !== 'function') return
+    if (!selectedBriefId || !runLane || typeof client?.startRun !== 'function') return
     setStartingRun(true)
     setRunError(null)
     try {
-      await client.startRun(briefLane, [selectedBriefId])
+      await client.startRun(runLane, [selectedBriefId])
       setShowConfirm(false)
       loadRuns()
     } catch (err) {
@@ -603,7 +605,7 @@ export default function DispatchPanel({
               {showConfirm && (
                 <div className="brief-confirm-card" role="region" aria-label="Confirm run">
                   <div className="brief-confirm-meta mono">
-                    <span className="brief-confirm-lane">Lane: {briefLane}</span>
+                    <span className="brief-confirm-lane">Lane: {runLane}</span>
                     <span className="brief-confirm-model">Model: {promptModel || 'Default model'}</span>
                     <span className="brief-confirm-id">Brief: {selectedBriefId}</span>
                   </div>

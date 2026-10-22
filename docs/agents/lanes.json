@@ -2,6 +2,7 @@
   "hermes": {
     "name": "Hermes",
     "harness": "Hermes",
+    "retired": true,
     "model": "deepseek/deepseek-v4.1-flash-1017",
     "modelHint": "the OpenRouter id; pick it from Hermes' own model list",
     "reasoning": "xhigh",
