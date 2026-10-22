@@ -2,10 +2,11 @@ import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { connect } from 'node:net'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
+import { gunzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
-import { createBridge, isAllowedHost } from '../server/index.js'
+import { createBridge, FOLDER_SHAPE, isAllowedHost, packTree } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
 import { extractReplyText } from '../server/assistant.js'
 import { FEATURES, PAPERCLIP_SURFACE } from '../server/surface.js'
@@ -291,11 +292,21 @@ function openSse(url, headers = {}, query = '') {
   })
 }
 
-async function sleep(ms) {
-  await new Promise((resolveWait) => setTimeout(resolveWait, ms))
+function readRaw(url, headers = {}) {
+  return new Promise((resolveRead, rejectRead) => {
+    const req = httpRequest(url, { headers }, (res) => {
+      const chunks = []
+      res.on('data', (chunk) => chunks.push(chunk))
+      res.on('end', () => resolveRead({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
+    })
+    req.on('error', rejectRead)
+    req.end()
+  })
 }
 
-async function waitUntil(fn, timeoutMs = 3000) {
+async function sleep(ms) {
+  await new Promise((resolveWait) => setTimeout(resolveWait, ms))
+}async function waitUntil(fn, timeoutMs = 3000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (await fn()) return
@@ -305,6 +316,7 @@ async function waitUntil(fn, timeoutMs = 3000) {
 }
 
 const FAKE_KEY = 'sk-or-v1-' + '0123456789abcdef'.repeat(4)
+const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
 
 function keyedToolChunk() {
   return `${JSON.stringify({
@@ -758,6 +770,110 @@ describe('live bridge', () => {
     const data = JSON.parse(treeEvent.data)
     expect(data.files).toEqual(['a.js', 'b.js'])
     await expect(withoutTree.next((e) => e.event === 'tree', 400)).rejects.toThrow('timed out waiting for SSE event')
+  })
+
+  it('answers GET /api/tree gzipped when the request names gzip', async () => {
+    const dir = makeTempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const bridge = createBridge({
+      paperclipUrl: DEAD_PAPERCLIP,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      reconnectMinMs: 5000,
+      surfaceEveryMs: 0,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const accept = { Accept: `application/json; shape=${FOLDER_SHAPE}` }
+    const gzipped = await readRaw(`${url}/api/tree`, { ...accept, 'Accept-Encoding': 'br, gzip' })
+    expect(gzipped.status).toBe(200)
+    expect(gzipped.headers['content-encoding']).toBe('gzip')
+    expect(gzipped.headers.vary).toBe('Origin, Accept-Encoding')
+    expect(JSON.parse(gunzipSync(gzipped.body).toString('utf8')).shape).toBe(FOLDER_SHAPE)
+
+    const plain = await readRaw(`${url}/api/tree`, accept)
+    expect(plain.status).toBe(200)
+    expect(plain.headers['content-encoding']).toBeUndefined()
+    expect(plain.headers.vary).toBe('Origin')
+    expect(JSON.parse(gunzipSync(gzipped.body).toString('utf8'))).toEqual(JSON.parse(plain.body.toString('utf8')))
+  })
+
+  it('raises the tree version after a file appears', async () => {
+    const dir = makeTempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const bridge = createBridge({
+      paperclipUrl: DEAD_PAPERCLIP,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      reconnectMinMs: 5000,
+      surfaceEveryMs: 0,
+      debounceMs: 50,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const accept = { Accept: `application/json; shape=${FOLDER_SHAPE}` }
+    const before = await fetch(`${url}/api/tree`, { headers: accept }).then((r) => r.json())
+    expect(Number.isInteger(before.version)).toBe(true)
+
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    let after = before
+    await waitUntil(async () => {
+      after = await fetch(`${url}/api/tree`, { headers: accept }).then((r) => r.json())
+      return after.version > before.version
+    })
+    expect(after.version).toBeGreaterThan(before.version)
+    expect(after.files.some((run) => run.includes('b.js'))).toBe(true)
+  })
+
+  it('sends only the files added since the version a page read', async () => {
+    const dir = makeTempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const bridge = createBridge({
+      paperclipUrl: DEAD_PAPERCLIP,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      reconnectMinMs: 5000,
+      surfaceEveryMs: 0,
+      debounceMs: 50,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const read = await fetch(`${url}/api/tree`, { headers: { Accept: `application/json; shape=${FOLDER_SHAPE}` } }).then((r) => r.json())
+    const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=${read.version}`)
+    cleanups.push(() => sse.close())
+    await sleep(50)
+
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    const event = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
+  })
+
+  it('sends the whole list to a stream whose since is unknown', async () => {
+    const dir = makeTempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const bridge = createBridge({
+      paperclipUrl: DEAD_PAPERCLIP,
+      companyId: 'comp-1',
+      projectRoot: dir,
+      port: 0,
+      reconnectMinMs: 5000,
+      surfaceEveryMs: 0,
+      debounceMs: 50,
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    await fetch(`${url}/api/tree`, { headers: { Accept: `application/json; shape=${FOLDER_SHAPE}` } })
+    const sse = await openSse(url, {}, `?tree=${FOLDER_SHAPE}&since=999999`)
+    cleanups.push(() => sse.close())
+    await sleep(50)
+
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    const event = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(event.data)).toEqual(packTree({ root: basename(dir), files: ['a.js', 'b.js'] }))
   })
 })
 

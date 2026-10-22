@@ -3,6 +3,8 @@ import { readdirSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
+import { gzip as gzipCallback } from 'node:zlib'
 import { createSplitMasker } from '../src/briefs/audit.js'
 import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
 import { createAssistantApi } from './assistant.js'
@@ -54,6 +56,7 @@ export function isAllowedHost(host) {
 }
 
 const HISTORY_LIMIT = 500
+const TREE_VERSIONS_KEPT = 4
 const LIVE_CHUNK_LIMIT = 8192
 const LOG_RUNS_KEPT = 8
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
@@ -67,6 +70,7 @@ const PARSER_BY_ADAPTER = {
 }
 const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const AGENT_FETCH_EVERY_MS = 30000
+const gzipAsync = promisify(gzipCallback)
 
 export function slugify(value) {
   return (
@@ -416,6 +420,8 @@ export function createBridge(options = {}) {
   let watchTimer = null
   let lastFiles = []
   let treePrimed = false
+  let treeVersion = 0
+  const treeVersions = new Map()
   let treeReading = null
   let treeDirty = false
   let surfaceTimer = null
@@ -443,11 +449,20 @@ export function createBridge(options = {}) {
     res.write(`event: change\ndata: ${JSON.stringify(event)}\n\n`)
   }
 
+  function rememberTreeVersion(files) {
+    treeVersion += 1
+    treeVersions.set(treeVersion, files)
+    while (treeVersions.size > TREE_VERSIONS_KEPT) {
+      treeVersions.delete(treeVersions.keys().next().value)
+    }
+  }
+
   function publishTree(current) {
     if (stopped) return
     if (!treePrimed) {
       treePrimed = true
       lastFiles = current.files
+      rememberTreeVersion(current.files)
       return
     }
     const changed =
@@ -455,6 +470,7 @@ export function createBridge(options = {}) {
       current.files.some((file, index) => file !== lastFiles[index])
     if (!changed) return
     lastFiles = current.files
+    rememberTreeVersion(current.files)
     const events = new Map()
     for (const client of clients) {
       if (!treeClients.has(client)) continue
@@ -1001,7 +1017,26 @@ export function createBridge(options = {}) {
         return
       }
       const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
-      sendJson(req, res, 200, wantsFolders ? { ...packTree(tree), created: tree.created } : tree)
+      const body = wantsFolders ? { ...packTree(tree), created: tree.created, version: treeVersion } : tree
+      const payload = Buffer.from(JSON.stringify(body), 'utf8')
+      const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
+      if (!wantsGzip) {
+        sendJson(req, res, 200, body)
+        return
+      }
+      const compressed = await gzipAsync(payload)
+      if (stopped) {
+        res.destroy()
+        return
+      }
+      res.writeHead(200, {
+        ...corsHeaders(req, isAllowed),
+        'Content-Type': 'application/json; charset=utf-8',
+        'Content-Encoding': 'gzip',
+        Vary: 'Origin, Accept-Encoding',
+        'Content-Length': compressed.length,
+      })
+      res.end(compressed)
       return
     }
 
@@ -1035,8 +1070,14 @@ export function createBridge(options = {}) {
       }
 
       clients.add(res)
-      if (url.searchParams.has('tree')) treeClients.add(res)
-      if (url.searchParams.get('tree') === FOLDER_SHAPE) folderClients.add(res)
+      if (url.searchParams.has('tree')) {
+        treeClients.add(res)
+        if (url.searchParams.get('tree') === FOLDER_SHAPE) folderClients.add(res)
+        const sinceText = url.searchParams.get('since')
+        const sinceVersion = sinceText && /^\d+$/.test(sinceText) ? Number(sinceText) : null
+        const sinceFiles = sinceVersion === null ? null : treeVersions.get(sinceVersion)
+        if (sinceFiles) treeSent.set(res, sinceFiles)
+      }
       req.on('close', () => {
         clients.delete(res)
       })

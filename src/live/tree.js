@@ -1,6 +1,20 @@
 export const FOLDER_SHAPE = 'folders'
 export const FOLDER_SHAPE_ACCEPT = `application/json; shape=${FOLDER_SHAPE}`
 
+const versions = new Map()
+
+export function readTreeVersion(data) {
+  return Number.isInteger(data?.version) && data.version >= 0 ? data.version : null
+}
+
+export function rememberTreeVersion(url, version) {
+  if (Number.isInteger(version) && version >= 0) versions.set(url, version)
+}
+
+export function treeVersionFor(url) {
+  return versions.get(url)
+}
+
 const NOT_A_LIST = 'The bridge sent a file list this page cannot read.'
 
 function refuse(detail) {

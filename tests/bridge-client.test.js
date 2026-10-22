@@ -47,6 +47,25 @@ describe('openBridge', () => {
     expect(seen.statuses).toEqual(['connecting'])
   })
 
+  it('opens the stream with the version the page read', async () => {
+    const url = 'http://bridge-since'
+    const fetchImpl = async (asked) => {
+      if (asked.endsWith('/api/agents')) return reply([])()
+      return reply({ root: 'p', files: ['a.js'], version: 12 })()
+    }
+    const found = await discoverBridge({ url, fetchImpl })
+    expect(found.version).toBe(12)
+    const link = openBridge({
+      url,
+      EventSourceImpl: FakeSource,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+    })
+    expect(FakeSource.last.url).toBe(`${url}/events?history=1&tree=folders&since=12`)
+    link.close()
+  })
+
   it('reports live once open and reconnecting after a drop', () => {
     const { source, seen } = harness()
     source.onopen()
