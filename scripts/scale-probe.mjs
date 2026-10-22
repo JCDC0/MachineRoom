@@ -14,7 +14,7 @@ import { createPipeline } from '../src/model/pipeline.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
 import { cardSize, viewInput } from '../src/engine/cards.js'
-import { layoutCards } from '../src/engine/layout.js'
+import { cardOverlaps, layoutCards } from '../src/engine/layout.js'
 import {
   AGENTS,
   DEFAULTS,
@@ -119,6 +119,56 @@ export function perCall(items, fn) {
   return { total, mean: total / Math.max(items.length, 1), worst }
 }
 
+export function layoutChain(activities, tree, agents = AGENTS) {
+  const state = createState(tree, agents)
+  let homes = new Map()
+  let key = ''
+  let previous = null
+  let layouts = 0
+  let overlapping = 0
+  let moves = 0
+  let worstMove = 0
+  let tallest = 0
+  for (const activity of activities) {
+    apply(state, activity)
+    const input = viewInput(state, [])
+    const views = planFolderView(input)
+    const next = `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
+    if (next === key) continue
+    key = next
+    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
+    const placed = layoutCards(entries, homes)
+    homes = new Map([...homes, ...placed])
+    layouts += 1
+    if (cardOverlaps(entries, placed).length > 0) overlapping += 1
+    if (previous) {
+      const shared = [...placed.keys()].filter((path) => previous.has(path))
+      if (shared.length > 0) {
+        let sum = 0
+        for (const path of shared) {
+          const before = previous.get(path)
+          const after = placed.get(path)
+          sum += Math.hypot(after.x - before.x, after.y - before.y)
+        }
+        const move = sum / shared.length
+        if (move > 150) moves += 1
+        worstMove = Math.max(worstMove, move)
+      }
+    }
+    let low = Infinity
+    let high = -Infinity
+    for (const entry of entries) {
+      const at = placed.get(entry.path)
+      if (!at) continue
+      low = Math.min(low, at.y - entry.height / 2)
+      high = Math.max(high, at.y + entry.height / 2)
+    }
+    if (high > low) tallest = Math.max(tallest, high - low)
+    previous = placed
+  }
+  return { layouts, overlapping, moves, worstMove, tallest }
+}
+
 export async function runProbe(options = {}) {
   const settings = { ...DEFAULTS, ...options }
   const rows = []
@@ -191,6 +241,36 @@ export async function runProbe(options = {}) {
   row('layoutCards (cold)', 'activity', first.ms, `${entries.length} cards`)
   const warm = timeIt(() => layoutCards(entries, first.result), 5)
   row('layoutCards (warm)', 'activity', warm.ms)
+
+  const chain = layoutChain(activities.slice(0, 800), tree)
+  rows.push({
+    stage: 'layoutCards, overlapping layouts',
+    runsAt: 'chain',
+    ms: chain.overlapping,
+    budget: 0,
+    size: `${chain.overlapping} of ${chain.layouts} layouts`,
+  })
+  rows.push({
+    stage: 'layoutCards, moves over 150',
+    runsAt: 'chain',
+    ms: chain.moves,
+    budget: settings.files >= 200000 ? 80 : null,
+    size: `${chain.moves} of ${chain.layouts} layouts`,
+  })
+  rows.push({
+    stage: 'layoutCards, worst move',
+    runsAt: 'chain',
+    ms: chain.worstMove,
+    budget: 1000,
+    size: `${Math.round(chain.worstMove)} units`,
+  })
+  rows.push({
+    stage: 'layoutCards, tallest layout',
+    runsAt: 'chain',
+    ms: chain.tallest,
+    budget: null,
+    size: `${Math.round(chain.tallest)} units`,
+  })
 
   const fileCounts = new Map()
   for (const file of tree.files) fileCounts.set(dirname(file), (fileCounts.get(dirname(file)) ?? 0) + 1)
@@ -270,8 +350,8 @@ export function formatRows(rows) {
   const head = ['stage', 'runs per', 'time ms', 'budget', 'size', '']
   const body = rows.map((entry) => {
     const time = entry.ms === null ? '' : entry.ms.toFixed(2)
-    const over = entry.ms === null ? entry.bytes > entry.budget : entry.ms > entry.budget
-    const budget = entry.ms === null ? `${entry.budget} bytes` : `${entry.budget} ms`
+    const over = entry.ms === null ? entry.bytes > entry.budget : entry.budget !== null && entry.ms > entry.budget
+    const budget = entry.ms === null ? `${entry.budget} bytes` : entry.budget === null ? 'info' : `${entry.budget} ms`
     return [entry.stage, entry.runsAt, time, budget, entry.size, over ? 'OVER' : 'ok']
   })
   const widths = head.map((_, i) => Math.max(...[head, ...body].map((line) => line[i].length)))
