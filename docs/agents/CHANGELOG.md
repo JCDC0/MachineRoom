@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Security review of what changed since the two October audits (Q1, report only): `docs/agents/AUDIT-2026-10-DELTA.md` lists 8 findings (1 High: the fixture builder's key check misses OpenRouter, Anthropic and other key shapes; 3 Medium: a planner title can change a brief's owner in `TASKS.md`, the Plan tab adds briefs whose text the owner never saw, and the split masker joins a chunk across a gap and lets a key through; 4 Low) with briefs Q1a to Q1d, and what was checked and found sound.
 - Brief Q1 (a security review of what changed since the two October audits, report only, for the cloud session).
 - Review note on U14: no fixes. On Windows `tests/mask-split.test.js` ran 168 tests, the 30 of the cloud plus the recording cases over the 69 recordings in `public/recordings` that its VM lacked, and all passed. Over the 74 recorded runs (4934 log chunks, recordings and fixtures as recorded) no chunk was held. The bridge test that a held tail goes out in under 2 seconds passed in the full suite while OpenCode ran its own. Full suite on the merge: 100 files, 1876 tests.
 - Briefs U15 (a quoted `>` is not a write, and the longer path wins; the security audit's N13) and U16 (the control client gives up on a request that never answers; N15), both for OpenCode in one run.
