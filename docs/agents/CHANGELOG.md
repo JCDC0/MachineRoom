@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Hermes is retired (the owner, 2026-10-22: subscriptions instead of OpenRouter credits), and a second OpenCode lane runs beside the first: `opencode2` in `docs/agents/lanes.json` with its own worktree, told not to start the real Paperclip and to touch only its brief's files. `briefProblems` in `src/briefs/run.js` lets a lane named with a number take its harness's briefs (`opencode2` takes OpenCode's); a test in `tests/run-lane.test.js`. Brief C4f takes Hermes out of the routing policy.
 - Brief Q1 (a security review of what changed since the two October audits, report only, for the cloud session).
 - Review note on U14: no fixes. On Windows `tests/mask-split.test.js` ran 168 tests, the 30 of the cloud plus the recording cases over the 69 recordings in `public/recordings` that its VM lacked, and all passed. Over the 74 recorded runs (4934 log chunks, recordings and fixtures as recorded) no chunk was held. The bridge test that a held tail goes out in under 2 seconds passed in the full suite while OpenCode ran its own. Full suite on the merge: 100 files, 1876 tests.
 - Briefs U15 (a quoted `>` is not a write, and the longer path wins; the security audit's N13) and U16 (the control client gives up on a request that never answers; N15), both for OpenCode in one run.

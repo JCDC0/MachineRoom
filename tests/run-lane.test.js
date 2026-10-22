@@ -196,6 +196,13 @@ describe('briefProblems', () => {
       .toEqual(['Brief W3 is for opencode and agy, not hermes. Pass --force to run it anyway.'])
   })
 
+  it('gives a second lane of one harness that harness briefs', () => {
+    const shared = sampleBrief('W3', 'Review and merge', 'OpenCode for the bridge, AGY for the panel', { owners: ['opencode', 'agy'] })
+    expect(briefProblems({ briefs: [shared], ids: ['W3'], laneKey: 'opencode2', branchExists: () => false })).toEqual([])
+    expect(briefProblems({ briefs: [shared], ids: ['W3'], laneKey: 'hermes2', branchExists: () => false }))
+      .toEqual(['Brief W3 is for opencode and agy, not hermes2. Pass --force to run it anyway.'])
+  })
+
   it('refuses a brief whose branch is already there', () => {
     const name = branchFor(hermesT3)
     expect(briefProblems({ briefs: [hermesT3], ids: ['T3'], laneKey: 'hermes', branchExists: (branch) => branch === name }))

@@ -207,7 +207,7 @@ export function formatOutcomes(rows) {
 
 export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}) {
   const list = Array.isArray(briefs) ? briefs : []
-  const lane = String(laneKey ?? '').trim().toLowerCase()
+  const lane = String(laneKey ?? '').trim().toLowerCase().replace(/\d+$/, '')
   const exists = typeof branchExists === 'function' ? branchExists : () => false
   const asked = []
   const seen = new Set()
