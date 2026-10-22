@@ -1,8 +1,9 @@
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { createPlansApi } from '../server/plans.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const BASE_TIME = Date.parse('2026-10-18T00:00:00Z')
@@ -261,6 +262,59 @@ async function waitUntil(fn, timeoutMs = 3000) {
     await new Promise((resolve) => setTimeout(resolve, 15))
   }
   throw new Error('condition not met in time')
+}
+
+function planComment(plan = TWO_BRIEFS_PLAN) {
+  return {
+    id: 'comment-plan-1',
+    issueId: 'issue-1',
+    authorAgentId: PLANNER.id,
+    body: JSON.stringify(plan),
+    createdAt: new Date(BASE_TIME).toISOString(),
+  }
+}
+
+function startGatedPlans(root, comment) {
+  const pending = []
+  let open = false
+  const answerFor = (url) => {
+    const path = new URL(url).pathname
+    if (path === '/api/issues/issue-1/comments') return { status: 200, json: async () => [comment] }
+    if (path === '/api/companies/comp-1/agents') return { status: 200, json: async () => [PLANNER] }
+    return { status: 404, json: async () => ({}) }
+  }
+  vi.stubGlobal('fetch', (url) => {
+    const answer = answerFor(url)
+    if (open) return Promise.resolve(answer)
+    return new Promise((resolve) => pending.push({ answer, resolve }))
+  })
+  cleanups.push(() => vi.unstubAllGlobals())
+
+  const api = createPlansApi({
+    paperclipUrl: 'http://paperclip.test',
+    companyId: 'comp-1',
+    projectRoot: root,
+    timeoutMs: 5000,
+    readJsonBody: async (req) => req.body,
+    sendJson: (req, res, status, body) => res.send({ status, body }),
+  })
+
+  return {
+    pending,
+    accept(ids, planId = comment.id) {
+      return new Promise((resolve) => {
+        const req = { method: 'POST', body: { ids, planId, confirmed: true } }
+        const res = { send: resolve }
+        api.handle(req, res, new URL('/api/control/plans/issue-1/accept', 'http://bridge.test')).catch((error) => {
+          res.send({ status: 0, body: { error: String(error) } })
+        })
+      })
+    },
+    release() {
+      open = true
+      for (const entry of pending.splice(0)) entry.resolve(entry.answer)
+    },
+  }
 }
 
 describe('plans routes', () => {
@@ -524,6 +578,42 @@ describe('plans routes', () => {
     expect(taken.body).toEqual({ error: 'Brief C7a is not in the plan, or has a problem now.' })
     expect(readFileSync(tasksPath, 'utf8')).toBe(afterSecond)
     expect(afterFirst.length).toBeLessThan(afterSecond.length)
+  })
+
+  it('adds both briefs when a fake Paperclip answers two accepts at once', async () => {
+    const root = writeDocs()
+    const tasksPath = join(root, 'docs', 'agents', 'TASKS.md')
+    const gate = startGatedPlans(root, planComment())
+
+    const first = gate.accept(['C7a'])
+    const second = gate.accept(['C7b'])
+    await waitUntil(() => gate.pending.length >= 2)
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    gate.release()
+
+    const [firstAnswer, secondAnswer] = await Promise.all([first, second])
+    expect(firstAnswer.status).toBe(201)
+    expect(secondAnswer.status).toBe(201)
+    const after = readFileSync(tasksPath, 'utf8')
+    expect((after.match(/\*\*C7a\./g) ?? [])).toHaveLength(1)
+    expect((after.match(/\*\*C7b\./g) ?? [])).toHaveLength(1)
+  })
+
+  it('lets a second accept through after the first one fails', async () => {
+    const root = writeDocs()
+    const tasksPath = join(root, 'docs', 'agents', 'TASKS.md')
+    const gate = startGatedPlans(root, planComment())
+
+    const stale = gate.accept(['C7a'], 'comment-old')
+    await waitUntil(() => gate.pending.length >= 2)
+    const fresh = gate.accept(['C7b'])
+    gate.release()
+
+    const [staleAnswer, freshAnswer] = await Promise.all([stale, fresh])
+    expect(staleAnswer.status).toBe(409)
+    expect(staleAnswer.body).toEqual({ error: 'The plan changed since you read it. Read it again.' })
+    expect(freshAnswer.status).toBe(201)
+    expect(readFileSync(tasksPath, 'utf8')).toContain('**C7b.')
   })
 
   it('keeps the line endings of TASKS.md when it adds the briefs', async () => {

@@ -102,6 +102,11 @@ export function pathAllowed(path, forbidden) {
   return true
 }
 
+function underTests(value) {
+  const target = foldedPath(value)
+  return target !== null && target.startsWith('tests/')
+}
+
 export function planPrompt({ goal, lanes, rules, ids } = {}) {
   const laneTable = lanes !== null && typeof lanes === 'object' ? lanes : {}
   const parts = rules !== null && typeof rules === 'object' ? rules : {}
@@ -195,6 +200,9 @@ function briefProblem(entry, id, { laneTable, used, counts, idsInPlan }) {
   const forbidden = Array.isArray(lane?.forbidden) ? lane.forbidden : []
   for (const file of [...files, ...tests, ...listedPaths(textOf(entry?.text))]) {
     if (!pathAllowed(file, forbidden)) return `Brief ${id} lets ${owner} touch ${file}, which lanes.json forbids.`
+  }
+  for (const test of tests) {
+    if (!underTests(test)) return `Brief ${id} names a test outside tests/: ${test}.`
   }
   if (tests.length === 0) return `Brief ${id} names no test.`
   const dashes = [textOf(entry?.title), textOf(entry?.text), ...files, ...tests]
