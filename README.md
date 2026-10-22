@@ -110,7 +110,7 @@ A lane is one agent with its own worktree and branch, listed in `docs/agents/lan
 - `C` toggle the control drawer
 - `?` toggle keyboard help
 
-MachineRoom prints and stores no key. The bridge reads the key it needs from the environment, and the assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second. The proxy route has no bridge and masks nothing.
+MachineRoom prints and stores no key. The bridge reads the key it needs from the environment, and the assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second. The proxy route has no bridge; the page masks the frames it reads itself, with the same rule and the same 1 second hold.
 
 ## Recordings
 

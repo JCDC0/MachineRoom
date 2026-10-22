@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The proxy route masks keys too (task U19): `openStream` in `src/live/source.js` runs one `createSplitMasker` per stream, holds a chunk whose tail could still grow into a key for at most 1 second, releases held frames on one timer, drops them on close and flushes them before a reconnect; tests in `tests/live.test.js`, and the README, the architecture's Known limits and the audit's N6 row say so.
 - Brief U19 (the proxy route masks keys too, for OpenCode). The UI audit table now records the fixes for N1 to N5 (U6 to U10a, 0.1.122 to 0.1.132).
 - Review note on G3d: no fixes. Every key, flag, default port and folder, query parameter, drawer tab and confirm card it names was checked against `src/ui/Hud.jsx`, `src/Stage.jsx`, `bin/machine-room.mjs`, `server/index.js` and the panels. It declined the brief's `never spends money without a confirm card`, because Start task creates a Paperclip task that can wake its agent with no card, and wrote that exception instead. It removed seven claims the code no longer backs, among them `--port` on `doctor`, a key check in `pack-check` and a lane run drawn live in the room.
 - Brief U18 (one runner replaces a stale lock, and nothing starts by its bare name, for OpenCode 2). The audit table now records that N7, N8 and N9 were fixed in 0.1.116 (U5d), and that a narrower race is left of N9.
