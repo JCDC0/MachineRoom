@@ -866,8 +866,8 @@ function runContractSuite(label, makeHarness) {
       const route = await client.suggestRoute(profile)
       expect(route).toEqual({
         tier: 'small',
-        choice: { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
-        reason: 'The small tier runs hermes on deepseek/deepseek-v4.1-flash-1017 at xhigh.',
+        choice: { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+        reason: 'The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.',
       })
 
       const escalated = await client.suggestRoute(profile, { failures: 1 })

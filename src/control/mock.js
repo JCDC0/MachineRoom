@@ -96,12 +96,12 @@ const SAMPLE_PLAN = {
 export const MOCK_POLICY = {
   tiers: {
     small: [
-      { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
-      { lane: 'hermes', model: 'minimax/minimax-m3.1-flash:free', reasoning: 'high', provider: 'openrouter' },
+      { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
     ],
     medium: [
       { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
+      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
     ],
     large: [
       { lane: 'agy', model: 'Gemini 4 Argon (Medium)', reasoning: 'medium', provider: 'antigravity' },

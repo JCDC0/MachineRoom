@@ -2,16 +2,16 @@
   "tiers": {
     "small": [
       {
-        "lane": "hermes",
-        "model": "deepseek/deepseek-v4.1-flash-1017",
-        "reasoning": "xhigh",
-        "provider": "openrouter"
+        "lane": "opencode2",
+        "model": "opencode-go/deepseek-v4.1-flash",
+        "reasoning": "max",
+        "provider": "opencode"
       },
       {
-        "lane": "hermes",
-        "model": "minimax/minimax-m3.1-flash:free",
+        "lane": "agy",
+        "model": "Gemini 3.8 Flash (High)",
         "reasoning": "high",
-        "provider": "openrouter"
+        "provider": "antigravity"
       }
     ],
     "medium": [
@@ -22,10 +22,10 @@
         "provider": "opencode"
       },
       {
-        "lane": "hermes",
-        "model": "deepseek/deepseek-v4.1-flash-1017",
-        "reasoning": "xhigh",
-        "provider": "openrouter"
+        "lane": "agy",
+        "model": "Gemini 3.8 Flash (High)",
+        "reasoning": "high",
+        "provider": "antigravity"
       }
     ],
     "large": [
