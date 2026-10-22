@@ -1,3 +1,4 @@
+import { createSplitMasker } from '../briefs/audit.js'
 import { basename } from '../model/paths.js'
 import { AGENT_ORDER } from '../model/pipeline.js'
 import { FOLDER_SHAPE_ACCEPT, readFileList } from './tree.js'
@@ -75,11 +76,28 @@ export function socketUrl(base, companyId) {
   return `${origin.replace(/^http/, 'ws')}/api/companies/${encodeURIComponent(companyId)}/events/ws`
 }
 
-export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, setTimer = setTimeout, clearTimer = clearTimeout }) {
+export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, setTimer = setTimeout, clearTimer = clearTimeout, now = Date.now }) {
   let socket = null
   let delay = BACKOFF_START
   let timer = null
+  let maskTimer = null
   let closed = false
+  const masker = createSplitMasker()
+
+  function release(out) {
+    for (const frame of out.frames) onFrame(frame)
+    if (maskTimer !== null) {
+      clearTimer(maskTimer)
+      maskTimer = null
+    }
+    if (closed) return
+    const at = masker.nextDue()
+    if (at === null) return
+    maskTimer = setTimer(() => {
+      maskTimer = null
+      if (!closed) release(masker.due(now()))
+    }, Math.max(0, at - now()))
+  }
 
   function connect() {
     onStatus('connecting')
@@ -90,12 +108,16 @@ export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, 
     }
     socket.onmessage = (event) => {
       try {
-        onFrame(JSON.parse(event.data))
+        release(masker.push(JSON.parse(event.data), now()))
       } catch {
         return
       }
     }
     socket.onclose = () => {
+      if (closed) return
+      try {
+        release(masker.flush())
+      } catch {}
       if (closed) return
       onStatus('reconnecting')
       timer = setTimer(connect, delay)
@@ -110,6 +132,8 @@ export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, 
     close() {
       closed = true
       clearTimer(timer)
+      clearTimer(maskTimer)
+      maskTimer = null
       socket?.close()
     },
   }

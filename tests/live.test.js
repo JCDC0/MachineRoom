@@ -158,6 +158,145 @@ describe('openStream', () => {
     expect(sockets[0].closed).toBe(true)
     expect(timers).toHaveLength(0)
   })
+
+  const KEY = 'sk-' + 'q'.repeat(40)
+
+  function logFrame(id, chunk, { runId = 'run-1', stream = 'stdout' } = {}) {
+    return {
+      id,
+      type: 'heartbeat.run.log',
+      createdAt: '2026-10-22T10:00:00.000Z',
+      payload: { runId, agentId: 'agent-1', seq: id, stream, chunk },
+    }
+  }
+
+  function statusFrame(id) {
+    return {
+      id,
+      type: 'heartbeat.run.status',
+      createdAt: '2026-10-22T10:00:01.000Z',
+      payload: { runId: 'run-1', status: 'running' },
+    }
+  }
+
+  function maskingHarness() {
+    const sockets = []
+    class FakeSocket {
+      constructor(url) {
+        this.url = url
+        sockets.push(this)
+      }
+      close() {
+        this.closed = true
+        this.onclose?.()
+      }
+    }
+    let clock = 0
+    let nextId = 1
+    const timers = new Map()
+    const frames = []
+    const statuses = []
+    const link = openStream({
+      url: 'ws://x',
+      onFrame: (frame) => frames.push(frame),
+      onStatus: (status) => statuses.push(status),
+      WebSocketImpl: FakeSocket,
+      setTimer: (fn, ms) => {
+        const id = nextId
+        nextId += 1
+        timers.set(id, { fn, at: clock + ms, ms })
+        return id
+      },
+      clearTimer: (id) => {
+        timers.delete(id)
+      },
+      now: () => clock,
+    })
+    function advance(ms) {
+      clock += ms
+      for (const [id, timer] of [...timers]) {
+        if (timer.at > clock) continue
+        timers.delete(id)
+        timer.fn()
+      }
+    }
+    return { sockets, timers, frames, statuses, link, advance }
+  }
+
+  it('masks a whole key in one chunk before onFrame sees it', () => {
+    const { sockets, frames, timers } = maskingHarness()
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(1, `reading ${KEY} now`)) })
+    expect(frames.map((frame) => frame.payload.chunk)).toEqual(['reading [key] now'])
+    expect(JSON.stringify(frames)).not.toContain(KEY.slice(-20))
+    expect(timers.size).toBe(0)
+  })
+
+  it('masks a key split across two chunks of one run and stream', () => {
+    const { sockets, frames, timers } = maskingHarness()
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(1, `reading ${KEY.slice(0, 12)}`)) })
+    expect(frames).toEqual([])
+    expect(timers.size).toBe(1)
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(2, `${KEY.slice(12)} now`)) })
+    expect(frames.map((frame) => frame.id)).toEqual([1, 2])
+    expect(frames.map((frame) => frame.payload.chunk)).toEqual(['reading [key]', ' now'])
+    expect(JSON.stringify(frames)).not.toContain(KEY.slice(-20))
+    expect(timers.size).toBe(0)
+  })
+
+  it('releases a held frame on the timer after one second with no second chunk', () => {
+    const { sockets, frames, timers, advance } = maskingHarness()
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(1, `reading ${KEY}`)) })
+    expect(frames).toEqual([])
+    expect([...timers.values()].map((timer) => timer.ms)).toEqual([1000])
+    advance(999)
+    expect(frames).toEqual([])
+    advance(1)
+    expect(frames.map((frame) => frame.payload.chunk)).toEqual(['reading [key]'])
+    expect(timers.size).toBe(0)
+  })
+
+  it('keeps a status frame behind a held chunk in its place', () => {
+    const { sockets, frames } = maskingHarness()
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(1, `reading ${KEY.slice(0, 12)}`)) })
+    sockets[0].onmessage({ data: JSON.stringify(statusFrame(2)) })
+    expect(frames).toEqual([])
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(3, `${KEY.slice(12)} now`)) })
+    expect(frames.map((frame) => frame.id)).toEqual([1, 2, 3])
+    expect(frames[0].payload.chunk).toBe('reading [key]')
+  })
+
+  it('passes a frame with no key through unchanged and at once', () => {
+    const { sockets, frames, timers } = maskingHarness()
+    const frame = statusFrame(1)
+    sockets[0].onmessage({ data: JSON.stringify(frame) })
+    expect(frames).toEqual([frame])
+    expect(timers.size).toBe(0)
+  })
+
+  it('leaves no timer after close and drops the held frame', () => {
+    const { sockets, frames, timers, link } = maskingHarness()
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(1, `reading ${KEY}`)) })
+    expect(frames).toEqual([])
+    expect(timers.size).toBe(1)
+    link.close()
+    expect(sockets[0].closed).toBe(true)
+    expect(timers.size).toBe(0)
+    expect(frames).toEqual([])
+  })
+
+  it('flushes a held frame before the new socket opens', () => {
+    const { sockets, timers, frames } = maskingHarness()
+    sockets[0].onmessage({ data: JSON.stringify(logFrame(1, `reading ${KEY}`)) })
+    expect(frames).toEqual([])
+    sockets[0].onclose()
+    expect(frames.map((frame) => frame.payload.chunk)).toEqual(['reading [key]'])
+    const reconnect = [...timers.values()][0]
+    expect(reconnect.ms).toBe(1000)
+    reconnect.fn()
+    expect(sockets).toHaveLength(2)
+    sockets[1].onmessage({ data: JSON.stringify(statusFrame(2)) })
+    expect(frames.map((frame) => frame.id)).toEqual([1, 2])
+  })
 })
 
 describe('incremental pipeline', () => {
