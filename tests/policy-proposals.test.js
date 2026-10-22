@@ -167,8 +167,8 @@ describe('proposePolicy', () => {
 
   it('leaves limits and quotaSkipPercent alone and changes no choice', () => {
     const rows = [
-      row(A.lane, A.model, 14, 6, 0.05),
-      row(B.lane, B.model, 11, 1, 0.03),
+      row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 0, 0.05),
+      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
       row('opencode', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.04),
     ]
     const answer = proposePolicy({ policy: POLICY_TEXT, rows })
@@ -208,9 +208,8 @@ describe('policyDiff', () => {
 
   it('writes a diff with the policy headers and three lines of context', () => {
     const rows = [
-      row(A.lane, A.model, 14, 6, 0.05),
-      row(B.lane, B.model, 11, 1, 0.03),
-      row('opencode', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.04),
+      row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
+      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
     ]
     const before = policyText(readPolicy(POLICY_TEXT))
     const after = policyText(proposePolicy({ policy: POLICY_TEXT, rows }).policy)
@@ -220,8 +219,8 @@ describe('policyDiff', () => {
     expect(lines[1]).toBe('+++ b/docs/agents/policy.json')
     expect(lines[2].startsWith('@@ ')).toBe(true)
     expect(lines.slice(3, 6).every((line) => line.startsWith(' '))).toBe(true)
-    expect(lines).toContain('-        "model": "deepseek/deepseek-v4.1-flash-1017",')
-    expect(lines).toContain('+        "model": "minimax/minimax-m3.1-flash:free",')
+    expect(lines).toContain('-        "lane": "opencode2",')
+    expect(lines).toContain('+        "lane": "opencode2",')
   })
 
   it('writes a diff that git apply takes', () => {
@@ -229,9 +228,8 @@ describe('policyDiff', () => {
     const file = join(dir, 'docs', 'agents', 'policy.json')
     mkdirSync(dirname(file), { recursive: true })
     const rows = [
-      row(A.lane, A.model, 14, 6, 0.05),
-      row(B.lane, B.model, 11, 1, 0.03),
-      row('opencode', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.04),
+      row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
+      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
     ]
     const before = policyText(readPolicy(POLICY_TEXT))
     const after = policyText(proposePolicy({ policy: POLICY_TEXT, rows }).policy)
@@ -245,9 +243,8 @@ describe('policyDiff', () => {
 
   it('writes a second hunk when the change is far from the first', () => {
     const rows = [
-      row(A.lane, A.model, 14, 6, 0.05),
-      row(B.lane, B.model, 11, 1, 0.03),
-      row('opencode', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.04),
+      row('opencode2', 'opencode-go/deepseek-v4.1-flash', 10, 10, 0.05),
+      row('agy', 'Gemini 3.8 Flash (High)', 11, 1, 0.03),
     ]
     const before = policyText(readPolicy(POLICY_TEXT))
     const swapped = policyText(proposePolicy({ policy: POLICY_TEXT, rows }).policy)

@@ -9,9 +9,10 @@ const ROOT = process.cwd()
 const SCRIPT = join(ROOT, 'scripts', 'policy-propose.mjs')
 const POLICY = join(ROOT, 'docs', 'agents', 'policy.json')
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-policy-propose-no-git-config')
-const HERMES = 'hermes'
-const A = 'deepseek/deepseek-v4.1-flash-1017'
-const B = 'minimax/minimax-m3.1-flash:free'
+const OPENCODE2 = 'opencode2'
+const AGY = 'agy'
+const A = 'opencode-go/deepseek-v4.1-flash'
+const B = 'Gemini 3.8 Flash (High)'
 const cleanups = []
 
 afterEach(() => {
@@ -60,12 +61,12 @@ function swapRecords() {
   const outcomes = []
   for (let index = 1; index <= 10; index += 1) {
     const branch = `feat/a${index}`
-    runs.push(record(HERMES, A, branch, 0.05))
+    runs.push(record(OPENCODE2, A, branch, 0.05))
     outcomes.push({ branch, outcome: index <= 7 ? 'merged' : 'rejected', fixes: 0 })
   }
   for (let index = 1; index <= 12; index += 1) {
     const branch = `feat/b${index}`
-    runs.push(record(HERMES, B, branch, 0.03))
+    runs.push(record(AGY, B, branch, 0.03))
     outcomes.push({ branch, outcome: index <= 11 ? 'merged' : 'rejected', fixes: 0 })
   }
   return { runs, outcomes }
@@ -96,7 +97,7 @@ describe('policy-propose command', () => {
 
     const result = runPolicy(temp, [])
     expect(result.status).toBe(0)
-    expect(result.stdout).toContain('Move hermes on minimax/minimax-m3.1-flash:free ahead of hermes on deepseek/deepseek-v4.1-flash-1017 in the small tier:')
+    expect(result.stdout).toContain('Move agy on Gemini 3.8 Flash (High) ahead of opencode2 on opencode-go/deepseek-v4.1-flash in the small tier:')
 
     const [name] = patchFiles(temp)
     expect(name).toBeTruthy()
@@ -121,12 +122,12 @@ describe('policy-propose command', () => {
     const outcomes = []
     for (let index = 1; index <= 10; index += 1) {
       const branch = `feat/a${index}`
-      runs.push(record(HERMES, A, branch, 0.05))
+      runs.push(record(OPENCODE2, A, branch, 0.05))
       outcomes.push({ branch, outcome: index <= 7 ? 'merged' : 'rejected', fixes: 0 })
     }
     for (let index = 1; index <= 3; index += 1) {
       const branch = `feat/b${index}`
-      runs.push(record(HERMES, B, branch, 0.03))
+      runs.push(record(AGY, B, branch, 0.03))
       outcomes.push({ branch, outcome: 'merged', fixes: 0 })
     }
     writeRecords(temp, runs, outcomes)

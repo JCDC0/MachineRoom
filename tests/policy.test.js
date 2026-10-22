@@ -96,8 +96,8 @@ describe('chooseRoute', () => {
   it('takes the first small choice', () => {
     const route = chooseRoute({ policy: policyFile(), profile: SMALL, quotas: [], spent: {} })
     expect(route.tier).toBe('small')
-    expect(route.choice).toEqual({ lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' })
-    expect(route.reason).toBe('The small tier runs hermes on deepseek/deepseek-v4.1-flash-1017 at xhigh.')
+    expect(route.choice).toEqual({ lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' })
+    expect(route.reason).toBe('The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.')
   })
 
   it('takes the first medium choice', () => {
@@ -109,8 +109,8 @@ describe('chooseRoute', () => {
   it('skips a provider above its quota and takes the next choice', () => {
     const route = chooseRoute({ policy: policyFile(), profile: MEDIUM, quotas: [over('opencode', 91)] })
     expect(route.tier).toBe('medium')
-    expect(route.choice.lane).toBe('hermes')
-    expect(route.choice.model).toBe('deepseek/deepseek-v4.1-flash-1017')
+    expect(route.choice.lane).toBe('agy')
+    expect(route.choice.model).toBe('Gemini 3.8 Flash (High)')
   })
 
   it('does not skip a provider at exactly the skip percent', () => {
@@ -119,19 +119,19 @@ describe('chooseRoute', () => {
   })
 
   it('does not skip a window with no percent', () => {
-    const quotas = [{ provider: 'openrouter', ok: true, windows: [window(null)] }]
+    const quotas = [{ provider: 'opencode', ok: true, windows: [window(null)] }]
     const route = chooseRoute({ policy: policyFile(), profile: SMALL, quotas })
-    expect(route.choice.model).toBe('deepseek/deepseek-v4.1-flash-1017')
+    expect(route.choice.model).toBe('opencode-go/deepseek-v4.1-flash')
   })
 
   it('does not skip a provider that could not be read', () => {
-    const quotas = [{ provider: 'openrouter', ok: false, error: 'Not available.', windows: [window(99)] }]
+    const quotas = [{ provider: 'opencode', ok: false, error: 'Not available.', windows: [window(99)] }]
     const route = chooseRoute({ policy: policyFile(), profile: SMALL, quotas })
-    expect(route.choice.model).toBe('deepseek/deepseek-v4.1-flash-1017')
+    expect(route.choice.model).toBe('opencode-go/deepseek-v4.1-flash')
   })
 
   it('gives no choice when every choice is skipped', () => {
-    const route = chooseRoute({ policy: policyFile(), profile: SMALL, quotas: [over('openrouter')] })
+    const route = chooseRoute({ policy: policyFile(), profile: SMALL, quotas: [over('opencode'), over('antigravity')] })
     expect(route.tier).toBe('small')
     expect(route.choice).toBeNull()
     expect(route.reason).toBe('Every choice for the small tier is above its quota.')
@@ -186,13 +186,13 @@ describe('chooseRoute', () => {
   it('routes when spend is under every limit', () => {
     const spent = { runUsd: 0.24, issueUsd: 0.99, agentMonthlyUsd: 9.99, companyMonthlyUsd: 29.99 }
     const route = chooseRoute({ policy: policyFile(), profile: SMALL, spent })
-    expect(route.choice.lane).toBe('hermes')
+    expect(route.choice.lane).toBe('opencode2')
   })
 
   it('takes a policy that readPolicy already read', () => {
     const policy = readPolicy(policyFile())
     const route = chooseRoute({ policy, profile: SMALL, quotas: [] })
-    expect(route.choice.model).toBe('deepseek/deepseek-v4.1-flash-1017')
+    expect(route.choice.model).toBe('opencode-go/deepseek-v4.1-flash')
   })
 
   it('gives the same answer for the same input', () => {

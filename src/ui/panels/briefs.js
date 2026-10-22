@@ -1,4 +1,4 @@
-export const VALID_LANES = Object.freeze(['hermes', 'opencode', 'agy'])
+export const VALID_LANES = Object.freeze(['hermes', 'opencode', 'opencode2', 'agy'])
 
 export const OWNER_LABELS = Object.freeze({
   hermes: 'Hermes',

@@ -8,7 +8,7 @@ export function agentForLane(lane, agents) {
   if (normLane === 'hermes') {
     return agents.find((agent) => agent?.adapterType === 'hermes_local') || null
   }
-  if (normLane === 'opencode') {
+  if (normLane === 'opencode' || normLane === 'opencode2') {
     return agents.find((agent) => agent?.adapterType === 'opencode_local') || null
   }
   if (normLane === 'agy') {

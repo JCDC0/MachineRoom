@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
+import { profileFromBrief } from '../src/policy/profile.js'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import { agentForLane, routeFields } from '../src/ui/panels/route.js'
 
@@ -39,6 +40,12 @@ describe('agentForLane', () => {
     expect(agent?.adapterType).toBe('opencode_local')
   })
 
+  it('maps opencode2 to the OpenCode agent', () => {
+    const agent = agentForLane('opencode2', SAMPLE_AGENTS)
+    expect(agent).toEqual(SAMPLE_AGENTS[2])
+    expect(agent?.adapterType).toBe('opencode_local')
+  })
+
   it('maps agy to a process agent named agy', () => {
     const agent = agentForLane('agy', SAMPLE_AGENTS)
     expect(agent).toEqual(SAMPLE_AGENTS[3])
@@ -65,6 +72,22 @@ describe('agentForLane', () => {
     expect(agentForLane(null, SAMPLE_AGENTS)).toBeNull()
     expect(agentForLane('hermes', null)).toBeNull()
     expect(agentForLane('hermes', undefined)).toBeNull()
+  })
+})
+
+describe('small brief route from the mock policy', () => {
+  it('routes a small brief to opencode2', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const brief = {
+      id: 'C4f',
+      owners: ['opencode2'],
+      text: 'Change `docs/agents/policy.json` and `tests/policy.test.js`. Files: `docs/agents/policy.json`, `tests/policy.test.js`. Tests in `tests/policy.test.js`.',
+    }
+    const route = await client.suggestRoute(profileFromBrief(brief))
+    expect(route.tier).toBe('small')
+    expect(route.choice.lane).toBe('opencode2')
+    expect(route.choice.model).toBe('opencode-go/deepseek-v4.1-flash')
+    expect(route.choice.reasoning).toBe('max')
   })
 })
 

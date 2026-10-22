@@ -9,12 +9,12 @@ import { makeTempDir } from './helpers/tempRoot.js'
 const POLICY = {
   tiers: {
     small: [
-      { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
-      { lane: 'hermes', model: 'minimax/minimax-m3.1-flash:free', reasoning: 'high', provider: 'openrouter' },
+      { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
     ],
     medium: [
       { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017', reasoning: 'xhigh', provider: 'openrouter' },
+      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
     ],
     large: [
       { lane: 'agy', model: 'Gemini 4 Argon (Medium)', reasoning: 'medium', provider: 'antigravity' },
@@ -158,7 +158,7 @@ describe('POST /api/control/route', () => {
     const paperclip = await startPaperclip({
       quota: [
         { provider: 'opencode', ok: true, windows: [{ label: 'Current week', usedPercent: 97, resetsAt: null, detail: null }] },
-        { provider: 'openrouter', ok: false, error: 'Usage not available', windows: [{ label: 'Current week', usedPercent: 100 }] },
+        { provider: 'antigravity', ok: false, error: 'Usage not available', windows: [{ label: 'Current week', usedPercent: 100 }] },
       ],
     })
     const { url } = await startRouteBridge({ paperclipUrl: paperclip.url })
@@ -166,10 +166,10 @@ describe('POST /api/control/route', () => {
     expect(answer.status).toBe(200)
     expect(answer.body.tier).toBe('medium')
     expect(answer.body.choice).toEqual({
-      lane: 'hermes',
-      model: 'deepseek/deepseek-v4.1-flash-1017',
-      reasoning: 'xhigh',
-      provider: 'openrouter',
+      lane: 'agy',
+      model: 'Gemini 3.8 Flash (High)',
+      reasoning: 'high',
+      provider: 'antigravity',
     })
   })
 
