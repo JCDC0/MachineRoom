@@ -26,13 +26,21 @@ export function planeToWorld(spot, out = new THREE.Vector3()) {
   )
 }
 
-export function viewInput(state, pinned = []) {
-  const files = []
-  for (const file of state.files.values()) if (file.exists) files.push(file.path)
+function viewFocus(state, pinned) {
   const focus = ['']
   for (const agent of state.agents.values()) focus.push(...(agent.focus ?? []))
   focus.push(...(state.recent ? freshRecent(state) : []), ...pinned)
-  return { files, focus, touched: state.recent ?? [] }
+  return focus
+}
+
+export function viewInput(state, pinned = []) {
+  const files = []
+  for (const file of state.files.values()) if (file.exists) files.push(file.path)
+  return { files, focus: viewFocus(state, pinned), touched: state.recent ?? [] }
+}
+
+export function viewKey(state, pinned = []) {
+  return `${state.existingFiles}|${viewFocus(state, pinned).join('\n')}|${(state.recent ?? []).join('\n')}`
 }
 
 export function cardHeight(rows) {
@@ -191,10 +199,10 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   }
 
   function recompute(state) {
-    const input = viewInput(state, [...pinned])
-    const key = `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
+    const key = viewKey(state, [...pinned])
     if (key === planKey) return false
     planKey = key
+    const input = viewInput(state, [...pinned])
     plan = new Map(planFolderView(input).map((view) => [view.path, view]))
     for (const card of [...cards.values()]) if (!plan.has(card.path)) removeCard(card)
     const views = [...plan.values()].sort((a, b) => a.path.length - b.path.length)

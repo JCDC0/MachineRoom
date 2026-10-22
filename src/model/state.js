@@ -5,8 +5,11 @@ export const CALL_LIMIT = 500
 
 export function createState(tree, agents) {
   const files = new Map()
+  let missingFiles = 0
   for (const path of tree.files) {
-    files.set(path, { path, exists: !tree.created.includes(path), reads: 0, writes: 0, failed: false, yellow: false })
+    const exists = !tree.created.includes(path)
+    if (!exists) missingFiles += 1
+    files.set(path, { path, exists, reads: 0, writes: 0, failed: false, yellow: false })
   }
   const dirs = new Map()
   for (const path of tree.dirs) dirs.set(path, { path, opened: false })
@@ -29,7 +32,19 @@ export function createState(tree, agents) {
       focus: [],
     })
   }
-  return { files, dirs, agents: roster, now: 0, recent: [], recentAt: new Map(), latest: 0 }
+  return {
+    files,
+    dirs,
+    agents: roster,
+    now: 0,
+    recent: [],
+    recentAt: new Map(),
+    latest: 0,
+    missingFiles,
+    get existingFiles() {
+      return this.files.size - this.missingFiles
+    },
+  }
 }
 
 function say(agent, text, tone = 'normal') {
@@ -65,6 +80,7 @@ function ensureFile(state, path) {
   if (!file) {
     file = { path, exists: false, reads: 0, writes: 0, failed: false, yellow: false }
     state.files.set(path, file)
+    state.missingFiles += 1
     ancestors(path).forEach((dir) => {
       if (!state.dirs.has(dir)) state.dirs.set(dir, { path: dir, opened: false })
     })
@@ -93,7 +109,10 @@ function applyTouch(state, agent, touch) {
     file.reads += 1
   } else {
     file.writes += 1
-    file.exists = true
+    if (!file.exists) {
+      file.exists = true
+      state.missingFiles -= 1
+    }
     file.failed = false
     agent.runWrites.add(touch.path)
   }
