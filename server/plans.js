@@ -53,6 +53,16 @@ export function createPlansApi(options) {
   const briefsDir = options.briefsDir ?? ''
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
+  let acceptQueue = Promise.resolve()
+
+  function queuedAccept(task) {
+    const run = acceptQueue.then(task, task)
+    acceptQueue = run.then(
+      () => undefined,
+      () => undefined,
+    )
+    return run
+  }
 
   async function upstream(method, path, body) {
     const signal = AbortSignal.timeout(timeoutMs)
@@ -332,7 +342,7 @@ export function createPlansApi(options) {
         fail(req, res, 404, 'That task no longer exists.')
         return true
       }
-      await acceptPlan(req, res, issueId)
+      await queuedAccept(() => acceptPlan(req, res, issueId))
       return true
     }
 

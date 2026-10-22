@@ -199,6 +199,13 @@ describe('parsePlan', () => {
     expect(problems(plan(good({ tests: [] })))).toEqual(['Brief C7a names no test.'])
   })
 
+  it('says a brief names a test outside tests/', () => {
+    expect(problems(plan(good({ tests: ['src/a.test.js'] })))).toEqual([
+      'Brief C7a names a test outside tests/: src/a.test.js.',
+    ])
+    expect(problems(plan(good({ tests: ['tests/a.test.js'] })))).toEqual([])
+  })
+
   it('says a brief has an em dash', () => {
     expect(problems(plan(good({ text: 'Do the thing \u2014 now.' })))).toEqual(['Brief C7a has an em dash.'])
     expect(problems(plan(good({ title: 'A \u2014 plan' })))).toEqual(['Brief C7a has an em dash.'])
