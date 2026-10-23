@@ -11,6 +11,7 @@ import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
+import { createLanesSource } from './lanes-source.js'
 import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
 import { createReviewsApi } from './reviews.js'
@@ -409,6 +410,16 @@ export function createBridge(options = {}) {
     timeoutMs: options.decideTimeoutMs,
   })
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
+  const lanesSourceOption = options.lanesSource
+  const lanesSourceOn =
+    lanesSourceOption === true || (lanesSourceOption !== null && typeof lanesSourceOption === 'object') || env.MACHINEROOM_LANES === '1'
+  const lanesSource = lanesSourceOn
+    ? createLanesSource({
+        ...(lanesSourceOption !== null && typeof lanesSourceOption === 'object' ? lanesSourceOption : {}),
+        projectRoot,
+        onFrame: (frame) => accept(frame),
+      })
+    : null
 
   const clients = new Set()
   const treeSent = new WeakMap()
@@ -594,14 +605,22 @@ export function createBridge(options = {}) {
     return Array.isArray(raw) ? raw : Array.isArray(raw?.agents) ? raw.agents : Array.isArray(raw?.data) ? raw.data : []
   }
 
+  function rememberLaneParsers() {
+    if (!lanesSource) return
+    for (const agent of lanesSource.agents) {
+      if (agent.id !== '') parserByAgentId.set(String(agent.id), agent.parser)
+    }
+  }
+
   function rememberAgents(list) {
-    const taken = new Set()
+    const taken = new Set(lanesSource ? lanesSource.agents.map((agent) => agent.key) : [])
     const agents = list.map((entry) => mapAgent(entry, taken))
     const parsers = new Map()
     for (const agent of agents) {
       if (agent.id !== '') parsers.set(String(agent.id), agent.parser)
     }
     parserByAgentId = parsers
+    rememberLaneParsers()
     return agents
   }
 
@@ -1043,17 +1062,26 @@ export function createBridge(options = {}) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/agents') {
+      const laneAgents = lanesSource ? [...lanesSource.agents] : []
       try {
         const upstream = await fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, {
           signal: AbortSignal.timeout(upstreamTimeoutMs),
         })
         if (!upstream.ok) {
+          if (lanesSource) {
+            sendJson(req, res, 200, laneAgents)
+            return
+          }
           sendJson(req, res, 502, { error: `upstream answered ${upstream.status}` })
           return
         }
         const raw = await upstream.json()
-        sendJson(req, res, 200, rememberAgents(agentListOf(raw)))
+        sendJson(req, res, 200, [...rememberAgents(agentListOf(raw)), ...laneAgents])
       } catch {
+        if (lanesSource) {
+          sendJson(req, res, 200, laneAgents)
+          return
+        }
         sendJson(req, res, 502, { error: 'upstream unreachable' })
       }
       return
@@ -1150,6 +1178,7 @@ export function createBridge(options = {}) {
   })
 
   async function start() {
+    lanesSource?.start()
     await startWatcher()
     if (stopped) throw new Error('The bridge stopped before it started.')
     startSurfaceTimer()
@@ -1179,6 +1208,7 @@ export function createBridge(options = {}) {
       maskTimer = null
     }
     runs.stopAll()
+    lanesSource?.stop()
     clearInterval(heartbeatTimer)
     if (surfaceTimer) {
       clearInterval(surfaceTimer)

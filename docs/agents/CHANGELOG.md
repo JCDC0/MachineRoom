@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge shows lane runs live from the `run-lane` logs with `--lanes` or `MACHINEROOM_LANES=1`: it watches `%TEMP%\machineroom-runs`, sends each complete line as a frame through `accept()`, lists the lane agents in `/api/agents`, and ends a run on its record or after 10 quiet minutes (task S6a).
 - Brief S6a: the bridge shows lane runs live from the `run-lane` logs, the owner's choice of run-lane as a service.
 - `docs/agents/SOURCES.md`: what Paperclip costs the room, and a plan for a direct live source from `run-lane` (S6a to S6d), AGY's children from their transcripts, Claude Code hooks, and an ACP probe; a design note for after Saturday.
 - Review note on Q4: no fixes. Six findings from 0.1.201 to 0.1.222, W1 (Medium: a recent touch's folder can be stacked and hidden while its parent is drawn open) and W2 to W6 (Low), each with its check; W5 and W6 are marked unproved. Briefs Q4a and Q4b fix them.
