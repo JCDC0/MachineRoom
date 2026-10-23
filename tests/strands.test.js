@@ -19,7 +19,7 @@ describe('strandPoints', () => {
     }
   })
 
-  it('different seeds give different scatter offsets', () => {
+  it('different seeds give different point spacing', () => {
     const pts1 = strandPoints(curve, 24, 1)
     const pts2 = strandPoints(curve, 24, 2)
     expect(pts1.length).toBe(pts2.length)
@@ -62,14 +62,28 @@ describe('strandPoints', () => {
     expect(strandPoints(curve, -10, 0)).toEqual([])
   })
 
-  it('places points along the straight line within the scatter', () => {
+  it('keeps every point on the line', () => {
     const pts = strandPoints(curve, 24, 5)
     expect(pts.length).toBe(10)
     pts.forEach((pt) => {
-      expect(pt.x).toBeGreaterThanOrEqual(-10)
-      expect(pt.x).toBeLessThanOrEqual(250)
-      // Scatter is small, within 15 units of y sag
-      expect(Math.abs(pt.z)).toBeLessThanOrEqual(15)
+      expect(pt.y).toBe(0)
+      expect(pt.z).toBe(0)
+      expect(pt.x).toBeGreaterThanOrEqual(0)
+      expect(pt.x).toBeLessThanOrEqual(240)
+    })
+  })
+
+  it('keeps every point on a diagonal line', () => {
+    const from = new THREE.Vector3(-120, 40, 75)
+    const to = new THREE.Vector3(300, -160, -225)
+    const span = new THREE.Vector3().subVectors(to, from)
+    strandPoints({ a: from, b: to }, 24, 9).forEach((pt) => {
+      const offset = new THREE.Vector3().subVectors(pt, from)
+      const cross = new THREE.Vector3().crossVectors(offset, span)
+      expect(cross.length()).toBeLessThan(1e-6)
+      const along = offset.dot(span) / span.lengthSq()
+      expect(along).toBeGreaterThanOrEqual(0)
+      expect(along).toBeLessThanOrEqual(1)
     })
   })
 })
