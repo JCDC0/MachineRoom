@@ -13,7 +13,6 @@ const MEASURED_MS = {
   'planFolderView, one new file': 10.6,
   'layoutCards (cold)': 11,
   'layoutCards (warm)': 21,
-  planCollapse: 16,
   'pipeline, Hermes read or shell line (mean)': 2.7,
   'pipeline, Hermes read or shell line (worst)': 9,
   packTree: 48,
