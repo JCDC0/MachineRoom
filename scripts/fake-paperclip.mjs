@@ -35,7 +35,12 @@ const SEED_AGENTS = [
   { name: 'Hermes', urlKey: 'hermes', adapterType: 'hermes_local', role: 'engineer', model: 'auto' },
   { name: 'OpenCode Go', urlKey: 'opencode-go', adapterType: 'opencode_local', role: 'engineer', model: 'opencode/fake-free' },
   { name: 'agy', urlKey: 'agy', adapterType: 'process', role: 'engineer', model: null },
+  { name: 'Orchestrator', urlKey: 'orchestrator', adapterType: 'opencode_local', role: 'ceo', model: 'opencode/fake-free' },
 ]
+const FIXTURE_AGENT_KEYS = new Map([
+  ['orchestrator', 'orchestrator'],
+  ['opencode', 'opencode-go'],
+])
 const KIND_PREFIX = new Map([
   ['company', 'c0000000'],
   ['agent', 'a0000000'],
@@ -240,6 +245,11 @@ export function loadScripts(fixturesDir = FIXTURES_DIR) {
     }
     for (const agent of Array.isArray(agentsFile?.agents) ? agentsFile.agents : []) {
       const adapterType = String(agent?.adapterType ?? '')
+      const fakeKey = FIXTURE_AGENT_KEYS.get(String(agent?.key ?? ''))
+      if (fakeKey) {
+        const steps = scriptOf(frames, agent.id)
+        if (steps) scripts.set(fakeKey, { source: runFile, steps })
+      }
       if (!adapterType || scripts.has(adapterType)) continue
       const steps = scriptOf(frames, agent.id)
       if (steps) scripts.set(adapterType, { source: runFile, steps })
@@ -569,7 +579,7 @@ export async function startFakePaperclip(options = {}) {
     const runId = state.next('run')
     const run = { id: runId, agentId: agent.id, issueId: issue.id, status: 'queued', log: '', createdAt: new Date().toISOString(), startedAt: null, finishedAt: null, lastOutputAt: null }
     state.runs.set(runId, run)
-    const script = scripts.get(agent.adapterType) ?? builtInScript(issue.title)
+    const script = scripts.get(agent.urlKey) ?? scripts.get(agent.adapterType) ?? builtInScript(issue.title)
     emit('heartbeat.run.queued', {
       runId,
       agentId: agent.id,
@@ -1150,7 +1160,7 @@ function describeRoutes(list) {
 export function startupLines(fake, options = {}) {
   const lines = [`Fake Paperclip on ${fake.url}`, `Company: ${fake.companyId}`]
   for (const agent of fake.agents) {
-    const script = fake.scripts.get(agent.adapterType)
+    const script = fake.scripts.get(agent.urlKey) ?? fake.scripts.get(agent.adapterType)
     lines.push(`Agent: ${agent.name} (${agent.adapterType}), runs ${script ? script.source : 'the built-in script'}`)
   }
   if (options.missing?.length) lines.push(`Missing: ${describeRoutes(options.missing)}`)

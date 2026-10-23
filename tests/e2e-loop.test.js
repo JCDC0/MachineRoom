@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { runDoctor } from '../server/doctor.js'
 import { FEATURES } from '../server/surface.js'
 import { FAKE_VERSION, LIVE_CHUNK_LIMIT, parseFakeArgs } from '../scripts/fake-paperclip.mjs'
+import { isOrchestrator } from '../src/engine/shapes.js'
 import { makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
@@ -52,7 +53,7 @@ describe('the whole loop through the bridge and the fake Paperclip', () => {
     expect(health.features).toEqual(Object.fromEntries(FEATURES.map((name) => [name, true])))
 
     const { agents, tree } = await roomInputs(url)
-    expect(agents.map((agent) => agent.key)).toEqual(['claude', 'hermes', 'opencode', 'agy'])
+    expect(agents.map((agent) => agent.key)).toEqual(['claude', 'hermes', 'opencode', 'agy', 'orchestrator'])
     expect(tree.files).toContain('src/math.js')
     const hermes = agents.find((agent) => agent.key === 'hermes')
 
@@ -107,6 +108,32 @@ describe('the whole loop through the bridge and the fake Paperclip', () => {
     const after = (await getJson(`${url}/api/backup`)).body
     expect(after.ageHours).toBe(0)
     expect(Date.parse(after.latestAt)).toBeGreaterThan(Date.parse(before.latestAt))
+  })
+
+  it('carries the orchestrator and two subagents from the fake Paperclip', async () => {
+    const { url } = await loop()
+    await waitForPaperclip(url)
+    const { agents, tree } = await roomInputs(url)
+    const orchestrator = agents.find((agent) => agent.key === 'orchestrator')
+    expect(orchestrator).toMatchObject({ name: 'Orchestrator', role: 'ceo', adapterType: 'opencode_local' })
+    expect(isOrchestrator(orchestrator)).toBe(true)
+
+    const opencode = agents.find((agent) => agent.key === 'opencode')
+    const created = await postJson(`${url}/api/control/issues`, {
+      title: 'Survey the exports',
+      assigneeAgentId: opencode.id,
+      confirmed: true,
+    })
+    expect(created.status).toBe(201)
+    const frames = await readFrames(url, runEnded(opencode.id))
+    const { state, activities } = playFrames(frames, agents, tree)
+    const mine = activities.filter((activity) => activity.agent === 'opencode')
+    const spawns = mine.filter((activity) => activity.type === 'agent.spawn')
+    const ends = activities.filter((activity) => activity.type === 'agent.end' && activity.agent.startsWith('opencode~'))
+    expect(spawns.map((activity) => activity.child)).toEqual(['opencode~1', 'opencode~2'])
+    expect(spawns.map((activity) => activity.name)).toEqual(['Count the exported functions', 'Check the test names'])
+    expect(ends.map((activity) => activity.agent)).toEqual(['opencode~1', 'opencode~2'])
+    expect(state.agents.get('opencode')).toMatchObject({ status: 'done', runs: 1 })
   })
 
   it('decides an approval, sets a budget and hires an agent through the control routes', async () => {
