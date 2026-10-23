@@ -12,7 +12,9 @@ import { dirname, makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
-import { cardSize, viewInput } from '../src/engine/cards.js'
+import { cardSize, overviewSpheres, viewInput } from '../src/engine/cards.js'
+import { fitView } from '../src/engine/camera.js'
+import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import { layoutSphere, sphereOverlaps } from '../src/engine/sphere.js'
 import {
   AGENTS,
@@ -128,6 +130,8 @@ export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2
   let moves = 0
   let worstMove = 0
   let tallest = 0
+  const overview = []
+  const hub = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
   for (const activity of activities) {
     apply(state, activity)
     const input = viewInput(state, [])
@@ -144,6 +148,13 @@ export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2
     }
     layouts += 1
     if (sphereOverlaps(entries, placed).length > 0) overlapping += 1
+    const viewByPath = new Map(views.map((view) => [view.path, view]))
+    const fitCards = entries.map((entry) => ({
+      path: entry.path,
+      home: placed.get(entry.path),
+      view: viewByPath.get(entry.path),
+    }))
+    overview.push(fitView([hub, ...overviewSpheres(fitCards)], { aspect: 1.6 }).dist)
     if (previous) {
       const shared = [...placed.keys()].filter((path) => previous.has(path))
       if (shared.length > 0) {
@@ -169,7 +180,15 @@ export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2
     if (high > low) tallest = Math.max(tallest, high - low)
     previous = placed
   }
-  return { layouts, overlapping, moves, worstMove, tallest }
+  return {
+    layouts,
+    overlapping,
+    moves,
+    worstMove,
+    tallest,
+    overviewMedian: overview.length > 0 ? median(overview) : 0,
+    overviewLargest: overview.length > 0 ? Math.max(...overview) : 0,
+  }
 }
 
 export async function runProbe(options = {}) {
@@ -284,6 +303,13 @@ export async function runProbe(options = {}) {
     ms: chain.tallest,
     budget: null,
     size: `${Math.round(chain.tallest)} units`,
+  })
+  rows.push({
+    stage: 'overview distance',
+    runsAt: 'chain',
+    ms: chain.overviewMedian,
+    budget: null,
+    size: `largest ${Math.round(chain.overviewLargest)} units`,
   })
 
   const frames = hermesFrames(tree, { seed: settings.seed })
