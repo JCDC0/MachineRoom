@@ -102,6 +102,18 @@ function lineBetween(material) {
 }
 
 function setEnds(line, a, b) {
+  const last = line.userData.ends
+  if (
+    last &&
+    last[0] === a.x &&
+    last[1] === a.y &&
+    last[2] === a.z &&
+    last[3] === b.x &&
+    last[4] === b.y &&
+    last[5] === b.z
+  ) {
+    return
+  }
   const array = line.geometry.attributes.position.array
   array[0] = a.x
   array[1] = a.y
@@ -109,6 +121,7 @@ function setEnds(line, a, b) {
   array[3] = b.x
   array[4] = b.y
   array[5] = b.z
+  line.userData.ends = [a.x, a.y, a.z, b.x, b.y, b.z]
   line.geometry.attributes.position.needsUpdate = true
 }
 
@@ -130,6 +143,7 @@ export function createAgents(scene, roster, cssScene = null) {
   const rosterKeys = new Set(roster.map((agent) => agent.key))
   const usedShapes = new Set(shapes)
   const retired = new Map()
+  const pendingChipRemovals = new Set()
   let parkedIndex = 0
 
   function addView(agent, { index, shapeName, home, scale = 1, parentKey = null }) {
@@ -200,7 +214,9 @@ export function createAgents(scene, roster, cssScene = null) {
     return view
   }
 
-  function removeView(view) {
+  function removeView(view, chips = null) {
+    if (chips) chips.remove?.(view.key)
+    else pendingChipRemovals.add(view.key)
     view.callout.object.removeFromParent()
     view.callout.element.remove()
     scene.remove(view.group, view.link, view.stripA, view.stripB, view.calloutLine)
@@ -227,10 +243,10 @@ export function createAgents(scene, roster, cssScene = null) {
     return index
   }
 
-  function syncViews(state) {
+  function syncViews(state, chips = null) {
     for (const view of [...views.values()]) {
       if (rosterKeys.has(view.key)) continue
-      if (!state.agents.has(view.key)) removeView(view)
+      if (!state.agents.has(view.key)) removeView(view, chips)
     }
     for (const entry of state.agents.values()) {
       if (!entry.parent || rosterKeys.has(entry.key) || views.has(entry.key)) continue
@@ -299,9 +315,11 @@ export function createAgents(scene, roster, cssScene = null) {
       camUp.crossVectors(world.back, world.right).normalize()
       rotMatrix.makeBasis(world.right, camUp, world.back)
     }
+    for (const key of pendingChipRemovals) terminals.remove?.(key)
+    pendingChipRemovals.clear()
     const isStill = still()
     const ended = []
-    syncViews(state)
+    syncViews(state, terminals)
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
@@ -347,11 +365,12 @@ export function createAgents(scene, roster, cssScene = null) {
       }
 
       const lastLine = entry?.lines?.[entry.lines.length - 1]
+      const lastFailed = lastLine?.tone === 'error'
       const failedFresh = status === 'error' && now - view.doneAt < DONE_GLOW_MS
       let calloutTone = null
       let calloutText = ''
       if (working) {
-        calloutTone = lastLine?.tone === 'error' ? 'error' : 'working'
+        calloutTone = lastFailed ? 'error' : 'working'
         calloutText = entry.label
       } else if (failedFresh) {
         calloutTone = 'error'
@@ -410,7 +429,8 @@ export function createAgents(scene, roster, cssScene = null) {
       const pointer = view.pointer ?? (working ? focusPointer(state, entry) : null)
       let color = null
       if (pointer) {
-        if (working) color = YELLOW
+        if (working && lastFailed) color = RED
+        else if (working) color = YELLOW
         else if (fresh) color = GREEN
         else if (status === 'error') color = RED
       }
@@ -442,7 +462,7 @@ export function createAgents(scene, roster, cssScene = null) {
       if (item.entry) retired.set(item.view.key, item.entry)
       terminals.setVisible?.(item.view.key, false)
       terminals.setOpen?.(item.view.key, false)
-      removeView(item.view)
+      removeView(item.view, terminals)
     }
   }
 
@@ -466,6 +486,7 @@ export function createAgents(scene, roster, cssScene = null) {
 
   function dispose() {
     for (const view of [...views.values()]) removeView(view)
+    pendingChipRemovals.clear()
     views.clear()
     pickables.length = 0
   }
