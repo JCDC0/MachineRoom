@@ -3,6 +3,7 @@ import { parseFrames, prepare } from './source.js'
 
 const INDEX_LIMIT = 50
 const READ_FAILED = 'The list of recordings could not be read.'
+const FIXTURE_NAME = /^scenario-[a-z]$/
 
 async function fetchOk(url) {
   const response = await fetch(url)
@@ -10,14 +11,18 @@ async function fetchOk(url) {
   return response
 }
 
-export function replayFiles(recording = null) {
+export function replayFiles(recording = null, fixture = null) {
+  if (!recording && typeof fixture === 'string' && FIXTURE_NAME.test(fixture)) {
+    const stem = `fixtures/${fixture}`
+    return { run: `${stem}-run.jsonl`, agents: `${stem}-agents.json`, tree: `${stem}-tree.json` }
+  }
   if (!recording) return { run: 'fixtures/sandbox-run.jsonl', agents: 'fixtures/agents.json', tree: 'fixtures/sandbox-tree.json' }
   const stem = `recordings/${recording}`
   return { run: `${stem}-run.jsonl`, agents: `${stem}-agents.json`, tree: `${stem}-tree.json` }
 }
 
-export async function loadReplay({ base = import.meta.env.BASE_URL, recording = null } = {}) {
-  const files = replayFiles(recording)
+export async function loadReplay({ base = import.meta.env.BASE_URL, recording = null, fixture = null } = {}) {
+  const files = replayFiles(recording, fixture)
   try {
     const [run, agents, tree] = await Promise.all([
       fetchOk(`${base}${files.run}`).then((response) => response.text()),
@@ -26,8 +31,9 @@ export async function loadReplay({ base = import.meta.env.BASE_URL, recording = 
     ])
     return prepare({ frames: parseFrames(run), agentsFile: agents, treeFile: tree })
   } catch (error) {
-    if (!recording) throw error
-    throw new Error(`The recording ${recording} could not be loaded. Make it with npm run run-recording -- <position>, then open the page again.`)
+    if (recording) throw new Error(`The recording ${recording} could not be loaded. Make it with npm run run-recording -- <position>, then open the page again.`)
+    if (typeof fixture === 'string' && FIXTURE_NAME.test(fixture)) throw new Error(`The fixture ${fixture} could not be loaded.`)
+    throw error
   }
 }
 

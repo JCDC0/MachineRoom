@@ -84,7 +84,7 @@ export default function App() {
       ? loadLive(route.connection, params)
       : scale !== null
         ? Promise.resolve(createScaleReplay(scale))
-        : loadReplay({ recording: recordingName(params) })
+        : loadReplay({ recording: recordingName(params), fixture: params.get('fixture') })
     wanted
       .then((data) => {
         if (current) setSource({ status: data.live || data.activities.length > 0 ? 'ready' : 'empty', data })
