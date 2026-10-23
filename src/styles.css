@@ -4087,6 +4087,48 @@ summary:focus-visible,
   pointer-events: auto;
 }
 
+.mr-card-bracket {
+  display: none;
+  position: absolute;
+  z-index: 4;
+  width: 14px;
+  height: 14px;
+  border: 0 solid var(--yellow);
+  pointer-events: none;
+}
+
+.mr-card.is-targeted .mr-card-bracket {
+  display: block;
+}
+
+.mr-card-bracket.is-tl {
+  top: -7px;
+  left: -7px;
+  border-top-width: 2px;
+  border-left-width: 2px;
+}
+
+.mr-card-bracket.is-tr {
+  top: -7px;
+  right: -7px;
+  border-top-width: 2px;
+  border-right-width: 2px;
+}
+
+.mr-card-bracket.is-bl {
+  bottom: -7px;
+  left: -7px;
+  border-bottom-width: 2px;
+  border-left-width: 2px;
+}
+
+.mr-card-bracket.is-br {
+  bottom: -7px;
+  right: -7px;
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+}
+
 .mr-card-face {
   position: relative;
   z-index: 1;

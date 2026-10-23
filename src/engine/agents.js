@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
-import { HUB_CENTER, PARK_LIFT, slotPoint } from './hub.js'
-import { folderRoute } from './route.js'
+import { dirname } from '../model/paths.js'
+import { HUB_CENTER, ORCHESTRATOR_HOME, PARK_LIFT, slotPoint } from './hub.js'
 import { isOrchestrator, shapeGeometry, shapesFor } from './shapes.js'
 import { GREEN, RED, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 
@@ -12,11 +12,13 @@ const STYLE = {
   error: { color: RED, opacity: 1, spin: 0.3 },
   done: { color: GREEN, opacity: 1, spin: 0.25 },
 }
-const TRAVEL_SPEED = 3400
-const ARRIVE = 170
 const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
-const AGENT_FRONT = 220
+const STRIP_RISE = 190
+const STRIP_RUN = 120
+const STRIP_WIDTH = 9
+const STRIP_OPACITY = 0.9
+const BRACKETS = ['tl', 'tr', 'bl', 'br']
 
 export function nameLabel(name) {
   if (typeof name !== 'string') return ''
@@ -24,10 +26,33 @@ export function nameLabel(name) {
   return label.length > 32 ? `${label.slice(0, 31)}~` : label
 }
 
-const heading = new THREE.Vector3()
+export function stripPoints(from, to, { rise = STRIP_RISE, run = STRIP_RUN, side = 1, right = null } = {}) {
+  const start = { x: from.x, y: from.y, z: from.z }
+  const end = { x: to.x, y: to.y, z: to.z }
+  let ux
+  let uz
+  if (right) {
+    const flat = Math.hypot(right.x, right.z) || 1
+    ux = (-right.x / flat) * side
+    uz = (-right.z / flat) * side
+  } else {
+    const dx = end.x - start.x
+    const dz = end.z - start.z
+    const flat = Math.hypot(dx, dz)
+    ux = flat > 1e-9 ? dx / flat : 1
+    uz = flat > 1e-9 ? dz / flat : 0
+  }
+  return [
+    start,
+    { x: start.x, y: start.y + rise, z: start.z },
+    { x: end.x - ux * run, y: end.y, z: end.z - uz * run },
+    end,
+  ]
+}
+
 const chipNear = new THREE.Vector3()
-const chipFar = new THREE.Vector3()
 const traceEnd = new THREE.Vector3()
+const stripStart = new THREE.Vector3()
 const calloutPos = new THREE.Vector3()
 const camUp = new THREE.Vector3()
 const rotMatrix = new THREE.Matrix4()
@@ -59,6 +84,15 @@ function lineBetween(material) {
   return line
 }
 
+function bandLine(material) {
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Array(12).fill(0), 3))
+  const line = new THREE.Line(geometry, material)
+  line.frustumCulled = false
+  line.visible = false
+  return line
+}
+
 function setEnds(line, a, b) {
   const array = line.geometry.attributes.position.array
   array[0] = a.x
@@ -68,6 +102,42 @@ function setEnds(line, a, b) {
   array[4] = b.y
   array[5] = b.z
   line.geometry.attributes.position.needsUpdate = true
+}
+
+function setPoints(line, points) {
+  const array = line.geometry.attributes.position.array
+  for (let index = 0; index < points.length; index += 1) {
+    const point = points[index]
+    array[index * 3] = point.x
+    array[index * 3 + 1] = point.y
+    array[index * 3 + 2] = point.z
+  }
+  line.geometry.attributes.position.needsUpdate = true
+}
+
+function bandEdges(points, right, up, width) {
+  const half = width / 2
+  const front = []
+  const back = []
+  for (let index = 0; index < points.length; index += 1) {
+    const previous = points[Math.max(0, index - 1)]
+    const next = points[Math.min(points.length - 1, index + 1)]
+    const dx = next.x - previous.x
+    const dy = next.y - previous.y
+    const dz = next.z - previous.z
+    const tx = dx * right.x + dy * right.y + dz * right.z
+    const ty = dx * up.x + dy * up.y + dz * up.z
+    const length = Math.hypot(tx, ty) || 1
+    const nx = -ty / length
+    const ny = tx / length
+    const offsetX = right.x * nx * half + up.x * ny * half
+    const offsetY = right.y * nx * half + up.y * ny * half
+    const offsetZ = right.z * nx * half + up.z * ny * half
+    const point = points[index]
+    front.push({ x: point.x + offsetX, y: point.y + offsetY, z: point.z + offsetZ })
+    back.push({ x: point.x - offsetX, y: point.y - offsetY, z: point.z - offsetZ })
+  }
+  return { front, back }
 }
 
 function flatRing(radius, opacity, y) {
@@ -80,15 +150,54 @@ function flatRing(radius, opacity, y) {
   return ring
 }
 
+function cardAt(path) {
+  if (typeof document === 'undefined') return null
+  for (const element of document.querySelectorAll('.mr-card')) {
+    if (element.dataset.path === path) return element
+  }
+  return null
+}
+
 export function createAgents(scene, roster, cssScene = null) {
   const views = new Map()
   const pickables = []
+  const targets = new Map()
   const shapes = shapesFor(roster)
+  const parked = roster.filter((agent) => !isOrchestrator(agent))
+  let parkedIndex = 0
 
-  roster.forEach((agent, index) => {
+  function syncTargets(wanted) {
+    for (const [path, entry] of [...targets]) {
+      if (wanted.has(path) && entry.element?.isConnected) continue
+      entry.brackets.forEach((element) => element.remove())
+      entry.element?.classList.remove('is-targeted')
+      targets.delete(path)
+    }
+    for (const path of wanted) {
+      const current = targets.get(path)
+      if (current?.element?.isConnected) {
+        if (!current.element.classList.contains('is-targeted')) current.element.classList.add('is-targeted')
+        continue
+      }
+      const element = cardAt(path)
+      if (!element) continue
+      element.classList.add('is-targeted')
+      const brackets = BRACKETS.map((corner) => {
+        const bracket = document.createElement('div')
+        bracket.className = `mr-card-bracket is-${corner}`
+        element.append(bracket)
+        return bracket
+      })
+      targets.set(path, { element, brackets })
+    }
+  }
+
+  roster.forEach((agent, rosterIndex) => {
     const group = new THREE.Group()
-    const shape = new THREE.LineSegments(shapeGeometry(shapes[index]), lineMaterial(WHITE, 0.35))
+    const shape = new THREE.LineSegments(shapeGeometry(shapes[rosterIndex]), lineMaterial(WHITE, 0.35))
     const orchestrator = isOrchestrator(agent)
+    const index = parkedIndex
+    if (!orchestrator) parkedIndex += 1
     const rings = [flatRing(130, 0.2, -110)]
     if (orchestrator) rings.push(flatRing(158, 0.14, -110))
     const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
@@ -97,26 +206,29 @@ export function createAgents(scene, roster, cssScene = null) {
     picker.userData.key = agent.key
     group.add(shape, ...rings, label, picker)
 
-    const home = slotPoint(index, roster.length).add(new THREE.Vector3(0, PARK_LIFT, 0))
+    const home = orchestrator
+      ? ORCHESTRATOR_HOME.clone()
+      : slotPoint(index, parked.length).add(new THREE.Vector3(0, PARK_LIFT, 0))
     group.position.copy(home)
 
     const link = lineBetween(lineMaterial(WHITE, 0.4))
-    const trace = lineBetween(new THREE.LineDashedMaterial({ color: YELLOW, dashSize: 34, gapSize: 22, transparent: true, opacity: 0, depthWrite: false }))
-    const tether = lineBetween(lineMaterial(WHITE, 0.3))
-    tether.visible = false
+    const stripMaterialA = lineMaterial(YELLOW, 0)
+    const stripMaterialB = lineMaterial(YELLOW, 0)
+    const stripA = bandLine(stripMaterialA)
+    const stripB = bandLine(stripMaterialB)
 
     const callout = makeCallout(agent.name)
     const calloutLine = lineBetween(lineMaterial(YELLOW, 0.6))
     calloutLine.visible = false
 
-    scene.add(group, link, trace, tether, calloutLine)
+    scene.add(group, link, stripA, stripB, calloutLine)
     cssScene?.add(callout.object)
     pickables.push(picker)
     views.set(agent.key, {
       key: agent.key,
-      index,
+      index: orchestrator ? -1 : index,
       orchestrator,
-      shapeName: shapes[index],
+      shapeName: shapes[rosterIndex],
       group,
       shape,
       rings,
@@ -124,25 +236,29 @@ export function createAgents(scene, roster, cssScene = null) {
       callout,
       calloutLine,
       link,
-      trace,
-      tether,
+      stripA,
+      stripB,
+      stripMaterialA,
+      stripMaterialB,
+      stripOpacity: 0,
+      stripColor: YELLOW,
       home,
-      goal: home.clone(),
       touch: home.clone(),
-      at: null,
-      dest: null,
+      aim: null,
+      pointer: null,
       side: -1,
       chipSide: 1,
-      legs: [],
-      leg: 0,
-      aim: null,
       doneAt: 0,
       style: 'idle',
     })
   })
 
   function setStatus(view, status, now) {
-    if (view.style !== status && (status === 'done' || status === 'error')) view.doneAt = now
+    if (view.style !== status) {
+      if (status === 'queued') view.pointer = null
+      if (status === 'working' && view.style !== 'queued') view.pointer = null
+      if (status === 'done' || status === 'error') view.doneAt = now
+    }
     view.style = status
   }
 
@@ -154,64 +270,16 @@ export function createAgents(scene, roster, cssScene = null) {
 
   function aimAt(key, dir, file, now) {
     const view = views.get(key)
-    if (view) view.aim = { dir, file, until: now + AIM_HOLD }
+    if (!view) return
+    view.aim = { dir, file, until: now + AIM_HOLD }
+    view.pointer = { dir, file }
   }
 
-  function standoff(view, point, dir, world, out) {
-    view.side = world.side(dir)
-    return out.copy(point).addScaledVector(world.right, view.side * world.reach(dir)).addScaledVector(world.back, AGENT_FRONT)
-  }
-
-  function legPoint(view, leg, world, now, out) {
-    if (leg.kind === 'folder') return standoff(view, world.center(leg.path), leg.path, world, out)
-    if (view.aim && now < view.aim.until) {
-      world.slot(view.aim.dir, view.aim.file, view.touch)
-      return standoff(view, view.touch, view.aim.dir, world, out)
-    }
-    view.touch.copy(world.center(view.dest))
-    return standoff(view, view.touch, view.dest, world, out)
-  }
-
-  function chase(view, entry, delta, now, world, isStill = false) {
-    const dest = entry.target ?? ''
-    if (view.dest !== dest) {
-      view.dest = dest
-      const route = folderRoute(view.at ?? '', dest)
-      view.legs = [...route.slice(0, -1).map((path) => ({ kind: 'folder', path })), { kind: 'final' }]
-      view.leg = 0
-    }
-    if (isStill) {
-      view.legs = [{ kind: 'final' }]
-      view.leg = 0
-      view.at = view.dest
-      legPoint(view, view.legs[0], world, now, view.goal)
-      view.group.position.copy(view.goal)
-      return true
-    }
-    const leg = view.legs[Math.min(view.leg, view.legs.length - 1)]
-    legPoint(view, leg, world, now, view.goal)
-    const position = view.group.position
-    if (leg.kind === 'final') {
-      position.lerp(view.goal, 1 - Math.exp(-delta * 4))
-      view.at = view.dest
-      return true
-    }
-    const distance = position.distanceTo(view.goal)
-    const step = TRAVEL_SPEED * delta
-    if (distance <= Math.max(step, ARRIVE)) {
-      view.at = leg.path
-      view.leg += 1
-      if (distance <= step) position.copy(view.goal)
-    } else {
-      heading.subVectors(view.goal, position).normalize()
-      position.addScaledVector(heading, step)
-    }
-    return false
-  }
-
-  function traceTarget(view, world, out) {
-    if (view.aim) return world.edge(view.aim.dir, view.aim.file, view.side, out)
-    return world.edge(view.dest ?? '', null, view.side, out)
+  function focusPointer(state, entry) {
+    const path = entry?.focus?.[0]
+    if (path === undefined) return null
+    if (state.files.has(path)) return { dir: dirname(path), file: path }
+    return { dir: path, file: null }
   }
 
   function update(state, delta, now, world, terminals) {
@@ -220,6 +288,7 @@ export function createAgents(scene, roster, cssScene = null) {
       rotMatrix.makeBasis(world.right, camUp, world.back)
     }
     const isStill = still()
+    const wantedTargets = new Set()
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
@@ -228,30 +297,29 @@ export function createAgents(scene, roster, cssScene = null) {
       const style = STYLE[status] ?? STYLE.idle
 
       const working = (status === 'working' || status === 'queued') && Boolean(entry?.label)
-      let arrived = false
-      if (working) {
-        arrived = chase(view, entry, delta, now, world, isStill)
-      } else {
-        view.at = null
-        view.dest = null
-        view.aim = null
-        view.side = -1
-        view.goal.copy(view.home)
-        view.group.position.lerp(view.goal, easeRate(delta, 2.6, isStill))
+      if (!view.group.position.equals(view.home)) {
+        if (isStill) view.group.position.copy(view.home)
+        else view.group.position.lerp(view.home, easeRate(delta, 4, false))
       }
-      view.chipSide = -view.side
+      view.chipSide = view.home.x < 0 ? -1 : 1
 
       const fresh = status === 'done' && now - view.doneAt < DONE_GLOW_MS
       const opacity = status === 'done' ? (fresh ? 1 : 0.6) : style.opacity
       view.shape.material.color.setHex(style.color)
       view.shape.material.opacity = opacity
+      const ringColor = status === 'working' || status === 'queued' ? YELLOW : style.color
       view.rings.forEach((ring, index) => {
-        ring.material.color.setHex(style.color)
+        ring.material.color.setHex(ringColor)
         ring.material.opacity = opacity * (index === 0 ? 0.55 : 0.4)
       })
       if (!isStill) {
         view.shape.rotation.y += delta * style.spin
         view.shape.rotation.x += delta * style.spin * 0.4
+      }
+      if ((status === 'working' || status === 'queued') && !isStill) {
+        view.shape.scale.setScalar(1 + 0.05 * (0.5 + 0.5 * Math.sin(now * 0.0022)))
+      } else {
+        view.shape.scale.setScalar(1)
       }
 
       const lastLine = entry?.lines?.[entry.lines.length - 1]
@@ -304,46 +372,63 @@ export function createAgents(scene, roster, cssScene = null) {
       view.link.material.color.setHex(style.color)
       view.link.material.opacity = working ? 0.6 : status === 'idle' ? 0.18 : 0.4
 
-      const traceOn = arrived || fresh || (status === 'error' && view.dest !== null)
-      const traceMaterial = view.trace.material
-      traceMaterial.opacity += ((traceOn ? 0.95 : 0) - traceMaterial.opacity) * Math.min(1, delta * 6)
-      view.trace.visible = traceMaterial.opacity > 0.02
-      if (view.trace.visible) {
-        terminals.edgePoint(view.key, view.chipSide, chipFar)
-        if (traceOn) traceTarget(view, world, traceEnd)
-        setEnds(view.trace, chipFar, traceEnd)
-        view.trace.computeLineDistances()
-        traceMaterial.color.setHex(status === 'error' ? RED : status === 'done' ? GREEN : YELLOW)
+      const pointer = view.pointer ?? (working ? focusPointer(state, entry) : null)
+      let color = null
+      if (pointer) {
+        if (working) color = YELLOW
+        else if (fresh) color = GREEN
+        else if (status === 'error') color = RED
       }
-      view.tether.visible = false
+      const stripOn = Boolean(pointer) && color !== null
+      if (color !== null) view.stripColor = color
+      view.stripOpacity += ((stripOn ? STRIP_OPACITY : 0) - view.stripOpacity) * easeRate(delta, 6, isStill)
+      const stripVisible = view.stripOpacity > 0.02
+      view.stripA.visible = stripVisible
+      view.stripB.visible = stripVisible
+      if (pointer) {
+        view.side = world.side(pointer.dir)
+        world.edge(pointer.dir, pointer.file, view.side, traceEnd)
+        view.touch.copy(traceEnd)
+      } else {
+        view.touch.copy(view.home)
+      }
+      if (pointer && stripOn) wantedTargets.add(pointer.dir)
+      if (stripVisible) {
+        stripStart.copy(view.group.position).addScaledVector(camUp, 105)
+        const points = stripPoints(stripStart, view.touch, { side: view.side, right: world.right })
+        const edges = bandEdges(points, world.right, camUp, STRIP_WIDTH)
+        setPoints(view.stripA, edges.front)
+        setPoints(view.stripB, edges.back)
+        view.stripMaterialA.color.setHex(view.stripColor)
+        view.stripMaterialB.color.setHex(view.stripColor)
+        view.stripMaterialA.opacity = view.stripOpacity
+        view.stripMaterialB.opacity = view.stripOpacity
+      }
     }
+    syncTargets(wantedTargets)
   }
 
   function snap(state, world) {
+    syncTargets(new Set())
     for (const view of views.values()) {
-      const entry = state.agents.get(view.key)
-      const working = entry && (entry.status === 'working' || entry.status === 'queued') && entry.label
       view.aim = null
-      if (working) {
-        view.dest = entry.target ?? ''
-        view.at = view.dest
-        view.legs = [{ kind: 'final' }]
-        view.leg = 0
-        legPoint(view, view.legs[0], world, performance.now(), view.group.position)
-      } else {
-        view.at = null
-        view.dest = null
-        view.group.position.copy(view.home)
-      }
+      view.pointer = null
+      view.side = -1
+      view.stripOpacity = 0
+      view.stripA.visible = false
+      view.stripB.visible = false
+      view.group.position.copy(view.home)
+      view.touch.copy(view.home)
     }
   }
 
   function dispose() {
+    syncTargets(new Set())
     for (const view of views.values()) {
       view.callout.object.removeFromParent()
       view.callout.element.remove()
-      scene.remove(view.group, view.link, view.trace, view.tether, view.calloutLine)
-      for (const root of [view.group, view.link, view.trace, view.tether, view.calloutLine]) {
+      scene.remove(view.group, view.link, view.stripA, view.stripB, view.calloutLine)
+      for (const root of [view.group, view.link, view.stripA, view.stripB, view.calloutLine]) {
         root.traverse((object) => {
           object.geometry?.dispose()
           object.material?.map?.dispose()
