@@ -4,6 +4,7 @@
 
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
+- Bring the room lines of `ARCHITECTURE.md` up to date for the sphere layout: the warm and cold layout times, 222 cards, 0 overlapping layouts, a 12,819 unit tallest layout, 0 moves over 150 units and a 33 unit worst move from `npm run scale-probe` on 2026-10-23, the frame times marked as measured before the redesign, and the obstacle clearance.
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
 - Review note on Q2: no fixes. Its table found every reduced motion rule in `ARCHITECTURE.md` in place but one (a closing list's ghost still faded; now it goes at once), and the camera and strands now share one media query listener. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 112 files, 2118 tests, in parallel on the first try.
 - Two more OpenCode lanes, `opencode4` and `opencode5`, at the owner's request (DeepSeek V4.1 Flash runs slowly enough that more lanes help): `lanes.json`, their worktrees and `VALID_LANES` in `src/ui/panels/briefs.js`. Each OpenCode lane's notes name the other four.
