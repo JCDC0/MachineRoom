@@ -292,6 +292,73 @@ describe('agy parser', () => {
     const out = parser.push(lines(step('ACTIVE', 'write_to_file', { TargetFile: 'C:\\Temp\\agent-sandbox\\docs\\agy-report.md' })), 400)
     expect(out[0].touches).toEqual([{ path: 'docs/agy-report.md', mode: 'write', kind: 'file' }])
   })
+
+  it('maps read_file, write_file and edit_file by Path', () => {
+    const parser = createAgyParser(ctx)
+    const tool = (index, name, path) => ({
+      event: 'step_update',
+      step_update: { conversation_id: 'c1', step_index: index, state: 'ACTIVE', step_type: 'tool', tool_name: name, tool_info: { parameters: { Path: path } } },
+    })
+    const out = parser.push(
+      lines(
+        tool(1, 'read_file', 'C:\\Temp\\agent-sandbox\\src\\strings.js'),
+        tool(2, 'write_file', 'C:\\Temp\\agent-sandbox\\docs\\main-notes.md'),
+        tool(3, 'edit_file', 'C:\\Temp\\agent-sandbox\\docs\\main-notes.md')
+      ),
+      450
+    )
+    expect(out.map((activity) => `${activity.tool} ${activity.label}`)).toEqual([
+      'read read src/strings.js',
+      'write write docs/main-notes.md',
+      'edit edit docs/main-notes.md',
+    ])
+    expect(out[2].touches).toEqual([{ path: 'docs/main-notes.md', mode: 'write', kind: 'file' }])
+  })
+
+  it('spawns an invoked subagent and ends it when a listing shows it idle', () => {
+    const parser = createAgyParser({ ...ctx, agentKey: 'agy' })
+    const active = {
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'c1',
+        step_index: 4,
+        state: 'ACTIVE',
+        step_type: 'tool',
+        tool_name: 'invoke_subagent',
+        tool_info: { parameters: { Role: 'Math Documenter', TypeName: 'self' } },
+      },
+    }
+    const done = {
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'c1',
+        step_index: 4,
+        state: 'DONE',
+        step_type: 'subagent',
+        tool_name: 'invoke_subagent',
+        subagent_info: { subagents: [{ role: 'Math Documenter', initial_prompt: 'Read src/strings.js.', conversation_id: 'child-1' }] },
+      },
+    }
+    const list = (index, state) => ({
+      event: 'step_update',
+      step_update: {
+        conversation_id: 'c1',
+        step_index: index,
+        state: 'DONE',
+        step_type: 'tool',
+        tool_name: 'manage_subagents',
+        tool_info: { parameters: { Action: 'list' }, output: `You have 1 active subagent(s):\n[{"role":"Math Documenter","conversationId":"child-1","state":"${state}"}]` },
+      },
+    })
+    expect(parser.push(lines(active), 100).map((activity) => activity.type)).toEqual(['tool.start'])
+    const afterDone = parser.push(lines(done), 200)
+    expect(afterDone.map((activity) => activity.type)).toEqual(['tool.end', 'agent.spawn'])
+    expect(afterDone[1]).toMatchObject({ agent: 'agy', child: 'agy~1', name: 'Math Documenter', label: 'Read src/strings.js.' })
+    const running = parser.push(lines(list(10, 'running')), 300)
+    expect(running.some((activity) => activity.type === 'agent.end')).toBe(false)
+    const idle = parser.push(lines(list(12, 'idle')), 400)
+    expect(idle.find((activity) => activity.type === 'agent.end')).toMatchObject({ agent: 'agy~1', ok: true, time: 400 })
+  })
 })
 
 describe('tool names that are only inherited names', () => {

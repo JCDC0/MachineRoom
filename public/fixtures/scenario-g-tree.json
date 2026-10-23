@@ -1,0 +1,24 @@
+{
+  "root": "agent-sandbox",
+  "files": [
+    "docs/agy-report.md",
+    "docs/api.md",
+    "docs/hermes-summary.md",
+    "docs/main-notes.md",
+    "docs/notes.md",
+    "docs/subagent-notes.md",
+    "package.json",
+    "src/math.js",
+    "src/strings.js",
+    "test/math.test.js",
+    "test/strings.test.js"
+  ],
+  "created": [
+    "docs/agy-report.md",
+    "docs/api.md",
+    "docs/hermes-summary.md",
+    "docs/main-notes.md",
+    "docs/subagent-notes.md",
+    "test/strings.test.js"
+  ]
+}
