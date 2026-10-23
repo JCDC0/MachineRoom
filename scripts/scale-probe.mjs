@@ -14,6 +14,7 @@ import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
 import { cardSize, viewInput } from '../src/engine/cards.js'
 import { cardOverlaps, layoutCards } from '../src/engine/layout.js'
+import { layoutSphere, sphereOverlaps } from '../src/engine/sphere.js'
 import {
   AGENTS,
   DEFAULTS,
@@ -168,6 +169,28 @@ export function layoutChain(activities, tree, agents = AGENTS) {
   return { layouts, overlapping, moves, worstMove, tallest }
 }
 
+export function sphereChain(activities, tree, agents = AGENTS) {
+  const state = createState(tree, agents)
+  let homes = new Map()
+  let key = ''
+  let layouts = 0
+  let overlapping = 0
+  for (const activity of activities) {
+    apply(state, activity)
+    const input = viewInput(state, [])
+    const views = planFolderView(input)
+    const next = `${input.files.length}|${input.focus.join('\\n')}|${input.touched.join('\\n')}`
+    if (next === key) continue
+    key = next
+    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
+    const placed = layoutSphere(entries, { previous: homes })
+    homes = new Map([...homes, ...placed])
+    layouts += 1
+    if (sphereOverlaps(entries, placed).length > 0) overlapping += 1
+  }
+  return { layouts, overlapping }
+}
+
 export async function runProbe(options = {}) {
   const settings = { ...DEFAULTS, ...options }
   const rows = []
@@ -250,6 +273,14 @@ export async function runProbe(options = {}) {
   const warm = timeIt(() => layoutCards(entries, first.result), 5)
   row('layoutCards (warm)', 'activity', warm.ms)
 
+  const folderSize = cardSize({ state: 'closed' })
+  const sphereFolders = tree.dirs.filter((path) => path === '' || path.split('/').length <= 2)
+  const sphereEntries = sphereFolders.map((path) => ({ path, ...folderSize }))
+  const sphereCold = timeIt(() => layoutSphere(sphereEntries), 5)
+  row('layoutSphere (cold)', 'activity', sphereCold.ms, `${sphereEntries.length} cards`)
+  const sphereWarm = timeIt(() => layoutSphere(sphereEntries, { previous: sphereCold.result }), 5)
+  row('layoutSphere (warm)', 'activity', sphereWarm.ms)
+
   const chain = layoutChain(activities.slice(0, 800), tree)
   rows.push({
     stage: 'layoutCards, overlapping layouts',
@@ -278,6 +309,14 @@ export async function runProbe(options = {}) {
     ms: chain.tallest,
     budget: null,
     size: `${Math.round(chain.tallest)} units`,
+  })
+  const sphereChainResult = sphereChain(activities.slice(0, 800), tree)
+  rows.push({
+    stage: 'layoutSphere, overlapping layouts',
+    runsAt: 'chain',
+    ms: sphereChainResult.overlapping,
+    budget: 0,
+    size: `${sphereChainResult.overlapping} of ${sphereChainResult.layouts} layouts`,
   })
 
   const frames = hermesFrames(tree, { seed: settings.seed })
