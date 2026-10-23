@@ -12,10 +12,10 @@ import { dirname, makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
-import { cardSize, overviewSpheres, viewInput } from '../src/engine/cards.js'
-import { fitView } from '../src/engine/camera.js'
+import { cardSize, openChain, overviewSpheres, viewInput } from '../src/engine/cards.js'
+import { OVERVIEW, fitView, viewBasis } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
-import { layoutSphere, sphereOverlaps } from '../src/engine/sphere.js'
+import { layoutSphere } from '../src/engine/sphere.js'
 import {
   AGENTS,
   DEFAULTS,
@@ -120,15 +120,45 @@ export function perCall(items, fn) {
   return { total, mean: total / Math.max(items.length, 1), worst }
 }
 
+export function topCovered(entries, placed, fit) {
+  const { back, right, up } = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
+  const rects = []
+  for (const entry of entries) {
+    if (entry.path === '' || entry.path.includes('/')) continue
+    const at = placed.get(entry.path)
+    if (!at) continue
+    const relative = { x: at.x - fit.target.x, y: at.y - fit.target.y, z: at.z - fit.target.z }
+    const depth = fit.dist - relative.x * back.x - relative.y * back.y - relative.z * back.z
+    if (!(depth > 0)) continue
+    const scale = 1 / depth
+    rects.push({
+      x: (relative.x * right.x + relative.y * right.y + relative.z * right.z) * scale,
+      y: (relative.x * up.x + relative.y * up.y + relative.z * up.z) * scale,
+      width: entry.width * scale,
+      height: entry.height * scale,
+      depth,
+    })
+  }
+  for (let i = 0; i < rects.length; i += 1) {
+    for (let j = i + 1; j < rects.length; j += 1) {
+      const a = rects[i]
+      const b = rects[j]
+      const behind = a.depth <= b.depth ? b : a
+      const overlapX = Math.max(0, (a.width + b.width) / 2 - Math.abs(a.x - b.x))
+      const overlapY = Math.max(0, (a.height + b.height) / 2 - Math.abs(a.y - b.y))
+      const area = behind.width * behind.height
+      if (area > 0 && (overlapX * overlapY) / area > 0.7) return true
+    }
+  }
+  return false
+}
+
 export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2 } = {}) {
   const state = createState(tree, agents)
   let homes = new Map()
   let key = ''
-  let previous = null
   let layouts = 0
-  let overlapping = 0
-  let moves = 0
-  let worstMove = 0
+  let covered = 0
   let tallest = 0
   const overview = []
   const hub = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
@@ -141,34 +171,21 @@ export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2
     key = next
     const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
     const sizes = new Map(entries.map((entry) => [entry.path, entry]))
-    const placed = layoutSphere(entries, { previous: homes })
+    const placed = layoutSphere(entries, { previous: homes, open: openChain(state) })
     for (const [path, spot] of placed) {
       const size = sizes.get(path)
       homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
     }
     layouts += 1
-    if (sphereOverlaps(entries, placed).length > 0) overlapping += 1
     const viewByPath = new Map(views.map((view) => [view.path, view]))
     const fitCards = entries.map((entry) => ({
       path: entry.path,
       home: placed.get(entry.path),
       view: viewByPath.get(entry.path),
     }))
-    overview.push(fitView([hub, ...overviewSpheres(fitCards)], { aspect: 1.6 }).dist)
-    if (previous) {
-      const shared = [...placed.keys()].filter((path) => previous.has(path))
-      if (shared.length > 0) {
-        let sum = 0
-        for (const path of shared) {
-          const before = previous.get(path)
-          const after = placed.get(path)
-          sum += Math.hypot(after.x - before.x, after.y - before.y, after.z - before.z)
-        }
-        const move = sum / shared.length
-        if (move > 150) moves += 1
-        worstMove = Math.max(worstMove, move)
-      }
-    }
+    const fit = fitView([hub, ...overviewSpheres(fitCards)], { aspect: 1.6 })
+    overview.push(fit.dist)
+    if (topCovered(entries, placed, fit)) covered += 1
     let low = Infinity
     let high = -Infinity
     for (const entry of entries) {
@@ -178,13 +195,10 @@ export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2
       high = Math.max(high, at.y + entry.height / 2)
     }
     if (high > low) tallest = Math.max(tallest, high - low)
-    previous = placed
   }
   return {
     layouts,
-    overlapping,
-    moves,
-    worstMove,
+    covered,
     tallest,
     overviewMedian: overview.length > 0 ? median(overview) : 0,
     overviewLargest: overview.length > 0 ? Math.max(...overview) : 0,
@@ -277,25 +291,11 @@ export async function runProbe(options = {}) {
 
   const chain = sphereChain(activities.slice(0, 800), tree)
   rows.push({
-    stage: 'layoutSphere, overlapping layouts',
+    stage: 'layoutSphere, covered top cards',
     runsAt: 'chain',
-    ms: chain.overlapping,
+    ms: chain.covered,
     budget: 0,
-    size: `${chain.overlapping} of ${chain.layouts} layouts`,
-  })
-  rows.push({
-    stage: 'layoutSphere, moves over 150',
-    runsAt: 'chain',
-    ms: chain.moves,
-    budget: settings.files >= 200000 ? 80 : null,
-    size: `${chain.moves} of ${chain.layouts} layouts`,
-  })
-  rows.push({
-    stage: 'layoutSphere, worst move',
-    runsAt: 'chain',
-    ms: chain.worstMove,
-    budget: 1000,
-    size: `${Math.round(chain.worstMove)} units`,
+    size: `${chain.covered} of ${chain.layouts} layouts`,
   })
   rows.push({
     stage: 'layoutSphere, tallest layout',
@@ -363,7 +363,7 @@ export function replayDigest(source) {
     if (next === key) continue
     key = next
     const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
-    const placed = layoutSphere(entries, { previous: homes })
+    const placed = layoutSphere(entries, { previous: homes, open: openChain(state) })
     const sizes = new Map(entries.map((entry) => [entry.path, entry]))
     for (const [path, spot] of placed) {
       const size = sizes.get(path)

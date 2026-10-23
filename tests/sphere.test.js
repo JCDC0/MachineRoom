@@ -4,65 +4,57 @@ import { fitView } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import {
   CARD_CLEARANCE,
-  HUB_CLEARANCE,
+  OPEN_CONE,
+  OPEN_STEP,
   POLE_CAP,
   ROOT_DROP,
-  DEEP_STEP,
-  FULL_SHELLS,
-  SHELL_RADIUS,
-  SHELL_STEP,
   SPHERE_CENTER,
+  STACK_LIMIT,
+  STACK_STEP,
+  TOP_MAX_RADIUS,
+  TOP_MIN_RADIUS,
+  TOP_SPACING,
   layoutSphere,
-  sphereOverlaps,
+  topShellRadius,
 } from '../src/engine/sphere.js'
 
-const CLOSED = { width: 372, height: 96 }
+const CLOSED = cardSize({ state: 'closed' })
+const EPS = 1e-6
 
-const fixture = [
-  { path: '', width: 450, height: 120 },
-  { path: 'src', width: 650, height: 800 },
-  { path: 'src/engine', width: 650, height: 500 },
-  { path: 'src/model', width: 370, height: 100 },
-  { path: 'src/ui', width: 370, height: 100 },
-  { path: 'src/ui/panels', width: 370, height: 100 },
-  { path: 'docs', width: 370, height: 100 },
-  { path: 'docs/guides', width: 370, height: 100 },
-  { path: 'test', width: 450, height: 120 },
-  { path: 'packages', width: 450, height: 120 },
-  { path: 'packages/core', width: 450, height: 120 },
-]
+const rootEntry = () => ({ path: '', ...CLOSED })
 
-const depthOf = (path) => (path === '' ? 0 : path.split('/').length)
-const radiusOf = (entry) => Math.hypot(entry.width, entry.height) / 2 + CARD_CLEARANCE / 2
+const topEntry = (index) => ({ path: `top-${String(index).padStart(3, '0')}`, ...CLOSED })
+
+function topTree(count) {
+  return [rootEntry(), ...Array.from({ length: count }, (_, index) => topEntry(index))]
+}
+
+const relative = (at) => ({ x: at.x - SPHERE_CENTER.x, y: at.y - SPHERE_CENTER.y, z: at.z - SPHERE_CENTER.z })
+const radial = (at) => Math.hypot(relative(at).x, relative(at).y, relative(at).z)
+const unit = (value) => {
+  const length = Math.hypot(value.x, value.y, value.z)
+  return { x: value.x / length, y: value.y / length, z: value.z / length }
+}
+const direction = (at) => unit(relative(at))
+const angle = (a, b) => {
+  const dot = a.x * b.x + a.y * b.y + a.z * b.z
+  return Math.acos(Math.min(1, Math.max(-1, dot)))
+}
 const placeOf = (placed, path) => {
   const at = placed.get(path)
   return { x: at.x, y: at.y, z: at.z }
 }
+const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
 
-function treeOf(top, children) {
-  const entries = [{ path: '', ...CLOSED }]
-  for (let i = 0; i < top; i += 1) {
-    const name = `top-${String(i).padStart(3, '0')}`
-    entries.push({ path: name, ...CLOSED })
-    for (let k = 0; k < children; k += 1) entries.push({ path: `${name}/child-${String(k).padStart(3, '0')}`, ...CLOSED })
-  }
-  return entries
-}
-
-function expectApart(entries, placed) {
-  expect(sphereOverlaps(entries, placed)).toEqual([])
-  for (let i = 0; i < entries.length; i += 1) {
-    const a = entries[i]
-    const at = placed.get(a.path)
-    expect(at, a.path).toBeTruthy()
-    const hubDistance = Math.hypot(at.x - SPHERE_CENTER.x, at.y - SPHERE_CENTER.y, at.z - SPHERE_CENTER.z)
-    expect(hubDistance - radiusOf(a)).toBeGreaterThanOrEqual(HUB_CLEARANCE)
-    for (let j = i + 1; j < entries.length; j += 1) {
-      const b = entries[j]
-      const other = placed.get(b.path)
-      const distance = Math.hypot(at.x - other.x, at.y - other.y, at.z - other.z)
-      const needed = (Math.hypot(a.width, a.height) + Math.hypot(b.width, b.height)) / 2 + 40
-      expect(distance, `${a.path || 'root'} and ${b.path || 'root'}`).toBeGreaterThanOrEqual(needed - 1e-6)
+function expectTopsSpaced(entries, placed) {
+  const tops = entries.filter((entry) => entry.path !== '' && !entry.path.includes('/'))
+  for (let i = 0; i < tops.length; i += 1) {
+    const a = placed.get(tops[i].path)
+    expect(a, tops[i].path).toBeTruthy()
+    expect(Math.abs(direction(a).y)).toBeLessThanOrEqual(Math.cos(POLE_CAP) + EPS)
+    for (let j = i + 1; j < tops.length; j += 1) {
+      const b = placed.get(tops[j].path)
+      expect(distance(a, b), `${tops[i].path} and ${tops[j].path}`).toBeGreaterThanOrEqual(TOP_SPACING * Math.min(tops[i].width, tops[j].width) - EPS)
     }
   }
 }
@@ -71,156 +63,170 @@ function expectClearOf(entries, placed, obstacle) {
   for (const entry of entries) {
     if (entry.path === '') continue
     const at = placed.get(entry.path)
-    const distance = Math.hypot(at.x - obstacle.x, at.y - obstacle.y, at.z - obstacle.z)
+    const distanceTo = Math.hypot(at.x - obstacle.x, at.y - obstacle.y, at.z - obstacle.z)
     const needed = Math.hypot(entry.width, entry.height) / 2 + obstacle.radius + CARD_CLEARANCE
-    expect(distance, entry.path).toBeGreaterThanOrEqual(needed - 1e-6)
+    expect(distanceTo, entry.path).toBeGreaterThanOrEqual(needed - EPS)
   }
 }
 
-describe('layoutSphere', () => {
-  it('gives the same places for the same input', () => {
-    const first = layoutSphere(fixture)
-    const second = layoutSphere(fixture)
-    expect([...first]).toEqual([...second])
+describe('the first shell', () => {
+  it('takes its radius from the count of top-level folders', () => {
+    for (const count of [4, 20, 80]) {
+      const entries = topTree(count)
+      const placed = layoutSphere(entries)
+      const wanted = topShellRadius(count, CLOSED)
+      for (const entry of entries) {
+        if (entry.path === '') continue
+        expect(radial(placed.get(entry.path)), entry.path).toBeCloseTo(wanted, 6)
+      }
+    }
+    expect(topShellRadius(4, CLOSED)).toBe(TOP_MIN_RADIUS)
+    expect(topShellRadius(20, CLOSED)).toBe(TOP_MIN_RADIUS)
+    expect(topShellRadius(80, CLOSED)).toBeCloseTo(1620, 0)
+    expect(topShellRadius(4000, CLOSED)).toBe(TOP_MAX_RADIUS)
   })
 
-  it('keeps cards apart and clear of the hub for a fixture tree', () => {
-    expectApart(fixture, layoutSphere(fixture))
-  })
-
-  it('keeps 300 folders at depth 1 and 2 apart', () => {
-    const entries = treeOf(10, 29)
-    expect(entries.filter((entry) => entry.path !== '')).toHaveLength(300)
-    expectApart(entries, layoutSphere(entries))
-  })
-
-  it('keeps one parent with 80 children apart and near their parent', () => {
-    const entries = [{ path: '', ...CLOSED }, { path: 'parent', ...CLOSED }]
-    for (let i = 0; i < 80; i += 1) entries.push({ path: `parent/child-${String(i).padStart(2, '0')}`, ...CLOSED })
+  it('keeps the top card centres at least 0.6 of a card width apart', () => {
+    const entries = topTree(80)
     const placed = layoutSphere(entries)
-    expectApart(entries, placed)
-    const parent = placed.get('parent')
-    for (const entry of entries.filter((item) => item.path.startsWith('parent/'))) {
-      const at = placed.get(entry.path)
-      const a = { x: parent.x - SPHERE_CENTER.x, y: parent.y - SPHERE_CENTER.y, z: parent.z - SPHERE_CENTER.z }
-      const b = { x: at.x - SPHERE_CENTER.x, y: at.y - SPHERE_CENTER.y, z: at.z - SPHERE_CENTER.z }
-      const cosine = (a.x * b.x + a.y * b.y + a.z * b.z) / (Math.hypot(a.x, a.y, a.z) * Math.hypot(b.x, b.y, b.z))
-      expect(Math.acos(Math.min(1, Math.max(-1, cosine)))).toBeLessThanOrEqual(Math.PI / 2)
-    }
+    expectTopsSpaced(entries, placed)
   })
 
-  it('keeps every card outside that place when a sibling is added', () => {
-    const before = layoutSphere(fixture)
-    const entries = [...fixture, { path: 'src/views', width: 370, height: 100 }]
-    const after = layoutSphere(entries, { previous: before })
-    const group = new Set(['src/ui', 'src/engine', 'src/model', 'src/views', 'src/ui/panels'])
-    for (const entry of fixture) {
-      if (group.has(entry.path)) continue
-      expect(placeOf(after, entry.path), entry.path).toEqual(placeOf(before, entry.path))
-    }
-    expectApart(entries, after)
+  it('keeps that spacing when a top card grows on a warm start', () => {
+    const entries = topTree(20)
+    const before = layoutSphere(entries)
+    const grown = entries.map((entry) => (entry.path === 'top-000' ? { path: entry.path, ...cardSize({ state: 'files', items: Array.from({ length: 4 }, (_, i) => ({ path: `top-000/f${i}.js`, kind: 'file' })) }) } : entry))
+    const after = layoutSphere(grown, { previous: before })
+    expectTopsSpaced(grown, after)
   })
+})
 
-  it('keeps every other card in place when a card is removed', () => {
-    const before = layoutSphere(fixture)
-    const entries = fixture.filter((entry) => entry.path !== 'docs/guides')
-    const after = layoutSphere(entries, { previous: before })
-    for (const entry of entries) expect(placeOf(after, entry.path), entry.path).toEqual(placeOf(before, entry.path))
-    expectApart(entries, after)
-  })
-
-  it('keeps a card in place when it grows without overlapping', () => {
-    const before = layoutSphere(fixture)
-    const entries = fixture.map((entry) => (entry.path === 'test' ? { ...entry, width: entry.width + 80 } : entry))
-    const after = layoutSphere(entries, { previous: before })
-    for (const entry of fixture) expect(placeOf(after, entry.path), entry.path).toEqual(placeOf(before, entry.path))
-    expectApart(entries, after)
-  })
-
-  it('moves only the grown card when it grows into another', () => {
-    const before = layoutSphere(fixture)
-    const entries = fixture.map((entry) => (entry.path === 'src/ui' ? { ...entry, width: entry.width + 1600 } : entry))
-    const after = layoutSphere(entries, { previous: before })
-    for (const entry of fixture) {
-      if (entry.path === 'src/ui') continue
-      expect(placeOf(after, entry.path), entry.path).toEqual(placeOf(before, entry.path))
-    }
-    expect(placeOf(after, 'src/ui')).not.toEqual(placeOf(before, 'src/ui'))
-    expectApart(entries, after)
-  })
-
-  it('puts each depth on its own shell', () => {
-    const entries = [...fixture, { path: 'src/ui/panels/rows', width: 370, height: 100 }]
+describe('the cabinet', () => {
+  it('stacks the children behind their parent, four deep', () => {
+    const entries = [rootEntry(), { path: 'src', ...CLOSED }]
+    for (let index = 0; index < 6; index += 1) entries.push({ path: `src/child-${String(index).padStart(2, '0')}`, ...CLOSED })
     const placed = layoutSphere(entries)
-    for (const entry of entries) {
-      if (entry.path === '') continue
+    const parent = placed.get('src')
+    const parentDirection = direction(parent)
+    const parentRadius = radial(parent)
+    const kids = entries.filter((entry) => entry.path.startsWith('src/')).sort((a, b) => (a.path < b.path ? -1 : 1))
+    const stacked = kids.filter((entry) => placed.has(entry.path))
+    expect(stacked).toHaveLength(STACK_LIMIT)
+    let before = parentRadius
+    for (const entry of stacked) {
       const at = placed.get(entry.path)
-      const distance = Math.hypot(at.x - SPHERE_CENTER.x, at.y - SPHERE_CENTER.y, at.z - SPHERE_CENTER.z)
-      const depth = depthOf(entry.path)
-      const near = Math.min(depth, FULL_SHELLS)
-      expect(distance, entry.path).toBeCloseTo(SHELL_RADIUS + (near - 1) * SHELL_STEP + (depth - near) * DEEP_STEP, 6)
+      const radius = radial(at)
+      expect(radius, entry.path).toBeGreaterThan(before)
+      expect(angle(direction(at), parentDirection), entry.path).toBeLessThan(0.1)
+      before = radius
     }
-    const tops = entries.filter((entry) => depthOf(entry.path) === 1)
-    for (const entry of tops) {
-      const at = placed.get(entry.path)
-      expect(Math.abs(at.y - SPHERE_CENTER.y), entry.path).toBeLessThanOrEqual(Math.cos(POLE_CAP) * SHELL_RADIUS + 1e-6)
+    expect(placed.has('src/child-04')).toBe(false)
+    expect(placed.has('src/child-05')).toBe(false)
+  })
+
+  it('steps a folder on the path out one layer and fans its siblings around it', () => {
+    const entries = [rootEntry(), { path: 'src', ...CLOSED }]
+    for (const name of ['a', 'b', 'c', 'd']) entries.push({ path: `src/${name}`, ...CLOSED })
+    entries.push({ path: 'src/a/deep', ...CLOSED })
+    const open = new Set(['src/a', 'src/a/deep'])
+    const placed = layoutSphere(entries, { open })
+    const parent = placed.get('src')
+    const parentDirection = direction(parent)
+    const parentRadius = radial(parent)
+    const pathAt = placed.get('src/a')
+    expect(radial(pathAt)).toBeCloseTo(parentRadius + OPEN_STEP, 6)
+    expect(angle(direction(pathAt), parentDirection)).toBeLessThan(EPS)
+    for (const name of ['b', 'c', 'd']) {
+      const at = placed.get(`src/${name}`)
+      expect(radial(at)).toBeCloseTo(parentRadius + OPEN_STEP, 6)
+      expect(angle(direction(at), parentDirection)).toBeLessThanOrEqual(OPEN_CONE + EPS)
+      expect(angle(direction(at), direction(pathAt))).toBeLessThanOrEqual(OPEN_CONE + EPS)
+    }
+    const deep = placed.get('src/a/deep')
+    expect(radial(deep)).toBeCloseTo(parentRadius + OPEN_STEP * 2, 6)
+    expect(angle(direction(deep), parentDirection)).toBeLessThan(EPS)
+  })
+
+  it('returns a folder that leaves the path to its parent stack and keeps the rest in place', () => {
+    const entries = [rootEntry(), { path: 'src', ...CLOSED }, { path: 'src/ui', ...CLOSED }, { path: 'src/model', ...CLOSED }]
+    const first = layoutSphere(entries, { open: new Set(['src/ui']) })
+    const parent = placeOf(first, 'src')
+    const ui = first.get('src/ui')
+    expect(radial(ui)).toBeCloseTo(radial(parent) + OPEN_STEP, 6)
+    const second = layoutSphere(entries, { previous: first })
+    expect(placeOf(second, 'src')).toEqual(parent)
+    const back = second.get('src/ui')
+    expect(distance(back, parent)).toBeLessThan(STACK_STEP * (STACK_LIMIT + 1))
+    expect(radial(back)).toBeGreaterThan(radial(parent))
+    expect(angle(direction(back), direction(parent))).toBeLessThan(0.1)
+    expect(placeOf(second, '')).toEqual(placeOf(first, ''))
+  })
+})
+
+describe('the layout', () => {
+  it('keeps the root below the hub centre', () => {
+    const entries = topTree(12)
+    for (const placed of [layoutSphere(entries), layoutSphere(entries, { previous: layoutSphere(entries) })]) {
+      const root = placed.get('')
+      expect(root.x).toBe(0)
+      expect(root.z).toBe(0)
+      expect(root.y).toBe(HUB_CENTER.y - ROOT_DROP)
+      expect(root.y).toBeLessThan(HUB_CENTER.y - HUB_RADIUS)
     }
   })
 
-  it('puts the root below the hub centre', () => {
-    expect(SPHERE_CENTER).toBe(HUB_CENTER)
-    const root = layoutSphere(fixture).get('')
-    expect(root.x).toBe(0)
-    expect(root.z).toBe(0)
-    expect(root.y).toBe(HUB_CENTER.y - ROOT_DROP)
-    expect(root.y).toBeLessThan(HUB_CENTER.y - HUB_RADIUS)
+  it('gives the same places for the same input, cold and warm', () => {
+    const entries = topTree(20)
+    entries.push({ path: 'top-000/one', ...CLOSED }, { path: 'top-000/two', ...CLOSED })
+    const open = new Set(['top-000/one'])
+    const cold = layoutSphere(entries, { open })
+    expect([...layoutSphere(entries, { open })]).toEqual([...cold])
+    expect([...layoutSphere(entries, { previous: cold, open })]).toEqual([...cold])
   })
 
   it('keeps every card clear of an obstacle and the root in place', () => {
-    const before = layoutSphere(fixture)
-    const at = before.get('src/ui')
-    const obstacle = { x: at.x + 40, y: at.y, z: at.z, radius: 120 }
-    const placed = layoutSphere(fixture, { obstacles: [obstacle] })
-    expectClearOf(fixture, placed, obstacle)
-    expectApart(fixture, placed)
+    const entries = topTree(8)
+    entries.push({ path: 'top-000/one', ...CLOSED })
+    const before = layoutSphere(entries)
+    const at = before.get('top-000/one')
+    const obstacle = { x: at.x + 20, y: at.y, z: at.z, radius: 120 }
+    const placed = layoutSphere(entries, { obstacles: [obstacle] })
+    expectClearOf(entries, placed, obstacle)
     expect(placeOf(placed, '')).toEqual(placeOf(before, ''))
-    expect(placeOf(placed, 'src/ui')).not.toEqual(placeOf(before, 'src/ui'))
+    expect(placeOf(placed, 'top-000/one')).not.toEqual(placeOf(before, 'top-000/one'))
   })
 
-  it('moves only the card that meets a new obstacle and its siblings on a warm start', () => {
-    const before = layoutSphere(fixture)
-    const at = before.get('src/ui')
+  it('moves only the card that meets a new obstacle on a warm start', () => {
+    const entries = topTree(8)
+    entries.push({ path: 'top-000/one', ...CLOSED })
+    const open = new Set(['top-000/one'])
+    const before = layoutSphere(entries, { open })
+    const at = before.get('top-000/one')
     const obstacle = { x: at.x, y: at.y, z: at.z, radius: 120 }
-    const after = layoutSphere(fixture, { previous: before, obstacles: [obstacle] })
-    const siblings = new Set(['src/engine', 'src/model', 'src/ui'])
-    for (const entry of fixture) {
-      if (siblings.has(entry.path)) continue
-      expect(placeOf(after, entry.path), entry.path).toEqual(placeOf(before, entry.path))
-    }
+    const after = layoutSphere(entries, { previous: before, obstacles: [obstacle], open })
     expect(placeOf(after, '')).toEqual(placeOf(before, ''))
-    expect(placeOf(after, 'src/ui')).not.toEqual(placeOf(before, 'src/ui'))
-    expectClearOf(fixture, after, obstacle)
-    expectApart(fixture, after)
+    expect(placeOf(after, 'top-000')).toEqual(placeOf(before, 'top-000'))
+    expect(placeOf(after, 'top-000/one')).not.toEqual(placeOf(before, 'top-000/one'))
+    expectClearOf(entries, after, obstacle)
   })
 
   it('keeps the root in place when an obstacle covers it', () => {
+    const entries = topTree(8)
     const root = { x: 0, y: HUB_CENTER.y - ROOT_DROP, z: 0 }
     const obstacle = { ...root, radius: 500 }
-    const cold = layoutSphere(fixture, { obstacles: [obstacle] })
+    const cold = layoutSphere(entries, { obstacles: [obstacle] })
     expect(placeOf(cold, '')).toEqual(root)
-    expectClearOf(fixture, cold, obstacle)
-    expectApart(fixture, cold)
-
-    const warm = layoutSphere(fixture, { previous: cold, obstacles: [obstacle] })
+    expectClearOf(entries, cold, obstacle)
+    const warm = layoutSphere(entries, { previous: cold, obstacles: [obstacle] })
     expect(placeOf(warm, '')).toEqual(root)
-    expectClearOf(fixture, warm, obstacle)
+    expectClearOf(entries, warm, obstacle)
   })
 
   it('fits only the root and the pinned cards, not every drawn card', () => {
     const card = (path, x, y, z, view) => ({ path, home: { x, y, z }, view })
     const hub = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
     const root = card('', 0, HUB_CENTER.y - ROOT_DROP, 0, { path: '', state: 'closed' })
-    const pinned = card('src', 1700, HUB_CENTER.y, 0, { path: 'src', state: 'closed', pinned: true })
+    const pinned = card('src', 1100, HUB_CENTER.y, 0, { path: 'src', state: 'closed', pinned: true })
     const deep = card('src/ui/panels/rows', 0, 11000, 0, { path: 'src/ui/panels/rows', state: 'files', items: [], hiddenItems: 0, pinned: false })
     const spheres = overviewSpheres([root, pinned, deep])
     const sizeOf = (view) => {

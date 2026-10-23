@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_SCALES, CARD_W, cardHeight, cardRows, cardSize, fadeProgress, rowOffset, viewInput, viewKey } from '../src/engine/cards.js'
+import { CARD_SCALES, CARD_W, cardHeight, cardRows, cardSize, fadeProgress, openChain, rowOffset, stackOverflow, viewInput, viewKey } from '../src/engine/cards.js'
 import { makeTree } from '../src/model/paths.js'
 import { RECENT_KEEP_MS, apply, createState } from '../src/model/state.js'
 
@@ -31,6 +31,13 @@ describe('card size', () => {
   it('widens a card for each faint back folder', () => {
     expect(cardSize(view('open', 0, 0, 3)).width).toBeGreaterThan(cardSize(view('open')).width)
     expect(cardSize(view('closed')).width).toBe(CARD_W * CARD_SCALES.closed)
+  })
+
+  it('uses the smaller, near uniform scales', () => {
+    expect(CARD_SCALES).toEqual({ closed: 1, open: 1.2, files: 1.8 })
+    expect(cardSize(view('closed')).width).toBe(248)
+    expect(cardSize(view('open')).width).toBeCloseTo(297.6, 6)
+    expect(cardSize(view('files', 3)).width).toBeCloseTo(446.4, 6)
   })
 
   it('places rows from the top of the card down', () => {
@@ -153,6 +160,71 @@ describe('viewKey', () => {
       touches: [],
     })
     expect(viewKey(state)).not.toBe(added)
+  })
+})
+
+describe('openChain', () => {
+  const tree = makeTree({ root: 'demo', files: ['src/engine/a.js', 'docs/b.md'], created: [] })
+  const state = createState(tree, [{ key: 'hermes', name: 'Hermes' }])
+
+  it('walks from a focused file to its folder and up to the root', () => {
+    state.agents.get('hermes').focus = ['src/engine/a.js']
+    expect([...openChain(state)].sort()).toEqual(['', 'src', 'src/engine'].sort())
+  })
+
+  it('keeps a focused folder and adds a pinned folder', () => {
+    state.agents.get('hermes').focus = ['docs']
+    expect([...openChain(state)].sort()).toEqual(['', 'docs'].sort())
+  })
+
+  it('adds a pinned folder with its ancestors', () => {
+    state.agents.get('hermes').focus = []
+    expect([...openChain(state, ['src/engine'])].sort()).toEqual(['', 'src', 'src/engine'].sort())
+  })
+
+  it('is empty when no agent has a focus', () => {
+    state.agents.get('hermes').focus = []
+    expect([...openChain(state)]).toEqual([])
+  })
+})
+
+describe('stackOverflow', () => {
+  const views = (children) => [
+    { path: '', back: 0 },
+    { path: 'src', back: 0 },
+    ...Array.from({ length: children }, (_, index) => ({ path: `src/c${index}`, back: 0 })),
+  ]
+
+  it('shows four stacked children and counts the rest on the parent', () => {
+    const result = stackOverflow(views(6))
+    expect([...result.hidden].sort()).toEqual(['src/c4', 'src/c5'])
+    expect(result.extra.get('src')).toBe(2)
+  })
+
+  it('does not count a child on the path in the stack', () => {
+    const result = stackOverflow(views(6), new Set(['src/c0']))
+    expect(result.hidden.has('src/c0')).toBe(false)
+    expect(result.hidden.size).toBe(0)
+    expect(result.extra.size).toBe(0)
+  })
+
+  it('hides nothing under a folder that is open', () => {
+    const result = stackOverflow(views(6), new Set(['src']))
+    expect(result.hidden.size).toBe(0)
+    expect(result.extra.size).toBe(0)
+  })
+
+  it('keeps every top-level card on the first shell', () => {
+    const list = [{ path: '', back: 0 }, ...Array.from({ length: 8 }, (_, index) => ({ path: `top-${index}`, back: 0 }))]
+    const result = stackOverflow(list)
+    expect(result.hidden.size).toBe(0)
+    expect(result.extra.size).toBe(0)
+  })
+
+  it('hides the children of a hidden card too', () => {
+    const list = [...views(6), { path: 'src/c4/deep', back: 0 }]
+    const result = stackOverflow(list)
+    expect(result.hidden.has('src/c4/deep')).toBe(true)
   })
 })
 

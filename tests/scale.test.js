@@ -82,8 +82,8 @@ describe('each fixed stage at 40000 files', () => {
     })
   }
 
-  it('reports no overlapping sphere layouts', () => {
-    expect(rows.get('layoutSphere, overlapping layouts').ms).toBe(0)
+  it('reports no covered top-level cards', () => {
+    expect(rows.get('layoutSphere, covered top cards').ms).toBe(0)
   })
 
   it('sends the first tree event and the file list route in under 1 MB', () => {
