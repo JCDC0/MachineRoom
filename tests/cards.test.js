@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_SCALES, CARD_W, cardHeight, cardRows, cardSize, rowOffset, viewInput, viewKey } from '../src/engine/cards.js'
+import { CARD_SCALES, CARD_W, cardHeight, cardRows, cardSize, fadeProgress, rowOffset, viewInput, viewKey } from '../src/engine/cards.js'
 import { makeTree } from '../src/model/paths.js'
 import { RECENT_KEEP_MS, apply, createState } from '../src/model/state.js'
 
@@ -36,6 +36,14 @@ describe('card size', () => {
   it('places rows from the top of the card down', () => {
     expect(rowOffset(3, 0)).toBeGreaterThan(rowOffset(3, 1))
     expect(rowOffset(3, 0)).toBeLessThan(cardHeight(3) / 2)
+  })
+})
+
+describe('fadeProgress', () => {
+  it('finishes at once when still is true and eases over the fade otherwise', () => {
+    expect(fadeProgress(0, 0, true)).toBe(1)
+    expect(fadeProgress(0, 200, false)).toBeCloseTo(0.5)
+    expect(fadeProgress(0, 900, false)).toBe(1)
   })
 })
 

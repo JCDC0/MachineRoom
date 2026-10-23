@@ -7,7 +7,7 @@ import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createLabels } from './labels.js'
-import { GREEN, RED, WHITE, glowTexture, still } from './sprites.js'
+import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, createTerminals } from './terminals.js'
 import { createVoid } from './void.js'
@@ -477,6 +477,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       renderer.forceContextLoss()
       gl.removeChild(renderer.domElement)
       css.removeChild(cssRenderer.domElement)
+      disposeStill()
     },
   }
 }

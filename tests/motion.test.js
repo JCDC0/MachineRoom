@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createCameraRig } from '../src/engine/camera.js'
 import { createHub } from '../src/engine/hub.js'
 import { createLabels } from '../src/engine/labels.js'
-import { easeRate, reducedMotion, still } from '../src/engine/sprites.js'
+import { disposeStill, easeRate, reducedMotion, still } from '../src/engine/sprites.js'
 import { createVoid } from '../src/engine/void.js'
 
 describe('easeRate', () => {
@@ -97,6 +97,30 @@ describe('reduced motion helper', () => {
     mql.matches = false
     expect(helper.still()).toBe(false)
     expect(still()).toBe(false)
+  })
+
+  it('follows a change event and removes the listener on dispose', () => {
+    const listeners = new Set()
+    const mql = {
+      matches: false,
+      addEventListener: (type, listener) => {
+        if (type === 'change') listeners.add(listener)
+      },
+      removeEventListener: (type, listener) => {
+        if (type === 'change') listeners.delete(listener)
+      },
+    }
+    globalThis.window = { matchMedia: () => mql }
+    expect(still()).toBe(false)
+    expect(listeners.size).toBe(1)
+    const listener = [...listeners][0]
+    listener({ matches: true })
+    expect(still()).toBe(true)
+    listener({ matches: false })
+    expect(still()).toBe(false)
+
+    disposeStill()
+    expect(listeners.size).toBe(0)
   })
 })
 
@@ -231,5 +255,24 @@ describe('void under reduced motion', () => {
     mql.matches = false
     space.update(0.1)
     expect(dust.rotation.y).toBeGreaterThan(0)
+  })
+
+  it('holds the fine dust near the camera still when still is true', () => {
+    const mql = { matches: true }
+    globalThis.window = { matchMedia: () => mql }
+    const scene = new THREE.Scene()
+    const space = createVoid(scene, null)
+    const dust = space.group.children.filter((c) => c.isPoints)
+    expect(dust).toHaveLength(2)
+    space.update(0.1)
+    for (const layer of dust) {
+      expect(layer.rotation.x).toBe(0)
+      expect(layer.rotation.y).toBe(0)
+    }
+
+    mql.matches = false
+    space.update(0.1)
+    for (const layer of dust) expect(layer.rotation.y).toBeGreaterThan(0)
+    expect(dust[1].rotation.x).toBeGreaterThan(0)
   })
 })

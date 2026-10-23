@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { easeInOut, easeRate, reducedMotion } from './sprites.js'
+import { easeInOut, easeRate, still } from './sprites.js'
 
 const MIN_DIST = 500
 const MAX_DIST = 26000
@@ -114,7 +114,6 @@ export function createCameraRig(camera, surface) {
   const overviewTarget = new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
   let adjusted = false
   const drift = { x: 0, y: 0, sx: 0, sy: 0 }
-  const motion = reducedMotion()
 
   function hover(event) {
     const rect = surface.getBoundingClientRect()
@@ -180,7 +179,7 @@ export function createCameraRig(camera, surface) {
       fromTarget: view.target.clone(),
       fromDist: view.dist,
       start: performance.now(),
-      duration: motion.still() ? 0 : duration,
+      duration: still() ? 0 : duration,
     }
   }
 
@@ -191,7 +190,7 @@ export function createCameraRig(camera, surface) {
       goal.dist = spot.dist
     }
     if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
-    const isStill = motion.still()
+    const isStill = still()
     const rate = easeRate(delta, 5, isStill)
     if (transition) {
       if (isStill) {
