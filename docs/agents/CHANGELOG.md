@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- End to end room test (task F4): five fake Paperclip agents play through the bridge into `createPipeline` and `apply`, and every activity runs the folder plan, the warm sphere layout, the strips and the packet pool.
 - Briefs F1 to F5, the finish line before Saturday: the README, ARCHITECTURE and the other user docs read against the app, and two end to end checks against the fake Paperclip (the room's engine layers, and the one-port room).
 - Review note on G4c: no fixes, 31 minutes. The three images show the flat cost board, the straight striped strips, the corner brackets and the drawer on Dispatch, each 1280 by 800, under 170 KB, with no text chunks and nothing private. They were taken at 0.1.208, before V21 and V22, so the folders sit on the old sphere and the strips carry no packets; a retake waits until the owner has looked at the cabinet sphere.
 - Review note on V21: no code fixes. The activity and plan digests are the same before and after the merge, and every layout digest changes, as the brief expected. The lane went past the brief's file list in three test files whose assertions the new scales, the probe row and the digests broke, and said so; it dropped the probe's move rows, since a card that changes role now moves on purpose. `ARCHITECTURE.md` was brought up to the cabinet sphere at the merge (the sphere line, the card layout, the overview and layout numbers). Not checked by eye: the browser pane was hidden. Full suite on the merge: 116 files, 2173 tests, in parallel on the first try.
