@@ -23,10 +23,10 @@ export function chipHalfWidth(open) {
 export function createTerminals(cssScene, roster) {
   const terminals = new Map()
 
-  roster.forEach((agent) => {
+  function addTerminal(key, name) {
     const element = document.createElement('div')
     element.className = 'mr-term is-idle'
-    element.dataset.agent = agent.key
+    element.dataset.agent = key
     const title = document.createElement('div')
     title.className = 'mr-term-title'
     const body = document.createElement('div')
@@ -37,9 +37,9 @@ export function createTerminals(cssScene, roster) {
     object.scale.setScalar(SCALE)
     cssScene.add(object)
 
-    terminals.set(agent.key, {
-      key: agent.key,
-      name: agent.name,
+    const term = {
+      key,
+      name,
       element,
       title,
       body,
@@ -50,8 +50,38 @@ export function createTerminals(cssScene, roster) {
       typedAt: 0,
       lastLine: null,
       rows: [],
-    })
-  })
+      fade: '',
+    }
+    terminals.set(key, term)
+    return term
+  }
+
+  function ensure(key, name) {
+    const term = terminals.get(key)
+    if (term) {
+      if (name && term.name !== name) term.name = name
+      return term
+    }
+    return addTerminal(key, name ?? key)
+  }
+
+  function setVisible(key, visible) {
+    const term = terminals.get(key)
+    if (!term || term.object.visible === visible) return
+    term.object.visible = visible
+    if (!visible) term.open = false
+  }
+
+  function setFade(key, alpha) {
+    const term = terminals.get(key)
+    if (!term) return
+    const value = alpha >= 0.999 ? '' : String(Math.max(0, alpha))
+    if (term.fade === value) return
+    term.fade = value
+    term.element.style.opacity = value
+  }
+
+  roster.forEach((agent) => addTerminal(agent.key, agent.name))
 
   function render(term, entry, now) {
     term.version = entry.version
@@ -93,7 +123,15 @@ export function createTerminals(cssScene, roster) {
       term.object.quaternion.copy(camera.quaternion)
 
       const entry = state.agents.get(term.key)
-      if (!entry) continue
+      if (!entry) {
+        setVisible(term.key, false)
+        continue
+      }
+      if (entry.parent) {
+        const parentName = state.agents.get(entry.parent)?.name ?? entry.parent
+        const name = `${parentName} > ${entry.name}`
+        if (term.name !== name) term.name = name
+      }
       if (entry.version !== term.version) render(term, entry, now)
       if (term.open) {
         const last = term.rows[term.rows.length - 1]
@@ -125,12 +163,15 @@ export function createTerminals(cssScene, roster) {
   return {
     terminals,
     update,
+    ensure,
     setOpen,
+    setVisible,
+    setFade,
     toggle: (key) => setOpen(key, !terminals.get(key)?.open),
     openAll: (open) => terminals.forEach((term) => setOpen(term.key, open)),
     isOpen: (key) => Boolean(terminals.get(key)?.open),
     openKeys: () => [...terminals.values()].filter((term) => term.open).map((term) => term.key),
-    positionOf: (key) => terminals.get(key).object.position,
+    positionOf: (key) => terminals.get(key)?.object.position ?? new THREE.Vector3(),
     edgePoint,
     dispose,
   }

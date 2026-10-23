@@ -13,6 +13,12 @@ export function isOrchestrator(agent) {
   return ORCHESTRATOR.test(String(agent.name ?? '')) || ORCHESTRATOR.test(String(agent.key ?? ''))
 }
 
+export function nextSpareShape(taken = []) {
+  const used = new Set(Array.isArray(taken) ? taken : [])
+  const spare = SHAPE_NAMES.find((candidate) => candidate !== ORCHESTRATOR_SHAPE && !used.has(candidate))
+  return spare ?? SPARE[used.size % SPARE.length]
+}
+
 export function shapesFor(roster) {
   const used = new Set()
   const names = roster.map((agent) => {

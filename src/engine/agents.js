@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { dirname } from '../model/paths.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, PARK_LIFT, slotPoint } from './hub.js'
-import { isOrchestrator, shapeGeometry, shapesFor } from './shapes.js'
+import { isOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
 import { GREEN, RED, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 
 const STYLE = {
@@ -14,16 +14,36 @@ const STYLE = {
 }
 const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
+const CHILD_FADE_MS = 1500
 const STRIP_RISE = 190
 const STRIP_RUN = 120
 const STRIP_WIDTH = 9
 const STRIP_OPACITY = 0.9
 const BRACKETS = ['tl', 'tr', 'bl', 'br']
+export const CHILD_SCALE = 0.6
+export const CHILD_TURN = Math.PI / 5
+export const CHILD_GAP = 120
 
 export function nameLabel(name) {
   if (typeof name !== 'string') return ''
   const label = name.toUpperCase()
   return label.length > 32 ? `${label.slice(0, 31)}~` : label
+}
+
+export function childPlace(parentPlace, index = 0) {
+  const x = Number(parentPlace?.x) || 0
+  const y = Number(parentPlace?.y) || 0
+  const z = Number(parentPlace?.z) || 0
+  const slot = Math.max(0, Math.floor(Number(index) || 0))
+  const side = slot % 2 === 0 ? 1 : -1
+  const rank = Math.floor(slot / 2) + 1
+  const turn = side * rank * CHILD_TURN
+  const radius = Math.hypot(x, z)
+  if (radius < 1) {
+    return { x: x + Math.cos(turn) * CHILD_GAP * rank, y, z: z + Math.sin(turn) * CHILD_GAP * rank }
+  }
+  const angle = Math.atan2(z, x) + turn
+  return { x: Math.cos(angle) * radius, y, z: Math.sin(angle) * radius }
 }
 
 export function stripPoints(from, to, { rise = STRIP_RISE, run = STRIP_RUN, side = 1, right = null } = {}) {
@@ -164,6 +184,9 @@ export function createAgents(scene, roster, cssScene = null) {
   const targets = new Map()
   const shapes = shapesFor(roster)
   const parked = roster.filter((agent) => !isOrchestrator(agent))
+  const rosterKeys = new Set(roster.map((agent) => agent.key))
+  const usedShapes = new Set(shapes)
+  const retired = new Map()
   let parkedIndex = 0
 
   function syncTargets(wanted) {
@@ -192,12 +215,10 @@ export function createAgents(scene, roster, cssScene = null) {
     }
   }
 
-  roster.forEach((agent, rosterIndex) => {
+  function addView(agent, { index, shapeName, home, scale = 1, parentKey = null }) {
     const group = new THREE.Group()
-    const shape = new THREE.LineSegments(shapeGeometry(shapes[rosterIndex]), lineMaterial(WHITE, 0.35))
-    const orchestrator = isOrchestrator(agent)
-    const index = parkedIndex
-    if (!orchestrator) parkedIndex += 1
+    const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(WHITE, 0.35))
+    const orchestrator = parentKey === null && isOrchestrator(agent)
     const rings = [flatRing(130, 0.2, -110)]
     if (orchestrator) rings.push(flatRing(158, 0.14, -110))
     const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
@@ -205,37 +226,42 @@ export function createAgents(scene, roster, cssScene = null) {
     const picker = new THREE.Mesh(new THREE.SphereGeometry(170, 8, 8), new THREE.MeshBasicMaterial({ visible: false }))
     picker.userData.key = agent.key
     group.add(shape, ...rings, label, picker)
-
-    const home = orchestrator
-      ? ORCHESTRATOR_HOME.clone()
-      : slotPoint(index, parked.length).add(new THREE.Vector3(0, PARK_LIFT, 0))
     group.position.copy(home)
+    group.scale.setScalar(scale)
 
     const link = lineBetween(lineMaterial(WHITE, 0.4))
     const stripMaterialA = lineMaterial(YELLOW, 0)
     const stripMaterialB = lineMaterial(YELLOW, 0)
     const stripA = bandLine(stripMaterialA)
     const stripB = bandLine(stripMaterialB)
+    const parentLink = parentKey ? lineBetween(lineMaterial(WHITE, 0.3)) : null
 
     const callout = makeCallout(agent.name)
     const calloutLine = lineBetween(lineMaterial(YELLOW, 0.6))
     calloutLine.visible = false
 
     scene.add(group, link, stripA, stripB, calloutLine)
+    if (parentLink) scene.add(parentLink)
     cssScene?.add(callout.object)
     pickables.push(picker)
-    views.set(agent.key, {
+    const view = {
       key: agent.key,
+      name: agent.name,
       index: orchestrator ? -1 : index,
       orchestrator,
-      shapeName: shapes[rosterIndex],
+      parentKey,
+      shapeName,
       group,
       shape,
       rings,
       label,
+      picker,
       callout,
       calloutLine,
       link,
+      parentLink,
+      scale,
+      fadeStart: 0,
       stripA,
       stripB,
       stripMaterialA,
@@ -250,7 +276,75 @@ export function createAgents(scene, roster, cssScene = null) {
       chipSide: 1,
       doneAt: 0,
       style: 'idle',
-    })
+    }
+    views.set(agent.key, view)
+    return view
+  }
+
+  function removeView(view) {
+    view.callout.object.removeFromParent()
+    view.callout.element.remove()
+    scene.remove(view.group, view.link, view.stripA, view.stripB, view.calloutLine)
+    if (view.parentLink) scene.remove(view.parentLink)
+    for (const root of [view.group, view.link, view.stripA, view.stripB, view.calloutLine, view.parentLink]) {
+      if (!root) continue
+      root.traverse((object) => {
+        object.geometry?.dispose()
+        object.material?.map?.dispose()
+        object.material?.dispose()
+      })
+    }
+    const at = pickables.indexOf(view.picker)
+    if (at !== -1) pickables.splice(at, 1)
+    views.delete(view.key)
+  }
+
+  function childIndex(state, entry) {
+    let index = 0
+    for (const other of state.agents.values()) {
+      if (other === entry) return index
+      if (other.parent === entry.parent) index += 1
+    }
+    return index
+  }
+
+  function childEndIsFresh(entry, state) {
+    const endedAt = entry.endedAt ?? 0
+    return endedAt > 0 && (state.latest ?? 0) - endedAt <= CHILD_FADE_MS
+  }
+
+  function syncViews(state) {
+    for (const view of [...views.values()]) {
+      if (rosterKeys.has(view.key)) continue
+      if (!state.agents.has(view.key)) removeView(view)
+    }
+    for (const entry of state.agents.values()) {
+      if (!entry.parent || rosterKeys.has(entry.key) || views.has(entry.key)) continue
+      const parentView = views.get(entry.parent)
+      if (!parentView) continue
+      if (retired.get(entry.key) === entry) continue
+      if (entry.status !== 'working' && entry.status !== 'queued' && !childEndIsFresh(entry, state)) continue
+      const shapeName = nextSpareShape([...usedShapes])
+      usedShapes.add(shapeName)
+      const place = childPlace(parentView.home, childIndex(state, entry))
+      addView(entry, {
+        index: -1,
+        shapeName,
+        home: new THREE.Vector3(place.x, place.y, place.z),
+        scale: parentView.scale * CHILD_SCALE,
+        parentKey: entry.parent,
+      })
+    }
+  }
+
+  roster.forEach((agent, rosterIndex) => {
+    const orchestrator = isOrchestrator(agent)
+    const index = orchestrator ? -1 : parkedIndex
+    if (!orchestrator) parkedIndex += 1
+    const home = orchestrator
+      ? ORCHESTRATOR_HOME.clone()
+      : slotPoint(index, parked.length).add(new THREE.Vector3(0, PARK_LIFT, 0))
+    addView(agent, { index, shapeName: shapes[rosterIndex], home })
   })
 
   function setStatus(view, status, now) {
@@ -258,6 +352,10 @@ export function createAgents(scene, roster, cssScene = null) {
       if (status === 'queued') view.pointer = null
       if (status === 'working' && view.style !== 'queued') view.pointer = null
       if (status === 'done' || status === 'error') view.doneAt = now
+      if (view.parentKey) {
+        if (status === 'working' || status === 'queued') view.fadeStart = 0
+        else if (status === 'done' || status === 'error') view.fadeStart = now
+      }
     }
     view.style = status
   }
@@ -289,28 +387,41 @@ export function createAgents(scene, roster, cssScene = null) {
     }
     const isStill = still()
     const wantedTargets = new Set()
+    const ended = []
+    syncViews(state)
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
       const status = entry?.status ?? 'idle'
       setStatus(view, status, now)
       const style = STYLE[status] ?? STYLE.idle
+      const fade = view.parentKey ? (view.fadeStart > 0 ? (isStill ? 0 : Math.max(0, 1 - (now - view.fadeStart) / CHILD_FADE_MS)) : 1) : 1
+
+      if (view.parentKey) {
+        const parentName = state.agents.get(view.parentKey)?.name ?? view.parentKey
+        terminals.ensure?.(view.key, `${parentName} > ${entry?.name ?? view.name}`)
+        terminals.setVisible?.(view.key, true)
+        terminals.setFade?.(view.key, fade)
+        if (fade <= 0) ended.push({ view, entry })
+      }
 
       const working = (status === 'working' || status === 'queued') && Boolean(entry?.label)
       if (!view.group.position.equals(view.home)) {
         if (isStill) view.group.position.copy(view.home)
         else view.group.position.lerp(view.home, easeRate(delta, 4, false))
       }
-      view.chipSide = view.home.x < 0 ? -1 : 1
+      const parentChipSide = view.parentKey ? views.get(view.parentKey)?.chipSide : null
+      view.chipSide = parentChipSide ? -parentChipSide : view.home.x < 0 ? -1 : 1
 
       const fresh = status === 'done' && now - view.doneAt < DONE_GLOW_MS
       const opacity = status === 'done' ? (fresh ? 1 : 0.6) : style.opacity
       view.shape.material.color.setHex(style.color)
-      view.shape.material.opacity = opacity
+      view.shape.material.opacity = opacity * fade
+      view.label.material.opacity = fade
       const ringColor = status === 'working' || status === 'queued' ? YELLOW : style.color
       view.rings.forEach((ring, index) => {
         ring.material.color.setHex(ringColor)
-        ring.material.opacity = opacity * (index === 0 ? 0.55 : 0.4)
+        ring.material.opacity = opacity * fade * (index === 0 ? 0.55 : 0.4)
       })
       if (!isStill) {
         view.shape.rotation.y += delta * style.spin
@@ -337,7 +448,7 @@ export function createAgents(scene, roster, cssScene = null) {
         calloutText = 'FINISHED'
       }
 
-      if (calloutTone) {
+      if (calloutTone && fade > 0.01) {
         view.callout.object.visible = true
         const calloutClass = `mr-callout is-${calloutTone}`
         if (view.callout.element.className !== calloutClass) {
@@ -370,7 +481,18 @@ export function createAgents(scene, roster, cssScene = null) {
       terminals.edgePoint(view.key, -view.chipSide, chipNear)
       setEnds(view.link, view.group.position, chipNear)
       view.link.material.color.setHex(style.color)
-      view.link.material.opacity = working ? 0.6 : status === 'idle' ? 0.18 : 0.4
+      view.link.material.opacity = (working ? 0.6 : status === 'idle' ? 0.18 : 0.4) * fade
+      if (view.parentLink) {
+        const parentView = views.get(view.parentKey)
+        if (parentView) {
+          setEnds(view.parentLink, parentView.group.position, view.group.position)
+          view.parentLink.material.color.setHex(parentView.shape.material.color.getHex())
+          view.parentLink.material.opacity = 0.3 * fade
+          view.parentLink.visible = fade > 0.01
+        } else {
+          view.parentLink.visible = false
+        }
+      }
 
       const pointer = view.pointer ?? (working ? focusPointer(state, entry) : null)
       let color = null
@@ -382,7 +504,7 @@ export function createAgents(scene, roster, cssScene = null) {
       const stripOn = Boolean(pointer) && color !== null
       if (color !== null) view.stripColor = color
       view.stripOpacity += ((stripOn ? STRIP_OPACITY : 0) - view.stripOpacity) * easeRate(delta, 6, isStill)
-      const stripVisible = view.stripOpacity > 0.02
+      const stripVisible = view.stripOpacity > 0.02 && fade > 0.01
       view.stripA.visible = stripVisible
       view.stripB.visible = stripVisible
       if (pointer) {
@@ -401,14 +523,22 @@ export function createAgents(scene, roster, cssScene = null) {
         setPoints(view.stripB, edges.back)
         view.stripMaterialA.color.setHex(view.stripColor)
         view.stripMaterialB.color.setHex(view.stripColor)
-        view.stripMaterialA.opacity = view.stripOpacity
-        view.stripMaterialB.opacity = view.stripOpacity
+        view.stripMaterialA.opacity = view.stripOpacity * fade
+        view.stripMaterialB.opacity = view.stripOpacity * fade
       }
     }
     syncTargets(wantedTargets)
+    for (const item of ended) {
+      if (item.entry) retired.set(item.view.key, item.entry)
+      terminals.setVisible?.(item.view.key, false)
+      terminals.setOpen?.(item.view.key, false)
+      removeView(item.view)
+    }
   }
 
   function snap(state, world) {
+    retired.clear()
+    syncViews(state)
     syncTargets(new Set())
     for (const view of views.values()) {
       view.aim = null
@@ -419,23 +549,15 @@ export function createAgents(scene, roster, cssScene = null) {
       view.stripB.visible = false
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
+      view.style = 'idle'
+      view.fadeStart = 0
+      view.doneAt = 0
     }
   }
 
   function dispose() {
     syncTargets(new Set())
-    for (const view of views.values()) {
-      view.callout.object.removeFromParent()
-      view.callout.element.remove()
-      scene.remove(view.group, view.link, view.stripA, view.stripB, view.calloutLine)
-      for (const root of [view.group, view.link, view.stripA, view.stripB, view.calloutLine]) {
-        root.traverse((object) => {
-          object.geometry?.dispose()
-          object.material?.map?.dispose()
-          object.material?.dispose()
-        })
-      }
-    }
+    for (const view of [...views.values()]) removeView(view)
     views.clear()
     pickables.length = 0
   }

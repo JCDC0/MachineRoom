@@ -82,6 +82,8 @@ export function createLivePlayer({ tree, agents, onActivity = () => {} }) {
           status: agent.status,
           label: agent.label,
           runs: agent.runs,
+          parent: agent.parent ?? null,
+          depth: agent.depth ?? 0,
         })),
       }
     },

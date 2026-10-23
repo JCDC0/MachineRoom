@@ -391,6 +391,13 @@ summary:focus-visible,
   font-weight: 500;
 }
 
+.agent-subagent {
+  grid-column: 1 / -1;
+  border-top: 1px solid rgb(255 255 255 / 0.16);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+}
+
 .agent[aria-pressed='true'],
 .overview[aria-pressed='true'] {
   border-color: var(--yellow);
