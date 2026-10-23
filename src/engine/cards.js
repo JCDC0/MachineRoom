@@ -211,6 +211,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   let movingNow = false
   let wasMoving = false
   let inspected = null
+  let rowRevision = 0
+  let lastRowFrameKey = null
 
   let lastExistingFiles = -1
   let lastLatest = -1
@@ -272,6 +274,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const occluder = new THREE.Mesh(new THREE.BufferGeometry(), hider)
     occluder.renderOrder = -1
     glScene?.add(occluder)
+    occluder.position.copy(object.position)
     const card = {
       path,
       element,
@@ -346,6 +349,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       row.addEventListener('click', (event) => {
         event.stopPropagation()
         inspected = inspected === item.path ? null : item.path
+        rowRevision += 1
         if (item.kind === 'dir') {
           pinned.add(item.path)
           pinnedVersion += 1
@@ -376,6 +380,21 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     card.rowPaths = paths
     const more = hidden > 0 ? [el('div', 'mr-card-more', `+ ${hidden} more`)] : []
     card.items.replaceChildren(...card.rows.map((entry) => entry.row), ...more)
+    rowRevision += 1
+  }
+
+  function resetRow(entry) {
+    entry.file = null
+    entry.lastReads = -1
+    entry.lastWrites = -1
+    entry.lastFailed = null
+    entry.lastYellow = null
+    entry.mark = ''
+    entry.short = ''
+    entry.cachedNote = entry.item.kind === 'file' ? 'not touched' : ''
+    entry.noteText = null
+    entry.detailText = null
+    entry.rowClass = null
   }
 
   function metaText(view) {
@@ -535,6 +554,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       }
     }
     active = { files, dirs, path: chain }
+    rowRevision += 1
     return layoutChanged || overviewChanged
   }
 
@@ -576,6 +596,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   function flash(path, tone, text = '') {
     const duration = tone === 'red' ? FAIL_MS : FLASH_MS
     flashes.set(path, { tone, text, until: performance.now() + duration })
+    rowRevision += 1
   }
 
   function sync(state) {
@@ -583,6 +604,10 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     pinnedVersion += 1
     planKey = ''
     recompute(state)
+    for (const card of cards.values()) {
+      for (const entry of card.rows) resetRow(entry)
+    }
+    rowRevision += 1
   }
 
   function setOptions(options = {}) {
@@ -676,7 +701,33 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const targeted = mask?.targeted ?? null
     const dimStep = delta / (DIM_FADE_MS / 1000)
     movingNow = false
+    let flashesEnded = false
+    for (const [path, hit] of flashes) {
+      if (hit.until <= now) {
+        flashes.delete(path)
+        flashesEnded = true
+      }
+    }
+    if (flashesEnded) rowRevision += 1
     const hasFlashes = flashes.size > 0
+    let fadesRunning = false
+    let dimRunning = false
+    for (const card of cards.values()) {
+      if (card.fade || card.listFade || card.ghosts.length > 0) fadesRunning = true
+      const dimGoal = dimmed && !dimLit?.has(card.path) ? 1 : 0
+      if (card.dimLevel !== dimGoal) dimRunning = true
+      if (fadesRunning && dimRunning) break
+    }
+    const flashKey = hasFlashes
+      ? [...flashes]
+          .map(([path, hit]) => `${path}:${hit.tone}:${hit.until}`)
+          .sort()
+          .join(';')
+      : ''
+    const maskKey = dimmed ? `1|${[...(dimLit ?? [])].join('\n')}|${[...(targeted ?? [])].join('\n')}` : '0'
+    const rowFrameKey = `${state.latest}|${maskKey}|${flashKey}|${fadesRunning ? 1 : 0}|${dimRunning ? 1 : 0}|${rowRevision}`
+    const rowsDue = rowFrameKey !== lastRowFrameKey
+    lastRowFrameKey = rowFrameKey
     let removed = false
     for (const card of [...cards.values()]) {
       if (card.fade) {
@@ -790,10 +841,11 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         paintCardOpacity(card)
       }
 
+      if (!rowsDue) continue
       for (const entry of card.rows) {
         const path = entry.item.path
         if (entry.item.kind === 'file') {
-          const file = entry.file ?? state.files.get(path)
+          const file = state.files.get(path)
           if (file) {
             entry.file = file
             if (
@@ -856,9 +908,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
           entry.detail.textContent = detail
         }
       }
-    }
-    if (hasFlashes) {
-      for (const [path, hit] of flashes) if (hit.until <= now) flashes.delete(path)
     }
     const isMoving = movingNow
     movingNow = movingNow || wasMoving
