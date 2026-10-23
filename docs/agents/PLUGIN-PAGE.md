@@ -101,7 +101,7 @@ Two ways to put the room on a plugin page:
     - It would run on Paperclip's React 19.2.8, not its own 19.3.1.
     - three.js and the whole room would have to be one file.
     - `src/styles.css` sets rules on `*`, `html`, `body` and `button`, which would restyle all of Paperclip.
-    - `Stage.jsx` and `Assistant.jsx` listen for keys on `window`, so `C`, `L`, `T`, `F`, `0` to `9`, `/` and `?` would fire while the owner types elsewhere in Paperclip.
+    - `Stage.jsx`, `Hud.jsx` and `Assistant.jsx` listen for keys on `window`, so `C`, `L`, `T`, `F`, `0` to `9`, `/` and `?` would fire while the owner types elsewhere in Paperclip.
   - Each of these can be fixed, but it is a port of the room.
 - An iframe. A tiny slot module renders an iframe that points at the built room in the plugin's UI folder, at `/_plugins/:pluginId/ui/room/index.html`. Paperclip's own `iframe` launcher does the same.
   - The room keeps its own document, React, CSS and keys.
@@ -145,7 +145,7 @@ I recommend the iframe. The rest of this section assumes it.
   - the mapping in `server/control.js`
   - the feature switches from `server/surface.js`
   - the change notices from `changeEvents`
-- `models` and `suggestRoute` read our own files (the model list and `docs/agents/policy.json`). The page could carry a copy.
+- `models` and `suggestRoute` use our own data (the list in `server/models.js` and `docs/agents/policy.json`). The page could carry a copy.
 - These need this machine and stay with the bridge (section 3):
   - `briefs` and `briefPrompt`
   - `runs`, `runStats` and `outcomes`

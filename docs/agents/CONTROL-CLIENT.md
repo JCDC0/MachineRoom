@@ -1,6 +1,6 @@
 # Control client contract
 
-The panels that start and steer work (dispatch, task thread, approvals, meters) talk to one object, the control client. Today a mock implements it (`src/control/mock.js`). Later the real one calls the bridge, which calls Paperclip (task C2). Panels must use only this object. They never call `fetch` themselves.
+The panels that start and steer work (dispatch, task thread, approvals, meters) talk to one object, the control client. A mock implements it (`src/control/mock.js`), and the real one (`src/control/client.js`) calls the bridge, which calls Paperclip. Panels must use only this object. They never call `fetch` themselves.
 
 Every method is `async`, returns plain data, and rejects with an `Error` whose `message` is plain words fit to show the user.
 
@@ -17,8 +17,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `decideApproval(id, decision, note?)` | `Approval` |
 | `costs()` | `Costs` |
 | `setAgentBudget(agentId, budgetMonthlyCents)` | `Agent` |
-| `hireAgent(draft)` | `{ agent, approval }`. `approval` is `null` when no approval is needed (task C3c; the mock has it, the real client waits for C2b) |
-| `updateAgent(agentId, patch)` | `Agent` (C3c, same note) |
+| `hireAgent(draft)` | `{ agent, approval }`. `approval` is `null` when no approval is needed (task C3c) |
+| `updateAgent(agentId, patch)` | `Agent` (C3c) |
 | `models()` | `ModelOption[]` |
 | `suggestRoute(profile, { failures } = {})` | `RouteSuggestion`, the tier, the choice and the reason from `docs/agents/policy.json`, read by the bridge (C4b; the mock holds a copy of the policy) |
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
@@ -107,15 +107,16 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 
 ## Hiring and updating an agent (C3c)
 
-`src/control/agents.js` holds the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). The mock uses them, and the bridge should use the same ones, so a bad request is refused the same way in both.
+`src/control/agents.js` holds the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). The mock and the bridge both use them, so a bad request is refused the same way in both.
 
 - `hireAgent` refuses a draft without a name or a harness, a value outside its range, an unknown setting, a name that is taken, and a `reportsToAgentId` that does not exist. Every refusal is a plain sentence.
 - When approval is required (the Paperclip company flag `requireBoardApprovalForNewAgents`; the mock defaults to on, `createMockClient({ requireApproval: false })` turns it off) the new agent has status `pending_approval` and `approval` is a pending `hire_agent` approval with `agentId` set. Approving it makes the agent `idle`. Rejecting it makes the agent `terminated`. Asking for a revision leaves it waiting. When approval is not required the agent is `idle` and `approval` is `null`.
 - `updateAgent` changes only the fields given. It refuses a waiting or a terminated agent, an empty patch, a change of harness, a depth while subagents are off, an agent that reports to itself, and a name that another agent's key already uses. Turning subagents off sets the depth to 0, and turning them on sets it to 1 unless a depth is given. `status: 'active'` resumes a paused agent (the agent is `idle` until it runs).
 - A budget in a patch changes the same number as `setAgentBudget` and sends a `costs` notice as well as an `agents` notice.
 - Notices: a hire sends `approvals` (when one is made) and `agents`. An update sends `agents`.
-- The real client (merged as 0.1.45) differs from the mock in one place: it reports `instructions` as an empty string and refuses an instructions change with "The instructions cannot be changed here yet.", because Paperclip keeps instructions in a separate bundle. `status: 'paused'` and `status: 'active'` go through Paperclip's pause and resume routes.
-- The real client (task C2b) maps these onto `POST /api/companies/:id/agent-hires` and `PATCH /api/agents/:id`. Model, turn limit and time limit go in `adapterConfig`. Where Paperclip has no field for reasoning effort or subagents, the bridge says so in plain words instead of pretending.
+- The real client (merged as 0.1.45) reports `instructions` as an empty string and refuses an instructions change with "The instructions cannot be changed here yet.", because Paperclip keeps instructions in a separate bundle. `status: 'paused'` and `status: 'active'` go through Paperclip's pause and resume routes.
+- The real client maps Paperclip's `terminated` status to `error`, so a panel sees `error` for a terminated agent; the mock can return `terminated`.
+- The real client maps these onto `POST /api/companies/:id/agent-hires` and `PATCH /api/agents/:id`. Model, turn limit and time limit go in `adapterConfig`. Where Paperclip has no field for reasoning effort or subagents, the bridge keeps the value in `metadata` (`metadata.reasoningEffort` and `metadata.subagents = { allowed, depth }`), and no harness enforces it (see `PAPERCLIP-API.md`).
 
 ## Change notices
 
