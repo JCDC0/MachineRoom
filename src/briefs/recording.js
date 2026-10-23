@@ -1,4 +1,5 @@
 import { basename } from '../model/paths.js'
+import { LINE as HERMES_LINE } from '../model/parsers/hermes.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
 import { RECORDING_NAME } from '../startup.js'
 import { sessionToolLines } from './run.js'
@@ -85,33 +86,51 @@ function sessionTimes(exportText) {
 function hermesEntries(session) {
   const lines = sessionToolLines(session)
   const times = sessionTimes(session)
-  return lines.map((line, index) => {
-    const at = times[index]
-    const ms = typeof at === 'number' ? (at > MS_FLOOR ? at : at * 1000) : null
-    return { chunk: `${line}\n`, at: ms }
-  })
+  const readLine = createRunLineReader('hermes')
+  return lines
+    .map((line, index) => {
+      const at = times[index]
+      const ms = typeof at === 'number' ? (at > MS_FLOOR ? at : at * 1000) : null
+      return readLine(line, ms)
+    })
+    .filter(Boolean)
+    .map((entry) => ({ chunk: entry.chunk, at: entry.at }))
+}
+
+export function createRunLineReader(harness) {
+  if (harness !== 'hermes' && harness !== 'opencode') throw new Error(`The line reader does not know the ${harness} log.`)
+  const parser = harness === 'opencode' ? createOpencodeParser({ rootName: '', files: [], dirs: [] }) : null
+  return function readLine(line, at = null) {
+    const text = String(line ?? '')
+    if (!text.trim()) return null
+    if (harness === 'hermes') {
+      return { chunk: `${text}\n`, at: Number.isFinite(at) ? at : null, read: HERMES_LINE.test(text) }
+    }
+    let time = Number.isFinite(at) ? at : null
+    if (time === null) {
+      try {
+        const item = JSON.parse(text)
+        if (typeof item?.timestamp === 'number' && Number.isFinite(item.timestamp)) time = item.timestamp
+      } catch {
+        time = null
+      }
+    }
+    const activities = parser.push(`${text}\n`, time ?? 0)
+    return { chunk: `${text}\n`, at: time, read: activities.length > 0 }
+  }
 }
 
 function opencodeEntries(log) {
-  const parser = createOpencodeParser({ rootName: '', files: [], dirs: [] })
+  const readLine = createRunLineReader('opencode')
   const entries = []
   for (const line of String(log ?? '').split(/\r?\n/)) {
-    if (!line.trim()) continue
-    let at = null
-    try {
-      const item = JSON.parse(line)
-      if (typeof item?.timestamp === 'number' && Number.isFinite(item.timestamp)) at = item.timestamp
-    } catch {
-      at = null
-    }
-    const activities = parser.push(`${line}\n`, at ?? 0)
-    if (activities.length === 0) continue
-    entries.push({ chunk: `${line}\n`, at })
+    const entry = readLine(line)
+    if (entry?.read) entries.push({ chunk: entry.chunk, at: entry.at })
   }
   return entries
 }
 
-function failure(record) {
+export function failureText(record) {
   if (record.killed === true) return 'killed'
   if (!Number.isInteger(record.exitCode)) return 'no exit code'
   return `exit ${record.exitCode}`
@@ -153,7 +172,7 @@ export function framesFromRun({ harness, log, session, record } = {}) {
     payload: {
       ...base,
       status: ok ? 'succeeded' : 'failed',
-      error: ok ? null : failure(record),
+      error: ok ? null : failureText(record),
       errorCode: null,
       startedAt: iso(running),
       finishedAt: iso(finish),

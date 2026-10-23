@@ -54,25 +54,23 @@ There is no randomness. The same recording always draws the same room.
 
 ## Run it
 
-MachineRoom follows a Paperclip instance on this machine. It never starts Paperclip. You need Node 24 or newer.
-
-Start Paperclip yourself, in its own terminal:
-
-```
-paperclipai run
-```
-
-Then build the viewer and serve it with the bridge on one port:
+You need Node 24 or newer. Build the viewer once, then serve it with the bridge on one port:
 
 ```
 npm install
 npm run build
-npm run serve -- up --company <id>
+npm run serve -- up --lanes
 ```
 
-`--company` is the company to follow, from Paperclip's company list. `PAPERCLIP_COMPANY_ID` does the same. The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it, and `--paperclip <url>` or `PAPERCLIP_URL` names another Paperclip.
+`--lanes` (or `MACHINEROOM_LANES=1`) shows lane runs live. Start a lane in another terminal (`npm run run-lane -- opencode <brief>`, see Working with lanes): the bridge sees its log appear in `%TEMP%\machineroom-runs`, the lane turns working, its reads and writes land on the project's cards as the log grows, and the run turns green or red when `run-lane` records how it ended. Each lane in `docs/agents/lanes.json` with a `cli` block is an agent, and a retired lane is left out. AGY is not a lane yet.
+
+The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it.
 
 For development, `npm run dev` serves the viewer on port 5173 and `npm run bridge` runs the bridge on port 5174 without a build.
+
+### With Paperclip
+
+MachineRoom grew out of Paperclip and can still follow an instance on this machine, beside the lanes or alone. It never starts Paperclip. Start it yourself, in its own terminal, with `paperclipai run`, then add `--company <id>` to `up`: the company to follow, from Paperclip's company list (`PAPERCLIP_COMPANY_ID` does the same). `--paperclip <url>` or `PAPERCLIP_URL` names a Paperclip other than `http://127.0.0.1:3100`.
 
 `up` runs the checks, prints one `ok` or `FAIL` line for each, then serves the room and prints the address to open:
 
@@ -82,13 +80,13 @@ For development, `npm run dev` serves the viewer on port 5173 and `npm run bridg
 - The project folder exists.
 - Automatic database backups are on, and the newest is under a day old.
 
-A failed check does not close the room. A part whose routes changed stays off, and its panel says so.
+Without Paperclip the Paperclip checks print FAIL. A failed check does not close the room. A part whose routes changed stays off, and its panel says so.
 
 `npm run serve -- doctor` runs those checks alone, starts nothing, and exits 1 when one fails. `doctor` takes `--paperclip`, `--company` and `--root`. `serve` and `up` also take `--port <n>`. The environment variables `PAPERCLIP_URL`, `PAPERCLIP_COMPANY_ID` and `PROJECT_ROOT` do the same; `PORT` sets the port for `serve` and `up`.
 
-### Without Paperclip
+### Replays
 
-After a build, `npm run serve -- up` still serves the room. The Paperclip check prints FAIL, and the replay and the simulated feed work without Paperclip.
+The replay and the simulated feed need neither Paperclip nor a lane.
 
 The first visit shows a connect screen, and the replay is one of its choices. An address skips the screen:
 
@@ -97,7 +95,7 @@ The first visit shows a connect screen, and the replay is one of its choices. An
 - `&fps` adds a line in the HUD's top left panel with the median and p95 frame time over the last 120 frames.
 - `/?live&simulate` plays the same recording through the live path. The badge reads `Demo`. Add `&speed=3` to play faster; the speed is clamped from 0.25 to 64.
 - `/?recording=<name>` opens a recording of a lane run.
-- `/?live&bridge=http://127.0.0.1:5174` follows Paperclip through a bridge.
+- `/?live&bridge=http://127.0.0.1:5174` follows a bridge: its lane runs with `--lanes`, and Paperclip when one runs.
 - `/?connect` shows the connect screen again.
 
 Drag to turn the view. Scroll to zoom.

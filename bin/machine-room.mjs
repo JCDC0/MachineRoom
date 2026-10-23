@@ -20,6 +20,7 @@ const USAGE = [
   '  --root <folder>     project folder (PROJECT_ROOT)',
   '  --port <n>          port to listen on (PORT)',
   '  --dist <folder>     built viewer folder (default: dist beside bin)',
+  '  --lanes             show lane runs live from the run-lane logs (MACHINEROOM_LANES=1)',
   '  --help              show this help',
 ].join('\n')
 
@@ -37,6 +38,8 @@ const DOCTOR_OPTION_NAMES = {
   '--root': 'projectRoot',
 }
 
+const FLAGS = new Set(['--lanes'])
+
 const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway; features whose routes changed stay off.'
 const PAPERCLIP_NOT_RUNNING = 'Paperclip is not running. Start it yourself with paperclipai run; machine-room never starts it.'
 
@@ -50,6 +53,10 @@ function parseArgs(argv, names = OPTION_NAMES) {
     }
     const equals = arg.indexOf('=')
     const flag = equals === -1 ? arg : arg.slice(0, equals)
+    if (FLAGS.has(flag)) {
+      options[flag.slice(2)] = true
+      continue
+    }
     if (!Object.hasOwn(names, flag)) throw new Error(`Unknown option ${flag}.`)
     let value
     if (equals === -1) {
@@ -100,6 +107,7 @@ async function startRoom(options, dist) {
     projectRoot: options.projectRoot,
     port: options.port,
     staticDir: dist,
+    lanesSource: options.lanes === true,
   })
 
   let info
