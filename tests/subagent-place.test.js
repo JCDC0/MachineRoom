@@ -1,8 +1,8 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import * as THREE from 'three'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { CHILD_GAP, CHILD_SCALE, childPlace, createAgents } from '../src/engine/agents.js'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
+import { CHILD_GAP, CHILD_HOLD_MS, CHILD_SCALE, childEndIsFresh, childFade, childPlace, createAgents } from '../src/engine/agents.js'
 import { nextSpareShape } from '../src/engine/shapes.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
@@ -43,6 +43,42 @@ describe('childPlace', () => {
     const second = childPlace(parentPlace, 2)
     expect(second).toEqual(first)
     expect(parentPlace).toEqual(before)
+  })
+})
+
+describe('childFade', () => {
+  it('holds an ended child at full opacity for 6 seconds, then fades it', () => {
+    expect(childFade(0)).toBe(1)
+    expect(childFade(5900)).toBe(1)
+    expect(childFade(6000)).toBe(1)
+    expect(childFade(6750)).toBeCloseTo(0.5)
+    expect(childFade(7500)).toBe(0)
+  })
+
+  it('holds for 6 seconds under reduced motion, then goes at once', () => {
+    expect(childFade(0, true)).toBe(1)
+    expect(childFade(5900, true)).toBe(1)
+    expect(childFade(6000, true)).toBe(1)
+    expect(childFade(6750, true)).toBe(0)
+    expect(childFade(7500, true)).toBe(0)
+  })
+})
+
+describe('childEndIsFresh', () => {
+  const entry = { endedAt: 1000 }
+
+  it('keeps an entry 7 seconds after its end and drops it at 8', () => {
+    expect(childEndIsFresh(entry, { latest: 8000 })).toBe(true)
+    expect(childEndIsFresh(entry, { latest: 9000 })).toBe(false)
+  })
+
+  it('covers the hold and the fade together, 7.5 seconds', () => {
+    expect(childEndIsFresh(entry, { latest: 1000 + CHILD_HOLD_MS + 1500 })).toBe(true)
+    expect(childEndIsFresh(entry, { latest: 1001 + CHILD_HOLD_MS + 1500 })).toBe(false)
+  })
+
+  it('drops an entry that never ended', () => {
+    expect(childEndIsFresh({}, { latest: 9000 })).toBe(false)
   })
 })
 
@@ -110,35 +146,40 @@ afterAll(() => {
   globalThis.document = savedDocument
 })
 
+function childHarness() {
+  const scene = new THREE.Scene()
+  const agents = createAgents(scene, [{ key: 'a', name: 'Alpha', shape: 'claude' }])
+  const state = createState({ files: [], dirs: [], created: [] }, [{ key: 'a', name: 'Alpha' }])
+  const chips = new Map()
+  const terminals = {
+    ensure(key, name) {
+      chips.set(key, { key, name })
+      return chips.get(key)
+    },
+    setVisible(key, visible) {
+      chips.set(key, { ...(chips.get(key) ?? { key }), visible })
+    },
+    setFade(key, alpha) {
+      chips.set(key, { ...(chips.get(key) ?? { key }), alpha })
+    },
+    setOpen() {},
+    edgePoint(key, side, out) {
+      return out.set(100, 290, 0)
+    },
+  }
+  const world = {
+    right: new THREE.Vector3(1, 0, 0),
+    back: new THREE.Vector3(0, 0, 1),
+    side: () => 1,
+    edge: (dir, file, side, out) => out.set(500, 400, 0),
+  }
+  return { agents, state, chips, terminals, world }
+}
+
 describe('a child view', () => {
-  it('is added beside its parent and removed after the fade', () => {
-    const scene = new THREE.Scene()
-    const agents = createAgents(scene, [{ key: 'a', name: 'Alpha', shape: 'claude' }])
-    const state = createState({ files: [], dirs: [], created: [] }, [{ key: 'a', name: 'Alpha' }])
+  it('is added beside its parent and held, faded, then removed', () => {
+    const { agents, state, chips, terminals, world } = childHarness()
     apply(state, { time: 1000, type: 'agent.spawn', agent: 'a', child: 'a~1', name: 'Scout', label: 'task', runId: 'r1' })
-    const chips = new Map()
-    const terminals = {
-      ensure(key, name) {
-        chips.set(key, { key, name })
-        return chips.get(key)
-      },
-      setVisible(key, visible) {
-        chips.set(key, { ...(chips.get(key) ?? { key }), visible })
-      },
-      setFade(key, alpha) {
-        chips.set(key, { ...(chips.get(key) ?? { key }), alpha })
-      },
-      setOpen() {},
-      edgePoint(key, side, out) {
-        return out.set(100, 290, 0)
-      },
-    }
-    const world = {
-      right: new THREE.Vector3(1, 0, 0),
-      back: new THREE.Vector3(0, 0, 1),
-      side: () => 1,
-      edge: (dir, file, side, out) => out.set(500, 400, 0),
-    }
     agents.update(state, 0.016, 1000, world, terminals)
     const child = agents.views.get('a~1')
     expect(child).toBeTruthy()
@@ -150,7 +191,20 @@ describe('a child view', () => {
 
     apply(state, { time: 2000, type: 'agent.end', agent: 'a~1', ok: true })
     agents.update(state, 0.016, 2000, world, terminals)
-    agents.update(state, 0.016, 3601, world, terminals)
+    expect(chips.get('a~1').alpha).toBe(1)
+    apply(state, { time: 3000, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+    agents.update(state, 0.016, 3000, world, terminals)
+    expect(chips.get('a~1').alpha).toBe(1)
+    agents.update(state, 0.016, 7999, world, terminals)
+    expect(agents.views.has('a~1')).toBe(true)
+    expect(chips.get('a~1').alpha).toBe(1)
+    agents.update(state, 0.016, 8000, world, terminals)
+    expect(agents.views.has('a~1')).toBe(true)
+    expect(chips.get('a~1').alpha).toBe(1)
+    agents.update(state, 0.016, 8750, world, terminals)
+    expect(agents.views.has('a~1')).toBe(true)
+    expect(chips.get('a~1').alpha).toBe(0.5)
+    agents.update(state, 0.016, 9500, world, terminals)
     expect(agents.views.has('a~1')).toBe(false)
     expect(chips.get('a~1').visible).toBe(false)
     agents.dispose()
@@ -170,6 +224,34 @@ describe('a child view', () => {
     terminals.setVisible('a~1', false)
     expect(term.object.visible).toBe(false)
     terminals.dispose()
+  })
+})
+
+describe('a child view under reduced motion', () => {
+  let savedWindow
+
+  beforeEach(() => {
+    savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+  })
+
+  afterEach(() => {
+    globalThis.window = savedWindow
+  })
+
+  it('holds the view for 6 seconds, then removes it at once', () => {
+    const { agents, state, chips, terminals, world } = childHarness()
+    apply(state, { time: 1000, type: 'agent.spawn', agent: 'a', child: 'a~1', name: 'Scout', label: 'task', runId: 'r1' })
+    apply(state, { time: 2000, type: 'agent.end', agent: 'a~1', ok: true })
+    agents.update(state, 0.016, 2000, world, terminals)
+    expect(chips.get('a~1').alpha).toBe(1)
+    agents.update(state, 0.016, 7999, world, terminals)
+    expect(agents.views.has('a~1')).toBe(true)
+    expect(chips.get('a~1').alpha).toBe(1)
+    agents.update(state, 0.016, 8001, world, terminals)
+    expect(agents.views.has('a~1')).toBe(false)
+    expect(chips.get('a~1').visible).toBe(false)
+    agents.dispose()
   })
 })
 
