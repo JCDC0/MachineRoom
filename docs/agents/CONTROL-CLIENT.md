@@ -45,8 +45,8 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 Agent        { id, key, name, adapterType, role, status, model: string|null, budgetMonthlyCents, spentMonthlyCents,
                reasoningEffort: low|medium|high|null, maxTurnsPerRun: number|null, timeoutSec: number|null,
                subagentsAllowed: boolean, subagentDepth: 0..3, instructions: string, reportsToAgentId: string|null }
-             status: idle | running | paused | error | pending_approval | terminated
-             A waiting or terminated agent cannot take a task (`createIssue` refuses it).
+             status: idle | running | paused | error | pending_approval
+             A waiting agent cannot take a task, and neither can one Paperclip has terminated (shown as `error`); `createIssue` refuses both.
              role: one of the Paperclip roles; adapterType: one of the Paperclip adapter types (lists in src/control/agents.js)
 AgentDraft   { name, adapterType, role? (engineer), model?, reasoningEffort?, maxTurnsPerRun? (1..200), timeoutSec? (10..7200),
                budgetMonthlyCents? (0), subagentsAllowed? (false), subagentDepth? (1..3, default 1 when allowed), instructions? (max 20000), reportsToAgentId? }
@@ -110,12 +110,12 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 `src/control/agents.js` holds the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). The mock and the bridge both use them, so a bad request is refused the same way in both.
 
 - `hireAgent` refuses a draft without a name or a harness, a value outside its range, an unknown setting, a name that is taken, and a `reportsToAgentId` that does not exist. Every refusal is a plain sentence.
-- When approval is required (the Paperclip company flag `requireBoardApprovalForNewAgents`; the mock defaults to on, `createMockClient({ requireApproval: false })` turns it off) the new agent has status `pending_approval` and `approval` is a pending `hire_agent` approval with `agentId` set. Approving it makes the agent `idle`. Rejecting it makes the agent `terminated`. Asking for a revision leaves it waiting. When approval is not required the agent is `idle` and `approval` is `null`.
-- `updateAgent` changes only the fields given. It refuses a waiting or a terminated agent, an empty patch, a change of harness, a depth while subagents are off, an agent that reports to itself, and a name that another agent's key already uses. Turning subagents off sets the depth to 0, and turning them on sets it to 1 unless a depth is given. `status: 'active'` resumes a paused agent (the agent is `idle` until it runs).
+- When approval is required (the Paperclip company flag `requireBoardApprovalForNewAgents`; the mock defaults to on, `createMockClient({ requireApproval: false })` turns it off) the new agent has status `pending_approval` and `approval` is a pending `hire_agent` approval with `agentId` set. Approving it makes the agent `idle`. Rejecting it terminates the agent, which both clients report as `error`. Asking for a revision leaves it waiting. When approval is not required the agent is `idle` and `approval` is `null`.
+- `updateAgent` changes only the fields given. It refuses a waiting agent and a terminated one (shown as `error`), an empty patch, a change of harness, a depth while subagents are off, an agent that reports to itself, and a name that another agent's key already uses. Turning subagents off sets the depth to 0, and turning them on sets it to 1 unless a depth is given. `status: 'active'` resumes a paused agent (the agent is `idle` until it runs).
 - A budget in a patch changes the same number as `setAgentBudget` and sends a `costs` notice as well as an `agents` notice.
 - Notices: a hire sends `approvals` (when one is made) and `agents`. An update sends `agents`.
 - The real client (merged as 0.1.45) reports `instructions` as an empty string and refuses an instructions change with "The instructions cannot be changed here yet.", because Paperclip keeps instructions in a separate bundle. `status: 'paused'` and `status: 'active'` go through Paperclip's pause and resume routes.
-- The real client maps Paperclip's `terminated` status to `error`, so a panel sees `error` for a terminated agent; the mock can return `terminated`.
+- Both clients map Paperclip's `terminated` status to `error`, so a panel sees `error` for a terminated agent, while both still refuse it a task and a settings change.
 - The real client maps these onto `POST /api/companies/:id/agent-hires` and `PATCH /api/agents/:id`. Model, turn limit and time limit go in `adapterConfig`. Where Paperclip has no field for reasoning effort or subagents, the bridge keeps the value in `metadata` (`metadata.reasoningEffort` and `metadata.subagents = { allowed, depth }`), and no harness enforces it (see `PAPERCLIP-API.md`).
 
 ## Change notices

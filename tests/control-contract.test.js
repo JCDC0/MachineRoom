@@ -835,6 +835,8 @@ function runContractSuite(label, makeHarness) {
       expect(await client.updateAgent(agent.id, { model: 'm3' })).toMatchObject({ status: 'idle', model: 'm3' })
       const second = await client.hireAgent({ name: 'Scout', adapterType: 'claude_local' })
       await client.decideApproval(second.approval.id, 'reject')
+      const rejected = (await client.agents()).find((agent) => agent.id === second.agent.id)
+      expect(rejected.status).toBe('error')
       await expect(client.updateAgent(second.agent.id, { model: 'm' })).rejects.toThrow('That agent was terminated.')
     })
 

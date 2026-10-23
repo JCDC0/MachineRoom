@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { fixtureLeak, sandboxFiles } from '../scripts/build-fixtures.mjs'
+import { fixtureLeak, fixtureNames, sandboxFiles } from '../scripts/build-fixtures.mjs'
+import { replayFiles } from '../src/model/replay.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/build-fixtures.mjs', import.meta.url))
@@ -79,6 +80,27 @@ describe('sandboxFiles', () => {
 
     expect(result.files).toEqual(['a.md', 'b.md', 'c.md', 'données/été.md'])
     expect(result.created).toEqual(['b.md', 'c.md'])
+  })
+})
+
+describe('fixtureNames', () => {
+  it('puts the default agent list where the default replay reads it', () => {
+    const names = fixtureNames()
+    expect(names.agents).toBe('agents.json')
+    expect(replayFiles()).toEqual({
+      run: `fixtures/${names.run}`,
+      agents: `fixtures/${names.agents}`,
+      tree: `fixtures/${names.tree}`,
+    })
+  })
+
+  it('keeps a named agent list beside its run and its tree', () => {
+    expect(fixtureNames('scenario-z')).toEqual({
+      run: 'scenario-z-run.jsonl',
+      agents: 'scenario-z-agents.json',
+      tree: 'scenario-z-tree.json',
+    })
+    expect(fixtureNames('my set').agents).toBe('my-set-agents.json')
   })
 })
 

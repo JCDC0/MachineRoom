@@ -29,7 +29,7 @@ It reads `PAPERCLIP_URL` (default `http://127.0.0.1:3100`), `PAPERCLIP_COMPANY_I
 npm run fixtures -- <frames.jsonl> <sandbox-folder> <ids.json> <name>
 ```
 
-This writes `<name>-run.jsonl`, `<name>-agents.json` and `<name>-tree.json` under `public/fixtures/`. Without a name the files are `sandbox-run.jsonl`, `sandbox-tree.json` and `sandbox-agents.json`. When a run renames or deletes a file, build the tree from a folder state where both names exist, so the parser can resolve both.
+This writes `<name>-run.jsonl`, `<name>-agents.json` and `<name>-tree.json` under `public/fixtures/`. Without a name the files are `sandbox-run.jsonl`, `sandbox-tree.json` and `agents.json`. When a run renames or deletes a file, build the tree from a folder state where both names exist, so the parser can resolve both.
 
 ## Windows notes found while recording
 

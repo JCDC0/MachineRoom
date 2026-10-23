@@ -284,6 +284,7 @@ function seed(at) {
 export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now = Date.now, requireApproval = true } = {}) {
   const state = seed(now())
   state.agents = state.agents.map((agent) => ({ ...AGENT_DEFAULTS, ...agent }))
+  const terminated = new Set()
   let briefsText = SAMPLE_BRIEFS
   let approvalCounter = 3
   const failures = new Map()
@@ -350,7 +351,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!draft?.title?.trim()) throw new Error('A title is required.')
         const assignee = agentById(draft.assigneeAgentId)
         if (!assignee) throw new Error('Choose an agent for this task.')
-        if (CANNOT_TAKE_TASKS.includes(assignee.status)) throw new Error('That agent cannot take tasks yet.')
+        if (CANNOT_TAKE_TASKS.includes(assignee.status) || terminated.has(assignee.id)) throw new Error('That agent cannot take tasks yet.')
         const problem = taskDraftProblem(draft)
         if (problem) throw new Error(problem)
         issueCounter += 1
@@ -399,7 +400,10 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const hired = approval.type === 'hire_agent' && approval.agentId ? agentById(approval.agentId) : null
         if (hired && hired.status === 'pending_approval') {
           if (approval.status === 'approved') hired.status = 'idle'
-          else if (approval.status === 'rejected') hired.status = 'terminated'
+          else if (approval.status === 'rejected') {
+            hired.status = 'error'
+            terminated.add(hired.id)
+          }
           emit({ topic: 'agents' })
         }
         emit({ topic: 'approvals' })
@@ -452,7 +456,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('updateAgent', () => {
         const agent = agentById(agentId)
         if (!agent) throw new Error('That agent no longer exists.')
-        if (agent.status === 'terminated') throw new Error('That agent was terminated.')
+        if (terminated.has(agent.id)) throw new Error('That agent was terminated.')
         if (agent.status === 'pending_approval') throw new Error('Approve the hire first.')
         const { status, ...changes } = cleanAgentPatch(patch)
         if (changes.reportsToAgentId === agent.id) throw new Error('An agent cannot report to itself.')
