@@ -124,3 +124,91 @@ describe('strands keep up with longer strings', () => {
     }
   })
 })
+
+describe('one glow texture for every strand', () => {
+  it('reuses the texture over two builds and frees it once', () => {
+    const scene = fakeScene()
+    const centres = new Map([
+      ['a', new THREE.Vector3(0, 0, 0)],
+      ['b', new THREE.Vector3(100, 0, 0)],
+    ])
+    const centreOf = (key) => centres.get(key)
+    const strings = createStrings(scene, { onPath: () => false })
+    let freed = 0
+
+    strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+    const texture = strandMesh(scene).material.map
+    expect(texture).toBeInstanceOf(THREE.CanvasTexture)
+    texture.addEventListener('dispose', () => {
+      freed += 1
+    })
+
+    strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+    expect(strandMesh(scene).material.map).toBe(texture)
+    expect(freed).toBe(0)
+
+    strings.dispose()
+    expect(freed).toBe(1)
+  })
+})
+
+describe('strands write only when their look changes', () => {
+  it('skips the colour and opacity writes until the yellow, dim or lit value moves', () => {
+    const scene = fakeScene()
+    const centres = new Map([
+      ['a', new THREE.Vector3(0, 0, 0)],
+      ['b', new THREE.Vector3(100, 0, 0)],
+    ])
+    const centreOf = (key) => centres.get(key)
+    let active = false
+    const strings = createStrings(scene, { onPath: () => active })
+    strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+    const mesh = strandMesh(scene)
+    const material = mesh.material
+    const colour = vi.spyOn(material.color, 'lerpColors')
+    let opacity = material.opacity
+    let writes = 0
+    Object.defineProperty(material, 'opacity', {
+      configurable: true,
+      get: () => opacity,
+      set: (value) => {
+        writes += 1
+        opacity = value
+      },
+    })
+
+    mesh.onBeforeRender()
+    expect(colour).toHaveBeenCalledTimes(1)
+    expect(writes).toBe(1)
+
+    mesh.onBeforeRender()
+    expect(colour).toHaveBeenCalledTimes(1)
+    expect(writes).toBe(1)
+
+    active = true
+    mesh.onBeforeRender()
+    expect(colour).toHaveBeenCalledTimes(2)
+    expect(writes).toBe(2)
+
+    mesh.onBeforeRender()
+    expect(colour).toHaveBeenCalledTimes(2)
+    expect(writes).toBe(2)
+
+    const mask = { dimmed: true, lit: new Set(['a', 'b']) }
+    strings.update(centreOf, mask, 0.1)
+    mesh.onBeforeRender()
+    expect(colour).toHaveBeenCalledTimes(3)
+    expect(writes).toBe(3)
+
+    mesh.onBeforeRender()
+    expect(colour).toHaveBeenCalledTimes(3)
+    expect(writes).toBe(3)
+
+    strings.update(centreOf, mask, 0.1)
+    mesh.onBeforeRender()
+    expect(colour).toHaveBeenCalledTimes(4)
+    expect(writes).toBe(4)
+
+    strings.dispose()
+  })
+})

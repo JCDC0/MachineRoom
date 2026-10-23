@@ -170,6 +170,7 @@ function fillStrand(strand, points) {
 export function createStrings(scene, { onPath = () => false } = {}) {
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()
+  const glow = glowTexture()
   let line = null
   let ends = []
   let strands = []
@@ -177,7 +178,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
   let dimLevel = 0
   let currentMask = null
 
-  function dispose() {
+  function clear() {
     if (line) {
       scene.remove(line)
       line.geometry.dispose()
@@ -193,6 +194,11 @@ export function createStrings(scene, { onPath = () => false } = {}) {
     strands = []
     ends = []
     lineLevels = []
+  }
+
+  function dispose() {
+    clear()
+    glow.dispose()
   }
 
   function update(centerOf, mask = null, delta = 0) {
@@ -259,7 +265,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
   }
 
   function build(links, centerOf, anchor = true) {
-    dispose()
+    clear()
     ends = anchor ? [{ from: null, to: '' }, ...links] : [...links]
     if (ends.length === 0) return
     const geometry = new THREE.BufferGeometry()
@@ -280,13 +286,12 @@ export function createStrings(scene, { onPath = () => false } = {}) {
     scene.add(line)
     lineLevels = new Array(ends.length).fill(-1)
 
-    const texture = glowTexture()
     strands = ends.map((link) => {
       const seed = stringHash(`${link.from ?? ''}>${link.to ?? ''}`)
       const material = new THREE.PointsMaterial({
         color: WHITE,
         size: 8,
-        map: texture,
+        map: glow,
         transparent: true,
         opacity: 0.35,
         depthWrite: false,
@@ -300,6 +305,9 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         seed,
         mesh,
         yellowLevel: 0,
+        paintedYellow: -1,
+        paintedLit: false,
+        paintedDim: -1,
         from: new THREE.Vector3(NaN, NaN, NaN),
         to: new THREE.Vector3(NaN, NaN, NaN),
         offsets: null,
@@ -317,7 +325,12 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         } else if (strand.yellowLevel > 0) {
           strand.yellowLevel = Math.max(0, strand.yellowLevel - delta / 1.5)
         }
-        const factor = linkIsLit(strand.link, currentMask) ? 1 : 1 - (1 - DIM_FACTOR) * dimLevel
+        const lit = linkIsLit(strand.link, currentMask)
+        if (strand.paintedYellow === strand.yellowLevel && strand.paintedLit === lit && strand.paintedDim === dimLevel) return
+        strand.paintedYellow = strand.yellowLevel
+        strand.paintedLit = lit
+        strand.paintedDim = dimLevel
+        const factor = lit ? 1 : 1 - (1 - DIM_FACTOR) * dimLevel
         material.color.lerpColors(COLOR_WHITE, COLOR_YELLOW, strand.yellowLevel)
         material.opacity = (0.35 + strand.yellowLevel * 0.55) * factor
       }

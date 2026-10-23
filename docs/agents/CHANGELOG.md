@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review note on Q3d: no fixes. V6 (one glow texture for every strand, freed once at teardown; a build clears without freeing it), V7 (a strand writes its colour and opacity only when its yellow, lit or dim level moved) and V12 (the bridge stays on its poll when the watcher cannot be armed, after a burst and at start) are fixed, each with a test that fails on the old code. The startup half of V12 went past the brief's wording, and the lane said so. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 116 files, 2156 tests, in parallel on the first try. The first run of Q3d ended with `provider.content-filter` before any change; the second run did the work.
 - Review note on Q3c: no fixes. A seek clears the follow timers, the pending card and the held card and aims again from the newest touch; ending follow (a click on empty space, a card head or a row, `focusPath`) tells Stage through `onPick(null)`, which clears the badge (`focus(null)` returns early); the HUD keys skip inputs, selects and dialogs. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 116 files, 2152 tests, in parallel on the first try.
 - The owner chose to keep an agent's focus on its last file during a tool call that names no file (audit finding V3); `ARCHITECTURE.md` says so under Known limits.
 - Review note on G3g: no fixes. Two lines changed, each with the code that proves it (the obstacle gap is the half diagonal plus the radius plus 60, and the layout numbers are measured again on the sphere, dated 2026-10-23); the brief's other examples were already right or fixed by Q3, and the lane said so rather than rewriting true lines. V21 will change the sphere's numbers again.
@@ -14,6 +15,7 @@
 - Each agent's link line and callout line are written only when an end moved (task Q3b, V11).
 - The depth mesh of a card starts at the card's position, rows drop the old state's file after a seek, and a paused replay skips the row loop when nothing changed (task Q3a).
 - Follow mode resets on a seek and ends on a card head, a card row or empty space, a seek drops the label timers `focusPath` set, and the HUD keys ignore a target inside a dialog (task Q3c).
+- The strands share one glow texture and skip colour and opacity writes that change nothing, and the bridge keeps polling when its watcher cannot be armed again (task Q3d).
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Bring the room lines of `ARCHITECTURE.md` up to date for the sphere layout: the warm and cold layout times, 222 cards, 0 overlapping layouts, a 12,819 unit tallest layout, 0 moves over 150 units and a 33 unit worst move from `npm run scale-probe` on 2026-10-23, the frame times marked as measured before the redesign, and the obstacle clearance.
