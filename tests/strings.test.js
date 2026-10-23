@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { STRING_LIFT, createStrings, strandPoints } from '../src/engine/strings.js'
+import { createStrings, strandPoints } from '../src/engine/strings.js'
 
 const context2d = {
   fillStyle: '',
@@ -68,12 +68,12 @@ describe('strands keep up with longer strings', () => {
       const firstGeometry = mesh.geometry
       const disposed = vi.fn()
       firstGeometry.addEventListener('dispose', disposed)
-      expect(firstGeometry.getAttribute('position').count).toBe(pointCount(new THREE.Vector3(0, STRING_LIFT, 0), new THREE.Vector3(100, STRING_LIFT, 0)))
+      expect(firstGeometry.getAttribute('position').count).toBe(pointCount(new THREE.Vector3(0, 0, 0), new THREE.Vector3(100, 0, 0)))
 
       centres = far
       strings.update(centreOf)
 
-      const farCount = pointCount(new THREE.Vector3(0, STRING_LIFT, 0), new THREE.Vector3(1000, STRING_LIFT, 0))
+      const farCount = pointCount(new THREE.Vector3(0, 0, 0), new THREE.Vector3(1000, 0, 0))
       expect(mesh.geometry).not.toBe(firstGeometry)
       expect(mesh.geometry.getAttribute('position').count).toBe(farCount)
       expect(farCount).toBeGreaterThan(4)

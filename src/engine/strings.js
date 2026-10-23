@@ -1,10 +1,10 @@
 import * as THREE from 'three'
+import { SPHERE_CENTER } from './sphere.js'
 import { WHITE, YELLOW, glowTexture, lineMaterial, reducedMotion, seeded } from './sprites.js'
 
 const SEGMENTS = 16
 const SAG = 0.12
 const SAG_MAX = 520
-export const STRING_LIFT = 30
 
 const COLOR_WHITE = new THREE.Color(WHITE)
 const COLOR_YELLOW = new THREE.Color(YELLOW)
@@ -27,7 +27,6 @@ export function strandPoints(curve, spacing = 24, seed = 0, out = null) {
   if (a && b) {
     len = a.distanceTo(b)
     if (len === 0) return out ? (out.length = 0, out) : []
-    const sag = Math.min(SAG_MAX, len * SAG) * 4
     const ax = a.x, ay = a.y, az = a.z
     const dx = b.x - ax, dy = b.y - ay, dz = b.z - az
     const count = spacing > 0 ? Math.max(0, Math.round(len / spacing)) : 0
@@ -37,7 +36,7 @@ export function strandPoints(curve, spacing = 24, seed = 0, out = null) {
     for (let i = 0; i < count; i += 1) {
       const t = count === 1 ? 0.5 : (i + 0.5) / count
       const x = ax + dx * t + (rand() - 0.5) * 10
-      const y = ay + dy * t - sag * t * (1 - t) + (rand() - 0.5) * 10
+      const y = ay + dy * t + (rand() - 0.5) * 10
       const z = az + dz * t + (rand() - 0.5) * 10
       if (i < points.length) {
         points[i].set(x, y, z)
@@ -113,7 +112,6 @@ function fillStrandDirect(strand, from, to) {
 
   const geometry = strand.mesh.geometry
   const attr = geometry.getAttribute('position')
-  const sag = Math.min(SAG_MAX, len * SAG) * 4
   const ax = from.x, ay = from.y, az = from.z
   const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
   const offsets = getOffsets(strand, count)
@@ -124,7 +122,7 @@ function fillStrandDirect(strand, from, to) {
       const t = count === 1 ? 0.5 : (i + 0.5) / count
       const base = i * 3
       array[base] = ax + dx * t + offsets[base]
-      array[base + 1] = ay + dy * t - sag * t * (1 - t) + offsets[base + 1]
+      array[base + 1] = ay + dy * t + offsets[base + 1]
       array[base + 2] = az + dz * t + offsets[base + 2]
     }
     attr.needsUpdate = true
@@ -136,7 +134,7 @@ function fillStrandDirect(strand, from, to) {
     const t = count === 1 ? 0.5 : (i + 0.5) / count
     const base = i * 3
     array[base] = ax + dx * t + offsets[base]
-    array[base + 1] = ay + dy * t - sag * t * (1 - t) + offsets[base + 1]
+    array[base + 1] = ay + dy * t + offsets[base + 1]
     array[base + 2] = az + dz * t + offsets[base + 2]
   }
 
@@ -195,11 +193,9 @@ export function createStrings(scene, { onPath = () => false } = {}) {
     let lineChanged = false
     for (let i = 0; i < ends.length; i += 1) {
       const link = ends[i]
-      if (link.from === null) from.set(0, 0, 0)
+      if (link.from === null) from.copy(SPHERE_CENTER)
       else from.copy(centerOf(link.from))
       to.copy(centerOf(link.to))
-      from.y += STRING_LIFT
-      to.y += STRING_LIFT
 
       const strand = strands[i]
       const moved = !strand || Number.isNaN(strand.from.x) ||
@@ -208,26 +204,18 @@ export function createStrings(scene, { onPath = () => false } = {}) {
 
       if (moved) {
         lineChanged = true
-        const len = from.distanceTo(to)
-        const sag = Math.min(SAG_MAX, len * SAG) * 4
         const ax = from.x, ay = from.y, az = from.z
         const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
-        let prevX = ax, prevY = ay, prevZ = az
         for (let segment = 0; segment < SEGMENTS; segment += 1) {
-          const t = (segment + 1) / SEGMENTS
-          const nextX = ax + dx * t
-          const nextY = ay + dy * t - sag * t * (1 - t)
-          const nextZ = az + dz * t
+          const start = segment / SEGMENTS
+          const end = (segment + 1) / SEGMENTS
           const base = (i * SEGMENTS + segment) * 6
-          array[base] = prevX
-          array[base + 1] = prevY
-          array[base + 2] = prevZ
-          array[base + 3] = nextX
-          array[base + 4] = nextY
-          array[base + 5] = nextZ
-          prevX = nextX
-          prevY = nextY
-          prevZ = nextZ
+          array[base] = ax + dx * start
+          array[base + 1] = ay + dy * start
+          array[base + 2] = az + dz * start
+          array[base + 3] = ax + dx * end
+          array[base + 4] = ay + dy * end
+          array[base + 5] = az + dz * end
         }
         if (strand) {
           strand.from.copy(from)

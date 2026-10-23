@@ -1,12 +1,10 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
-import { basename, dirname, visibleText } from '../model/paths.js'
+import { basename, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
 import { parentPath } from './fastPath.js'
-import { OVERVIEW, viewBasis } from './camera.js'
-import { HUB_CENTER } from './hub.js'
-import { CARD_HUB, cardDepth, layoutCards } from './layout.js'
+import { ROOT_DROP, SPHERE_CENTER, layoutSphere } from './sphere.js'
 import { easeRate, still } from './sprites.js'
 
 export const CARD_W = 248
@@ -17,16 +15,7 @@ export const BACK_STEP = 12
 export const CARD_SCALES = { closed: 1.5, open: 1.8, files: 2.6 }
 const FLASH_MS = 1100
 const FAIL_MS = 2600
-const BASIS = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
-
-export function planeToWorld(spot, out = new THREE.Vector3()) {
-  const { right, up, back } = BASIS
-  return out.set(
-    HUB_CENTER.x + right.x * spot.x + up.x * spot.y + back.x * spot.z,
-    HUB_CENTER.y + right.y * spot.x + up.y * spot.y + back.y * spot.z,
-    HUB_CENTER.z + right.z * spot.x + up.z * spot.y + back.z * spot.z
-  )
-}
+const FADE_MS = 400
 
 function viewFocus(state, pinned) {
   const focus = ['']
@@ -103,18 +92,19 @@ function rowNote(file) {
   return parts.join(' · ') || 'not touched'
 }
 
-export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, obstacles = [] } = {}) {
+export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2 } = {}) {
   const cards = new Map()
   const plane = new THREE.PlaneGeometry(1, 1)
   const hider = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })
   const homes = new Map()
   const pinned = new Set()
   const flashes = new Map()
-  let boardObstacles = obstacles
+  const initialDepth = Number(alwaysDepth)
+  let alwaysLevel = Number.isFinite(initialDepth) ? Math.min(3, Math.max(0, Math.floor(initialDepth))) : 2
   const right = new THREE.Vector3(1, 0, 0)
   const up = new THREE.Vector3(0, 1, 0)
   const back = new THREE.Vector3(0, 0, 1)
-  const rootHome = planeToWorld({ x: 0, y: CARD_HUB.hh + 80, z: cardDepth('') })
+  const rootHome = new THREE.Vector3(SPHERE_CENTER.x, SPHERE_CENTER.y - ROOT_DROP, SPHERE_CENTER.z)
   let planKey = ''
   let layoutKey = ''
   let plan = new Map()
@@ -148,7 +138,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
 
   function nearestCard(path) {
     let at = path
-    while (!cards.has(at) && at !== '') at = parentPath(at)
+    while (at !== '' && (!cards.has(at) || cards.get(at).leaving)) at = parentPath(at)
     return cards.get(at) ?? null
   }
 
@@ -203,6 +193,15 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       bandFailed: false,
       height: 0,
       lastHeight: -1,
+      opacity: 1,
+      lastOpacity: 1,
+      fade: null,
+      listOpacity: 1,
+      lastListOpacity: 1,
+      listFade: null,
+      leaving: false,
+      fresh: true,
+      ghosts: [],
     }
     cards.set(path, card)
     return card
@@ -275,6 +274,42 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     return ''
   }
 
+  function isPinnedView(view) {
+    return view.pinned === true || pinned.has(view.path)
+  }
+
+  function setCardOpacity(card, level) {
+    card.opacity = level
+    const text = level === 1 ? '' : String(level)
+    if (card.lastOpacity !== text) {
+      card.lastOpacity = text
+      card.element.style.opacity = text
+    }
+  }
+
+  function startListGhost(card) {
+    if (card.items.childNodes.length === 0) return
+    const ghost = card.items.cloneNode(true)
+    ghost.style.position = 'absolute'
+    ghost.style.left = '0'
+    ghost.style.right = '0'
+    ghost.style.top = `${HEAD_H}px`
+    ghost.style.pointerEvents = 'none'
+    ghost.style.zIndex = '2'
+    ghost.style.opacity = '1'
+    card.element.appendChild(ghost)
+    card.ghosts.push({ element: ghost, start: performance.now() })
+  }
+
+  function setListOpacity(card, level) {
+    card.listOpacity = level
+    const text = level === 1 ? '' : String(level)
+    if (card.lastListOpacity !== text) {
+      card.lastListOpacity = text
+      card.items.style.opacity = text
+    }
+  }
+
   function recompute(state) {
     const unchanged =
       planKey !== '' &&
@@ -293,11 +328,54 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     if (key === planKey) return false
     planKey = key
     const input = viewInput(state, [...pinned])
-    plan = new Map(planFolderView(input).map((view) => [view.path, view]))
-    for (const card of [...cards.values()]) if (!plan.has(card.path)) removeCard(card)
+    plan = new Map(planFolderView({ ...input, alwaysDepth: alwaysLevel }).map((view) => [view.path, view]))
+    const now = performance.now()
+    const isStill = still()
+    for (const card of [...cards.values()]) {
+      if (plan.has(card.path) || card.leaving) continue
+      if (!isStill && !(card.view && isPinnedView(card.view))) {
+        card.leaving = true
+        card.fade = { from: card.opacity, to: 0, start: now }
+      } else {
+        removeCard(card)
+      }
+    }
     const views = [...plan.values()].sort((a, b) => a.path.length - b.path.length)
     for (const view of views) {
       const card = cards.get(view.path) ?? makeCard(view.path)
+      const before = card.view
+      const pinnedView = isPinnedView(view)
+      if (card.leaving) {
+        card.leaving = false
+        if (!isStill && !pinnedView) {
+          card.fade = { from: card.opacity, to: 1, start: now }
+        } else {
+          card.fade = null
+          setCardOpacity(card, 1)
+        }
+      }
+      if (card.fresh) {
+        card.fresh = false
+        if (!isStill && !pinnedView) {
+          setCardOpacity(card, 0)
+          card.fade = { from: 0, to: 1, start: now }
+        } else {
+          setCardOpacity(card, 1)
+        }
+      }
+      if (before?.state === 'files' && view.state !== 'files') {
+        if (!isStill && !pinnedView) startListGhost(card)
+        card.listFade = null
+        setListOpacity(card, 1)
+      } else if (before?.state !== 'files' && view.state === 'files') {
+        if (!isStill && !pinnedView) {
+          setListOpacity(card, 0)
+          card.listFade = { from: 0, to: 1, start: now }
+        } else {
+          card.listFade = null
+          setListOpacity(card, 1)
+        }
+      }
       card.view = view
       card.baseClass = `mr-card is-${view.state}`
       card.height = cardHeight(cardRows(view))
@@ -310,11 +388,13 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const layoutChanged = nextLayoutKey !== layoutKey
     if (layoutChanged) {
       layoutKey = nextLayoutKey
-      const placed = layoutCards(entries, homes, { obstacles: boardObstacles })
+      const sizes = new Map(entries.map((entry) => [entry.path, entry]))
+      const placed = layoutSphere(entries, { previous: homes })
       for (const [path, spot] of placed) {
-        homes.set(path, spot)
+        const size = sizes.get(path)
+        homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
         const card = cards.get(path)
-        if (card) planeToWorld(spot, card.home)
+        if (card) card.home.set(spot.x, spot.y, spot.z)
       }
     }
     const focusPaths = new Set()
@@ -383,18 +463,28 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     recompute(state)
   }
 
-  function setObstacles(list) {
-    boardObstacles = Array.isArray(list) ? list : []
+  function setOptions(options = {}) {
+    if (!Object.hasOwn(options, 'alwaysDepth')) return false
+    const raw = Number(options.alwaysDepth)
+    if (!Number.isFinite(raw)) return false
+    const value = Math.min(3, Math.max(0, Math.floor(raw)))
+    if (value === alwaysLevel) return false
+    alwaysLevel = value
     pinnedVersion += 1
     planKey = ''
     layoutKey = ''
+    return true
   }
 
   function visibleLinks() {
-    const links = []
+    const links = [{ from: null, to: '' }]
     for (const card of cards.values()) {
-      if (card.path === '') continue
-      const parent = nearestCard(parentPath(card.path))
+      if (card.path === '' || card.leaving) continue
+      if (!card.path.includes('/')) {
+        links.push({ from: null, to: card.path })
+        continue
+      }
+      const parent = cards.get(parentPath(card.path)) ?? nearestCard(parentPath(card.path))
       if (parent) links.push({ from: parent.path, to: card.path })
     }
     return links
@@ -410,10 +500,37 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)
     const changed = recompute(state)
     const now = performance.now()
-    const ease = easeRate(delta, 3, still())
+    const isStill = still()
+    const ease = easeRate(delta, 3, isStill)
     movingNow = false
     const hasFlashes = flashes.size > 0
-    for (const card of cards.values()) {
+    let removed = false
+    for (const card of [...cards.values()]) {
+      if (card.fade) {
+        const t = isStill ? 1 : Math.min(1, (now - card.fade.start) / FADE_MS)
+        setCardOpacity(card, t >= 1 ? card.fade.to : card.fade.from + (card.fade.to - card.fade.from) * t)
+        if (t >= 1) card.fade = null
+      }
+      if (card.listFade) {
+        const t = isStill ? 1 : Math.min(1, (now - card.listFade.start) / FADE_MS)
+        setListOpacity(card, t >= 1 ? card.listFade.to : card.listFade.from + (card.listFade.to - card.listFade.from) * t)
+        if (t >= 1) card.listFade = null
+      }
+      if (card.ghosts.length > 0) {
+        const keep = []
+        for (const ghost of card.ghosts) {
+          const t = Math.min(1, (now - ghost.start) / FADE_MS)
+          ghost.element.style.opacity = String(1 - t)
+          if (t < 1) keep.push(ghost)
+          else ghost.element.remove()
+        }
+        card.ghosts = keep
+      }
+      if (card.leaving && !card.fade) {
+        removeCard(card)
+        removed = true
+        continue
+      }
       const position = card.object.position
       let posChanged = false
       if (position.distanceToSquared(card.home) > 0.25) {
@@ -557,7 +674,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const isMoving = movingNow
     movingNow = movingNow || wasMoving
     wasMoving = isMoving
-    return changed
+    return changed || removed
   }
 
   function dispose() {
@@ -591,7 +708,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     onPath: (path) => active.path.has(path),
     flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
     sync,
-    setObstacles,
+    setOptions,
     update,
     visibleLinks,
     spheres,

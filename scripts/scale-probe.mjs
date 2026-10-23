@@ -13,7 +13,6 @@ import { createPipeline } from '../src/model/pipeline.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
 import { cardSize, viewInput } from '../src/engine/cards.js'
-import { cardOverlaps, layoutCards } from '../src/engine/layout.js'
 import { layoutSphere, sphereOverlaps } from '../src/engine/sphere.js'
 import {
   AGENTS,
@@ -119,7 +118,7 @@ export function perCall(items, fn) {
   return { total, mean: total / Math.max(items.length, 1), worst }
 }
 
-export function layoutChain(activities, tree, agents = AGENTS) {
+export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2 } = {}) {
   const state = createState(tree, agents)
   let homes = new Map()
   let key = ''
@@ -132,15 +131,19 @@ export function layoutChain(activities, tree, agents = AGENTS) {
   for (const activity of activities) {
     apply(state, activity)
     const input = viewInput(state, [])
-    const views = planFolderView(input)
+    const views = planFolderView({ ...input, alwaysDepth })
     const next = `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
     if (next === key) continue
     key = next
     const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
-    const placed = layoutCards(entries, homes)
-    homes = new Map([...homes, ...placed])
+    const sizes = new Map(entries.map((entry) => [entry.path, entry]))
+    const placed = layoutSphere(entries, { previous: homes })
+    for (const [path, spot] of placed) {
+      const size = sizes.get(path)
+      homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
+    }
     layouts += 1
-    if (cardOverlaps(entries, placed).length > 0) overlapping += 1
+    if (sphereOverlaps(entries, placed).length > 0) overlapping += 1
     if (previous) {
       const shared = [...placed.keys()].filter((path) => previous.has(path))
       if (shared.length > 0) {
@@ -148,7 +151,7 @@ export function layoutChain(activities, tree, agents = AGENTS) {
         for (const path of shared) {
           const before = previous.get(path)
           const after = placed.get(path)
-          sum += Math.hypot(after.x - before.x, after.y - before.y)
+          sum += Math.hypot(after.x - before.x, after.y - before.y, after.z - before.z)
         }
         const move = sum / shared.length
         if (move > 150) moves += 1
@@ -167,28 +170,6 @@ export function layoutChain(activities, tree, agents = AGENTS) {
     previous = placed
   }
   return { layouts, overlapping, moves, worstMove, tallest }
-}
-
-export function sphereChain(activities, tree, agents = AGENTS) {
-  const state = createState(tree, agents)
-  let homes = new Map()
-  let key = ''
-  let layouts = 0
-  let overlapping = 0
-  for (const activity of activities) {
-    apply(state, activity)
-    const input = viewInput(state, [])
-    const views = planFolderView(input)
-    const next = `${input.files.length}|${input.focus.join('\\n')}|${input.touched.join('\\n')}`
-    if (next === key) continue
-    key = next
-    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
-    const placed = layoutSphere(entries, { previous: homes })
-    homes = new Map([...homes, ...placed])
-    layouts += 1
-    if (sphereOverlaps(entries, placed).length > 0) overlapping += 1
-  }
-  return { layouts, overlapping }
 }
 
 export async function runProbe(options = {}) {
@@ -267,12 +248,6 @@ export async function runProbe(options = {}) {
   })
   row('planFolderView, one new file with alwaysDepth 2', 'activity', addedAlways.worst, `${alwaysViews.length} cards, ${alwaysViews.filter((view) => view.pinned).length} pinned`)
 
-  const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
-  const first = timeIt(() => layoutCards(entries, null), 5)
-  row('layoutCards (cold)', 'activity', first.ms, `${entries.length} cards`)
-  const warm = timeIt(() => layoutCards(entries, first.result), 5)
-  row('layoutCards (warm)', 'activity', warm.ms)
-
   const folderSize = cardSize({ state: 'closed' })
   const sphereFolders = tree.dirs.filter((path) => path === '' || path.split('/').length <= 2)
   const sphereEntries = sphereFolders.map((path) => ({ path, ...folderSize }))
@@ -281,42 +256,34 @@ export async function runProbe(options = {}) {
   const sphereWarm = timeIt(() => layoutSphere(sphereEntries, { previous: sphereCold.result }), 5)
   row('layoutSphere (warm)', 'activity', sphereWarm.ms)
 
-  const chain = layoutChain(activities.slice(0, 800), tree)
+  const chain = sphereChain(activities.slice(0, 800), tree)
   rows.push({
-    stage: 'layoutCards, overlapping layouts',
+    stage: 'layoutSphere, overlapping layouts',
     runsAt: 'chain',
     ms: chain.overlapping,
     budget: 0,
     size: `${chain.overlapping} of ${chain.layouts} layouts`,
   })
   rows.push({
-    stage: 'layoutCards, moves over 150',
+    stage: 'layoutSphere, moves over 150',
     runsAt: 'chain',
     ms: chain.moves,
     budget: settings.files >= 200000 ? 80 : null,
     size: `${chain.moves} of ${chain.layouts} layouts`,
   })
   rows.push({
-    stage: 'layoutCards, worst move',
+    stage: 'layoutSphere, worst move',
     runsAt: 'chain',
     ms: chain.worstMove,
     budget: 1000,
     size: `${Math.round(chain.worstMove)} units`,
   })
   rows.push({
-    stage: 'layoutCards, tallest layout',
+    stage: 'layoutSphere, tallest layout',
     runsAt: 'chain',
     ms: chain.tallest,
     budget: null,
     size: `${Math.round(chain.tallest)} units`,
-  })
-  const sphereChainResult = sphereChain(activities.slice(0, 800), tree)
-  rows.push({
-    stage: 'layoutSphere, overlapping layouts',
-    runsAt: 'chain',
-    ms: sphereChainResult.overlapping,
-    budget: 0,
-    size: `${sphereChainResult.overlapping} of ${sphereChainResult.layouts} layouts`,
   })
 
   const frames = hermesFrames(tree, { seed: settings.seed })
@@ -364,13 +331,18 @@ export function replayDigest(source) {
   for (const activity of activities) {
     apply(state, activity)
     const input = viewInput(state, [])
-    const views = planFolderView(input)
+    const views = planFolderView({ ...input, alwaysDepth: 2 })
     plans.push(views)
     const next = `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
     if (next === key) continue
     key = next
-    const placed = layoutCards(views.map((view) => ({ path: view.path, ...cardSize(view) })), homes)
-    homes = new Map([...homes, ...placed])
+    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
+    const placed = layoutSphere(entries, { previous: homes })
+    const sizes = new Map(entries.map((entry) => [entry.path, entry]))
+    for (const [path, spot] of placed) {
+      const size = sizes.get(path)
+      homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
+    }
     layouts.push([...placed])
   }
   return {

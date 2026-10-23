@@ -11,8 +11,8 @@ const MEASURED_MS = {
   'planFolderView, first call': 49,
   'planFolderView, 3 agents, same files': 3.2,
   'planFolderView, one new file': 10.6,
-  'layoutCards (cold)': 11,
-  'layoutCards (warm)': 21,
+  'layoutSphere (cold)': 5,
+  'layoutSphere (warm)': 5,
   'pipeline, Hermes read or shell line (mean)': 2.7,
   'pipeline, Hermes read or shell line (worst)': 9,
   packTree: 48,
@@ -81,6 +81,10 @@ describe('each fixed stage at 40000 files', () => {
       expect(rows.get(stage).ms).toBeLessThan(measured * 10)
     })
   }
+
+  it('reports no overlapping sphere layouts', () => {
+    expect(rows.get('layoutSphere, overlapping layouts').ms).toBe(0)
+  })
 
   it('sends the first tree event and the file list route in under 1 MB', () => {
     expect(rows.get('tree event, first to a page').bytes).toBeLessThan(BUDGET.firstEvent)
