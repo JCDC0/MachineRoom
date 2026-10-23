@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Brief G4c (retake the three README screenshots that show the old cost board and strip).
 - Review note on Q2: no fixes. Its table found every reduced motion rule in `ARCHITECTURE.md` in place but one (a closing list's ghost still faded; now it goes at once), and the camera and strands now share one media query listener. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 112 files, 2118 tests, in parallel on the first try.
 - Two more OpenCode lanes, `opencode4` and `opencode5`, at the owner's request (DeepSeek V4.1 Flash runs slowly enough that more lanes help): `lanes.json`, their worktrees and `VALID_LANES` in `src/ui/panels/briefs.js`. Each OpenCode lane's notes name the other four.
 - The fine dust is motes in the 3D void now, at the owner's request: it was 600 points of size 4 packed within 2300 units of the hub at 0.09 opacity, too small and faint to see from the overview, while the grain overlay read as white noise on the screen. Now 1400 motes fill the volume from 400 to 9000 units, each a crisp 3 pixel point (`sizeAttenuation: false`) at an opacity of 0.25 plus 0.75 of the strength, and grain starts off (a browser that saved grain on keeps it until it is switched off in Settings). Checked in replay at 40,000 files: small specks across the space around the room. Full suite: 112 files, 2115 tests.
