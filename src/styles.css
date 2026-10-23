@@ -1463,6 +1463,16 @@ summary:focus-visible,
   text-overflow: ellipsis;
 }
 
+.stage-badge {
+  right: 24px;
+}
+
+@media (min-width: 900px) {
+  .stage-badge {
+    right: calc(var(--space) * 4 + 280px);
+  }
+}
+
 .mr-board {
   position: fixed;
   z-index: 2;

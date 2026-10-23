@@ -11,6 +11,12 @@ export const HEAD_H = 56
 export const ROW_H = 22
 export const CARD_PAD = 8
 export const BACK_STEP = 12
+export const CARD_FACE_EDGE = 1
+export const CARD_FACE_BORDER = 2
+export const CARD_TAB_W = 72
+export const CARD_TAB_H = 8
+export const CARD_TAB_LEFT = -1
+export const CARD_TAB_TOP = -9
 export const CARD_SCALES = { closed: 1.5, open: 1.8, files: 2.6 }
 const FLASH_MS = 1100
 const FAIL_MS = 2600
@@ -63,6 +69,50 @@ export function cardSize(view) {
   return { scale, width: (CARD_W + back) * scale, height: (cardHeight(cardRows(view)) + back) * scale }
 }
 
+function backLayers(view) {
+  const raw = Number(view?.back)
+  if (!Number.isFinite(raw)) return 0
+  return Math.min(3, Math.max(0, Math.floor(raw)))
+}
+
+export function occluderParts(view) {
+  const height = cardHeight(cardRows(view)) + CARD_FACE_BORDER
+  const tabLeft = CARD_TAB_LEFT + CARD_FACE_EDGE
+  const tabTop = CARD_TAB_TOP + CARD_FACE_EDGE
+  const parts = [
+    { width: CARD_W, height, x: 0, y: 0 },
+    {
+      width: CARD_TAB_W,
+      height: CARD_TAB_H,
+      x: tabLeft + CARD_TAB_W / 2 - CARD_W / 2,
+      y: height / 2 - tabTop - CARD_TAB_H / 2,
+    },
+  ]
+  for (let layer = 1; layer <= backLayers(view); layer += 1) {
+    parts.push({ width: CARD_W, height, x: layer * BACK_STEP, y: layer * BACK_STEP })
+  }
+  return parts
+}
+
+export function occluderBox(view, scale = 1) {
+  let left = Infinity
+  let right = -Infinity
+  let bottom = Infinity
+  let top = -Infinity
+  for (const part of occluderParts(view)) {
+    left = Math.min(left, part.x - part.width / 2)
+    right = Math.max(right, part.x + part.width / 2)
+    bottom = Math.min(bottom, part.y - part.height / 2)
+    top = Math.max(top, part.y + part.height / 2)
+  }
+  return {
+    width: (right - left) * scale,
+    height: (top - bottom) * scale,
+    offsetX: ((left + right) / 2) * scale,
+    offsetY: ((top + bottom) / 2) * scale,
+  }
+}
+
 export function cardRadius(view) {
   const { width, height } = cardSize(view)
   return Math.hypot(width, height) / 2
@@ -98,6 +148,22 @@ function el(tag, className, text) {
   return node
 }
 
+function occluderGeometry(view) {
+  const parts = occluderParts(view)
+  const positions = new Float32Array(parts.length * 18)
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]
+    const left = part.x - part.width / 2
+    const right = part.x + part.width / 2
+    const bottom = part.y - part.height / 2
+    const top = part.y + part.height / 2
+    positions.set([left, bottom, 0, right, bottom, 0, right, top, 0, left, bottom, 0, right, top, 0, left, top, 0], index * 18)
+  }
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3))
+  return geometry
+}
+
 function rowMark(file) {
   if (!file) return ''
   if (file.failed) return 'failed'
@@ -119,7 +185,6 @@ function rowNote(file) {
 
 export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2, obstacles = [] } = {}) {
   const cards = new Map()
-  const plane = new THREE.PlaneGeometry(1, 1)
   const hider = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })
   const homes = new Map()
   const pinned = new Set()
@@ -199,7 +264,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const scale = parent ? parent.scale * 0.5 : CARD_SCALES.closed
     object.scale.setScalar(scale)
     cssScene.add(object)
-    const occluder = new THREE.Mesh(plane, hider)
+    const occluder = new THREE.Mesh(new THREE.BufferGeometry(), hider)
     occluder.renderOrder = -1
     glScene?.add(occluder)
     const card = {
@@ -217,6 +282,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       rowPaths: [],
       view: null,
       backCount: -1,
+      occluderKey: '',
       baseClass: 'mr-card is-closed',
       className: 'mr-card is-closed',
       bandText: '',
@@ -242,8 +308,15 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   function removeCard(card) {
     cssScene.remove(card.object)
     glScene?.remove(card.occluder)
+    card.occluder.geometry.dispose()
     card.element.remove()
     cards.delete(card.path)
+  }
+
+  function paintOccluder(card, view) {
+    card.occluder.geometry.dispose()
+    card.occluder.geometry = occluderGeometry(view)
+    card.occluderKey = `${card.height}|${backLayers(view)}`
   }
 
   function paintBacks(card, count) {
@@ -417,6 +490,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       card.baseClass = `mr-card is-${view.state}`
       card.height = cardHeight(cardRows(view))
       paintBacks(card, view.back)
+      if (card.occluderKey !== `${card.height}|${backLayers(view)}`) paintOccluder(card, view)
       paintRows(card, view)
       card.meta.textContent = metaText(view)
     }
@@ -649,7 +723,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         card.lastScale = card.scale
         card.lastHeight = card.height
         card.object.scale.setScalar(card.scale)
-        card.occluder.scale.set(CARD_W * card.scale, card.height * card.scale, 1)
+        card.occluder.scale.setScalar(card.scale)
       }
       if (!card.object.quaternion.equals(camera.quaternion)) {
         card.object.quaternion.copy(camera.quaternion)
@@ -789,7 +863,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
 
   function dispose() {
     for (const card of [...cards.values()]) removeCard(card)
-    plane.dispose()
     hider.dispose()
   }
 

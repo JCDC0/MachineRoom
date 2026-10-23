@@ -26,7 +26,6 @@ const NONE = []
 const BADGE = {
   position: 'fixed',
   bottom: 96,
-  right: 24,
   zIndex: 5,
   padding: '2px 8px',
   fontFamily: 'var(--mono)',
@@ -492,17 +491,17 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         </svg>
       )}
       {live && (
-        <div style={{ ...BADGE, color: snapshot.status === 'live' ? 'var(--yellow)' : 'var(--red)' }} role="status">
+        <div className="stage-badge" style={{ ...BADGE, color: snapshot.status === 'live' ? 'var(--yellow)' : 'var(--red)' }} role="status">
           {live.simulated ? 'Demo' : 'Live'} // {snapshot.status === 'live' ? 'connected' : snapshot.status}
         </div>
       )}
       {following && (
-        <div style={{ ...BADGE, bottom: live ? 128 : 96, color: 'var(--white)' }} role="status">
+        <div className="stage-badge" style={{ ...BADGE, bottom: live ? 128 : 96, color: 'var(--white)' }} role="status">
           Follow // {following}
         </div>
       )}
       {toast && (
-        <div style={{ ...BADGE, bottom: live ? 164 : 132, color: 'var(--white)', maxWidth: 360, textTransform: 'none' }} role="status">
+        <div className="stage-badge" style={{ ...BADGE, bottom: live ? 164 : 132, color: 'var(--white)', maxWidth: 360, textTransform: 'none' }} role="status">
           {toast}
         </div>
       )}
