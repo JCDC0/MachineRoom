@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { SPHERE_CENTER } from './sphere.js'
-import { WHITE, YELLOW, glowTexture, reducedMotion, seeded } from './sprites.js'
+import { WHITE, YELLOW, glowTexture, seeded, still } from './sprites.js'
 
 const SEGMENTS = 16
 const LINE_LEVEL = 0.22
@@ -168,7 +168,6 @@ function fillStrand(strand, points) {
 }
 
 export function createStrings(scene, { onPath = () => false } = {}) {
-  const motion = reducedMotion()
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()
   let line = null
@@ -199,7 +198,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
   function update(centerOf, mask = null, delta = 0) {
     currentMask = mask
     const dimGoal = mask?.dimmed ? 1 : 0
-    if (motion.still()) {
+    if (still()) {
       dimLevel = dimGoal
     } else if (dimLevel < dimGoal) {
       dimLevel = Math.min(dimGoal, dimLevel + delta)
@@ -311,7 +310,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         const delta = Math.min((now - lastTime) / 1000, 0.1)
         lastTime = now
         const active = onPath(strand.link.to)
-        if (motion.still()) {
+        if (still()) {
           strand.yellowLevel = active ? 1 : 0
         } else if (active) {
           strand.yellowLevel = 1

@@ -24,14 +24,37 @@ export function easeRate(delta, speed, still = false) {
 
 export function reducedMotion(win = (typeof window !== 'undefined' ? window : null)) {
   let mql = null
+  let fromChange = null
+  let listening = false
+  const onChange = (event) => {
+    fromChange = Boolean(event?.matches)
+  }
   try {
     if (win && typeof win.matchMedia === 'function') {
       mql = win.matchMedia('(prefers-reduced-motion: reduce)')
+      if (mql && typeof mql.addEventListener === 'function') {
+        mql.addEventListener('change', onChange)
+        listening = true
+      } else if (mql && typeof mql.addListener === 'function') {
+        mql.addListener(onChange)
+        listening = true
+      }
     }
   } catch {
     mql = null
+    listening = false
   }
-  return { mql, still: () => Boolean(mql?.matches) }
+  return {
+    mql,
+    still: () => (fromChange === null ? Boolean(mql?.matches) : fromChange),
+    dispose: () => {
+      if (!listening || !mql) return
+      if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onChange)
+      else if (typeof mql.removeListener === 'function') mql.removeListener(onChange)
+      listening = false
+      fromChange = null
+    },
+  }
 }
 
 let defaultHelper = null
@@ -42,11 +65,19 @@ export function still() {
   const currentWindow = typeof window !== 'undefined' ? window : null
   const currentMatchMedia = currentWindow ? currentWindow.matchMedia : null
   if (!defaultHelper || lastWindow !== currentWindow || lastMatchMedia !== currentMatchMedia) {
+    defaultHelper?.dispose()
     defaultHelper = reducedMotion(currentWindow)
     lastWindow = currentWindow
     lastMatchMedia = currentMatchMedia
   }
   return defaultHelper.still()
+}
+
+export function disposeStill() {
+  defaultHelper?.dispose()
+  defaultHelper = null
+  lastWindow = undefined
+  lastMatchMedia = undefined
 }
 
 export function glowTexture() {

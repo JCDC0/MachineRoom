@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.206. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.207. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -74,7 +74,7 @@ src/engine/       three.js scene, no React
   terminals.js      CSS3D terminal chips beside their agents
   board.js          the cost board: boardLines and boardVisible (pure, tested), and the fixed screen panel at the bottom right, fed by costBoard
   camera.js         orbit, zoom, focus, pointer drift, fit the overview to a set of spheres (pure fitView, tested)
-  sprites.js        colours and helpers (copied from the portfolio void engine)
+  sprites.js        colours and helpers (copied from the portfolio void engine), and `still()`: one shared reading of `prefers-reduced-motion` that follows its `change` event, released by `disposeStill()` when the room goes
 src/control/      the control client contract, its mock, the real client over the bridge, and `agents.js` (the agent lists and the checks for hire and update; see CONTROL-CLIENT.md)
 src/policy/       route.js: the routing policy, version 1 (readPolicy, tierFor, escalate, chooseRoute) over docs/agents/policy.json; profile.js: profileFromBrief, the profile tierFor reads, from a brief; proposals.js: proposePolicy, policyText and policyDiff, a reorder of one tier suggested by the outcome table as a patch to review; pure, tested; the bridge answers POST /api/control/route with chooseRoute, quota and spend from Paperclip (server/policy.js), and the dispatch form shows its suggestion with a Use button (C4c, `src/ui/panels/route.js`)
 src/briefs/       parses the briefs in TASKS.md and builds the full prompt for an agent from HOUSE-RULES.md and lanes.json; review.js holds the checks behind npm run review-lane (pure, tested)

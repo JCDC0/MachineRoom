@@ -25,6 +25,11 @@ const DIM_FADE_MS = 1000
 const DIM_OPACITY = 0.25
 const BRACKETS = ['tl', 'tr', 'bl', 'br']
 
+export function fadeProgress(start, now, stillNow = false, duration = FADE_MS) {
+  if (stillNow) return 1
+  return Math.min(1, (now - start) / duration)
+}
+
 function viewFocus(state, pinned) {
   const focus = ['']
   for (const agent of state.agents.values()) focus.push(...(agent.focus ?? []))
@@ -675,19 +680,19 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     let removed = false
     for (const card of [...cards.values()]) {
       if (card.fade) {
-        const t = isStill ? 1 : Math.min(1, (now - card.fade.start) / FADE_MS)
+        const t = fadeProgress(card.fade.start, now, isStill)
         setCardOpacity(card, t >= 1 ? card.fade.to : card.fade.from + (card.fade.to - card.fade.from) * t)
         if (t >= 1) card.fade = null
       }
       if (card.listFade) {
-        const t = isStill ? 1 : Math.min(1, (now - card.listFade.start) / FADE_MS)
+        const t = fadeProgress(card.listFade.start, now, isStill)
         setListOpacity(card, t >= 1 ? card.listFade.to : card.listFade.from + (card.listFade.to - card.listFade.from) * t)
         if (t >= 1) card.listFade = null
       }
       if (card.ghosts.length > 0) {
         const keep = []
         for (const ghost of card.ghosts) {
-          const t = Math.min(1, (now - ghost.start) / FADE_MS)
+          const t = fadeProgress(ghost.start, now, isStill)
           ghost.element.style.opacity = String(1 - t)
           if (t < 1) keep.push(ghost)
           else ghost.element.remove()
