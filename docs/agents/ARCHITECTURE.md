@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.187. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.188. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -154,7 +154,7 @@ Every activity has `time` (ms since epoch), `agent` (key), `runId` and `order`.
 | `agent.spawn` | `child` (the parent key, `~` and a number from 1 within the parent's run), `name` (at most 40 characters), `label`; `agent` is the parent |
 | `agent.end` | `ok`; `agent` is the child |
 
-The OpenCode and Hermes parsers emit `agent.spawn` and then `agent.end` at the time of a `subagent` or `delegate` line, since those harnesses report a child only when it has finished, and keep the `other` tool call for the same line. `state.js` adds a child to the roster with `parent` and `depth` (at most 3), and the parent's `run.end` ends its children still working. The engine draws only the agents it was built with, so a child shows only in the HUD list until S2d.
+The OpenCode and Hermes parsers emit `agent.spawn` and then `agent.end` at the time of a `subagent` or `delegate` line, since those harnesses report a child only when it has finished, and keep the `other` tool call for the same line. `state.js` adds a child to the roster with `parent` and `depth` (at most 3), and the parent's `run.end` ends its children still working. The engine adds a view for a child when it appears (S2d): the next spare shape at 0.6 of its parent's size beside the parked parent (`childPlace`), a short line to it, and a chip titled `PARENT > NAME`; it fades out over 1.5 seconds after it ends (at once under reduced motion). Since the harnesses report a child only at its end, it shows only for that fade. The HUD lists a child under its parent, indented 16px a level, with a `subagent` tag (`.hud-agent-row.is-subagent`, `.agent-subagent`); the number keys pick top agents only.
 
 A touch is `{path, mode, kind}`. `kind` is `file` or `dir`. `mode` is `read`, `write` or `list`. `path` is relative to the project root, and `''` is the root.
 

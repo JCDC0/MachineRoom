@@ -19,6 +19,34 @@ const STATUS_TEXT = {
   done: 'finished',
 }
 
+export function agentRows(agents) {
+  const list = Array.isArray(agents) ? agents : []
+  const known = new Set(list.map((agent) => agent?.key))
+  const children = new Map()
+  const roots = []
+  for (const agent of list) {
+    if (!agent) continue
+    if (agent.parent && agent.parent !== agent.key && known.has(agent.parent)) {
+      if (!children.has(agent.parent)) children.set(agent.parent, [])
+      children.get(agent.parent).push(agent)
+    } else {
+      roots.push(agent)
+    }
+  }
+  const rows = []
+  const seen = new Set()
+  let number = 0
+  function visit(agent, depth) {
+    if (!agent || seen.has(agent.key)) return
+    seen.add(agent.key)
+    if (depth === 0) number += 1
+    rows.push({ agent, depth, number: depth === 0 ? number : null })
+    for (const child of children.get(agent.key) ?? []) visit(child, depth + 1)
+  }
+  for (const agent of roots) visit(agent, 0)
+  return rows
+}
+
 export const SHORTCUTS = [
   ['Space', 'Play or pause replay'],
   ['0', 'Overview camera'],
@@ -86,6 +114,7 @@ export default function Hud({
   const visibleShortcuts = client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')
 
   const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
+  const rows = agentRows(snapshot?.agents ?? [])
   const context = { agents, paths: assistantPaths }
 
   useEffect(() => {
@@ -269,10 +298,14 @@ export default function Hud({
       </div>
 
       <nav className="hud-agents" aria-label="Agents">
-        {(snapshot?.agents ?? []).map((agent, index) => {
+        {rows.map(({ agent, depth, number }) => {
           const isOpen = isTerminalOpen(openTerminals, agent.key)
           return (
-            <div key={agent.key} className="hud-agent-row">
+            <div
+              key={agent.key}
+              className={`hud-agent-row${depth > 0 ? ' is-subagent' : ''}`}
+              style={depth > 0 ? { paddingLeft: `${depth * 16}px` } : undefined}
+            >
               <button
                 type="button"
                 className={`agent is-${agent.status}`}
@@ -282,11 +315,12 @@ export default function Hud({
                 <span className="agent-head">
                   <span className="dot" aria-hidden="true" />
                   <span className="agent-name">{agent.name}</span>
-                  <span className="agent-key mono">{index + 1}</span>
+                  {number !== null && <span className="agent-key mono">{number}</span>}
                 </span>
                 <span className="agent-subtags mono">
                   <span className="agent-subtag agent-lane">{agent.key}</span>
                   <span className="agent-subtag agent-status">{STATUS_TEXT[agent.status] ?? agent.status}</span>
+                  {depth > 0 && <span className="agent-subtag agent-subagent">subagent</span>}
                 </span>
               </button>
               <button
