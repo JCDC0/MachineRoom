@@ -14,7 +14,9 @@ const STYLE = {
 }
 const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
+export const CHILD_HOLD_MS = 6000
 const CHILD_FADE_MS = 1500
+const CHILD_LIFE_MS = CHILD_HOLD_MS + CHILD_FADE_MS
 const STRIP_RISE = 190
 const STRIP_RUN = 120
 const STRIP_WIDTH = 9
@@ -22,6 +24,18 @@ const STRIP_OPACITY = 0.9
 export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
+
+export function childFade(sinceEnd, reduced = false) {
+  const elapsed = Number.isFinite(sinceEnd) ? Math.max(0, sinceEnd) : 0
+  if (elapsed <= CHILD_HOLD_MS) return 1
+  if (reduced || elapsed >= CHILD_LIFE_MS) return 0
+  return 1 - (elapsed - CHILD_HOLD_MS) / CHILD_FADE_MS
+}
+
+export function childEndIsFresh(entry, state) {
+  const endedAt = entry?.endedAt ?? 0
+  return endedAt > 0 && (state?.latest ?? 0) - endedAt <= CHILD_LIFE_MS
+}
 
 export function nameLabel(name) {
   if (typeof name !== 'string') return ''
@@ -272,11 +286,6 @@ export function createAgents(scene, roster, cssScene = null) {
     return index
   }
 
-  function childEndIsFresh(entry, state) {
-    const endedAt = entry.endedAt ?? 0
-    return endedAt > 0 && (state.latest ?? 0) - endedAt <= CHILD_FADE_MS
-  }
-
   function syncViews(state) {
     for (const view of [...views.values()]) {
       if (rosterKeys.has(view.key)) continue
@@ -358,7 +367,7 @@ export function createAgents(scene, roster, cssScene = null) {
       const status = entry?.status ?? 'idle'
       setStatus(view, status, now)
       const style = STYLE[status] ?? STYLE.idle
-      const fade = view.parentKey ? (view.fadeStart > 0 ? (isStill ? 0 : Math.max(0, 1 - (now - view.fadeStart) / CHILD_FADE_MS)) : 1) : 1
+      const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
 
       if (view.parentKey) {
         const parentName = state.agents.get(view.parentKey)?.name ?? view.parentKey
