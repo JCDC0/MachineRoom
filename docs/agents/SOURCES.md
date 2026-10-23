@@ -1,0 +1,60 @@
+# Where the room gets its events
+
+Written 2026-10-24 by Claude, after the real AGY subagent run (run `ffd660e6`). A design note for after Saturday, not a brief. It answers two questions from the owner: what Paperclip costs us, and whether a direct source would remove those costs quickly.
+
+## The goal
+
+The room is a control panel for the owner's subscriptions, efficiency first and looks second: watch every harness and its subagents work, find the bug, and run them the way Claude runs the lanes today (five OpenCode lanes and AGY), with the room growing on top of itself. Browser use, file exploration and document viewing belong in it.
+
+## What Paperclip costs us
+
+Each row is something we built or hit only because the events come through Paperclip.
+
+| Cost | What we built or saw | Gone with a direct source? |
+| --- | --- | --- |
+| The live socket cuts a log chunk to its last 8192 characters | the bridge rereads the full chunk from `/api/heartbeat-runs/:id/log`, in order, with retries; the proxy route still loses such calls | Yes: we own the pipe and read whole lines |
+| The routes change between versions | `server/surface.js` (29 routes, 443 lines), `npm run doctor`, the six feature switches and the 503 answers, the version read before and after the spec | Yes for the room's events; still needed for whatever we keep calling in Paperclip |
+| The `process` adapter runs a fixed command | AGY's prompt lives in its Paperclip setup, so a task's text never reaches it; the subagent test had to change that setup and restore it | Yes: the runner passes the brief as the prompt, as `run-lane` does for OpenCode |
+| Only stdout reaches the stream | nothing; AGY's subagent steps go to a transcript file and never reach the room | Partly: the runner runs on this machine and can read the child's transcript, with the owner's yes, since it sits under the home folder |
+| Paperclip's REST refuses a cross-origin page | the Vite proxy and the bridge | No: the bridge stays as the page's one door |
+| A key can be split across two chunks | `createSplitMasker`, the 1 second hold, the seq gap reset | No: any stream needs masking, but our own runner cuts at line ends, so splits get rare |
+| Backups work only in `local_trusted` mode, with no token | the Backups section and its warnings | Stays while Paperclip holds the tasks |
+| Paperclip's own work shows up as load | the owner saw `workspace_git_scan` every 100 ms on 2026-10-24, from Paperclip, not from us | Yes for runs that do not go through Paperclip |
+
+The heavy ones for monitoring are the first four. They are why a run can look quiet in the room while the harness is busy: a cut chunk, a renamed tool, or a child that only writes to its own file.
+
+One cost a source change does not touch: each harness reports what it reports. OpenCode and Hermes name a child only when it ends; this AGY renamed its file tools to `read_file`, `write_file` and `edit_file` and puts a child behind an `invoke_subagent` tool. The parsers have to follow each harness, whatever carries the bytes (brief S5).
+
+## What a direct source looks like
+
+Most of it exists already.
+
+- `npm run run-lane` starts a lane, writes its JSON log to `%TEMP%\machineroom-runs\<lane>-<brief>-<stamp>.log`, records the run in `runs.jsonl`, the outcome in `outcomes.jsonl`, and costs per lane and model (`--stats`).
+- `framesFromRun` in `src/briefs/recording.js` already turns a finished OpenCode or Hermes lane log into Paperclip-shaped frames (`heartbeat.run.queued`, `status`, `log`), which is how `/?recording=` replays a lane run.
+- The pipeline, the parsers, the state and the engine read those frames as they are.
+
+So a live lane source is the bridge watching the runs folder and feeding the same frames as each log grows, instead of after the run. The page does not change.
+
+## The order of work
+
+1. S6a, the live lane source. A bridge module that watches the runs folder, tails each new lane log from its first byte, and sends frames built the way `framesFromRun` builds them, with the lane as the agent (`opencode` to `opencode5` from `lanes.json`). Paperclip stays a second source on the same stream. Tests on a fake log that grows. One OpenCode brief.
+2. S6b, AGY as a run-lane lane. A `cli` block for `agy` in `lanes.json` (`agy --print <prompt> --output-format stream-json --dangerously-skip-permissions`, in the lane's worktree), so `run-lane` passes the brief as the prompt and AGY stops being a lane run by hand. Needs the owner's yes, since AGY then runs unattended like the OpenCode lanes. Small.
+3. S6c, AGY's children from their transcripts. When `invoke_subagent` names a child's `conversation_id`, the runner reads that child's transcript file as it grows and sends its steps under the child's key, so the child gets its own strip. Needs the owner's yes to read under the home folder. One brief after S5.
+4. S6d, Claude Code as a source. Claude Code hooks around each tool call and around subagents, written as JSON lines to a file the bridge tails, give the most exact live subagent events of any harness we use. Only for Claude Code runs. One brief, and a check of which hook events this Claude Code version offers.
+5. ACP, later. Our Claude parser already reads ACP-shaped `tool_call` lines. Before building on the Agent Client Protocol, check which of our harnesses speak it today; where one does, one parser can replace a harness's own. A short probe, not a brief yet.
+
+S6a and S6b remove the first and third costs for lane runs at once, and leave Paperclip untouched for whoever still uses it.
+
+## What stays with Paperclip, or moves
+
+Paperclip still gives tasks, threads, approvals, budgets and backups. For the lanes, `run-lane`, `runs.jsonl`, `outcomes.jsonl`, `--stats` and the routing policy (`src/policy/`) already do the same jobs on our side. Whether the drawer's Tasks, Approvals and Meters tabs should read the lane records instead of Paperclip is the owner's call after S6a; nothing in this note removes Paperclip.
+
+## The bigger room
+
+What the owner named beyond events, each driven by the same tool events:
+
+- Browser use: AGY lists 23 `browser_` tools in its init line. A browser call can be its own touch kind, shown as a card for the page with its address.
+- File exploration: the folder cards are this already; a click on a row could open the file read only through the bridge, inside the project folder only.
+- Document and PDF viewing: the same read only route, shown in a panel beside the room.
+
+Each is a brief of its own after S6a, and none needs Paperclip.
