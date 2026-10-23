@@ -63,7 +63,8 @@ export const SHORTCUTS = [
 ]
 
 export function hudKeyBlocked(target) {
-  return Boolean(target?.closest?.('input, textarea, select, [role="dialog"]'))
+  const dialog = typeof document === 'undefined' ? null : document.querySelector('[role="dialog"]')
+  return Boolean(dialog || target?.closest?.('input, textarea, select, [role="dialog"]'))
 }
 
 function formatTime(ms) {

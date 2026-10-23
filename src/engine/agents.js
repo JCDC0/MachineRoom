@@ -66,11 +66,18 @@ export function childPlace(parentPlace, index = 0) {
   return { x: Math.cos(angle) * radius, y, z: Math.sin(angle) * radius }
 }
 
-export function stripPoints(from, to) {
-  return [
-    { x: from.x, y: from.y, z: from.z },
-    { x: to.x, y: to.y, z: to.z },
-  ]
+export function stripPoints(from, to, out = []) {
+  const points = out ?? []
+  points.length = 2
+  points[0] = points[0] ?? {}
+  points[1] = points[1] ?? {}
+  points[0].x = from.x
+  points[0].y = from.y
+  points[0].z = from.z
+  points[1].x = to.x
+  points[1].y = to.y
+  points[1].z = to.z
+  return points
 }
 
 export function packetSpots(now, sends, duration = PACKET_DURATION, reduced = false, out = []) {
@@ -152,7 +159,7 @@ function setEnds(line, a, b) {
     last[4] === b.y &&
     last[5] === b.z
   ) {
-    return
+    return false
   }
   const array = line.geometry.attributes.position.array
   array[0] = a.x
@@ -163,6 +170,7 @@ function setEnds(line, a, b) {
   array[5] = b.z
   line.userData.ends = [a.x, a.y, a.z, b.x, b.y, b.z]
   line.geometry.attributes.position.needsUpdate = true
+  return true
 }
 
 function flatRing(radius, opacity, y) {
@@ -276,6 +284,7 @@ export function createAgents(scene, roster, cssScene = null) {
       fadeStart: 0,
       stripA,
       stripB,
+      stripEnds: [{}, {}],
       stripMaterialA,
       stripMaterialB,
       packets,
@@ -537,16 +546,16 @@ export function createAgents(scene, roster, cssScene = null) {
       }
       if (stripVisible) {
         stripStart.copy(view.group.position).addScaledVector(camUp, 105)
-        const [a, b] = stripPoints(stripStart, view.touch)
-        setEnds(view.stripA, a, b)
-        setEnds(view.stripB, a, b)
-        view.stripB.computeLineDistances()
+        const [a, b] = stripPoints(stripStart, view.touch, view.stripEnds)
+        const movedA = setEnds(view.stripA, a, b)
+        const movedB = setEnds(view.stripB, a, b)
+        if (movedA || movedB) view.stripB.computeLineDistances()
         view.stripMaterialB.color.setHex(view.stripColor)
         view.stripMaterialA.opacity = view.stripOpacity * fade * STRIP_BASE
         view.stripMaterialB.opacity = view.stripOpacity * fade * STRIP_DASH
       }
       if (stripVisible && !isStill) {
-        updatePackets(view, now, fade, stripOn)
+        updatePackets(view, now, fade, status === 'working' && stripOn)
       } else {
         hidePackets(view)
       }
