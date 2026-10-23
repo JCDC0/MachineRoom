@@ -5,7 +5,6 @@ import { createAgents } from './agents.js'
 import { FOV, createCameraRig, fitView, followTarget } from './camera.js'
 import { createCards } from './cards.js'
 import { createCostBoard } from './board.js'
-import { parentPath } from './fastPath.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createLabels } from './labels.js'
 import { GREEN, RED, WHITE, glowTexture, still } from './sprites.js'
@@ -31,7 +30,7 @@ function workingMask(state) {
       let at = dir
       lit.add(at)
       while (at !== '') {
-        at = parentPath(at)
+        at = dirname(at)
         lit.add(at)
       }
     }
@@ -210,7 +209,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (!own) return false
     start.push(own)
     if (wide && path !== '') {
-      const parent = cards.cardSphere(parentPath(path))
+      const parent = cards.cardSphere(dirname(path))
       if (parent) start.push(parent)
     }
     rig.followSpheres(() => {
@@ -218,7 +217,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       const current = cards.cardSphere(path)
       if (current) next.push(current)
       if (wide && path !== '') {
-        const above = cards.cardSphere(parentPath(path))
+        const above = cards.cardSphere(dirname(path))
         if (above) next.push(above)
       }
       return next.length > 0 ? next : start

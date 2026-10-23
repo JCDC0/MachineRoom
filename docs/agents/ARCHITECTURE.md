@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.191. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.192. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -63,9 +63,7 @@ src/model/        pure logic, no DOM, fully tested
   scaleTree.js      makeScaleTree, scaleActivities and createScaleReplay: the seeded tree and activities behind `?scale=N` and `npm run scale-probe`
 src/engine/       three.js scene, no React
   sphere.js         layoutSphere: folder cards on shells of a sphere around the hub (depth 1 at 1700, each level 1000 further out to depth 3, then 400 per level), the root below the hub, top-level folders by a Fibonacci spiral with the poles free, children in a cone around their parent; no two cards closer than half their diagonals plus 40; a warm start moves only the new or resized cards and their siblings (pure, tested)
-  layout.js         treeFromState only (the old view plane layout went with V16)
-  route.js          the folders an agent passes between two folders (pure, tested)
-  strings.js        straight lines between folders and to the hub centre, each with a strand of seeded points that turns yellow on a working agent's path (curvePoint and strandPoints are pure, tested)
+  strings.js        straight lines between folders and to the hub centre, each with a strand of seeded points that turns yellow on a working agent's path (strandPoints is pure, tested)
   room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
   cards.js          folder cards from planFolderView, each a CSS3D element with a depth plane, glides and grows, rows for files (cardSize is pure, tested)
   labels.js         file name labels that rise and fade above a card when a file is read, written or fails

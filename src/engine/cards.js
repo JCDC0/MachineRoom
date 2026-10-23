@@ -1,9 +1,8 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
-import { basename, visibleText } from '../model/paths.js'
+import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
-import { parentPath } from './fastPath.js'
 import { ROOT_DROP, SPHERE_CENTER, layoutSphere } from './sphere.js'
 import { easeRate, still } from './sprites.js'
 
@@ -142,7 +141,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
 
   function nearestCard(path) {
     let at = path
-    while (at !== '' && (!cards.has(at) || cards.get(at).leaving)) at = parentPath(at)
+    while (at !== '' && (!cards.has(at) || cards.get(at).leaving)) at = dirname(at)
     return cards.get(at) ?? null
   }
 
@@ -169,7 +168,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       planKey = ''
     })
     const object = new CSS3DObject(element)
-    const parent = path === '' ? null : nearestCard(parentPath(path))
+    const parent = path === '' ? null : nearestCard(dirname(path))
     object.position.copy(parent ? parent.object.position : rootHome)
     const scale = parent ? parent.scale * 0.5 : CARD_SCALES.closed
     object.scale.setScalar(scale)
@@ -413,14 +412,14 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
     const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
     const dirs = new Set()
-    for (const file of files) dirs.add(parentPath(file))
+    for (const file of files) dirs.add(dirname(file))
     for (const path of focusPaths) if (!state.files.has(path)) dirs.add(path)
     const chain = new Set()
     for (const dir of dirs) {
       let at = dir
       chain.add(at)
       while (at !== '') {
-        at = parentPath(at)
+        at = dirname(at)
         chain.add(at)
       }
     }
@@ -496,7 +495,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         links.push({ from: null, to: card.path })
         continue
       }
-      const parent = cards.get(parentPath(card.path)) ?? nearestCard(parentPath(card.path))
+      const parent = cards.get(dirname(card.path)) ?? nearestCard(dirname(card.path))
       if (parent) links.push({ from: parent.path, to: card.path })
     }
     return links
