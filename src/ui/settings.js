@@ -19,7 +19,7 @@ export const DEFAULT_EFFECTS = Object.freeze({
   fishEye: Object.freeze({ on: false, strength: 0.2 }),
   aberration: Object.freeze({ on: false, strength: 0.2 }),
   vignette: Object.freeze({ on: true, strength: 0.2 }),
-  grain: Object.freeze({ on: true, strength: 0.2 }),
+  grain: Object.freeze({ on: false, strength: 0.2 }),
   dust: Object.freeze({ on: true, strength: 0.2 }),
 })
 
@@ -60,7 +60,7 @@ export function effectSettings(saved) {
   const fishEye = clampEffect(source.fishEye ?? source.fisheye, false, 0.2)
   const aberration = clampEffect(source.aberration ?? source.chromaticAberration, false, 0.2)
   const vignette = clampEffect(source.vignette, true, 0.2)
-  const grain = clampEffect(source.grain, true, 0.2)
+  const grain = clampEffect(source.grain, false, 0.2)
   const dust = clampEffect(source.dust ?? source.fineDust, true, 0.2)
 
   return {

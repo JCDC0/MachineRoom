@@ -125,7 +125,7 @@ describe('effectSettings', () => {
     expect(defaults.aberration).toEqual({ on: false, strength: 0.2 })
     expect(defaults.chromaticAberration).toEqual({ on: false, strength: 0.2 })
     expect(defaults.vignette).toEqual({ on: true, strength: 0.2 })
-    expect(defaults.grain).toEqual({ on: true, strength: 0.2 })
+    expect(defaults.grain).toEqual({ on: false, strength: 0.2 })
     expect(defaults.dust).toEqual({ on: true, strength: 0.2 })
     expect(defaults.fineDust).toEqual({ on: true, strength: 0.2 })
 

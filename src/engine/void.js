@@ -5,16 +5,38 @@ export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
 const TICK = 50
 const DUST = 1800
-const FINE_DUST = 600
+export const MOTES = 1400
+export const MOTE_INNER = 400
+export const MOTE_OUTER = 9000
+const MOTE_SIZE = 3
 
 let fineDustOptions = { on: true, strength: 0.2 }
 const fineDustMaterials = new Set()
 
+export function moteOpacity({ on, strength } = {}) {
+  const value = Number(strength)
+  if (!on || !Number.isFinite(value) || value <= 0) return 0
+  return Math.min(1, 0.25 + value * 0.75)
+}
+
+export function motePoints(count = MOTES, seed = 1337, inner = MOTE_INNER, outer = MOTE_OUTER) {
+  const next = seeded(seed)
+  const points = []
+  for (let index = 0; index < count; index += 1) {
+    const direction = new THREE.Vector3(next() * 2 - 1, next() * 2 - 1, next() * 2 - 1)
+    if (direction.lengthSq() < 1e-6) direction.set(1, 0, 0)
+    direction.normalize()
+    const radius = Math.cbrt(inner ** 3 + next() * (outer ** 3 - inner ** 3))
+    points.push(direction.multiplyScalar(radius))
+  }
+  return points
+}
+
 export function setFineDust(options = {}) {
   fineDustOptions = { ...fineDustOptions, ...options }
   for (const mat of fineDustMaterials) {
-    mat.visible = Boolean(fineDustOptions.on && fineDustOptions.strength > 0)
-    mat.opacity = fineDustOptions.on ? fineDustOptions.strength * 0.45 : 0
+    mat.opacity = moteOpacity(fineDustOptions)
+    mat.visible = mat.opacity > 0
   }
 }
 
@@ -89,26 +111,17 @@ export function createVoid(scene, texture) {
   )
   group.add(dust)
 
-  const fineNext = seeded(1337)
   const fineMaterial = new THREE.PointsMaterial({
     color: WHITE,
-    size: 4,
-    map: texture,
+    size: MOTE_SIZE,
+    sizeAttenuation: false,
     transparent: true,
-    opacity: fineDustOptions.on ? fineDustOptions.strength * 0.45 : 0,
-    visible: Boolean(fineDustOptions.on && fineDustOptions.strength > 0),
+    opacity: moteOpacity(fineDustOptions),
     depthWrite: false,
   })
+  fineMaterial.visible = fineMaterial.opacity > 0
   fineDustMaterials.add(fineMaterial)
-  const fineDust = new THREE.Points(
-    new THREE.BufferGeometry().setFromPoints(
-      Array.from({ length: FINE_DUST }, () => {
-        const direction = new THREE.Vector3(fineNext() * 2 - 1, fineNext() * 2 - 1, fineNext() * 2 - 1).normalize()
-        return direction.multiplyScalar(500 + fineNext() * 1800)
-      })
-    ),
-    fineMaterial
-  )
+  const fineDust = new THREE.Points(new THREE.BufferGeometry().setFromPoints(motePoints()), fineMaterial)
   group.add(fineDust)
 
   scene.add(group)
