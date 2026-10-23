@@ -5,6 +5,8 @@ import {
   HUB_CLEARANCE,
   POLE_CAP,
   ROOT_DROP,
+  DEEP_STEP,
+  FULL_SHELLS,
   SHELL_RADIUS,
   SHELL_STEP,
   SPHERE_CENTER,
@@ -142,7 +144,9 @@ describe('layoutSphere', () => {
       if (entry.path === '') continue
       const at = placed.get(entry.path)
       const distance = Math.hypot(at.x - SPHERE_CENTER.x, at.y - SPHERE_CENTER.y, at.z - SPHERE_CENTER.z)
-      expect(distance, entry.path).toBeCloseTo(SHELL_RADIUS + (depthOf(entry.path) - 1) * SHELL_STEP, 6)
+      const depth = depthOf(entry.path)
+      const near = Math.min(depth, FULL_SHELLS)
+      expect(distance, entry.path).toBeCloseTo(SHELL_RADIUS + (near - 1) * SHELL_STEP + (depth - near) * DEEP_STEP, 6)
     }
     const tops = entries.filter((entry) => depthOf(entry.path) === 1)
     for (const entry of tops) {

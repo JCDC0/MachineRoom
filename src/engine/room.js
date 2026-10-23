@@ -52,7 +52,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     glScene: scene,
     rootName,
     onInspect: (path) => focusPath(path),
-    obstacles: boardShown ? [board.box()] : [],
+    alwaysDepth: 2,
   })
   let linkKey = ''
   let fitted = null
@@ -223,7 +223,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (shown !== boardShown) {
       boardShown = shown
       board.setVisible(shown)
-      cards.setObstacles(shown ? [board.box()] : [])
     }
     refit(true)
   }
@@ -285,8 +284,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const onContextRestored = () => console.warn('machine-room: WebGL context restored')
   renderer.domElement.addEventListener('webglcontextlost', onContextLost)
   renderer.domElement.addEventListener('webglcontextrestored', onContextRestored)
-  rig.snap()
   sync(getState())
+  rig.snap()
   frameId = requestAnimationFrame(frame)
 
   const pathTarget = new THREE.Vector3()
@@ -363,6 +362,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     focused: () => focused,
     setCosts(costBoardData) {
       board.update(costBoardData)
+    },
+    setOptions(options = {}) {
+      if (!cards.setOptions(options)) return
+      cards.sync(getState())
+      relink()
+      refit(true)
     },
     setTasks(tasksMap) {
       agentSet.setTasks(tasksMap)

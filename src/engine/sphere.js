@@ -4,6 +4,8 @@ import { HUB_CENTER, HUB_RADIUS, HUB_Y } from './hub.js'
 export const SPHERE_CENTER = HUB_CENTER
 export const SHELL_RADIUS = 1700
 export const SHELL_STEP = 1000
+export const FULL_SHELLS = 3
+export const DEEP_STEP = 400
 export const ROOT_DROP = 1000
 export const POLE_CAP = (25 * Math.PI) / 180
 export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
@@ -33,7 +35,9 @@ function depthOf(path) {
 }
 
 function shellOf(depth) {
-  return depth === 0 ? 0 : SHELL_RADIUS + (depth - 1) * SHELL_STEP
+  if (depth === 0) return 0
+  const near = Math.min(depth, FULL_SHELLS)
+  return SHELL_RADIUS + (near - 1) * SHELL_STEP + (depth - near) * DEEP_STEP
 }
 
 function sizeOf(entry) {
