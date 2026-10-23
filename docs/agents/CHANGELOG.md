@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
 - Review note on Q2: no fixes. Its table found every reduced motion rule in `ARCHITECTURE.md` in place but one (a closing list's ghost still faded; now it goes at once), and the camera and strands now share one media query listener. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 112 files, 2118 tests, in parallel on the first try.
 - Two more OpenCode lanes, `opencode4` and `opencode5`, at the owner's request (DeepSeek V4.1 Flash runs slowly enough that more lanes help): `lanes.json`, their worktrees and `VALID_LANES` in `src/ui/panels/briefs.js`. Each OpenCode lane's notes name the other four.
