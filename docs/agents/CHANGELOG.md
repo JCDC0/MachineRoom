@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
 - Review note on Q2: no fixes. Its table found every reduced motion rule in `ARCHITECTURE.md` in place but one (a closing list's ghost still faded; now it goes at once), and the camera and strands now share one media query listener. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 112 files, 2118 tests, in parallel on the first try.
@@ -12,6 +13,7 @@
 - The strip from a working agent to its file is one straight line now, faint white with yellow stripes, at the owner's request: it was two parallel bright yellow lines with additive blending at 0.9 opacity, bent through a rise and a level run, so it glared and met the card at a sharp angle. `stripPoints` gives the two ends; the band helpers are gone. Checked in replay at 40,000 files: each working agent's strip runs straight down to its card as a faint dashed line. The `--replay` digests are the same.
 - Reduced motion reads one shared media query that follows a change event and is removed when the room is disposed (task Q2).
 - Under reduced motion a closing list fades out at once, and a test holds the fine dust near the camera still (task Q2).
+- Audit of the room, version 3 and what followed it (task Q3): 16 findings in `docs/agents/AUDIT-2026-10-V3.md`, no code changed.
 - Briefs S2g (the orchestrator and subagents through the fake Paperclip), Q2 (reduced motion across the room, version 3) and Q3 (read what the redesign changed).
 - A fifth fake Paperclip agent, the Orchestrator, and per-agent scripts so it and OpenCode Go play the scenario-e runs while Claude, Hermes and agy keep the sandbox runs (task S2g).
 - Review note on S2f: no fixes. The `--replay` digests are the same before and after the merge. The look was not checked: with the preview pane hidden the room's animation frames do not run, so the replay clock stayed at 00:00 and no chip was drawn; the hold rests on the tests of `childFade` and `childEndIsFresh`. Full suite on the merge: 111 files, 2106 tests, in parallel on the first try.
