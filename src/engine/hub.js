@@ -1,10 +1,13 @@
 import * as THREE from 'three'
+import { isOrchestrator } from './shapes.js'
 import { WHITE, lineMaterial, still } from './sprites.js'
 
 export const HUB_RADIUS = 300
 export const HUB_Y = 200
 export const PARK_LIFT = 90
+export const ORCHESTRATOR_LIFT = 360
 export const HUB_CENTER = new THREE.Vector3(0, HUB_Y, 0)
+export const ORCHESTRATOR_HOME = new THREE.Vector3(HUB_CENTER.x, HUB_Y + ORCHESTRATOR_LIFT, HUB_CENTER.z)
 
 const TICKS = 120
 const DASHES = 72
@@ -33,7 +36,8 @@ function segments(values) {
   return geometry
 }
 
-export function createHub(scene, count) {
+export function createHub(scene, agentsOrCount) {
+  const count = Array.isArray(agentsOrCount) ? agentsOrCount.filter((agent) => !isOrchestrator(agent)).length : agentsOrCount
   const group = new THREE.Group()
   group.position.y = HUB_Y
 

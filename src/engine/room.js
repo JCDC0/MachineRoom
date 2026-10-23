@@ -38,7 +38,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   css.appendChild(cssRenderer.domElement)
 
   const space = createVoid(scene, texture)
-  const hub = createHub(scene, agents.length)
+  const hub = createHub(scene, agents)
   const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
   const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster)

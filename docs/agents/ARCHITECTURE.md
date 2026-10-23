@@ -1,11 +1,11 @@
 # MachineRoom architecture
 
-Version 0.1.185. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.186. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
-- The middle is the hub: a flat ring where each agent parks at its own slot between runs.
-- Each agent is a distinct wireframe shape. When it works it leaves the ring and stands beside the folder it works in, in front of it.
+- The middle is the hub: a flat ring where each agent stays at its own slot, working or not; the orchestrator floats above the hub centre.
+- Each agent is a distinct wireframe shape. A working agent shows it by its status ring, its chip and a slow pulse, and a yellow strip of three straight segments runs from it to the row of the file it touches, with four yellow corner brackets around that card.
 - Each agent has a terminal chip beside it, joined by a thin line. The chip shows the name and a status ring, and opens to show the log.
 - The project folders are flat folder cards scattered in 3D space around the hub, joined parent to child by curved strings. Only the folders on the agents' paths open. An open folder shows at most 3 child folders and up to 3 faint folders behind it for the rest, and the folder that holds the file being touched lists up to 10 items.
 - Colour has one meaning each: white is activity, red is failure, yellow is active, green is finished work.
@@ -69,7 +69,7 @@ src/engine/       three.js scene, no React
   room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
   cards.js          folder cards from planFolderView, each a CSS3D element with a depth plane, glides and grows, rows for files (cardSize is pure, tested)
   labels.js         file name labels that rise and fade above a card when a file is read, written or fails
-  agents.js         agent shapes, movement, link line to the chip, dashed trace to the file, the CSS3D callout with the agent's command
+  agents.js         agent shapes parked on the hub, link line to the chip, the strip to the touched file (stripPoints is pure, tested) and the card brackets, the CSS3D callout with the agent's command
   shapes.js         one distinct wireframe shape per agent, the orchestrator's own shape
   hub.js            the ring in the middle, agent slots, pulses
   void.js           the faint 3D lattice, coordinate labels and far dust
@@ -194,6 +194,7 @@ A shell command touches files only when its text names a known file or folder. S
         .mr-item-detail
       .mr-card-more
     .mr-card-band[.is-failed]
+  .mr-card-bracket.is-{tl|tr|bl|br}   (on .mr-card.is-targeted, added by agents.js)
 
 .mr-callout.is-{working|error|done}
   .mr-callout-title
