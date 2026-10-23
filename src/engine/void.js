@@ -5,6 +5,18 @@ export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
 const TICK = 50
 const DUST = 1800
+const FINE_DUST = 600
+
+let fineDustOptions = { on: true, strength: 0.2 }
+const fineDustMaterials = new Set()
+
+export function setFineDust(options = {}) {
+  fineDustOptions = { ...fineDustOptions, ...options }
+  for (const mat of fineDustMaterials) {
+    mat.visible = Boolean(fineDustOptions.on && fineDustOptions.strength > 0)
+    mat.opacity = fineDustOptions.on ? fineDustOptions.strength * 0.45 : 0
+  }
+}
 
 export function latticeLines(step = LATTICE_STEP, cells = LATTICE_CELLS) {
   const extent = step * cells
@@ -76,15 +88,41 @@ export function createVoid(scene, texture) {
     new THREE.PointsMaterial({ color: WHITE, size: 10, map: texture, transparent: true, opacity: 0.45, depthWrite: false })
   )
   group.add(dust)
+
+  const fineNext = seeded(1337)
+  const fineMaterial = new THREE.PointsMaterial({
+    color: WHITE,
+    size: 4,
+    map: texture,
+    transparent: true,
+    opacity: fineDustOptions.on ? fineDustOptions.strength * 0.45 : 0,
+    visible: Boolean(fineDustOptions.on && fineDustOptions.strength > 0),
+    depthWrite: false,
+  })
+  fineDustMaterials.add(fineMaterial)
+  const fineDust = new THREE.Points(
+    new THREE.BufferGeometry().setFromPoints(
+      Array.from({ length: FINE_DUST }, () => {
+        const direction = new THREE.Vector3(fineNext() * 2 - 1, fineNext() * 2 - 1, fineNext() * 2 - 1).normalize()
+        return direction.multiplyScalar(500 + fineNext() * 1800)
+      })
+    ),
+    fineMaterial
+  )
+  group.add(fineDust)
+
   scene.add(group)
 
   function update(delta) {
     if (!still()) {
       dust.rotation.y += delta * 0.004
+      fineDust.rotation.y += delta * 0.002
+      fineDust.rotation.x += delta * 0.001
     }
   }
 
   function dispose() {
+    fineDustMaterials.delete(fineMaterial)
     scene.remove(group)
     group.traverse((object) => {
       object.geometry?.dispose()
@@ -95,3 +133,4 @@ export function createVoid(scene, texture) {
 
   return { group, update, dispose }
 }
+

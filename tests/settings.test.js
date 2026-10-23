@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { validateConnectUrl } from '../src/ui/Connect.jsx'
-import { DEFAULT_SETTINGS, loadAssistantPosition, loadSettings, saveAssistantPosition, saveSettings, SETTINGS_KEY } from '../src/ui/settings.js'
+import { readStorage, writeStorage } from '../src/storage.js'
+import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, saveAssistantPosition, saveEffectSettings, saveSettings, SETTINGS_KEY } from '../src/ui/settings.js'
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -114,3 +115,138 @@ describe('validateConnectUrl', () => {
     expect(validateConnectUrl('paperclip', '/')).toBe('Enter a proxy path such as /paperclip.')
   })
 })
+
+describe('effectSettings', () => {
+  it('fills defaults when saved settings are empty or invalid', () => {
+    const defaults = effectSettings()
+    expect(defaults.alwaysDepth).toBe(2)
+    expect(defaults.fishEye).toEqual({ on: false, strength: 0.2 })
+    expect(defaults.aberration).toEqual({ on: false, strength: 0.2 })
+    expect(defaults.chromaticAberration).toEqual({ on: false, strength: 0.2 })
+    expect(defaults.vignette).toEqual({ on: true, strength: 0.2 })
+    expect(defaults.grain).toEqual({ on: true, strength: 0.2 })
+    expect(defaults.dust).toEqual({ on: true, strength: 0.2 })
+    expect(defaults.fineDust).toEqual({ on: true, strength: 0.2 })
+
+    expect(effectSettings(null)).toEqual(defaults)
+    expect(effectSettings({})).toEqual(defaults)
+    expect(effectSettings('invalid')).toEqual(defaults)
+  })
+
+  it('clamps alwaysDepth between 1 and 3', () => {
+    expect(effectSettings({ alwaysDepth: 0 }).alwaysDepth).toBe(1)
+    expect(effectSettings({ alwaysDepth: 1 }).alwaysDepth).toBe(1)
+    expect(effectSettings({ alwaysDepth: 2 }).alwaysDepth).toBe(2)
+    expect(effectSettings({ alwaysDepth: 3 }).alwaysDepth).toBe(3)
+    expect(effectSettings({ alwaysDepth: 4 }).alwaysDepth).toBe(3)
+    expect(effectSettings({ alwaysDepth: -10 }).alwaysDepth).toBe(1)
+    expect(effectSettings({ alwaysDepth: 100 }).alwaysDepth).toBe(3)
+    expect(effectSettings({ alwaysDepth: 2.6 }).alwaysDepth).toBe(3)
+    expect(effectSettings({ alwaysDepth: 'invalid' }).alwaysDepth).toBe(2)
+  })
+
+  it('clamps effect strengths between 0 and 1', () => {
+    const res = effectSettings({
+      fishEye: { on: true, strength: 2.5 },
+      vignette: { on: false, strength: -1 },
+      grain: { on: true, strength: 0.75 },
+    })
+    expect(res.fishEye).toEqual({ on: true, strength: 1 })
+    expect(res.vignette).toEqual({ on: false, strength: 0 })
+    expect(res.grain).toEqual({ on: true, strength: 0.75 })
+  })
+
+  it('accepts boolean and numeric shortcuts', () => {
+    const res = effectSettings({
+      fishEye: true,
+      grain: false,
+      dust: 0.85,
+    })
+    expect(res.fishEye).toEqual({ on: true, strength: 0.2 })
+    expect(res.grain).toEqual({ on: false, strength: 0.2 })
+    expect(res.dust).toEqual({ on: true, strength: 0.85 })
+  })
+
+  it('recognizes aliases for effect names', () => {
+    const res = effectSettings({
+      fisheye: { on: true, strength: 0.4 },
+      chromaticAberration: { on: true, strength: 0.5 },
+      fineDust: { on: false, strength: 0.1 },
+    })
+    expect(res.fishEye).toEqual({ on: true, strength: 0.4 })
+    expect(res.aberration).toEqual({ on: true, strength: 0.5 })
+    expect(res.chromaticAberration).toEqual({ on: true, strength: 0.5 })
+    expect(res.dust).toEqual({ on: false, strength: 0.1 })
+    expect(res.fineDust).toEqual({ on: false, strength: 0.1 })
+  })
+
+  it('reads nested effects and persists to storage', () => {
+    const storage = makeStorage()
+    const initial = loadEffectSettings(storage)
+    expect(initial.alwaysDepth).toBe(2)
+    expect(initial.vignette.on).toBe(true)
+
+    const updated = saveEffectSettings(storage, {
+      alwaysDepth: 3,
+      fishEye: { on: true, strength: 0.6 },
+      vignette: { on: false, strength: 0 },
+    })
+    expect(updated.alwaysDepth).toBe(3)
+    expect(updated.fishEye).toEqual({ on: true, strength: 0.6 })
+    expect(updated.vignette).toEqual({ on: false, strength: 0 })
+
+    const reloaded = loadEffectSettings(storage)
+    expect(reloaded.alwaysDepth).toBe(3)
+    expect(reloaded.fishEye).toEqual({ on: true, strength: 0.6 })
+    expect(reloaded.vignette).toEqual({ on: false, strength: 0 })
+
+    const raw = JSON.parse(storage.getItem(SETTINGS_KEY))
+    expect(raw.alwaysDepth).toBe(3)
+    expect(raw.effects.fishEye).toEqual({ on: true, strength: 0.6 })
+    expect(raw.source).toBe('bridge')
+  })
+
+  it('preserves existing effect values on partial effect patches', () => {
+    const storage = makeStorage()
+    saveEffectSettings(storage, {
+      fishEye: { on: false, strength: 0.85 },
+      grain: { on: true, strength: 0.7 },
+    })
+
+    const afterOn = saveEffectSettings(storage, {
+      fishEye: { on: true },
+    })
+    expect(afterOn.fishEye).toEqual({ on: true, strength: 0.85 })
+
+    const afterStrength = saveEffectSettings(storage, {
+      grain: { strength: 0.4 },
+    })
+    expect(afterStrength.grain).toEqual({ on: true, strength: 0.4 })
+  })
+})
+
+describe('storage helpers', () => {
+  it('safely reads from and writes to storage', () => {
+    const storage = makeStorage()
+    expect(readStorage('missing', storage)).toBeNull()
+    expect(readStorage('key', null)).toBeNull()
+
+    expect(writeStorage('test', '123', storage)).toBe(true)
+    expect(readStorage('test', storage)).toBe('123')
+    expect(writeStorage('test', '123', null)).toBe(false)
+  })
+
+  it('safely handles throwing storage implementations', () => {
+    const throwing = {
+      getItem() {
+        throw new Error('Blocked')
+      },
+      setItem() {
+        throw new Error('Quota')
+      },
+    }
+    expect(readStorage('key', throwing)).toBeNull()
+    expect(writeStorage('key', 'val', throwing)).toBe(false)
+  })
+})
+
