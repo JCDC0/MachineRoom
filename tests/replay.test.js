@@ -324,4 +324,22 @@ describe('replayFiles', () => {
       tree: 'recordings/hermes-20261020-060000-tree.json',
     })
   })
+
+  it('names the three files of a fixture', () => {
+    expect(replayFiles(null, 'scenario-e')).toEqual({
+      run: 'fixtures/scenario-e-run.jsonl',
+      agents: 'fixtures/scenario-e-agents.json',
+      tree: 'fixtures/scenario-e-tree.json',
+    })
+  })
+
+  it('falls back to the sandbox for a fixture name that is not allowed', () => {
+    for (const name of ['scenario-', 'scenario-ee', 'scenario-E', 'scenario-1', '../scenario-e', 'scenario-e/../x', '']) {
+      expect(replayFiles(null, name)).toEqual(replayFiles())
+    }
+  })
+
+  it('keeps a recording ahead of a fixture name', () => {
+    expect(replayFiles('hermes-20261020-060000', 'scenario-e')).toEqual(replayFiles('hermes-20261020-060000'))
+  })
 })
