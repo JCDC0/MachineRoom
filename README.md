@@ -1,16 +1,20 @@
 # Machine Room
 
-A browser viewer that shows coding agents working on one project as a 3D machine room. Each agent is a shape in the room. It can follow a local Paperclip instance live, or replay a recorded run.
+A browser viewer that shows coding agents working on one project as a 3D machine room. The agents park on a hub and the project folders sit on a sphere around them. It can follow a local Paperclip instance live, or replay a recorded run.
 
 ## Screenshots
 
 ![The overview of the room](docs/images/overview.png)
 
-The overview, with the hub and the folder cards.
+The overview, with the hub, the parked agents and the folder sphere.
 
-![One working agent, close up](docs/images/closeup.png)
+![One touched card, close up](docs/images/closeup.png)
 
-Follow mode close up on a working agent.
+Follow mode close up on the card an agent is touching.
+
+![The connect screen](docs/images/connect.png)
+
+The connect screen.
 
 ![The control drawer](docs/images/drawer.png)
 
@@ -22,16 +26,22 @@ A seeded room at 40000 files.
 
 ## What you see
 
-- The hub: a flat ring in the middle. Each agent parks at its own slot there between runs.
-- Agent shapes: each agent is its own wireframe shape. A working agent leaves the ring and stands in front of the folder it works in.
+- The hub: a flat ring in the middle. Each agent parks at its own slot there, between runs and while it works. The orchestrator floats above the middle of the ring.
+- Agent shapes: each agent is its own wireframe shape. A working agent shows it by its status ring, its chip and a slow pulse of its shape.
+- Subagents: a child reported by an OpenCode or Hermes run appears beside its parent as a smaller shape with its own chip, joined to the parent by a short line. It fades out after 1.5 seconds, because the harness reports it only when it ends.
 - Terminal chips: a chip beside each agent, joined by a thin line. It shows the name and a status ring, and opens to show the log.
 - Agent callouts: a thin line from an agent to a block with its name, the task its run works on and the command it runs now. The border is yellow while it works, red on a failure and green with `FINISHED` for 5 seconds after a good run.
-- Folder cards: the project folders are flat cards around the hub, joined parent to child by curved strings. Only the folders on the agents' paths open.
+- Folder sphere: flat cards on shells around the hub, always facing the camera. The root sits below the hub. Top-level folders spread around the sphere, and deeper folders sit farther out near their parent. Straight lines join each top-level folder and the root to the hub centre, and every deeper folder to its parent.
+- The tree: every folder down to depth 2 is always drawn, up to 300 cards. The rest stay as faint folders behind their parent. Folders below that depth appear, with a short fade, while they are on an agent's path. A folder that holds a file being touched lists up to 10 items.
+- The strip: while an agent works, a yellow strip of three straight segments runs from it to the row of the file it touches, and four yellow corner brackets sit around that card. The strip is green for 5 seconds after a good run and red when the run fails.
+- Follow mode: `F` cycles wide, close up and off. Wide shows the touched card and its parent, and close up shows the card alone. The camera holds each card at least 4 seconds and eases over 1.2 seconds. Clicking an agent, `0` or `1` to `9` ends it.
 - Each colour has one meaning:
   - White is activity. A read or write flashes the file row and its card white.
-  - Yellow is active. The folder and the file an agent works on right now carry a dashed yellow outline, and the trace from its chip to the file is yellow.
-  - Red is failure. A failed tool call, run or test flashes red and leaves the file red until it is written again.
-  - Green is finished work. A run that ends well turns the agent, its chip and every file it wrote in that run green.
+  - Yellow is active. The folder and the file an agent works on right now carry a dashed yellow outline, and the strip to the file is yellow.
+  - Red is failure. A failed tool call, run or test flashes red and leaves the file red until it is written again. The strip turns red when the run fails.
+  - Green is finished work. A run that ends well turns the agent, its chip and every file it wrote in that run green. The strip stays green for 5 seconds.
+- While any agent works, cards off the working agents' paths dim to 0.25 with their lines, and the cards on a path to a touched file glow with a soft light on the border.
+- Settings: the Settings button at the top right opens a panel. Folder depth is a slider from 1 to 3, 2 by default, for how many folder levels are always drawn. Five screen effects have an on switch and a strength: fish eye, chromatic aberration, vignette, grain and fine dust. Fish eye and chromatic aberration start off. Vignette, grain and fine dust start on at low strength. The choices are saved in this browser with the connection.
 - Cost board: below the hub. It shows the spend against the budget, a row per agent with cost, tokens and a share bar, and the provider quota windows. It is hidden under 900 pixels wide.
 - Health chip: under the Replay and Live switch, and only when something is wrong. It names a bridge that does not answer, a Paperclip that is not connected, routes that changed or a route check that did not run.
 - Control drawer on `C`: Dispatch, Tasks, Approvals, Meters, Plan, Agents and Reviews. The drawer section below describes each tab.
@@ -93,8 +103,8 @@ The room was measured on seeded trees of 40000 and 200000 files.
 - `GET /api/tree` holds about 0.6 MB in the folder shape at 40000 files, and 115 KB gzipped. At 200000 files it holds about 3.1 MB, and 570 KB gzipped.
 - The answer carries a version. A page's first `tree` event holds only the files added since the list it read, and each later event only the files that page has not had.
 - Shell commands and Hermes reads look names up from an index, so they cost the same at any repository size.
-- The warm card layout takes about 14 ms for 122 cards. In the seeded replay at 200000 files up to 165 cards are drawn, and no two cards overlap in any fixture, recording or that replay. The layout grows to about 4900 units tall, and the cards move over 150 units on average in 82 of 399 layouts.
-- Frame time at 200000 files was 18 ms median and 48 ms p95, and 12 and 28 at 40000. A shorter layout pass later gave 15 and 36, but it added overlaps, so the review took it out and the room was not measured again.
+- The sphere layout compares every pair of cards on a shell. A cold layout of 300 cards takes about 110 ms, and an added card about 1 ms. The room runs it when a card appears, leaves or changes size.
+- The overview fits every drawn card. At 40000 files a deep path can span about 9700 units from the lowest card to the highest, so the cards are small in the overview. Follow mode is the way to read the card an agent touches.
 
 Try it with the dev server:
 
@@ -137,7 +147,7 @@ A lane is one agent with its own worktree and branch, listed in `docs/agents/lan
 - `Space` play or pause replay
 - `0` overview camera
 - `1` to `9` focus agent 1 to 9
-- `F` follow the working agent: wide, close up, off
+- `F` follow the card an agent is touching: wide, close up, off
 - `T` show or hide the log of the selected agent, or of every agent
 - `Left` and `Right` arrows seek backward or forward 5 seconds
 - `[` and `]` decrease or increase replay speed
