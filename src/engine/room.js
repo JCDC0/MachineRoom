@@ -61,7 +61,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const hub = createHub(scene, agents)
   const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
   const agentSet = createAgents(scene, roster, cssScene)
-  const terminals = createTerminals(cssScene, roster)
+  const terminals = createTerminals(cssScene, roster, { onPick })
   const board = createCostBoard(surface, { onPick })
   let boardShown = boardVisible(width)
   board.setVisible(boardShown)
@@ -144,10 +144,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const hit = raycaster.intersectObjects(agentSet.pickables, false)[0]
     if (hit) onPick(hit.object.userData.key)
   })
-
-  for (const term of terminals.terminals.values()) {
-    term.element.addEventListener('click', () => onPick(term.key))
-  }
 
   function sync(state) {
     labels.clear()

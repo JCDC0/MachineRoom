@@ -20,13 +20,14 @@ export function chipHalfWidth(open) {
   return ((open ? OPEN_W : CHIP_W) * SCALE) / 2
 }
 
-export function createTerminals(cssScene, roster) {
+export function createTerminals(cssScene, roster, { onPick = null } = {}) {
   const terminals = new Map()
 
   function addTerminal(key, name) {
     const element = document.createElement('div')
     element.className = 'mr-term is-idle'
     element.dataset.agent = key
+    if (onPick) element.addEventListener('click', () => onPick(key))
     const title = document.createElement('div')
     title.className = 'mr-term-title'
     const body = document.createElement('div')
@@ -152,6 +153,14 @@ export function createTerminals(cssScene, roster) {
     return out.copy(term.object.position).addScaledVector(right, side * chipHalfWidth(term.open))
   }
 
+  function remove(key) {
+    const term = terminals.get(key)
+    if (!term) return
+    cssScene.remove(term.object)
+    term.element.remove()
+    terminals.delete(key)
+  }
+
   function dispose() {
     for (const term of terminals.values()) {
       cssScene.remove(term.object)
@@ -173,6 +182,7 @@ export function createTerminals(cssScene, roster) {
     openKeys: () => [...terminals.values()].filter((term) => term.open).map((term) => term.key),
     positionOf: (key) => terminals.get(key)?.object.position ?? new THREE.Vector3(),
     edgePoint,
+    remove,
     dispose,
   }
 }
