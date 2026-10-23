@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cardClickEndsFollow, createLater, followAfterSeek } from '../src/engine/room.js'
+import { cardClickEndsFollow, createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek } from '../src/engine/room.js'
 
 function state(status, focus, recent = []) {
   return {
@@ -36,6 +36,61 @@ describe('followAfterSeek', () => {
       pendingFollow: null,
       path: null,
     })
+  })
+})
+
+describe('the working mask', () => {
+  const working = (focus, status = 'working', latest = 10) => ({
+    latest,
+    files: new Map([['src/a.js', { path: 'src/a.js', exists: true }]]),
+    agents: new Map([['hermes', { key: 'hermes', status, focus }]]),
+  })
+
+  it('builds once over idle frames and again when an agent, a focus or the activity changes', () => {
+    const cache = createWorkingMaskCache()
+    const state = working(['src/a.js'])
+    const mask = cache.of(state)
+    expect(mask).toEqual({ dimmed: true, lit: new Set(['', 'src']), targeted: new Set(['src']) })
+    for (let frame = 0; frame < 5; frame += 1) expect(cache.of(state)).toBe(mask)
+    expect(cache.builds()).toBe(1)
+    state.latest = 11
+    expect(cache.of(state)).not.toBe(mask)
+    expect(cache.builds()).toBe(2)
+    state.agents.get('hermes').focus = ['docs/b.md']
+    cache.of(state)
+    expect(cache.builds()).toBe(3)
+    state.agents.get('hermes').status = 'done'
+    const idle = cache.of(state)
+    expect(idle.dimmed).toBe(false)
+    expect(cache.builds()).toBe(4)
+    for (let frame = 0; frame < 5; frame += 1) expect(cache.of(state)).toBe(idle)
+    expect(cache.builds()).toBe(4)
+  })
+})
+
+describe('the follow focus', () => {
+  it('clears the focused agent when follow ends', () => {
+    const room = createFollowFocus()
+    room.focus('agent3')
+    room.setFollowing('wide')
+    expect(room.focused()).toBe('agent3')
+    expect(room.end()).toBe(true)
+    expect(room.following()).toBe(false)
+    expect(room.focused()).toBeNull()
+  })
+
+  it('clears the focused agent when focus names no agent view', () => {
+    const room = createFollowFocus()
+    room.focus('agent3')
+    room.focus(null, false)
+    expect(room.focused()).toBeNull()
+  })
+
+  it('keeps the focused agent when follow is already off', () => {
+    const room = createFollowFocus()
+    room.focus('agent3')
+    expect(room.end()).toBe(false)
+    expect(room.focused()).toBe('agent3')
   })
 })
 

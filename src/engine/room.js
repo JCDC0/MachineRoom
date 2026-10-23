@@ -38,6 +38,64 @@ function workingMask(state) {
   return { dimmed: touched, lit, targeted }
 }
 
+export function createWorkingMaskCache() {
+  let mask = { dimmed: false, lit: new Set(), targeted: new Set() }
+  let latest = null
+  let focus = []
+  let statuses = []
+  let builds = 0
+
+  function changed(state) {
+    if (state.latest !== latest || state.agents.size !== focus.length) return true
+    let index = 0
+    for (const agent of state.agents.values()) {
+      if (agent.focus !== focus[index] || agent.status !== statuses[index]) return true
+      index += 1
+    }
+    return false
+  }
+
+  function of(state) {
+    if (!changed(state)) return mask
+    latest = state.latest
+    focus = []
+    statuses = []
+    for (const agent of state.agents.values()) {
+      focus.push(agent.focus)
+      statuses.push(agent.status)
+    }
+    mask = workingMask(state)
+    builds += 1
+    return mask
+  }
+
+  return { of, builds: () => builds }
+}
+
+export function createFollowFocus() {
+  let following = false
+  let focused = null
+  return {
+    focus(key, hasView = true) {
+      focused = hasView ? key : null
+    },
+    clear() {
+      focused = null
+    },
+    setFollowing(value) {
+      following = value
+    },
+    following: () => following,
+    end() {
+      if (!following) return false
+      following = false
+      focused = null
+      return true
+    },
+    focused: () => focused,
+  }
+}
+
 export function touchedPath(state) {
   let best = null
   let bestIndex = -1
@@ -175,7 +233,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const rig = createCameraRig(camera, surface)
   const raycaster = new THREE.Raycaster()
   const pointer = new THREE.Vector2()
-  let focused = null
+  const followFocus = createFollowFocus()
+  const masks = createWorkingMaskCache()
 
   rig.setClickHandler((event) => {
     const rect = gl.getBoundingClientRect()
@@ -199,11 +258,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       pulse.sprite.material.opacity = 0
     })
     cards.sync(state)
-    const follow = followAfterSeek(state, following)
+    const follow = followAfterSeek(state, followFocus.following())
     followCard = follow.followCard
     pendingFollow = follow.pendingFollow
-    if (following) {
-      if (follow.path !== null && followCardPath(follow.path, following)) {
+    if (followFocus.following()) {
+      if (follow.path !== null && followCardPath(follow.path, followFocus.following())) {
         followCard = { path: follow.path, at: performance.now() }
       } else {
         rig.stopFollow()
@@ -214,14 +273,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     agentSet.snap(state, world)
   }
 
-  let following = false
   let followCard = null
   let pendingFollow = null
   const timers = createLater()
 
   function endFollow() {
-    if (!following) return
-    following = false
+    if (!followFocus.end()) return
     followCard = null
     pendingFollow = null
     rig.stopFollow()
@@ -230,8 +287,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function focusAgent(key, style = 'wide') {
     const view = agentSet.views.get(key)
+    followFocus.focus(key, Boolean(view))
     if (!view) return
-    focused = key
     const middle = new THREE.Vector3()
     if (style === 'close') {
       rig.focus(() => middle.copy(view.group.position).lerp(view.touch, view.aim ? 0.5 : 0), 1500, 0.3)
@@ -275,14 +332,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const box = cards.screenFrame(path, camera, width, height)
     const decision = followTarget(followCard, { path }, box && { width, height, card: box }, performance.now())
     if (!decision?.moved) return
-    if (followCardPath(path, following)) followCard = { path: decision.path, at: decision.at }
+    if (followCardPath(path, followFocus.following())) followCard = { path: decision.path, at: decision.at }
   }
 
   function onActivity(activity) {
     const view = agentSet.views.get(activity.agent)
     if (!view) return
     const position = view.group.position
-    if (following && activity.type === 'tool.start') {
+    if (followFocus.following() && activity.type === 'tool.start') {
       const path = touchedCard(activity)
       if (path !== null) pendingFollow = path
     }
@@ -358,14 +415,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     beforeFrame(delta * 1000)
 
     const state = getState()
-    const mask = workingMask(state)
+    const mask = masks.of(state)
     space.update(delta)
     hub.update(now / 1000, delta)
     if (cards.update(state, delta, camera, mask)) {
       relink()
       refit()
     }
-    if (following && pendingFollow !== null) {
+    if (followFocus.following() && pendingFollow !== null) {
       const path = pendingFollow
       pendingFollow = null
       followPath(path)
@@ -397,7 +454,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     })
 
     rig.update(delta)
-    terminals.update(state, now, camera, focused, anchorOf, delta, chipSideOf)
+    terminals.update(state, now, camera, followFocus.focused(), anchorOf, delta, chipSideOf)
     renderer.render(scene, camera)
     cssRenderer.render(cssScene, camera)
   }
@@ -415,7 +472,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   function focusTerminal(key) {
     if (!terminals.terminals.has(key)) return false
     terminals.setOpen(key, true)
-    focused = key
+    followFocus.focus(key)
     rig.focus(() => terminals.positionOf(key), 1300, 0.12)
     return true
   }
@@ -426,7 +483,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (!isFile && path !== '' && !state.dirs.has(path)) return false
     endFollow()
     const dir = isFile ? dirname(path) : path
-    focused = null
+    followFocus.clear()
     cards.pin(dir)
     if (isFile) {
       cards.flashFile(dir, path, 'white')
@@ -463,11 +520,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     openTerminals: (open) => terminals.openAll(open),
     openTerminalKeys: () => terminals.openKeys(),
     overview() {
-      focused = null
+      followFocus.clear()
       rig.overview()
     },
     setFollow(mode) {
-      following = mode
+      followFocus.setFollowing(mode)
       followCard = null
       pendingFollow = null
       rig.stopFollow()
@@ -476,8 +533,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       if (path === null) return
       if (followCardPath(path, mode)) followCard = { path, at: performance.now() }
     },
-    following: () => following,
-    focused: () => focused,
+    following: () => followFocus.following(),
+    focused: () => followFocus.focused(),
     setCosts(costBoardData) {
       board.update(costBoardData)
     },

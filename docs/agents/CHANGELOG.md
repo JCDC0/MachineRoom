@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The folder layout takes its open set from the plan's open and files views plus the focus chain and the pins, so a recent touch's folder is never stacked or hidden (task Q4a, W1).
+- The room keeps its working mask, and a card keeps its row frame key, until the activity, an agent, a focus array, the mask, a flash or a row changes (task Q4a, W4).
+- Ending follow clears the room's focused agent, and a focus that names no agent view clears it too, so the room and the HUD agree (task Q4a, W5).
 - Review note on Q4: no fixes. Six findings from 0.1.201 to 0.1.222, W1 (Medium: a recent touch's folder can be stacked and hidden while its parent is drawn open) and W2 to W6 (Low), each with its check; W5 and W6 are marked unproved. Briefs Q4a and Q4b fix them.
 - A real AGY run through Paperclip with a subagent (run `ffd660e6`): the child appears as an `invoke_subagent` tool step and in `manage_subagents` states, its own steps are not in the parent's output, and this AGY's file tools are `read_file`, `write_file` and `edit_file`, which the parser does not know yet. Brief S5 reads it.
 - Review note on S4: no fixes. The AGY parser turns a second `conversation_id` in a run into a subagent that works beside its parent, with its own key, focus, strip, packets, callout and chip (`agy > NAME`); the state and the engine needed no change, which the lane checked with a scratch test. The pipeline already passes `agentKey` to the parser at its one call site. The `--replay` digests are the same before and after the merge apart from the new `scenario-f` line. Not checked by eye: the browser pane was hidden, so the room did not render. Not checked against the real AGY: its subagent output has not been seen, so the rule may change once a real run is recorded. Full suite on the merge: 119 files, 2199 tests, in parallel on the first try.
