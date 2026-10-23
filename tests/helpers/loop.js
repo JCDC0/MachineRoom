@@ -123,19 +123,18 @@ export async function roomInputs(url) {
   return { agents, tree: makeTree({ root: raw.root, files: raw.files, created: [] }) }
 }
 
-export function playFrames(frames, agents, tree) {
+export function playFrames(frames, agents, tree, onActivity = () => {}) {
   const pipeline = createPipeline({ agents, tree })
   const state = createState(tree, agents)
   const activities = []
-  for (const frame of frames) {
-    for (const activity of pipeline.push(frame)) {
-      apply(state, activity)
-      activities.push(activity)
-    }
-  }
-  for (const activity of pipeline.flush()) {
+  const applyOne = (activity) => {
     apply(state, activity)
     activities.push(activity)
+    onActivity(activity, state)
   }
+  for (const frame of frames) {
+    for (const activity of pipeline.push(frame)) applyOne(activity)
+  }
+  for (const activity of pipeline.flush()) applyOne(activity)
   return { state, activities }
 }

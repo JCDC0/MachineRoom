@@ -203,6 +203,7 @@ describe('the fake Paperclip server', () => {
     const scripts = loadScripts()
     const sources = Object.fromEntries([...scripts].map(([key, script]) => [key, script.source]))
     expect(sources).toEqual({
+      agy: 'scenario-f-run.jsonl',
       claude_local: 'sandbox-run.jsonl',
       hermes_local: 'sandbox-run.jsonl',
       opencode_local: 'sandbox-run.jsonl',
