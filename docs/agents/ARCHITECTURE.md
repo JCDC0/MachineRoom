@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.197. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.198. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -122,7 +122,7 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 ## Room behaviour
 
 - Space: black, with a faint lattice in all three axes (2000 unit cells, brighter tick crosses, a few coordinate labels), a far shell of dust and fog. The camera drifts a little with the pointer, eased, and not at all under reduced motion, and the far dust stops turning.
-- Hub: a flat ring at the middle, radius 300. Each agent has a slot on it in roster order and parks there when it has no run. A run start pulses the ring white, a run end pulses it green or red, and each slot marker takes its agent's colour. Under reduced motion the dash ring stops turning, slot markers do not grow, and pulses only change brightness where they end.
+- Hub: a flat ring at the middle, radius 300. Each agent has a slot on it in roster order and stays parked there, working or not; the orchestrator floats above the hub centre. A run start pulses the ring white, a run end pulses it green or red, and each slot marker takes its agent's colour. Under reduced motion the dash ring stops turning, slot markers do not grow, and pulses only change brightness where they end.
 - Folders: `planFolderView` (`src/model/folderView.js`) picks the cards from the files, the paths agents touch now, the recent touches (at most 8) made in the last 90 seconds of run time (`freshRecent` in `state.js`, measured against the newest activity, so folders close when later work moves on), plus any pinned folder; with `alwaysDepth` from 1 to 3 (0, today's plan, until V16 passes a value) every folder down to that depth is in the plan all the time, closed unless it holds a touched file, at most `maxAlways` (300) with the root, a parent keeping its children with the most files and putting the rest in its faint back folders, and each such view carries `pinned: true`. Closed cards are smallest, open cards larger, and a card that lists files is largest. A card that lists files has a row per item with read and write counts and a `+ N more` line. Cards face the camera.
 - Card layout: `layoutSphere` (`src/engine/sphere.js`) puts the cards on shells around the hub centre, the root below the hub, and the room passes `alwaysDepth` 2 to the plan (`room.setOptions({ alwaysDepth })` changes it). A card that enters the plan without `pinned`, and every list of items that opens, fades in over 0.4 seconds and out over 0.4 seconds when it leaves (at once under reduced motion). A card that comes back takes its last place, and cards glide and grow to new places and sizes (they jump to their place and size under reduced motion).
 - Clicks: a card's head pins the folder open (its tab turns yellow) or unpins it. A row shows the full path and counts and flies the camera to it; a folder row also pins that folder.
