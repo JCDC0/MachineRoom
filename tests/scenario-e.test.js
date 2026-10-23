@@ -7,27 +7,27 @@ const OTHER_FIXTURES = {
   'fixtures/sandbox': {
     activities: '485d94210c7f1c8e',
     plans: 'd6687f030f0b9dca',
-    layouts: '0c8d0dc6cdae2ff4',
+    layouts: 'd5c2f4a6094eec89',
   },
   'fixtures/scenario-a': {
     activities: '1894ba2b0fa96ff4',
     plans: 'a968c054f9cfe12c',
-    layouts: '7d850ea74863b547',
+    layouts: '52cf9c9f4aa847ee',
   },
   'fixtures/scenario-b': {
     activities: '0a10dbb64e548bb9',
     plans: 'f99f954e8043c19a',
-    layouts: '44b74499402e91c8',
+    layouts: '7dc9bdeee6b1ca32',
   },
   'fixtures/scenario-c': {
     activities: 'e6dc4d8a1b46b1d2',
     plans: 'f22d812a58e58fe7',
-    layouts: '4316a2698a00b670',
+    layouts: 'be4fbdf7bce02777',
   },
   'fixtures/scenario-d': {
     activities: '2fab820498862bc2',
     plans: 'aeba5c940991f527',
-    layouts: '12ff53c77733921e',
+    layouts: 'de86a7f893c17220',
   },
 }
 

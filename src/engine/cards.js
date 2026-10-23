@@ -3,7 +3,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
-import { ROOT_DROP, SPHERE_CENTER, layoutSphere } from './sphere.js'
+import { ROOT_DROP, SPHERE_CENTER, STACK_LIMIT, layoutSphere } from './sphere.js'
 import { easeRate, still } from './sprites.js'
 
 export const CARD_W = 248
@@ -17,7 +17,7 @@ export const CARD_TAB_W = 72
 export const CARD_TAB_H = 8
 export const CARD_TAB_LEFT = -1
 export const CARD_TAB_TOP = -9
-export const CARD_SCALES = { closed: 1.5, open: 1.8, files: 2.6 }
+export const CARD_SCALES = { closed: 1, open: 1.2, files: 1.8 }
 const FLASH_MS = 1100
 const FAIL_MS = 2600
 const FADE_MS = 400
@@ -54,6 +54,68 @@ export function viewInput(state, pinned = []) {
 
 export function viewKey(state, pinned = []) {
   return `${state.existingFiles}|${viewFocus(state, pinned).join('\n')}|${(state.recent ?? []).join('\n')}`
+}
+
+export function openChain(state, extra = []) {
+  const focus = new Set()
+  for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focus.add(path)
+  for (const path of extra) focus.add(path)
+  const dirs = new Set()
+  for (const path of focus) dirs.add(state.files.has(path) ? dirname(path) : path)
+  const chain = new Set()
+  for (const dir of dirs) {
+    let at = dir
+    chain.add(at)
+    while (at !== '') {
+      at = dirname(at)
+      chain.add(at)
+    }
+  }
+  return chain
+}
+
+export function stackOverflow(views, open = new Set()) {
+  const paths = new Set(views.map((view) => view.path))
+  const parentOf = new Map()
+  for (const view of views) {
+    if (view.path === '') continue
+    let at = dirname(view.path)
+    while (at !== '' && !paths.has(at)) at = dirname(at)
+    if (at === '' && paths.has('')) parentOf.set(view.path, '')
+    else if (paths.has(at)) parentOf.set(view.path, at)
+  }
+  const groups = new Map()
+  for (const view of views) {
+    const parent = parentOf.get(view.path)
+    if (parent === undefined) continue
+    const list = groups.get(parent)
+    if (list) list.push(view)
+    else groups.set(parent, [view])
+  }
+  const hidden = new Set()
+  const extra = new Map()
+  for (const [parent, kids] of groups) {
+    if (parent === '') continue
+    if (open.has(parent)) continue
+    if (kids.some((view) => open.has(view.path))) continue
+    const stack = kids.filter((view) => !open.has(view.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    for (const view of stack.slice(STACK_LIMIT)) hidden.add(view.path)
+    const over = Math.max(0, stack.length - STACK_LIMIT)
+    if (over > 0) extra.set(parent, over)
+  }
+  let grew = hidden.size > 0
+  while (grew) {
+    grew = false
+    for (const view of views) {
+      if (hidden.has(view.path)) continue
+      const parent = parentOf.get(view.path)
+      if (parent !== undefined && hidden.has(parent)) {
+        hidden.add(view.path)
+        grew = true
+      }
+    }
+  }
+  return { hidden, extra }
 }
 
 export function cardHeight(rows) {
@@ -463,10 +525,26 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     planKey = key
     const input = viewInput(state, [...pinned])
     plan = new Map(planFolderView({ ...input, alwaysDepth: alwaysLevel }).map((view) => [view.path, view]))
+    const focusPaths = new Set()
+    for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
+    const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
+    const dirs = new Set()
+    for (const file of files) dirs.add(dirname(file))
+    for (const path of focusPaths) if (!state.files.has(path)) dirs.add(path)
+    const chain = openChain(state)
+    active = { files, dirs, path: chain }
+    const openPaths = openChain(state, [...pinned])
+    const views = [...plan.values()].sort((a, b) => a.path.length - b.path.length)
+    const overflow = stackOverflow(views, openPaths)
+    const drawn = new Map()
+    for (const view of views) {
+      if (overflow.hidden.has(view.path)) continue
+      drawn.set(view.path, { ...view, back: Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
+    }
     const now = performance.now()
     const isStill = still()
     for (const card of [...cards.values()]) {
-      if (plan.has(card.path) || card.leaving) continue
+      if (drawn.has(card.path) || card.leaving) continue
       if (!isStill && !(card.view && isPinnedView(card.view))) {
         card.leaving = true
         card.fade = { from: card.opacity, to: 0, start: now }
@@ -474,8 +552,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         removeCard(card)
       }
     }
-    const views = [...plan.values()].sort((a, b) => a.path.length - b.path.length)
-    for (const view of views) {
+    for (const view of drawn.values()) {
       const card = cards.get(view.path) ?? makeCard(view.path)
       const before = card.view
       const pinnedView = isPinnedView(view)
@@ -518,13 +595,14 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       paintRows(card, view)
       card.meta.textContent = metaText(view)
     }
-    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
-    const nextLayoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${obstacleKey}`
+    const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view) }))
+    const openKey = [...openPaths].sort().join('\n')
+    const nextLayoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${obstacleKey}|${openKey}`
     const layoutChanged = nextLayoutKey !== layoutKey
     if (layoutChanged) {
       layoutKey = nextLayoutKey
       const sizes = new Map(entries.map((entry) => [entry.path, entry]))
-      const placed = layoutSphere(entries, { previous: homes, obstacles: boardObstacles })
+      const placed = layoutSphere(entries, { previous: homes, obstacles: boardObstacles, open: openPaths })
       for (const [path, spot] of placed) {
         const size = sizes.get(path)
         homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
@@ -533,27 +611,11 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       }
     }
     const nextOverviewKey = entries
-      .filter((entry) => entry.path === '' || plan.get(entry.path)?.pinned === true)
+      .filter((entry) => entry.path === '' || drawn.get(entry.path)?.pinned === true)
       .map((entry) => `${entry.path}:${entry.width}:${entry.height}`)
       .join(';')
     const overviewChanged = nextOverviewKey !== overviewLayoutKey
     overviewLayoutKey = nextOverviewKey
-    const focusPaths = new Set()
-    for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
-    const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
-    const dirs = new Set()
-    for (const file of files) dirs.add(dirname(file))
-    for (const path of focusPaths) if (!state.files.has(path)) dirs.add(path)
-    const chain = new Set()
-    for (const dir of dirs) {
-      let at = dir
-      chain.add(at)
-      while (at !== '') {
-        at = dirname(at)
-        chain.add(at)
-      }
-    }
-    active = { files, dirs, path: chain }
     rowRevision += 1
     return layoutChanged || overviewChanged
   }

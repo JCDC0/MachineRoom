@@ -1,28 +1,30 @@
 import { dirname } from '../model/paths.js'
-import { HUB_CENTER, HUB_RADIUS, HUB_Y } from './hub.js'
+import { HUB_CENTER, HUB_Y } from './hub.js'
 
 export const SPHERE_CENTER = HUB_CENTER
-export const SHELL_RADIUS = 1700
-export const SHELL_STEP = 1000
-export const FULL_SHELLS = 3
-export const DEEP_STEP = 400
 export const ROOT_DROP = 1000
 export const POLE_CAP = (25 * Math.PI) / 180
 export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 export const CARD_CLEARANCE = 40
-export const HUB_CLEARANCE = HUB_RADIUS + 200
+export const TOP_MIN_RADIUS = 1100
+export const TOP_MAX_RADIUS = 2600
+export const TOP_SPACING = 0.6
+export const OPEN_STEP = 650
+export const STACK_STEP = 50
+export const STACK_LIFT = 12
+export const STACK_SIDE = 16
+export const STACK_LIMIT = 4
+export const OPEN_CONE = 0.22
+export const FAN_CONE_MIN = 0.1
+export const FAN_CONE_MAX = 0.35
 
-const ROOT_SIZE = { width: 440, height: 160 }
-const CONE_PACK = 0.55
-const SETTLE_PASSES = 600
-const SETTLE_STEP = 0.45
-const SETTLE_ANCHOR = 0.008
-const SETTLE_DONE = 2
-const SETTLE_STALL = 25
+const ROOT_SIZE = { width: 248, height: 64 }
+const DEFAULT_CARD = { width: 248, height: 64 }
+const TOP_SEPARATION_PASSES = 60
+const TOP_SEPARATION_STEP = 0.5
 const SEARCH_STEP = 0.055
 const SEARCH_LIMIT = 4200
-const SEPARATION_EPS = 10
-const OVERLAP_EPS = 0.001
+const SEPARATION_EPS = 0.01
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
 
@@ -34,30 +36,22 @@ function depthOf(path) {
   return path === '' ? 0 : path.split('/').length
 }
 
-function shellOf(depth) {
-  if (depth === 0) return 0
-  const near = Math.min(depth, FULL_SHELLS)
-  return SHELL_RADIUS + (near - 1) * SHELL_STEP + (depth - near) * DEEP_STEP
-}
-
-function sizeOf(entry) {
+function sizeOf(entry, fallback = ROOT_SIZE) {
   const width = Number(entry?.width)
   const height = Number(entry?.height)
   return {
-    width: Number.isFinite(width) && width > 0 ? width : ROOT_SIZE.width,
-    height: Number.isFinite(height) && height > 0 ? height : ROOT_SIZE.height,
+    width: Number.isFinite(width) && width > 0 ? width : fallback.width,
+    height: Number.isFinite(height) && height > 0 ? height : fallback.height,
   }
 }
 
 function makeNode(path, entry) {
   const size = sizeOf(entry)
-  const depth = depthOf(path)
   return {
     path,
     width: size.width,
     height: size.height,
-    depth,
-    shell: shellOf(depth),
+    depth: depthOf(path),
     radius: Math.hypot(size.width, size.height) / 2 + CARD_CLEARANCE / 2,
   }
 }
@@ -109,6 +103,12 @@ function buildModel(entries) {
   return { nodes, paths, children, root: nodes.get('') }
 }
 
+function normalizeOpen(value) {
+  if (value instanceof Set) return new Set([...value].filter((path) => typeof path === 'string'))
+  if (Array.isArray(value)) return new Set(value.filter((path) => typeof path === 'string'))
+  return new Set()
+}
+
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
 function unit(value) {
@@ -123,6 +123,10 @@ function cross(a, b) {
 
 function directionOf(position) {
   return unit({ x: position.x - SPHERE_CENTER.x, y: position.y - SPHERE_CENTER.y, z: position.z - SPHERE_CENTER.z })
+}
+
+function radiusOf(position) {
+  return Math.hypot(position.x - SPHERE_CENTER.x, position.y - SPHERE_CENTER.y, position.z - SPHERE_CENTER.z)
 }
 
 function pointAt(direction, radius) {
@@ -152,24 +156,6 @@ function directionAround(axis, angle, azimuth) {
   })
 }
 
-function angleBetween(a, b) {
-  return Math.acos(clamp(dot(a, b), -1, 1))
-}
-
-function tangentToward(target, direction) {
-  const along = dot(target, direction)
-  return unit({ x: target.x - direction.x * along, y: target.y - direction.y * along, z: target.z - direction.z * along })
-}
-
-function rotateToward(direction, target, amount) {
-  const side = tangentToward(target, direction)
-  return unit({
-    x: direction.x + side.x * amount,
-    y: direction.y + side.y * amount,
-    z: direction.z + side.z * amount,
-  })
-}
-
 function clampTop(direction) {
   const top = Math.cos(POLE_CAP)
   if (Math.abs(direction.y) <= top) return direction
@@ -183,147 +169,164 @@ function clampTop(direction) {
 function fibonacciTop(count) {
   const top = Math.cos(POLE_CAP)
   return Array.from({ length: count }, (_, index) => {
-    const y = top - ((index + 0.5) / count) * 2 * top
+    const y = top - ((index + 0.5) / Math.max(1, count)) * 2 * top
     const ring = Math.sqrt(Math.max(0, 1 - y * y))
     const angle = index * GOLDEN_ANGLE
     return { x: Math.cos(angle) * ring, y, z: Math.sin(angle) * ring }
   })
 }
 
-function conePoint(axis, angle, index, count) {
-  const spread = angle * Math.sqrt((index + 0.5) / Math.max(1, count))
-  return directionAround(axis, spread, index * GOLDEN_ANGLE)
+export function topShellRadius(count, size = DEFAULT_CARD) {
+  const width = Number(size?.width)
+  const height = Number(size?.height)
+  const safeWidth = Number.isFinite(width) && width > 0 ? width : DEFAULT_CARD.width
+  const safeHeight = Number.isFinite(height) && height > 0 ? height : DEFAULT_CARD.height
+  const diagonal = Math.hypot(safeWidth, safeHeight)
+  const wanted = diagonal * Math.sqrt(Math.max(0, count) / 2)
+  return clamp(wanted, TOP_MIN_RADIUS, TOP_MAX_RADIUS)
 }
 
-function coneAngle(radii, shell) {
-  const total = radii.reduce((sum, radius) => sum + radius * radius, 0)
-  const ratio = total / (2 * shell * shell * CONE_PACK)
-  const angle = Math.acos(clamp(1 - ratio, -1, 1))
-  return Math.max(0.06, Math.min(Math.PI * 0.92, angle))
+function topSize(tops, nodes) {
+  if (tops.length === 0) return DEFAULT_CARD
+  let width = 0
+  let height = 0
+  for (const path of tops) {
+    const node = nodes.get(path)
+    width += node.width
+    height += node.height
+  }
+  return { width: width / tops.length, height: height / tops.length }
 }
 
-function settleDirections(list, initial, { obstacles = [], top = false, passes = SETTLE_PASSES } = {}) {
-  const dirs = new Map(list.map((node) => [node.path, { ...initial.get(node.path) }]))
-  let best = Infinity
-  let bestPass = 0
-  for (let pass = 0; pass < passes; pass += 1) {
-    const moves = new Map(list.map((node) => [node.path, { x: 0, y: 0, z: 0 }]))
-    let worst = 0
-    for (let i = 0; i < list.length; i += 1) {
-      const a = list[i]
-      const da = dirs.get(a.path)
-      const pa = pointAt(da, a.shell)
-      for (let j = i + 1; j < list.length; j += 1) {
-        const b = list[j]
-        const db = dirs.get(b.path)
-        const pb = pointAt(db, b.shell)
+function clearOfObstacles(direction, radius, node, obstacles) {
+  const place = pointAt(direction, radius)
+  for (const obstacle of obstacles) {
+    const distance = Math.hypot(place.x - obstacle.x, place.y - obstacle.y, place.z - obstacle.z)
+    if (distance + SEPARATION_EPS < obstacleDistance(node, obstacle)) return false
+  }
+  return true
+}
+
+function clearDirection(direction, radius, node, obstacles, top = false) {
+  let next = top ? clampTop(direction) : direction
+  if (clearOfObstacles(next, radius, node, obstacles)) return next
+  for (let attempt = 1; attempt < SEARCH_LIMIT; attempt += 1) {
+    const angle = SEARCH_STEP * Math.sqrt(attempt)
+    if (angle > Math.PI) break
+    next = directionAround(direction, angle, attempt * GOLDEN_ANGLE)
+    if (top) next = clampTop(next)
+    if (clearOfObstacles(next, radius, node, obstacles)) return next
+  }
+  return top ? clampTop(direction) : direction
+}
+
+function separateTopDirections(nodes, directions, shell) {
+  const work = directions.map((direction) => ({ ...direction }))
+  for (let pass = 0; pass < TOP_SEPARATION_PASSES; pass += 1) {
+    let moved = false
+    for (let i = 0; i < work.length; i += 1) {
+      const a = nodes[i]
+      const da = work[i]
+      const pa = pointAt(da, shell)
+      for (let j = i + 1; j < work.length; j += 1) {
+        const b = nodes[j]
+        const db = work[j]
+        const pb = pointAt(db, shell)
         const dx = pa.x - pb.x
         const dy = pa.y - pb.y
         const dz = pa.z - pb.z
         const distance = Math.hypot(dx, dy, dz)
-        const needed = a.radius + b.radius + SEPARATION_EPS
-        if (distance >= needed) continue
-        const overlap = needed - distance
-        worst = Math.max(worst, overlap)
-        const away = distance < 1e-6 ? tangentBasis(da).first : { x: dx / distance, y: dy / distance, z: dz / distance }
-        const alongA = dot(away, da)
-        const sideA = unit({ x: away.x - da.x * alongA, y: away.y - da.y * alongA, z: away.z - da.z * alongA })
-        const moveA = moves.get(a.path)
-        moveA.x += sideA.x * ((overlap * SETTLE_STEP) / a.shell)
-        moveA.y += sideA.y * ((overlap * SETTLE_STEP) / a.shell)
-        moveA.z += sideA.z * ((overlap * SETTLE_STEP) / a.shell)
-        const alongB = dot(away, db)
-        const sideB = unit({ x: -away.x + db.x * alongB, y: -away.y + db.y * alongB, z: -away.z + db.z * alongB })
-        const moveB = moves.get(b.path)
-        moveB.x += sideB.x * ((overlap * SETTLE_STEP) / b.shell)
-        moveB.y += sideB.y * ((overlap * SETTLE_STEP) / b.shell)
-        moveB.z += sideB.z * ((overlap * SETTLE_STEP) / b.shell)
+        const needed = TOP_SPACING * Math.min(a.width, b.width)
+        if (distance >= needed || distance < 1e-6) continue
+        moved = true
+        const side = unit({ x: dx / distance, y: dy / distance, z: dz / distance })
+        const alongA = dot(side, da)
+        const sideA = unit({ x: side.x - da.x * alongA, y: side.y - da.y * alongA, z: side.z - da.z * alongA })
+        const alongB = dot(side, db)
+        const sideB = unit({ x: -side.x + db.x * alongB, y: -side.y + db.y * alongB, z: -side.z + db.z * alongB })
+        const step = ((needed - distance) * TOP_SEPARATION_STEP) / shell
+        const nextA = unit({ x: da.x + sideA.x * step, y: da.y + sideA.y * step, z: da.z + sideA.z * step })
+        const nextB = unit({ x: db.x + sideB.x * step, y: db.y + sideB.y * step, z: db.z + sideB.z * step })
+        work[i] = clampTop(nextA)
+        work[j] = clampTop(nextB)
       }
-      for (const obstacle of obstacles) {
-        const dx = pa.x - obstacle.x
-        const dy = pa.y - obstacle.y
-        const dz = pa.z - obstacle.z
+    }
+    if (!moved) break
+  }
+  return work
+}
+
+function fanCone(count) {
+  return clamp(FAN_CONE_MIN + 0.05 * Math.sqrt(Math.max(1, count)), FAN_CONE_MIN, FAN_CONE_MAX)
+}
+
+function separateWarmTops(nodes, positions, previous) {
+  const changed = nodes.map((node) => {
+    const before = previousAt(previous, node.path)
+    return !before || before.width !== node.width || before.height !== node.height
+  })
+  for (let pass = 0; pass < TOP_SEPARATION_PASSES; pass += 1) {
+    let moved = false
+    for (let i = 0; i < nodes.length; i += 1) {
+      const a = nodes[i]
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const b = nodes[j]
+        const pa = positions.get(a.path)
+        const pb = positions.get(b.path)
+        const dx = pa.x - pb.x
+        const dy = pa.y - pb.y
+        const dz = pa.z - pb.z
         const distance = Math.hypot(dx, dy, dz)
-        const needed = obstacleDistance(a, obstacle) + SEPARATION_EPS
-        if (distance >= needed) continue
-        worst = Math.max(worst, needed - distance)
-        const away = distance < 1e-6 ? tangentBasis(da).first : { x: dx / distance, y: dy / distance, z: dz / distance }
-        const along = dot(away, da)
-        const side = unit({ x: away.x - da.x * along, y: away.y - da.y * along, z: away.z - da.z * along })
-        const move = moves.get(a.path)
-        move.x += side.x * (((needed - distance) * SETTLE_STEP) / a.shell)
-        move.y += side.y * (((needed - distance) * SETTLE_STEP) / a.shell)
-        move.z += side.z * (((needed - distance) * SETTLE_STEP) / a.shell)
+        const needed = TOP_SPACING * Math.min(a.width, b.width)
+        if (distance >= needed || distance < 1e-6) continue
+        moved = true
+        const moveA = changed[i] || !changed[j]
+        const moveB = changed[j] || !changed[i]
+        const share = moveA && moveB ? 0.5 : 1
+        const side = unit({ x: dx / distance, y: dy / distance, z: dz / distance })
+        const push = (node, position, away) => {
+          const at = directionOf(position)
+          const along = dot(away, at)
+          const sideStep = unit({ x: away.x - at.x * along, y: away.y - at.y * along, z: away.z - at.z * along })
+          const angle = ((needed - distance) * share) / Math.max(1, radiusOf(position))
+          const next = clampTop(unit({ x: at.x + sideStep.x * angle, y: at.y + sideStep.y * angle, z: at.z + sideStep.z * angle }))
+          positions.set(node.path, tagPosition(pointAt(next, radiusOf(position)), node))
+        }
+        if (moveA) push(a, pa, side)
+        if (moveB) push(b, pb, { x: -side.x, y: -side.y, z: -side.z })
       }
     }
-    for (const node of list) {
-      const direction = dirs.get(node.path)
-      const move = moves.get(node.path)
-      let next = unit({ x: direction.x + move.x, y: direction.y + move.y, z: direction.z + move.z })
-      next = rotateToward(next, initial.get(node.path), SETTLE_ANCHOR)
-      if (top) next = clampTop(next)
-      dirs.set(node.path, next)
-    }
-    if (worst < SETTLE_DONE) break
-    if (worst < best * 0.99) {
-      best = worst
-      bestPass = pass
-    } else if (pass - bestPass >= SETTLE_STALL) break
+    if (!moved) break
   }
-  return dirs
 }
 
-function regionAllows(direction, region) {
-  if (!region || region.kind === 'free') return true
-  if (region.kind === 'top') return Math.abs(direction.y) <= Math.cos(POLE_CAP) + 1e-9
-  if (region.kind === 'cone') return angleBetween(direction, region.axis) <= region.maxAngle + 1e-9
-  return true
+function fanDirections(axis, kids, open, count) {
+  const cone = fanCone(count)
+  const pathKids = kids.filter((path) => open.has(path))
+  const otherKids = kids.filter((path) => !open.has(path))
+  const out = new Map()
+  if (pathKids.length === 1) out.set(pathKids[0], axis)
+  pathKids.forEach((path, index) => {
+    if (index === 0 && pathKids.length === 1) return
+    const angle = 0.04 + 0.06 * index
+    out.set(path, directionAround(axis, angle, index * Math.PI))
+  })
+  otherKids.forEach((path, index) => {
+    const share = otherKids.length === 1 ? 1 : 0.45 + (0.55 * Math.sqrt((index + 0.5) / otherKids.length))
+    out.set(path, directionAround(axis, cone * share, 0.7 + index * GOLDEN_ANGLE))
+  })
+  return out
 }
 
-function clearanceAt(direction, node, shell, others, obstacles = []) {
-  const place = pointAt(direction, shell)
-  let best = Math.hypot(place.x - SPHERE_CENTER.x, place.y - SPHERE_CENTER.y, place.z - SPHERE_CENTER.z) - HUB_CLEARANCE - node.radius
-  for (const other of others) {
-    const distance = Math.hypot(place.x - other.pos.x, place.y - other.pos.y, place.z - other.pos.z)
-    best = Math.min(best, distance - node.radius - other.radius)
+function stackPosition(parentDirection, parentRadius, index) {
+  const step = index + 1
+  const base = pointAt(parentDirection, parentRadius + step * STACK_STEP)
+  const side = tangentBasis(parentDirection).first
+  return {
+    x: base.x + side.x * step * STACK_SIDE,
+    y: base.y + step * STACK_LIFT,
+    z: base.z + side.z * step * STACK_SIDE,
   }
-  for (const obstacle of obstacles) {
-    const distance = Math.hypot(place.x - obstacle.x, place.y - obstacle.y, place.z - obstacle.z)
-    best = Math.min(best, distance - obstacleDistance(node, obstacle))
-  }
-  return best
-}
-
-function clearAt(direction, node, shell, others, region, obstacles) {
-  if (!regionAllows(direction, region)) return false
-  return clearanceAt(direction, node, shell, others, obstacles) >= SEPARATION_EPS
-}
-
-function searchDirection(preferred, node, shell, region, others, obstacles = []) {
-  const base = unit(preferred)
-  if (clearAt(base, node, shell, others, region, obstacles)) return base
-  const limits = []
-  if (region?.kind === 'cone') {
-    limits.push(region.maxAngle)
-    limits.push(Math.min(Math.PI, region.maxAngle * 1.4 + 0.2))
-    limits.push(Math.PI)
-  } else {
-    limits.push(Math.PI)
-  }
-  let best = null
-  for (const limit of limits) {
-    const active = region?.kind === 'cone' ? { ...region, maxAngle: limit } : region
-    for (let attempt = 0; attempt < SEARCH_LIMIT; attempt += 1) {
-      const angle = attempt === 0 ? 0 : SEARCH_STEP * Math.sqrt(attempt)
-      if (angle > limit) break
-      const direction = directionAround(base, angle, attempt * GOLDEN_ANGLE)
-      if (!regionAllows(direction, active)) continue
-      const clearance = clearanceAt(direction, node, shell, others, obstacles)
-      if (!best || clearance > best.clearance) best = { direction, clearance }
-      if (clearance >= SEPARATION_EPS) return direction
-    }
-  }
-  return best?.direction ?? base
 }
 
 function tagPosition(position, node) {
@@ -339,228 +342,153 @@ function previousAt(previous, path) {
   return [value.x, value.y, value.z].every(Number.isFinite) ? value : null
 }
 
-function previousSize(value) {
-  const width = value?.width
-  const height = value?.height
-  return Number.isFinite(width) && Number.isFinite(height) ? { width, height } : null
-}
+const distanceBetween = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
 
-function sizeChanged(before, node) {
-  const size = previousSize(before)
-  return size ? size.width !== node.width || size.height !== node.height : false
-}
-
-function chooseMover(a, b, previous) {
-  if (a.node.path === '') return b
-  if (b.node.path === '') return a
-  const beforeA = previousAt(previous, a.node.path)
-  const beforeB = previousAt(previous, b.node.path)
-  const newA = !beforeA
-  const newB = !beforeB
-  if (newA !== newB) return newA ? a : b
-  const changedA = beforeA ? sizeChanged(beforeA, a.node) : false
-  const changedB = beforeB ? sizeChanged(beforeB, b.node) : false
-  if (changedA !== changedB) return changedA ? a : b
-  if (a.node.radius !== b.node.radius) return a.node.radius > b.node.radius ? a : b
-  if (a.node.depth !== b.node.depth) return a.node.depth > b.node.depth ? a : b
-  return byName(a.node.path, b.node.path) > 0 ? a : b
-}
-
-function firstOverlap(occupied) {
-  for (let i = 0; i < occupied.length; i += 1) {
-    const a = occupied[i]
-    for (let j = i + 1; j < occupied.length; j += 1) {
-      const b = occupied[j]
-      const distance = Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z)
-      if (distance + OVERLAP_EPS < a.radius + b.radius) return [a, b]
-    }
-  }
-  return null
-}
-
-function firstObstacleHit(occupied, obstacles) {
-  for (const item of occupied) {
-    if (item.path === '') continue
-    for (const obstacle of obstacles) {
-      const distance = Math.hypot(item.pos.x - obstacle.x, item.pos.y - obstacle.y, item.pos.z - obstacle.z)
-      if (distance + OVERLAP_EPS < obstacleDistance(item, obstacle)) return item
-    }
-  }
-  return null
-}
-
-function repairOverlaps(occupied, positions, previous, obstacles = []) {
-  const limit = occupied.length * 2 + 4
-  for (let pass = 0; pass < limit; pass += 1) {
-    const pair = firstOverlap(occupied)
-    let mover = null
-    if (pair) mover = chooseMover(pair[0], pair[1], previous)
-    else mover = firstObstacleHit(occupied, obstacles)
-    if (!mover) return
-    const node = mover.node
-    const region = node.depth === 1 ? { kind: 'top' } : { kind: 'free' }
-    const others = occupied.filter((item) => item !== mover)
-    let direction = searchDirection(directionOf(mover.pos), node, node.shell, region, others, obstacles)
-    if (node.depth === 1) direction = clampTop(direction)
-    mover.pos = tagPosition(pointAt(direction, node.shell), node)
-    positions.set(node.path, mover.pos)
-  }
-}
-
-function moveOffObstacles(occupied, positions, obstacles) {
-  if (obstacles.length === 0) return
-  for (const item of occupied) {
-    if (item.path === '') continue
-    if (!firstObstacleHit([item], obstacles)) continue
-    const node = item.node
-    const region = node.depth === 1 ? { kind: 'top' } : { kind: 'free' }
-    const others = occupied.filter((other) => other !== item)
-    let direction = searchDirection(directionOf(item.pos), node, node.shell, region, others, obstacles)
-    if (node.depth === 1) direction = clampTop(direction)
-    item.pos = tagPosition(pointAt(direction, node.shell), node)
-    positions.set(node.path, item.pos)
-  }
-}
-
-function addPlacement(occupied, positions, node, direction) {
-  const position = tagPosition(pointAt(direction, node.shell), node)
-  positions.set(node.path, position)
-  occupied.push({ path: node.path, node, pos: position, radius: node.radius })
-  return position
-}
-
-function placeFromPrevious(occupied, positions, node, before) {
-  const position = tagPosition({ x: before.x, y: before.y, z: before.z }, node)
-  positions.set(node.path, position)
-  occupied.push({ path: node.path, node, pos: position, radius: node.radius })
-  return position
-}
-
-function groupCone(kids, model) {
-  const radii = kids.map((path) => model.nodes.get(path).radius)
-  const shell = Math.min(...kids.map((path) => model.nodes.get(path).shell))
-  const needed = coneAngle(radii, shell)
-  return Math.min(Math.PI * 0.92, Math.max(needed * 1.08, 0.1))
-}
-
-function placeCold(model, obstacles) {
-  const { nodes, paths, children, root } = model
+function placeCold(model, open, obstacles) {
+  const { nodes, children, root } = model
   const positions = new Map()
-  const occupied = []
   const rootPosition = tagPosition({ x: 0, y: HUB_Y - ROOT_DROP, z: 0 }, root)
   positions.set('', rootPosition)
-  occupied.push({ path: '', node: root, pos: rootPosition, radius: root.radius })
 
   const tops = children.get('')
-  const topSpots = fibonacciTop(tops.length)
-  const topInitial = new Map(tops.map((path, index) => [path, topSpots[index]]))
+  const shell = topShellRadius(tops.length, topSize(tops, nodes))
   const topNodes = tops.map((path) => nodes.get(path))
-  const rootObstacle = { x: rootPosition.x, y: rootPosition.y, z: rootPosition.z, radius: root.radius }
-  const topDirs = settleDirections(topNodes, topInitial, { obstacles: [rootObstacle, ...obstacles], top: true })
-  for (const path of tops) addPlacement(occupied, positions, nodes.get(path), topDirs.get(path))
+  const topDirections = separateTopDirections(topNodes, fibonacciTop(tops.length), shell)
+  tops.forEach((path, index) => {
+    const node = nodes.get(path)
+    const direction = clearDirection(topDirections[index], shell, node, obstacles, true)
+    positions.set(path, tagPosition(pointAt(direction, shell), node))
+  })
 
-  const maxDepth = paths.reduce((high, path) => Math.max(high, nodes.get(path).depth), 0)
-  for (let depth = 2; depth <= maxDepth; depth += 1) {
-    const level = paths.filter((path) => nodes.get(path).depth === depth)
-    if (level.length === 0) continue
-    const groups = new Map()
-    for (const path of level) {
-      const parent = nodes.get(path).parent
-      const list = groups.get(parent)
-      if (list) list.push(path)
-      else groups.set(parent, [path])
+  const queue = [...tops]
+  while (queue.length > 0) {
+    const parentPath = queue.shift()
+    const parentPosition = positions.get(parentPath)
+    const parentDirection = directionOf(parentPosition)
+    const parentRadius = radiusOf(parentPosition)
+    const kids = children.get(parentPath)
+    if (!kids || kids.length === 0) continue
+    const pathKids = kids.filter((path) => open.has(path))
+    const stackKids = kids.filter((path) => !open.has(path))
+    const fan = open.has(parentPath) || pathKids.length > 0
+    if (fan) {
+      const directions = fanDirections(parentDirection, kids, open, kids.length)
+      for (const path of kids) {
+        const node = nodes.get(path)
+        const direction = clearDirection(directions.get(path) ?? parentDirection, parentRadius + OPEN_STEP, node, obstacles)
+        positions.set(path, tagPosition(pointAt(direction, parentRadius + OPEN_STEP), node))
+        queue.push(path)
+      }
+      continue
     }
-    const initial = new Map()
-    for (const [parentPath, kids] of groups) {
-      const axis = directionOf(positions.get(parentPath))
-      const kidNodes = kids.map((path) => nodes.get(path))
-      const cone = coneAngle(kidNodes.map((node) => node.radius), Math.min(...kidNodes.map((node) => node.shell)))
-      kidNodes.forEach((node, index) => {
-        initial.set(node.path, conePoint(axis, cone, index, kidNodes.length))
-      })
-    }
-    const levelNodes = level.map((path) => nodes.get(path))
-    const placedBefore = occupied.map((item) => ({ x: item.pos.x, y: item.pos.y, z: item.pos.z, radius: item.radius }))
-    const dirs = settleDirections(levelNodes, initial, { obstacles: [...placedBefore, ...obstacles] })
-    for (const node of levelNodes) addPlacement(occupied, positions, node, dirs.get(node.path))
+
+    stackKids.slice(0, STACK_LIMIT).forEach((path, index) => {
+      const node = nodes.get(path)
+      const base = stackPosition(parentDirection, parentRadius, index)
+      const at = pointAt(clearDirection(directionOf(base), radiusOf(base), node, obstacles), radiusOf(base))
+      positions.set(path, tagPosition(at, node))
+      queue.push(path)
+    })
   }
-
-  moveOffObstacles(occupied, positions, obstacles)
-  repairOverlaps(occupied, positions, null, obstacles)
   return positions
 }
 
-function placeWarm(model, previous, obstacles) {
+function placeWarm(model, open, previous, obstacles) {
   const { nodes, children, root } = model
   const positions = new Map()
-  const occupied = []
   const rootPosition = tagPosition({ x: 0, y: HUB_Y - ROOT_DROP, z: 0 }, root)
   positions.set('', rootPosition)
-  occupied.push({ path: '', node: root, pos: rootPosition, radius: root.radius })
 
-  const queue = []
   const tops = children.get('')
-  const topDirections = fibonacciTop(tops.length)
+  const shell = topShellRadius(tops.length, topSize(tops, nodes))
+  const topSpots = fibonacciTop(tops.length)
+  const placedTops = []
   tops.forEach((path, index) => {
     const node = nodes.get(path)
     const before = previousAt(previous, path)
-    if (before) placeFromPrevious(occupied, positions, node, before)
-    else {
-      const direction = searchDirection(topDirections[index], node, node.shell, { kind: 'top' }, occupied, obstacles)
-      addPlacement(occupied, positions, node, direction)
+    if (before) {
+      const position = tagPosition({ x: before.x, y: before.y, z: before.z }, node)
+      positions.set(path, position)
+      placedTops.push({ node, position })
+      return
     }
-    if (children.get(path).length > 0) queue.push(path)
+    let direction = topSpots[index]
+    for (let attempt = 0; attempt < SEARCH_LIMIT; attempt += 1) {
+      direction = attempt === 0 ? topSpots[index] : directionAround(topSpots[index], SEARCH_STEP * Math.sqrt(attempt), attempt * GOLDEN_ANGLE)
+      direction = clampTop(direction)
+      const place = pointAt(direction, shell)
+      const apart = placedTops.every((other) => distanceBetween(place, other.position) >= TOP_SPACING * Math.min(node.width, other.node.width))
+      if (apart && clearOfObstacles(direction, shell, node, obstacles)) break
+    }
+    const position = tagPosition(pointAt(direction, shell), node)
+    positions.set(path, position)
+    placedTops.push({ node, position })
   })
 
-  let at = 0
-  while (at < queue.length) {
-    const parentPath = queue[at]
-    at += 1
-    const kids = children.get(parentPath)
-    const axis = directionOf(positions.get(parentPath))
-    const cone = groupCone(kids, model)
-    const kidNodes = kids.map((path) => nodes.get(path))
-    kidNodes.forEach((node, index) => {
-      const before = previousAt(previous, node.path)
-      if (before) placeFromPrevious(occupied, positions, node, before)
-      else {
-        const preferred = conePoint(axis, cone, index, kidNodes.length)
-        const direction = searchDirection(preferred, node, node.shell, { kind: 'cone', axis, maxAngle: cone }, occupied, obstacles)
-        addPlacement(occupied, positions, node, direction)
-      }
-      if (children.get(node.path).length > 0) queue.push(node.path)
-    })
-  }
+  separateWarmTops(tops.map((path) => nodes.get(path)), positions, previous)
 
-  moveOffObstacles(occupied, positions, obstacles)
-  repairOverlaps(occupied, positions, previous, obstacles)
+  const queue = [...tops]
+  while (queue.length > 0) {
+    const parentPath = queue.shift()
+    const parentPosition = positions.get(parentPath)
+    const parentDirection = directionOf(parentPosition)
+    const parentRadius = radiusOf(parentPosition)
+    const kids = children.get(parentPath)
+    if (!kids || kids.length === 0) continue
+    const parentFan = open.has(parentPath) || kids.some((path) => open.has(path))
+    const stackKids = kids.filter((path) => !open.has(path))
+    const stackIndex = new Map(stackKids.map((path, index) => [path, index]))
+    const freshFan = parentFan ? kids : []
+    const directions = fanDirections(parentDirection, freshFan, open, freshFan.length)
+    const previousParent = previousAt(previous, parentPath) ?? parentPosition
+
+    for (const path of kids) {
+      const node = nodes.get(path)
+      const fan = parentFan
+      const slot = stackIndex.get(path)
+      if (!fan && (slot === undefined || slot >= STACK_LIMIT)) continue
+      const before = previousAt(previous, path)
+      const wasFan = Boolean(before) && distanceBetween(before, previousParent) >= OPEN_STEP * 0.5
+      if (before && fan === wasFan) {
+        positions.set(path, tagPosition({ x: before.x, y: before.y, z: before.z }, node))
+        queue.push(path)
+        continue
+      }
+      if (fan) {
+        const direction = clearDirection(directions.get(path) ?? parentDirection, parentRadius + OPEN_STEP, node, obstacles)
+        positions.set(path, tagPosition(pointAt(direction, parentRadius + OPEN_STEP), node))
+      } else {
+        const base = stackPosition(parentDirection, parentRadius, slot)
+        const at = pointAt(clearDirection(directionOf(base), radiusOf(base), node, obstacles), radiusOf(base))
+        positions.set(path, tagPosition(at, node))
+      }
+      queue.push(path)
+    }
+  }
   return positions
 }
 
-export function layoutSphere(entries, { previous, obstacles } = {}) {
-  const model = buildModel(entries)
-  const clear = normalizeObstacles(obstacles)
-  const hasPrevious = previous && (typeof previous.size === 'number' ? previous.size > 0 : Object.keys(previous).length > 0)
-  return hasPrevious ? placeWarm(model, previous, clear) : placeCold(model, clear)
+function clearMovedObstacles(model, positions, obstacles) {
+  if (obstacles.length === 0) return
+  for (const path of [...positions.keys()].sort(byName)) {
+    if (path === '') continue
+    const node = model.nodes.get(path)
+    const position = positions.get(path)
+    const direction = directionOf(position)
+    const radius = radiusOf(position)
+    if (clearOfObstacles(direction, radius, node, obstacles)) continue
+    const safe = clearDirection(direction, radius, node, obstacles, node.depth === 1)
+    const at = pointAt(safe, radius)
+    positions.set(path, tagPosition(at, node))
+  }
 }
 
-export function sphereOverlaps(entries, placed) {
+export function layoutSphere(entries, { previous, obstacles, open } = {}) {
   const model = buildModel(entries)
-  const boxes = []
-  for (const node of model.nodes.values()) {
-    const at = placed?.get?.(node.path)
-    if (!at) continue
-    boxes.push({ path: node.path, node, pos: at })
-  }
-  const out = []
-  for (let i = 0; i < boxes.length; i += 1) {
-    const a = boxes[i]
-    for (let j = i + 1; j < boxes.length; j += 1) {
-      const b = boxes[j]
-      const distance = Math.hypot(a.pos.x - b.pos.x, a.pos.y - b.pos.y, a.pos.z - b.pos.z)
-      const needed = a.node.radius + b.node.radius
-      if (distance + OVERLAP_EPS < needed) out.push({ a: a.path, b: b.path, distance, needed })
-    }
-  }
-  return out
+  const openPaths = normalizeOpen(open)
+  const clear = normalizeObstacles(obstacles)
+  const hasPrevious = previous && (typeof previous.size === 'number' ? previous.size > 0 : Object.keys(previous).length > 0)
+  const positions = hasPrevious ? placeWarm(model, openPaths, previous, clear) : placeCold(model, openPaths, clear)
+  clearMovedObstacles(model, positions, clear)
+  return positions
 }
