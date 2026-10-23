@@ -13,7 +13,7 @@ import { createPlayer } from './model/player.js'
 import { costBoard } from './model/costs.js'
 import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
-import Hud from './ui/Hud.jsx'
+import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
 import { loadEffectSettings, loadSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
@@ -280,7 +280,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     function onKey(event) {
-      if (event.target.closest('input, textarea, [role="dialog"]')) return
+      if (hudKeyBlocked(event.target)) return
       if (event.target.closest('button') && (event.code === 'Space' || event.key === 'Enter')) return
       const room = roomRef.current
       if (event.code === 'Space') {

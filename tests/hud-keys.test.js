@@ -1,13 +1,36 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { hudKeyBlocked } from '../src/ui/Hud.jsx'
 
 const target = (...names) => ({
   closest: (selector) => (names.some((name) => selector.includes(name)) ? {} : null),
 })
 
+let savedDocument
+
+function stubDocument(dialog) {
+  savedDocument = globalThis.document
+  globalThis.document = { querySelector: (selector) => (selector === '[role="dialog"]' && dialog ? {} : null) }
+}
+
+afterEach(() => {
+  if (savedDocument === undefined) delete globalThis.document
+  else globalThis.document = savedDocument
+  savedDocument = undefined
+})
+
 describe('hudKeyBlocked', () => {
   it('blocks the HUD keys whose target is inside a dialog', () => {
     expect(hudKeyBlocked(target('[role="dialog"]'))).toBe(true)
+  })
+
+  it('blocks the keys while a dialog is open and focus stays on the HUD button', () => {
+    stubDocument(true)
+    expect(hudKeyBlocked(target('.hud'))).toBe(true)
+  })
+
+  it('leaves the keys alone when no dialog is open', () => {
+    stubDocument(false)
+    expect(hudKeyBlocked(target('.hud'))).toBe(false)
   })
 
   it('blocks the keys in a field as before', () => {
