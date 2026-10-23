@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { readdirSync, watch } from 'node:fs'
+import { readdirSync, statSync, watch } from 'node:fs'
 import { createServer } from 'node:http'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -549,12 +549,16 @@ export function createBridge(options = {}) {
     if (stopped || !projectRoot) return false
     if (watcher) return true
     try {
-      watcher = watch(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
+      if (!statSync(resolve(projectRoot)).isDirectory()) return false
+      const current = watch(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
         if (stopped) return
         if (filename && IGNORED_WATCH.test(String(filename))) return
         beginPolling()
       })
-      watcher.on('error', () => {})
+      current.on('error', () => {
+        if (watcher === current) beginPolling(false)
+      })
+      watcher = current
       return true
     } catch {
       watcher = null
