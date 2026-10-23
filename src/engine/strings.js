@@ -1,10 +1,12 @@
 import * as THREE from 'three'
 import { SPHERE_CENTER } from './sphere.js'
-import { WHITE, YELLOW, glowTexture, lineMaterial, reducedMotion, seeded } from './sprites.js'
+import { WHITE, YELLOW, glowTexture, reducedMotion, seeded } from './sprites.js'
 
 const SEGMENTS = 16
 const SAG = 0.12
 const SAG_MAX = 520
+const LINE_LEVEL = 0.22
+const DIM_FACTOR = 0.25
 
 const COLOR_WHITE = new THREE.Color(WHITE)
 const COLOR_YELLOW = new THREE.Color(YELLOW)
@@ -85,6 +87,16 @@ function stringHash(str) {
     h = Math.imul(h, 16777619)
   }
   return h >>> 0
+}
+
+function linkIsLit(link, mask) {
+  if (!mask?.dimmed || !mask.lit) return false
+  return mask.lit.has(link.from ?? '') && mask.lit.has(link.to ?? '')
+}
+
+function setLinkLevel(array, index, level) {
+  const base = index * SEGMENTS * 6
+  for (let value = 0; value < SEGMENTS * 6; value += 1) array[base + value] = level
 }
 
 function getOffsets(strand, count) {
@@ -170,6 +182,9 @@ export function createStrings(scene, { onPath = () => false } = {}) {
   let line = null
   let ends = []
   let strands = []
+  let lineLevels = []
+  let dimLevel = 0
+  let currentMask = null
 
   function dispose() {
     if (line) {
@@ -185,17 +200,37 @@ export function createStrings(scene, { onPath = () => false } = {}) {
       strand.offsets = null
     }
     strands = []
+    ends = []
+    lineLevels = []
   }
 
-  function update(centerOf) {
+  function update(centerOf, mask = null, delta = 0) {
+    currentMask = mask
+    const dimGoal = mask?.dimmed ? 1 : 0
+    if (motion.still()) {
+      dimLevel = dimGoal
+    } else if (dimLevel < dimGoal) {
+      dimLevel = Math.min(dimGoal, dimLevel + delta)
+    } else if (dimLevel > dimGoal) {
+      dimLevel = Math.max(dimGoal, dimLevel - delta)
+    }
     if (!line) return
     const array = line.geometry.attributes.position.array
+    const colors = line.geometry.attributes.color.array
     let lineChanged = false
+    let colorChanged = false
     for (let i = 0; i < ends.length; i += 1) {
       const link = ends[i]
       if (link.from === null) from.copy(SPHERE_CENTER)
       else from.copy(centerOf(link.from))
       to.copy(centerOf(link.to))
+
+      const level = LINE_LEVEL + ((linkIsLit(link, mask) ? 1 : LINE_LEVEL * DIM_FACTOR) - LINE_LEVEL) * dimLevel
+      if (lineLevels[i] !== level) {
+        lineLevels[i] = level
+        setLinkLevel(colors, i, level)
+        colorChanged = true
+      }
 
       const strand = strands[i]
       const moved = !strand || Number.isNaN(strand.from.x) ||
@@ -227,6 +262,9 @@ export function createStrings(scene, { onPath = () => false } = {}) {
     if (lineChanged) {
       line.geometry.attributes.position.needsUpdate = true
     }
+    if (colorChanged) {
+      line.geometry.attributes.color.needsUpdate = true
+    }
   }
 
   function build(links, centerOf, anchor = true) {
@@ -235,9 +273,21 @@ export function createStrings(scene, { onPath = () => false } = {}) {
     if (ends.length === 0) return
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ends.length * SEGMENTS * 6), 3))
-    line = new THREE.LineSegments(geometry, lineMaterial(WHITE, 0.22))
+    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(ends.length * SEGMENTS * 6), 3))
+    line = new THREE.LineSegments(
+      geometry,
+      new THREE.LineBasicMaterial({
+        color: WHITE,
+        vertexColors: true,
+        transparent: true,
+        opacity: 1,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      })
+    )
     line.frustumCulled = false
     scene.add(line)
+    lineLevels = new Array(ends.length).fill(-1)
 
     const texture = glowTexture()
     strands = ends.map((link) => {
@@ -259,7 +309,6 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         seed,
         mesh,
         yellowLevel: 0,
-        lastYellowLevel: 0,
         from: new THREE.Vector3(NaN, NaN, NaN),
         to: new THREE.Vector3(NaN, NaN, NaN),
         offsets: null,
@@ -277,15 +326,9 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         } else if (strand.yellowLevel > 0) {
           strand.yellowLevel = Math.max(0, strand.yellowLevel - delta / 1.5)
         }
-        if (strand.yellowLevel > 0) {
-          material.color.lerpColors(COLOR_WHITE, COLOR_YELLOW, strand.yellowLevel)
-          material.opacity = 0.35 + strand.yellowLevel * 0.55
-          strand.lastYellowLevel = strand.yellowLevel
-        } else if (strand.lastYellowLevel !== 0) {
-          material.color.setHex(WHITE)
-          material.opacity = 0.35
-          strand.lastYellowLevel = 0
-        }
+        const factor = linkIsLit(strand.link, currentMask) ? 1 : 1 - (1 - DIM_FACTOR) * dimLevel
+        material.color.lerpColors(COLOR_WHITE, COLOR_YELLOW, strand.yellowLevel)
+        material.opacity = (0.35 + strand.yellowLevel * 0.55) * factor
       }
       scene.add(mesh)
       return strand
