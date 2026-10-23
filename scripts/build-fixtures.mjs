@@ -38,6 +38,15 @@ export function fixtureLeak(lines) {
   return 0
 }
 
+export function fixtureNames(outName = 'sandbox') {
+  const safeName = outName.replace(/[^A-Za-z0-9._-]/g, '-')
+  return {
+    run: `${safeName}-run.jsonl`,
+    agents: safeName === 'sandbox' ? 'agents.json' : `${safeName}-agents.json`,
+    tree: `${safeName}-tree.json`,
+  }
+}
+
 export function sandboxFiles(sandbox) {
   const tracked = gitList(sandbox, ['ls-files', '-z', '--cached', '--others', '--exclude-standard'])
   const files = tracked.split('\0').filter(Boolean).sort()
@@ -56,7 +65,7 @@ function main(argv) {
     return 1
   }
 
-  const safeName = outName.replace(/[^A-Za-z0-9._-]/g, '-')
+  const names = fixtureNames(outName)
 
   const frames = readFileSync(rawFile, 'utf8')
     .split('\n')
@@ -77,7 +86,7 @@ function main(argv) {
     console.error(`possible secret in frame ${secret + 1}; fixture not written`)
     return 2
   }
-  writeFileSync(join(root, 'public', 'fixtures', `${safeName}-run.jsonl`), lines.join('\n') + '\n')
+  writeFileSync(join(root, 'public', 'fixtures', names.run), lines.join('\n') + '\n')
 
   const ids = JSON.parse(readFileSync(idsFile, 'utf8').replace(/^\uFEFF/, ''))
   const adapters = { claude: 'claude_local', hermes: 'hermes_local', opencode: 'opencode_local', agy: 'process' }
@@ -89,10 +98,10 @@ function main(argv) {
     adapterType: adapters[key],
     parser: key,
   }))
-  writeFileSync(join(root, 'public', 'fixtures', `${safeName}-agents.json`), JSON.stringify({ projectRoot: 'agent-sandbox', agents }, null, 2) + '\n')
+  writeFileSync(join(root, 'public', 'fixtures', names.agents), JSON.stringify({ projectRoot: 'agent-sandbox', agents }, null, 2) + '\n')
 
   const { files, created } = sandboxFiles(sandbox)
-  writeFileSync(join(root, 'public', 'fixtures', `${safeName}-tree.json`), JSON.stringify({ root: 'agent-sandbox', files, created }, null, 2) + '\n')
+  writeFileSync(join(root, 'public', 'fixtures', names.tree), JSON.stringify({ root: 'agent-sandbox', files, created }, null, 2) + '\n')
 
   console.log(`frames: ${frames.length}, agents: ${agents.length}, files: ${files.length}, created: ${created.length}`)
   return 0

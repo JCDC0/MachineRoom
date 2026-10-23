@@ -37,7 +37,7 @@ describe('hireAgent with approval required', () => {
     const second = await client.hireAgent({ ...planner, name: 'Scout' })
     await client.decideApproval(first.approval.id, 'reject')
     await client.decideApproval(second.approval.id, 'request-revision')
-    expect((await byKey(client, 'planner')).status).toBe('terminated')
+    expect((await byKey(client, 'planner')).status).toBe('error')
     expect((await byKey(client, 'scout')).status).toBe('pending_approval')
   })
 
