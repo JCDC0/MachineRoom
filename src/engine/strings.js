@@ -15,8 +15,10 @@ export function curvePoint(a, b, t, out) {
   return out
 }
 
-export function strandPoints(curve, spacing = 24, seed = 0) {
-  if (!curve) return []
+const scratchPt = new THREE.Vector3()
+
+export function strandPoints(curve, spacing = 24, seed = 0, out = null) {
+  if (!curve) return out ? (out.length = 0, out) : []
   let a = curve.a ?? curve.from ?? (Array.isArray(curve) ? curve[0] : null)
   let b = curve.b ?? curve.to ?? (Array.isArray(curve) ? curve[1] : null)
   let getPoint = null
@@ -24,34 +26,56 @@ export function strandPoints(curve, spacing = 24, seed = 0) {
 
   if (a && b) {
     len = a.distanceTo(b)
-    if (len === 0) return []
-    getPoint = (t, out) => curvePoint(a, b, t, out)
+    if (len === 0) return out ? (out.length = 0, out) : []
+    const sag = Math.min(SAG_MAX, len * SAG) * 4
+    const ax = a.x, ay = a.y, az = a.z
+    const dx = b.x - ax, dy = b.y - ay, dz = b.z - az
+    const count = spacing > 0 ? Math.max(0, Math.round(len / spacing)) : 0
+    if (count === 0) return out ? (out.length = 0, out) : []
+    const rand = seeded(seed)
+    const points = out ?? []
+    for (let i = 0; i < count; i += 1) {
+      const t = count === 1 ? 0.5 : (i + 0.5) / count
+      const x = ax + dx * t + (rand() - 0.5) * 10
+      const y = ay + dy * t - sag * t * (1 - t) + (rand() - 0.5) * 10
+      const z = az + dz * t + (rand() - 0.5) * 10
+      if (i < points.length) {
+        points[i].set(x, y, z)
+      } else {
+        points.push(new THREE.Vector3(x, y, z))
+      }
+    }
+    if (points.length > count) points.length = count
+    return points
   } else if (typeof curve.getPoint === 'function') {
     len = typeof curve.getLength === 'function' ? curve.getLength() : (curve.length ?? 0)
-    if (len === 0) return []
-    getPoint = (t, out) => curve.getPoint(t, out)
+    if (len === 0) return out ? (out.length = 0, out) : []
+    getPoint = (t, pt) => curve.getPoint(t, pt)
   } else if (typeof curve === 'function') {
     len = curve.length ?? 0
-    if (len === 0) return []
-    getPoint = (t, out) => curve(t, out)
+    if (len === 0) return out ? (out.length = 0, out) : []
+    getPoint = (t, pt) => curve(t, pt)
   } else {
-    return []
+    return out ? (out.length = 0, out) : []
   }
 
   const count = spacing > 0 ? Math.max(0, Math.round(len / spacing)) : 0
-  if (count === 0) return []
+  if (count === 0) return out ? (out.length = 0, out) : []
   const rand = seeded(seed)
-  const points = []
-  const pt = new THREE.Vector3()
+  const points = out ?? []
   for (let i = 0; i < count; i += 1) {
     const t = count === 1 ? 0.5 : (i + 0.5) / count
-    getPoint(t, pt)
-    const scatter = 10
-    const x = pt.x + (rand() - 0.5) * scatter
-    const y = pt.y + (rand() - 0.5) * scatter
-    const z = pt.z + (rand() - 0.5) * scatter
-    points.push(new THREE.Vector3(x, y, z))
+    getPoint(t, scratchPt)
+    const x = scratchPt.x + (rand() - 0.5) * 10
+    const y = scratchPt.y + (rand() - 0.5) * 10
+    const z = scratchPt.z + (rand() - 0.5) * 10
+    if (i < points.length) {
+      points[i].set(x, y, z)
+    } else {
+      points.push(new THREE.Vector3(x, y, z))
+    }
   }
+  if (points.length > count) points.length = count
   return points
 }
 
@@ -64,10 +88,77 @@ function stringHash(str) {
   return h >>> 0
 }
 
+function getOffsets(strand, count) {
+  if (strand.offsets && strand.offsetsCount === count) {
+    return strand.offsets
+  }
+  const rand = seeded(strand.seed)
+  const offsets = new Float32Array(count * 3)
+  for (let i = 0; i < count; i += 1) {
+    const base = i * 3
+    offsets[base] = (rand() - 0.5) * 10
+    offsets[base + 1] = (rand() - 0.5) * 10
+    offsets[base + 2] = (rand() - 0.5) * 10
+  }
+  strand.offsets = offsets
+  strand.offsetsCount = count
+  return offsets
+}
+
+function fillStrandDirect(strand, from, to) {
+  const len = from.distanceTo(to)
+  if (len === 0) return
+  const count = Math.max(0, Math.round(len / 24))
+  if (count === 0) return
+
+  const geometry = strand.mesh.geometry
+  const attr = geometry.getAttribute('position')
+  const sag = Math.min(SAG_MAX, len * SAG) * 4
+  const ax = from.x, ay = from.y, az = from.z
+  const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
+  const offsets = getOffsets(strand, count)
+
+  if (attr && attr.count === count) {
+    const array = attr.array
+    for (let i = 0; i < count; i += 1) {
+      const t = count === 1 ? 0.5 : (i + 0.5) / count
+      const base = i * 3
+      array[base] = ax + dx * t + offsets[base]
+      array[base + 1] = ay + dy * t - sag * t * (1 - t) + offsets[base + 1]
+      array[base + 2] = az + dz * t + offsets[base + 2]
+    }
+    attr.needsUpdate = true
+    return
+  }
+
+  const array = new Float32Array(count * 3)
+  for (let i = 0; i < count; i += 1) {
+    const t = count === 1 ? 0.5 : (i + 0.5) / count
+    const base = i * 3
+    array[base] = ax + dx * t + offsets[base]
+    array[base + 1] = ay + dy * t - sag * t * (1 - t) + offsets[base + 1]
+    array[base + 2] = az + dz * t + offsets[base + 2]
+  }
+
+  geometry.dispose()
+  const nextGeo = new THREE.BufferGeometry()
+  nextGeo.setAttribute('position', new THREE.BufferAttribute(array, 3))
+  strand.mesh.geometry = nextGeo
+}
+
 function fillStrand(strand, points) {
   const geometry = strand.mesh.geometry
-  if (geometry.getAttribute('position')?.count === points.length) {
-    geometry.setFromPoints(points)
+  const attr = geometry.getAttribute('position')
+  if (attr && attr.count === points.length) {
+    const array = attr.array
+    for (let i = 0; i < points.length; i += 1) {
+      const pt = points[i]
+      const base = i * 3
+      array[base] = pt.x
+      array[base + 1] = pt.y
+      array[base + 2] = pt.z
+    }
+    attr.needsUpdate = true
     return
   }
   geometry.dispose()
@@ -78,8 +169,6 @@ export function createStrings(scene, { onPath = () => false } = {}) {
   const motion = reducedMotion()
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()
-  const start = new THREE.Vector3()
-  const end = new THREE.Vector3()
   let line = null
   let ends = []
   let strands = []
@@ -95,6 +184,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
       scene.remove(strand.mesh)
       strand.mesh.geometry.dispose()
       strand.mesh.material.dispose()
+      strand.offsets = null
     }
     strands = []
   }
@@ -118,22 +208,31 @@ export function createStrings(scene, { onPath = () => false } = {}) {
 
       if (moved) {
         lineChanged = true
+        const len = from.distanceTo(to)
+        const sag = Math.min(SAG_MAX, len * SAG) * 4
+        const ax = from.x, ay = from.y, az = from.z
+        const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
+        let prevX = ax, prevY = ay, prevZ = az
         for (let segment = 0; segment < SEGMENTS; segment += 1) {
-          curvePoint(from, to, segment / SEGMENTS, start)
-          curvePoint(from, to, (segment + 1) / SEGMENTS, end)
+          const t = (segment + 1) / SEGMENTS
+          const nextX = ax + dx * t
+          const nextY = ay + dy * t - sag * t * (1 - t)
+          const nextZ = az + dz * t
           const base = (i * SEGMENTS + segment) * 6
-          array[base] = start.x
-          array[base + 1] = start.y
-          array[base + 2] = start.z
-          array[base + 3] = end.x
-          array[base + 4] = end.y
-          array[base + 5] = end.z
+          array[base] = prevX
+          array[base + 1] = prevY
+          array[base + 2] = prevZ
+          array[base + 3] = nextX
+          array[base + 4] = nextY
+          array[base + 5] = nextZ
+          prevX = nextX
+          prevY = nextY
+          prevZ = nextZ
         }
         if (strand) {
           strand.from.copy(from)
           strand.to.copy(to)
-          const pts = strandPoints({ a: from, b: to }, 24, strand.seed)
-          fillStrand(strand, pts)
+          fillStrandDirect(strand, from, to)
         }
       }
     }
@@ -172,8 +271,11 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         seed,
         mesh,
         yellowLevel: 0,
+        lastYellowLevel: 0,
         from: new THREE.Vector3(NaN, NaN, NaN),
         to: new THREE.Vector3(NaN, NaN, NaN),
+        offsets: null,
+        offsetsCount: 0,
       }
       mesh.onBeforeRender = () => {
         const now = performance.now()
@@ -190,9 +292,11 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         if (strand.yellowLevel > 0) {
           material.color.lerpColors(COLOR_WHITE, COLOR_YELLOW, strand.yellowLevel)
           material.opacity = 0.35 + strand.yellowLevel * 0.55
-        } else {
+          strand.lastYellowLevel = strand.yellowLevel
+        } else if (strand.lastYellowLevel !== 0) {
           material.color.setHex(WHITE)
           material.opacity = 0.35
+          strand.lastYellowLevel = 0
         }
       }
       scene.add(mesh)
