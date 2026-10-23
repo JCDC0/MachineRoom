@@ -17,10 +17,11 @@ const DONE_GLOW_MS = 5000
 export const CHILD_HOLD_MS = 6000
 const CHILD_FADE_MS = 1500
 const CHILD_LIFE_MS = CHILD_HOLD_MS + CHILD_FADE_MS
-const STRIP_RISE = 190
-const STRIP_RUN = 120
-const STRIP_WIDTH = 9
 const STRIP_OPACITY = 0.9
+const STRIP_BASE = 0.2
+const STRIP_DASH = 0.7
+const STRIP_DASH_SIZE = 26
+const STRIP_GAP_SIZE = 22
 export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
@@ -59,27 +60,10 @@ export function childPlace(parentPlace, index = 0) {
   return { x: Math.cos(angle) * radius, y, z: Math.sin(angle) * radius }
 }
 
-export function stripPoints(from, to, { rise = STRIP_RISE, run = STRIP_RUN, side = 1, right = null } = {}) {
-  const start = { x: from.x, y: from.y, z: from.z }
-  const end = { x: to.x, y: to.y, z: to.z }
-  let ux
-  let uz
-  if (right) {
-    const flat = Math.hypot(right.x, right.z) || 1
-    ux = (-right.x / flat) * side
-    uz = (-right.z / flat) * side
-  } else {
-    const dx = end.x - start.x
-    const dz = end.z - start.z
-    const flat = Math.hypot(dx, dz)
-    ux = flat > 1e-9 ? dx / flat : 1
-    uz = flat > 1e-9 ? dz / flat : 0
-  }
+export function stripPoints(from, to) {
   return [
-    start,
-    { x: start.x, y: start.y + rise, z: start.z },
-    { x: end.x - ux * run, y: end.y, z: end.z - uz * run },
-    end,
+    { x: from.x, y: from.y, z: from.z },
+    { x: to.x, y: to.y, z: to.z },
   ]
 }
 
@@ -117,15 +101,6 @@ function lineBetween(material) {
   return line
 }
 
-function bandLine(material) {
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(new Array(12).fill(0), 3))
-  const line = new THREE.Line(geometry, material)
-  line.frustumCulled = false
-  line.visible = false
-  return line
-}
-
 function setEnds(line, a, b) {
   const array = line.geometry.attributes.position.array
   array[0] = a.x
@@ -135,42 +110,6 @@ function setEnds(line, a, b) {
   array[4] = b.y
   array[5] = b.z
   line.geometry.attributes.position.needsUpdate = true
-}
-
-function setPoints(line, points) {
-  const array = line.geometry.attributes.position.array
-  for (let index = 0; index < points.length; index += 1) {
-    const point = points[index]
-    array[index * 3] = point.x
-    array[index * 3 + 1] = point.y
-    array[index * 3 + 2] = point.z
-  }
-  line.geometry.attributes.position.needsUpdate = true
-}
-
-function bandEdges(points, right, up, width) {
-  const half = width / 2
-  const front = []
-  const back = []
-  for (let index = 0; index < points.length; index += 1) {
-    const previous = points[Math.max(0, index - 1)]
-    const next = points[Math.min(points.length - 1, index + 1)]
-    const dx = next.x - previous.x
-    const dy = next.y - previous.y
-    const dz = next.z - previous.z
-    const tx = dx * right.x + dy * right.y + dz * right.z
-    const ty = dx * up.x + dy * up.y + dz * up.z
-    const length = Math.hypot(tx, ty) || 1
-    const nx = -ty / length
-    const ny = tx / length
-    const offsetX = right.x * nx * half + up.x * ny * half
-    const offsetY = right.y * nx * half + up.y * ny * half
-    const offsetZ = right.z * nx * half + up.z * ny * half
-    const point = points[index]
-    front.push({ x: point.x + offsetX, y: point.y + offsetY, z: point.z + offsetZ })
-    back.push({ x: point.x - offsetX, y: point.y - offsetY, z: point.z - offsetZ })
-  }
-  return { front, back }
 }
 
 function flatRing(radius, opacity, y) {
@@ -208,10 +147,12 @@ export function createAgents(scene, roster, cssScene = null) {
     group.scale.setScalar(scale)
 
     const link = lineBetween(lineMaterial(WHITE, 0.4))
-    const stripMaterialA = lineMaterial(YELLOW, 0)
-    const stripMaterialB = lineMaterial(YELLOW, 0)
-    const stripA = bandLine(stripMaterialA)
-    const stripB = bandLine(stripMaterialB)
+    const stripMaterialA = lineMaterial(WHITE, 0)
+    const stripMaterialB = new THREE.LineDashedMaterial({ color: YELLOW, transparent: true, opacity: 0, depthWrite: false, dashSize: STRIP_DASH_SIZE, gapSize: STRIP_GAP_SIZE })
+    const stripA = lineBetween(stripMaterialA)
+    const stripB = lineBetween(stripMaterialB)
+    stripA.visible = false
+    stripB.visible = false
     const parentLink = parentKey ? lineBetween(lineMaterial(WHITE, 0.3)) : null
 
     const callout = makeCallout(agent.name)
@@ -488,14 +429,13 @@ export function createAgents(scene, roster, cssScene = null) {
       }
       if (stripVisible) {
         stripStart.copy(view.group.position).addScaledVector(camUp, 105)
-        const points = stripPoints(stripStart, view.touch, { side: view.side, right: world.right })
-        const edges = bandEdges(points, world.right, camUp, STRIP_WIDTH)
-        setPoints(view.stripA, edges.front)
-        setPoints(view.stripB, edges.back)
-        view.stripMaterialA.color.setHex(view.stripColor)
+        const [a, b] = stripPoints(stripStart, view.touch)
+        setEnds(view.stripA, a, b)
+        setEnds(view.stripB, a, b)
+        view.stripB.computeLineDistances()
         view.stripMaterialB.color.setHex(view.stripColor)
-        view.stripMaterialA.opacity = view.stripOpacity * fade
-        view.stripMaterialB.opacity = view.stripOpacity * fade
+        view.stripMaterialA.opacity = view.stripOpacity * fade * STRIP_BASE
+        view.stripMaterialB.opacity = view.stripOpacity * fade * STRIP_DASH
       }
     }
     for (const item of ended) {

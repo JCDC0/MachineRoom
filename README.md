@@ -33,13 +33,13 @@ A seeded room at 40000 files.
 - Agent callouts: a thin line from an agent to a block with its name, the task its run works on and the command it runs now. The border is yellow while it works, red on a failure and green with `FINISHED` for 5 seconds after a good run.
 - Folder sphere: flat cards on shells around the hub, always facing the camera. The root sits below the hub. Top-level folders spread around the sphere, and deeper folders sit farther out near their parent. Straight lines join each top-level folder and the root to the hub centre, and every deeper folder to its parent.
 - The tree: every folder down to depth 2 is always drawn, up to 300 cards. The rest stay as faint folders behind their parent. Folders below that depth appear, with a short fade, while they are on an agent's path. A folder that holds a file being touched lists up to 10 items.
-- The strip: while an agent works, a yellow strip of three straight segments runs from it to the row of the file it touches, and four yellow corner brackets sit around that card. The strip is green for 5 seconds after a good run and red when the run fails.
+- The strip: while an agent works, a straight line runs from it to the row of the file it touches, faint white with yellow stripes, and four yellow corner brackets sit around that card. The stripes are green for 5 seconds after a good run and red when the run fails.
 - Follow mode: `F` cycles wide, close up and off. Wide shows the touched card and its parent, and close up shows the card alone. The camera holds each card at least 4 seconds and eases over 1.2 seconds. Clicking an agent, `0` or `1` to `9` ends it.
 - Each colour has one meaning:
   - White is activity. A read or write flashes the file row and its card white.
-  - Yellow is active. The folder and the file an agent works on right now carry a dashed yellow outline, and the strip to the file is yellow.
-  - Red is failure. A failed tool call, run or test flashes red and leaves the file red until it is written again. The strip turns red when the run fails.
-  - Green is finished work. A run that ends well turns the agent, its chip and every file it wrote in that run green. The strip stays green for 5 seconds.
+  - Yellow is active. The folder and the file an agent works on right now carry a dashed yellow outline, and the strip to the file carries yellow stripes.
+  - Red is failure. A failed tool call, run or test flashes red and leaves the file red until it is written again. The strip's stripes turn red when the run fails.
+  - Green is finished work. A run that ends well turns the agent, its chip and every file it wrote in that run green. The strip's stripes stay green for 5 seconds.
 - While any agent works, cards off the working agents' paths dim to 0.25 with their lines, and the cards on a path to a touched file glow with a soft light on the border.
 - Settings: the Settings button at the top right opens a panel. Folder depth is a slider from 1 to 3, 2 by default, for how many folder levels are always drawn. Five screen effects have an on switch and a strength: fish eye, chromatic aberration, vignette, grain and fine dust. Fish eye and chromatic aberration start off. Vignette, grain and fine dust start on at low strength. The choices are saved in this browser with the connection.
 - Cost board: below the hub. It shows the spend against the budget, a row per agent with cost, tokens and a share bar, and the provider quota windows. It is hidden under 900 pixels wide.
