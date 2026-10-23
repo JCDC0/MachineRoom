@@ -10,6 +10,7 @@
 - Every terminal chip, including one made later, gets the room's pick handler (task Q3b, V9).
 - Each agent's link line and callout line are written only when an end moved (task Q3b, V11).
 - The depth mesh of a card starts at the card's position, rows drop the old state's file after a seek, and a paused replay skips the row loop when nothing changed (task Q3a).
+- Follow mode resets on a seek and ends on a card head, a card row or empty space, a seek drops the label timers `focusPath` set, and the HUD keys ignore a target inside a dialog (task Q3c).
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
