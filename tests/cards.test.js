@@ -1,7 +1,117 @@
-import { describe, expect, it } from 'vitest'
-import { CARD_SCALES, CARD_W, cardHeight, cardRows, cardSize, fadeProgress, openChain, rowOffset, stackOverflow, viewInput, viewKey } from '../src/engine/cards.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import * as THREE from 'three'
+import {
+  CARD_SCALES,
+  CARD_W,
+  cardHeight,
+  cardRows,
+  cardSize,
+  createCards,
+  createRowFrameKey,
+  fadeProgress,
+  openChain,
+  planOpenSet,
+  rowOffset,
+  stackOverflow,
+  viewInput,
+  viewKey,
+} from '../src/engine/cards.js'
 import { makeTree } from '../src/model/paths.js'
 import { RECENT_KEEP_MS, apply, createState } from '../src/model/state.js'
+
+function fakeElement(tag = 'div') {
+  const node = {
+    tagName: String(tag).toUpperCase(),
+    className: '',
+    style: {},
+    dataset: {},
+    children: [],
+    parentNode: null,
+    ownerDocument: { defaultView: { Element: function Element() {} } },
+    append(...nodes) {
+      node.children.push(...nodes)
+    },
+    appendChild(child) {
+      node.children.push(child)
+      return child
+    },
+    replaceChildren(...nodes) {
+      node.children.length = 0
+      node.children.push(...nodes)
+    },
+    addEventListener() {},
+    removeEventListener() {},
+    remove() {},
+    setAttribute(name, value) {
+      node[name] = value
+    },
+    cloneNode() {
+      return fakeElement(tag)
+    },
+  }
+  Object.defineProperty(node, 'textContent', {
+    get() {
+      return node.text ?? ''
+    },
+    set(value) {
+      node.text = String(value)
+      if (value === '') node.children.length = 0
+    },
+  })
+  return node
+}
+
+let savedDocument
+
+beforeAll(() => {
+  savedDocument = globalThis.document
+  globalThis.document = { createElement: (tag) => fakeElement(tag) }
+})
+
+afterAll(() => {
+  globalThis.document = savedDocument
+})
+
+function fakeScene() {
+  const children = []
+  return {
+    children,
+    add(object) {
+      children.push(object)
+    },
+    remove(object) {
+      const index = children.indexOf(object)
+      if (index !== -1) children.splice(index, 1)
+    },
+  }
+}
+
+const camera = () => new THREE.PerspectiveCamera(60, 1, 1, 100000)
+
+function recentState() {
+  const tree = makeTree({
+    root: 'demo',
+    files: [
+      'docs/b.md',
+      'src/alpha/a.js',
+      'src/beta/b.js',
+      'src/delta/d.js',
+      'src/epsilon/e.js',
+      'src/gamma/g.js',
+      'src/mine/m.js',
+      'src/other/o.js',
+    ],
+  })
+  const state = createState(tree, [
+    { key: 'claude', name: 'Claude' },
+    { key: 'hermes', name: 'Hermes' },
+  ])
+  state.agents.get('claude').focus = ['docs/b.md']
+  state.recent = ['src/mine/m.js']
+  state.recentAt = new Map([['src/mine/m.js', 41000]])
+  state.latest = 100000
+  return state
+}
 
 const view = (state, items = 0, hiddenItems = 0, back = 0) => ({
   path: 'src',
@@ -51,6 +161,27 @@ describe('fadeProgress', () => {
     expect(fadeProgress(0, 0, true)).toBe(1)
     expect(fadeProgress(0, 200, false)).toBeCloseTo(0.5)
     expect(fadeProgress(0, 900, false)).toBe(1)
+  })
+})
+
+describe('createRowFrameKey', () => {
+  const mask = { dimmed: true, lit: new Set(['', 'src']), targeted: new Set(['src']) }
+
+  it('builds once over idle frames and again when the state, mask, flash or rows change', () => {
+    const cache = createRowFrameKey()
+    const key = cache.key({ latest: 10 }, mask, 0, 0)
+    expect(cache.key({ latest: 10 }, mask, 0, 0)).toBe(key)
+    expect(cache.key({ latest: 10 }, mask, 0, 0)).toBe(key)
+    expect(cache.builds()).toBe(1)
+    expect(cache.key({ latest: 11 }, mask, 0, 0)).not.toBe(key)
+    expect(cache.builds()).toBe(2)
+    const idleMask = { dimmed: false, lit: new Set(), targeted: new Set() }
+    cache.key({ latest: 11 }, idleMask, 0, 0)
+    expect(cache.builds()).toBe(3)
+    cache.key({ latest: 11 }, idleMask, 1, 0)
+    expect(cache.builds()).toBe(4)
+    cache.key({ latest: 11 }, idleMask, 1, 1)
+    expect(cache.builds()).toBe(5)
   })
 })
 
@@ -185,6 +316,32 @@ describe('openChain', () => {
   it('is empty when no agent has a focus', () => {
     state.agents.get('hermes').focus = []
     expect([...openChain(state)]).toEqual([])
+  })
+})
+
+describe('the open set the plan draws', () => {
+  it('adds every view the plan draws open or with files to the focus chain', () => {
+    const views = [
+      { path: '', state: 'open' },
+      { path: 'src', state: 'closed' },
+      { path: 'src/mine', state: 'files' },
+    ]
+    expect([...planOpenSet(views, new Set(['docs']))].sort()).toEqual(['', 'docs', 'src/mine'])
+  })
+
+  it('draws a fresh recent folder and its row when another agent works elsewhere', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    expect(src.view.state).toBe('open')
+    expect(src.view.folders).toContain('src/mine')
+    const mine = cards.cards.get('src/mine')
+    expect(mine.view.state).toBe('files')
+    expect(cards.center('src/mine').equals(cards.cards.get('src/mine').object.position)).toBe(true)
+    expect(cards.center('src/mine').equals(cards.center(''))).toBe(false)
+    cards.dispose()
   })
 })
 

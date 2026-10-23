@@ -74,6 +74,45 @@ export function openChain(state, extra = []) {
   return chain
 }
 
+export function planOpenSet(views, chain = new Set()) {
+  const open = new Set(chain)
+  for (const view of views) {
+    if (view?.state === 'open' || view?.state === 'files') open.add(view.path)
+  }
+  return open
+}
+
+export function createRowFrameKey() {
+  let latest = null
+  let mask = null
+  let flash = -1
+  let revision = -1
+  let value = ''
+  let builds = 0
+  return {
+    key(state, maskValue, flashValue, revisionValue) {
+      if (
+        value !== '' &&
+        state.latest === latest &&
+        maskValue === mask &&
+        flashValue === flash &&
+        revisionValue === revision
+      ) {
+        return value
+      }
+      const maskKey = maskValue?.dimmed ? `1|${[...(maskValue.lit ?? [])].join('\n')}|${[...(maskValue.targeted ?? [])].join('\n')}` : '0'
+      latest = state.latest
+      mask = maskValue
+      flash = flashValue
+      revision = revisionValue
+      value = `${latest}|${maskKey}|${flash}|${revision}`
+      builds += 1
+      return value
+    },
+    builds: () => builds,
+  }
+}
+
 export function stackOverflow(views, open = new Set()) {
   const paths = new Set(views.map((view) => view.path))
   const parentOf = new Map()
@@ -256,6 +295,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   const homes = new Map()
   const pinned = new Set()
   const flashes = new Map()
+  let flashVersion = 0
+  const rowFrame = createRowFrameKey()
   let boardObstacles = Array.isArray(obstacles) ? [...obstacles] : []
   let obstacleKey = obstacleKeyOf(boardObstacles)
   const initialDepth = Number(alwaysDepth)
@@ -533,7 +574,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     for (const path of focusPaths) if (!state.files.has(path)) dirs.add(path)
     const chain = openChain(state)
     active = { files, dirs, path: chain }
-    const openPaths = openChain(state, [...pinned])
+    const openPaths = planOpenSet(plan.values(), openChain(state, [...pinned]))
     const views = [...plan.values()].sort((a, b) => a.path.length - b.path.length)
     const overflow = stackOverflow(views, openPaths)
     const drawn = new Map()
@@ -658,11 +699,13 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   function flash(path, tone, text = '') {
     const duration = tone === 'red' ? FAIL_MS : FLASH_MS
     flashes.set(path, { tone, text, until: performance.now() + duration })
+    flashVersion += 1
     rowRevision += 1
   }
 
   function sync(state) {
     flashes.clear()
+    flashVersion += 1
     pinnedVersion += 1
     planKey = ''
     recompute(state)
@@ -770,24 +813,12 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         flashesEnded = true
       }
     }
-    if (flashesEnded) rowRevision += 1
-    const hasFlashes = flashes.size > 0
-    let fadesRunning = false
-    let dimRunning = false
-    for (const card of cards.values()) {
-      if (card.fade || card.listFade || card.ghosts.length > 0) fadesRunning = true
-      const dimGoal = dimmed && !dimLit?.has(card.path) ? 1 : 0
-      if (card.dimLevel !== dimGoal) dimRunning = true
-      if (fadesRunning && dimRunning) break
+    if (flashesEnded) {
+      flashVersion += 1
+      rowRevision += 1
     }
-    const flashKey = hasFlashes
-      ? [...flashes]
-          .map(([path, hit]) => `${path}:${hit.tone}:${hit.until}`)
-          .sort()
-          .join(';')
-      : ''
-    const maskKey = dimmed ? `1|${[...(dimLit ?? [])].join('\n')}|${[...(targeted ?? [])].join('\n')}` : '0'
-    const rowFrameKey = `${state.latest}|${maskKey}|${flashKey}|${fadesRunning ? 1 : 0}|${dimRunning ? 1 : 0}|${rowRevision}`
+    const hasFlashes = flashes.size > 0
+    const rowFrameKey = rowFrame.key(state, mask, flashVersion, rowRevision)
     const rowsDue = rowFrameKey !== lastRowFrameKey
     lastRowFrameKey = rowFrameKey
     let removed = false
