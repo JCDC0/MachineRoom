@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Paperclip is uninstalled from the owner's machine (its data folder is kept), and the README and `ARCHITECTURE.md` say that MachineRoom grew out of Paperclip and now runs its agents through its own lane runner; the Paperclip code stays as an optional source until each part has a replacement.
 - Review note on Q4b: no fixes. W2 (packets only while the agent works; the touch burst stays), W3 (the strip reuses its two points and recomputes the dash distances only when an end moved) and W6 (any open `[role="dialog"]` blocks the HUD and room keys) are fixed, each with a test that fails on the old code. Escape still closes a dialog, since it is handled before the block; `?` no longer closes help while it is open. The `--replay` digests are the same before and after the merge. Full suite on the merge: 119 files, 2210 tests.
 - Brief S6a: the bridge shows lane runs live from the `run-lane` logs, the owner's choice of run-lane as a service.
 - `docs/agents/SOURCES.md`: what Paperclip costs the room, and a plan for a direct live source from `run-lane` (S6a to S6d), AGY's children from their transcripts, Claude Code hooks, and an ACP probe; a design note for after Saturday.

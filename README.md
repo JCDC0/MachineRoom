@@ -1,6 +1,8 @@
 # Machine Room
 
-A browser viewer that shows coding agents working on one project as a 3D machine room. The agents park on a hub and the project folders sit on a sphere around them. It can follow a local Paperclip instance live, or replay a recorded run.
+A browser viewer that shows coding agents working on one project as a 3D machine room. The agents park on a hub and the project folders sit on a sphere around them. It replays recorded runs, shows lane runs, and can follow a local Paperclip instance live.
+
+MachineRoom grew out of [Paperclip](https://github.com/paperclipai/paperclip): it began as a viewer for a Paperclip instance, and its idea of a company of agents with tasks, budgets and approvals comes from there. The room now runs its agents through its own lane runner (`npm run run-lane`) and can still follow a Paperclip instance when one runs. MachineRoom is an independent project and is not made by or endorsed by Paperclip.
 
 ## Screenshots
 
