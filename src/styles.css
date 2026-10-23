@@ -4195,6 +4195,19 @@ summary:focus-visible,
   color: var(--white);
 }
 
+.mr-card.is-lit .mr-card-face {
+  border-color: var(--white);
+  box-shadow: 0 0 24px rgb(255 255 255 / 0.32);
+}
+
+.mr-card.is-lit .mr-card-tab {
+  border-color: var(--white);
+}
+
+.mr-card.is-lit .mr-card-name {
+  color: var(--white);
+}
+
 .mr-card.is-active .mr-card-face {
   border-color: var(--white);
   outline: 2px dashed var(--yellow);

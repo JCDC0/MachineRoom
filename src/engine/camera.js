@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { easeRate, reducedMotion } from './sprites.js'
+import { easeInOut, easeRate, reducedMotion } from './sprites.js'
 
 const MIN_DIST = 500
 const MAX_DIST = 26000
@@ -7,6 +7,11 @@ const MAX_DIST = 26000
 export const OVERVIEW = { x: 0, y: 200, z: 0, yaw: 0.42, pitch: 0.3, dist: 2600 }
 export const FOV = 50
 export const FIT_MIN = 1800
+export const FOLLOW_HOLD_MS = 4000
+export const FOLLOW_EASE_MS = 1200
+const FOLLOW_WIDE_MIN = 900
+const FOLLOW_CLOSE_MIN = 620
+const MIDDLE_EDGE = 1 / 6
 const FIT_MARGIN = { x: 0.8, y: 0.84 }
 const DRIFT_X = 60
 const DRIFT_Y = 36
@@ -62,11 +67,48 @@ export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, f
   return { target, dist: Math.min(dist, MAX_DIST) }
 }
 
+function insideMiddle(frame) {
+  if (!frame || !frame.card || !(frame.width > 0) || !(frame.height > 0)) return false
+  const card = frame.card
+  if (![card.x, card.y, card.width, card.height].every(Number.isFinite)) return false
+  const left = frame.width * MIDDLE_EDGE
+  const right = frame.width - left
+  const top = frame.height * MIDDLE_EDGE
+  const bottom = frame.height - top
+  return (
+    card.x - card.width / 2 >= left &&
+    card.x + card.width / 2 <= right &&
+    card.y - card.height / 2 >= top &&
+    card.y + card.height / 2 <= bottom
+  )
+}
+
+export function followTarget(previous, next, frame, now) {
+  const held = previous && typeof previous.path === 'string' ? previous : null
+  const wanted = next && typeof next.path === 'string' ? next : null
+  if (!held) {
+    if (!wanted) return null
+    return { path: wanted.path, at: now, moved: true }
+  }
+  if (!wanted || wanted.path === held.path) {
+    return { path: held.path, at: held.at, moved: false }
+  }
+  const since = Number.isFinite(held.at) ? held.at : 0
+  if (now - since < FOLLOW_HOLD_MS) {
+    return { path: held.path, at: held.at, moved: false }
+  }
+  if (insideMiddle(frame)) {
+    return { path: held.path, at: held.at, moved: false }
+  }
+  return { path: wanted.path, at: now, moved: true }
+}
+
 export function createCameraRig(camera, surface) {
   const view = { target: new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z), yaw: OVERVIEW.yaw, pitch: OVERVIEW.pitch, dist: OVERVIEW.dist }
   const goal = { target: view.target.clone(), yaw: view.yaw, pitch: view.pitch, dist: view.dist }
   const drag = { active: false, moved: 0, x: 0, y: 0 }
   let follow = null
+  let transition = null
   let onClick = () => {}
   let overviewDist = OVERVIEW.dist
   const overviewTarget = new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
@@ -121,6 +163,7 @@ export function createCameraRig(camera, surface) {
 
   function reset() {
     follow = null
+    transition = null
     adjusted = false
     goal.target.copy(overviewTarget)
     goal.yaw = OVERVIEW.yaw
@@ -132,15 +175,42 @@ export function createCameraRig(camera, surface) {
     view.dist = goal.dist
   }
 
+  function startTransition(duration = FOLLOW_EASE_MS) {
+    transition = {
+      fromTarget: view.target.clone(),
+      fromDist: view.dist,
+      start: performance.now(),
+      duration: motion.still() ? 0 : duration,
+    }
+  }
+
   function update(delta) {
-    if (follow) goal.target.copy(follow())
+    if (follow) {
+      const spot = follow()
+      goal.target.copy(spot.target)
+      goal.dist = spot.dist
+    }
     if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
     const isStill = motion.still()
     const rate = easeRate(delta, 5, isStill)
-    view.target.lerp(goal.target, rate)
+    if (transition) {
+      if (isStill) {
+        view.target.copy(goal.target)
+        view.dist = goal.dist
+        transition = null
+      } else {
+        const t = transition.duration <= 0 ? 1 : Math.min(1, (performance.now() - transition.start) / transition.duration)
+        const eased = easeInOut(t)
+        view.target.lerpVectors(transition.fromTarget, goal.target, eased)
+        view.dist = transition.fromDist + (goal.dist - transition.fromDist) * eased
+        if (t >= 1) transition = null
+      }
+    } else {
+      view.target.lerp(goal.target, rate)
+      view.dist += (goal.dist - view.dist) * rate
+    }
     view.yaw += (goal.yaw - view.yaw) * rate
     view.pitch += (goal.pitch - view.pitch) * rate
-    view.dist += (goal.dist - view.dist) * rate
     const horizontal = Math.cos(view.pitch) * view.dist
     camera.position.set(
       view.target.x + Math.sin(view.yaw) * horizontal,
@@ -159,6 +229,7 @@ export function createCameraRig(camera, surface) {
   }
 
   function snap() {
+    transition = null
     view.target.copy(goal.target)
     view.yaw = goal.yaw
     view.pitch = goal.pitch
@@ -172,9 +243,31 @@ export function createCameraRig(camera, surface) {
       onClick = handler
     },
     focus(position, dist = 1500, pitch = null) {
-      follow = position
+      transition = null
+      follow = () => ({ target: position(), dist })
       goal.dist = dist
       goal.pitch = pitch ?? Math.max(goal.pitch, 0.5)
+    },
+    followSpheres(spheres, mode = 'wide', duration = FOLLOW_EASE_MS) {
+      follow = () => {
+        const next = fitView(spheres(), {
+          yaw: view.yaw,
+          pitch: view.pitch,
+          fov: camera.fov || FOV,
+          aspect: camera.aspect || 1,
+          min: mode === 'close' ? FOLLOW_CLOSE_MIN : FOLLOW_WIDE_MIN,
+        })
+        return { target: next.target, dist: next.dist }
+      }
+      startTransition(duration)
+    },
+    stopFollow() {
+      follow = null
+      transition = null
+      goal.target.copy(view.target)
+      goal.dist = view.dist
+      goal.yaw = view.yaw
+      goal.pitch = view.pitch
     },
     setOverviewDistance(distance) {
       overviewDist = THREE.MathUtils.clamp(distance, MIN_DIST, MAX_DIST)
@@ -186,6 +279,7 @@ export function createCameraRig(camera, surface) {
     },
     overview() {
       follow = null
+      transition = null
       adjusted = false
       goal.target.copy(overviewTarget)
       goal.yaw = OVERVIEW.yaw

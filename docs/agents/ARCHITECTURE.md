@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.188. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.189. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -69,7 +69,7 @@ src/engine/       three.js scene, no React
   room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
   cards.js          folder cards from planFolderView, each a CSS3D element with a depth plane, glides and grows, rows for files (cardSize is pure, tested)
   labels.js         file name labels that rise and fade above a card when a file is read, written or fails
-  agents.js         agent shapes parked on the hub, link line to the chip, the strip to the touched file (stripPoints is pure, tested) and the card brackets, the CSS3D callout with the agent's command
+  agents.js         agent shapes parked on the hub, link line to the chip, the strip to the touched file (stripPoints is pure, tested), the CSS3D callout with the agent's command
   shapes.js         one distinct wireframe shape per agent, the orchestrator's own shape
   hub.js            the ring in the middle, agent slots, pulses
   void.js           the faint 3D lattice, coordinate labels and far dust
@@ -131,7 +131,7 @@ Code: `src/live/source.js` (agent discovery, socket with reconnect), `src/live/b
 - Depth: the WebGL canvas sits over the CSS3D layer with a clear background, and each card has an invisible plane that writes only depth. WebGL lines and shapes behind a card are hidden, and those in front of it draw over it.
 - Agents: each has its own wireframe shape (`shapes.js`: Claude a compound, Hermes a knot, OpenCode a stellated solid, agy a geodesic, the orchestrator an armillary with a second ring, spare shapes for more). A working agent travels folder by folder from the root (it jumps to its goal under reduced motion), then stands on the hub side of the card, a little in front of it. Its chip sits between it and the card, and a dashed trace runs from the chip to the row of the file it touches: yellow while working, green for 5 seconds after a good run, red on a failure. Shapes stop turning under reduced motion. A callout, a thin line up and to the side of the agent away from its chip, shows its name on a white block, the identifier of the Paperclip task its running run works on (`agentTasks` in `src/model/liveTasks.js`, read from `liveRuns()` and `issues()` on each `agents`, `issues` and `liveRuns` notice), and its current command: yellow border while it works, red while its last tool call failed and for 5 seconds after a failed run, green with `FINISHED` for 5 seconds after a good run. It is hidden through the CSS3D object's `visible`, because the CSS3D renderer sets each element's `display` on every frame.
 - Terminal chips: each chip follows its agent (in one frame under reduced motion) and faces the camera. Collapsed it shows the name and a status ring (yellow working, red error, green done). `T` opens the focused agent's chip to show its log, or opens or closes every chip when no agent is focused. `focusTerminal` opens the chip and flies to it.
-- Camera: the overview fits the hub and every card from the overview angle (`fitView`), never closer than 1800. It refits when the cards change, but only when the frame would move more than 150 or change distance by more than 8 percent. `0` returns to it. `F` cycles follow mode: wide (the agent and its chip), close up (the agent and the file it touches), off. The camera moves to the agent that starts a tool call or a run (it jumps under reduced motion) and holds each agent for 2.5 seconds before it can switch. Clicking, `0` or `1` to `9` ends follow mode.
+- Camera: the overview fits the hub and every card from the overview angle (`fitView`), never closer than 1800. It refits when the cards change, but only when the frame would move more than 150 or change distance by more than 8 percent. `0` returns to it. `F` cycles follow mode: wide (the touched card and its parent), close up (the touched card alone), off. The camera follows the card that holds the file being touched, not the agent (`followTarget` in `camera.js`, pure, tested): it holds each card at least 4 seconds, does not move when the next card is already inside the middle two thirds of the frame, and eases over 1.2 seconds (it jumps under reduced motion). While any agent works, every card off a working agent's path dims to 0.25 opacity with its line and strand, the cards on the path glow (full white border, a soft outer glow), and everything returns over 1 second when no agent works. Clicking, `0` or `1` to `9` ends follow mode.
 - Assistant: `/` opens the floating terminal. Typed requests become actions that `Stage.jsx` runs through `dispatch.js`. The room offers `focus(key, view)`, `focusTerminal(key)` (camera on the agent's terminal) and `focusPath(path)` (opens the folders on the way, flashes the target and flies to it). A toast at the bottom right shows results that need words (a created task, a refusal). Writes (a task, a budget) run only after the confirm card, and the dispatcher refuses them without an explicit `confirmed`. Panels open through the HUD's `controlTarget` prop.
 - Cost board: when there is a control client, Stage reads `agents()` and `costs()` at start, every 60 seconds and on an `agents` or `costs` notice, joins them with `costBoard` and hands the result to `room.setCosts`. The board sits below the hub ring in the overview's view plane at scale 2.4 and faces the camera: the spend against the budget (red when over), a row per agent with cost, tokens and a share bar (`not reported` in dim white), the quota windows (an error in red), and `Costs not available.` when the read fails. A row click flies to that agent. It is hidden below 900 pixels wide, where the Meters tab covers costs. The overview fit includes its sphere (A5c); since V16 the cards no longer keep clear of it, so a card can overlap the board.
 - Meters panel: a Backups section reads the age of Paperclip's newest backup (`backupStatus()`), names its warnings in words, and offers Back up now behind a confirm card (`backupNow()`).
@@ -194,7 +194,7 @@ A shell command touches files only when its text names a known file or folder. S
         .mr-item-detail
       .mr-card-more
     .mr-card-band[.is-failed]
-  .mr-card-bracket.is-{tl|tr|bl|br}   (on .mr-card.is-targeted, added by agents.js)
+  .mr-card-bracket.is-{tl|tr|bl|br}   (built with every card, shown on .mr-card.is-targeted)
 
 .mr-callout.is-{working|error|done}
   .mr-callout-title

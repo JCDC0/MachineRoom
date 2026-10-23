@@ -16,6 +16,9 @@ export const CARD_SCALES = { closed: 1.5, open: 1.8, files: 2.6 }
 const FLASH_MS = 1100
 const FAIL_MS = 2600
 const FADE_MS = 400
+const DIM_FADE_MS = 1000
+const DIM_OPACITY = 0.25
+const BRACKETS = ['tl', 'tr', 'bl', 'br']
 
 function viewFocus(state, pinned) {
   const focus = ['']
@@ -105,6 +108,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   const up = new THREE.Vector3(0, 1, 0)
   const back = new THREE.Vector3(0, 0, 1)
   const rootHome = new THREE.Vector3(SPHERE_CENTER.x, SPHERE_CENTER.y - ROOT_DROP, SPHERE_CENTER.z)
+  const projection = new THREE.Vector3()
   let planKey = ''
   let layoutKey = ''
   let plan = new Map()
@@ -156,6 +160,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const face = el('div', 'mr-card-face')
     face.append(head, items, band)
     element.append(backs, face)
+    for (const corner of BRACKETS) element.append(el('div', `mr-card-bracket is-${corner}`))
     head.addEventListener('click', (event) => {
       event.stopPropagation()
       if (pinned.has(path)) pinned.delete(path)
@@ -195,6 +200,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       lastHeight: -1,
       opacity: 1,
       lastOpacity: 1,
+      dimLevel: 0,
+      lastDimLevel: -1,
       fade: null,
       listOpacity: 1,
       lastListOpacity: 1,
@@ -278,13 +285,18 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     return view.pinned === true || pinned.has(view.path)
   }
 
-  function setCardOpacity(card, level) {
-    card.opacity = level
-    const text = level === 1 ? '' : String(level)
+  function paintCardOpacity(card) {
+    const level = card.opacity * (1 - (1 - DIM_OPACITY) * card.dimLevel)
+    const text = level >= 1 ? '' : String(level)
     if (card.lastOpacity !== text) {
       card.lastOpacity = text
       card.element.style.opacity = text
     }
+  }
+
+  function setCardOpacity(card, level) {
+    card.opacity = level
+    paintCardOpacity(card)
   }
 
   function startListGhost(card) {
@@ -494,7 +506,43 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     return [...cards.values()].map((card) => ({ x: card.home.x, y: card.home.y, z: card.home.z, r: cardRadius(card.view) }))
   }
 
-  function update(state, delta, camera) {
+  function cardSphere(path) {
+    const card = cards.get(path)
+    if (!card?.view) return null
+    const position = card.object.position
+    return { x: position.x, y: position.y, z: position.z, r: cardRadius(card.view) }
+  }
+
+  function screenFrame(path, camera, viewWidth, viewHeight) {
+    const card = cards.get(path)
+    if (!card?.view || !(viewWidth > 0) || !(viewHeight > 0)) return null
+    const halfWidth = (CARD_W * card.scale) / 2
+    const halfHeight = (card.height * card.scale) / 2
+    let left = Infinity
+    let rightEdge = -Infinity
+    let top = Infinity
+    let bottom = -Infinity
+    for (const sx of [-1, 1]) {
+      for (const sy of [-1, 1]) {
+        projection.copy(card.object.position).addScaledVector(right, sx * halfWidth).addScaledVector(up, sy * halfHeight).project(camera)
+        if (![projection.x, projection.y].every(Number.isFinite)) return null
+        const x = ((projection.x + 1) / 2) * viewWidth
+        const y = ((1 - projection.y) / 2) * viewHeight
+        left = Math.min(left, x)
+        rightEdge = Math.max(rightEdge, x)
+        top = Math.min(top, y)
+        bottom = Math.max(bottom, y)
+      }
+    }
+    return {
+      x: (left + rightEdge) / 2,
+      y: (top + bottom) / 2,
+      width: rightEdge - left,
+      height: bottom - top,
+    }
+  }
+
+  function update(state, delta, camera, mask = null) {
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)
@@ -502,6 +550,10 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const now = performance.now()
     const isStill = still()
     const ease = easeRate(delta, 3, isStill)
+    const dimmed = Boolean(mask?.dimmed)
+    const dimLit = mask?.lit ?? null
+    const targeted = mask?.targeted ?? null
+    const dimStep = delta / (DIM_FADE_MS / 1000)
     movingNow = false
     const hasFlashes = flashes.size > 0
     let removed = false
@@ -596,9 +648,25 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       else if (active.path.has(card.path)) className += ' is-path'
       if (pinned.has(card.path)) className += ' is-pinned'
       if (tone) className += ` is-flash-${tone}`
+      const lit = dimmed && Boolean(dimLit?.has(card.path))
+      if (dimmed) className += lit ? ' is-lit' : ' is-dim'
+      if (targeted?.has(card.path)) className += ' is-targeted'
       if (card.className !== className) {
         card.className = className
         card.element.className = className
+      }
+
+      const dimGoal = dimmed && !lit ? 1 : 0
+      if (isStill) {
+        card.dimLevel = dimGoal
+      } else if (card.dimLevel < dimGoal) {
+        card.dimLevel = Math.min(dimGoal, card.dimLevel + dimStep)
+      } else if (card.dimLevel > dimGoal) {
+        card.dimLevel = Math.max(dimGoal, card.dimLevel - dimStep)
+      }
+      if (card.dimLevel !== card.lastDimLevel) {
+        card.lastDimLevel = card.dimLevel
+        paintCardOpacity(card)
       }
 
       for (const entry of card.rows) {
@@ -712,6 +780,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     update,
     visibleLinks,
     spheres,
+    cardSphere,
+    screenFrame,
     dispose,
     moving: () => movingNow,
     vectors: () => ({ right, up, back }),

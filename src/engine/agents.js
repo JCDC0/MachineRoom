@@ -19,7 +19,6 @@ const STRIP_RISE = 190
 const STRIP_RUN = 120
 const STRIP_WIDTH = 9
 const STRIP_OPACITY = 0.9
-const BRACKETS = ['tl', 'tr', 'bl', 'br']
 export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
@@ -170,50 +169,15 @@ function flatRing(radius, opacity, y) {
   return ring
 }
 
-function cardAt(path) {
-  if (typeof document === 'undefined') return null
-  for (const element of document.querySelectorAll('.mr-card')) {
-    if (element.dataset.path === path) return element
-  }
-  return null
-}
-
 export function createAgents(scene, roster, cssScene = null) {
   const views = new Map()
   const pickables = []
-  const targets = new Map()
   const shapes = shapesFor(roster)
   const parked = roster.filter((agent) => !isOrchestrator(agent))
   const rosterKeys = new Set(roster.map((agent) => agent.key))
   const usedShapes = new Set(shapes)
   const retired = new Map()
   let parkedIndex = 0
-
-  function syncTargets(wanted) {
-    for (const [path, entry] of [...targets]) {
-      if (wanted.has(path) && entry.element?.isConnected) continue
-      entry.brackets.forEach((element) => element.remove())
-      entry.element?.classList.remove('is-targeted')
-      targets.delete(path)
-    }
-    for (const path of wanted) {
-      const current = targets.get(path)
-      if (current?.element?.isConnected) {
-        if (!current.element.classList.contains('is-targeted')) current.element.classList.add('is-targeted')
-        continue
-      }
-      const element = cardAt(path)
-      if (!element) continue
-      element.classList.add('is-targeted')
-      const brackets = BRACKETS.map((corner) => {
-        const bracket = document.createElement('div')
-        bracket.className = `mr-card-bracket is-${corner}`
-        element.append(bracket)
-        return bracket
-      })
-      targets.set(path, { element, brackets })
-    }
-  }
 
   function addView(agent, { index, shapeName, home, scale = 1, parentKey = null }) {
     const group = new THREE.Group()
@@ -386,7 +350,6 @@ export function createAgents(scene, roster, cssScene = null) {
       rotMatrix.makeBasis(world.right, camUp, world.back)
     }
     const isStill = still()
-    const wantedTargets = new Set()
     const ended = []
     syncViews(state)
 
@@ -514,7 +477,6 @@ export function createAgents(scene, roster, cssScene = null) {
       } else {
         view.touch.copy(view.home)
       }
-      if (pointer && stripOn) wantedTargets.add(pointer.dir)
       if (stripVisible) {
         stripStart.copy(view.group.position).addScaledVector(camUp, 105)
         const points = stripPoints(stripStart, view.touch, { side: view.side, right: world.right })
@@ -527,7 +489,6 @@ export function createAgents(scene, roster, cssScene = null) {
         view.stripMaterialB.opacity = view.stripOpacity * fade
       }
     }
-    syncTargets(wantedTargets)
     for (const item of ended) {
       if (item.entry) retired.set(item.view.key, item.entry)
       terminals.setVisible?.(item.view.key, false)
@@ -539,7 +500,6 @@ export function createAgents(scene, roster, cssScene = null) {
   function snap(state, world) {
     retired.clear()
     syncViews(state)
-    syncTargets(new Set())
     for (const view of views.values()) {
       view.aim = null
       view.pointer = null
@@ -556,7 +516,6 @@ export function createAgents(scene, roster, cssScene = null) {
   }
 
   function dispose() {
-    syncTargets(new Set())
     for (const view of [...views.values()]) removeView(view)
     views.clear()
     pickables.length = 0
