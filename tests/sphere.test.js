@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { cardSize, overviewSpheres } from '../src/engine/cards.js'
+import { fitView } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import {
   CARD_CLEARANCE,
@@ -62,6 +64,16 @@ function expectApart(entries, placed) {
       const needed = (Math.hypot(a.width, a.height) + Math.hypot(b.width, b.height)) / 2 + 40
       expect(distance, `${a.path || 'root'} and ${b.path || 'root'}`).toBeGreaterThanOrEqual(needed - 1e-6)
     }
+  }
+}
+
+function expectClearOf(entries, placed, obstacle) {
+  for (const entry of entries) {
+    if (entry.path === '') continue
+    const at = placed.get(entry.path)
+    const distance = Math.hypot(at.x - obstacle.x, at.y - obstacle.y, at.z - obstacle.z)
+    const needed = Math.hypot(entry.width, entry.height) / 2 + obstacle.radius + CARD_CLEARANCE
+    expect(distance, entry.path).toBeGreaterThanOrEqual(needed - 1e-6)
   }
 }
 
@@ -162,5 +174,68 @@ describe('layoutSphere', () => {
     expect(root.z).toBe(0)
     expect(root.y).toBe(HUB_CENTER.y - ROOT_DROP)
     expect(root.y).toBeLessThan(HUB_CENTER.y - HUB_RADIUS)
+  })
+
+  it('keeps every card clear of an obstacle and the root in place', () => {
+    const before = layoutSphere(fixture)
+    const at = before.get('src/ui')
+    const obstacle = { x: at.x + 40, y: at.y, z: at.z, radius: 120 }
+    const placed = layoutSphere(fixture, { obstacles: [obstacle] })
+    expectClearOf(fixture, placed, obstacle)
+    expectApart(fixture, placed)
+    expect(placeOf(placed, '')).toEqual(placeOf(before, ''))
+    expect(placeOf(placed, 'src/ui')).not.toEqual(placeOf(before, 'src/ui'))
+  })
+
+  it('moves only the card that meets a new obstacle and its siblings on a warm start', () => {
+    const before = layoutSphere(fixture)
+    const at = before.get('src/ui')
+    const obstacle = { x: at.x, y: at.y, z: at.z, radius: 120 }
+    const after = layoutSphere(fixture, { previous: before, obstacles: [obstacle] })
+    const siblings = new Set(['src/engine', 'src/model', 'src/ui'])
+    for (const entry of fixture) {
+      if (siblings.has(entry.path)) continue
+      expect(placeOf(after, entry.path), entry.path).toEqual(placeOf(before, entry.path))
+    }
+    expect(placeOf(after, '')).toEqual(placeOf(before, ''))
+    expect(placeOf(after, 'src/ui')).not.toEqual(placeOf(before, 'src/ui'))
+    expectClearOf(fixture, after, obstacle)
+    expectApart(fixture, after)
+  })
+
+  it('keeps the root in place when an obstacle covers it', () => {
+    const root = { x: 0, y: HUB_CENTER.y - ROOT_DROP, z: 0 }
+    const obstacle = { ...root, radius: 500 }
+    const cold = layoutSphere(fixture, { obstacles: [obstacle] })
+    expect(placeOf(cold, '')).toEqual(root)
+    expectClearOf(fixture, cold, obstacle)
+    expectApart(fixture, cold)
+
+    const warm = layoutSphere(fixture, { previous: cold, obstacles: [obstacle] })
+    expect(placeOf(warm, '')).toEqual(root)
+    expectClearOf(fixture, warm, obstacle)
+  })
+
+  it('fits only the root and the pinned cards, not every drawn card', () => {
+    const card = (path, x, y, z, view) => ({ path, home: { x, y, z }, view })
+    const hub = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
+    const root = card('', 0, HUB_CENTER.y - ROOT_DROP, 0, { path: '', state: 'closed' })
+    const pinned = card('src', 1700, HUB_CENTER.y, 0, { path: 'src', state: 'closed', pinned: true })
+    const deep = card('src/ui/panels/rows', 0, 11000, 0, { path: 'src/ui/panels/rows', state: 'files', items: [], hiddenItems: 0, pinned: false })
+    const spheres = overviewSpheres([root, pinned, deep])
+    const sizeOf = (view) => {
+      const size = cardSize(view)
+      return Math.hypot(size.width, size.height) / 2
+    }
+    expect(spheres).toHaveLength(2)
+    expect(spheres.map((item) => item.r)).toEqual([sizeOf(root.view), sizeOf(pinned.view)])
+    const pinnedFit = fitView([hub, ...spheres], { aspect: 1.6 })
+    const deeper = card('src/ui/panels/rows/one', 0, 15000, 0, { path: 'src/ui/panels/rows/one', state: 'files', items: [], hiddenItems: 0, pinned: false })
+    expect(fitView([hub, ...overviewSpheres([root, pinned, deep, deeper])], { aspect: 1.6 })).toEqual(pinnedFit)
+    const all = [root, pinned, deep].map((entry) => {
+      const size = cardSize(entry.view)
+      return { x: entry.home.x, y: entry.home.y, z: entry.home.z, r: Math.hypot(size.width, size.height) / 2 }
+    })
+    expect(fitView([hub, ...all], { aspect: 1.6 }).dist).toBeGreaterThan(pinnedFit.dist)
   })
 })

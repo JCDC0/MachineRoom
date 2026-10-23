@@ -69,6 +69,29 @@ export function cardRadius(view) {
   return Math.hypot(width, height) / 2
 }
 
+export function overviewSpheres(cards) {
+  const out = []
+  for (const card of cards ?? []) {
+    const root = card?.path === ''
+    if (!root && card?.view?.pinned !== true) continue
+    const at = card?.home
+    if (!at || ![at.x, at.y, at.z].every(Number.isFinite)) continue
+    out.push({ x: at.x, y: at.y, z: at.z, r: card.view ? cardRadius(card.view) : 0 })
+  }
+  return out
+}
+
+function obstacleKeyOf(list) {
+  if (!Array.isArray(list)) return ''
+  return list
+    .map((item) =>
+      [item?.x, item?.y, item?.z, item?.radius]
+        .map((value) => (Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '?'))
+        .join(',')
+    )
+    .join(';')
+}
+
 function el(tag, className, text) {
   const node = document.createElement(tag)
   node.className = className
@@ -95,13 +118,15 @@ function rowNote(file) {
   return parts.join(' · ') || 'not touched'
 }
 
-export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2 } = {}) {
+export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2, obstacles = [] } = {}) {
   const cards = new Map()
   const plane = new THREE.PlaneGeometry(1, 1)
   const hider = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })
   const homes = new Map()
   const pinned = new Set()
   const flashes = new Map()
+  let boardObstacles = Array.isArray(obstacles) ? [...obstacles] : []
+  let obstacleKey = obstacleKeyOf(boardObstacles)
   const initialDepth = Number(alwaysDepth)
   let alwaysLevel = Number.isFinite(initialDepth) ? Math.min(3, Math.max(0, Math.floor(initialDepth))) : 2
   const right = new THREE.Vector3(1, 0, 0)
@@ -111,6 +136,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   const projection = new THREE.Vector3()
   let planKey = ''
   let layoutKey = ''
+  let overviewLayoutKey = ''
   let plan = new Map()
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let movingNow = false
@@ -396,12 +422,12 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       card.meta.textContent = metaText(view)
     }
     const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
-    const nextLayoutKey = entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')
+    const nextLayoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${obstacleKey}`
     const layoutChanged = nextLayoutKey !== layoutKey
     if (layoutChanged) {
       layoutKey = nextLayoutKey
       const sizes = new Map(entries.map((entry) => [entry.path, entry]))
-      const placed = layoutSphere(entries, { previous: homes })
+      const placed = layoutSphere(entries, { previous: homes, obstacles: boardObstacles })
       for (const [path, spot] of placed) {
         const size = sizes.get(path)
         homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
@@ -409,6 +435,12 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         if (card) card.home.set(spot.x, spot.y, spot.z)
       }
     }
+    const nextOverviewKey = entries
+      .filter((entry) => entry.path === '' || plan.get(entry.path)?.pinned === true)
+      .map((entry) => `${entry.path}:${entry.width}:${entry.height}`)
+      .join(';')
+    const overviewChanged = nextOverviewKey !== overviewLayoutKey
+    overviewLayoutKey = nextOverviewKey
     const focusPaths = new Set()
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
     const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
@@ -425,7 +457,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       }
     }
     active = { files, dirs, path: chain }
-    return layoutChanged
+    return layoutChanged || overviewChanged
   }
 
   function center(path) {
@@ -502,8 +534,19 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     return links
   }
 
-  function spheres() {
-    return [...cards.values()].map((card) => ({ x: card.home.x, y: card.home.y, z: card.home.z, r: cardRadius(card.view) }))
+  function overview() {
+    return overviewSpheres(cards.values())
+  }
+
+  function setObstacles(list) {
+    const next = Array.isArray(list) ? [...list] : []
+    const key = obstacleKeyOf(next)
+    if (key === obstacleKey) return false
+    boardObstacles = next
+    obstacleKey = key
+    planKey = ''
+    layoutKey = ''
+    return true
   }
 
   function cardSphere(path) {
@@ -777,9 +820,10 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
     sync,
     setOptions,
+    setObstacles,
     update,
     visibleLinks,
-    spheres,
+    overviewSpheres: overview,
     cardSphere,
     screenFrame,
     dispose,

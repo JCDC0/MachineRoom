@@ -65,6 +65,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const terminals = createTerminals(cssScene, roster)
   const board = createCostBoard(cssScene, { onPick })
   let boardShown = width >= 900
+  let boardHasData = false
+  const boardActive = () => boardShown && boardHasData
+  const boardObstacles = () => (boardActive() ? [board.obstacle()] : [])
   board.setVisible(boardShown)
   const labels = createLabels(scene)
 
@@ -74,6 +77,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     rootName,
     onInspect: (path) => focusPath(path),
     alwaysDepth: 2,
+    obstacles: boardObstacles(),
   })
   let linkKey = ''
   let fitted = null
@@ -101,8 +105,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function refit(force = false) {
-    const spheres = [HUB_SPHERE, ...cards.spheres()]
-    if (boardShown) spheres.push(board.sphere())
+    const spheres = [HUB_SPHERE, ...cards.overviewSpheres()]
+    if (boardActive()) spheres.push(board.sphere())
     const next = fitView(spheres, { aspect: width / height })
     if (!force && fitted) {
       const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
@@ -295,6 +299,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (shown !== boardShown) {
       boardShown = shown
       board.setVisible(shown)
+      cards.setObstacles(boardObstacles())
     }
     refit(true)
   }
@@ -444,6 +449,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     following: () => following,
     focused: () => focused,
     setCosts(costBoardData) {
+      const hasData = costBoardData != null
+      if (hasData !== boardHasData) {
+        boardHasData = hasData
+        cards.setObstacles(boardObstacles())
+        refit()
+      }
       board.update(costBoardData)
     },
     setOptions(options = {}) {

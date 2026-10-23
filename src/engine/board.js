@@ -237,6 +237,11 @@ export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
     return { x: object.position.x, y: object.position.y, z: object.position.z, r: Math.hypot(b.hw, b.hh) }
   }
 
+  function obstacle() {
+    const b = box()
+    return { x: object.position.x, y: object.position.y, z: object.position.z, radius: Math.hypot(b.hw, b.hh) }
+  }
+
   function dispose() {
     cssScene.remove(object)
     element.remove()
@@ -248,6 +253,7 @@ export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
     object,
     box,
     sphere,
+    obstacle,
     update,
     setVisible,
     dispose,
