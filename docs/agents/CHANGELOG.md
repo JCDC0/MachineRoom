@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review note on G4c: no fixes, 31 minutes. The three images show the flat cost board, the straight striped strips, the corner brackets and the drawer on Dispatch, each 1280 by 800, under 170 KB, with no text chunks and nothing private. They were taken at 0.1.208, before V21 and V22, so the folders sit on the old sphere and the strips carry no packets; a retake waits until the owner has looked at the cabinet sphere.
 - Review note on V21: no code fixes. The activity and plan digests are the same before and after the merge, and every layout digest changes, as the brief expected. The lane went past the brief's file list in three test files whose assertions the new scales, the probe row and the digests broke, and said so; it dropped the probe's move rows, since a card that changes role now moves on purpose. `ARCHITECTURE.md` was brought up to the cabinet sphere at the merge (the sphere line, the card layout, the overview and layout numbers). Not checked by eye: the browser pane was hidden. Full suite on the merge: 116 files, 2173 tests, in parallel on the first try.
 - Review note on V22: one fix at the merge. The 5 packets of a burst were all sent at the same moment, so they travelled stacked as one point; they now leave 30 ms apart. The lane found that the scatter came from a second path (`fillStrandDirect` and its offsets) as well as `strandPoints`, and fixed both. `ARCHITECTURE.md` describes the packets and the travelling strands. The `--replay` digests are the same before and after the merge. Not checked by eye: the browser pane scales an emulated viewport, so 3 pixel points cannot be judged there. Full suite on the merge: 116 files, 2163 tests, in parallel on the first try.
 - The strand points sit on their line and travel along it at 2000 units a second when the folder is on a working agent's path (task V22).
@@ -21,6 +22,8 @@
 - The depth mesh of a card starts at the card's position, rows drop the old state's file after a seek, and a paused replay skips the row loop when nothing changed (task Q3a).
 - Follow mode resets on a seek and ends on a card head, a card row or empty space, a seek drops the label timers `focusPath` set, and the HUD keys ignore a target inside a dialog (task Q3c).
 - The strands share one glow texture and skip colour and opacity writes that change nothing, and the bridge keeps polling when its watcher cannot be armed again (task Q3d).
+- Retake three README screenshots (task G4c): overview with two working agents, follow mode close up, and control drawer, showing the bottom right cost board, straight striped strips and default motes with no grain.
+
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Bring the room lines of `ARCHITECTURE.md` up to date for the sphere layout: the warm and cold layout times, 222 cards, 0 overlapping layouts, a 12,819 unit tallest layout, 0 moves over 150 units and a 33 unit worst move from `npm run scale-probe` on 2026-10-23, the frame times marked as measured before the redesign, and the obstacle clearance.
