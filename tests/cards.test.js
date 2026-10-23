@@ -4,6 +4,7 @@ import {
   CARD_SCALES,
   CARD_W,
   cardHeight,
+  cardPlan,
   cardRows,
   cardSize,
   createCards,
@@ -93,6 +94,13 @@ function recentState() {
     root: 'demo',
     files: [
       'docs/b.md',
+      'lib/a/x.js',
+      'lib/b/x.js',
+      'lib/c/x.js',
+      'lib/d/x.js',
+      'lib/e/x.js',
+      'lib/f/x.js',
+      'lib/g/x.js',
       'src/alpha/a.js',
       'src/beta/b.js',
       'src/delta/d.js',
@@ -341,6 +349,22 @@ describe('the open set the plan draws', () => {
     expect(mine.view.state).toBe('files')
     expect(cards.center('src/mine').equals(cards.cards.get('src/mine').object.position)).toBe(true)
     expect(cards.center('src/mine').equals(cards.center(''))).toBe(false)
+    cards.dispose()
+  })
+})
+
+describe('cardPlan', () => {
+  it('hides the same views the cards hide on the Q4a case', () => {
+    const state = recentState()
+    const layout = cardPlan(state, { alwaysDepth: 2 })
+    expect(layout.drawn.has('src/mine')).toBe(true)
+    expect(layout.hidden.size).toBeGreaterThan(0)
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    expect([...cards.cards.keys()].sort()).toEqual([...layout.drawn.keys()].sort())
+    for (const path of layout.hidden) expect(cards.cards.has(path)).toBe(false)
+    expect(layout.drawn.get('lib').back).toBe(3)
     cards.dispose()
   })
 })

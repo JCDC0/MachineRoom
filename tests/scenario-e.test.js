@@ -7,12 +7,12 @@ const OTHER_FIXTURES = {
   'fixtures/sandbox': {
     activities: '485d94210c7f1c8e',
     plans: 'd6687f030f0b9dca',
-    layouts: 'd5c2f4a6094eec89',
+    layouts: 'cba16d4e0badc8cc',
   },
   'fixtures/scenario-a': {
     activities: '1894ba2b0fa96ff4',
     plans: 'a968c054f9cfe12c',
-    layouts: '52cf9c9f4aa847ee',
+    layouts: '24d2d37a5e0db33b',
   },
   'fixtures/scenario-b': {
     activities: '0a10dbb64e548bb9',
@@ -27,7 +27,7 @@ const OTHER_FIXTURES = {
   'fixtures/scenario-d': {
     activities: '2fab820498862bc2',
     plans: 'aeba5c940991f527',
-    layouts: 'de86a7f893c17220',
+    layouts: '504fecae4502e8b0',
   },
 }
 

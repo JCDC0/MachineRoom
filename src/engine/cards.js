@@ -224,6 +224,25 @@ export function cardRadius(view) {
   return Math.hypot(width, height) / 2
 }
 
+export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new Map(), obstacles = [] } = {}) {
+  const pins = [...pinned]
+  const input = viewInput(state, pins)
+  const plan = planFolderView({ ...input, alwaysDepth })
+  const open = planOpenSet(plan, openChain(state, pins))
+  const views = [...plan].sort((a, b) => a.path.length - b.path.length)
+  const overflow = stackOverflow(views, open)
+  const drawn = new Map()
+  for (const view of views) {
+    if (overflow.hidden.has(view.path)) continue
+    drawn.set(view.path, { ...view, back: Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
+  }
+  const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view) }))
+  const openKey = [...open].sort().join('\n')
+  const layoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${obstacleKeyOf(obstacles)}|${openKey}`
+  const placed = layoutSphere(entries, { previous, obstacles, open })
+  return { input, plan, open, views, hidden: overflow.hidden, drawn, entries, placed, layoutKey }
+}
+
 export function overviewSpheres(cards) {
   const out = []
   for (const card of cards ?? []) {
@@ -309,7 +328,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   let planKey = ''
   let layoutKey = ''
   let overviewLayoutKey = ''
-  let plan = new Map()
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let movingNow = false
   let wasMoving = false
@@ -561,11 +579,11 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     lastLatest = state.latest
     saveAgentFocus(state)
 
-    const key = viewKey(state, [...pinned])
-    if (key === planKey) return false
-    planKey = key
-    const input = viewInput(state, [...pinned])
-    plan = new Map(planFolderView({ ...input, alwaysDepth: alwaysLevel }).map((view) => [view.path, view]))
+    const planKeyNext = viewKey(state, [...pinned])
+    if (planKeyNext === planKey) return false
+    planKey = planKeyNext
+    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, previous: homes, obstacles: boardObstacles })
+    const drawn = layout.drawn
     const focusPaths = new Set()
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
     const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
@@ -574,14 +592,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     for (const path of focusPaths) if (!state.files.has(path)) dirs.add(path)
     const chain = openChain(state)
     active = { files, dirs, path: chain }
-    const openPaths = planOpenSet(plan.values(), openChain(state, [...pinned]))
-    const views = [...plan.values()].sort((a, b) => a.path.length - b.path.length)
-    const overflow = stackOverflow(views, openPaths)
-    const drawn = new Map()
-    for (const view of views) {
-      if (overflow.hidden.has(view.path)) continue
-      drawn.set(view.path, { ...view, back: Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
-    }
     const now = performance.now()
     const isStill = still()
     for (const card of [...cards.values()]) {
@@ -636,15 +646,12 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       paintRows(card, view)
       card.meta.textContent = metaText(view)
     }
-    const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view) }))
-    const openKey = [...openPaths].sort().join('\n')
-    const nextLayoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${obstacleKey}|${openKey}`
-    const layoutChanged = nextLayoutKey !== layoutKey
+    const entries = layout.entries
+    const layoutChanged = layout.layoutKey !== layoutKey
     if (layoutChanged) {
-      layoutKey = nextLayoutKey
+      layoutKey = layout.layoutKey
       const sizes = new Map(entries.map((entry) => [entry.path, entry]))
-      const placed = layoutSphere(entries, { previous: homes, obstacles: boardObstacles, open: openPaths })
-      for (const [path, spot] of placed) {
+      for (const [path, spot] of layout.placed) {
         const size = sizes.get(path)
         homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
         const card = cards.get(path)
