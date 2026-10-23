@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Retake three README screenshots (task G4c): overview with two working agents, follow mode close up, and control drawer, showing the bottom right cost board, straight striped strips and default motes with no grain.
+
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
