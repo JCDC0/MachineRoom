@@ -2,12 +2,14 @@
 
 ## Unreleased
 
+- Review note on Q3a: no fixes. V1 (the depth mesh starts at its card's place, so the root's no longer sits at the hub centre), V2 (a seek clears each row's cached file and counts) and V10 (the row loop is skipped while the newest activity, the mask, the flashes, the fades, the dimming and a row revision are unchanged) are fixed, with tests that a flash, its end, a fade and a new activity each still repaint. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 114 files, 2137 tests, in parallel on the first try.
 - Review note on Q3b: no fixes. V5 (red stripes when the last call failed), V8 (a subagent's chip is removed with its view, queued when a seek removes it), V9 (every chip, a subagent's too, takes the click) and V11 (a line's buffer is written only when an end moved) are fixed, each with a test. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 113 files, 2131 tests, in parallel on the first try.
 - Briefs V21 (the cabinet sphere: a packed first layer of top-level folders, subfolders stacked behind their folder, the working path stepping outward) and V22 (packets on the lines), from the owner's sketch.
 - The strip turns red when a working agent's last tool call failed, before the working yellow (task Q3b, V5).
 - A subagent's chip is removed with its view, element, CSS3D object and map entry (task Q3b, V8).
 - Every terminal chip, including one made later, gets the room's pick handler (task Q3b, V9).
 - Each agent's link line and callout line are written only when an end moved (task Q3b, V11).
+- The depth mesh of a card starts at the card's position, rows drop the old state's file after a seek, and a paused replay skips the row loop when nothing changed (task Q3a).
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
