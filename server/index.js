@@ -541,12 +541,13 @@ export function createBridge(options = {}) {
     }
     if (stopped) return
     const read = startTreeRead().catch(() => {})
-    armWatcher()
+    if (!armWatcher()) beginPolling(false)
     return read
   }
 
   function armWatcher() {
-    if (stopped || !projectRoot || watcher) return
+    if (stopped || !projectRoot) return false
+    if (watcher) return true
     try {
       watcher = watch(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
         if (stopped) return
@@ -554,10 +555,14 @@ export function createBridge(options = {}) {
         beginPolling()
       })
       watcher.on('error', () => {})
-    } catch {}
+      return true
+    } catch {
+      watcher = null
+      return false
+    }
   }
 
-  function beginPolling() {
+  function beginPolling(readNow = true) {
     if (stopped) return
     if (watcher) {
       try {
@@ -566,14 +571,13 @@ export function createBridge(options = {}) {
       watcher = null
     }
     if (pollTimer) return
-    checkTreeChange()
+    if (readNow) checkTreeChange()
     pollTimer = setInterval(() => {
       if (stopped) return
       if (treeReading) return
-      if (Date.now() - treeChangedAt >= quietMs) {
+      if (Date.now() - treeChangedAt >= quietMs && armWatcher()) {
         clearInterval(pollTimer)
         pollTimer = null
-        armWatcher()
         startTreeRead().catch(() => {})
         return
       }

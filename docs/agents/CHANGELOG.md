@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The strands share one glow texture and skip colour and opacity writes that change nothing, and the bridge keeps polling when its watcher cannot be armed again (task Q3d).
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).

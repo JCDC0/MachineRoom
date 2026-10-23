@@ -30,9 +30,9 @@ function queuedReads() {
   return { reads, readTree }
 }
 
-async function openEvents(url) {
+async function openEvents(url, query = '') {
   const controller = new AbortController()
-  const response = await fetch(`${url}/events`, { signal: controller.signal })
+  const response = await fetch(`${url}/events${query}`, { signal: controller.signal })
   const chunks = []
   const decoder = new TextDecoder()
   const reading = (async () => {
@@ -58,7 +58,7 @@ function makeRoot() {
   return root
 }
 
-function startBridge({ readTree, root, debounceMs = 15 }) {
+function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs }) {
   const bridge = createBridge({
     paperclipUrl: DEAD_PAPERCLIP,
     companyId: 'tree-read-test',
@@ -67,6 +67,8 @@ function startBridge({ readTree, root, debounceMs = 15 }) {
     env: {},
     surfaceEveryMs: 0,
     debounceMs,
+    pollMs,
+    quietMs,
     readTree,
   })
   bridges.push(bridge)
@@ -152,5 +154,61 @@ describe('a tree read in flight', () => {
     const response = await pending
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ root: 'project', files: ['src/a.js'], created: [] })
+  })
+})
+
+function removeRoot(root) {
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+}
+
+describe('the watcher when it cannot be armed', () => {
+  it('keeps polling after a burst when watch throws on the way back', async () => {
+    const root = makeRoot()
+    let files = ['a.js']
+    let reads = 0
+    const readTree = async () => {
+      reads += 1
+      return { root: 'project', files: [...files], created: [] }
+    }
+    const { started } = startBridge({ readTree, root, debounceMs: 5, pollMs: 5, quietMs: 50 })
+    const { url } = await started
+    const events = await openEvents(url, '?tree=1')
+    try {
+      writeFileSync(join(root, 'burst.js'), '1\n')
+      await waitFor(() => reads >= 2)
+      removeRoot(root)
+      await wait(250)
+
+      const before = reads
+      await wait(60)
+      expect(reads).toBeGreaterThan(before)
+
+      files = ['a.js', 'b.js']
+      await waitFor(() => events.text().includes('b.js'))
+    } finally {
+      await events.close()
+    }
+  })
+
+  it('polls at once when watch throws at startup', async () => {
+    const root = makeRoot()
+    removeRoot(root)
+    let files = ['a.js']
+    let reads = 0
+    const readTree = async () => {
+      reads += 1
+      return { root: 'project', files: [...files], created: [] }
+    }
+    const { started } = startBridge({ readTree, root, debounceMs: 5, pollMs: 10, quietMs: 10 })
+    const { url } = await started
+    expect(reads).toBe(1)
+    const events = await openEvents(url, '?tree=1')
+    try {
+      files = ['a.js', 'b.js']
+      await waitFor(() => events.text().includes('b.js'))
+      expect(reads).toBeGreaterThan(1)
+    } finally {
+      await events.close()
+    }
   })
 })
