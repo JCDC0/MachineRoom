@@ -57,6 +57,8 @@ export function isAllowedHost(host) {
 
 const HISTORY_LIMIT = 500
 const TREE_VERSIONS_KEPT = 4
+const TREE_REUSE_MS = 1000
+const WATCH_QUIET_MS = 2000
 const LIVE_CHUNK_LIMIT = 8192
 const LOG_RUNS_KEPT = 8
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
@@ -313,6 +315,8 @@ export function createBridge(options = {}) {
   const reconnectMaxMs = Number(options.reconnectMaxMs ?? 15000)
   const heartbeatMs = Number(options.heartbeatMs ?? 15000)
   const debounceMs = Number(options.debounceMs ?? 300)
+  const pollMs = Number(options.pollMs ?? Math.min(debounceMs, 200))
+  const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
   const logRetries = Number(options.logRetries ?? 3)
   const logRetryMs = Number(options.logRetryMs ?? 150)
   const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
@@ -417,8 +421,11 @@ export function createBridge(options = {}) {
   let reconnectTimer = null
   let reconnectDelay = reconnectMinMs
   let watcher = null
-  let watchTimer = null
+  let pollTimer = null
   let lastFiles = []
+  let lastTree = null
+  let lastTreeAt = 0
+  let treeChangedAt = 0
   let treePrimed = false
   let treeVersion = 0
   const treeVersions = new Map()
@@ -459,8 +466,11 @@ export function createBridge(options = {}) {
 
   function publishTree(current) {
     if (stopped) return
+    lastTree = current
+    lastTreeAt = Date.now()
     if (!treePrimed) {
       treePrimed = true
+      treeChangedAt = lastTreeAt
       lastFiles = current.files
       rememberTreeVersion(current.files)
       return
@@ -469,6 +479,7 @@ export function createBridge(options = {}) {
       current.files.length !== lastFiles.length ||
       current.files.some((file, index) => file !== lastFiles[index])
     if (!changed) return
+    treeChangedAt = lastTreeAt
     lastFiles = current.files
     rememberTreeVersion(current.files)
     const events = new Map()
@@ -526,19 +537,44 @@ export function createBridge(options = {}) {
     }
     if (stopped) return
     const read = startTreeRead().catch(() => {})
+    armWatcher()
+    return read
+  }
+
+  function armWatcher() {
+    if (stopped || !projectRoot || watcher) return
     try {
       watcher = watch(resolve(projectRoot), { recursive: true }, (_eventType, filename) => {
         if (stopped) return
         if (filename && IGNORED_WATCH.test(String(filename))) return
-        if (watchTimer) clearTimeout(watchTimer)
-        watchTimer = setTimeout(() => {
-          watchTimer = null
-          checkTreeChange()
-        }, debounceMs)
+        beginPolling()
       })
       watcher.on('error', () => {})
     } catch {}
-    return read
+  }
+
+  function beginPolling() {
+    if (stopped) return
+    if (watcher) {
+      try {
+        watcher.close()
+      } catch {}
+      watcher = null
+    }
+    if (pollTimer) return
+    checkTreeChange()
+    pollTimer = setInterval(() => {
+      if (stopped) return
+      if (treeReading) return
+      if (Date.now() - treeChangedAt >= quietMs) {
+        clearInterval(pollTimer)
+        pollTimer = null
+        armWatcher()
+        startTreeRead().catch(() => {})
+        return
+      }
+      checkTreeChange()
+    }, pollMs)
   }
 
   function agentListOf(raw) {
@@ -1011,12 +1047,13 @@ export function createBridge(options = {}) {
     }
 
     if (req.method === 'GET' && url.pathname === '/api/tree') {
-      const tree = await startTreeRead()
+      const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
+      const recent = lastTree && Date.now() - lastTreeAt <= TREE_REUSE_MS
+      const tree = wantsFolders && recent ? lastTree : await startTreeRead()
       if (stopped || !tree) {
         res.destroy()
         return
       }
-      const wantsFolders = String(req.headers.accept ?? '').includes(`shape=${FOLDER_SHAPE}`)
       const body = wantsFolders ? { ...packTree(tree), created: tree.created, version: treeVersion } : tree
       const payload = Buffer.from(JSON.stringify(body), 'utf8')
       const wantsGzip = /(^|,)\s*gzip\b/i.test(String(req.headers['accept-encoding'] ?? ''))
@@ -1135,9 +1172,9 @@ export function createBridge(options = {}) {
       surfaceTimer = null
     }
     surfacePending = false
-    if (watchTimer) {
-      clearTimeout(watchTimer)
-      watchTimer = null
+    if (pollTimer) {
+      clearInterval(pollTimer)
+      pollTimer = null
     }
     if (watcher) {
       try {
