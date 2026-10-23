@@ -5,11 +5,26 @@ import { WHITE, YELLOW, glowTexture, seeded, still } from './sprites.js'
 const SEGMENTS = 16
 const LINE_LEVEL = 0.22
 const DIM_FACTOR = 0.25
+const STRAND_SPEED = 2000
+const STRAND_JITTER = 0.6
 
 const COLOR_WHITE = new THREE.Color(WHITE)
 const COLOR_YELLOW = new THREE.Color(YELLOW)
 
 const scratchPt = new THREE.Vector3()
+
+function fractionAt(index, count, rand) {
+  if (count <= 1) return 0.5
+  const base = (index + 0.5) / count
+  return base + (rand() - 0.5) * (STRAND_JITTER / count)
+}
+
+function strandFractions(count, seed) {
+  const rand = seeded(seed)
+  const fractions = new Float32Array(count)
+  for (let i = 0; i < count; i += 1) fractions[i] = fractionAt(i, count, rand)
+  return fractions
+}
 
 export function strandPoints(curve, spacing = 24, seed = 0, out = null) {
   if (!curve) return out ? (out.length = 0, out) : []
@@ -28,10 +43,10 @@ export function strandPoints(curve, spacing = 24, seed = 0, out = null) {
     const rand = seeded(seed)
     const points = out ?? []
     for (let i = 0; i < count; i += 1) {
-      const t = count === 1 ? 0.5 : (i + 0.5) / count
-      const x = ax + dx * t + (rand() - 0.5) * 10
-      const y = ay + dy * t + (rand() - 0.5) * 10
-      const z = az + dz * t + (rand() - 0.5) * 10
+      const t = fractionAt(i, count, rand)
+      const x = ax + dx * t
+      const y = ay + dy * t
+      const z = az + dz * t
       if (i < points.length) {
         points[i].set(x, y, z)
       } else {
@@ -57,11 +72,11 @@ export function strandPoints(curve, spacing = 24, seed = 0, out = null) {
   const rand = seeded(seed)
   const points = out ?? []
   for (let i = 0; i < count; i += 1) {
-    const t = count === 1 ? 0.5 : (i + 0.5) / count
+    const t = fractionAt(i, count, rand)
     getPoint(t, scratchPt)
-    const x = scratchPt.x + (rand() - 0.5) * 10
-    const y = scratchPt.y + (rand() - 0.5) * 10
-    const z = scratchPt.z + (rand() - 0.5) * 10
+    const x = scratchPt.x
+    const y = scratchPt.y
+    const z = scratchPt.z
     if (i < points.length) {
       points[i].set(x, y, z)
     } else {
@@ -91,21 +106,14 @@ function setLinkLevel(array, index, level) {
   for (let value = 0; value < SEGMENTS * 6; value += 1) array[base + value] = level
 }
 
-function getOffsets(strand, count) {
-  if (strand.offsets && strand.offsetsCount === count) {
-    return strand.offsets
+function getFractions(strand, count) {
+  if (strand.fractions && strand.fractionsCount === count) {
+    return strand.fractions
   }
-  const rand = seeded(strand.seed)
-  const offsets = new Float32Array(count * 3)
-  for (let i = 0; i < count; i += 1) {
-    const base = i * 3
-    offsets[base] = (rand() - 0.5) * 10
-    offsets[base + 1] = (rand() - 0.5) * 10
-    offsets[base + 2] = (rand() - 0.5) * 10
-  }
-  strand.offsets = offsets
-  strand.offsetsCount = count
-  return offsets
+  strand.fractions = strandFractions(count, strand.seed)
+  strand.fractionsCount = count
+  strand.phase = 0
+  return strand.fractions
 }
 
 function fillStrandDirect(strand, from, to) {
@@ -118,16 +126,16 @@ function fillStrandDirect(strand, from, to) {
   const attr = geometry.getAttribute('position')
   const ax = from.x, ay = from.y, az = from.z
   const dx = to.x - ax, dy = to.y - ay, dz = to.z - az
-  const offsets = getOffsets(strand, count)
+  const fractions = getFractions(strand, count)
 
   if (attr && attr.count === count) {
     const array = attr.array
     for (let i = 0; i < count; i += 1) {
-      const t = count === 1 ? 0.5 : (i + 0.5) / count
+      const t = fractions[i]
       const base = i * 3
-      array[base] = ax + dx * t + offsets[base]
-      array[base + 1] = ay + dy * t + offsets[base + 1]
-      array[base + 2] = az + dz * t + offsets[base + 2]
+      array[base] = ax + dx * t
+      array[base + 1] = ay + dy * t
+      array[base + 2] = az + dz * t
     }
     attr.needsUpdate = true
     return
@@ -135,11 +143,11 @@ function fillStrandDirect(strand, from, to) {
 
   const array = new Float32Array(count * 3)
   for (let i = 0; i < count; i += 1) {
-    const t = count === 1 ? 0.5 : (i + 0.5) / count
+    const t = fractions[i]
     const base = i * 3
-    array[base] = ax + dx * t + offsets[base]
-    array[base + 1] = ay + dy * t + offsets[base + 1]
-    array[base + 2] = az + dz * t + offsets[base + 2]
+    array[base] = ax + dx * t
+    array[base + 1] = ay + dy * t
+    array[base + 2] = az + dz * t
   }
 
   geometry.dispose()
@@ -167,6 +175,27 @@ function fillStrand(strand, points) {
   strand.mesh.geometry = new THREE.BufferGeometry().setFromPoints(points)
 }
 
+function travelStrand(strand, delta) {
+  const fractions = strand.fractions
+  if (!fractions || fractions.length === 0) return
+  const len = strand.from.distanceTo(strand.to)
+  if (len <= 0) return
+  const attr = strand.mesh.geometry.getAttribute('position')
+  if (!attr || attr.count !== fractions.length) return
+  strand.phase = (strand.phase + (delta * STRAND_SPEED) / len) % 1
+  const array = attr.array
+  const ax = strand.from.x, ay = strand.from.y, az = strand.from.z
+  const dx = strand.to.x - ax, dy = strand.to.y - ay, dz = strand.to.z - az
+  for (let i = 0; i < fractions.length; i += 1) {
+    const t = (fractions[i] + strand.phase) % 1
+    const base = i * 3
+    array[base] = ax + dx * t
+    array[base + 1] = ay + dy * t
+    array[base + 2] = az + dz * t
+  }
+  attr.needsUpdate = true
+}
+
 export function createStrings(scene, { onPath = () => false } = {}) {
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()
@@ -189,7 +218,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
       scene.remove(strand.mesh)
       strand.mesh.geometry.dispose()
       strand.mesh.material.dispose()
-      strand.offsets = null
+      strand.fractions = null
     }
     strands = []
     ends = []
@@ -310,21 +339,24 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         paintedDim: -1,
         from: new THREE.Vector3(NaN, NaN, NaN),
         to: new THREE.Vector3(NaN, NaN, NaN),
-        offsets: null,
-        offsetsCount: 0,
+        fractions: null,
+        fractionsCount: 0,
+        phase: 0,
       }
       mesh.onBeforeRender = () => {
         const now = performance.now()
         const delta = Math.min((now - lastTime) / 1000, 0.1)
         lastTime = now
         const active = onPath(strand.link.to)
-        if (still()) {
+        const isStill = still()
+        if (isStill) {
           strand.yellowLevel = active ? 1 : 0
         } else if (active) {
           strand.yellowLevel = 1
         } else if (strand.yellowLevel > 0) {
           strand.yellowLevel = Math.max(0, strand.yellowLevel - delta / 1.5)
         }
+        if (active && !isStill) travelStrand(strand, delta)
         const lit = linkIsLit(strand.link, currentMask)
         if (strand.paintedYellow === strand.yellowLevel && strand.paintedLit === lit && strand.paintedDim === dimLevel) return
         strand.paintedYellow = strand.yellowLevel

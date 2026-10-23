@@ -22,6 +22,11 @@ const STRIP_BASE = 0.2
 const STRIP_DASH = 0.7
 const STRIP_DASH_SIZE = 26
 const STRIP_GAP_SIZE = 22
+export const PACKET_POOL = 24
+export const PACKET_DURATION = 450
+export const PACKET_INTERVAL = 90
+export const PACKET_BURST = 5
+const PACKET_SIZE = 3
 export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
@@ -65,6 +70,40 @@ export function stripPoints(from, to) {
     { x: from.x, y: from.y, z: from.z },
     { x: to.x, y: to.y, z: to.z },
   ]
+}
+
+export function packetSpots(now, sends, duration = PACKET_DURATION, reduced = false, out = []) {
+  const spots = out ?? []
+  spots.length = 0
+  if (reduced || !Number.isFinite(now) || !(duration > 0)) return spots
+  if (!sends || sends.length === 0) return spots
+  for (let i = 0; i < sends.length; i += 1) {
+    const sent = sends[i]
+    const age = now - sent
+    if (!(age >= 0) || age > duration) continue
+    spots.push(age / duration)
+    if (spots.length > PACKET_POOL) spots.shift()
+  }
+  return spots
+}
+
+function packetPoints() {
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PACKET_POOL * 3), 3))
+  geometry.setDrawRange(0, 0)
+  const material = new THREE.PointsMaterial({
+    color: YELLOW,
+    size: PACKET_SIZE,
+    sizeAttenuation: false,
+    transparent: true,
+    opacity: 0.9,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  })
+  const points = new THREE.Points(geometry, material)
+  points.frustumCulled = false
+  points.visible = false
+  return points
 }
 
 const chipNear = new THREE.Vector3()
@@ -146,6 +185,44 @@ export function createAgents(scene, roster, cssScene = null) {
   const pendingChipRemovals = new Set()
   let parkedIndex = 0
 
+  function queuePacket(view, at) {
+    view.packetSends.push(at)
+    if (view.packetSends.length > PACKET_POOL) view.packetSends.shift()
+  }
+
+  function hidePackets(view) {
+    view.packets.visible = false
+    view.packetNextAt = 0
+    view.packetSends.length = 0
+    view.packetFractions.length = 0
+  }
+
+  function updatePackets(view, now, fade, sending) {
+    if (sending && (view.packetNextAt === 0 || now >= view.packetNextAt)) {
+      queuePacket(view, now)
+      view.packetNextAt = now + PACKET_INTERVAL
+    }
+    const spots = packetSpots(now, view.packetSends, PACKET_DURATION, false, view.packetFractions)
+    const geometry = view.packets.geometry
+    const attr = geometry.getAttribute('position')
+    const array = attr.array
+    const a = stripStart
+    const b = view.touch
+    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z
+    for (let i = 0; i < spots.length; i += 1) {
+      const t = spots[i]
+      const base = i * 3
+      array[base] = a.x + dx * t
+      array[base + 1] = a.y + dy * t
+      array[base + 2] = a.z + dz * t
+    }
+    geometry.setDrawRange(0, spots.length)
+    attr.needsUpdate = true
+    view.packets.material.color.setHex(view.stripColor)
+    view.packets.material.opacity = view.stripOpacity * fade
+    view.packets.visible = true
+  }
+
   function addView(agent, { index, shapeName, home, scale = 1, parentKey = null }) {
     const group = new THREE.Group()
     const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(WHITE, 0.35))
@@ -167,13 +244,14 @@ export function createAgents(scene, roster, cssScene = null) {
     const stripB = lineBetween(stripMaterialB)
     stripA.visible = false
     stripB.visible = false
+    const packets = packetPoints()
     const parentLink = parentKey ? lineBetween(lineMaterial(WHITE, 0.3)) : null
 
     const callout = makeCallout(agent.name)
     const calloutLine = lineBetween(lineMaterial(YELLOW, 0.6))
     calloutLine.visible = false
 
-    scene.add(group, link, stripA, stripB, calloutLine)
+    scene.add(group, link, stripA, stripB, packets, calloutLine)
     if (parentLink) scene.add(parentLink)
     cssScene?.add(callout.object)
     pickables.push(picker)
@@ -199,6 +277,11 @@ export function createAgents(scene, roster, cssScene = null) {
       stripB,
       stripMaterialA,
       stripMaterialB,
+      packets,
+      packetSends: [],
+      packetFractions: [],
+      packetNextAt: 0,
+      packetBurstAt: -Infinity,
       stripOpacity: 0,
       stripColor: YELLOW,
       home,
@@ -219,9 +302,9 @@ export function createAgents(scene, roster, cssScene = null) {
     else pendingChipRemovals.add(view.key)
     view.callout.object.removeFromParent()
     view.callout.element.remove()
-    scene.remove(view.group, view.link, view.stripA, view.stripB, view.calloutLine)
+    scene.remove(view.group, view.link, view.stripA, view.stripB, view.packets, view.calloutLine)
     if (view.parentLink) scene.remove(view.parentLink)
-    for (const root of [view.group, view.link, view.stripA, view.stripB, view.calloutLine, view.parentLink]) {
+    for (const root of [view.group, view.link, view.stripA, view.stripB, view.packets, view.calloutLine, view.parentLink]) {
       if (!root) continue
       root.traverse((object) => {
         object.geometry?.dispose()
@@ -301,6 +384,10 @@ export function createAgents(scene, roster, cssScene = null) {
     if (!view) return
     view.aim = { dir, file, until: now + AIM_HOLD }
     view.pointer = { dir, file }
+    if (now - view.packetBurstAt > 4) {
+      view.packetBurstAt = now
+      for (let i = 0; i < PACKET_BURST; i += 1) queuePacket(view, now)
+    }
   }
 
   function focusPointer(state, entry) {
@@ -457,6 +544,11 @@ export function createAgents(scene, roster, cssScene = null) {
         view.stripMaterialA.opacity = view.stripOpacity * fade * STRIP_BASE
         view.stripMaterialB.opacity = view.stripOpacity * fade * STRIP_DASH
       }
+      if (stripVisible && !isStill) {
+        updatePackets(view, now, fade, stripOn)
+      } else {
+        hidePackets(view)
+      }
     }
     for (const item of ended) {
       if (item.entry) retired.set(item.view.key, item.entry)
@@ -476,6 +568,8 @@ export function createAgents(scene, roster, cssScene = null) {
       view.stripOpacity = 0
       view.stripA.visible = false
       view.stripB.visible = false
+      hidePackets(view)
+      view.packetBurstAt = -Infinity
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
       view.style = 'idle'

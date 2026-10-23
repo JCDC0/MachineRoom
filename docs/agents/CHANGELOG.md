@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The strand points sit on their line and travel along it at 2000 units a second when the folder is on a working agent's path (task V22).
+- Each agent's strip sends yellow packets every 90 ms and a burst of five at each tool.start, green after a good run and red after a failure, from a fixed pool of 24 points (task V22).
 - Review note on Q3d: no fixes. V6 (one glow texture for every strand, freed once at teardown; a build clears without freeing it), V7 (a strand writes its colour and opacity only when its yellow, lit or dim level moved) and V12 (the bridge stays on its poll when the watcher cannot be armed, after a burst and at start) are fixed, each with a test that fails on the old code. The startup half of V12 went past the brief's wording, and the lane said so. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 116 files, 2156 tests, in parallel on the first try. The first run of Q3d ended with `provider.content-filter` before any change; the second run did the work.
 - Review note on Q3c: no fixes. A seek clears the follow timers, the pending card and the held card and aims again from the newest touch; ending follow (a click on empty space, a card head or a row, `focusPath`) tells Stage through `onPick(null)`, which clears the badge (`focus(null)` returns early); the HUD keys skip inputs, selects and dialogs. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 116 files, 2152 tests, in parallel on the first try.
 - The owner chose to keep an agent's focus on its last file during a tool call that names no file (audit finding V3); `ARCHITECTURE.md` says so under Known limits.
