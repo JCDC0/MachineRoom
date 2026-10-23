@@ -41,7 +41,26 @@ So a live lane source is the bridge watching the runs folder and feeding the sam
 2. S6b, AGY as a run-lane lane. A `cli` block for `agy` in `lanes.json` (`agy --print <prompt> --output-format stream-json --dangerously-skip-permissions`, in the lane's worktree), so `run-lane` passes the brief as the prompt and AGY stops being a lane run by hand. Needs the owner's yes, since AGY then runs unattended like the OpenCode lanes. Small.
 3. S6c, AGY's children from their transcripts. When `invoke_subagent` names a child's `conversation_id`, the runner reads that child's transcript file as it grows and sends its steps under the child's key, so the child gets its own strip. Needs the owner's yes to read under the home folder. One brief after S5.
 4. S6d, Claude Code as a source. Claude Code hooks around each tool call and around subagents, written as JSON lines to a file the bridge tails, give the most exact live subagent events of any harness we use. Only for Claude Code runs. One brief, and a check of which hook events this Claude Code version offers.
-5. ACP, later. Our Claude parser already reads ACP-shaped `tool_call` lines. Before building on the Agent Client Protocol, check which of our harnesses speak it today; where one does, one parser can replace a harness's own. A short probe, not a brief yet.
+5. ACP for the harnesses that speak it. See the next section.
+
+## ACP, checked 2026-10-24
+
+The Agent Client Protocol is JSON-RPC over the agent's stdin and stdout. The client starts the agent, opens a session, sends the prompt, and gets `session/update` notifications. A `tool_call` carries a `kind` (read, edit, delete, move, search, execute, think, fetch, switch_mode, other), a `status` (pending, in_progress, completed, failed) and `locations`, a list of absolute paths with an optional line. That is the touch the room needs, in one shape for every harness, instead of a parser per harness that breaks when a tool is renamed (as AGY's did). A draft RFD, behind an `unstable_subagents` flag, exposes each subagent as its own session linked to its parent, with its own tool calls on the same connection: the live child the owner asked for, once agents ship it.
+
+The cost: `run-lane` becomes an ACP client instead of reading stdout. It has to answer the agent's permission requests (by the lane's policy) and may serve file reads if it says it can. More work than piping a log, but it also gives control: cancel, and a session the runner owns.
+
+| Harness | ACP | Checked how | Worth it |
+| --- | --- | --- | --- |
+| OpenCode | built in, `opencode acp` | its `--help` on this machine; on the ACP agent list | High: the five lanes run on it |
+| Claude Code | through Zed's adapter `claude-agent-acp`; no ACP command of its own | `claude --help` shows only `stream-json`; the ACP list names "Claude Agent" via that adapter | Medium: hooks or `stream-json` already give exact events |
+| Hermes | built in, `hermes acp` | its `--help`; on the list | Low: the owner may retire it |
+| Pi | through the `pi-acp` adapter | on the list; not installed here | Low until Pi is installed |
+| AGY | none | no `acp` in `agy --help`; not on the list | None: keep the stream-json parser (S5) |
+| DeepSeek harness | unknown | not on the list, not installed, `C:\deepseek-harness` empty | Ask the owner which program this is; DeepSeek models already run through OpenCode |
+
+Next step: a probe brief that starts `opencode acp` in a sandbox, opens one session, sends a small task that reads and writes two files and starts a subagent, and records every `session/update`, to see the real `kind`, `locations` and what a subagent looks like. Then an ACP source in `run-lane` for OpenCode, beside the stdout source of S6a.
+
+Sources: [ACP agents](https://agentclientprotocol.com/get-started/agents.md), [tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls.md), [subagent sessions RFD](https://agentclientprotocol.com/rfds/subagents.md), [v2 draft](https://agentclientprotocol.com/announcements/acp-v2-draft).
 
 S6a and S6b remove the first and third costs for lane runs at once, and leave Paperclip untouched for whoever still uses it.
 
