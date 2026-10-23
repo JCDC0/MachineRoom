@@ -48,6 +48,60 @@ describe('an agy run with a child conversation', () => {
   })
 })
 
+describe('a real agy run with a subagent', () => {
+  const { agents, tree, activities } = loadScenario('scenario-g')
+  const starts = activities.filter((activity) => activity.type === 'tool.start')
+
+  it('reads and writes with the file tools this agy names', () => {
+    const reads = starts.filter((activity) => activity.tool === 'read').map((activity) => activity.touches[0].path)
+    expect(reads.slice(0, 2)).toEqual(['src/strings.js', 'test/strings.test.js'])
+    const writes = starts.filter((activity) => activity.touches.some((touch) => touch.mode === 'write'))
+    expect(writes.map((activity) => activity.touches[0].path)).toEqual(['docs/main-notes.md', 'docs/main-notes.md'])
+    expect(writes.map((activity) => activity.label)).toEqual(['write docs/main-notes.md', 'edit docs/main-notes.md'])
+  })
+
+  it('spawns the subagent before the first read and ends it at the first idle', () => {
+    const spawnAt = activities.findIndex((activity) => activity.type === 'agent.spawn')
+    expect(spawnAt).toBeGreaterThan(-1)
+    expect(activities[spawnAt]).toMatchObject({ agent: 'agy', child: 'agy~1', name: 'Math Documenter' })
+    expect(activities[spawnAt].label).toContain('Read src/math.js')
+    const firstRead = activities.findIndex((activity) => activity.type === 'tool.start' && activity.tool === 'read')
+    expect(spawnAt).toBeLessThan(firstRead)
+
+    const lists = starts.filter((activity) => activity.label === 'manage_subagents')
+    expect(lists).toHaveLength(3)
+    const idleEnd = activities.find((activity) => activity.type === 'tool.end' && activity.id === lists[2].id)
+    const ends = activities.filter((activity) => activity.type === 'agent.end' && activity.agent === 'agy~1')
+    expect(ends).toHaveLength(1)
+    expect(ends[0]).toMatchObject({ ok: true, time: idleEnd.time })
+  })
+
+  it('leaves no tool call open', () => {
+    const opened = new Set(starts.map((activity) => activity.id))
+    const closed = new Set(activities.filter((activity) => activity.type === 'tool.end').map((activity) => activity.id))
+    expect([...opened].filter((id) => !closed.has(id))).toEqual([])
+    expect(closed.size).toBe(opened.size)
+  })
+
+  it('keeps the subagent working while the parent reads', () => {
+    const state = createState(tree, agents)
+    let together = null
+    for (const activity of activities) {
+      apply(state, activity)
+      const parent = state.agents.get('agy')
+      const child = state.agents.get('agy~1')
+      if (!together && parent?.status === 'working' && child?.status === 'working' && parent.focus[0]) {
+        together = { parentFocus: [...parent.focus], childFocus: [...child.focus] }
+      }
+    }
+    expect(together).not.toBeNull()
+    expect(together.parentFocus).toEqual(['src/strings.js'])
+    expect(together.childFocus).toEqual([])
+    expect(state.agents.get('agy~1')).toMatchObject({ status: 'done', parent: 'agy', depth: 1 })
+    expect(state.agents.get('agy')).toMatchObject({ status: 'done', runs: 1 })
+  })
+})
+
 const loops = []
 
 async function loop() {
@@ -61,7 +115,7 @@ afterEach(async () => {
 })
 
 describe('an agy task through the fake Paperclip', () => {
-  it('shows the parent and the child working together, the child ending first', async () => {
+  it('shows the parent and the subagent working at the same activity', async () => {
     const { url } = await loop()
     await waitForPaperclip(url)
     const { agents, tree } = await roomInputs(url)
@@ -81,14 +135,13 @@ describe('an agy task through the fake Paperclip', () => {
       if (together) return
       const parent = current.agents.get('agy')
       const child = current.agents.get('agy~1')
-      if (parent?.status === 'working' && child?.status === 'working' && child.focus.length > 0) {
+      if (parent?.status === 'working' && child?.status === 'working') {
         together = { type: activity.type, parentFocus: [...parent.focus], childFocus: [...child.focus] }
       }
     })
 
     expect(together).not.toBeNull()
-    expect(together.childFocus).toEqual(['docs/notes.md'])
-    expect(together.parentFocus).toEqual(['src/math.js'])
+    expect(together.childFocus).toEqual([])
     const childEnd = activities.find((activity) => activity.type === 'agent.end' && activity.agent === 'agy~1')
     const runEnd = activities.find((activity) => activity.type === 'run.end' && activity.agent === 'agy')
     expect(childEnd.time).toBeLessThan(runEnd.time)

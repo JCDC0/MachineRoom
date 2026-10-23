@@ -1,0 +1,12 @@
+{
+  "projectRoot": "agent-sandbox",
+  "agents": [
+    {
+      "id": "6435db1d-8bbf-4289-8b2a-d0b04c249665",
+      "key": "agy",
+      "name": "agy",
+      "adapterType": "process",
+      "parser": "agy"
+    }
+  ]
+}
