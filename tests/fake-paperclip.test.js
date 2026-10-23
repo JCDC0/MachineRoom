@@ -184,12 +184,36 @@ describe('the fake Paperclip server', () => {
     link.close()
   })
 
-  it('reads a run script for each of the four harnesses from the recordings', () => {
+  it('lists five agents, with the orchestrator as the chief', async () => {
+    const paperclip = await fake()
+    expect(paperclip.agents).toHaveLength(5)
+    const orchestrator = paperclip.agents.find((agent) => agent.urlKey === 'orchestrator')
+    expect(orchestrator).toMatchObject({
+      name: 'Orchestrator',
+      adapterType: 'opencode_local',
+      role: 'ceo',
+      adapterConfig: { model: 'opencode/fake-free' },
+    })
+    const listed = await call(`${paperclip.url}/api/companies/${paperclip.companyId}/agents`)
+    expect(listed.body.map((agent) => agent.name)).toEqual(['Claude Code', 'Hermes', 'OpenCode Go', 'agy', 'Orchestrator'])
+    expect(startupLines(paperclip)).toContain('Agent: Orchestrator (opencode_local), runs scenario-e-run.jsonl')
+  })
+
+  it('reads a run script for each harness and per agent from the recordings', () => {
     const scripts = loadScripts()
-    expect([...scripts.keys()].sort()).toEqual(['claude_local', 'hermes_local', 'opencode_local', 'process'])
-    for (const script of scripts.values()) {
-      expect(script.source).toBe('sandbox-run.jsonl')
-      expect(script.steps.some((step) => step.type === 'heartbeat.run.log')).toBe(true)
-    }
+    const sources = Object.fromEntries([...scripts].map(([key, script]) => [key, script.source]))
+    expect(sources).toEqual({
+      claude_local: 'sandbox-run.jsonl',
+      hermes_local: 'sandbox-run.jsonl',
+      opencode_local: 'sandbox-run.jsonl',
+      process: 'sandbox-run.jsonl',
+      orchestrator: 'scenario-e-run.jsonl',
+      'opencode-go': 'scenario-e-run.jsonl',
+    })
+    const logs = (script) => script.steps.filter((step) => step.type === 'heartbeat.run.log')
+    expect(logs(scripts.get('orchestrator'))).toHaveLength(2)
+    expect(logs(scripts.get('opencode-go'))).toHaveLength(3)
+    expect(logs(scripts.get('opencode-go')).map((step) => step.payload.chunk).join('').match(/"tool":"subagent"/g)).toHaveLength(2)
+    expect(scripts.has('claude-code')).toBe(false)
   })
 })
