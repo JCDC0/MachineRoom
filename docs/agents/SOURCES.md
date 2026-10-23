@@ -56,11 +56,11 @@ The cost: `run-lane` becomes an ACP client instead of reading stdout. It has to 
 | Hermes | built in, `hermes acp` | its `--help`; on the list | Low: the owner may retire it |
 | Pi | through the `pi-acp` adapter | on the list; not installed here | Low until Pi is installed |
 | AGY | none | no `acp` in `agy --help`; not on the list | None: keep the stream-json parser (S5) |
-| DeepSeek harness | unknown | not on the list, not installed, `C:\deepseek-harness` empty | Ask the owner which program this is; DeepSeek models already run through OpenCode |
+| DeepSeek Harness (`dsh`) | built in: `dsh --profile acp` starts `@deepseek-ai/dsh-acp`, a standard ACP v1 server for programs (sessions, model and effort, cancel, semantic updates); DSH also runs its own subagents out of process over ACP (`dsh-subagent-acp`) | the package README in `deepseek-ai/deepseek-harness` (`packages/acp/acp`); not installed here (`npx @deepseek-ai/dsh`, Node 22.19 or later); a developer preview that warns of breaking changes | High: ACP is its native control surface, and its subagents are ACP sessions already |
 
 Next step: a probe brief that starts `opencode acp` in a sandbox, opens one session, sends a small task that reads and writes two files and starts a subagent, and records every `session/update`, to see the real `kind`, `locations` and what a subagent looks like. Then an ACP source in `run-lane` for OpenCode, beside the stdout source of S6a.
 
-Sources: [ACP agents](https://agentclientprotocol.com/get-started/agents.md), [tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls.md), [subagent sessions RFD](https://agentclientprotocol.com/rfds/subagents.md), [v2 draft](https://agentclientprotocol.com/announcements/acp-v2-draft).
+Sources: [DeepSeek Harness ACP package](https://github.com/deepseek-ai/deepseek-harness/blob/main/packages/acp/acp/README.md), [ACP agents](https://agentclientprotocol.com/get-started/agents.md), [tool calls](https://agentclientprotocol.com/protocol/v1/tool-calls.md), [subagent sessions RFD](https://agentclientprotocol.com/rfds/subagents.md), [v2 draft](https://agentclientprotocol.com/announcements/acp-v2-draft).
 
 S6a and S6b remove the first and third costs for lane runs at once, and leave Paperclip untouched for whoever still uses it.
 
