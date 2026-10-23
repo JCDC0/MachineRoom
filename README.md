@@ -2,7 +2,23 @@
 
 A browser viewer that shows coding agents working on one project as a 3D machine room. Each agent is a shape in the room. It can follow a local Paperclip instance live, or replay a recorded run.
 
-Screenshots come with G4.
+## Screenshots
+
+![The overview of the room](docs/images/overview.png)
+
+The overview, with the hub and the folder cards.
+
+![One working agent, close up](docs/images/closeup.png)
+
+Follow mode close up on a working agent.
+
+![The control drawer](docs/images/drawer.png)
+
+The control drawer open on Dispatch.
+
+![A seeded room](docs/images/scale.png)
+
+A seeded room at 40000 files.
 
 ## What you see
 
@@ -11,7 +27,7 @@ Screenshots come with G4.
 - Terminal chips: a chip beside each agent, joined by a thin line. It shows the name and a status ring, and opens to show the log.
 - Agent callouts: a thin line from an agent to a block with its name, the task its run works on and the command it runs now. The border is yellow while it works, red on a failure and green with `FINISHED` for 5 seconds after a good run.
 - Folder cards: the project folders are flat cards around the hub, joined parent to child by curved strings. Only the folders on the agents' paths open.
-- Four colours, one meaning each:
+- Each colour has one meaning:
   - White is activity. A read or write flashes the file row and its card white.
   - Yellow is active. The folder and the file an agent works on right now carry a dashed yellow outline, and the trace from its chip to the file is yellow.
   - Red is failure. A failed tool call, run or test flashes red and leaves the file red until it is written again.
@@ -61,12 +77,32 @@ After a build, `npm run serve -- up` still serves the room. The Paperclip checks
 The first visit shows a connect screen, and the replay is one of its choices. An address skips the screen:
 
 - `/?replay` plays the recorded run.
+- `/?replay&scale=200000` plays a seeded room of 200000 files in a tenth as many folders, with three agents touching files at random. The number is a whole number from 1000 to 500000.
+- `&fps` adds a line in the HUD's top left panel with the median and p95 frame time over the last 120 frames.
 - `/?live&simulate` plays the same recording through the live path. The badge reads `Demo`. Add `&speed=3` to play faster; the speed is clamped from 0.25 to 64.
 - `/?recording=<name>` opens a recording of a lane run.
 - `/?live&bridge=http://127.0.0.1:5174` follows Paperclip through a bridge.
 - `/?connect` shows the connect screen again.
 
 Drag to turn the view. Scroll to zoom.
+
+## Big repositories
+
+The room was measured on seeded trees of 40000 and 200000 files.
+
+- `GET /api/tree` holds about 0.6 MB in the folder shape at 40000 files, and 115 KB gzipped. At 200000 files it holds about 3.1 MB, and 570 KB gzipped.
+- The answer carries a version. A page's first `tree` event holds only the files added since the list it read, and each later event only the files that page has not had.
+- Shell commands and Hermes reads look names up from an index, so they cost the same at any repository size.
+- The warm card layout takes about 14 ms for 122 cards. In the seeded replay at 200000 files up to 165 cards are drawn, and no two cards overlap in any fixture, recording or that replay. The layout grows to about 4900 units tall, and the cards move over 150 units on average in 82 of 399 layouts.
+- Frame time at 200000 files was 18 ms median and 48 ms p95, and 12 and 28 at 40000. A shorter layout pass later gave 15 and 36, but it added overlaps, so the review took it out and the room was not measured again.
+
+Try it with the dev server:
+
+```
+npm run dev
+```
+
+Open `/?replay&scale=200000&fps`. The frame line sits in the top left panel. `npm run scale-probe` times each stage of the room on a seeded tree in memory and prints the overlaps, moves, worst move and height; `--files` and `--folders` change its size.
 
 ## The control drawer
 
@@ -129,7 +165,7 @@ npm run pack-check
 - `npm test` runs vitest in Node with no browser.
 - `npm run build` also catches broken imports.
 - `npm run doctor` compares a running Paperclip's spec with the routes and fields the bridge uses, and names each missing or changed one.
-- `npm run history-audit` scans main, the tags and the tracked files for keys, e-mail addresses, Windows user paths, the profile name and paths into one private folder. A key shows only its first four characters and its length. It exits 1 on any finding.
+- `npm run history-audit` scans main, the tags and the tracked files for keys, e-mail addresses, Windows user paths, the profile name and paths into one private folder. A key shows only its first 4 characters and its length. It exits 1 on any finding.
 - `npm run pack-check` checks what `npm pack` would hold. It fails on a file the one-port command needs but the pack leaves out, and on `.env`, tests, recordings, `node_modules`, `.git` or a log file in the pack.
 
 The code is described in `docs/agents/ARCHITECTURE.md`.
