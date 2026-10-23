@@ -3,6 +3,9 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createBridge } from '../../server/index.js'
 import { startFakePaperclip } from '../../scripts/fake-paperclip.mjs'
+import { makeTree } from '../../src/model/paths.js'
+import { createPipeline } from '../../src/model/pipeline.js'
+import { apply, createState } from '../../src/model/state.js'
 import { makeTempDir } from './tempRoot.js'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'public', 'fixtures')
@@ -112,4 +115,27 @@ export function runEnded(agentId) {
         frame.payload?.agentId === agentId &&
         ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(frame.payload?.status)
     )
+}
+
+export async function roomInputs(url) {
+  const agents = (await getJson(`${url}/api/agents`)).body
+  const raw = (await getJson(`${url}/api/tree`)).body
+  return { agents, tree: makeTree({ root: raw.root, files: raw.files, created: [] }) }
+}
+
+export function playFrames(frames, agents, tree) {
+  const pipeline = createPipeline({ agents, tree })
+  const state = createState(tree, agents)
+  const activities = []
+  for (const frame of frames) {
+    for (const activity of pipeline.push(frame)) {
+      apply(state, activity)
+      activities.push(activity)
+    }
+  }
+  for (const activity of pipeline.flush()) {
+    apply(state, activity)
+    activities.push(activity)
+  }
+  return { state, activities }
 }

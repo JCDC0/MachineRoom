@@ -3,10 +3,7 @@ import { runDoctor } from '../server/doctor.js'
 import { FEATURES } from '../server/surface.js'
 import { FAKE_VERSION, LIVE_CHUNK_LIMIT, parseFakeArgs } from '../scripts/fake-paperclip.mjs'
 import { isOrchestrator } from '../src/engine/shapes.js'
-import { makeTree } from '../src/model/paths.js'
-import { createPipeline } from '../src/model/pipeline.js'
-import { apply, createState } from '../src/model/state.js'
-import { getJson, postJson, readFrames, runEnded, startLoop, waitFor, waitForPaperclip } from './helpers/loop.js'
+import { getJson, playFrames, postJson, readFrames, roomInputs, runEnded, startLoop, waitFor, waitForPaperclip } from './helpers/loop.js'
 
 const loops = []
 
@@ -19,29 +16,6 @@ async function loop(options) {
 afterEach(async () => {
   while (loops.length > 0) await loops.pop().stop()
 })
-
-function playFrames(frames, agents, tree) {
-  const pipeline = createPipeline({ agents, tree })
-  const state = createState(tree, agents)
-  const activities = []
-  for (const frame of frames) {
-    for (const activity of pipeline.push(frame)) {
-      apply(state, activity)
-      activities.push(activity)
-    }
-  }
-  for (const activity of pipeline.flush()) {
-    apply(state, activity)
-    activities.push(activity)
-  }
-  return { state, activities }
-}
-
-async function roomInputs(url) {
-  const agents = (await getJson(`${url}/api/agents`)).body
-  const raw = (await getJson(`${url}/api/tree`)).body
-  return { agents, tree: makeTree({ root: raw.root, files: raw.files, created: [] }) }
-}
 
 describe('the whole loop through the bridge and the fake Paperclip', () => {
   it('reports every feature on, runs a Hermes task in the room, answers in the thread and makes a backup', async () => {
