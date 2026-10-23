@@ -1,0 +1,14 @@
+{
+  "root": "agent-sandbox",
+  "files": [
+    "docs/child-summary.md",
+    "docs/notes.md",
+    "package.json",
+    "src/math.js",
+    "src/strings.js",
+    "test/math.test.js"
+  ],
+  "created": [
+    "docs/child-summary.md"
+  ]
+}
