@@ -7,9 +7,8 @@ import { performance } from 'node:perf_hooks'
 import { promisify } from 'node:util'
 import { gzip as gzipCallback } from 'node:zlib'
 import { FOLDER_SHAPE, packTree, readTree, treeEvent } from '../server/index.js'
-import { planCollapse } from '../src/model/collapse.js'
 import { planFolderView } from '../src/model/folderView.js'
-import { ancestors, dirname, makeTree } from '../src/model/paths.js'
+import { dirname, makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
@@ -272,12 +271,6 @@ export async function runProbe(options = {}) {
     size: `${Math.round(chain.tallest)} units`,
   })
 
-  const fileCounts = new Map()
-  for (const file of tree.files) fileCounts.set(dirname(file), (fileCounts.get(dirname(file)) ?? 0) + 1)
-  const hot = [...new Set([...state.agents.values()].flatMap((agent) => agent.focus).flatMap((path) => [...ancestors(path), dirname(path)]))]
-  const collapse = timeIt(() => planCollapse({ folders: tree.dirs, fileCounts, hot }), 5)
-  row('planCollapse', 'activity', collapse.ms, `${collapse.result.visible.length + collapse.result.collapsed.length} tiles`)
-
   const frames = hermesFrames(tree, { seed: settings.seed })
   const pipeline = createPipeline({ agents: AGENTS, tree })
   const lines = perCall(frames, (frame) => pipeline.push(frame))
@@ -318,7 +311,6 @@ export function replayDigest(source) {
   const state = createState(tree, agents)
   const plans = []
   const layouts = []
-  const collapses = []
   let homes = new Map()
   let key = ''
   for (const activity of activities) {
@@ -332,17 +324,13 @@ export function replayDigest(source) {
     const placed = layoutCards(views.map((view) => ({ path: view.path, ...cardSize(view) })), homes)
     homes = new Map([...homes, ...placed])
     layouts.push([...placed])
-    const fileCounts = new Map()
-    for (const file of state.files.values()) fileCounts.set(dirname(file.path), (fileCounts.get(dirname(file.path)) ?? 0) + 1)
-    const hot = [...state.agents.values()].flatMap((agent) => agent.focus).map((path) => (state.files.has(path) ? dirname(path) : path))
-    collapses.push(planCollapse({ folders: [...state.dirs.keys()], fileCounts, hot, maxTiles: 12 }))
   }
   return {
     name: source.name,
     activities: activities.length,
     plans: plans.length,
     layouts: layouts.length,
-    digest: { activities: digest(activities), plans: digest(plans), layouts: digest(layouts), collapses: digest(collapses) },
+    digest: { activities: digest(activities), plans: digest(plans), layouts: digest(layouts) },
   }
 }
 

@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.177. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.178. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -23,7 +23,7 @@ npm run dev        http://localhost:5173
 npm run bridge     local bridge to Paperclip, port 5174 (see .env.example)
 npm run serve      the built viewer and the bridge on one port, no Vite (npm run build first); --paperclip, --company, --root, --port, --dist; prints the address to open; npm run serve -- doctor checks a running Paperclip (it answers, its routes, the company, the project folder, a backup under a day old) and exits 1 on any failure; npm run serve -- up runs those checks, prints them, then serves the room whether they passed or not, and never starts Paperclip
 npm run pack-check what an npm pack would hold: fails when bin/machine-room.mjs reaches a file the pack leaves out, or the pack holds .env, tests, recordings, node_modules, .git or logs; tests/pack-start.test.js packs for real, unpacks with scripts/untar.mjs (no shell tar) and starts the room from the unpacked folder with no node_modules
-npm run scale-probe -- [--files 40000] [--folders 4000] [--seed N] [--replay]   time each stage of the room on a seeded tree in memory (readTree with a fake listDir, the tree event, makeTree, the state, planFolderView, layoutCards, planCollapse, the Hermes pipeline) against 16 ms for work per frame or activity, 1 second at load and 2 MB for a tree event; --replay prints a digest of the activities, folder plans, layouts and collapse plans of each fixture and each public/recordings/*-run.jsonl, to diff two versions
+npm run scale-probe -- [--files 40000] [--folders 4000] [--seed N] [--replay]   time each stage of the room on a seeded tree in memory (readTree with a fake listDir, the tree event, makeTree, the state, planFolderView, layoutCards, the Hermes pipeline) against 16 ms for work per frame or activity, 1 second at load and 2 MB for a tree event; --replay prints a digest of the activities, folder plans and layouts of each fixture and each public/recordings/*-run.jsonl, to diff two versions
 npm run doctor     compare the running Paperclip's /api/openapi.json with the routes in server/surface.js; exits 1 and names each route or field that is missing
 npm run fake-paperclip -- [--port 3999] [--speed 4] [--missing ROUTE,...] [--slow ROUTE,...] [--fail ROUTE,...]   a Paperclip in memory (scripts/fake-paperclip.mjs, a dev tool left out of the pack): every route in server/surface.js, /api/health with a version and /api/openapi.json built from surface.js; one company and four agents (claude_local, hermes_local, opencode_local, process); a task for an agent plays that harness's run from public/fixtures (or a short built-in script) on /api/companies/:id/events/ws, then adds a reply comment; approvals, budgets, costs, quota windows and backups live in memory; --missing leaves a route out of the spec and answers 404, --slow never answers, --fail answers 500, and ROUTE is a surface.js path with an optional method ("GET /api/approvals/{id}"); it prints the company id. To look at it by eye: npm run fake-paperclip, then npm run build and npm run serve -- --paperclip http://127.0.0.1:3999 --company COMPANY, and add --root on a folder named agent-sandbox that holds the files of public/fixtures/sandbox-tree.json, since the recorded runs touch those; without them Hermes's reads land at the root (see Known limits)
 npm run decide-eval  compare decision models on the probe sets (see DECIDER-EVAL.md; needs your own OPENROUTER_API_KEY to run)
@@ -61,7 +61,7 @@ src/model/        pure logic, no DOM, fully tested
   replay.js         fetch the recording from public/fixtures or public/recordings, and read public/recordings/index.json (parseRecordingIndex, loadRecordingIndex, describeRecording, filterRecordings)
   scaleTree.js      makeScaleTree, scaleActivities and createScaleReplay: the seeded tree and activities behind `?scale=N` and `npm run scale-probe`
 src/engine/       three.js scene, no React
-  layout.js         layoutCards: the folder cards in the view plane, no overlap, warm start (pure, tested); layoutTree: the older whole-tree 3D layout, kept for the collapse work
+  layout.js         layoutCards: the folder cards in the view plane, no overlap, warm start (pure, tested)
   route.js          the folders an agent passes between two folders (pure, tested)
   strings.js        curved strings between folders, each with a strand of seeded points that turns yellow on a working agent's path (curvePoint and strandPoints are pure, tested)
   room.js           builds the scene, runs the frame loop, reacts to activities, follow mode
@@ -225,7 +225,7 @@ Do not rename these classes without changing both sides.
 
 ## Known limits
 
-- The card layout compares every pair of drawn cards, which stays small because the folder plan draws only the folders on the agents' paths. The older whole-tree layout (`layoutTree`) took 0.13 seconds for 400 folders and 1.2 seconds for 1600.
+- The card layout compares every pair of drawn cards, which stays small because the folder plan draws only the folders on the agents' paths.
 - Hermes read lines carry only a file name. When two files share it, the parser picks the one in or nearest the folder of that run's last file; with no folder yet, or a tie, the name lands at the root.
 - Failure is read from tool status and from output text such as a test marker. A tool that fails quietly shows as ok.
 - In live mode without a file list, a Hermes read shows only a file name, so a file it reads before any other agent has touched it appears at the root until its real path is seen.
