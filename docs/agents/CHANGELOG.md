@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Briefs V21 (the cabinet sphere: a packed first layer of top-level folders, subfolders stacked behind their folder, the working path stepping outward) and V22 (packets on the lines), from the owner's sketch.
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
