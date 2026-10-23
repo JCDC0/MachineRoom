@@ -232,8 +232,17 @@ export async function runProbe(options = {}) {
   const views = plan.result
   row('planFolderView, 3 agents, same files', 'activity', plan.ms, `${views.length} cards`)
   const grown = Array.from({ length: 5 }, (_, i) => [...input.result.files, ...Array.from({ length: i + 1 }, (_, k) => `probe/new-${k}.js`)])
+  planFolderView({ files: [] })
+  planFolderView(input.result)
   const added = perCall(grown, (files) => planFolderView({ ...input.result, files }))
   row('planFolderView, one new file', 'activity', added.worst)
+  planFolderView({ files: [] })
+  planFolderView(input.result)
+  let alwaysViews = []
+  const addedAlways = perCall(grown, (files) => {
+    alwaysViews = planFolderView({ ...input.result, files, alwaysDepth: 2 })
+  })
+  row('planFolderView, one new file with alwaysDepth 2', 'activity', addedAlways.worst, `${alwaysViews.length} cards, ${alwaysViews.filter((view) => view.pinned).length} pinned`)
 
   const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
   const first = timeIt(() => layoutCards(entries, null), 5)
