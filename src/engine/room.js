@@ -226,8 +226,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function followPath(path) {
-    const frame = cards.screenFrame(path, camera, width, height)
-    const decision = followTarget(followCard, { path }, frame, performance.now())
+    const box = cards.screenFrame(path, camera, width, height)
+    const decision = followTarget(followCard, { path }, box && { width, height, card: box }, performance.now())
     if (!decision?.moved) return
     if (followCardPath(path, following)) followCard = { path: decision.path, at: decision.at }
   }
