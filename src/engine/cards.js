@@ -3,6 +3,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
+import { parentPath } from './fastPath.js'
 import { OVERVIEW, viewBasis } from './camera.js'
 import { HUB_CENTER } from './hub.js'
 import { CARD_HUB, cardDepth, layoutCards } from './layout.js'
@@ -119,11 +120,35 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   let plan = new Map()
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let movingNow = false
+  let wasMoving = false
   let inspected = null
+
+  let lastExistingFiles = -1
+  let lastLatest = -1
+  let lastPinnedVersion = 0
+  let pinnedVersion = 1
+  let lastAgentFocus = []
+
+  function focusChanged(state) {
+    if (state.agents.size !== lastAgentFocus.length) return true
+    let i = 0
+    for (const agent of state.agents.values()) {
+      if (agent.focus !== lastAgentFocus[i]) return true
+      i += 1
+    }
+    return false
+  }
+
+  function saveAgentFocus(state) {
+    lastAgentFocus = []
+    for (const agent of state.agents.values()) {
+      lastAgentFocus.push(agent.focus)
+    }
+  }
 
   function nearestCard(path) {
     let at = path
-    while (!cards.has(at) && at !== '') at = dirname(at)
+    while (!cards.has(at) && at !== '') at = parentPath(at)
     return cards.get(at) ?? null
   }
 
@@ -145,10 +170,11 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       event.stopPropagation()
       if (pinned.has(path)) pinned.delete(path)
       else pinned.add(path)
+      pinnedVersion += 1
       planKey = ''
     })
     const object = new CSS3DObject(element)
-    const parent = path === '' ? null : nearestCard(dirname(path))
+    const parent = path === '' ? null : nearestCard(parentPath(path))
     object.position.copy(parent ? parent.object.position : rootHome)
     const scale = parent ? parent.scale * 0.5 : CARD_SCALES.closed
     object.scale.setScalar(scale)
@@ -156,7 +182,28 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const occluder = new THREE.Mesh(plane, hider)
     occluder.renderOrder = -1
     glScene?.add(occluder)
-    const card = { path, element, backs, meta, items, band, object, occluder, home: object.position.clone(), scale, rows: [], rowPaths: [], view: null, backCount: -1 }
+    const card = {
+      path,
+      element,
+      backs,
+      meta,
+      items,
+      band,
+      object,
+      occluder,
+      home: object.position.clone(),
+      scale,
+      rows: [],
+      rowPaths: [],
+      view: null,
+      backCount: -1,
+      baseClass: 'mr-card is-closed',
+      className: 'mr-card is-closed',
+      bandText: '',
+      bandFailed: false,
+      height: 0,
+      lastHeight: -1,
+    }
     cards.set(path, card)
     return card
   }
@@ -192,11 +239,30 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
         inspected = inspected === item.path ? null : item.path
         if (item.kind === 'dir') {
           pinned.add(item.path)
+          pinnedVersion += 1
           planKey = ''
         }
         if (inspected) onInspect(item.path)
       })
-      return { row, note, detail, item }
+      return {
+        row,
+        note,
+        detail,
+        item,
+        file: null,
+        baseClass: `mr-item is-${item.kind}`,
+        visiblePath: visibleText(item.path),
+        rowClass: '',
+        noteText: '',
+        detailText: '',
+        lastReads: -1,
+        lastWrites: -1,
+        lastFailed: null,
+        lastYellow: null,
+        mark: '',
+        short: '',
+        cachedNote: item.kind === 'file' ? 'not touched' : '',
+      }
     })
     card.rowPaths = paths
     const more = hidden > 0 ? [el('div', 'mr-card-more', `+ ${hidden} more`)] : []
@@ -210,6 +276,19 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   }
 
   function recompute(state) {
+    const unchanged =
+      planKey !== '' &&
+      pinnedVersion === lastPinnedVersion &&
+      state.existingFiles === lastExistingFiles &&
+      state.latest === lastLatest &&
+      !focusChanged(state)
+    if (unchanged) return false
+
+    lastPinnedVersion = pinnedVersion
+    lastExistingFiles = state.existingFiles
+    lastLatest = state.latest
+    saveAgentFocus(state)
+
     const key = viewKey(state, [...pinned])
     if (key === planKey) return false
     planKey = key
@@ -220,6 +299,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     for (const view of views) {
       const card = cards.get(view.path) ?? makeCard(view.path)
       card.view = view
+      card.baseClass = `mr-card is-${view.state}`
+      card.height = cardHeight(cardRows(view))
       paintBacks(card, view.back)
       paintRows(card, view)
       card.meta.textContent = metaText(view)
@@ -239,14 +320,15 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const focusPaths = new Set()
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
     const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
-    const dirs = new Set([...files].map(dirname))
+    const dirs = new Set()
+    for (const file of files) dirs.add(parentPath(file))
     for (const path of focusPaths) if (!state.files.has(path)) dirs.add(path)
     const chain = new Set()
     for (const dir of dirs) {
       let at = dir
       chain.add(at)
       while (at !== '') {
-        at = dirname(at)
+        at = parentPath(at)
         chain.add(at)
       }
     }
@@ -296,12 +378,14 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
 
   function sync(state) {
     flashes.clear()
+    pinnedVersion += 1
     planKey = ''
     recompute(state)
   }
 
   function setObstacles(list) {
     boardObstacles = Array.isArray(list) ? list : []
+    pinnedVersion += 1
     planKey = ''
     layoutKey = ''
   }
@@ -310,7 +394,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const links = []
     for (const card of cards.values()) {
       if (card.path === '') continue
-      const parent = nearestCard(dirname(card.path))
+      const parent = nearestCard(parentPath(card.path))
       if (parent) links.push({ from: parent.path, to: card.path })
     }
     return links
@@ -328,66 +412,151 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const now = performance.now()
     const ease = easeRate(delta, 3, still())
     movingNow = false
+    const hasFlashes = flashes.size > 0
     for (const card of cards.values()) {
       const position = card.object.position
+      let posChanged = false
       if (position.distanceToSquared(card.home) > 0.25) {
         position.lerp(card.home, ease)
         movingNow = true
-      } else {
+        posChanged = true
+      } else if (!position.equals(card.home)) {
         position.copy(card.home)
+        posChanged = true
+      }
+      if (posChanged) {
+        card.occluder.position.copy(position)
       }
       const view = card.view
       const goal = CARD_SCALES[view.state] ?? 1
       if (Math.abs(card.scale - goal) > 0.002) {
         card.scale += (goal - card.scale) * ease
-        movingNow = true
       } else {
         card.scale = goal
       }
-      card.object.scale.setScalar(card.scale)
-      card.object.quaternion.copy(camera.quaternion)
-      card.occluder.position.copy(position)
-      card.occluder.quaternion.copy(camera.quaternion)
-      card.occluder.scale.set(CARD_W * card.scale, cardHeight(cardRows(view)) * card.scale, 1)
-      const flashing = flashes.get(card.path)
-      const tone = flashing && flashing.until > now ? flashing.tone : null
-      const failedName = visibleText(flashing?.text || (card.path === '' ? rootName : basename(card.path)))
-      const failedText = tone === 'red' ? `FAILED ${failedName}` : ''
-      if (failedText) {
-        if (card.band.textContent !== failedText) card.band.textContent = failedText
-        if (!card.band.classList.contains('is-failed')) card.band.classList.add('is-failed')
-      } else {
-        if (card.band.textContent !== '') card.band.textContent = ''
-        if (card.band.classList.contains('is-failed')) card.band.classList.remove('is-failed')
+      if (card.lastScale !== card.scale || card.lastHeight !== card.height) {
+        card.lastScale = card.scale
+        card.lastHeight = card.height
+        card.object.scale.setScalar(card.scale)
+        card.occluder.scale.set(CARD_W * card.scale, card.height * card.scale, 1)
       }
-      const classes = ['mr-card', `is-${view.state}`]
-      if (active.dirs.has(card.path)) classes.push('is-active')
-      else if (active.path.has(card.path)) classes.push('is-path')
-      if (pinned.has(card.path)) classes.push('is-pinned')
-      if (tone) classes.push(`is-flash-${tone}`)
-      const className = classes.join(' ')
-      if (card.element.className !== className) card.element.className = className
+      if (!card.object.quaternion.equals(camera.quaternion)) {
+        card.object.quaternion.copy(camera.quaternion)
+      }
+      if (!card.occluder.quaternion.equals(camera.quaternion)) {
+        card.occluder.quaternion.copy(camera.quaternion)
+      }
+
+      const flashing = hasFlashes ? flashes.get(card.path) : null
+      const tone = flashing && flashing.until > now ? flashing.tone : null
+      let failedText = ''
+      if (tone === 'red') {
+        const failedName = visibleText(flashing.text || (card.path === '' ? rootName : basename(card.path)))
+        failedText = `FAILED ${failedName}`
+      }
+      if (failedText) {
+        if (card.bandText !== failedText) {
+          card.bandText = failedText
+          card.band.textContent = failedText
+        }
+        if (!card.bandFailed) {
+          card.bandFailed = true
+          card.band.classList.add('is-failed')
+        }
+      } else {
+        if (card.bandText !== '') {
+          card.bandText = ''
+          card.band.textContent = ''
+        }
+        if (card.bandFailed) {
+          card.bandFailed = false
+          card.band.classList.remove('is-failed')
+        }
+      }
+
+      let className = card.baseClass ?? `mr-card is-${view.state}`
+      if (active.dirs.has(card.path)) className += ' is-active'
+      else if (active.path.has(card.path)) className += ' is-path'
+      if (pinned.has(card.path)) className += ' is-pinned'
+      if (tone) className += ` is-flash-${tone}`
+      if (card.className !== className) {
+        card.className = className
+        card.element.className = className
+      }
+
       for (const entry of card.rows) {
         const path = entry.item.path
-        const file = state.files.get(path)
-        const hit = flashes.get(path)
+        if (entry.item.kind === 'file') {
+          const file = entry.file ?? state.files.get(path)
+          if (file) {
+            entry.file = file
+            if (
+              file.reads !== entry.lastReads ||
+              file.writes !== entry.lastWrites ||
+              file.failed !== entry.lastFailed ||
+              file.yellow !== entry.lastYellow
+            ) {
+              entry.lastReads = file.reads
+              entry.lastWrites = file.writes
+              entry.lastFailed = file.failed
+              entry.lastYellow = file.yellow
+              let mark = ''
+              if (file.failed) mark = 'failed'
+              else if (file.yellow) mark = 'finished'
+              else if (file.writes > 0) mark = 'written'
+              else if (file.reads > 0) mark = 'read'
+              entry.mark = mark
+
+              const parts = []
+              const shortParts = []
+              if (file.reads) {
+                parts.push(`read ${file.reads}`)
+                shortParts.push(`r ${file.reads}`)
+              }
+              if (file.writes) {
+                parts.push(`written ${file.writes}`)
+                shortParts.push(`w ${file.writes}`)
+              }
+              if (file.failed) {
+                parts.push('failed')
+                shortParts.push('failed')
+              } else if (file.yellow) {
+                parts.push('finished')
+                shortParts.push('finished')
+              }
+              entry.cachedNote = parts.join(' · ') || 'not touched'
+              entry.short = shortParts.join(' · ')
+            }
+          }
+        }
+        const hit = hasFlashes ? flashes.get(path) : null
         const rowTone = hit && hit.until > now ? hit.tone : null
-        const mark = entry.item.kind === 'file' ? rowMark(file) : ''
-        const rowClasses = ['mr-item', `is-${entry.item.kind}`]
-        if (mark) rowClasses.push(`is-${mark}`)
-        if (active.files.has(path) || active.dirs.has(path)) rowClasses.push('is-active')
-        if (rowTone) rowClasses.push(`is-flash-${rowTone}`)
-        if (inspected === path) rowClasses.push('is-inspected')
-        const rowClass = rowClasses.join(' ')
-        if (entry.row.className !== rowClass) entry.row.className = rowClass
-        const note = entry.item.kind === 'file' ? rowNote(file) : ''
-        const short = note === 'not touched' ? '' : note.replace('written', 'w').replace('read', 'r')
-        if (entry.note.textContent !== short) entry.note.textContent = short
-        const detail = inspected === path ? `${visibleText(path)}  ${note}` : ''
-        if (entry.detail.textContent !== detail) entry.detail.textContent = detail
+        let rowClass = entry.baseClass
+        if (entry.mark) rowClass += ` is-${entry.mark}`
+        if (active.files.has(path) || active.dirs.has(path)) rowClass += ' is-active'
+        if (rowTone) rowClass += ` is-flash-${rowTone}`
+        if (inspected === path) rowClass += ' is-inspected'
+        if (entry.rowClass !== rowClass) {
+          entry.rowClass = rowClass
+          entry.row.className = rowClass
+        }
+        if (entry.noteText !== entry.short) {
+          entry.noteText = entry.short
+          entry.note.textContent = entry.short
+        }
+        const detail = inspected === path ? `${entry.visiblePath}  ${entry.cachedNote}` : ''
+        if (entry.detailText !== detail) {
+          entry.detailText = detail
+          entry.detail.textContent = detail
+        }
       }
     }
-    for (const [path, hit] of flashes) if (hit.until <= now) flashes.delete(path)
+    if (hasFlashes) {
+      for (const [path, hit] of flashes) if (hit.until <= now) flashes.delete(path)
+    }
+    const isMoving = movingNow
+    movingNow = movingNow || wasMoving
+    wasMoving = isMoving
     return changed
   }
 
@@ -400,6 +569,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   function pin(path) {
     if (!pinned.has(path)) {
       pinned.add(path)
+      pinnedVersion += 1
       planKey = ''
     }
   }
