@@ -44,6 +44,8 @@ describe('agentForLane', () => {
     const agent = agentForLane('opencode2', SAMPLE_AGENTS)
     expect(agent).toEqual(SAMPLE_AGENTS[2])
     expect(agent?.adapterType).toBe('opencode_local')
+    expect(agentForLane('opencode3', SAMPLE_AGENTS)).toEqual(SAMPLE_AGENTS[2])
+    expect(agentForLane('opencodex', SAMPLE_AGENTS)).toBeNull()
   })
 
   it('maps agy to a process agent named agy', () => {
