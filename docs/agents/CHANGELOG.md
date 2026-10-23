@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Audit of the room, version 3 and what followed it (task Q3): 16 findings in `docs/agents/AUDIT-2026-10-V3.md`, no code changed.
 - Briefs S2g (the orchestrator and subagents through the fake Paperclip), Q2 (reduced motion across the room, version 3) and Q3 (read what the redesign changed).
 - Review note on S2f: no fixes. The `--replay` digests are the same before and after the merge. The look was not checked: with the preview pane hidden the room's animation frames do not run, so the replay clock stayed at 00:00 and no chip was drawn; the hold rests on the tests of `childFade` and `childEndIsFresh`. Full suite on the merge: 111 files, 2106 tests, in parallel on the first try.
 - Review note on V20: no fixes. Its sums match `src/styles.css` (the face is 2 px taller than `cardHeight` for its border, the tab sits 8 px above the face, each back is shifted 12 px right and up), the `--replay` digests are the same before and after the merge, and the lane's sphere rows did not change. The look was not checked: the hidden preview pane renders too slowly for the close-up camera to reach a card. The merge also fixes a V19 overlap seen in that check: the follow, live and toast badges sat at the bottom right over the new cost board, and from 900 px wide, where the board shows, they now sit 16 px to its left (`.stage-badge`). Full suite on the merge: 111 files, 2098 tests, in parallel on the first try.
