@@ -7,7 +7,7 @@ The viewer replays Paperclip frames. To record new ones:
 3. Start the recorder: `node scripts/record-events.mjs <company-id> <out.jsonl> <seconds>`. It writes one JSON line per socket event as `{ t, kind, data }`; the kinds are `open`, `frame`, `error`, `close` and `timeout`.
 4. Give an agent a task. Create an issue assigned to it with `paperclipai issue create`, or wake it with `paperclipai agent heartbeat:invoke <agent-id>`.
 5. Stop the recorder when the run ends.
-6. Build the fixtures: `npm run fixtures -- <out.jsonl> <sandbox-folder> <ids.json>`. The script removes the Windows profile name and email addresses from paths and text, and stops if a frame looks like it holds a key.
+6. Build the fixtures: `npm run fixtures -- <out.jsonl> <sandbox-folder> <ids.json>`. The script joins the chunks of each run and stream before it removes the Windows profile name and email addresses, so a name or address split across two chunks is masked whole, then cuts the text back into chunks. It joins the text deltas of one step too, because Paperclip can split a name across two of them. It stops if the joined text of a run looks like it holds a key.
 
 ## Recording a lane run
 

@@ -1,15 +1,17 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir, userInfo } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { fixtureLeak, fixtureNames, sandboxFiles } from '../scripts/build-fixtures.mjs'
+import { fixtureLeak, fixtureNames, sandboxFiles, scrubFrames } from '../scripts/build-fixtures.mjs'
 import { replayFiles } from '../src/model/replay.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/build-fixtures.mjs', import.meta.url))
 const REFUSED_OUT = fileURLToPath(new URL('../public/fixtures/mr-test-refused-run.jsonl', import.meta.url))
+const SPLIT_OUT = fileURLToPath(new URL('../public/fixtures/mr-test-split-refused-run.jsonl', import.meta.url))
+const SCENARIO_G = fileURLToPath(new URL('../public/fixtures/scenario-g-run.jsonl', import.meta.url))
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-fixtures-no-git-config')
 const cleanups = []
 
@@ -35,6 +37,19 @@ function tempDir() {
 
 function frame(text) {
   return JSON.stringify({ type: 'heartbeat.run.log', payload: { chunk: text } })
+}
+
+function logFrame(chunk, seq) {
+  return { type: 'heartbeat.run.log', payload: { runId: 'run-1', stream: 'stdout', seq, chunk, truncated: false } }
+}
+
+function deltaFrame(text, seq) {
+  const event = { event: 'step_update', step_update: { conversation_id: 'c1', step_index: 1, state: 'ACTIVE', text_delta: text } }
+  return logFrame(JSON.stringify(event) + '\n', seq)
+}
+
+function textOf(frames) {
+  return frames.map((item) => item.payload.chunk).join('')
 }
 
 function git(cwd, args) {
@@ -114,6 +129,63 @@ describe('fixtureLeak', () => {
   it('passes a clean frame', () => {
     expect(fixtureLeak([frame('read src/math.js'), frame('OPENROUTER_API_KEY=')])).toBe(0)
   })
+
+  it('finds a key split across two chunks', () => {
+    const key = 'sk-' + 'or-v1-' + 'q'.repeat(40)
+    const first = JSON.stringify(logFrame(`token ${key.slice(0, 16)}`, 1))
+    const second = JSON.stringify(logFrame(key.slice(16), 2))
+    expect(fixtureLeak([first, second])).toBe(1)
+  })
+
+  it('finds a key split across two text deltas', () => {
+    const key = 'sk-' + 'or-v1-' + 'q'.repeat(40)
+    const frames = [deltaFrame(`token ${key.slice(0, 16)}`, 1), deltaFrame(key.slice(16), 2)]
+    expect(fixtureLeak(frames.map((item) => JSON.stringify(item)))).toBe(1)
+  })
+})
+
+describe('scrubFrames', () => {
+  const ACCOUNT = userInfo().username
+  const ESCAPED = ACCOUNT.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+  it('masks a profile path split at every position across two chunks', () => {
+    const text = `see C:/Users/${ACCOUNT}/AppData/Local/Temp now`
+    const expected = text.replace(new RegExp(ESCAPED, 'gi'), 'user')
+    for (let cut = 0; cut <= text.length; cut += 1) {
+      const frames = [logFrame(text.slice(0, cut), 1), logFrame(text.slice(cut), 2)]
+      expect(textOf(scrubFrames(frames))).toBe(expected)
+    }
+  })
+
+  it('masks an e-mail address split at every position across two chunks', () => {
+    const text = 'mail worker@example.test now'
+    const expected = text.replace(new RegExp(ESCAPED, 'gi'), 'user').replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[a-z]{2,}/g, 'user')
+    for (let cut = 0; cut <= text.length; cut += 1) {
+      const frames = [logFrame(text.slice(0, cut), 1), logFrame(text.slice(cut), 2)]
+      expect(textOf(scrubFrames(frames))).toBe(expected)
+    }
+    expect(expected).not.toContain('@')
+  })
+
+  it('masks a profile name split across two text deltas of one step', () => {
+    const cut = Math.max(1, Math.floor(ACCOUNT.length / 2))
+    const frames = [deltaFrame(`see C:/Users/${ACCOUNT.slice(0, cut)}`, 1), deltaFrame(`${ACCOUNT.slice(cut)}/AppData`, 2)]
+    const joined = textOf(scrubFrames(frames))
+    const deltas = joined
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => JSON.parse(line).step_update.text_delta)
+      .join('')
+    expect(joined).not.toContain(ACCOUNT)
+    expect(deltas).toBe('see C:/Users/user/AppData')
+  })
+
+  it('rebuilds scenario-g from its own run file without a change', () => {
+    const text = readFileSync(SCENARIO_G, 'utf8')
+    const frames = text.split('\n').filter(Boolean).map((line) => JSON.parse(line))
+    const rebuilt = scrubFrames(frames).map((item) => JSON.stringify(item)).join('\n') + '\n'
+    expect(rebuilt).toBe(text)
+  })
 })
 
 describe('the fixture builder refusal', () => {
@@ -131,5 +203,22 @@ describe('the fixture builder refusal', () => {
     expect(result.stderr.trim()).toBe('possible key in frame 2; fixture not written')
     expect(result.stderr).not.toContain(key)
     expect(existsSync(REFUSED_OUT)).toBe(false)
+  })
+
+  it('refuses a key split across two chunks before writing', () => {
+    const dir = tempDir()
+    const key = 'sk-' + 'or-v1-' + 'q'.repeat(40)
+    const raw = join(dir, 'frames.jsonl')
+    const frames = [logFrame(`token ${key.slice(0, 16)}`, 1), logFrame(key.slice(16), 2)]
+    writeFileSync(raw, frames.map((item) => JSON.stringify(item)).join('\n') + '\n')
+    cleanups.push(() => rmSync(SPLIT_OUT, { force: true }))
+    const result = spawnSync(process.execPath, [SCRIPT, raw, join(dir, 'sandbox'), join(dir, 'ids.json'), 'mr-test-split-refused'], {
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    expect(result.status).toBe(2)
+    expect(result.stderr.trim()).toBe('possible key in frame 1; fixture not written')
+    expect(result.stderr).not.toContain(key)
+    expect(existsSync(SPLIT_OUT)).toBe(false)
   })
 })
