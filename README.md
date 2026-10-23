@@ -28,21 +28,23 @@ A seeded room at 40000 files.
 
 - The hub: a flat ring in the middle. Each agent parks at its own slot there, between runs and while it works. The orchestrator floats above the middle of the ring.
 - Agent shapes: each agent is its own wireframe shape. A working agent shows it by its status ring, its chip and a slow pulse of its shape.
-- Subagents: a child reported by an OpenCode or Hermes run appears beside its parent as a smaller shape with its own chip, joined to the parent by a short line. It fades out after 1.5 seconds, because the harness reports it only when it ends.
+- Subagents: a child reported by an OpenCode or Hermes run appears beside its parent as a smaller shape with its own chip, joined to the parent by a short line. The harness reports it only when it ends, so it stays at full strength for 6 seconds and then fades over 1.5 seconds.
 - Terminal chips: a chip beside each agent, joined by a thin line. It shows the name and a status ring, and opens to show the log.
 - Agent callouts: a thin line from an agent to a block with its name, the task its run works on and the command it runs now. The border is yellow while it works, red on a failure and green with `FINISHED` for 5 seconds after a good run.
-- Folder sphere: flat cards on shells around the hub, always facing the camera. The root sits below the hub. Top-level folders spread around the sphere, and deeper folders sit farther out near their parent. Straight lines join each top-level folder and the root to the hub centre, and every deeper folder to its parent.
-- The tree: every folder down to depth 2 is always drawn, up to 300 cards. The rest stay as faint folders behind their parent. Folders below that depth appear, with a short fade, while they are on an agent's path. A folder that holds a file being touched lists up to 10 items.
-- The strip: while an agent works, a straight line runs from it to the row of the file it touches, faint white with yellow stripes, and four yellow corner brackets sit around that card. The stripes are green for 5 seconds after a good run and red when the run fails.
-- Follow mode: `F` cycles wide, close up and off. Wide shows the touched card and its parent, and close up shows the card alone. The camera holds each card at least 4 seconds and eases over 1.2 seconds. Clicking an agent, `0` or `1` to `9` ends it.
+- Folder sphere: flat cards, always facing the camera. Top-level folders sit on a packed first shell whose radius grows with their count, and the root sits below the hub. A closed folder stacks up to four of its children behind it, and the rest show as faint backs. When the working path opens a folder, its children step outward 650 units for that level and fan beside each other. Straight lines join each top-level folder and the root to the hub centre, and every deeper folder to its parent.
+- The tree: every folder down to depth 2 is always drawn, up to 300 cards. Folders below that depth appear, with a short fade, only while they are on an agent's path. A folder that holds a file being touched lists up to 10 items.
+- The strip: while an agent works, a straight line runs from it to the row of the file it touches, faint white with yellow stripes. Small yellow points run along it every 90 ms, and a burst of five leaves at each tool call. Four yellow corner brackets sit around that card.
+- Strands: each line between folders carries small white points. When the folder is on a working agent's path, its points turn yellow and travel along the line, then fade back over 1.5 seconds.
+- Follow mode: `F` cycles wide, close up and off. Wide shows the touched card and its parent, and close up shows the card alone. The camera holds each card at least 4 seconds and eases over 1.2 seconds. A click in the room ends it, and so do `0` and `1` to `9`.
 - Each colour has one meaning:
   - White is activity. A read or write flashes the file row and its card white.
   - Yellow is active. The folder and the file an agent works on right now carry a dashed yellow outline, and the strip to the file carries yellow stripes.
-  - Red is failure. A failed tool call, run or test flashes red and leaves the file red until it is written again. The strip's stripes turn red when the run fails.
-  - Green is finished work. A run that ends well turns the agent, its chip and every file it wrote in that run green. The strip's stripes stay green for 5 seconds.
+  - Red is failure. A failed tool call, run or test flashes red and leaves the file red until it is written again. The strip's stripes and points turn red when the run fails.
+  - Green is finished work. A run that ends well turns the agent, its chip and every file it wrote in that run green. The strip's stripes and points stay green for 5 seconds.
 - While any agent works, cards off the working agents' paths dim to 0.25 with their lines, and the cards on a path to a touched file glow with a soft light on the border.
 - Settings: the Settings button at the top right opens a panel. Folder depth is a slider from 1 to 3, 2 by default, for how many folder levels are always drawn. Five screen effects have an on switch and a strength: fish eye, chromatic aberration, vignette, grain and fine dust. Fish eye, chromatic aberration and grain start off. Vignette and fine dust start on at low strength. The fine dust is motes in the 3D space around the room, not noise on the screen. The choices are saved in this browser with the connection.
-- Cost board: below the hub. It shows the spend against the budget, a row per agent with cost, tokens and a share bar, and the provider quota windows. It is hidden under 900 pixels wide.
+- Fine dust: 1400 small points across the space around the room, from 400 to 9000 units out. They drift slowly, and they hold still under reduced motion.
+- Cost board: a flat panel at the bottom right, above the transport bar, 280 pixels wide. It shows the spend against the budget, a row per agent with cost, tokens and a share bar, and the provider quota windows. It is hidden under 900 pixels wide.
 - Health chip: under the Replay and Live switch, and only when something is wrong. It names a bridge that does not answer, a Paperclip that is not connected, routes that changed or a route check that did not run.
 - Control drawer on `C`: Dispatch, Tasks, Approvals, Meters, Plan, Agents and Reviews. The drawer section below describes each tab.
 
@@ -68,13 +70,15 @@ npm run serve -- up --company <id>
 
 `--company` is the company to follow, from Paperclip's company list. `PAPERCLIP_COMPANY_ID` does the same. The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it, and `--paperclip <url>` or `PAPERCLIP_URL` names another Paperclip.
 
+For development, `npm run dev` serves the viewer on port 5173 and `npm run bridge` runs the bridge on port 5174 without a build.
+
 `up` runs the checks, prints one `ok` or `FAIL` line for each, then serves the room and prints the address to open:
 
 - Paperclip answers, and its version.
 - Its spec lists every route the bridge uses.
 - The company is in Paperclip's list.
 - The project folder exists.
-- The newest database backup is under a day old.
+- Automatic database backups are on, and the newest is under a day old.
 
 A failed check does not close the room. A part whose routes changed stays off, and its panel says so.
 
@@ -82,7 +86,7 @@ A failed check does not close the room. A part whose routes changed stays off, a
 
 ### Without Paperclip
 
-After a build, `npm run serve -- up` still serves the room. The Paperclip checks print FAIL, and the replay and the simulated feed work without Paperclip.
+After a build, `npm run serve -- up` still serves the room. The Paperclip check prints FAIL, and the replay and the simulated feed work without Paperclip.
 
 The first visit shows a connect screen, and the replay is one of its choices. An address skips the screen:
 
@@ -103,8 +107,8 @@ The room was measured on seeded trees of 40000 and 200000 files.
 - `GET /api/tree` holds about 0.6 MB in the folder shape at 40000 files, and 115 KB gzipped. At 200000 files it holds about 3.1 MB, and 570 KB gzipped.
 - The answer carries a version. A page's first `tree` event holds only the files added since the list it read, and each later event only the files that page has not had.
 - Shell commands and Hermes reads look names up from an index, so they cost the same at any repository size.
-- The sphere layout compares every pair of cards on a shell. A cold layout of 300 cards takes about 110 ms, and an added card about 1 ms. The room runs it when a card appears, leaves or changes size.
-- The overview fits every drawn card. At 40000 files a deep path can span about 9700 units from the lowest card to the highest, so the cards are small in the overview. Follow mode is the way to read the card an agent touches.
+- The sphere layout compares pairs only on the top-level shell, so stacks and fans take one pass. The room runs the layout when a card appears, leaves or changes size, and a warm start moves only the new or resized cards, a card that meets an obstacle, and their siblings.
+- The overview fits the hub, the root and the always-present cards. At 40000 files its distance is about 4200 units (largest about 4700), so the cards are small in the overview. Follow mode is the way to read the card an agent touches.
 
 Try it with the dev server:
 
@@ -112,25 +116,27 @@ Try it with the dev server:
 npm run dev
 ```
 
-Open `/?replay&scale=200000&fps`. The frame line sits in the top left panel. `npm run scale-probe` times each stage of the room on a seeded tree in memory and prints the overlaps, moves, worst move and height; `--files` and `--folders` change its size.
+Open `/?replay&scale=200000&fps`. The frame line sits in the top left panel. `npm run scale-probe` times each stage of the room on a seeded tree in memory and prints the covered top cards, the tallest layout and the overview distance; `--files` and `--folders` change its size.
 
 ## The control drawer
 
 The drawer needs a control client. It is there in replay, the demo and a live room through a bridge; it is not there when the page talks to Paperclip directly through the Vite proxy. With a control client, the drawer has up to seven tabs.
 
-- Dispatch: pick an open brief to see its prompt and route, or write a task for an agent. The Route row suggests a lane and model, with a Use button when the policy names one, and the Runs list shows running and recent lane runs.
+- Dispatch: pick an open brief to see its prompt and route. The Route row suggests a lane and model, with a Use button when the policy names one. You can also write a task for an agent, and the Runs list shows running and recent lane runs.
 - Tasks: open and finished tasks. A task with a live Paperclip run reads `running AGENT` or `queued AGENT`. Open one to read its thread and post a comment.
 - Approvals: pending requests with Approve, Request changes and Reject, an optional note, and a list of decided ones.
 - Meters: company and agent budgets, spend, provider quotas, and the age of the newest Paperclip backup. Back up now sits behind a confirm card.
 - Plan: write a goal and ask the planner behind a confirm card. Each brief shows its size, files, tests and route. Tick the ones to add to `docs/agents/TASKS.md` behind a second confirm card, then open one in Dispatch with `Dispatch <id>`.
-- Agents: hire an agent, or edit its name, harness, role, model, limits, budget and instructions.
+- Agents: hire an agent, or edit its name, role, model, limits, budget and instructions. The harness is fixed once the agent is hired.
 - Reviews: each lane's branch, commits ahead, files and last run. Click a row for the diff. Merge opens a confirm card with a message and merges the head you read.
 
 ## Working with lanes
 
-A lane is one agent with its own worktree and branch, listed in `docs/agents/lanes.json`. The drawer can start a local lane run on an open brief and show the result.
+A lane is one agent with its own worktree and branch, listed in `docs/agents/lanes.json`. There are five OpenCode lanes (`opencode` and `opencode2` to `opencode5`), `agy` works by hand and has no command line, and `hermes` is retired, so `npm run run-lane` refuses it. The drawer can start a local lane run on an open brief and show the result.
 
 - Start a lane run. Press `C`, open Dispatch, pick a brief, then Run now. The confirm card names the lane, model and brief and says it spends money. Confirm starts the lane in its own worktree. The Runs list shows its last lines and its record.
+- Start one from a terminal. `npm run run-lane -- opencode <brief>` starts a lane on the open brief you name. `--dry-run` prints the command, `--list` shows the last 10 runs, and `--stats` shows runs, minutes and cost per lane and model.
+- Record a hand run. `npm run hand-run -- agy <brief> --minutes 40` writes the run of a lane started by hand. `npm run outcome -- <branch> merged --grade A-` records how a lane run ended.
 - See it in the room. A lane run is not a Paperclip run, so the live room does not draw it. When it ends, it writes a recording under `public/recordings/` and prints `room: /?recording=<name>`; open that address to replay it in the room.
 - Try a lane's build beside the stable room. `npm run candidate -- <lane>` builds that worktree and serves it on port 5175, with its own bridge. Leave the stable room running and compare the two. It refuses a lane with no worktree, a worktree with uncommitted changes, and a port in use. See `docs/agents/CANDIDATE.md`.
 - Review and merge. Press `C`, open Reviews. Each lane shows its branch, commits ahead, files and last run; click it for the diff. Merge is offered on a lane with commits ahead and no uncommitted changes, after a confirm card with a one-line message. The bridge merges one lane at a time, needs the main checkout on main with no uncommitted changes, a clean lane and the lane's exact head, stops on a conflict and leaves main as it was. It never pushes.
@@ -156,7 +162,7 @@ A lane is one agent with its own worktree and branch, listed in `docs/agents/lan
 - `C` toggle the control drawer
 - `?` toggle keyboard help
 
-MachineRoom prints and stores no key. The bridge reads the key it needs from the environment, and the assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second. The proxy route has no bridge; the page masks the frames it reads itself, with the same rule and the same 1 second hold.
+MachineRoom prints and stores no key. The bridge needs no key of its own: the assistant route runs OpenCode, which uses the login on this computer, and the assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second. The proxy route has no bridge; the page masks the frames it reads itself, with the same rule and the same 1 second hold.
 
 ## Recordings
 
