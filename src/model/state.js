@@ -2,6 +2,28 @@ import { ancestors, dirname } from './paths.js'
 
 const LINE_LIMIT = 80
 export const CALL_LIMIT = 500
+export const MAX_DEPTH = 3
+
+function makeAgent(key, name, parent = null, depth = 0, runId = null) {
+  return {
+    key,
+    name,
+    status: 'idle',
+    runId,
+    label: '',
+    target: '',
+    endedAt: 0,
+    error: null,
+    lines: [],
+    version: 0,
+    runs: 0,
+    calls: new Map(),
+    runWrites: new Set(),
+    focus: [],
+    parent,
+    depth,
+  }
+}
 
 export function createState(tree, agents) {
   const files = new Map()
@@ -14,24 +36,7 @@ export function createState(tree, agents) {
   const dirs = new Map()
   for (const path of tree.dirs) dirs.set(path, { path, opened: false })
   const roster = new Map()
-  for (const agent of agents) {
-    roster.set(agent.key, {
-      key: agent.key,
-      name: agent.name,
-      status: 'idle',
-      runId: null,
-      label: '',
-      target: '',
-      endedAt: 0,
-      error: null,
-      lines: [],
-      version: 0,
-      runs: 0,
-      calls: new Map(),
-      runWrites: new Set(),
-      focus: [],
-    })
-  }
+  for (const agent of agents) roster.set(agent.key, makeAgent(agent.key, agent.name))
   return {
     files,
     dirs,
@@ -118,11 +123,43 @@ function applyTouch(state, agent, touch) {
   }
 }
 
+function isDescendant(state, agent, parentKey) {
+  let key = agent.parent
+  while (key) {
+    if (key === parentKey) return true
+    key = state.agents.get(key)?.parent ?? null
+  }
+  return false
+}
+
+function finish(agent, activity) {
+  agent.status = activity.ok ? 'done' : 'error'
+  agent.endedAt = activity.time
+  agent.calls.clear()
+  agent.focus = []
+  if (!activity.ok) agent.error = activity.error ?? 'failed'
+}
+
 export function apply(state, activity) {
   if (Number.isFinite(activity.time) && activity.time > (state.latest ?? 0)) state.latest = activity.time
   const agent = state.agents.get(activity.agent)
   if (!agent) return
   switch (activity.type) {
+    case 'agent.spawn': {
+      if (!activity.child) break
+      const depth = (agent.depth ?? 0) + 1
+      if (depth > MAX_DEPTH) break
+      const existing = state.agents.get(activity.child)
+      if (existing && (existing.status === 'working' || existing.parent !== agent.key || existing.depth !== depth)) break
+      const child = makeAgent(activity.child, activity.name || activity.child, agent.key, depth, activity.runId ?? null)
+      child.status = 'working'
+      child.label = activity.label ?? ''
+      state.agents.set(child.key, child)
+      break
+    }
+    case 'agent.end':
+      finish(agent, activity)
+      break
     case 'run.queued':
       agent.status = 'queued'
       say(agent, 'queued', 'dim')
@@ -181,6 +218,9 @@ export function apply(state, activity) {
         say(agent, `FAILED ${activity.error ?? ''}`.trim(), 'error')
       }
       agent.runWrites.clear()
+      for (const child of state.agents.values()) {
+        if (child.status === 'working' && isDescendant(state, child, agent.key)) finish(child, activity)
+      }
       break
     default:
       break

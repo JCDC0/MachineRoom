@@ -101,6 +101,8 @@ export function createPlayer({ activities, tree, agents, idleCapMs = 4000, tailM
           status: agent.status,
           label: agent.label,
           runs: agent.runs,
+          parent: agent.parent ?? null,
+          depth: agent.depth ?? 0,
         })),
       }
     },

@@ -7,6 +7,7 @@ const VERBS = { read: 'read', write: 'write', patch: 'edit', find: 'search', sea
 export function createHermesParser(ctx) {
   const out = []
   let counter = 0
+  let children = 0
   let near
 
   const reader = createLineReader((line, time) => {
@@ -37,6 +38,14 @@ export function createHermesParser(ctx) {
     }
     out.push(toolStart({ time: startTime, id, tool, label, touches }))
     out.push(toolEnd({ time, id, ok }))
+    if (verb === 'delegate') {
+      const parent = ctx.agentKey ?? 'agent'
+      const child = `${parent}~${(children += 1)}`
+      const goal = detail.replace(/^\d+x:\s*/i, '').replace(/(?:\.\.\.|…)\s*$/u, '')
+      const spawned = shorten(goal || 'delegate', 40)
+      out.push({ time, type: 'agent.spawn', agent: parent, child, name: spawned, label })
+      out.push({ time, type: 'agent.end', agent: child, ok })
+    }
   })
 
   return {

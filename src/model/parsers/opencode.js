@@ -44,6 +44,7 @@ export function recoverCall(line) {
 export function createOpencodeParser(ctx) {
   const out = []
   let counter = 0
+  let children = 0
 
   const reader = createLineReader((line, time) => {
     const json = parseJson(line)
@@ -88,6 +89,14 @@ export function createOpencodeParser(ctx) {
     const failed = status === 'error' || (tool === 'shell' && looksFailed(output))
     out.push(toolStart({ time: time - 300, id: callId, tool, label, touches }))
     out.push(toolEnd({ time, id: callId, ok: !failed }))
+    if (name === 'subagent') {
+      const parent = ctx.agentKey ?? 'agent'
+      const child = `${parent}~${(children += 1)}`
+      const description = typeof input.description === 'string' ? input.description : ''
+      const spawned = shorten(description || 'subagent', 40)
+      out.push({ time, type: 'agent.spawn', agent: parent, child, name: spawned, label })
+      out.push({ time, type: 'agent.end', agent: child, ok: !failed })
+    }
   }
 
   return {
