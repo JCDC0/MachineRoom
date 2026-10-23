@@ -4,11 +4,13 @@ import { createClaudeParser } from '../src/model/parsers/claude.js'
 import { createHermesParser } from '../src/model/parsers/hermes.js'
 import { createParser } from '../src/model/parsers/index.js'
 import { createOpencodeParser } from '../src/model/parsers/opencode.js'
+import { unreadableLines } from '../src/model/parsers/unreadable.js'
 import { testContext } from './helpers.js'
 
 const ctx = testContext()
 const lines = (...items) => items.map((item) => (typeof item === 'string' ? item : JSON.stringify(item))).join('\n') + '\n'
-const summary = (activities) => activities.map((a) => (a.type === 'tool.start' ? `start ${a.label}` : `end ${a.ok}`))
+const summary = (activities) =>
+  activities.filter((a) => a.type === 'tool.start' || a.type === 'tool.end').map((a) => (a.type === 'tool.start' ? `start ${a.label}` : `end ${a.ok}`))
 
 describe('claude parser', () => {
   it('turns an edit into a write touch and a completed end', () => {
@@ -130,6 +132,25 @@ describe('hermes parser', () => {
     expect(out[0].touches).toEqual([{ path: 'index.js', mode: 'read', kind: 'file' }])
     expect(out[0].label).toBe('read index.js')
   })
+
+  it('reports a delegate line as one child at the line time', () => {
+    const parser = createHermesParser({ ...ctx, agentKey: 'hermes' })
+    const line = '  \u250a \ud83d\udd00 delegate  1x: Count the exported functions...  14.4s\n'
+    const out = parser.push(line, 10000)
+    expect(summary(out)).toEqual(['start delegate 1x: Count the exported functions...', 'end true'])
+    expect(unreadableLines('hermes', line)).toEqual([])
+    expect(out.filter((a) => a.type === 'agent.spawn')).toEqual([
+      {
+        time: 10000,
+        type: 'agent.spawn',
+        agent: 'hermes',
+        child: 'hermes~1',
+        name: 'Count the exported functions',
+        label: 'delegate 1x: Count the exported functions...',
+      },
+    ])
+    expect(out.filter((a) => a.type === 'agent.end')).toEqual([{ time: 10000, type: 'agent.end', agent: 'hermes~1', ok: true }])
+  })
 })
 
 describe('opencode parser', () => {
@@ -192,31 +213,41 @@ describe('opencode parser', () => {
   })
 
   it('names a subagent call by its description and touches no file', () => {
-    const parser = createOpencodeParser(ctx)
-    const out = parser.push(
-      lines({
-        type: 'tool_use',
-        timestamp: 8000,
-        sessionID: 'ses_a',
-        part: {
-          type: 'tool',
-          tool: 'subagent',
-          id: 'call_1',
-          state: {
-            status: 'completed',
-            input: { agent: 'general', description: 'Count exported functions', prompt: 'Read src/model/paths.js and src/model/commands.js' },
-            metadata: { sessionID: 'ses_b' },
-            time: { start: 1000, end: 8000 },
-          },
+    const parser = createOpencodeParser({ ...ctx, agentKey: 'opencode' })
+    const line = lines({
+      type: 'tool_use',
+      timestamp: 8000,
+      sessionID: 'ses_a',
+      part: {
+        type: 'tool',
+        tool: 'subagent',
+        id: 'call_1',
+        state: {
+          status: 'completed',
+          input: { agent: 'general', description: 'Count exported functions', prompt: 'Read src/model/paths.js and src/model/commands.js' },
+          metadata: { sessionID: 'ses_b' },
+          time: { start: 1000, end: 8000 },
         },
-      }),
-      8000
-    )
+      },
+    })
+    const out = parser.push(line, 8000)
     expect(summary(out)).toEqual(['start subagent: Count exported functions', 'end true'])
+    expect(unreadableLines('opencode', line)).toEqual([])
     expect(out[0].tool).toBe('other')
     expect(out[0].touches).toEqual([])
     expect(out[0].time).toBe(7700)
     expect(out[1]).toMatchObject({ type: 'tool.end', id: 'call_1', ok: true, time: 8000 })
+    expect(out.filter((a) => a.type === 'agent.spawn')).toEqual([
+      {
+        time: 8000,
+        type: 'agent.spawn',
+        agent: 'opencode',
+        child: 'opencode~1',
+        name: 'Count exported functions',
+        label: 'subagent: Count exported functions',
+      },
+    ])
+    expect(out.filter((a) => a.type === 'agent.end')).toEqual([{ time: 8000, type: 'agent.end', agent: 'opencode~1', ok: true }])
   })
 
   it('fails a subagent call whose status is error', () => {

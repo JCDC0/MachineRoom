@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.182. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.183. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 ## What it shows
 
@@ -150,6 +150,10 @@ Every activity has `time` (ms since epoch), `agent` (key), `runId` and `order`.
 | `tool.start` | `id`, `tool` (read, write, edit, shell, search, other), `label`, `touches` |
 | `tool.end` | `id`, `ok` |
 | `error` | `text` |
+| `agent.spawn` | `child` (the parent key, `~` and a number from 1 within the parent's run), `name` (at most 40 characters), `label`; `agent` is the parent |
+| `agent.end` | `ok`; `agent` is the child |
+
+The OpenCode and Hermes parsers emit `agent.spawn` and then `agent.end` at the time of a `subagent` or `delegate` line, since those harnesses report a child only when it has finished, and keep the `other` tool call for the same line. `state.js` adds a child to the roster with `parent` and `depth` (at most 3), and the parent's `run.end` ends its children still working. The engine draws only the agents it was built with, so a child shows only in the HUD list until S2d.
 
 A touch is `{path, mode, kind}`. `kind` is `file` or `dir`. `mode` is `read`, `write` or `list`. `path` is relative to the project root, and `''` is the root.
 

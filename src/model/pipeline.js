@@ -64,7 +64,7 @@ export function createPipeline({ agents, tree }) {
     const out = []
 
     function emit(activity) {
-      out.push({ ...activity, agent: agent.key, runId, order: (order += 1) })
+      out.push({ ...activity, agent: activity.agent ?? agent.key, runId, order: (order += 1) })
     }
 
     if (frame.type === 'heartbeat.run.queued') {
@@ -94,7 +94,7 @@ export function createPipeline({ agents, tree }) {
       if (ended.has(runId)) return []
       let entry = parsers.get(runId)
       if (!entry) {
-        entry = { parser: createParser(agent, ctx), agent, runId }
+        entry = { parser: createParser(agent, { ...ctx, agentKey: agent.key }), agent, runId }
         parsers.set(runId, entry)
       }
       const chunkTime = Date.parse(payload.ts ?? frame.createdAt)
@@ -114,7 +114,7 @@ export function createPipeline({ agents, tree }) {
     for (const [runId, entry] of parsers) {
       const time = lastRunTime.get(runId) ?? lastTime
       entry.parser.flush(time).forEach((activity) => {
-        out.push({ ...activity, agent: entry.agent.key, runId, order: (order += 1) })
+        out.push({ ...activity, agent: activity.agent ?? entry.agent.key, runId, order: (order += 1) })
       })
     }
     parsers.clear()
