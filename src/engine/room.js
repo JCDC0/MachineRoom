@@ -38,6 +38,46 @@ function workingMask(state) {
   return { dimmed: touched, lit, targeted }
 }
 
+export function touchedPath(state) {
+  let best = null
+  let bestIndex = -1
+  for (const agent of state.agents.values()) {
+    if (agent.status !== 'working') continue
+    for (const path of agent.focus ?? []) {
+      const index = state.recent ? state.recent.lastIndexOf(path) : -1
+      if (best === null || index >= bestIndex) {
+        best = state.files.has(path) ? dirname(path) : path
+        bestIndex = index
+      }
+    }
+  }
+  return best
+}
+
+export function followAfterSeek(state, following) {
+  return { followCard: null, pendingFollow: null, path: following ? touchedPath(state) : null }
+}
+
+export function cardClickEndsFollow(target) {
+  return Boolean(target?.closest?.('.mr-card-head, .mr-item'))
+}
+
+export function createLater(delay = 250) {
+  const pending = new Set()
+  function later(fn) {
+    const timer = setTimeout(() => {
+      pending.delete(timer)
+      fn()
+    }, delay)
+    pending.add(timer)
+  }
+  function clear() {
+    pending.forEach((timer) => clearTimeout(timer))
+    pending.clear()
+  }
+  return { later, clear }
+}
+
 export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
   const texture = glowTexture()
   const scene = new THREE.Scene()
@@ -143,15 +183,32 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     raycaster.setFromCamera(pointer, camera)
     const hit = raycaster.intersectObjects(agentSet.pickables, false)[0]
     if (hit) onPick(hit.object.userData.key)
+    else endFollow()
   })
 
+  function onCardClick(event) {
+    if (cardClickEndsFollow(event.target)) endFollow()
+  }
+  cssRenderer.domElement.addEventListener('click', onCardClick, true)
+
   function sync(state) {
+    timers.clear()
     labels.clear()
     pulses.forEach((pulse) => {
       pulse.active = false
       pulse.sprite.material.opacity = 0
     })
     cards.sync(state)
+    const follow = followAfterSeek(state, following)
+    followCard = follow.followCard
+    pendingFollow = follow.pendingFollow
+    if (following) {
+      if (follow.path !== null && followCardPath(follow.path, following)) {
+        followCard = { path: follow.path, at: performance.now() }
+      } else {
+        rig.stopFollow()
+      }
+    }
     relink()
     refit()
     agentSet.snap(state, world)
@@ -160,6 +217,16 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   let following = false
   let followCard = null
   let pendingFollow = null
+  const timers = createLater()
+
+  function endFollow() {
+    if (!following) return
+    following = false
+    followCard = null
+    pendingFollow = null
+    rig.stopFollow()
+    onPick(null)
+  }
 
   function focusAgent(key, style = 'wide') {
     const view = agentSet.views.get(key)
@@ -179,22 +246,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (file) return dirname(file.path)
     const dir = touches.find((touch) => touch.kind === 'dir')
     return dir ? dir.path : null
-  }
-
-  function currentTouched(state) {
-    let best = null
-    let bestIndex = -1
-    for (const agent of state.agents.values()) {
-      if (agent.status !== 'working') continue
-      for (const path of agent.focus ?? []) {
-        const index = state.recent ? state.recent.lastIndexOf(path) : -1
-        if (best === null || index >= bestIndex) {
-          best = state.files.has(path) ? dirname(path) : path
-          bestIndex = index
-        }
-      }
-    }
-    return best
   }
 
   function followCardPath(path, style) {
@@ -373,12 +424,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const state = getState()
     const isFile = state.files.has(path)
     if (!isFile && path !== '' && !state.dirs.has(path)) return false
+    endFollow()
     const dir = isFile ? dirname(path) : path
     focused = null
     cards.pin(dir)
     if (isFile) {
       cards.flashFile(dir, path, 'white')
-      later(() => {
+      timers.later(() => {
         cards.slotPosition(dir, path, scratch)
         labels.show(basename(path), scratch, '#ffffff')
       })
@@ -395,16 +447,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       0.25
     )
     return true
-  }
-
-  const pending = new Set()
-
-  function later(fn) {
-    const timer = setTimeout(() => {
-      pending.delete(timer)
-      fn()
-    }, 250)
-    pending.add(timer)
   }
 
   return {
@@ -430,7 +472,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       pendingFollow = null
       rig.stopFollow()
       if (!mode) return
-      const path = currentTouched(getState())
+      const path = touchedPath(getState())
       if (path === null) return
       if (followCardPath(path, mode)) followCard = { path, at: performance.now() }
     },
@@ -450,8 +492,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     },
     dispose() {
       cancelAnimationFrame(frameId)
-      pending.forEach((timer) => clearTimeout(timer))
-      pending.clear()
+      timers.clear()
       observer.disconnect()
       rig.dispose()
       agentSet.dispose()
@@ -467,6 +508,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         pulse.sprite.material.dispose()
       }
       texture.dispose()
+      cssRenderer.domElement.removeEventListener('click', onCardClick, true)
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored)
       renderer.dispose()

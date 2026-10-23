@@ -62,6 +62,10 @@ export const SHORTCUTS = [
   ['?', 'Toggle keyboard help'],
 ]
 
+export function hudKeyBlocked(target) {
+  return Boolean(target?.closest?.('input, textarea, select, [role="dialog"]'))
+}
+
 function formatTime(ms) {
   if (ms == null) return ''
   if (typeof ms === 'string') return ms
@@ -147,7 +151,7 @@ export default function Hud({
         setSettingsOpen(false)
         return
       }
-      if (event.target?.closest?.('input, textarea, select')) return
+      if (hudKeyBlocked(event.target)) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key === 'l' || event.key === 'L') {
         event.preventDefault()

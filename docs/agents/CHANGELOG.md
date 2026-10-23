@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Review note on Q3c: no fixes. A seek clears the follow timers, the pending card and the held card and aims again from the newest touch; ending follow (a click on empty space, a card head or a row, `focusPath`) tells Stage through `onPick(null)`, which clears the badge (`focus(null)` returns early); the HUD keys skip inputs, selects and dialogs. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 116 files, 2152 tests, in parallel on the first try.
 - The owner chose to keep an agent's focus on its last file during a tool call that names no file (audit finding V3); `ARCHITECTURE.md` says so under Known limits.
 - Review note on G3g: no fixes. Two lines changed, each with the code that proves it (the obstacle gap is the half diagonal plus the radius plus 60, and the layout numbers are measured again on the sphere, dated 2026-10-23); the brief's other examples were already right or fixed by Q3, and the lane said so rather than rewriting true lines. V21 will change the sphere's numbers again.
 - Review note on Q3a: no fixes. V1 (the depth mesh starts at its card's place, so the root's no longer sits at the hub centre), V2 (a seek clears each row's cached file and counts) and V10 (the row loop is skipped while the newest activity, the mask, the flashes, the fades, the dimming and a row revision are unchanged) are fixed, with tests that a flash, its end, a fade and a new activity each still repaint. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 114 files, 2137 tests, in parallel on the first try.
@@ -12,6 +13,7 @@
 - Every terminal chip, including one made later, gets the room's pick handler (task Q3b, V9).
 - Each agent's link line and callout line are written only when an end moved (task Q3b, V11).
 - The depth mesh of a card starts at the card's position, rows drop the old state's file after a seek, and a paused replay skips the row loop when nothing changed (task Q3a).
+- Follow mode resets on a seek and ends on a card head, a card row or empty space, a seek drops the label timers `focusPath` set, and the HUD keys ignore a target inside a dialog (task Q3c).
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
 - Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Bring the room lines of `ARCHITECTURE.md` up to date for the sphere layout: the warm and cold layout times, 222 cards, 0 overlapping layouts, a 12,819 unit tallest layout, 0 moves over 150 units and a 33 unit worst move from `npm run scale-probe` on 2026-10-23, the frame times marked as measured before the redesign, and the obstacle clearance.
