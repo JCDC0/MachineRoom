@@ -1,16 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import * as THREE from 'three'
-import {
-  BOARD_HEIGHT,
-  BOARD_SCALE,
-  BOARD_WIDTH,
-  BOARD_Y,
-  boardBox,
-  boardLines,
-  createCostBoard,
-} from '../src/engine/board.js'
-import { OVERVIEW, viewBasis } from '../src/engine/camera.js'
-import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
+import { boardLines, boardVisible, createCostBoard } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
 import { createMockClient } from '../src/control/mock.js'
 import { toAgents } from '../src/live/source.js'
@@ -278,13 +267,15 @@ describe('boardLines', () => {
 })
 
 describe('createCostBoard', () => {
-  it('adds one object, updates rows, handles pick, and removes on dispose', async () => {
-    const scene = new THREE.Scene()
+  it('adds its element to the container, updates rows, handles pick, and removes on dispose', async () => {
+    const container = document.createElement('div')
     const onPick = vi.fn()
-    const board = createCostBoard(scene, { onPick })
+    const board = createCostBoard(container, { onPick })
 
-    expect(scene.children).toHaveLength(1)
-    expect(scene.children[0]).toBe(board.object)
+    expect(container.children).toHaveLength(1)
+    expect(container.children[0]).toBe(board.element)
+    expect(board.element.className).toBe('mr-board')
+    expect(board.object).toBeUndefined()
 
     const client = createMockClient()
     const [agentsRaw, costsRaw] = await Promise.all([client.agents(), client.costs()])
@@ -293,10 +284,10 @@ describe('createCostBoard', () => {
 
     board.update(boardData)
 
-    const rows = board.object.element.querySelectorAll('.mr-board-row')
+    const rows = board.element.querySelectorAll('.mr-board-row')
     expect(rows).toHaveLength(5)
 
-    const quotas = board.object.element.querySelectorAll('.mr-board-quota')
+    const quotas = board.element.querySelectorAll('.mr-board-quota')
     expect(quotas).toHaveLength(4)
 
     rows[1].click()
@@ -305,43 +296,19 @@ describe('createCostBoard', () => {
     rows[3].click()
     expect(onPick).toHaveBeenCalledWith('opencode')
 
-    board.setVisible(false)
-    expect(board.object.visible).toBe(false)
-
-    board.setVisible(true)
-    expect(board.object.visible).toBe(true)
-
     board.dispose()
-    expect(scene.children).toHaveLength(0)
-    expect(board.object.element.removed).toBe(true)
+    expect(board.element.removed).toBe(true)
   })
 
-  it('exports the box it fills in the view plane', () => {
-    const scene = new THREE.Scene()
-    const board = createCostBoard(scene)
-    const box = board.box()
-    const scale = board.object.scale.x
+  it('hides below 900 pixels wide and shows at 900', () => {
+    expect(boardVisible(899)).toBe(false)
+    expect(boardVisible(900)).toBe(true)
 
-    expect(scale).toBe(BOARD_SCALE)
-    expect(box).toEqual(boardBox(scale))
-    expect(box.x).toBe(0)
-    expect(box.y).toBe(BOARD_Y)
-    expect(box.y + box.hh).toBeLessThan(-HUB_RADIUS * Math.sin(OVERVIEW.pitch))
-    expect(box.hw).toBeCloseTo((BOARD_WIDTH / 2) * scale)
-    expect(box.hh).toBeCloseTo((BOARD_HEIGHT / 2) * scale)
-
-    const { right, up } = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
-    const at = board.object.position
-    expect(at.x).toBeCloseTo(HUB_CENTER.x + right.x * box.x + up.x * box.y)
-    expect(at.y).toBeCloseTo(HUB_CENTER.y + right.y * box.x + up.y * box.y)
-    expect(at.z).toBeCloseTo(HUB_CENTER.z + right.z * box.x + up.z * box.y)
-
-    const sphere = board.sphere()
-    expect(sphere.x).toBeCloseTo(at.x)
-    expect(sphere.y).toBeCloseTo(at.y)
-    expect(sphere.z).toBeCloseTo(at.z)
-    expect(sphere.r).toBeCloseTo(Math.hypot(box.hw, box.hh))
-
+    const board = createCostBoard(document.createElement('div'))
+    board.setVisible(false)
+    expect(board.element.style.display).toBe('none')
+    board.setVisible(true)
+    expect(board.element.style.display).toBe('')
     board.dispose()
   })
 })

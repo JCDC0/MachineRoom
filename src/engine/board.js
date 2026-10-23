@@ -1,22 +1,9 @@
-import * as THREE from 'three'
-import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { visibleText } from '../model/paths.js'
-import { OVERVIEW, viewBasis } from './camera.js'
-import { HUB_CENTER } from './hub.js'
 
-export const BOARD_WIDTH = 280
-export const BOARD_HEIGHT = 460
-export const BOARD_SCALE = 2.4
-export const BOARD_Y = -700
-const BASIS = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
-const BOARD_AT = new THREE.Vector3(
-  HUB_CENTER.x + BASIS.up.x * BOARD_Y,
-  HUB_CENTER.y + BASIS.up.y * BOARD_Y,
-  HUB_CENTER.z + BASIS.up.z * BOARD_Y
-)
+export const BOARD_MIN_WIDTH = 900
 
-export function boardBox(scale = BOARD_SCALE) {
-  return { x: 0, y: BOARD_Y, hw: (BOARD_WIDTH / 2) * scale, hh: (BOARD_HEIGHT / 2) * scale }
+export function boardVisible(width) {
+  return width >= BOARD_MIN_WIDTH
 }
 
 function formatMoney(cents) {
@@ -118,7 +105,7 @@ export function boardLines(board) {
   }
 }
 
-export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
+export function createCostBoard(container, { onPick = () => {} } = {}) {
   const element = document.createElement('div')
   element.className = 'mr-board'
 
@@ -140,11 +127,7 @@ export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
   emptyEl.textContent = 'Costs not available.'
 
   element.append(title, summaryEl, rowsContainer, quotaContainer, emptyEl)
-
-  const object = new CSS3DObject(element)
-  object.scale.setScalar(BOARD_SCALE)
-  object.position.copy(BOARD_AT)
-  cssScene.add(object)
+  container?.append?.(element)
 
   function update(board) {
     const lines = boardLines(board)
@@ -225,35 +208,17 @@ export function createCostBoard(cssScene, { onPick = () => {} } = {}) {
   }
 
   function setVisible(visible) {
-    object.visible = Boolean(visible)
-  }
-
-  function box() {
-    return boardBox(object.scale.x)
-  }
-
-  function sphere() {
-    const b = box()
-    return { x: object.position.x, y: object.position.y, z: object.position.z, r: Math.hypot(b.hw, b.hh) }
-  }
-
-  function obstacle() {
-    const b = box()
-    return { x: object.position.x, y: object.position.y, z: object.position.z, radius: Math.hypot(b.hw, b.hh) }
+    element.style.display = visible ? '' : 'none'
   }
 
   function dispose() {
-    cssScene.remove(object)
     element.remove()
   }
 
   update(null)
 
   return {
-    object,
-    box,
-    sphere,
-    obstacle,
+    element,
     update,
     setVisible,
     dispose,

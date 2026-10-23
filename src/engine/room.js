@@ -4,7 +4,7 @@ import { basename, dirname } from '../model/paths.js'
 import { createAgents } from './agents.js'
 import { FOV, createCameraRig, fitView, followTarget } from './camera.js'
 import { createCards } from './cards.js'
-import { createCostBoard } from './board.js'
+import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createLabels } from './labels.js'
 import { GREEN, RED, WHITE, glowTexture, still } from './sprites.js'
@@ -62,11 +62,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
   const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster)
-  const board = createCostBoard(cssScene, { onPick })
-  let boardShown = width >= 900
-  let boardHasData = false
-  const boardActive = () => boardShown && boardHasData
-  const boardObstacles = () => (boardActive() ? [board.obstacle()] : [])
+  const board = createCostBoard(surface, { onPick })
+  let boardShown = boardVisible(width)
   board.setVisible(boardShown)
   const labels = createLabels(scene)
 
@@ -76,7 +73,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     rootName,
     onInspect: (path) => focusPath(path),
     alwaysDepth: 2,
-    obstacles: boardObstacles(),
   })
   let linkKey = ''
   let fitted = null
@@ -105,7 +101,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function refit(force = false) {
     const spheres = [HUB_SPHERE, ...cards.overviewSpheres()]
-    if (boardActive()) spheres.push(board.sphere())
     const next = fitView(spheres, { aspect: width / height })
     if (!force && fitted) {
       const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
@@ -294,11 +289,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
-    const shown = width >= 900
+    const shown = boardVisible(width)
     if (shown !== boardShown) {
       boardShown = shown
       board.setVisible(shown)
-      cards.setObstacles(boardObstacles())
     }
     refit(true)
   }
@@ -357,7 +351,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
     rig.update(delta)
     terminals.update(state, now, camera, focused, anchorOf, delta, chipSideOf)
-    board.object.quaternion.copy(camera.quaternion)
     renderer.render(scene, camera)
     cssRenderer.render(cssScene, camera)
   }
@@ -448,12 +441,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     following: () => following,
     focused: () => focused,
     setCosts(costBoardData) {
-      const hasData = costBoardData != null
-      if (hasData !== boardHasData) {
-        boardHasData = hasData
-        cards.setObstacles(boardObstacles())
-        refit()
-      }
       board.update(costBoardData)
     },
     setOptions(options = {}) {

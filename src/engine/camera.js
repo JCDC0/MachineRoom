@@ -124,7 +124,7 @@ export function createCameraRig(camera, surface) {
   }
 
   function down(event) {
-    if (event.target.closest('.hud, .mr-term, .mr-card')) return
+    if (event.target.closest('.hud, .mr-term, .mr-card, .mr-board')) return
     drag.active = true
     drag.moved = 0
     drag.x = event.clientX
@@ -150,7 +150,7 @@ export function createCameraRig(camera, surface) {
   }
 
   function wheel(event) {
-    if (event.target.closest('.hud')) return
+    if (event.target.closest('.hud, .mr-board')) return
     adjusted = true
     goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(event.deltaY * 0.001), MIN_DIST, MAX_DIST)
   }
