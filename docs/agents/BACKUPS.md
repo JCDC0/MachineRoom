@@ -127,7 +127,7 @@ Step by step, as far as the code shows:
 
 ## 6. What MachineRoom can use
 
-- Back up now: `POST /api/instance/database-backups` with no body, from the bridge. It needs `local_trusted` mode or a board API key of an instance admin, and it answers 201 with `backupFile`, `sizeBytes`, `prunedCount` and the times. A second call during a run answers 409.
-- Backup age: `GET /api/health`, `databaseBackup.latestBackup.mtime` and `ageHours`, plus `databaseBackup.status` and the warning codes. In `local_trusted` mode these fields are always there. In `authenticated` mode the caller must be a board actor, or the block is redacted.
+- Back up now: `POST /api/instance/database-backups` with no body, from the bridge. The bridge sends no token, so this works only in `local_trusted` mode; in `authenticated` mode Paperclip refuses it. It answers `201` with `backupFile`, `sizeBytes`, `prunedCount` and the times. A second call during a run answers `409`.
+- Backup age: `GET /api/health`, `databaseBackup.latestBackup.mtime` and `ageHours`, plus `databaseBackup.status` and the warning codes. In `local_trusted` mode these fields are always there. In `authenticated` mode the caller must be a board actor, or the block is redacted; the bridge is not a board actor, so it gets the redacted block.
 - Both routes must be listed in `server/surface.js` before the bridge calls them, so `npm run doctor` compares them with the running Paperclip's spec.
 - Nothing in the code gives a list of backup files. The newest file is the only one the health answer names, and a restore has no route at all, so the viewer can show the age and offer a backup, but not offer a restore.
