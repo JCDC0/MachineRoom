@@ -16,7 +16,9 @@ import { store } from './storage.js'
 import Hud from './ui/Hud.jsx'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
-import { loadSettings, saveSettings } from './ui/settings.js'
+import { loadEffectSettings, loadSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
+import { setFineDust } from './engine/void.js'
+import { barrelDataUri } from './ui/barrel.js'
 import Waiting from './ui/Waiting.jsx'
 
 const SPEEDS = [1, 2, 4, 8]
@@ -61,6 +63,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
+  const [effects, setEffects] = useState(() => loadEffectSettings(store()))
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const targetCount = useRef(0)
@@ -69,6 +72,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const framesRef = useRef([])
   const lastFrameRef = useRef(0)
   const [fpsStats, setFpsStats] = useState(() => (fps ? { median: 0, p95: 0 } : null))
+
+  function handleSettingsChange(next) {
+    const normalized = saveEffectSettings(store(), next)
+    setEffects(normalized)
+    setFineDust(normalized.dust)
+    roomRef.current?.setOptions({ alwaysDepth: normalized.alwaysDepth })
+  }
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
   const assistantPaths = useMemo(
@@ -116,6 +126,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       },
     })
     roomRef.current = room
+    room.setOptions({ alwaysDepth: effects.alwaysDepth })
+    setFineDust(effects.dust)
     if (latestBoardRef.current) {
       room.setCosts(latestBoardRef.current)
     }
@@ -137,6 +149,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       roomRef.current = null
     }
   }, [data, player])
+
+  useEffect(() => {
+    setFineDust(effects.dust)
+    roomRef.current?.setOptions({ alwaysDepth: effects.alwaysDepth })
+  }, [effects.alwaysDepth, effects.dust])
 
   useEffect(() => {
     if (!fps) return undefined
@@ -264,7 +281,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     function onKey(event) {
-      if (event.target.closest('input, textarea')) return
+      if (event.target.closest('input, textarea, [role="dialog"]')) return
+      if (event.target.closest('button') && (event.code === 'Space' || event.key === 'Enter')) return
       const room = roomRef.current
       if (event.code === 'Space') {
         event.preventDefault()
@@ -388,10 +406,91 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const linkTrouble = ['connecting', 'reconnecting', 'disconnected'].includes(snapshot.status)
   const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
 
+  const fishEyeOn = Boolean(effects.fishEye?.on && effects.fishEye?.strength > 0)
+  const barrelMap = useMemo(() => (fishEyeOn ? barrelDataUri() : ''), [fishEyeOn])
+  const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
+  const hasFilter = fishEyeOn || chromaOn
+  const chromaDx = chromaOn ? Number((effects.aberration.strength * 6).toFixed(2)) : 0
+  const fishEyeScale = fishEyeOn ? Number((effects.fishEye.strength * 240).toFixed(2)) : 0
+
   return (
     <div className="surface" ref={surfaceRef}>
-      <div className="layer" ref={cssRef} aria-hidden="true" />
-      <div className="layer is-over" ref={glRef} aria-hidden="true" />
+      <div
+        className="surface-layers"
+        style={hasFilter ? { filter: 'url(#mr-screen-filter)' } : undefined}
+      >
+        <div className="layer" ref={cssRef} aria-hidden="true" />
+        <div className="layer is-over" ref={glRef} aria-hidden="true" />
+      </div>
+      <div className="screen-effects-overlay" aria-hidden="true">
+        <div
+          className="screen-vignette"
+          style={{ opacity: effects.vignette?.on ? effects.vignette.strength : 0 }}
+        />
+        <div
+          className="screen-grain"
+          style={{ opacity: effects.grain?.on ? effects.grain.strength * 0.25 : 0 }}
+        />
+      </div>
+      {hasFilter && (
+        <svg
+          className="screen-filter-defs"
+          aria-hidden="true"
+          style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none', overflow: 'hidden' }}
+        >
+          <defs>
+            <filter id="mr-screen-filter" x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
+              {fishEyeOn && (
+                <feImage
+                  href={barrelMap}
+                  x="0%"
+                  y="0%"
+                  width="100%"
+                  height="100%"
+                  preserveAspectRatio="none"
+                  result="barrel"
+                />
+              )}
+              {chromaOn && (
+                <>
+                  <feColorMatrix
+                    in="SourceGraphic"
+                    type="matrix"
+                    result="red"
+                    values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                  />
+                  <feOffset in="red" dx={chromaDx} dy="0" result="redShift" />
+                  <feColorMatrix
+                    in="SourceGraphic"
+                    type="matrix"
+                    result="green"
+                    values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                  />
+                  <feColorMatrix
+                    in="SourceGraphic"
+                    type="matrix"
+                    result="blue"
+                    values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
+                  />
+                  <feOffset in="blue" dx={-chromaDx} dy="0" result="blueShift" />
+                  <feBlend in="redShift" in2="green" mode="screen" result="rg" />
+                  <feBlend in="rg" in2="blueShift" mode="screen" result="chroma" />
+                </>
+              )}
+              {fishEyeOn && (
+                <feDisplacementMap
+                  in={chromaOn ? 'chroma' : 'SourceGraphic'}
+                  in2="barrel"
+                  scale={fishEyeScale}
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                  result="filtered"
+                />
+              )}
+            </filter>
+          </defs>
+        </svg>
+      )}
       {live && (
         <div style={{ ...BADGE, color: snapshot.status === 'live' ? 'var(--yellow)' : 'var(--red)' }} role="status">
           {live.simulated ? 'Demo' : 'Live'} // {snapshot.status === 'live' ? 'connected' : snapshot.status}
@@ -432,6 +531,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         onToggleTerminal={toggleTerminal}
         onShowTerminals={showTerminals}
         health={health}
+        effects={effects}
+        onSettingsChange={handleSettingsChange}
       />
     </div>
   )

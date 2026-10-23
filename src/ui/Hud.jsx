@@ -3,6 +3,7 @@ import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import Assistant from './Assistant.jsx'
+import Settings from './Settings.jsx'
 import { healthNotice } from './healthNotice.js'
 import {
   areAllTerminalsOpen,
@@ -99,8 +100,11 @@ export default function Hud({
   helpOpen: controlledHelpOpen,
   initialHelpOpen = false,
   assistantOpen = false,
+  effects = null,
+  onSettingsChange = () => {},
 }) {
   const [logOpen, setLogOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [internalHelpOpen, setHelpOpen] = useState(
     () => Boolean(initialHelpOpen || controlledHelpOpen)
@@ -137,6 +141,12 @@ export default function Hud({
 
   useEffect(() => {
     function onKey(event) {
+      if (event.key === 'Escape') {
+        setHelpOpen(false)
+        setHealthOpen(false)
+        setSettingsOpen(false)
+        return
+      }
       if (event.target?.closest?.('input, textarea, select')) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key === 'l' || event.key === 'L') {
@@ -156,9 +166,6 @@ export default function Hud({
       } else if (event.key === '?') {
         event.preventDefault()
         setHelpOpen((open) => !open)
-      } else if (event.key === 'Escape') {
-        setHelpOpen(false)
-        setHealthOpen(false)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -281,6 +288,17 @@ export default function Hud({
           >
             <span>Log</span>
             <span className="agent-key mono">L</span>
+          </button>
+          <button
+            type="button"
+            className="hud-action"
+            aria-pressed={settingsOpen}
+            aria-expanded={settingsOpen}
+            aria-controls="hud-settings-dialog"
+            aria-label="Settings"
+            onClick={() => setSettingsOpen((open) => !open)}
+          >
+            <span>Settings</span>
           </button>
           <button
             type="button"
@@ -422,6 +440,14 @@ export default function Hud({
             </ol>
           </section>
         </div>
+      )}
+
+      {settingsOpen && (
+        <Settings
+          effects={effects}
+          onChange={onSettingsChange}
+          onClose={() => setSettingsOpen(false)}
+        />
       )}
 
       <Assistant
