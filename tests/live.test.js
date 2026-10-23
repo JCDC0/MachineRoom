@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { treeFromState } from '../src/engine/layout.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
 import { discover, openStream, parserFor, rootNameOf, socketUrl, toAgents } from '../src/live/source.js'
 import { makeTree } from '../src/model/paths.js'
 import { SEEN_LIMIT, buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
-import { createState } from '../src/model/state.js'
 import { loadRecording } from './helpers.js'
 
 const recording = loadRecording()
@@ -472,12 +470,5 @@ describe('live player', () => {
     player.pause()
     player.seek(0)
     expect(player.playing).toBe(true)
-  })
-})
-
-describe('treeFromState', () => {
-  it('lists the files and folders the state knows, sorted', () => {
-    const state = createState(makeTree({ root: 'r', files: ['b.js', 'a/c.js'], created: [] }), recording.agents)
-    expect(treeFromState(state, 'r')).toEqual({ rootName: 'r', files: ['a/c.js', 'b.js'], dirs: ['', 'a'], created: [] })
   })
 })

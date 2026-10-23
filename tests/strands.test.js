@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { curvePoint, strandPoints } from '../src/engine/strings.js'
+import { strandPoints } from '../src/engine/strings.js'
 
 describe('strandPoints', () => {
   const a = new THREE.Vector3(0, 0, 0)
@@ -49,7 +49,7 @@ describe('strandPoints', () => {
   it('accepts object with getPoint and getLength', () => {
     const custom = {
       getLength: () => 240,
-      getPoint: (t, out) => curvePoint(a, b, t, out),
+      getPoint: (t, out) => out.lerpVectors(a, b, t),
     }
     const pts = strandPoints(custom, 24, 7)
     expect(pts.length).toBe(10)
@@ -62,7 +62,7 @@ describe('strandPoints', () => {
     expect(strandPoints(curve, -10, 0)).toEqual([])
   })
 
-  it('places points along the curve near the sag line', () => {
+  it('places points along the straight line within the scatter', () => {
     const pts = strandPoints(curve, 24, 5)
     expect(pts.length).toBe(10)
     pts.forEach((pt) => {

@@ -3,19 +3,11 @@ import { SPHERE_CENTER } from './sphere.js'
 import { WHITE, YELLOW, glowTexture, reducedMotion, seeded } from './sprites.js'
 
 const SEGMENTS = 16
-const SAG = 0.12
-const SAG_MAX = 520
 const LINE_LEVEL = 0.22
 const DIM_FACTOR = 0.25
 
 const COLOR_WHITE = new THREE.Color(WHITE)
 const COLOR_YELLOW = new THREE.Color(YELLOW)
-
-export function curvePoint(a, b, t, out) {
-  out.lerpVectors(a, b, t)
-  out.y -= Math.min(SAG_MAX, a.distanceTo(b) * SAG) * 4 * t * (1 - t)
-  return out
-}
 
 const scratchPt = new THREE.Vector3()
 
