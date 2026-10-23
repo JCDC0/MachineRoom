@@ -3,6 +3,8 @@ import { ancestors, dirname, normalise } from './paths.js'
 const DEFAULT_MAX_FOLDERS = 3
 const DEFAULT_MAX_ITEMS = 10
 const DEFAULT_BACK_LAYERS = 3
+const DEFAULT_MAX_ALWAYS = 300
+const MAX_ALWAYS_DEPTH = 3
 
 function clean(raw) {
   if (typeof raw === 'string' && raw !== '.' && !raw.includes('\\') && !raw.includes('//') && !raw.startsWith('./') && !raw.endsWith('/')) return raw
@@ -48,6 +50,10 @@ function addFile(index, raw) {
   index.fileSet.add(path)
   const parent = parentOf(path)
   addFolder(parent, (at) => index.folders.has(at), (at) => index.folders.add(at), index.children)
+  for (let at = parent; ; at = parentOf(at)) {
+    index.fileCount.set(at, (index.fileCount.get(at) ?? 0) + 1)
+    if (at === '') break
+  }
   const list = index.filesIn.get(parent)
   if (list) list.push(path)
   else index.filesIn.set(parent, [path])
@@ -72,10 +78,53 @@ let lastIndex = null
 
 function indexFiles(files) {
   if (lastIndex && extendIndex(lastIndex, files)) return lastIndex
-  const index = { source: [...files], fileSet: new Set(), folders: new Set(['']), filesIn: new Map(), children: new Map() }
+  const index = {
+    source: [...files],
+    fileSet: new Set(),
+    folders: new Set(['']),
+    filesIn: new Map(),
+    children: new Map(),
+    fileCount: new Map([['', 0]]),
+  }
   files.forEach((raw) => addFile(index, raw))
   lastIndex = index
   return index
+}
+
+function depthOf(raw) {
+  const number = Number(raw)
+  if (!Number.isFinite(number) || number < 0) return 0
+  return Math.min(MAX_ALWAYS_DEPTH, Math.floor(number))
+}
+
+function alwaysPlan(index, depth, maxAlways) {
+  const pinned = new Set()
+  const dropped = new Map()
+  if (depth < 1 || maxAlways < 1) return { pinned, dropped }
+  let budget = maxAlways - 1
+  pinned.add('')
+  let frontier = ['']
+  for (let level = 1; level <= depth && frontier.length > 0; level += 1) {
+    frontier.sort(byName)
+    const next = []
+    for (const parent of frontier) {
+      const children = [...(index.children.get(parent) ?? [])].sort(
+        (a, b) => (index.fileCount.get(b) ?? 0) - (index.fileCount.get(a) ?? 0) || byName(a, b),
+      )
+      let kept = 0
+      for (const child of children) {
+        if (budget <= 0) break
+        pinned.add(child)
+        next.push(child)
+        budget -= 1
+        kept += 1
+      }
+      const rest = children.length - kept
+      if (rest > 0) dropped.set(parent, (dropped.get(parent) ?? 0) + rest)
+    }
+    frontier = next
+  }
+  return { pinned, dropped }
 }
 
 export function planFolderView({
@@ -85,12 +134,17 @@ export function planFolderView({
   maxFolders = DEFAULT_MAX_FOLDERS,
   maxItems = DEFAULT_MAX_ITEMS,
   backLayers = DEFAULT_BACK_LAYERS,
+  alwaysDepth = 0,
+  maxAlways = DEFAULT_MAX_ALWAYS,
 } = {}) {
   const folderLimit = count(maxFolders)
   const itemLimit = count(maxItems)
   const layerLimit = count(backLayers)
+  const alwaysLevel = depthOf(alwaysDepth)
+  const alwaysLimit = count(maxAlways)
 
-  const { fileSet, folders, filesIn, children: fileChildren } = indexFiles(files)
+  const index = indexFiles(files)
+  const { fileSet, folders, filesIn, children: fileChildren } = index
   const extraFolders = new Set()
   const extraChildren = new Map()
   const isFolder = (path) => folders.has(path) || extraFolders.has(path)
@@ -151,6 +205,8 @@ export function planFolderView({
 
   const drawn = new Set([''])
   focusFolders.forEach((path) => drawn.add(path))
+  const always = alwaysPlan(index, alwaysLevel, alwaysLimit)
+  always.pinned.forEach((path) => drawn.add(path))
 
   const shownFolders = new Map()
   focusFolders.forEach((path) => {
@@ -160,6 +216,7 @@ export function planFolderView({
   })
 
   return [...drawn].sort(byName).map((path) => {
+    const isPinned = always.pinned.has(path)
     if (fileFolders.has(path)) {
       const all = itemsFor(path)
       const items = []
@@ -172,7 +229,7 @@ export function planFolderView({
         }
         items.push(item)
       })
-      return {
+      const view = {
         path,
         state: 'files',
         folders: [],
@@ -181,12 +238,14 @@ export function planFolderView({
         items,
         hiddenItems: all.length - items.length,
       }
+      if (isPinned) view.pinned = true
+      return view
     }
 
     if (focusFolders.has(path)) {
       const shown = shownFolders.get(path) ?? []
       const hiddenFolders = children.get(path).length - shown.length
-      return {
+      const view = {
         path,
         state: 'open',
         folders: shown,
@@ -195,8 +254,21 @@ export function planFolderView({
         items: [],
         hiddenItems: 0,
       }
+      if (isPinned) view.pinned = true
+      return view
     }
 
-    return { path, state: 'closed', folders: [], back: 0, hiddenFolders: 0, items: [], hiddenItems: 0 }
+    const dropped = isPinned ? (always.dropped.get(path) ?? 0) : 0
+    const view = {
+      path,
+      state: 'closed',
+      folders: [],
+      back: Math.min(dropped, layerLimit),
+      hiddenFolders: dropped,
+      items: [],
+      hiddenItems: 0,
+    }
+    if (isPinned) view.pinned = true
+    return view
   })
 }

@@ -1,5 +1,21 @@
+import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
+import { viewInput } from '../src/engine/cards.js'
 import { planFolderView } from '../src/model/folderView.js'
+import { apply, createState } from '../src/model/state.js'
+import { loadRecording, loadScenario } from './helpers.js'
+
+const PLAN_DIGESTS = {
+  sandbox: 'ae5d30b00ecdf96d',
+  'scenario-a': '4b3e72323954daeb',
+  'scenario-b': 'f1ab1b3c433a6af9',
+  'scenario-c': 'ecb910f0c9df6809',
+  'scenario-d': '176cd9d806d2e88a',
+}
+
+function digest(value) {
+  return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16)
+}
 
 function byPath(plan) {
   return new Map(plan.map((entry) => [entry.path, entry]))
@@ -164,6 +180,160 @@ describe('planFolderView', () => {
       files: [...files].reverse(),
       focus: [...focus].reverse(),
       touched: [...touched].reverse(),
+    })
+
+    expect(second).toEqual(first)
+  })
+
+  it('keeps the plans recorded on main at depth 0', () => {
+    const fixtures = [
+      ['sandbox', loadRecording()],
+      ['scenario-a', loadScenario('scenario-a')],
+      ['scenario-b', loadScenario('scenario-b')],
+      ['scenario-c', loadScenario('scenario-c')],
+      ['scenario-d', loadScenario('scenario-d')],
+    ]
+    for (const [name, { agents, tree, activities }] of fixtures) {
+      const state = createState(tree, agents)
+      const plans = []
+      for (const activity of activities) {
+        apply(state, activity)
+        plans.push(planFolderView({ ...viewInput(state, []), alwaysDepth: 0 }))
+      }
+      expect(digest(plans)).toBe(PLAN_DIGESTS[name])
+    }
+  })
+
+  it('draws every folder down to the depth, closed and pinned', () => {
+    const files = [
+      'README.md',
+      'docs/notes.md',
+      'src/model/state.js',
+      'src/model/parsers/common.js',
+      'src/engine/room.js',
+      'tests/a.test.js',
+    ]
+    const expected = {
+      1: ['', 'docs', 'src', 'tests'],
+      2: ['', 'docs', 'src', 'src/engine', 'src/model', 'tests'],
+      3: ['', 'docs', 'src', 'src/engine', 'src/model', 'src/model/parsers', 'tests'],
+    }
+
+    for (const depth of [1, 2, 3]) {
+      const plan = planFolderView({ files, alwaysDepth: depth })
+      expect(paths(plan)).toEqual(expected[depth])
+      for (const view of plan) {
+        expect(view.state).toBe('closed')
+        expect(view.pinned).toBe(true)
+        expect(view.back).toBe(0)
+        expect(view.hiddenFolders).toBe(0)
+      }
+    }
+  })
+
+  it('caps the always folders at 300 and keeps the rest in back layers', () => {
+    const files = Array.from({ length: 500 }, (_, i) => `big/f${String(i).padStart(3, '0')}/a.js`)
+
+    const plan = planFolderView({ files, alwaysDepth: 2 })
+    const folders = byPath(plan)
+
+    expect(plan).toHaveLength(300)
+    expect(paths(plan)).toEqual(['', 'big', ...Array.from({ length: 298 }, (_, i) => `big/f${String(i).padStart(3, '0')}`)])
+    expect(folders.get('big').state).toBe('closed')
+    expect(folders.get('big').pinned).toBe(true)
+    expect(folders.get('big').hiddenFolders).toBe(202)
+    expect(folders.get('big').back).toBe(3)
+    expect(folders.has('big/f297')).toBe(true)
+    expect(folders.has('big/f298')).toBe(false)
+  })
+
+  it('keeps the children with the most files when the cap cuts a depth', () => {
+    const files = []
+    for (let i = 0; i < 500; i += 1) {
+      const folder = `big/f${String(i).padStart(3, '0')}`
+      files.push(`${folder}/a.js`)
+      if (i === 100) files.push(`${folder}/b.js`, `${folder}/c.js`, `${folder}/d.js`)
+      if (i >= 400 && i <= 404) files.push(`${folder}/b.js`)
+    }
+
+    const plan = planFolderView({ files, alwaysDepth: 2, maxAlways: 10 })
+    const folders = byPath(plan)
+    const kept = paths(plan).filter((path) => path.startsWith('big/f'))
+
+    expect(kept).toEqual(['big/f000', 'big/f001', 'big/f100', 'big/f400', 'big/f401', 'big/f402', 'big/f403', 'big/f404'])
+    expect(folders.get('big').hiddenFolders).toBe(492)
+    expect(folders.get('big').back).toBe(3)
+  })
+
+  it('adds only the deep path an agent touches below the always depth', () => {
+    const files = ['src/model/parsers/common.js', 'src/model/state.js', 'lib/util/tool.js', 'docs/notes.md']
+
+    const base = planFolderView({ files, alwaysDepth: 1 })
+    expect(paths(base)).toEqual(['', 'docs', 'lib', 'src'])
+
+    const plan = planFolderView({ files, alwaysDepth: 1, focus: ['src/model/parsers/common.js'] })
+    const folders = byPath(plan)
+
+    expect(paths(plan)).toEqual(['', 'docs', 'lib', 'src', 'src/model', 'src/model/parsers'])
+    expect(folders.get('lib')).toMatchObject({ state: 'closed', pinned: true })
+    expect(folders.get('src/model/parsers')).toMatchObject({
+      state: 'files',
+      items: [{ path: 'src/model/parsers/common.js', kind: 'file' }],
+    })
+    expect(folders.get('src/model/parsers').pinned).toBeUndefined()
+    expect(folders.get('src/model').pinned).toBeUndefined()
+  })
+
+  it('removes only the folders below the always depth when a recent touch goes stale', () => {
+    const files = ['src/model/parsers/common.js', 'src/model/state.js', 'src/engine/room.js', 'docs/notes.md']
+    const input = { files, alwaysDepth: 2 }
+
+    const fresh = planFolderView({ ...input, focus: ['src/model/parsers/common.js'], touched: ['src/model/parsers/common.js'] })
+    const stale = planFolderView({ ...input, focus: [''], touched: [] })
+    const stalePaths = paths(stale)
+
+    expect(stalePaths).toEqual(['', 'docs', 'src', 'src/engine', 'src/model'])
+    expect(paths(fresh)).toEqual(['', 'docs', 'src', 'src/engine', 'src/model', 'src/model/parsers'])
+    expect(paths(fresh).filter((path) => !stalePaths.includes(path))).toEqual(['src/model/parsers'])
+    expect(stale.every((view) => view.pinned)).toBe(true)
+    expect(fresh.filter((view) => view.pinned).map((view) => view.path)).toEqual(['', 'docs', 'src', 'src/engine', 'src/model'])
+  })
+
+  it('keeps the always plan the same as a fresh call when the file list grows', () => {
+    const base = ['README.md', 'docs/notes.md', 'src/a.js', 'src/model/b.js']
+    const steps = [
+      base,
+      [...base, 'src/model/parsers/c.js'],
+      [...base, 'src/model/parsers/c.js', 'src/engine/d.js', 'tests/e.test.js'],
+    ]
+    planFolderView({ files: [] })
+    const grown = steps.map((files) => planFolderView({ files, alwaysDepth: 3, maxAlways: 6 }))
+
+    for (let i = 0; i < steps.length; i += 1) {
+      planFolderView({ files: [] })
+      expect(grown[i]).toEqual(planFolderView({ files: steps[i], alwaysDepth: 3, maxAlways: 6 }))
+    }
+  })
+
+  it('gives the same always plan whatever the input order', () => {
+    const files = [
+      'src/model/parsers/common.js',
+      'src/model/state.js',
+      'src/engine/room.js',
+      'docs/notes.md',
+      'tests/a.test.js',
+      'lib/util/tool.js',
+    ]
+    const focus = ['src/model/parsers/common.js', 'docs/notes.md']
+    const touched = ['lib/util/tool.js']
+
+    const first = planFolderView({ files, focus, touched, alwaysDepth: 3, maxAlways: 5 })
+    const second = planFolderView({
+      files: [...files].reverse(),
+      focus: [...focus].reverse(),
+      touched: [...touched].reverse(),
+      alwaysDepth: 3,
+      maxAlways: 5,
     })
 
     expect(second).toEqual(first)
