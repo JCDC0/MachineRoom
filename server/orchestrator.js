@@ -133,7 +133,8 @@ function recordLine(record) {
         ? `project ${record.project}`
         : 'briefs none'
   const exit = Number.isInteger(record.exitCode) ? `exit ${record.exitCode}` : 'exit none'
-  const branch = typeof record.branch === 'string' && record.branch ? record.branch : 'no branch'
+  const queue = typeof record.queue === 'string' && record.queue ? record.queue : ''
+  const branch = typeof record.branch === 'string' && record.branch ? record.branch : queue || 'no branch'
   let commits = 'none'
   if (Array.isArray(record.commits) && record.commits.length > 0) {
     const shown = record.commits.slice(0, RECORD_COMMITS).join('; ')
@@ -144,7 +145,10 @@ function recordLine(record) {
     typeof record.costUsd === 'number' && Number.isFinite(record.costUsd)
       ? `${record.costUsd.toFixed(4)} USD`
       : 'not reported'
-  return `lane ${record.lane || 'unknown'} | ${place} | ${exit} | branch ${branch} | commits ${commits} | cost ${cost}`
+  const line = `lane ${record.lane || 'unknown'} | ${place} | ${exit} | branch ${branch} | commits ${commits} | cost ${cost}`
+  if (!queue) return line
+  return `${line}
+This was task ${record.queueIndex ?? '?'} of a queue. The runner commits it on ${queue} only after the project's tests pass, a few seconds to minutes after this message; check git log on that branch before you review it.`
 }
 
 export function createOrchestrator({

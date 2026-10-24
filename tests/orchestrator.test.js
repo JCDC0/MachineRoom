@@ -300,14 +300,27 @@ describe('waking the orchestrator', () => {
     expect(prompt).toContain('0.5000 USD')
     expect(rig.answer().messages.some((message) => message.from === 'room')).toBe(true)
 
+    const queueLog = join(rig.runs, 'opencode2-queue-20261024-120500-2.log')
+    writeFileSync(queueLog, 'a log\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode2', briefs: [], exitCode: 0, killed: false, log: queueLog, branch: '', commits: [], project: rig.projectRoot, queue: 'machineroom/queue-20261024-120500', queueIndex: 2 })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode2-queue-20261024-120500-2', 'succeeded'))
+    await waitFor(() => rig.calls().length === 3)
+    await waitIdle(rig, 3)
+    const queuePrompt = rig.calls()[2].args[1]
+    expect(queuePrompt).toContain('branch machineroom/queue-20261024-120500')
+    expect(queuePrompt).toContain('This was task 2 of a queue.')
+
     rig.orchestrator.onFrame(frame('run-orchestrator-chat-1', 'succeeded', 'orchestrator'))
     await sleep(150)
-    expect(rig.calls()).toHaveLength(2)
+    expect(rig.calls()).toHaveLength(3)
 
     rig.orchestrator.stop({ confirmed: true })
     rig.orchestrator.onFrame(frame('run-opencode7-K2-20261024-130000', 'failed'))
     await sleep(150)
-    expect(rig.calls()).toHaveLength(2)
+    expect(rig.calls()).toHaveLength(3)
   })
 
   it('starts at most 30 room turns in an hour and waits for the owner after that', async () => {
