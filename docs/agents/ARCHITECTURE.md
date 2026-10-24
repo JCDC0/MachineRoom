@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.318. A browser viewer that shows coding agents working on one project as a 3D machine room. It follows the room's own sources live: runs started with `run-lane` (`--lanes`), task queues on a project (S8, S8b) and the owner's Claude Code and OpenCode sessions (`--sessions`, S7a and S7b). It replays a recorded run too.
+Version 0.1.319. A browser viewer that shows coding agents working on one project as a 3D machine room. It follows the room's own sources live: runs started with `run-lane` (`--lanes`), task queues on a project (S8, S8b) and the owner's Claude Code and OpenCode sessions (`--sessions`, S7a and S7b). It replays a recorded run too.
 
 MachineRoom grew out of Paperclip: it began as its viewer and took its idea of a company of agents with tasks, budgets and approvals. Paperclip was removed on 2026-10-24, and the room now reads its own sources. S6a (0.1.233) shows lane runs live from the run-lane logs. The drawer reads tasks, live runs and costs from the lane records (`server/control.js`, `server/lane-costs.js`; L1 and L2); approvals and comments are empty, and a task, comment or agent write is refused.
 
