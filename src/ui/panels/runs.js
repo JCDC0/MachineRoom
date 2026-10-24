@@ -54,6 +54,15 @@ export function recordLine(record) {
 
 export const formatRecordLine = recordLine
 
+export function runStartLine(answer) {
+  if (!answer || typeof answer !== 'object') return 'The bridge sent no answer.'
+  const lane = typeof answer.lane === 'string' && answer.lane.trim() ? answer.lane.trim() : 'The run'
+  if (answer.queue === true && Number.isInteger(answer.tasks) && answer.tasks > 0) {
+    return `${lane} started ${answer.tasks} task${answer.tasks === 1 ? '' : 's'} in order.`
+  }
+  return `${lane} started.`
+}
+
 export function runningLine(entry, now) {
   if (!entry || typeof entry !== 'object') return ''
   const lane = entry.lane || 'unknown'
@@ -68,9 +77,11 @@ export const PROJECT_TASK_LIMIT = 4000
 export const PROJECT_TASK_COUNT_LIMIT = 20
 export const PROJECT_QUEUE_TEXT_LIMIT = PROJECT_TASK_LIMIT * PROJECT_TASK_COUNT_LIMIT + 4000
 export const PROJECT_CONFIRM_LIMIT = 120
+export const PROJECT_SPLIT_DELAY = 3000
 export const PROJECT_TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
 export const PROJECT_TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 export const PROJECT_TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
+export const NO_IDLE_LANE_PROBLEM = 'No lane is idle.'
 
 function runsOnProject(agent) {
   const adapterType = typeof agent.adapterType === 'string' ? agent.adapterType : ''
@@ -98,6 +109,45 @@ export function projectRunLanes(agents, running) {
     lanes.push({ key, name, running: active.has(key) })
   }
   return lanes
+}
+
+function idleProjectLanes(lanes) {
+  const list = Array.isArray(lanes) ? lanes : []
+  const seen = new Set()
+  const idle = []
+  for (const lane of list) {
+    if (!lane || typeof lane !== 'object') continue
+    if (lane.running) continue
+    const key = typeof lane.key === 'string' ? lane.key.trim() : ''
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    const name = typeof lane.name === 'string' && lane.name.trim() ? lane.name.trim() : key
+    idle.push({ key, name })
+  }
+  return idle
+}
+
+export function planLaneTasks(tasks, lanes) {
+  const list = Array.isArray(tasks) ? tasks : []
+  const taskProblem = projectTaskProblem(list)
+  if (taskProblem) return { pairs: [], problem: taskProblem }
+  const idle = idleProjectLanes(lanes)
+  if (idle.length === 0) return { pairs: [], problem: NO_IDLE_LANE_PROBLEM }
+  if (idle.length < list.length) {
+    const lanesWord = idle.length === 1 ? 'lane is' : 'lanes are'
+    return {
+      pairs: [],
+      problem: `${list.length} tasks need ${list.length} idle lanes. Only ${idle.length} ${lanesWord} idle.`,
+    }
+  }
+  return {
+    pairs: list.map((task, index) => ({
+      task: task.trim(),
+      lane: idle[index].key,
+      name: idle[index].name,
+    })),
+    problem: null,
+  }
 }
 
 export function splitTasks(text) {
@@ -134,6 +184,10 @@ export function projectTaskProblem(task) {
 
 export function projectRunLabel(count) {
   return Number.isInteger(count) && count > 1 ? `Run ${count} tasks in order` : 'Run'
+}
+
+export function projectSplitLabel(count) {
+  return Number.isInteger(count) && count > 1 ? `Run ${count} tasks on ${count} lanes` : projectRunLabel(count)
 }
 
 export function projectWorktreeName(project, lane) {

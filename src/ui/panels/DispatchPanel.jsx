@@ -11,8 +11,14 @@ import {
 import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
 import { agentForLane, routeFields } from './route.js'
-import { PROJECT_QUEUE_TEXT_LIMIT, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitTasks, timeSinceStart } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, PROJECT_SPLIT_DELAY, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, runStartLine, splitTasks, timeSinceStart } from './runs.js'
 import { profileFromBrief } from '../../policy/profile.js'
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
 
 export default function DispatchPanel({
   client,
@@ -67,8 +73,11 @@ export default function DispatchPanel({
   const [projectLane, setProjectLane] = useState('')
   const [projectTask, setProjectTask] = useState('')
   const [projectOwnWorktree, setProjectOwnWorktree] = useState(true)
+  const [projectOneLanePerTask, setProjectOneLanePerTask] = useState(false)
   const [projectAllowDirty, setProjectAllowDirty] = useState(false)
   const [projectShowConfirm, setProjectShowConfirm] = useState(false)
+  const [projectSplitPlan, setProjectSplitPlan] = useState(null)
+  const [projectAnswers, setProjectAnswers] = useState([])
   const [projectStarting, setProjectStarting] = useState(false)
   const [projectError, setProjectError] = useState(null)
 
@@ -383,14 +392,60 @@ export default function DispatchPanel({
     }
   }
 
+  function dismissProjectConfirm() {
+    setProjectShowConfirm(false)
+    setProjectSplitPlan(null)
+    setProjectAnswers([])
+    setProjectError(null)
+  }
+
   function openProjectConfirm() {
     const tasks = splitTasks(projectTask)
-    if (!projectLane || projectLaneRunning || projectTaskProblem(tasks)) return
+    if (projectTaskProblem(tasks)) return
+    const split = projectOneLanePerTask && tasks.length > 1
+    if (!split && (!projectLane || projectLaneRunning)) return
+    const plan = split ? planLaneTasks(tasks, projectLanes) : null
+    setProjectSplitPlan(plan)
+    setProjectAnswers([])
     setProjectShowConfirm(true)
     setProjectError(null)
   }
 
   async function handleConfirmProjectRun() {
+    if (projectSplitPlan) {
+      if (projectSplitPlan.problem || projectSplitPlan.pairs.length === 0) {
+        setProjectError(projectSplitPlan.problem || 'Could not plan these tasks.')
+        return
+      }
+      if (typeof client?.startRun !== 'function') return
+      setProjectStarting(true)
+      setProjectError(null)
+      setProjectAnswers([])
+      const answers = []
+      let failed = false
+      for (let index = 0; index < projectSplitPlan.pairs.length; index += 1) {
+        const pair = projectSplitPlan.pairs[index]
+        try {
+          const answer = await client.startRun(pair.lane, { tasks: [pair.task], worktree: true })
+          answers.push({ ok: true, message: runStartLine(answer) })
+        } catch (err) {
+          failed = true
+          answers.push({ ok: false, message: err.message || 'Could not start run.' })
+        }
+        setProjectAnswers([...answers])
+        if (index < projectSplitPlan.pairs.length - 1) {
+          await wait(PROJECT_SPLIT_DELAY)
+        }
+      }
+      setProjectStarting(false)
+      if (!failed) {
+        setProjectTask('')
+        setProjectAllowDirty(false)
+      }
+      loadRuns()
+      return
+    }
+
     const tasks = splitTasks(projectTask)
     const problem = projectTaskProblem(tasks)
     if (projectLaneRunning) {
@@ -566,11 +621,12 @@ export default function DispatchPanel({
   })
   const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, projectLane) : ''
   const projectProblem = projectTaskProblem(projectTasks)
+  const projectSplitRun = projectOneLanePerTask && projectTasks.length > 1
+  const projectSplitTaskCount = projectSplitPlan?.pairs.length || projectTasks.length
   const canStartProject =
     typeof client?.startRun === 'function' &&
-    Boolean(projectLane) &&
-    !projectLaneRunning &&
-    !projectProblem
+    !projectProblem &&
+    (projectSplitRun || (Boolean(projectLane) && !projectLaneRunning))
 
   return (
     <form className="dispatch-form" onSubmit={handleSubmit} noValidate>
@@ -597,10 +653,10 @@ export default function DispatchPanel({
             <select
               id="project-run-lane"
               value={projectLane}
+              disabled={projectSplitRun}
               onChange={(event) => {
                 setProjectLane(event.target.value)
-                setProjectShowConfirm(false)
-                setProjectError(null)
+                dismissProjectConfirm()
               }}
             >
               <option value="">Select a lane</option>
@@ -610,8 +666,13 @@ export default function DispatchPanel({
                 </option>
               ))}
             </select>
-            {projectLaneRunning && (
+            {projectLaneRunning && !projectSplitRun && (
               <div className="brief-state is-dim mono">That lane is already running.</div>
+            )}
+            {projectSplitRun && (
+              <div className="brief-state is-dim mono">
+                Each task takes the next idle lane, in this order.
+              </div>
             )}
           </div>
 
@@ -625,8 +686,7 @@ export default function DispatchPanel({
               placeholder="What should the agent do in this project? Separate tasks with a line of ---"
               onChange={(event) => {
                 setProjectTask(event.target.value)
-                setProjectShowConfirm(false)
-                setProjectError(null)
+                dismissProjectConfirm()
               }}
             />
           </div>
@@ -636,15 +696,34 @@ export default function DispatchPanel({
               <input
                 type="checkbox"
                 checked={projectOwnWorktree}
+                disabled={projectOneLanePerTask}
                 onChange={(event) => {
                   const on = event.target.checked
                   setProjectOwnWorktree(on)
                   if (on) setProjectAllowDirty(false)
-                  setProjectShowConfirm(false)
-                  setProjectError(null)
+                  dismissProjectConfirm()
                 }}
               />
               <span>Own worktree</span>
+            </label>
+          </div>
+
+          <div className="panel-checkbox-field">
+            <label>
+              <input
+                type="checkbox"
+                checked={projectOneLanePerTask}
+                onChange={(event) => {
+                  const on = event.target.checked
+                  setProjectOneLanePerTask(on)
+                  if (on) {
+                    setProjectOwnWorktree(true)
+                    setProjectAllowDirty(false)
+                  }
+                  dismissProjectConfirm()
+                }}
+              />
+              <span>One lane per task</span>
             </label>
           </div>
 
@@ -657,8 +736,7 @@ export default function DispatchPanel({
                   disabled={projectQueue}
                   onChange={(event) => {
                     setProjectAllowDirty(event.target.checked)
-                    setProjectShowConfirm(false)
-                    setProjectError(null)
+                    dismissProjectConfirm()
                   }}
                 />
                 <span>Allow uncommitted changes</span>
@@ -676,11 +754,98 @@ export default function DispatchPanel({
               disabled={!canStartProject}
               onClick={openProjectConfirm}
             >
-              {projectRunLabel(projectTasks.length)}
+              {projectSplitRun ? projectSplitLabel(projectTasks.length) : projectRunLabel(projectTasks.length)}
             </button>
           </div>
 
-          {projectShowConfirm && (
+          {projectShowConfirm && projectSplitPlan && (
+            <div className="brief-confirm-card" role="region" aria-label="Confirm project runs">
+              <div className="brief-confirm-meta mono">
+                <span className="brief-confirm-project">Project: {projectConfirm.project}</span>
+                <span className="brief-confirm-tasks">
+                  {projectSplitPlan.problem
+                    ? `Tasks: ${projectSplitTaskCount}`
+                    : `Tasks: ${projectSplitTaskCount} on ${projectSplitTaskCount} lanes`}
+                </span>
+              </div>
+              {projectSplitPlan.problem ? (
+                <div className="brief-confirm-error mono" role="alert">
+                  {projectSplitPlan.problem}
+                </div>
+              ) : (
+                <div className="runs-list">
+                  {projectSplitPlan.pairs.map((pair, index) => {
+                    const answer = projectAnswers[index]
+                    return (
+                      <div
+                        key={`split-${pair.lane}-${index}`}
+                        className={`runs-entry mono ${answer ? `is-recent ${answer.ok ? 'is-finished' : 'is-failed'}` : 'is-running'}`}
+                      >
+                        <div className="runs-entry-head mono">
+                          <span className="runs-entry-lane">{pair.name}</span>
+                          <span className="runs-entry-briefs">
+                            {pair.task.slice(0, PROJECT_CONFIRM_LIMIT)}
+                          </span>
+                        </div>
+                        {answer && (
+                          <div
+                            className="runs-entry-lines mono is-dim"
+                            role={answer.ok ? 'status' : 'alert'}
+                          >
+                            {answer.message}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+              {!projectSplitPlan.problem && (
+                <>
+                  <div className="brief-confirm-warning">
+                    Each task runs in its own worktree beside the project, on its own branch, never on main.
+                  </div>
+                  <div className="brief-confirm-warning">
+                    This starts {projectSplitTaskCount} agents on this computer three seconds apart and spends money.
+                  </div>
+                </>
+              )}
+              <div className="brief-confirm-actions">
+                <button
+                  type="button"
+                  className="brief-confirm-btn"
+                  disabled={
+                    projectStarting ||
+                    Boolean(projectSplitPlan.problem) ||
+                    projectAnswers.length >= projectSplitPlan.pairs.length
+                  }
+                  onClick={handleConfirmProjectRun}
+                >
+                  {projectStarting
+                    ? 'Starting'
+                    : projectAnswers.length >= projectSplitPlan.pairs.length &&
+                        projectSplitPlan.pairs.length > 0
+                      ? 'Done'
+                      : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  className="brief-cancel-btn"
+                  disabled={projectStarting}
+                  onClick={dismissProjectConfirm}
+                >
+                  {projectAnswers.length > 0 ? 'Close' : 'Cancel'}
+                </button>
+              </div>
+              {projectError && (
+                <div className="brief-confirm-error mono" role="alert">
+                  {projectError}
+                </div>
+              )}
+            </div>
+          )}
+
+          {projectShowConfirm && !projectSplitPlan && (
             <div className="brief-confirm-card" role="region" aria-label="Confirm project run">
               <div className="brief-confirm-meta mono">
                 <span className="brief-confirm-lane">Lane: {projectConfirm.lane}</span>

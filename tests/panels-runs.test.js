@@ -5,17 +5,22 @@ import {
   formatCost,
   formatMinutes,
   formatRecordLine,
+  NO_IDLE_LANE_PROBLEM,
+  planLaneTasks,
+  PROJECT_SPLIT_DELAY,
   PROJECT_TASK_PROBLEM,
   PROJECT_TASK_SEPARATOR_PROBLEM,
   PROJECT_TASKS_PROBLEM,
   projectRunConfirm,
   projectRunBody,
   projectRunLabel,
+  projectSplitLabel,
   projectTaskProblem,
   projectWorktreeName,
   recordLine,
   resultWord,
   runResultWord,
+  runStartLine,
   runningLine,
   splitTasks,
   timeSince,
@@ -170,6 +175,20 @@ describe('recordLine', () => {
   })
 })
 
+describe('runStartLine', () => {
+  it('names the lane and what the bridge started', () => {
+    expect(runStartLine({ lane: 'opencode', queue: true, tasks: 1 })).toBe('opencode started 1 task in order.')
+    expect(runStartLine({ lane: 'hermes', queue: true, tasks: 3 })).toBe('hermes started 3 tasks in order.')
+    expect(runStartLine({ lane: 'claude' })).toBe('claude started.')
+  })
+
+  it('handles a missing lane or answer', () => {
+    expect(runStartLine(null)).toBe('The bridge sent no answer.')
+    expect(runStartLine(undefined)).toBe('The bridge sent no answer.')
+    expect(runStartLine({ lane: '  ' })).toBe('The run started.')
+  })
+})
+
 describe('runningLine', () => {
   it('formats running entry with lane, briefs, and time ago', () => {
     const entry = {
@@ -213,6 +232,85 @@ describe('splitTasks', () => {
   })
 })
 
+describe('planLaneTasks', () => {
+  const lanes = [
+    { key: 'opencode', name: 'OpenCode', running: false },
+    { key: 'hermes', name: 'Hermes', running: true },
+    { key: 'claude', name: 'Claude', running: false },
+    { key: 'opencode2', name: '', running: false },
+  ]
+
+  it('pairs tasks with idle lanes in picker order', () => {
+    expect(planLaneTasks(['One.', 'Two.', 'Three.'], lanes)).toEqual({
+      pairs: [
+        { task: 'One.', lane: 'opencode', name: 'OpenCode' },
+        { task: 'Two.', lane: 'claude', name: 'Claude' },
+        { task: 'Three.', lane: 'opencode2', name: 'opencode2' },
+      ],
+      problem: null,
+    })
+  })
+
+  it('takes one task on one idle lane and trims the task', () => {
+    expect(planLaneTasks(['  One.  '], lanes)).toEqual({
+      pairs: [{ task: 'One.', lane: 'opencode', name: 'OpenCode' }],
+      problem: null,
+    })
+  })
+
+  it('skips running lanes and keeps the order of the rest', () => {
+    const plan = planLaneTasks(['One.', 'Two.'], [lanes[2], lanes[1], lanes[0]])
+    expect(plan.problem).toBeNull()
+    expect(plan.pairs.map((pair) => pair.lane)).toEqual(['claude', 'opencode'])
+  })
+
+  it('skips duplicate and unusable lanes', () => {
+    const list = [
+      null,
+      'lane',
+      { key: '' },
+      { key: 'opencode', name: 'OpenCode' },
+      { key: 'opencode', name: 'OpenCode again' },
+      { key: 'hermes', name: 'Hermes', running: true },
+    ]
+    expect(planLaneTasks(['One.'], list)).toEqual({
+      pairs: [{ task: 'One.', lane: 'opencode', name: 'OpenCode' }],
+      problem: null,
+    })
+  })
+
+  it('refuses when there are fewer idle lanes than tasks', () => {
+    expect(planLaneTasks(['One.', 'Two.', 'Three.', 'Four.'], lanes)).toEqual({
+      pairs: [],
+      problem: '4 tasks need 4 idle lanes. Only 3 lanes are idle.',
+    })
+    expect(planLaneTasks(['One.', 'Two.'], [lanes[0]])).toEqual({
+      pairs: [],
+      problem: '2 tasks need 2 idle lanes. Only 1 lane is idle.',
+    })
+  })
+
+  it('refuses when no lane is idle', () => {
+    expect(planLaneTasks(['One.'], [lanes[1]])).toEqual({
+      pairs: [],
+      problem: NO_IDLE_LANE_PROBLEM,
+    })
+    expect(NO_IDLE_LANE_PROBLEM).toBe('No lane is idle.')
+    expect(planLaneTasks(['One.'], [])).toEqual({ pairs: [], problem: NO_IDLE_LANE_PROBLEM })
+    expect(planLaneTasks(['One.'], null)).toEqual({ pairs: [], problem: NO_IDLE_LANE_PROBLEM })
+  })
+
+  it('refuses a bad task list before it counts lanes', () => {
+    expect(planLaneTasks([], lanes)).toEqual({ pairs: [], problem: PROJECT_TASK_PROBLEM })
+    expect(planLaneTasks([''], lanes)).toEqual({ pairs: [], problem: PROJECT_TASK_PROBLEM })
+    expect(planLaneTasks(['one', 7], lanes)).toEqual({ pairs: [], problem: PROJECT_TASK_PROBLEM })
+    expect(planLaneTasks(Array.from({ length: 21 }, () => 'x'), lanes)).toEqual({
+      pairs: [],
+      problem: PROJECT_TASKS_PROBLEM,
+    })
+  })
+})
+
 describe('projectTaskProblem with a task list', () => {
   it('checks each task in the list', () => {
     expect(projectTaskProblem(['one', 'two'])).toBeNull()
@@ -234,6 +332,26 @@ describe('projectRunLabel', () => {
     expect(projectRunLabel(20)).toBe('Run 20 tasks in order')
     expect(projectRunLabel('3')).toBe('Run')
     expect(projectRunLabel(undefined)).toBe('Run')
+  })
+})
+
+describe('projectSplitLabel', () => {
+  it('counts tasks and lanes when several tasks are split', () => {
+    expect(projectSplitLabel(2)).toBe('Run 2 tasks on 2 lanes')
+    expect(projectSplitLabel(10)).toBe('Run 10 tasks on 10 lanes')
+  })
+
+  it('falls back to the queue label for one task or junk', () => {
+    expect(projectSplitLabel(0)).toBe('Run')
+    expect(projectSplitLabel(1)).toBe('Run')
+    expect(projectSplitLabel('3')).toBe('Run')
+    expect(projectSplitLabel(undefined)).toBe('Run')
+  })
+})
+
+describe('PROJECT_SPLIT_DELAY', () => {
+  it('is three seconds', () => {
+    expect(PROJECT_SPLIT_DELAY).toBe(3000)
   })
 })
 
