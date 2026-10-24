@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)))
@@ -47,7 +48,7 @@ function childEnv(temp) {
   delete env.MACHINEROOM_LANES
   delete env.MACHINEROOM_SESSIONS
   env.TEMP = temp
-  return env
+  return withLanePrograms(env, temp)
 }
 
 function startBin(args, env) {

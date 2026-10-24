@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { prepareWorktree, worktreePlan } from '../scripts/run-lane.mjs'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, worktreeFor, worktreeProblems } from '../src/briefs/run.js'
+import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
@@ -51,7 +52,7 @@ function runLane(args) {
   return new Promise((done, fail) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: process.env,
+      env: withLanePrograms(process.env, tempDir('mr-lane-programs-')),
     })
     let stdout = ''
     let stderr = ''
