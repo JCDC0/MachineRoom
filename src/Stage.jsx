@@ -53,17 +53,22 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const live = data.live ?? null
   const demoLadder = useMemo(() => {
     if (live || typeof window === 'undefined') return null
-    if (new URLSearchParams(window.location.search).get('ladder') !== 'demo') return null
+    const params = new URLSearchParams(window.location.search)
+    const demo = params.get('ladder') === 'demo' || params.get('fixture') === 'scenario-i'
+    if (!demo) return null
     return { subs: DEMO_SUBS }
   }, [live])
   const agents = useMemo(() => {
     if (!demoLadder) return data.agents
-    const subs = demoLadder.subs.map((sub) => ({
-      id: `sub-${sub.id}`,
-      key: `sub-${sub.id}`,
-      name: sub.name,
-      subOrchestrator: true,
-    }))
+    const present = new Set(data.agents.map((agent) => agent.key))
+    const subs = demoLadder.subs
+      .filter((sub) => !present.has(`sub-${sub.id}`))
+      .map((sub) => ({
+        id: `sub-${sub.id}`,
+        key: `sub-${sub.id}`,
+        name: sub.name,
+        subOrchestrator: true,
+      }))
     return [...data.agents, ...subs]
   }, [data.agents, demoLadder])
   const player = useMemo(() => {
