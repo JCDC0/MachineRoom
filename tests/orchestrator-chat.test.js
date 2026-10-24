@@ -94,6 +94,18 @@ describe('orchestratorChat helpers', () => {
     expect(lines[3].from).toBe('orchestrator')
   })
 
+  it('labels a sub orchestrator report with its id', () => {
+    const lines = chatLines({
+      messages: [
+        { id: 's1', from: 'sub:frontend', text: 'Done.' },
+        { id: 's2', from: 'sub:', text: 'No id.' },
+      ],
+    })
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatchObject({ id: 's1', from: 'sub', text: 'Sub frontend\n\nDone.' })
+    expect(lines[1]).toMatchObject({ id: 's2', from: 'orchestrator', text: 'No id.' })
+  })
+
   it('shows the newest lines only, up to the requested limit', () => {
     const messages = Array.from({ length: 5 }, (_, index) => ({
       id: `m${index}`,
@@ -328,6 +340,19 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('Enter sends. Shift+Enter adds a line.')
     expect(html).toContain('>Send</button>')
     expect(html).toContain('>Stop</button>')
+  })
+
+  it('shows a sub orchestrator report under its own label', () => {
+    const chat = {
+      state: 'idle',
+      messages: [{ id: 'm1', from: 'sub:frontend', text: 'Done.' }],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain('class="mr-orch-line is-sub"')
+    expect(html).toContain('Sub frontend')
+    expect(html).not.toContain('class="mr-orch-line is-orchestrator"')
   })
 
   it('draws orchestrator and room messages as blocks and keeps owner messages plain', () => {

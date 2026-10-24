@@ -92,6 +92,13 @@ export function orchestratorDoing(agents) {
   return ''
 }
 
+function subLabel(value) {
+  const id = visibleChatText(String(value ?? ''))
+    .replace(/\s+/g, ' ')
+    .trim()
+  return id ? `Sub ${id}` : ''
+}
+
 export function chatLines(chat, limit = ORCH_MAX_LINES) {
   const list = chat && Array.isArray(chat.messages) ? chat.messages : []
   const lines = []
@@ -100,11 +107,13 @@ export function chatLines(chat, limit = ORCH_MAX_LINES) {
     const raw = typeof message.text === 'string' ? message.text : ''
     const text = visibleChatText(raw).trim()
     if (!text) continue
-    const from = FROM_VALUES.has(message.from) ? message.from : 'orchestrator'
+    const source = typeof message.from === 'string' ? message.from : ''
+    const label = source.startsWith('sub:') ? subLabel(source.slice(4)) : ''
+    const from = label ? 'sub' : FROM_VALUES.has(source) ? source : 'orchestrator'
     lines.push({
       id: String(message.id ?? `${from}-${lines.length}`),
       from,
-      text,
+      text: label ? `${label}\n\n${text}` : text,
       at: message.at ?? null,
     })
   }
