@@ -21,6 +21,7 @@ function kindOf(name) {
 export function createClaudeParser(ctx) {
   const calls = new Map()
   const children = new Map()
+  const heard = new Set()
   const childCounts = new Map()
   const out = []
   const parentKey = ctx.agentKey ?? 'agent'
@@ -43,7 +44,10 @@ export function createClaudeParser(ctx) {
 
   function ownerOf(parentId) {
     if (typeof parentId !== 'string' || parentId === '') return parentKey
-    return children.get(parentId) ?? parentKey
+    const child = children.get(parentId)
+    if (!child) return parentKey
+    heard.add(child)
+    return child
   }
 
   function folderTouch(raw) {
@@ -115,7 +119,8 @@ export function createClaudeParser(ctx) {
     out.push({ ...toolEnd({ time, id, ok }), agent: call.owner })
     if (call.task) {
       const child = children.get(id)
-      if (child) out.push({ time, type: 'agent.end', agent: child, ok })
+      // A good result before any line of the child means it runs in the background; it ends with the parent's run.
+      if (child && (heard.has(child) || !ok)) out.push({ time, type: 'agent.end', agent: child, ok })
     }
   }
 

@@ -29,6 +29,27 @@ function starts(activities) {
 }
 
 describe('claude stream-json', () => {
+  it('keeps a background subagent open when its Agent result comes before its own lines', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines(
+        assistant([use('a1', 'Agent', { subagent_type: 'Explore', description: 'Read strings' })]),
+        result('a1'),
+        assistant([use('r1', 'Read', { file_path: 'src/math.js' })]),
+        assistant([use('r2', 'Read', { file_path: 'src/strings.js' })], 'a1'),
+        result('r2', false, 'a1'),
+        result('r1'),
+      ),
+      0,
+    )
+    expect(out.filter((activity) => activity.type === 'agent.end')).toEqual([])
+    expect(starts(out).map((activity) => [activity.agent, activity.touches[0]?.path])).toEqual([
+      ['claude', undefined],
+      ['claude', 'src/math.js'],
+      ['claude~1', 'src/strings.js'],
+    ])
+  })
+
   it('maps each tool name to its touches', () => {
     const parser = createClaudeParser(ctx)
     const out = parser.push(
