@@ -426,7 +426,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const state = getState()
     const mask = masks.of(state)
     space.update(delta)
-    hub.update(now / 1000, delta)
+    hub.update(now / 1000, delta, camera, height)
     if (cards.update(state, delta, camera, mask)) {
       relink()
       refit()
