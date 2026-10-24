@@ -12,7 +12,7 @@ import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
-import { createOrchestrator } from './orchestrator.js'
+import { createOrchestrators } from './orchestrators.js'
 import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
 import { createReviewsApi } from './reviews.js'
@@ -255,6 +255,7 @@ export function createBridge(options = {}) {
   }
   const sendJson = createSendJson(isAllowed)
   const readJsonBody = createReadJsonBody(sendJson)
+  let orchestrators = null
 
   const briefs = createBriefsApi({
     projectRoot,
@@ -267,6 +268,7 @@ export function createBridge(options = {}) {
     runnerCommand: options.runnerCommand,
     sendJson,
     readJsonBody,
+    orchestrators: () => orchestrators,
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)
     },
@@ -315,13 +317,13 @@ export function createBridge(options = {}) {
     lanesSourceOption === true || (lanesSourceOption !== null && typeof lanesSourceOption === 'object') || env.MACHINEROOM_LANES === '1'
   const lanesSourceObject = lanesSourceOption !== null && typeof lanesSourceOption === 'object' ? lanesSourceOption : {}
   const lanesConfig = lanesSourceOn ? lanesSourceObject.lanes ?? readLanes() : {}
-  let orchestrator = null
   const lanesSource = lanesSourceOn
     ? createLanesSource({
         ...lanesSourceObject,
         projectRoot,
+        subOrchestrators: () => (orchestrators ? orchestrators.subs() : []),
         onFrame: (frame) => {
-          if (orchestrator) orchestrator.onFrame(frame)
+          if (orchestrators) orchestrators.onFrame(frame)
           accept(frame)
         },
       })
@@ -339,7 +341,7 @@ export function createBridge(options = {}) {
 
   const clients = new Set()
   if (lanesSourceOn) {
-    orchestrator = createOrchestrator({
+    orchestrators = createOrchestrators({
       projectRoot,
       runsFolder: resolve(options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
       lanes: lanesConfig,
@@ -350,6 +352,8 @@ export function createBridge(options = {}) {
       onNotice: (event) => {
         for (const client of clients) writeSseChange(client, event)
       },
+      sendJson,
+      readJsonBody,
     })
   }
   const treeSent = new WeakMap()
@@ -643,33 +647,14 @@ export function createBridge(options = {}) {
     if (await assistant.handle(req, res, url)) return
     if (await decideApi.handle(req, res, url)) return
 
-    if (orchestrator && req.method === 'GET' && url.pathname === '/api/orchestrator') {
-      sendJson(req, res, 200, orchestrator.answer())
-      return
-    }
-
-    if (orchestrator && req.method === 'POST' && url.pathname === '/api/orchestrator/messages') {
-      const body = await readJsonBody(req, res)
-      if (body === null) return
-      const out = orchestrator.send(body)
-      sendJson(req, res, out.status, out.body)
-      return
-    }
-
-    if (orchestrator && req.method === 'POST' && url.pathname === '/api/orchestrator/stop') {
-      const body = await readJsonBody(req, res)
-      if (body === null) return
-      const out = orchestrator.stop(body)
-      sendJson(req, res, out.status, out.body)
-      return
-    }
+    if (orchestrators && (await orchestrators.handle(req, res, url))) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {
         ok: true,
         lanes: lanesSource !== null,
         sessions: sessionsSource !== null,
-        ...(orchestrator ? { orchestrator: true } : {}),
+        ...(orchestrators ? { orchestrator: true } : {}),
         unparsed: { ...unreadable.counts(), since: unparsedSince },
         masked: { total: maskedTotal, since: maskedSince },
       })
@@ -804,7 +789,7 @@ export function createBridge(options = {}) {
       maskTimer = null
     }
     runs.stopAll()
-    orchestrator?.close()
+    orchestrators?.close()
     lanesSource?.stop()
     sessionsSource?.stop()
     clearInterval(heartbeatTimer)

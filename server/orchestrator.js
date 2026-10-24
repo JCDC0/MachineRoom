@@ -26,6 +26,7 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const PROMPT_FILE = join(REPO_ROOT, 'docs', 'agents', 'ORCHESTRATOR-AGENT.md')
 const PROMPT_LIMIT = 20000
 const RECORD_COMMITS = 10
+const TURN_LOG = /-chat-\d{8}-\d{6}-\d{3}\.log$/i
 const DEFAULT_LANE = { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } }
 const DEFAULT_OPENCODE_MODEL = 'opencode/deepseek-v4.1-flash-free'
 const VARIABLE = /%([^%]+)%/g
@@ -64,6 +65,14 @@ function readText(file) {
 function projectHash(projectRoot) {
   const key = projectRoot ? pathKey(projectRoot) : ''
   return createHash('sha256').update(key).digest('hex').slice(0, 8)
+}
+
+export function chatFileFor(projectRoot, runsFolder, id = ORCHESTRATOR_KEY) {
+  const root = projectRoot ? resolve(projectRoot) : ''
+  const folder = resolve(runsFolder)
+  const key = id === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
+  const name = key === ORCHESTRATOR_KEY ? `orchestrator-${projectHash(root)}.json` : `orchestrator-${projectHash(root)}-${key}.json`
+  return join(folder, name)
 }
 
 function fallbackPrompt(projectRoot, runsFolder) {
@@ -109,7 +118,8 @@ function opencodeSessionId(log) {
 }
 
 function blockFor(message) {
-  const label = message.from === 'owner' ? 'Owner' : message.from === 'room' ? 'Room' : 'Orchestrator'
+  const from = String(message?.from ?? '')
+  const label = from === 'owner' ? 'Owner' : from === 'room' ? 'Room' : from.startsWith('sub:') ? `Sub ${from.slice(4)}` : 'Orchestrator'
   return `${label}: ${message.text}`
 }
 
@@ -153,6 +163,12 @@ This was task ${record.queueIndex ?? '?'} of a queue. The runner commits it on $
 }
 
 export function createOrchestrator({
+  id = ORCHESTRATOR_KEY,
+  name = '',
+  harness: harnessOption = '',
+  model: modelOption = '',
+  bin: binOption = '',
+  parent = '',
   projectRoot = '',
   runsFolder = runsFolderDefault(),
   lanes = {},
@@ -161,18 +177,30 @@ export function createOrchestrator({
   onNotice = () => {},
   promptFile = PROMPT_FILE,
   bridgeUrl = () => '',
+  extraInstructions = '',
+  onReply = null,
+  outsideFiles = null,
+  onOutsideScope = null,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
+  const key = String(id) === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
+  const logPrefix = key === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub-${key}`
   const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
-  const harness = String(lane.cli.harness ?? 'claude') === 'opencode' ? 'opencode' : 'claude'
-  const model = String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
-  const bin = String(lane.cli.bin ?? (harness === 'opencode' ? 'opencode' : 'claude'))
-  const conversationFile = join(folder, `orchestrator-${projectHash(root)}.json`)
+  const harness =
+    harnessOption === 'opencode' || harnessOption === 'claude'
+      ? harnessOption
+      : String(lane.cli.harness ?? 'claude') === 'opencode'
+        ? 'opencode'
+        : 'claude'
+  const model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
+  const bin = binOption ? String(binOption) : String(lane.cli.bin ?? (harness === 'opencode' ? 'opencode' : 'claude'))
+  const conversationFile = chatFileFor(root, folder, key)
   const messages = []
   const pending = []
   const roomTurns = []
+  let ladder = null
   let sessionId = null
   let state = 'idle'
   let running = null
@@ -188,7 +216,10 @@ export function createOrchestrator({
     try {
       mkdirSync(folder, { recursive: true })
       const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
-      writeFileSync(conversationFile, `${JSON.stringify({ project: root, sessionId, state, messages, pending: waiting }, null, 2)}\n`)
+      writeFileSync(
+        conversationFile,
+        `${JSON.stringify({ project: root, sessionId, state, messages, pending: waiting, ...(ladder ? { ladder } : {}) }, null, 2)}\n`
+      )
     } catch {}
   }
 
@@ -203,14 +234,16 @@ export function createOrchestrator({
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
     if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
+    if (saved.ladder && typeof saved.ladder === 'object' && !Array.isArray(saved.ladder)) ladder = saved.ladder
     const list = Array.isArray(saved.messages) ? saved.messages : []
     for (const item of list) {
       if (!item || typeof item !== 'object') continue
-      if (!['owner', 'orchestrator', 'room'].includes(item.from)) continue
+      const from = typeof item.from === 'string' ? item.from : ''
+      if (!['owner', 'orchestrator', 'room'].includes(from) && !from.startsWith('sub:')) continue
       if (typeof item.text !== 'string' || item.text.trim() === '') continue
       messages.push({
         id: typeof item.id === 'string' && item.id ? item.id : randomUUID(),
-        from: item.from,
+        from,
         text: item.text,
         at: typeof item.at === 'string' && item.at ? item.at : iso(now()),
       })
@@ -292,9 +325,9 @@ export function createOrchestrator({
     const first = !sessionId
     if (first && harness === 'claude') sessionId = randomUUID()
     const startedAt = now()
-    const name = `${ORCHESTRATOR_KEY}-chat-${stamp(startedAt)}`
-    const logPath = join(folder, `${name}.log`)
-    const metaPath = join(folder, `${name}.meta.json`)
+    const logName = `${logPrefix}-chat-${stamp(startedAt)}`
+    const logPath = join(folder, `${logName}.log`)
+    const metaPath = join(folder, `${logName}.meta.json`)
     const turn = { startedAt, logPath, metaPath, killed: false, done: false, child: null, timer: null }
     running = turn
     setState('working')
@@ -308,10 +341,11 @@ export function createOrchestrator({
       return
     }
     const message = turnText(turnMessages)
-    const instruction = instructionFor(promptFile, root, folder, String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''))
+    const baseInstruction = instructionFor(promptFile, root, folder, String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''))
+    const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
     let args
     if (harness === 'opencode') {
-      args = ['run', '--format', 'json', '--model', model, '--auto', '--title', name]
+      args = ['run', '--format', 'json', '--model', model, '--auto', '--title', logName]
       if (!first) args.push('--session', sessionId)
       args.push(first ? `${instruction}\n\n${message}` : message)
     } else {
@@ -389,7 +423,7 @@ export function createOrchestrator({
       : report || EMPTY_REPLY
     addMessage('orchestrator', text)
     const record = runRecord({
-      lane: ORCHESTRATOR_KEY,
+      lane: logPrefix,
       model,
       startedAt: turn.startedAt,
       minutes: Math.round(((now() - turn.startedAt) / 60000) * 10) / 10,
@@ -403,6 +437,11 @@ export function createOrchestrator({
     try {
       appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
     } catch {}
+    if (typeof onReply === 'function') {
+      try {
+        onReply(text)
+      } catch {}
+    }
     if (running === turn) running = null
     if (!stopped) {
       setState(state === 'paused' ? 'paused' : 'idle')
@@ -412,6 +451,10 @@ export function createOrchestrator({
 
   function answer() {
     return {
+      id: key,
+      name: name || (key === ORCHESTRATOR_KEY ? 'Orchestrator' : key),
+      parent: parent || null,
+      harness,
       state,
       model,
       project: root,
@@ -433,6 +476,16 @@ export function createOrchestrator({
     return { status: 202, body: { id: message.id } }
   }
 
+  function deliver(from, text) {
+    if (stopped) return null
+    const value = typeof text === 'string' ? text.trim() : ''
+    if (!value) return null
+    const message = addMessage(from, value)
+    pending.push(message)
+    maybeStartTurn()
+    return message
+  }
+
   function stop(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
     if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
@@ -444,6 +497,16 @@ export function createOrchestrator({
     return { status: 200, body: { ok: true } }
   }
 
+  function getLadder() {
+    return ladder
+  }
+
+  function setLadder(value) {
+    ladder = value && typeof value === 'object' && !Array.isArray(value) ? value : null
+    persist()
+    notify()
+  }
+
   function onFrame(frame) {
     if (stopped) return
     if (frame?.type !== 'heartbeat.run.status') return
@@ -452,12 +515,26 @@ export function createOrchestrator({
     const runId = typeof frame.payload?.runId === 'string' ? frame.payload.runId : ''
     const runName = runId.startsWith('run-') ? runId.slice(4) : ''
     const record = recordFor(runName)
+    if (record && typeof record.log === 'string' && TURN_LOG.test(basename(record.log))) return
     const laneKey = record?.lane ?? String(frame.payload?.agentId ?? '').replace(/^agent-/, '')
     if (!laneKey || laneKey === ORCHESTRATOR_KEY) return
+    if (!record && laneKey.startsWith('sub-')) return
+    const startedBy = typeof record?.startedBy === 'string' && record.startedBy ? record.startedBy : ORCHESTRATOR_KEY
+    if (startedBy !== key) return
     if (!sessionId || state === 'paused') return
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
     const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
-    const message = addMessage('room', record ? `${first}\n${recordLine(record)}` : first)
+    let text = record ? `${first}\n${recordLine(record)}` : first
+    const outside = typeof outsideFiles === 'function' ? outsideFiles(record, laneKey) : []
+    if (Array.isArray(outside) && outside.length > 0) {
+      text = `Outside the scope, do not merge:\n${outside.map((file) => `- ${file}`).join('\n')}\n\n${text}`
+      if (typeof onOutsideScope === 'function') {
+        try {
+          onOutsideScope(text)
+        } catch {}
+      }
+    }
+    const message = addMessage('room', text)
     pending.push(message)
     maybeStartTurn()
   }
@@ -481,5 +558,5 @@ export function createOrchestrator({
   persist()
   maybeStartTurn()
 
-  return { answer, send, stop, onFrame, close }
+  return { answer, send, deliver, stop, getLadder, setLadder, onFrame, close }
 }

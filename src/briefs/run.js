@@ -266,6 +266,7 @@ export function parseRunArgs(argv) {
   let taskFile = ''
   let allowDirty = false
   let worktree = false
+  let startedBy = ''
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -340,6 +341,13 @@ export function parseRunArgs(argv) {
       minutes = Number(value)
       continue
     }
+    if (arg === '--started-by' || arg.startsWith('--started-by=')) {
+      const value = arg === '--started-by' ? args[index + 1] : arg.slice('--started-by='.length)
+      if (arg === '--started-by') index += 1
+      if (typeof value !== 'string' || !/^[a-z0-9-]{1,24}$/.test(value)) throw new Error('--started-by needs an orchestrator id.')
+      startedBy = value
+      continue
+    }
     if (arg.startsWith('-')) throw new Error(`Unknown option ${arg}.`)
     if (arg === '') continue
     if (!lane) lane = arg
@@ -361,6 +369,7 @@ export function parseRunArgs(argv) {
       ...(force ? { force: true } : {}),
       ...(worktree ? { worktree: true } : {}),
       ...overrides,
+      ...(startedBy ? { startedBy } : {}),
       project,
       ...(task ? { task } : {}),
       ...(taskFile ? { taskFile } : {}),
@@ -368,7 +377,7 @@ export function parseRunArgs(argv) {
     }
   }
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
-  return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides }
+  return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}) }
 }
 
 export function laneWithOverrides(lane, { model, reasoning } = {}) {
@@ -608,7 +617,7 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -625,6 +634,7 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],
   }
+  if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project
   if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, 200)
   return record

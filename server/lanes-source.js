@@ -42,6 +42,19 @@ export function laneAgents(lanes) {
   return agents
 }
 
+export function subOrchestratorAgent(sub) {
+  const id = typeof sub?.id === 'string' ? sub.id.trim() : ''
+  if (!id) return null
+  const key = `sub-${id}`
+  const name = typeof sub?.name === 'string' && sub.name.trim() ? sub.name.trim() : id
+  const harness = String(sub?.harness ?? '') === 'opencode' ? 'opencode' : 'claude'
+  try {
+    const agent = agentsFile(key, { [key]: { name, cli: { harness } } }).agents[0]
+    if (agent) return { ...agent, key, role: null, subOrchestrator: true }
+  } catch {}
+  return { id: `agent-${key}`, key, name, adapterType: null, parser: harness, role: null, subOrchestrator: true }
+}
+
 function pathKey(path) {
   try {
     const resolved = resolve(String(path ?? ''))
@@ -200,12 +213,16 @@ function laneOf(name, lanes) {
   return keys.find((key) => name.startsWith(`${key}-`)) ?? null
 }
 
+function subOf(name) {
+  const match = /^(sub-[a-z0-9-]{1,24})-chat-\d{8}-/.exec(name)
+  return match ? match[1] : null
+}
+
 export function createLanesSource(options = {}) {
   const folder = resolve(options.folder ?? runsFolder())
   const recordsFile = resolve(options.recordsFile ?? join(folder, 'runs.jsonl'))
   const lanes = options.lanes ?? readLanes()
-  const agents = laneAgents(lanes)
-  const byLane = new Map(agents.map((agent) => [agent.key, agent]))
+  const subOrchestrators = typeof options.subOrchestrators === 'function' ? options.subOrchestrators : () => []
   const roomRoot = options.projectRoot ? resolve(options.projectRoot) : ''
   const repoRoot = resolve(options.repoRoot ?? REPO_ROOT)
   const worktreeRoots = new Set([pathKey(repoRoot)])
@@ -234,6 +251,28 @@ export function createLanesSource(options = {}) {
     try {
       onFrame(frame)
     } catch {}
+  }
+
+  function agentsNow() {
+    const list = laneAgents(lanes)
+    let subs = []
+    try {
+      subs = subOrchestrators() ?? []
+    } catch {
+      subs = []
+    }
+    for (const sub of Array.isArray(subs) ? subs : []) {
+      const agent = subOrchestratorAgent(sub)
+      if (agent && !list.some((item) => item.key === agent.key)) list.push(agent)
+    }
+    return list
+  }
+
+  function agentFor(name, map) {
+    const sub = subOf(name)
+    if (sub) return map.get(sub) ?? null
+    const lane = laneOf(name, lanes)
+    return lane ? map.get(lane) ?? null : null
   }
 
   function inRoomRepo(project) {
@@ -281,6 +320,7 @@ export function createLanesSource(options = {}) {
     } catch {
       return
     }
+    const map = new Map(agentsNow().map((agent) => [agent.key, agent]))
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.log')) continue
       const path = join(folder, entry.name)
@@ -309,12 +349,7 @@ export function createLanesSource(options = {}) {
           }
         }
       }
-      const lane = laneOf(entry.name, lanes)
-      if (!lane) {
-        seen.add(key)
-        continue
-      }
-      const agent = byLane.get(lane)
+      const agent = agentFor(entry.name, map)
       if (!agent) {
         seen.add(key)
         continue
@@ -545,5 +580,13 @@ export function createLanesSource(options = {}) {
     }))
   }
 
-  return { agents, openRuns, start, stop, tick }
+  return {
+    get agents() {
+      return agentsNow()
+    },
+    openRuns,
+    start,
+    stop,
+    tick,
+  }
 }
