@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A new `server/harnesses/` holds one Node descriptor per harness with a session reader, and `server/sessions-source.js` ticks the readers the registry lists instead of naming Claude Code and OpenCode (task H7, step H3 of HARNESSES.md).
 - The orchestrator chat names the project folder: the header shows its base name beside the model and the first-message card gives the full path (task Q6c).
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator chat has a tab per orchestrator, an Attach form that saves the whole ladder and lists the bridge's problems, and Detach behind a confirm card, with the ladder form helpers and the client and mock routes behind them (task O4).
