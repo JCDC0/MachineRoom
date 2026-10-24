@@ -20,7 +20,10 @@ export function withLanePrograms(env, folder) {
     writeFileSync(path, '')
     chmodSync(path, 0o755)
   }
-  const pathKey = Object.keys(next).find((key) => key.toUpperCase() === 'PATH') ?? 'PATH'
-  next[pathKey] = [bin, next[pathKey]].filter(Boolean).join(delimiter)
+  // A Windows runner can carry both Path and PATH; keep one, or the child may read the other.
+  const pathKeys = Object.keys(next).filter((key) => key.toUpperCase() === 'PATH')
+  const current = pathKeys.map((key) => next[key]).find(Boolean) ?? ''
+  for (const key of pathKeys) delete next[key]
+  next.PATH = [bin, current].filter(Boolean).join(delimiter)
   return next
 }
