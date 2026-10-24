@@ -14,6 +14,11 @@ function recordCost(record) {
   return typeof record?.costUsd === 'number' && Number.isFinite(record.costUsd) ? record.costUsd : null
 }
 
+function recordTokens(record, name) {
+  const value = record?.[name]
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
 export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) {
   const from = monthStart(now)
   const to = nextMonth(from)
@@ -25,9 +30,23 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     if (!lane) continue
     const started = Date.parse(record.startedAt)
     if (!Number.isFinite(started) || started < from || started >= to) continue
+    let total = totals.get(lane)
+    if (!total) {
+      total = { cost: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      totals.set(lane, total)
+    }
     const cost = recordCost(record)
-    if (cost === null) continue
-    totals.set(lane, (totals.get(lane) ?? 0) + cost)
+    if (cost !== null) total.cost += cost
+    const input = recordTokens(record, 'inputTokens')
+    if (input !== null) {
+      total.input += input
+      total.hasInput = true
+    }
+    const output = recordTokens(record, 'outputTokens')
+    if (output !== null) {
+      total.output += output
+      total.hasOutput = true
+    }
   }
 
   const byAgent = []
@@ -36,13 +55,13 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     const agentId = String(agent.id ?? '')
     if (!agentId) continue
     const key = String(agent.key ?? '')
-    const total = key ? totals.get(key) ?? 0 : 0
+    const total = key ? totals.get(key) : null
     byAgent.push({
       agentId,
       agentName: String(agent.name ?? key ?? agentId),
-      costCents: Math.round(total * 100),
-      inputTokens: null,
-      outputTokens: null,
+      costCents: Math.round((total?.cost ?? 0) * 100),
+      inputTokens: total?.hasInput ? total.input : null,
+      outputTokens: total?.hasOutput ? total.output : null,
     })
   }
 

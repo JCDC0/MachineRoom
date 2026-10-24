@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
 import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf, timeUntil } from './format.js'
 import { subscribeToNotices } from './notices.js'
-import { backupAgePercent, backupNotice, backupsNotRunning, formatBytes } from './backup.js'
+import { backupAgePercent, backupNotice, backupsNotRunning, formatBytes, laneModeFromHealth } from './backup.js'
 
 export function budgetConfirmText(name, cents) {
   return `Set ${visibleText(name)}'s monthly budget to ${formatCents(cents)} in Paperclip?`
@@ -33,7 +33,7 @@ export default function MetersPanel({
     () => initialBackupStatus == null && typeof client?.backupStatus === 'function'
   )
   const [backupError, setBackupError] = useState(null)
-  const [backupDown, setBackupDown] = useState(false)
+  const [health, setHealth] = useState(null)
   const [showConfirm, setShowConfirm] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   const [backupActionError, setBackupActionError] = useState(null)
@@ -69,12 +69,20 @@ export default function MetersPanel({
     try {
       const status = await client.backupStatus()
       setBackupStatus(status)
-      setBackupDown(false)
-    } catch (err) {
+    } catch {
       setBackupError('Could not read the backup status.')
-      setBackupDown(err?.message === 'Paperclip did not answer.')
     } finally {
       setBackupLoading(false)
+    }
+  }
+
+  async function loadHealth() {
+    if (typeof client?.health !== 'function') return
+    try {
+      const answer = await client.health()
+      setHealth(answer && typeof answer === 'object' && !Array.isArray(answer) ? answer : null)
+    } catch {
+      setHealth(null)
     }
   }
 
@@ -97,6 +105,7 @@ export default function MetersPanel({
   useEffect(() => {
     loadData({ isInitial: true })
     loadBackup()
+    loadHealth()
   }, [client])
 
   useEffect(() => {
@@ -151,7 +160,8 @@ export default function MetersPanel({
   }
 
   const notice = backupNotice(backupStatus)
-  const backupsLine = backupsNotRunning({ laneMode: Boolean(costs), paperclipDown: backupDown })
+  const laneMode = laneModeFromHealth(health)
+  const backupsLine = backupsNotRunning({ laneMode, paperclipDown: laneMode })
   const backupPct = backupAgePercent(backupStatus)
   const summary = costs?.summary ?? null
   const quota = listOf(costs?.quota)
@@ -169,6 +179,7 @@ export default function MetersPanel({
           onClick={() => {
             loadData({ isInitial: false })
             loadBackup()
+            loadHealth()
           }}
         >
           Refresh

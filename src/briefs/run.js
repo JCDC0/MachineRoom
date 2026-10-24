@@ -582,7 +582,52 @@ function logCost(log) {
 function opencodeSummary(log, worktree) {
   const parser = createOpencodeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('opencode', activities, opencodeReport(log), logCost(log))
+  return summaryOf('opencode', activities, opencodeReport(log), { costUsd: logCost(log) })
+}
+
+function lastJsonLine(log, match) {
+  let last = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (match(item)) last = item
+  }
+  return last
+}
+
+function tokenCount(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
+}
+
+function sumTokens(values) {
+  const known = values.map(tokenCount).filter((value) => value !== null)
+  return known.length === 0 ? null : known.reduce((sum, value) => sum + value, 0)
+}
+
+function claudeUsage(log) {
+  const line = lastJsonLine(log, (item) => item?.type === 'result')
+  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null }
+  const usage = line.usage && typeof line.usage === 'object' ? line.usage : {}
+  return {
+    costUsd: finiteNumber(line.total_cost_usd),
+    inputTokens: sumTokens([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens]),
+    outputTokens: tokenCount(usage.output_tokens),
+  }
+}
+
+function agyUsage(log) {
+  const line = lastJsonLine(log, (item) => item?.event === 'result')
+  const usage = line?.result?.usage
+  const inputTokens = tokenCount(usage?.input_tokens)
+  const output = tokenCount(usage?.output_tokens)
+  const thinking = tokenCount(usage?.thinking_tokens)
+  const outputTokens = output === null && thinking === null ? null : (output ?? 0) + (thinking ?? 0)
+  return { costUsd: null, inputTokens, outputTokens }
 }
 
 function agyReport(log) {
@@ -606,10 +651,10 @@ function agyReport(log) {
 function agySummary(log, worktree) {
   const parser = createAgyParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('agy', activities, agyReport(log), null)
+  return summaryOf('agy', activities, agyReport(log), agyUsage(log))
 }
 
-function summaryOf(harness, activities, head, costUsd) {
+function summaryOf(harness, activities, head, { costUsd = null, inputTokens = null, outputTokens = null } = {}) {
   const calls = activities.filter((activity) => activity.type === 'tool.start')
   const written = []
   const read = []
@@ -628,19 +673,21 @@ function summaryOf(harness, activities, head, costUsd) {
     read: unique(read),
     head,
     costUsd,
+    inputTokens,
+    outputTokens,
   }
 }
 
 function hermesSummary(log, worktree) {
   const parser = createHermesParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('hermes', activities, reportHead(log), null)
+  return summaryOf('hermes', activities, reportHead(log))
 }
 
 function claudeSummary(log, worktree) {
   const parser = createClaudeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('claude', activities, [], null)
+  return summaryOf('claude', activities, [], claudeUsage(log))
 }
 
 export function summarizeRun({ harness, log, worktree } = {}) {
@@ -683,7 +730,11 @@ function isoTime(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, log, branch, commits, project, task } = {}) {
+function tokenField(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
+}
+
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -694,6 +745,8 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     exitCode: Number.isInteger(exitCode) ? exitCode : null,
     killed: killed === true,
     costUsd: typeof costUsd === 'number' && Number.isFinite(costUsd) ? costUsd : null,
+    inputTokens: tokenField(inputTokens),
+    outputTokens: tokenField(outputTokens),
     log: log ? String(log) : null,
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],
