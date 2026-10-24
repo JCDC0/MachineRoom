@@ -24,11 +24,11 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
 | `briefs()` | `Brief[]`, in file order (added with task T1a; the mock serves samples) |
 | `briefPrompt(ids, lane)` | `BriefPrompt`, the full prompt for one or more briefs and one lane (T1a) |
-| `runs()` | `{ running, recent }`, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
+| `runs()` | `{ project, running, recent }`, the name of the room's project folder, the runs this bridge started that have not ended (`RunInfo`) and the last 20 run records, newest first (T5) |
 | `runStats({ since? })` | `RunStats`, runs, minutes and cost per lane and model over every run record, or from `since` (a `YYYY-MM-DD` day, UTC) on; a bad day is refused with `--since needs a date like 2026-10-19.` (T13b; the mock sums its own finished fake runs) |
 | `outcomes()` | `OutcomeRow[]`, one row per lane and model with its merged, rejected and pending runs, merge rate, average review fixes and cost per merge from the decided runs (C6a, C6b; the newest outcome for a branch wins, and the mock serves rows built from sample runs) |
 | `liveRuns()` | `LiveRun[]`, the queued and running Paperclip runs, newest first, at most 50 (W6a; a `liveRuns` change notice goes out on each `heartbeat.run.queued` and `heartbeat.run.status` frame; the mock serves one running run and adds one for the lane's agent while its own sample run from `startRun` lasts) |
-| `startRun(lane, briefs)` | `RunInfo`, the new running entry. It sends `confirmed: true`, so call it only after the user confirmed (U5a); a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record) |
+| `startRun(lane, { briefs } \| { task, allowDirty })` | `RunInfo`, the new running entry. `briefs` starts a brief run; `task` starts a run on the bridge's project folder and `allowDirty` lets a git project with uncommitted changes run. It sends `confirmed: true`, so call it only after the user confirmed (U5a); a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record). A task outside 1 to 4000 characters, this checkout or a lane worktree, and a dirty project without `allowDirty` are refused (L3) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did at its head on its branch compared with `main` (W3a) |
 | `mergeReview(lane, { head, message })` | `MergeResult`, the new merge commit on `main`. It sends `confirmed: true`, so call it only after the user confirmed; `head` is the sha from `reviews()` (W3b; the mock merges a sample lane once) |
@@ -74,7 +74,8 @@ PlanAnswer   { status: waiting | ready, briefs: PlanBrief[], problems: string[],
 PlanBrief    { id, title, owner, size: small | medium | large, files: string[], tests: string[], text, dependsOn: string[] }
 RunInfo      { lane, briefs: string[], startedAt, lastLines: string[] (the last 5 lines the run printed) }
 RunRecord    { lane, briefs, model: string|null, reasoning: string|null, startedAt, minutes: number|null, exitCode: number|null,
-               killed: boolean, costUsd: number|null, log: string|null, branch, commits: string[] }   (one line of runs.jsonl)
+               killed: boolean, costUsd: number|null, log: string|null, branch, commits: string[],
+               project?: string, task?: string }   (one line of runs.jsonl; a project run has empty briefs, the folder and the first 200 characters of its task)
 Review       { lane, worktree, branch, head: string (full sha of the worktree HEAD), ahead: number (commits on top of main),
                commits: string[] (at most 50), dirty: boolean, files: number, added: number, deleted: number,
                lastRun: RunRecord | null }
@@ -107,7 +108,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 
 When the lane source is on and Paperclip does not answer, `costs()` comes from the lane run records: one row per lane with this calendar month's spend, no budget, null tokens and no quota, and the Backups section says Paperclip is not running.
 
-Lane mode: with the lane source on and Paperclip not answering, `issues()` and `liveRuns()` read the lane runs, `comments()` and `approvals()` are empty, `createIssue` and `postComment` reject with `Lane runs start from Dispatch, not from a task.`, and the real client's `health()` reads `/api/health` (`lanes: true`, `paperclip: false`).
+Lane mode: with the lane source on and Paperclip not answering, `issues()` and `liveRuns()` read the lane runs, `comments()` and `approvals()` are empty, `createIssue` and `postComment` reject with `Lane runs start from Dispatch, not from a task.`, and the real client's `health()` reads `/api/health` (`lanes: true`, `paperclip: false`). When `health()` says `lanes: true`, the Dispatch panel lists the lane agents with a command line and starts a task on the room's project folder with `startRun(lane, { task, allowDirty })` (L3).
 
 ## Hiring and updating an agent (C3c)
 

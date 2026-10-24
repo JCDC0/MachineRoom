@@ -158,6 +158,8 @@ npm run run-lane -- opencode --project C:\GitHub\Other --task-file task.md
 
 The runner refuses this checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. It runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
 
+With `--lanes`, the Dispatch panel can start the same kind of run on the room's own folder: pick a lane, write the task, and turn on `Allow uncommitted changes` when the folder has them.
+
 A lane's `cli.model` can name a `provider/model` from any OpenAI-compatible provider in OpenCode's own config. The key stays in that config or an environment variable, never in `docs/agents/lanes.json` or this repository. MachineRoom does not set up a provider and does not read the key.
 
 ## What it never does

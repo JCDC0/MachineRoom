@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Dispatch panel starts a run on the room's own project when the lane source is on: `POST /api/control/runs` takes a lane and a task and runs `run-lane --project` with `--task`, the same project checks refuse this checkout, a lane worktree and a dirty folder, and the panel shows a confirm card with a switch for uncommitted changes (task L3).
 - Briefs L3 (start a project run from the drawer), L4 (costs and tokens for Claude Code and AGY, and the Meters check) and Q5 (read what changed on 2026-10-24).
 
 - Review note on L2: no fixes. With the lane source on and Paperclip down, issues, live runs, comments and approvals come from the lane runs; writes to a lane task answer 409. Run queued and status frames now also send an `issues` notice (not log frames, so a few per run). The control client gained `health()` so the Approvals tab can tell lane mode apart. Full suite on the merge: 124 files, 2324 tests.
