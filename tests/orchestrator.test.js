@@ -1,10 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { createLanesSource } from '../server/lanes-source.js'
+import { createLanesSource, laneAgents } from '../server/lanes-source.js'
 import { createOrchestrator } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
@@ -16,7 +16,13 @@ const ORCHESTRATOR_LANE = {
   harness: 'Claude Code',
   cli: { harness: 'claude', bin: 'claude', model: 'opus' },
 }
+const OPENCODE_LANE = {
+  name: 'Orchestrator',
+  harness: 'OpenCode',
+  cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
+}
 const LANES = { orchestrator: ORCHESTRATOR_LANE }
+const OPENCODE_LANES = { orchestrator: OPENCODE_LANE }
 const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
 const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
 
@@ -36,7 +42,30 @@ const FAKE_CLAUDE = [
   '  }',
   '}',
   "const reply = mode === 'empty' ? '' : mode === 'fail' ? 'You have hit your session limit.' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
-  "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125 }))",
+  "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: 12, output_tokens: 3 } }))",
+  "if (mode === 'fail') process.exitCode = 3",
+].join('\n')
+
+const FAKE_OPENCODE = [
+  "import { appendFileSync, existsSync } from 'node:fs'",
+  'const args = process.argv.slice(2)',
+  "const calls = String(process.env.MR_CALLS ?? '')",
+  "if (calls) appendFileSync(calls, JSON.stringify({ pid: process.pid, args, cwd: process.cwd() }) + '\\n')",
+  "const at = args.indexOf('--session')",
+  "const sessionId = at === -1 ? 'ses_fake_first' : String(args[at + 1] ?? '')",
+  "const prompt = String(args.at(-1) ?? '')",
+  "console.log(JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: sessionId, part: { type: 'step-start' } }))",
+  "console.log(JSON.stringify({ type: 'tool_use', timestamp: 2, sessionID: sessionId, part: { id: 'prt_1', type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'src/math.js' } } } }))",
+  "const mode = String(process.env.MR_MODE ?? 'reply')",
+  "if (mode === 'hold') {",
+  "  while (!existsSync(String(process.env.MR_RELEASE ?? ''))) {",
+  '    await new Promise((done) => setTimeout(done, 20))',
+  '  }',
+  '}',
+  "console.log(JSON.stringify({ type: 'text', timestamp: 3, sessionID: sessionId, part: { type: 'text', text: 'Working.' } }))",
+  "const reply = mode === 'fail' ? '' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "console.log(JSON.stringify({ type: 'text', timestamp: 4, sessionID: sessionId, part: { type: 'text', text: reply } }))",
+  "console.log(JSON.stringify({ type: 'step_finish', timestamp: 5, sessionID: sessionId, part: { type: 'step-finish', cost: 0.25, tokens: { input: 12, output: 3 } } }))",
   "if (mode === 'fail') process.exitCode = 3",
 ].join('\n')
 
@@ -78,14 +107,14 @@ function readLines(file) {
     .filter(Boolean)
 }
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, project = true } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', project = true } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
   mkdirSync(runs, { recursive: true })
   if (projectRoot) mkdirSync(projectRoot, { recursive: true })
-  const script = join(base, 'fake-claude.mjs')
-  writeFileSync(script, FAKE_CLAUDE)
+  const script = join(base, harness === 'opencode' ? 'fake-opencode.mjs' : 'fake-claude.mjs')
+  writeFileSync(script, harness === 'opencode' ? FAKE_OPENCODE : FAKE_CLAUDE)
   const promptFile = join(base, 'orchestrator-agent.md')
   if (prompt !== null) writeFileSync(promptFile, prompt)
   const callsFile = join(base, 'calls.jsonl')
@@ -120,6 +149,8 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, project = tru
     callsFile,
     releaseFile,
     promptFile,
+    lanes,
+    harness,
     behaviour,
     notices,
     orchestrator,
@@ -140,6 +171,11 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, project = tru
 
 async function waitIdle(rig, count) {
   await waitFor(() => rig.answer().state === 'idle' && rig.calls().length === count, 15000, `turn ${count} to end`)
+}
+
+function stateFile(rig) {
+  const file = readdirSync(rig.runs).find((name) => /^orchestrator-[0-9a-f]{8}\.json$/.test(name))
+  return JSON.parse(readFileSync(join(rig.runs, file), 'utf8'))
 }
 
 function recordsOf(rig) {
@@ -215,9 +251,62 @@ describe('one orchestrator turn', () => {
     expect(second.args).not.toContain('--session-id')
     expect(valueAfter(second.args, '--resume')).toBe(sessionId)
     expect(second.args[1]).toBe('And then run the tests.')
-    expect(recordsOf(rig).at(-1)).toMatchObject({ lane: 'orchestrator', exitCode: 0, killed: false, costUsd: 0.125 })
+    expect(recordsOf(rig).at(-1)).toMatchObject({ lane: 'orchestrator', exitCode: 0, killed: false, costUsd: 0.125, inputTokens: 12, outputTokens: 3 })
     expect(rig.notices.length).toBeGreaterThan(0)
     expect(rig.notices.every((event) => event.topic === 'orchestrator')).toBe(true)
+  })
+
+  it('runs an OpenCode turn with the instructions first, then the same session', async () => {
+    const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
+    expect(rig.answer()).toMatchObject({ state: 'idle', model: 'opencode-go/deepseek-v4.1-flash' })
+    rig.send('Build the room.')
+    await waitIdle(rig, 1)
+
+    const calls = rig.calls()
+    expect(calls).toHaveLength(1)
+    const first = calls[0].args
+    expect(rig.spawned[0].file).toBe('opencode')
+    expect(rig.spawned[0].shell).toBe(false)
+    expect(rig.spawned[0].cwd).toBe(rig.projectRoot)
+    expect(first.slice(0, 5)).toEqual(['run', '--format', 'json', '--model', 'opencode-go/deepseek-v4.1-flash'])
+    expect(first).toContain('--auto')
+    const title = valueAfter(first, '--title')
+    expect(title).toMatch(/^orchestrator-chat-/)
+    expect(first).not.toContain('--session')
+    const prompt = first.at(-1)
+    expect(prompt.startsWith(`project=${rig.projectRoot}`)).toBe(true)
+    expect(prompt).toContain(`bridge=http://127.0.0.1:5999`)
+    expect(prompt.endsWith('Build the room.')).toBe(true)
+
+    const reply = rig.answer().messages.at(-1)
+    expect(reply.from).toBe('orchestrator')
+    expect(reply.text.startsWith('Reply: project=')).toBe(true)
+    expect(reply.text).not.toBe('Working.')
+
+    const saved = stateFile(rig)
+    expect(saved.sessionId).toBe('ses_fake_first')
+    expect(saved.state).toBe('idle')
+    const record = recordsOf(rig).at(-1)
+    expect(record).toMatchObject({
+      lane: 'orchestrator',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      exitCode: 0,
+      killed: false,
+      costUsd: 0.25,
+      inputTokens: null,
+      outputTokens: null,
+    })
+    expect(basename(record.log, '.log')).toBe(title)
+    const meta = JSON.parse(readFileSync(record.log.replace(/\.log$/, '.meta.json'), 'utf8'))
+    expect(meta).toEqual({ project: rig.projectRoot, sessionId: 'ses_fake_first' })
+
+    rig.send('And then run the tests.')
+    await waitIdle(rig, 2)
+    const second = rig.calls()[1].args
+    expect(valueAfter(second, '--session')).toBe('ses_fake_first')
+    expect(second.at(-1)).toBe('And then run the tests.')
+    expect(second.at(-1)).not.toContain('project=')
+    expect(recordsOf(rig).at(-1)).toMatchObject({ costUsd: 0.25 })
   })
 
   it('waits a message that arrives during a turn and sends it in the next one', async () => {
@@ -534,5 +623,38 @@ describe('the lane source and the orchestrator turn', () => {
     const meta = JSON.parse(readFileSync(record.log.replace(/\.log$/, '.meta.json'), 'utf8'))
     expect(meta.project).toBe(rig.projectRoot)
     expect(meta.sessionId).toBe(valueAfter(rig.calls()[0].args, '--session-id'))
+  })
+
+  it('shows an OpenCode turn with the OpenCode parser', async () => {
+    const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
+    expect(laneAgents(OPENCODE_LANES)[0]).toMatchObject({ key: 'orchestrator', parser: 'opencode' })
+    const frames = []
+    const source = createLanesSource({
+      folder: rig.runs,
+      projectRoot: rig.projectRoot,
+      repoRoot: rig.projectRoot,
+      lanes: OPENCODE_LANES,
+      pollMs: 20,
+      quietMs: 60000,
+      onFrame: (item) => frames.push(item),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+
+    rig.send('Show this turn.')
+    await waitFor(
+      () =>
+        frames.some(
+          (item) =>
+            item.type === 'heartbeat.run.status' &&
+            item.payload.status === 'succeeded' &&
+            item.payload.agentId === 'agent-orchestrator'
+        ),
+      15000,
+      'the lane source to end the OpenCode turn'
+    )
+    expect(
+      frames.some((item) => item.type === 'heartbeat.run.log' && String(item.payload.chunk).includes('"type":"tool_use"'))
+    ).toBe(true)
   })
 })
