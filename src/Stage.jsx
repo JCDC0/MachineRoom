@@ -15,6 +15,7 @@ import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
+import { OrchestratorActivity, orchestratorDoing } from './ui/orchestratorChat.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
 import { loadEffectSettings, loadSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
 import { setFineDust } from './engine/void.js'
@@ -404,6 +405,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const idleSoFar = snapshot.agents.every((agent) => agent.runs === 0)
   const linkTrouble = ['connecting', 'reconnecting', 'disconnected'].includes(snapshot.status)
   const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
+  const orchestratorActivity = orchestratorDoing(snapshot.agents)
 
   const fishEyeOn = Boolean(effects.fishEye?.on && effects.fishEye?.strength > 0)
   const barrelMap = useMemo(() => (fishEyeOn ? barrelDataUri() : ''), [fishEyeOn])
@@ -506,33 +508,35 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         </div>
       )}
       {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
-      <Hud
-        snapshot={snapshot}
-        focused={focused}
-        speeds={SPEEDS}
-        rootName={data.tree.rootName}
-        fpsStats={fpsStats}
-        mode={mode}
-        client={client}
-        assistantPaths={assistantPaths}
-        onAssistantAction={runAssistant}
-        controlTarget={controlTarget}
-        markers={timeline?.markers ?? NONE}
-        log={log}
-        liveAvailable={liveAvailable}
-        onMode={onMode}
-        onToggle={() => player.toggle()}
-        onSeek={(value) => player.seek(value)}
-        onSpeed={changeSpeed}
-        onFocus={focus}
-        onOverview={overview}
-        openTerminals={openChips}
-        onToggleTerminal={toggleTerminal}
-        onShowTerminals={showTerminals}
-        health={health}
-        effects={effects}
-        onSettingsChange={handleSettingsChange}
-      />
+      <OrchestratorActivity.Provider value={orchestratorActivity}>
+        <Hud
+          snapshot={snapshot}
+          focused={focused}
+          speeds={SPEEDS}
+          rootName={data.tree.rootName}
+          fpsStats={fpsStats}
+          mode={mode}
+          client={client}
+          assistantPaths={assistantPaths}
+          onAssistantAction={runAssistant}
+          controlTarget={controlTarget}
+          markers={timeline?.markers ?? NONE}
+          log={log}
+          liveAvailable={liveAvailable}
+          onMode={onMode}
+          onToggle={() => player.toggle()}
+          onSeek={(value) => player.seek(value)}
+          onSpeed={changeSpeed}
+          onFocus={focus}
+          onOverview={overview}
+          openTerminals={openChips}
+          onToggleTerminal={toggleTerminal}
+          onShowTerminals={showTerminals}
+          health={health}
+          effects={effects}
+          onSettingsChange={handleSettingsChange}
+        />
+      </OrchestratorActivity.Provider>
     </div>
   )
 }

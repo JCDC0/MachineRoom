@@ -4581,6 +4581,7 @@ summary:focus-visible,
   gap: var(--space);
   font-size: 12px;
   letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
 }
 
 .mr-orch-dot {
@@ -4666,6 +4667,55 @@ summary:focus-visible,
 
 .mr-orch-text {
   white-space: pre-wrap;
+}
+
+.mr-orch-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mr-orch-block {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mr-orch-block.is-heading {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.mr-orch-block.is-list {
+  padding-left: 18px;
+}
+
+.mr-orch-block.is-list li {
+  white-space: pre-wrap;
+}
+
+.mr-orch-block.is-list li + li {
+  margin-top: 2px;
+}
+
+.mr-orch-block.is-code {
+  padding: 6px;
+  overflow-x: auto;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.05);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mr-orch-code {
+  padding: 0 3px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  background: rgb(255 255 255 / 0.06);
+  font-family: var(--mono);
+  font-size: 11px;
 }
 
 .mr-orch-who {

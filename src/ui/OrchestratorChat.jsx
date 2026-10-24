@@ -1,20 +1,75 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useContext, useEffect, useId, useRef, useState } from 'react'
 import {
   ORCH_MAX_CHARS,
   ORCH_REFRESH_MS,
   ORCH_START_CONFIRM,
   ORCH_STOP_CONFIRM,
+  OrchestratorActivity,
   canSend,
   charCount,
+  chatBlocks,
   chatLines,
   clampDraft,
   errorText,
   isSendKey,
   needsStartConfirm,
   normalizeChat,
-  statusText,
+  statusDetail,
   statusTone,
 } from './orchestratorChat.js'
+
+function InlineSpans({ spans }) {
+  return spans.map((span, index) =>
+    span.kind === 'code' ? (
+      <code key={index} className="mr-orch-code">
+        {span.text}
+      </code>
+    ) : (
+      <span key={index}>{span.text}</span>
+    )
+  )
+}
+
+function ChatBlocks({ text }) {
+  return chatBlocks(text).map((block, index) => {
+    if (block.kind === 'code') {
+      return (
+        <pre key={index} className="mr-orch-block is-code">
+          <code>{block.text}</code>
+        </pre>
+      )
+    }
+    if (block.kind === 'list') {
+      const items = block.items.map((item, itemIndex) => (
+        <li key={itemIndex}>
+          <InlineSpans spans={item.spans} />
+        </li>
+      ))
+      const start = block.ordered && block.start !== 1 ? block.start : undefined
+      return block.ordered ? (
+        <ol key={index} className="mr-orch-block is-list" start={start}>
+          {items}
+        </ol>
+      ) : (
+        <ul key={index} className="mr-orch-block is-list">
+          {items}
+        </ul>
+      )
+    }
+    if (block.kind === 'heading') {
+      return (
+        <p key={index} className="mr-orch-block is-heading">
+          <InlineSpans spans={block.spans} />
+        </p>
+      )
+    }
+    return (
+      <p key={index} className="mr-orch-block is-para">
+        <InlineSpans spans={block.spans} />
+      </p>
+    )
+  })
+}
 
 function initialChatState(initialChat) {
   return normalizeChat(initialChat)
@@ -27,6 +82,7 @@ export default function OrchestratorChat({
   initialChat = null,
   initialDraft = '',
   initialConfirm = null,
+  activity = '',
 }) {
   const [chat, setChat] = useState(() => initialChatState(initialChat))
   const [draft, setDraft] = useState(() => clampDraft(initialDraft))
@@ -45,9 +101,11 @@ export default function OrchestratorChat({
   const logRef = useRef(null)
   const inputRef = useRef(null)
   const reloadRef = useRef(null)
+  const roomActivity = useContext(OrchestratorActivity)
 
   const lines = chatLines(chat)
-  const status = statusText(chat.state)
+  const doing = activity || roomActivity
+  const status = statusDetail(chat.state, doing)
   const tone = statusTone(chat.state)
   const count = charCount(draft)
   const working = chat.state === 'working'
@@ -220,7 +278,13 @@ export default function OrchestratorChat({
           lines.map((line) => (
             <div key={line.id} className={`mr-orch-line is-${line.from}`}>
               {line.from === 'room' ? <span className="mr-orch-who mono">room</span> : null}
-              <span className="mr-orch-text">{line.text}</span>
+              {line.from === 'owner' ? (
+                <span className="mr-orch-text">{line.text}</span>
+              ) : (
+                <div className={`mr-orch-blocks is-${line.from}`}>
+                  <ChatBlocks text={line.text} />
+                </div>
+              )}
             </div>
           ))
         )}
