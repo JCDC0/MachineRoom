@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge tests Y1 dropped are back on the lane bridge: the agent list, SSE replay, key masking, the unreadable counter, the assistant, briefs, run and decide routes, with the cases whose subject is gone left out (task Y1c).
 - The room has an orchestrator chat: a bottom left panel with the conversation, the state line, the message box and the confirm cards, opened by an ORCHESTRATOR button beside CONTROL or by `/`, and the waiting card points a beginner at it (task K2).
 - A lane run on another project takes `--worktree` to run in a git worktree beside the project at `<parent>/<project>-mr-<lane>`, made from the project's HEAD when missing and reused when clean, with a `node_modules` link and a refusal that names a dirty worktree; a queue makes its branch there and `--dry-run` prints the path and whether it would be made (task K3).
 - `docs/agents/ORCHESTRATOR-AGENT.md` gives the orchestrator lane its system prompt: find out what the owner wants, plan tasks that touch different files, start lanes in worktrees, check their branches, merge what passes with a straight-line history and report (task K3).
