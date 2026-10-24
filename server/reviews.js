@@ -1,6 +1,9 @@
 import { execFile } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { worktreeFor } from '../src/briefs/run.js'
+import { mainCheckoutOf } from './lanes-source.js'
 import { gitPath } from './programPath.js'
 import { readRunRecords, runsFile } from './runs.js'
 
@@ -11,9 +14,19 @@ const MESSAGE_LIMIT = 200
 const HEAD_PATTERN = /^[0-9a-fA-F]{40}$/
 const MERGE_ENV = { GIT_TERMINAL_PROMPT: '0', GIT_EDITOR: 'true' }
 const MAIN_REF = 'refs/heads/main'
-const LANE_RANGE = `${MAIN_REF}..HEAD`
-const LANE_DIFF = `${MAIN_REF}...HEAD`
+const MAIN_BASE = { ref: MAIN_REF, name: 'main' }
+const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
+const ROOM_BRIEFS = join(REPO_ROOT, 'docs', 'agents')
 export const DEFAULT_PATCH_LIMIT = 400 * 1024
+
+function pathKey(path) {
+  try {
+    const resolved = resolve(String(path ?? ''))
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+  } catch {
+    return ''
+  }
+}
 
 function readText(path) {
   if (!path) return null
@@ -121,11 +134,17 @@ function parseNumstat(output) {
   return { files, added, deleted }
 }
 
-function laneWorktree(lanes, lane) {
+function laneEntry(lanes, lane) {
   if (typeof lane !== 'string' || !lane) return null
   if (!Object.hasOwn(lanes, lane)) return null
   const info = lanes[lane]
   if (!info || typeof info !== 'object' || Array.isArray(info)) return null
+  return info
+}
+
+function laneWorktree(lanes, lane) {
+  const info = laneEntry(lanes, lane)
+  if (!info) return null
   if (!Object.hasOwn(info, 'worktree')) return null
   const worktree = info.worktree
   if (typeof worktree !== 'string' || !worktree) return null
@@ -136,10 +155,21 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const limit = Number.isInteger(patchLimit) && patchLimit > 0 ? patchLimit : DEFAULT_PATCH_LIMIT
+  const roomCheckout = resolvedRoot ? mainCheckoutOf(resolvedRoot) : ''
+  const codeCheckout = roomCheckout ? mainCheckoutOf(REPO_ROOT) : ''
+  const otherProject = Boolean(roomCheckout && codeCheckout && pathKey(roomCheckout) !== pathKey(codeCheckout))
+  const lanesFolder =
+    resolvedBriefs && existsSync(join(resolvedBriefs, 'lanes.json'))
+      ? resolvedBriefs
+      : otherProject && existsSync(join(ROOM_BRIEFS, 'lanes.json'))
+        ? ROOM_BRIEFS
+        : resolvedBriefs
+  const lanesCheckout = lanesFolder ? mainCheckoutOf(lanesFolder) : ''
+  const onProject = Boolean(roomCheckout && lanesCheckout && pathKey(roomCheckout) !== pathKey(lanesCheckout))
   let merging = false
 
   function readLanes() {
-    const text = resolvedBriefs ? readText(join(resolvedBriefs, 'lanes.json')) : null
+    const text = lanesFolder ? readText(join(lanesFolder, 'lanes.json')) : null
     if (text === null) return { status: 404, error: 'The lane file is missing.' }
     let parsed
     try {
@@ -157,18 +187,38 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
     return readRunRecords(runsFile()).find((record) => record && record.lane === lane) ?? null
   }
 
-  async function laneReview(lane, worktree) {
+  function laneFolder(lanes, lane) {
+    if (!onProject) return laneWorktree(lanes, lane)
+    if (!laneEntry(lanes, lane)) return null
+    return worktreeFor(resolvedRoot, lane)
+  }
+
+  async function projectBase() {
+    try {
+      const branch = (await git(resolvedRoot, ['symbolic-ref', '--short', 'HEAD'])).trim()
+      return branch ? { ref: `refs/heads/${branch}`, name: branch } : null
+    } catch {
+      return null
+    }
+  }
+
+  async function baseFor() {
+    return onProject ? projectBase() : MAIN_BASE
+  }
+
+  async function laneReview(lane, worktree, base) {
     const branch = (await git(worktree, ['branch', '--show-current'])).trim()
     const head = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
-    const log = await git(worktree, ['log', '--oneline', LANE_RANGE])
+    const log = await git(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
     const commits = log.split(/\r?\n/).filter(Boolean)
     const status = await git(worktree, ['status', '--porcelain'])
-    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', LANE_DIFF]))
+    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
     return {
       lane,
       worktree,
       branch,
       head,
+      base: base.name,
       ahead: commits.length,
       commits: commits.slice(0, COMMIT_LIMIT),
       dirty: status.trim() !== '',
@@ -179,10 +229,10 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
     }
   }
 
-  async function laneDiff(lane, worktree) {
+  async function laneDiff(lane, worktree, base) {
     const branch = (await git(worktree, ['branch', '--show-current'])).trim()
     const head = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
-    const range = `${MAIN_REF}...${head}`
+    const range = `${base.ref}...${head}`
     const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', range]))
     const full = await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', range])
     const truncated = full.length > limit
@@ -264,6 +314,57 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
     return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit } }
   }
 
+  async function fastForwardLane(lane, worktree, head) {
+    if (!resolvedRoot) {
+      return { status: 500, body: { error: 'The bridge could not read the project folder.' } }
+    }
+
+    const base = await projectBase()
+    if (!base) {
+      return { status: 409, body: { error: 'The project is not on a branch.' } }
+    }
+    const projectStatus = await git(resolvedRoot, ['status', '--porcelain', '--untracked-files=no'])
+    if (projectStatus.trim() !== '') {
+      return { status: 409, body: { error: 'The project has uncommitted changes.' } }
+    }
+
+    let laneHead
+    try {
+      laneHead = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
+    } catch (error) {
+      if (worktreeUnreadable(error)) {
+        return { status: 404, body: { error: worktreeError(error) } }
+      }
+      throw error
+    }
+    if (laneHead !== head) {
+      return { status: 409, body: { error: 'The lane moved since you read it. Read it again.' } }
+    }
+    const laneStatus = await git(worktree, ['status', '--porcelain'])
+    if (laneStatus.trim() !== '') {
+      return { status: 409, body: { error: 'The lane has uncommitted changes.' } }
+    }
+    if (await isAncestor(resolvedRoot, laneHead, base.ref)) {
+      return { status: 409, body: { error: 'Nothing to merge.' } }
+    }
+    if (!(await isAncestor(resolvedRoot, base.ref, laneHead))) {
+      return {
+        status: 409,
+        body: { error: `The lane is not a fast forward of ${base.name}. Rebase it onto ${base.name} and read it again.` },
+      }
+    }
+
+    const branch = (await git(worktree, ['branch', '--show-current'])).trim()
+    try {
+      await git(resolvedRoot, ['merge', '--ff-only', laneHead], MERGE_ENV)
+    } catch {
+      return { status: 500, body: { error: 'The merge failed.' } }
+    }
+
+    const commit = (await git(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
+    return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit } }
+  }
+
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
@@ -296,9 +397,18 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
         sendJson(req, res, 404, { error: 'Choose a lane from the list.' })
         return true
       }
-      const worktree = laneWorktree(read.lanes, lane)
+      const worktree = laneFolder(read.lanes, lane)
       if (!worktree) {
         sendJson(req, res, 404, { error: 'Choose a lane from the list.' })
+        return true
+      }
+      if (onProject && !existsSync(worktree)) {
+        sendJson(req, res, 404, { error: 'That worktree is missing.' })
+        return true
+      }
+      const base = await baseFor()
+      if (!base) {
+        sendJson(req, res, 409, { error: 'The project is not on a branch.' })
         return true
       }
 
@@ -333,7 +443,9 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
         merging = true
         let answer
         try {
-          answer = await mergeLane(lane, worktree, head, message)
+          answer = onProject
+            ? await fastForwardLane(lane, worktree, head)
+            : await mergeLane(lane, worktree, head, message)
         } catch {
           answer = { status: 500, body: { error: 'The merge failed.' } }
         } finally {
@@ -344,19 +456,25 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
       }
 
       try {
-        sendJson(req, res, 200, await laneDiff(lane, worktree))
+        sendJson(req, res, 200, await laneDiff(lane, worktree, base))
       } catch (error) {
         sendJson(req, res, 404, { error: worktreeError(error) })
       }
       return true
     }
 
+    const base = await baseFor()
+    if (!base) {
+      sendJson(req, res, 409, { error: 'The project is not on a branch.' })
+      return true
+    }
     const entries = []
     for (const lane of Object.keys(read.lanes)) {
-      const worktree = laneWorktree(read.lanes, lane)
+      const worktree = laneFolder(read.lanes, lane)
       if (!worktree) continue
+      if (onProject && !existsSync(worktree)) continue
       try {
-        entries.push(await laneReview(lane, worktree))
+        entries.push(await laneReview(lane, worktree, base))
       } catch (error) {
         entries.push({ lane, worktree, error: worktreeError(error) })
       }

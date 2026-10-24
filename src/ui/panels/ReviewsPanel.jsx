@@ -16,10 +16,12 @@ export function MergeConfirmCard({
   onCancel,
 }) {
   if (!target) return null
+  const base = target.base || 'main'
+  const laneName = target.branch ? `${target.lane}'s ${target.branch}` : `${target.lane}'s work`
   return (
     <div className="brief-confirm-card review-confirm-card" role="region" aria-label={`Confirm merge for ${target.lane}`}>
       <div className="brief-confirm-warning">
-        {`Merge ${target.lane}'s ${target.branch} (${target.headShort}) into main? It merges in the main checkout and never pushes.`}
+        {`Merge ${laneName} (${target.headShort}) into ${base}? It changes the project checkout and never pushes.`}
       </div>
       <div className="panel-field review-message-field">
         <label htmlFor={`merge-msg-${target.lane}`}>Message</label>
@@ -185,6 +187,7 @@ export default function ReviewsPanel({
     setConfirmTarget({
       lane: row.lane,
       branch: row.branch,
+      base: row.base || 'main',
       head: result.head,
       headShort: result.head.slice(0, 7),
     })
@@ -234,6 +237,7 @@ export default function ReviewsPanel({
   }
 
   const lines = diff?.patch ? patchLines(diff.patch) : []
+  const base = reviews.find((review) => typeof review?.base === 'string' && review.base)?.base ?? ''
 
   return (
     <div className="reviews-panel">
@@ -246,6 +250,10 @@ export default function ReviewsPanel({
           Refresh
         </button>
       </div>
+
+      {base && !loading && (
+        <div className="review-last-run mono">{`Each lane is compared against ${visibleText(base)}.`}</div>
+      )}
 
       {loading ? (
         <div className="panel-state mono">Loading reviews...</div>

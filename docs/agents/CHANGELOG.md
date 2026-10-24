@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Reviews tab follows lanes on the room's project: when the room's root is another repository it lists the worktrees beside the project, compares each lane against the project's current branch and fast-forwards that branch after a confirm, and the panel names the branch (task R10).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.

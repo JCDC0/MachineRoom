@@ -22,7 +22,8 @@ export function defaultMergeMessage(review) {
   if (!review || typeof review !== 'object') return ''
   const lane = typeof review.lane === 'string' ? review.lane.trim() : ''
   const branch = typeof review.branch === 'string' ? review.branch.trim() : ''
-  if (!lane || !branch) return ''
+  if (!lane) return ''
+  if (!branch) return `Merge ${lane}`
   return `Merge ${lane}'s ${branch}`
 }
 
@@ -50,6 +51,7 @@ export function reviewRow(review) {
       branch: '',
       head: '',
       headShort: '',
+      base: '',
       ahead: 0,
       aheadText: '0 commits ahead',
       files: 0,
@@ -69,6 +71,7 @@ export function reviewRow(review) {
   const branch = typeof review.branch === 'string' ? review.branch : ''
   const head = typeof review.head === 'string' ? review.head : ''
   const headShort = head.slice(0, 7)
+  const base = typeof review.base === 'string' ? review.base : ''
 
   if (review.error) {
     return {
@@ -76,6 +79,7 @@ export function reviewRow(review) {
       branch,
       head,
       headShort,
+      base,
       ahead: 0,
       aheadText: null,
       files: 0,
@@ -104,6 +108,7 @@ export function reviewRow(review) {
     branch,
     head,
     headShort,
+    base,
     ahead,
     aheadText: `${ahead} ${ahead === 1 ? 'commit' : 'commits'} ahead`,
     files,

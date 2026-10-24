@@ -1,0 +1,296 @@
+import { execFileSync } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { createElement } from 'react'
+import { renderToString } from 'react-dom/server'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createBridge } from '../server/index.js'
+import ReviewsPanel from '../src/ui/panels/ReviewsPanel.jsx'
+import { defaultMergeMessage, reviewRow } from '../src/ui/panels/reviews.js'
+import { makeTempDir as makeTempRoot } from './helpers/tempRoot.js'
+
+const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
+const REAL_TMP = tmpdir()
+const NO_GIT_CONFIG = join(REAL_TMP, 'machineroom-project-reviews-no-git-config')
+const cleanups = []
+
+afterEach(async () => {
+  while (cleanups.length > 0) {
+    const fn = cleanups.pop()
+    await fn()
+  }
+})
+
+function makeTempDir() {
+  const dir = makeTempRoot('mr-project-reviews-')
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  return dir
+}
+
+function git(cwd, args) {
+  return execFileSync('git', args, {
+    cwd,
+    shell: false,
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      GIT_CONFIG_SYSTEM: NO_GIT_CONFIG,
+      GIT_CONFIG_GLOBAL: NO_GIT_CONFIG,
+      GIT_CONFIG_NOSYSTEM: '1',
+      GIT_TERMINAL_PROMPT: '0',
+      GIT_AUTHOR_NAME: 'MachineRoom Test',
+      GIT_AUTHOR_EMAIL: 'test@example.invalid',
+      GIT_COMMITTER_NAME: 'MachineRoom Test',
+      GIT_COMMITTER_EMAIL: 'test@example.invalid',
+    },
+  })
+}
+
+function initRepo(folder, branch) {
+  mkdirSync(folder, { recursive: true })
+  git(folder, ['init', '-b', branch])
+  git(folder, ['config', 'user.name', 'MachineRoom Test'])
+  git(folder, ['config', 'user.email', 'test@example.invalid'])
+  git(folder, ['config', 'commit.gpgsign', 'false'])
+  git(folder, ['config', 'core.autocrlf', 'false'])
+}
+
+function makeProject({ detach = false } = {}) {
+  const base = makeTempDir()
+  const room = join(base, 'room')
+  const project = join(base, 'project')
+  const worktree = join(base, 'project-mr-opencode')
+  const lanes = {
+    opencode: { name: 'OpenCode' },
+    hermes: { name: 'Hermes', worktree: room },
+    quiet: { name: 'No worktree here' },
+  }
+
+  initRepo(room, 'main')
+  mkdirSync(join(room, 'docs', 'agents'), { recursive: true })
+  writeFileSync(join(room, 'docs', 'agents', 'lanes.json'), JSON.stringify(lanes))
+  writeFileSync(join(room, 'README.md'), 'room\n')
+  git(room, ['add', '.'])
+  git(room, ['commit', '-m', 'room'])
+
+  initRepo(project, 'trunk')
+  writeFileSync(join(project, 'notes.txt'), 'hello\n')
+  git(project, ['add', 'notes.txt'])
+  git(project, ['commit', '-m', 'first'])
+
+  if (detach) {
+    git(project, ['worktree', 'add', '--detach', worktree])
+  } else {
+    git(project, ['worktree', 'add', '-b', 'feat/x', worktree])
+  }
+  writeFileSync(join(worktree, 'extra.js'), 'export const x = 1\n')
+  git(worktree, ['add', 'extra.js'])
+  git(worktree, ['commit', '-m', 'lane work'])
+
+  return { base, room, project, worktree, briefsDir: join(room, 'docs', 'agents') }
+}
+
+function useRunsTemp() {
+  const dir = makeTempDir()
+  const previous = process.env.TEMP
+  process.env.TEMP = dir
+  cleanups.push(() => {
+    process.env.TEMP = previous
+  })
+  return dir
+}
+
+async function startBridge({ projectRoot, briefsDir }) {
+  const bridge = createBridge({
+    projectRoot,
+    briefsDir,
+    port: 0,
+    paperclipUrl: 'http://127.0.0.1:1',
+    companyId: 'company-1',
+    reconnectMinMs: 60000,
+    reconnectMaxMs: 60000,
+  })
+  cleanups.push(() => bridge.stop())
+  const { url } = await bridge.start()
+  return { url }
+}
+
+function mergeRequest(url, lane, body) {
+  return fetch(`${url}/api/control/reviews/${encodeURIComponent(lane)}/merge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+describe('review routes on another project', () => {
+  it('lists the lane whose project worktree exists and names the project branch', async () => {
+    useRunsTemp()
+    const { project, worktree, briefsDir } = makeProject()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+    const res = await fetch(`${url}/api/control/reviews`)
+    expect(res.status).toBe(200)
+    const { lanes } = await res.json()
+    expect(lanes.map((entry) => entry.lane)).toEqual(['opencode'])
+
+    const entry = lanes[0]
+    expect(entry).toMatchObject({
+      lane: 'opencode',
+      worktree,
+      branch: 'feat/x',
+      base: 'trunk',
+      ahead: 1,
+      dirty: false,
+      files: 1,
+      added: 1,
+      deleted: 0,
+      lastRun: null,
+    })
+    expect(entry.head).toBe(git(worktree, ['rev-parse', 'HEAD']).trim())
+    expect(entry.commits).toHaveLength(1)
+    expect(entry.commits[0]).toMatch(/ lane work$/)
+    expect(git(worktree, ['status', '--porcelain'])).toBe('')
+  }, 40000)
+
+  it('answers the diff of the lane against the project branch', async () => {
+    const { project, briefsDir } = makeProject()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+    const res = await fetch(`${url}/api/control/reviews/opencode/diff`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.lane).toBe('opencode')
+    expect(body.branch).toBe('feat/x')
+    expect(body.truncated).toBe(false)
+    expect(body.files).toEqual([{ path: 'extra.js', added: 1, deleted: 0 }])
+    expect(body.patch).toContain('diff --git a/extra.js b/extra.js')
+    expect(body.patch).toContain('export const x = 1')
+  }, 40000)
+
+  it('fast-forwards the project branch to the lane head', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const oldBase = git(project, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, lane: 'opencode', branch: 'feat/x', head, commit: head })
+    expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
+    expect(git(project, ['rev-parse', 'HEAD^']).trim()).toBe(oldBase)
+    expect(git(project, ['status', '--porcelain'])).toBe('')
+    expect(existsSync(join(project, 'extra.js'))).toBe(true)
+
+    const again = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    expect(again.status).toBe(409)
+    expect(await again.json()).toEqual({ error: 'Nothing to merge.' })
+    expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  }, 40000)
+
+  it('refuses a merge when the project branch moved on and says to rebase', async () => {
+    const { project, worktree, briefsDir } = makeProject()
+    writeFileSync(join(project, 'notes.txt'), 'changed on the project\n')
+    git(project, ['add', 'notes.txt'])
+    git(project, ['commit', '-m', 'project moved on'])
+    const projectHead = git(project, ['rev-parse', 'HEAD']).trim()
+    const laneHead = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head: laneHead, message: 'Merge the lane' })
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({
+      error: 'The lane is not a fast forward of trunk. Rebase it onto trunk and read it again.',
+    })
+    expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(projectHead)
+    expect(git(project, ['status', '--porcelain'])).toBe('')
+    expect(git(worktree, ['rev-parse', 'HEAD']).trim()).toBe(laneHead)
+  }, 40000)
+
+  it('reads the room lanes when the project has no lane file of its own', async () => {
+    useRunsTemp()
+    const { room, project, briefsDir } = makeProject()
+    rmSync(join(room, 'docs', 'agents', 'lanes.json'))
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+    const res = await fetch(`${url}/api/control/reviews`)
+    expect(res.status).toBe(200)
+    const { lanes } = await res.json()
+    expect(lanes.map((entry) => entry.lane)).toContain('opencode')
+    expect(lanes.find((entry) => entry.lane === 'opencode')?.base).toBe('trunk')
+  }, 40000)
+
+  it('fast-forwards a detached lane worktree, as a run-lane task makes it', async () => {
+    useRunsTemp()
+    const { project, worktree, briefsDir } = makeProject({ detach: true })
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+
+    const list = await fetch(`${url}/api/control/reviews`).then((r) => r.json())
+    expect(list.lanes[0]).toMatchObject({ lane: 'opencode', branch: '', base: 'trunk', ahead: 1 })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, lane: 'opencode', branch: '', head, commit: head })
+    expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  }, 40000)
+
+  it('still reads every configured lane against main on MachineRoom itself', async () => {
+    useRunsTemp()
+    const briefsDir = join(REPO_ROOT, 'docs', 'agents')
+    const lanesFile = JSON.parse(readFileSync(join(briefsDir, 'lanes.json'), 'utf8'))
+    const configured = Object.values(lanesFile).filter(
+      (lane) => lane && typeof lane === 'object' && typeof lane.worktree === 'string' && lane.worktree
+    )
+    const { url } = await startBridge({ projectRoot: REPO_ROOT, briefsDir })
+    const res = await fetch(`${url}/api/control/reviews`)
+    expect(res.status).toBe(200)
+    const { lanes } = await res.json()
+    expect(lanes).toHaveLength(configured.length)
+    for (const entry of lanes) {
+      expect(entry.base === undefined || entry.base === 'main', entry.lane).toBe(true)
+    }
+  }, 60000)
+})
+
+describe('review panel helpers', () => {
+  it('carries the base branch and names it in the panel', () => {
+    const row = reviewRow({
+      lane: 'opencode',
+      branch: 'feat/x',
+      base: 'trunk',
+      head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
+      ahead: 1,
+      dirty: false,
+    })
+    expect(row.base).toBe('trunk')
+
+    const html = renderToString(
+      createElement(ReviewsPanel, {
+        client: null,
+        initialReviews: [
+          {
+            lane: 'opencode',
+            branch: 'feat/x',
+            base: 'trunk',
+            head: '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d',
+            ahead: 1,
+            dirty: false,
+            files: 1,
+            added: 1,
+            deleted: 0,
+          },
+        ],
+        initialDiff: null,
+      })
+    )
+    expect(html).toContain('Each lane is compared against trunk.')
+  })
+
+  it('keeps a merge message for a lane that has no branch', () => {
+    expect(defaultMergeMessage({ lane: 'opencode', branch: '' })).toBe('Merge opencode')
+    expect(defaultMergeMessage({ lane: 'opencode', branch: 'feat/x' })).toBe("Merge opencode's feat/x")
+    expect(defaultMergeMessage({})).toBe('')
+  })
+})
