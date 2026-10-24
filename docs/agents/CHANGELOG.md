@@ -2,7 +2,9 @@
 
 ## Unreleased
 
+- Review note on L4: one fix. Claude Code's `usage` on the result line covers only the last turn (82 output tokens on the real scratch run), while `modelUsage` holds the run's totals per model (738); the summary now sums `modelUsage` and falls back to `usage`, with a test. On the real run the summary reads $0.289, 240,877 input and 738 output tokens. Full suite on the merge: 124 files, 2330 tests.
 - Briefs L3 (start a project run from the drawer), L4 (costs and tokens for Claude Code and AGY, and the Meters check) and Q5 (read what changed on 2026-10-24).
+- Claude Code runs record the cost of their last result line and both Claude Code and AGY record their input and output tokens, the lane costs sum those tokens for the board, and the Meters tab reads lane mode from the bridge health answer (task L4).
 
 - Review note on L2: no fixes. With the lane source on and Paperclip down, issues, live runs, comments and approvals come from the lane runs; writes to a lane task answer 409. Run queued and status frames now also send an `issues` notice (not log frames, so a few per run). The control client gained `health()` so the Approvals tab can tell lane mode apart. Full suite on the merge: 124 files, 2324 tests.
 - Review note on L1: no fixes. With the lane source on and Paperclip down, `/api/control/costs` and the agents' spend come from `runs.jsonl` (this UTC month, per lane). The Meters tab tells lane mode apart by a failed backup read whose error is `Paperclip did not answer.` while costs loaded; a health flag passed down would be more direct, outside the brief's files. A lane with spend and no tokens shows `? in / ? out` on the board. `tests/candidate.test.js` failed once in the full run while L2 ran its own suite and passed alone. Full suite on the merge: 123 files, 2313 tests.

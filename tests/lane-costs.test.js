@@ -5,7 +5,7 @@ import { createBridge } from '../server/index.js'
 import { laneCosts, readLaneCosts } from '../server/lane-costs.js'
 import { boardLines } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
-import { backupsNotRunning } from '../src/ui/panels/backup.js'
+import { backupsNotRunning, laneModeFromHealth } from '../src/ui/panels/backup.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
@@ -75,6 +75,28 @@ describe('laneCosts', () => {
     expect(costs.quota).toEqual([])
   })
 
+  it('sums the tokens per lane and leaves one null when no record carries it', () => {
+    const agents = [
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode' },
+      { id: 'agent-agy', key: 'agy', name: 'agy' },
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code' },
+    ]
+    const records = [
+      record('opencode', '2026-10-02T09:00:00.000Z', 0.5, { inputTokens: 1200, outputTokens: 300 }),
+      record('opencode', '2026-10-03T09:00:00.000Z', null, { inputTokens: 800, outputTokens: 200 }),
+      record('agy', '2026-10-04T09:00:00.000Z', null, { inputTokens: 5000, outputTokens: 600 }),
+      record('claude', '2026-10-05T09:00:00.000Z', 0.2, { inputTokens: 400 }),
+    ]
+
+    const costs = laneCosts({ records, agents, now: NOW })
+    expect(costs.byAgent).toEqual([
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 50, inputTokens: 2000, outputTokens: 500 },
+      { agentId: 'agent-agy', agentName: 'agy', costCents: 0, inputTokens: 5000, outputTokens: 600 },
+      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 20, inputTokens: 400, outputTokens: null },
+    ])
+    expect(costs.summary.spendCents).toBe(70)
+  })
+
   it('reads the records from a temp runs.jsonl', () => {
     const folder = tempDir()
     const file = join(folder, 'runs.jsonl')
@@ -95,10 +117,10 @@ describe('the lane costs routes', () => {
     const runs = join(base, 'machineroom-runs')
     useTemp(base)
     writeRuns(join(runs, 'runs.jsonl'), [
-      record('opencode', new Date().toISOString(), 0.5),
-      record('opencode', new Date().toISOString(), 0.1, { project: 'C:\\GitHub\\Other' }),
+      record('opencode', new Date().toISOString(), 0.5, { inputTokens: 1200, outputTokens: 300 }),
+      record('opencode', new Date().toISOString(), 0.1, { project: 'C:\\GitHub\\Other', inputTokens: 800, outputTokens: 200 }),
       record('opencode2', new Date().toISOString(), 0.1234),
-      record('agy', new Date().toISOString(), null),
+      record('agy', new Date().toISOString(), null, { inputTokens: 5000, outputTokens: 600 }),
     ])
     const bridge = createBridge({
       paperclipUrl: DEAD_PAPERCLIP,
@@ -124,7 +146,7 @@ describe('the lane costs routes', () => {
     const body = await costs.json()
     expect(body.summary).toEqual({ spendCents: 72, budgetCents: 0, utilizationPercent: null })
     expect(body.byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, inputTokens: null, outputTokens: null },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, inputTokens: 2000, outputTokens: 500 },
       { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, inputTokens: null, outputTokens: null },
     ])
     expect(body.quota).toEqual([])
@@ -156,8 +178,8 @@ describe('the board and the backup line in lane mode', () => {
   it('shows the lanes spend and null tokens without NaN', () => {
     const costs = laneCosts({
       records: [
-        record('opencode', '2026-10-02T09:00:00.000Z', 0.5),
-        record('opencode', '2026-10-20T09:00:00.000Z', 0.1, { project: 'C:\\GitHub\\Other' }),
+        record('opencode', '2026-10-02T09:00:00.000Z', 0.5, { inputTokens: 1200, outputTokens: 300 }),
+        record('opencode', '2026-10-20T09:00:00.000Z', 0.1, { project: 'C:\\GitHub\\Other', inputTokens: 800, outputTokens: 200 }),
         record('opencode2', '2026-10-10T09:00:00.000Z', 0.1234),
         record('agy', '2026-10-11T09:00:00.000Z', null),
       ],
@@ -177,7 +199,7 @@ describe('the board and the backup line in lane mode', () => {
       key: 'opencode',
       name: 'OpenCode',
       cost: '$0.60',
-      tokens: '? in / ? out',
+      tokens: '2.0k in / 500 out',
       share: 0.833,
       reported: true,
     })
@@ -199,5 +221,16 @@ describe('the board and the backup line in lane mode', () => {
     expect(backupsNotRunning({ laneMode: true, paperclipDown: false })).toBeNull()
     expect(backupsNotRunning({ laneMode: false, paperclipDown: true })).toBeNull()
     expect(backupsNotRunning()).toBeNull()
+  })
+
+  it('tells lane mode apart from a health answer', () => {
+    expect(laneModeFromHealth({ lanes: true, paperclip: false })).toBe(true)
+    expect(laneModeFromHealth({ lanes: true, paperclip: false, paperclipVersion: null })).toBe(true)
+    expect(laneModeFromHealth({ lanes: true, paperclip: true })).toBe(false)
+    expect(laneModeFromHealth({ lanes: true })).toBe(true)
+    expect(laneModeFromHealth({ lanes: false, paperclip: false })).toBe(false)
+    expect(laneModeFromHealth({ paperclip: false })).toBe(false)
+    expect(laneModeFromHealth(null)).toBe(false)
+    expect(laneModeFromHealth('lanes')).toBe(false)
   })
 })

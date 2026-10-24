@@ -296,6 +296,8 @@ describe('summarizeRun', () => {
         'Stopping here as instructed.',
       ],
       costUsd: 0,
+      inputTokens: null,
+      outputTokens: null,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 2 tool calls, 0 failed',
@@ -335,8 +337,54 @@ describe('summarizeRun', () => {
     ].map((item) => JSON.stringify(item)).join('\n')
     const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\GitHub\\MachineRoom-claude' })
     expect(summary).toEqual({
-      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null,
+      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null, inputTokens: null, outputTokens: null,
     })
+  })
+
+  it('reads the cost and tokens of the last Claude Code result line', () => {
+    const log = [
+      JSON.stringify({
+        type: 'result',
+        total_cost_usd: 0.0123,
+        usage: { input_tokens: 10, cache_creation_input_tokens: 20, cache_read_input_tokens: 30, output_tokens: 40 },
+      }),
+      'not json',
+      JSON.stringify({
+        type: 'result',
+        total_cost_usd: 0.25,
+        usage: { input_tokens: 100, cache_creation_input_tokens: 200, cache_read_input_tokens: 300, output_tokens: 400 },
+      }),
+    ].join('\n')
+    const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\scratch' })
+    expect(summary.costUsd).toBe(0.25)
+    expect(summary.inputTokens).toBe(600)
+    expect(summary.outputTokens).toBe(400)
+  })
+
+  it('takes the run totals from modelUsage over the last turn in usage', () => {
+    const log = JSON.stringify({
+      type: 'result',
+      total_cost_usd: 0.29,
+      usage: { input_tokens: 2, cache_creation_input_tokens: 1, cache_read_input_tokens: 3, output_tokens: 82 },
+      modelUsage: {
+        a: { inputTokens: 12, cacheReadInputTokens: 100, cacheCreationInputTokens: 50, outputTokens: 700 },
+        b: { inputTokens: 1, cacheReadInputTokens: 0, cacheCreationInputTokens: 0, outputTokens: 38 },
+      },
+    })
+    const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\scratch' })
+    expect(summary.inputTokens).toBe(163)
+    expect(summary.outputTokens).toBe(738)
+  })
+
+  it('reads the tokens of the last AGY result line and counts thinking as output', () => {
+    const log = [
+      JSON.stringify({ event: 'result', result: { usage: { input_tokens: 1, output_tokens: 2, thinking_tokens: 3, total_tokens: 6 } } }),
+      JSON.stringify({ event: 'result', result: { usage: { input_tokens: 100, output_tokens: 40, thinking_tokens: 20, total_tokens: 160 } } }),
+    ].join('\n')
+    const summary = summarizeRun({ harness: 'agy', log, worktree: 'C:\\scratch' })
+    expect(summary.inputTokens).toBe(100)
+    expect(summary.outputTokens).toBe(60)
+    expect(summary.costUsd).toBeNull()
   })
 
   it('adds up the cost of every step that carries one', () => {
@@ -402,7 +450,7 @@ describe('summarizeRun', () => {
 
   it('handles an empty AGY log', () => {
     expect(summarizeRun({ harness: 'agy', log: '', worktree: 'C:\\scratch' })).toEqual({
-      harness: 'agy', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null,
+      harness: 'agy', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null,
     })
   })
 
@@ -417,6 +465,8 @@ describe('summarizeRun', () => {
       read: [],
       head: ['Files in current directory:', '- err.txt', '- out.txt'],
       costUsd: null,
+      inputTokens: null,
+      outputTokens: null,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 1 tool calls, 0 failed',
@@ -503,7 +553,7 @@ describe('summarizeRun', () => {
 
   it('handles an empty log for both harnesses', () => {
     expect(summarizeRun({ harness: 'opencode', log: '', worktree: 'C:\\scratch' })).toEqual({
-      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null,
+      harness: 'opencode', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null, inputTokens: null, outputTokens: null,
     })
     expect(summarizeRun({ harness: 'hermes', log: '', worktree: 'C:\\scratch' }).head).toEqual([])
     expect(formatSummary(summarizeRun({ harness: 'hermes', log: '', worktree: '' }))).toEqual([
@@ -579,6 +629,8 @@ describe('runRecord', () => {
       exitCode: 0,
       killed: false,
       costUsd: 0.0421,
+      inputTokens: 1500,
+      outputTokens: 300,
       log: 'C:\\Temp\\machineroom-runs\\hermes-T3.log',
       branch: 'feat/t3-run-records-and',
       commits: ['abc1234 0.1.44: Record each lane run'],
@@ -593,12 +645,14 @@ describe('runRecord', () => {
       exitCode: 0,
       killed: false,
       costUsd: 0.0421,
+      inputTokens: 1500,
+      outputTokens: 300,
       log: 'C:\\Temp\\machineroom-runs\\hermes-T3.log',
       branch: 'feat/t3-run-records-and',
       commits: ['abc1234 0.1.44: Record each lane run'],
     })
     expect(Object.keys(record)).toEqual([
-      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'log', 'branch', 'commits',
+      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'log', 'branch', 'commits',
     ])
   })
 
@@ -610,6 +664,8 @@ describe('runRecord', () => {
     expect(record.reasoning).toBeNull()
     expect(record.exitCode).toBeNull()
     expect(record.costUsd).toBeNull()
+    expect(record.inputTokens).toBeNull()
+    expect(record.outputTokens).toBeNull()
     expect(record.killed).toBe(false)
     expect(record.startedAt).toBe('2025-10-09T08:53:20.000Z')
   })
