@@ -3,6 +3,9 @@
 ## Unreleased
 
 - Briefs S6f (a lane run on another project), S6b (AGY as a lane) and S6g (Claude Code as a lane), for the Sunday target.
+- `run-lane --project FOLDER` with `--task` or `--task-file` runs a lane on another folder, refuses this checkout, a lane worktree and a dirty git folder unless `--allow-dirty`, writes `project` and `task` to the run record, and leaves a meta file beside the log (task S6f).
+- The lane source reads `lanes.json` from this repository, shows a meta-file run for the room's root with its paths kept, and skips one for another folder (task S6f).
+- README and `ARCHITECTURE.md` describe runs on another project and OpenAI-compatible models in a lane's `cli.model` (task S6f).
 
 - Review note on S6a: one fix. The source polled `runs.jsonl` (61 KB here) five times a second even with no lane running; it now reads the records only while a run is open. The README's run section now starts from `npm run serve -- up --lanes`, with Paperclip as the optional second source. The lane found that the page recomputes agent keys from adapter and name, so lanes `opencode2` to `opencode5` show as `opencode-2` to `opencode-5`; matching goes by `agentId`, so it was left. Not checked: a real lane run seen live in a browser. The `--replay` digests did not change. Full suite on the merge: 120 files, 2238 tests.
 - Briefs F8 (the fixture builder masks across chunks), P18 (the scale probe lays out what the room draws) and S6e (a probe of OpenCode over ACP).

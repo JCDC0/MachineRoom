@@ -33,13 +33,14 @@ function expandBin(bin, env) {
   })
 }
 
-export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
+export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd } = {}) {
   if (!lane || typeof lane !== 'object') throw new Error('There is no lane to run.')
   const cli = lane.cli
   if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
   const harness = cli.harness
   if (harness !== 'hermes' && harness !== 'opencode') throw new Error(`The runner does not know the ${harness} command line.`)
-  if (typeof lane.worktree !== 'string' || lane.worktree.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
+  const folder = typeof cwd === 'string' && cwd.trim() !== '' ? cwd : lane.worktree
+  if (typeof folder !== 'string' || folder.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
   const file = expandBin(cli.bin, env)
   const reasoning = lane.reasoning ? String(lane.reasoning) : ''
   if (harness === 'hermes') {
@@ -47,10 +48,10 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
     if (cli.toolsets) args.push('-t', String(cli.toolsets))
     if (reasoning) args.push('--reasoning', reasoning)
     if (usageFile) args.push('--usage-file', usageFile)
-    return { file, args, cwd: lane.worktree }
+    return { file, args, cwd: folder }
   }
   const model = reasoning ? `${cli.model}#${reasoning}` : cli.model
-  return { file, args: ['run', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: lane.worktree }
+  return { file, args: ['run', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: folder }
 }
 
 export const DEFAULT_MINUTES = 100
@@ -264,6 +265,10 @@ export function parseRunArgs(argv) {
   let force = false
   let since = ''
   let minutes = DEFAULT_MINUTES
+  let project = ''
+  let task = ''
+  let taskFile = ''
+  let allowDirty = false
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -283,6 +288,10 @@ export function parseRunArgs(argv) {
       force = true
       continue
     }
+    if (arg === '--allow-dirty') {
+      allowDirty = true
+      continue
+    }
     if (arg === '--list') {
       list = true
       continue
@@ -293,6 +302,27 @@ export function parseRunArgs(argv) {
     }
     if (arg === '--outcomes') {
       outcomes = true
+      continue
+    }
+    if (arg === '--project' || arg.startsWith('--project=')) {
+      const value = arg === '--project' ? args[index + 1] : arg.slice('--project='.length)
+      if (arg === '--project') index += 1
+      if (typeof value !== 'string' || value === '') throw new Error('--project needs a folder.')
+      project = value
+      continue
+    }
+    if (arg === '--task' || arg.startsWith('--task=')) {
+      const value = arg === '--task' ? args[index + 1] : arg.slice('--task='.length)
+      if (arg === '--task') index += 1
+      if (typeof value !== 'string') throw new Error('--task needs text.')
+      task = value
+      continue
+    }
+    if (arg === '--task-file' || arg.startsWith('--task-file=')) {
+      const value = arg === '--task-file' ? args[index + 1] : arg.slice('--task-file='.length)
+      if (arg === '--task-file') index += 1
+      if (typeof value !== 'string' || value === '') throw new Error('--task-file needs a path.')
+      taskFile = value
       continue
     }
     if (arg === '--since' || arg.startsWith('--since=')) {
@@ -318,6 +348,21 @@ export function parseRunArgs(argv) {
   if (stats) return { lane, briefs, dryRun, minutes, list, stats, ...(since ? { since } : {}) }
   if (outcomes) return { lane, briefs, dryRun, minutes, list, outcomes, ...(since ? { since } : {}) }
   if (!lane) throw new Error('Name a lane to run, for example hermes.')
+  if (project || task || taskFile) {
+    if (!project) throw new Error('--project needs a folder.')
+    if (briefs.length > 0) throw new Error('Name a brief id or a --project folder, not both.')
+    if (task && taskFile) throw new Error('Use --task or --task-file, not both.')
+    if (!task && !taskFile) throw new Error('Name the task with --task or --task-file.')
+    return {
+      lane, briefs: [], dryRun, minutes, list,
+      ...(force ? { force: true } : {}),
+      ...overrides,
+      project,
+      ...(task ? { task } : {}),
+      ...(taskFile ? { taskFile } : {}),
+      ...(allowDirty ? { allowDirty: true } : {}),
+    }
+  }
   if (briefs.length === 0) throw new Error('Name at least one brief id.')
   return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides }
 }
@@ -332,6 +377,49 @@ export function laneWithOverrides(lane, { model, reasoning } = {}) {
   }
   if (reasoning) next.reasoning = reasoning
   return next
+}
+
+function normalPath(value) {
+  if (typeof value !== 'string' || value.trim() === '') return ''
+  const raw = value.trim()
+  let text = raw.replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/+$/, '')
+  if (!text && raw.startsWith('/')) text = '/'
+  if (/^[a-zA-Z]:$/.test(text)) text = `${text}/`
+  return process.platform === 'win32' ? text.toLowerCase() : text
+}
+
+export function pathInside(child, parent) {
+  const one = normalPath(child)
+  const two = normalPath(parent)
+  if (!one || !two) return false
+  if (one === two) return true
+  return one.startsWith(two.endsWith('/') ? two : `${two}/`)
+}
+
+export function projectProblems({ project, root, mainCheckout, lanes, dirty, allowDirty } = {}) {
+  const folder = String(project ?? '').trim()
+  if (!folder) return ['--project needs a folder.']
+  const problems = []
+  const checkouts = [root, mainCheckout]
+    .filter((value) => typeof value === 'string' && value.trim() !== '')
+    .filter((value, index, list) => list.findIndex((other) => pathInside(value, other) && pathInside(other, value)) === index)
+  if (checkouts.some((checkout) => pathInside(folder, checkout))) {
+    problems.push(`The project folder ${folder} is this checkout. Run on another project.`)
+  }
+  if (problems.length === 0) {
+    for (const [key, lane] of Object.entries(lanes ?? {})) {
+      if (!lane || typeof lane !== 'object') continue
+      if (typeof lane.worktree !== 'string' || lane.worktree.trim() === '') continue
+      if (pathInside(folder, lane.worktree)) {
+        problems.push(`The project folder ${folder} is the ${key} lane worktree. Run on another project.`)
+        break
+      }
+    }
+  }
+  if (problems.length === 0 && dirty === true && allowDirty !== true) {
+    problems.push(`The project folder ${folder} has uncommitted changes. Commit or discard them, or pass --allow-dirty.`)
+  }
+  return problems
 }
 
 function unique(values) {
@@ -550,8 +638,8 @@ function isoTime(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, log, branch, commits } = {}) {
-  return {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, log, branch, commits, project, task } = {}) {
+  const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
     model: model ? String(model) : null,
@@ -565,6 +653,9 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],
   }
+  if (typeof project === 'string' && project.trim() !== '') record.project = project
+  if (typeof task === 'string' && task !== '') record.task = task.slice(0, 200)
+  return record
 }
 
 export function runListLine(record) {

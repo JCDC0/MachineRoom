@@ -1,0 +1,396 @@
+import { spawn, spawnSync } from 'node:child_process'
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createLanesSource, laneAgents } from '../server/lanes-source.js'
+import { gitPath } from '../server/programPath.js'
+import {
+  commandFor,
+  laneStats,
+  parseRunArgs,
+  pathInside,
+  projectProblems,
+  runListLine,
+  runRecord,
+  UNATTENDED_NOTE,
+} from '../src/briefs/run.js'
+import { buildActivities } from '../src/model/pipeline.js'
+import { makeTree } from '../src/model/paths.js'
+import { waitFor } from './helpers/loop.js'
+import { makeTempDir } from './helpers/tempRoot.js'
+
+const realLanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
+const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
+const env = { LOCALAPPDATA: 'C:\\Users\\me\\AppData\\Local', APPDATA: 'C:\\Users\\me\\AppData\\Roaming' }
+const cleanups = []
+
+afterEach(() => {
+  while (cleanups.length > 0) {
+    const fn = cleanups.pop()
+    fn()
+  }
+})
+
+function tempDir(prefix = 'mr-project-') {
+  const dir = makeTempDir(prefix)
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  return dir
+}
+
+function folderIn(base, name) {
+  const dir = join(base, name)
+  mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function pathKey(value) {
+  const resolved = resolve(String(value ?? ''))
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+}
+
+function runLane(args, env = {}) {
+  return new Promise((done, fail) => {
+    const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...env },
+    })
+    let stdout = ''
+    let stderr = ''
+    const timer = setTimeout(() => {
+      child.kill()
+      fail(new Error(`run-lane did not exit. stderr: ${stderr}`))
+    }, 30000)
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk
+    })
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk
+    })
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      fail(error)
+    })
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      done({ code, stdout, stderr })
+    })
+  })
+}
+
+function laneLine(path, id = 'call-1') {
+  return JSON.stringify({
+    type: 'tool_use',
+    timestamp: Date.now(),
+    part: { type: 'tool', id, tool: 'read', state: { status: 'completed', input: { path }, output: '' } },
+  })
+}
+
+function metaPath(logPath) {
+  return logPath.replace(/\.log$/i, '.meta.json')
+}
+
+function startSource({ runs, projectRoot, lanes, quietMs = 60000, pollMs = 20 }) {
+  const frames = []
+  const source = createLanesSource({
+    folder: runs,
+    projectRoot,
+    lanes,
+    quietMs,
+    pollMs,
+    onFrame: (frame) => frames.push(frame),
+  })
+  cleanups.push(() => source.stop())
+  source.start()
+  return { source, frames }
+}
+
+function logFrames(frames) {
+  return frames.filter((frame) => frame.type === 'heartbeat.run.log')
+}
+
+describe('parseRunArgs for another project', () => {
+  it('takes a folder with task text instead of a brief id', () => {
+    expect(parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task', 'Fix the test.'])).toEqual({
+      lane: 'opencode', briefs: [], dryRun: false, minutes: 100, list: false, project: 'C:\\GitHub\\Other', task: 'Fix the test.',
+    })
+    expect(parseRunArgs(['opencode', '--project=C:\\GitHub\\Other', '--task=Fix it.', '--allow-dirty'])).toMatchObject({
+      project: 'C:\\GitHub\\Other', task: 'Fix it.', allowDirty: true,
+    })
+  })
+
+  it('takes a task file instead of task text', () => {
+    expect(parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task-file', 'task.md'])).toMatchObject({
+      project: 'C:\\GitHub\\Other', taskFile: 'task.md',
+    })
+  })
+
+  it('refuses a brief id and a project together', () => {
+    expect(() => parseRunArgs(['opencode', 'T2', '--project', 'C:\\GitHub\\Other', '--task', 'Fix it.']))
+      .toThrow('Name a brief id or a --project folder, not both.')
+  })
+
+  it('refuses a missing folder, task or task file', () => {
+    expect(() => parseRunArgs(['opencode', '--project'])).toThrow('--project needs a folder.')
+    expect(() => parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other'])).toThrow('Name the task with --task or --task-file.')
+    expect(() => parseRunArgs(['opencode', '--task', 'Fix it.'])).toThrow('--project needs a folder.')
+    expect(() => parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task-file'])).toThrow('--task-file needs a path.')
+  })
+
+  it('refuses task text and a task file together', () => {
+    expect(() => parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task', 'Fix it.', '--task-file', 'task.md']))
+      .toThrow('Use --task or --task-file, not both.')
+  })
+})
+
+describe('commandFor on another project', () => {
+  it('uses the project folder as the working folder', () => {
+    const project = 'C:\\GitHub\\Other'
+    const command = commandFor({ lane: realLanes.opencode, prompt: 'Do it.', env, title: 'opencode-project-1', cwd: project })
+    expect(command.cwd).toBe(project)
+    expect(command.args).toContain('opencode-go/deepseek-v4.1-flash#max')
+  })
+
+  it('needs no lane worktree when the project folder is given', () => {
+    const lane = { ...realLanes.opencode, worktree: '' }
+    expect(commandFor({ lane, prompt: 'Do it.', env, title: 'opencode-project-1', cwd: 'C:\\GitHub\\Other' }).cwd)
+      .toBe('C:\\GitHub\\Other')
+  })
+
+  it('keeps the lane worktree when no folder is given', () => {
+    expect(commandFor({ lane: realLanes.opencode, prompt: 'Do it.', env, title: 'opencode-1' }).cwd)
+      .toBe(realLanes.opencode.worktree)
+  })
+})
+
+describe('projectProblems', () => {
+  const base = 'C:\\GitHub'
+  const root = `${base}\\MachineRoom-opencode`
+  const main = `${base}\\MachineRoom`
+
+  it('refuses this checkout, the main checkout and a lane worktree', () => {
+    expect(projectProblems({ project: root, root, mainCheckout: main, lanes: realLanes }))
+      .toEqual([`The project folder ${root} is this checkout. Run on another project.`])
+    expect(projectProblems({ project: main, root, mainCheckout: main, lanes: realLanes }))
+      .toEqual([`The project folder ${main} is this checkout. Run on another project.`])
+    const lanes = { opencode3: { worktree: `${base}\\MachineRoom-opencode3` } }
+    expect(projectProblems({ project: `${base}\\MachineRoom-opencode3`, root, mainCheckout: main, lanes }))
+      .toEqual([`The project folder ${base}\\MachineRoom-opencode3 is the opencode3 lane worktree. Run on another project.`])
+  })
+
+  it('refuses a dirty git folder unless the run allows it', () => {
+    const project = `${base}\\Other`
+    expect(projectProblems({ project, root, mainCheckout: main, lanes: realLanes, dirty: true }))
+      .toEqual([`The project folder ${project} has uncommitted changes. Commit or discard them, or pass --allow-dirty.`])
+    expect(projectProblems({ project, root, mainCheckout: main, lanes: realLanes, dirty: true, allowDirty: true })).toEqual([])
+    expect(projectProblems({ project, root, mainCheckout: main, lanes: realLanes, dirty: false })).toEqual([])
+  })
+
+  it('takes a plain folder', () => {
+    expect(projectProblems({ project: `${base}\\Other`, root, mainCheckout: main, lanes: realLanes })).toEqual([])
+  })
+
+  it('compares a folder without case on Windows', () => {
+    if (process.platform !== 'win32') return
+    expect(pathInside(root.toUpperCase(), root.toLowerCase())).toBe(true)
+  })
+})
+
+describe('scripts/run-lane.mjs on another project', () => {
+  it('refuses a folder that does not exist', async () => {
+    const folder = tempDir()
+    const result = await runLane(['opencode', '--project', join(folder, 'missing'), '--task', 'Fix it.', '--dry-run'])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('does not exist')
+    expect(result.stdout).not.toContain('cwd:')
+  })
+
+  it('refuses this checkout', async () => {
+    const result = await runLane(['opencode', '--project', REPO_ROOT, '--task', 'Fix it.', '--dry-run'])
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('is this checkout')
+    expect(result.stdout).not.toContain('cwd:')
+  })
+
+  it('refuses a dirty git folder and runs it with --allow-dirty', async () => {
+    const base = tempDir()
+    const project = folderIn(base, 'Other')
+    const init = spawnSync(gitPath(), ['init'], { cwd: project, encoding: 'utf8', windowsHide: true })
+    expect(init.status).toBe(0)
+    writeFileSync(join(project, 'notes.txt'), 'uncommitted\n')
+
+    const refused = await runLane(['opencode', '--project', project, '--task', 'Fix it.'])
+    expect(refused.code).toBe(1)
+    expect(refused.stdout).toContain('has uncommitted changes')
+    expect(refused.stdout).toContain('--allow-dirty')
+
+    const allowed = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--allow-dirty', '--dry-run'])
+    expect(allowed.code).toBe(0)
+    const cwd = allowed.stdout.split(/\r?\n/).find((line) => line.startsWith('cwd: '))
+    expect(pathKey(cwd.slice('cwd: '.length))).toBe(pathKey(project))
+  })
+
+  it('reads the task from a UTF-8 file', async () => {
+    const base = tempDir()
+    const project = folderIn(base, 'Other')
+    const task = 'Réparer le test.'
+    const taskFile = join(base, 'task.md')
+    writeFileSync(taskFile, task, 'utf8')
+    const result = await runLane(['opencode', '--project', project, '--task-file', taskFile, '--dry-run'])
+    expect(result.code).toBe(0)
+    expect(result.stdout).toContain(`<prompt: ${task.length + 2 + UNATTENDED_NOTE.length} characters>`)
+  })
+
+  it('refuses a brief id and a project together before it prints a command', async () => {
+    const base = tempDir()
+    const project = folderIn(base, 'Other')
+    const result = await runLane(['opencode', 'T2', '--project', project, '--task', 'Fix it.', '--dry-run'])
+    expect(result.code).toBe(1)
+    expect(result.stderr).toContain('not both')
+    expect(result.stdout).not.toContain('cwd:')
+  })
+})
+
+describe('the record of a project run', () => {
+  it('writes project, task, no briefs and the usual fields to runs.jsonl', () => {
+    const base = tempDir()
+    const runs = folderIn(base, 'machineroom-runs')
+    const project = folderIn(base, 'Other')
+    const task = `Fix the test. ${'More detail. '.repeat(30)}`.trim()
+    const record = runRecord({
+      lane: 'opencode',
+      briefs: [],
+      model: 'opencode-go/deepseek-v4.1-flash',
+      reasoning: 'max',
+      startedAt: '2026-10-24T12:00:00.000Z',
+      minutes: 1.2,
+      exitCode: 0,
+      killed: false,
+      costUsd: 0.01,
+      log: join(runs, 'opencode-project-20261024-120000.log'),
+      branch: '',
+      commits: [],
+      project,
+      task,
+    })
+    appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+    const written = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
+    expect(written).toMatchObject({
+      lane: 'opencode',
+      briefs: [],
+      project,
+      task: task.slice(0, 200),
+      log: join(runs, 'opencode-project-20261024-120000.log'),
+      branch: '',
+      commits: [],
+    })
+    expect(written.task).toHaveLength(200)
+    expect(Object.keys(written)).toEqual([
+      'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'log', 'branch', 'commits', 'project', 'task',
+    ])
+    expect(runListLine(written)).toContain('none')
+    expect(laneStats([written]).rows[0]).toMatchObject({ lane: 'opencode', runs: 1 })
+  })
+
+  it('still lists a project run with --list and --stats', async () => {
+    const base = tempDir()
+    const runs = folderIn(base, 'machineroom-runs')
+    const project = folderIn(base, 'Other')
+    const record = runRecord({
+      lane: 'opencode',
+      briefs: [],
+      model: 'opencode-go/deepseek-v4.1-flash',
+      startedAt: '2026-10-24T12:00:00.000Z',
+      minutes: 1.2,
+      exitCode: 0,
+      killed: false,
+      log: join(runs, 'opencode-project-20261024-120000.log'),
+      project,
+      task: 'Fix it.',
+    })
+    appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+
+    const list = await runLane(['--list'], { TEMP: base })
+    expect(list.code).toBe(0)
+    expect(list.stdout).toContain('opencode')
+    expect(list.stdout).toContain('none')
+
+    const stats = await runLane(['--stats'], { TEMP: base })
+    expect(stats.code).toBe(0)
+    expect(stats.stdout).toContain('opencode | opencode-go/deepseek-v4.1-flash | 1 run')
+  })
+})
+
+describe('the lane source on another project', () => {
+  it('shows a meta-file run for the room root with its paths kept', async () => {
+    const base = tempDir()
+    const runs = folderIn(base, 'runs')
+    const projectRoot = folderIn(base, 'Other')
+    const worktree = folderIn(base, 'MachineRoom-opencode3')
+    const lanes = { ...realLanes, opencode: { ...realLanes.opencode, worktree } }
+    const logPath = join(runs, 'opencode-project-20261024-120000.log')
+    const inProject = laneLine(`${projectRoot}\\src\\a.js`, 'call-1')
+    const inWorktree = laneLine(`${worktree}\\src\\b.js`, 'call-2')
+    writeFileSync(logPath, `${inProject}\n${inWorktree}\n`)
+    writeFileSync(metaPath(logPath), `${JSON.stringify({ lane: 'opencode', project: projectRoot })}\n`)
+
+    const { frames } = startSource({ runs, projectRoot, lanes })
+    await waitFor(() => logFrames(frames).length === 2, { what: 'both project lines' })
+    const chunks = logFrames(frames).map((frame) => frame.payload.chunk)
+    expect(chunks[0]).toBe(`${inProject}\n`)
+    expect(chunks[1]).toBe(`${inWorktree}\n`)
+
+    const agents = laneAgents(lanes).filter((agent) => agent.key === 'opencode')
+    const tree = makeTree({ root: basename(projectRoot), files: [] })
+    const activities = buildActivities(frames, { agents, tree })
+    const started = activities.filter((activity) => activity.type === 'tool.start' && activity.touches?.length > 0)
+    expect(started.map((activity) => activity.touches[0].path)).toEqual(['src/a.js'])
+  })
+
+  it('skips a meta-file log for another folder and still shows the next one', async () => {
+    const base = tempDir()
+    const runs = folderIn(base, 'runs')
+    const projectRoot = folderIn(base, 'Other')
+    const elsewhere = folderIn(base, 'Elsewhere')
+    const lanes = { ...realLanes, opencode: { ...realLanes.opencode, worktree: folderIn(base, 'MachineRoom-opencode3') } }
+
+    const skipped = join(runs, 'opencode-project-20261024-120000.log')
+    writeFileSync(skipped, `${laneLine(`${elsewhere}\\src\\a.js`)}\n`)
+    writeFileSync(metaPath(skipped), `${JSON.stringify({ lane: 'opencode', project: elsewhere })}\n`)
+
+    const { source, frames } = startSource({ runs, projectRoot, lanes })
+    source.tick()
+    expect(logFrames(frames)).toHaveLength(0)
+
+    const shown = join(runs, 'opencode-project-20261024-121000.log')
+    writeFileSync(shown, `${laneLine(`${projectRoot}\\src\\b.js`)}\n`)
+    writeFileSync(metaPath(shown), `${JSON.stringify({ lane: 'opencode', project: projectRoot })}\n`)
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the shown log' })
+    expect(logFrames(frames)[0].payload.chunk).toContain('b.js')
+  })
+
+  it('keeps a meta-file run whose project differs only by case on Windows', async () => {
+    if (process.platform !== 'win32') return
+    const base = tempDir()
+    const runs = folderIn(base, 'runs')
+    const projectRoot = folderIn(base, 'Other')
+    const lanes = { ...realLanes, opencode: { ...realLanes.opencode, worktree: folderIn(base, 'MachineRoom-opencode3') } }
+    const logPath = join(runs, 'opencode-project-20261024-122000.log')
+    writeFileSync(logPath, `${laneLine(`${projectRoot}\\src\\a.js`)}\n`)
+    writeFileSync(metaPath(logPath), `${JSON.stringify({ lane: 'opencode', project: projectRoot.toUpperCase() })}\n`)
+
+    const { frames } = startSource({ runs, projectRoot, lanes })
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the case-insensitive log' })
+  })
+
+  it('lists the lanes when the project root has no lanes.json', () => {
+    const base = tempDir()
+    const runs = folderIn(base, 'runs')
+    const projectRoot = folderIn(base, 'NoLanes')
+    const source = createLanesSource({ folder: runs, projectRoot, pollMs: 20 })
+    cleanups.push(() => source.stop())
+    expect(source.agents.map((agent) => agent.key)).toEqual(laneAgents(realLanes).map((agent) => agent.key))
+    expect(source.agents.length).toBeGreaterThan(0)
+  })
+})
