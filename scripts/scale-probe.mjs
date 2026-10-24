@@ -12,7 +12,7 @@ import { dirname, makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { parseFrames, prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
-import { cardSize, openChain, overviewSpheres, viewInput } from '../src/engine/cards.js'
+import { cardPlan, cardSize, overviewSpheres, viewInput, viewKey } from '../src/engine/cards.js'
 import { OVERVIEW, fitView, viewBasis } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
 import { layoutSphere } from '../src/engine/sphere.js'
@@ -164,24 +164,22 @@ export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2
   const hub = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
   for (const activity of activities) {
     apply(state, activity)
-    const input = viewInput(state, [])
-    const views = planFolderView({ ...input, alwaysDepth })
-    const next = `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
+    const next = viewKey(state)
     if (next === key) continue
     key = next
-    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
+    const layout = cardPlan(state, { alwaysDepth, previous: homes })
+    const entries = layout.entries
+    const placed = layout.placed
     const sizes = new Map(entries.map((entry) => [entry.path, entry]))
-    const placed = layoutSphere(entries, { previous: homes, open: openChain(state) })
     for (const [path, spot] of placed) {
       const size = sizes.get(path)
       homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
     }
     layouts += 1
-    const viewByPath = new Map(views.map((view) => [view.path, view]))
     const fitCards = entries.map((entry) => ({
       path: entry.path,
       home: placed.get(entry.path),
-      view: viewByPath.get(entry.path),
+      view: layout.drawn.get(entry.path),
     }))
     const fit = fitView([hub, ...overviewSpheres(fitCards)], { aspect: 1.6 })
     overview.push(fit.dist)
@@ -356,20 +354,17 @@ export function replayDigest(source) {
   let key = ''
   for (const activity of activities) {
     apply(state, activity)
-    const input = viewInput(state, [])
-    const views = planFolderView({ ...input, alwaysDepth: 2 })
-    plans.push(views)
-    const next = `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
+    const layout = cardPlan(state, { alwaysDepth: 2, previous: homes })
+    plans.push(layout.plan)
+    const next = viewKey(state)
     if (next === key) continue
     key = next
-    const entries = views.map((view) => ({ path: view.path, ...cardSize(view) }))
-    const placed = layoutSphere(entries, { previous: homes, open: openChain(state) })
-    const sizes = new Map(entries.map((entry) => [entry.path, entry]))
-    for (const [path, spot] of placed) {
+    const sizes = new Map(layout.entries.map((entry) => [entry.path, entry]))
+    for (const [path, spot] of layout.placed) {
       const size = sizes.get(path)
       homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
     }
-    layouts.push([...placed])
+    layouts.push([...layout.placed])
   }
   return {
     name: source.name,
