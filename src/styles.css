@@ -322,14 +322,59 @@ summary:focus-visible,
   background: var(--white);
 }
 
-.hud-agents {
+.hud-agents-box {
   grid-column: 1;
   grid-row: 2;
-  align-self: end;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 0;
+}
+
+.hud-agents {
   display: flex;
   flex-direction: column;
   gap: var(--space);
   width: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  pointer-events: auto;
+  scrollbar-width: thin;
+}
+
+.hud-agent-row.is-idle-hidden {
+  display: none;
+}
+
+.idle-toggle {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space);
+  padding: var(--space) calc(var(--space) * 1.5);
+  text-align: left;
+  background-color: rgb(0 0 0 / 0.92);
+  background-image: var(--corner-ticks);
+  border: 1px dashed var(--line);
+  border-radius: 2px;
+  color: rgb(255 255 255 / 0.72);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.idle-toggle:hover:not(:disabled) {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.idle-toggle[aria-expanded='true'] {
+  border-color: var(--white);
+  color: var(--white);
 }
 
 .hud-agent-row {
@@ -1883,10 +1928,10 @@ summary:focus-visible,
 
 .waiting {
   position: fixed;
-  left: 50%;
+  left: calc(var(--space) * 2 + 368px + var(--space) * 2);
   bottom: calc(var(--space) * 11);
-  transform: translateX(-50%);
-  width: min(512px, calc(100vw - 544px));
+  transform: none;
+  width: min(512px, calc(100vw - 432px));
   min-width: 320px;
   pointer-events: none;
   z-index: 4;
@@ -2218,6 +2263,8 @@ summary:focus-visible,
   }
 
   .waiting {
+    left: calc(var(--space) * 2);
+    bottom: calc(46vh + var(--space) * 13);
     width: calc(100vw - 32px);
   }
 }
@@ -4464,8 +4511,9 @@ summary:focus-visible,
   z-index: 6;
   width: 368px;
   max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 104px);
+  max-height: min(420px, 46vh);
   padding: var(--space);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space);

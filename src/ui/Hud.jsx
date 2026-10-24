@@ -6,6 +6,7 @@ import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
+import { agentForNumber, agentList } from './agentList.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
 import { orchestratorOn } from './orchestratorChat.js'
@@ -16,40 +17,14 @@ import {
   toggleAllTerminalsLabel,
 } from './terminalButtons.js'
 
+export { agentRows } from './agentList.js'
+
 const STATUS_TEXT = {
   idle: 'idle',
   queued: 'queued',
   working: 'working',
   error: 'failed',
   done: 'finished',
-}
-
-export function agentRows(agents) {
-  const list = Array.isArray(agents) ? agents : []
-  const known = new Set(list.map((agent) => agent?.key))
-  const children = new Map()
-  const roots = []
-  for (const agent of list) {
-    if (!agent) continue
-    if (agent.parent && agent.parent !== agent.key && known.has(agent.parent)) {
-      if (!children.has(agent.parent)) children.set(agent.parent, [])
-      children.get(agent.parent).push(agent)
-    } else {
-      roots.push(agent)
-    }
-  }
-  const rows = []
-  const seen = new Set()
-  let number = 0
-  function visit(agent, depth) {
-    if (!agent || seen.has(agent.key)) return
-    seen.add(agent.key)
-    if (depth === 0) number += 1
-    rows.push({ agent, depth, number: depth === 0 ? number : null })
-    for (const child of children.get(agent.key) ?? []) visit(child, depth + 1)
-  }
-  for (const agent of roots) visit(agent, 0)
-  return rows
 }
 
 export const SHORTCUTS = [
@@ -116,6 +91,8 @@ export default function Hud({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
+  const [idleOpen, setIdleOpen] = useState(false)
+  const [chatSpace, setChatSpace] = useState(0)
   const [guideOpen, setGuideOpen] = useState(
     () => typeof window !== 'undefined' && shouldShowGuide() && guideCanOpen(document)
   )
@@ -127,6 +104,7 @@ export default function Hud({
   const notice = healthNotice(health)
   const chatAvailable = orchestratorOn(health)
   const logBodyRef = useRef(null)
+  const agentsBoxRef = useRef(null)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
   const visibleShortcuts = (client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')).map(
@@ -135,7 +113,14 @@ export default function Hud({
   )
 
   const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
-  const rows = agentRows(snapshot?.agents ?? [])
+  const list = agentList(snapshot?.agents ?? [], idleOpen)
+  const activeRows = list.rows.filter((row) => row.group !== 'idle')
+  const idleRows = list.rows.filter((row) => row.group === 'idle')
+  const listRef = useRef(list)
+  const focusRef = useRef(onFocus)
+  listRef.current = list
+  focusRef.current = onFocus
+  const idleLabel = `${list.idleCount} idle ${list.idleCount === 1 ? 'lane' : 'lanes'}`
   const context = { agents, paths: assistantPaths }
 
   function closeGuide() {
@@ -158,6 +143,45 @@ export default function Hud({
   useEffect(() => {
     if (!chatAvailable) setChatOpen(false)
   }, [chatAvailable])
+
+  useEffect(() => {
+    if (!chatOpen) {
+      setChatSpace(0)
+      return undefined
+    }
+    const box = agentsBoxRef.current
+    const chat = typeof document === 'undefined' ? null : document.getElementById('hud-orchestrator-chat')
+    if (!box || !chat) return undefined
+
+    function measure() {
+      const bottom = box.getBoundingClientRect().bottom
+      const top = chat.getBoundingClientRect().top
+      setChatSpace(Math.max(0, Math.round(bottom - top + 8)))
+    }
+
+    measure()
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null
+    observer?.observe(chat)
+    window.addEventListener('resize', measure)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', measure)
+    }
+  }, [chatOpen])
+
+  useEffect(() => {
+    function onKey(event) {
+      if (!/^[1-9]$/.test(event.key)) return
+      if (event.ctrlKey || event.metaKey || event.altKey) return
+      if (hudKeyBlocked(event.target)) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      const agent = agentForNumber(listRef.current, event.key)
+      if (agent) focusRef.current(agent.key)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [])
 
   useEffect(() => {
     if (controlTarget?.nonce != null) {
@@ -212,6 +236,52 @@ export default function Hud({
       logBodyRef.current.scrollTop = logBodyRef.current.scrollHeight
     }
   }, [logOpen, visibleLog.length])
+
+  function renderAgentRow({ agent, depth, number, group, visible }) {
+    const isOpen = isTerminalOpen(openTerminals, agent.key)
+    const classes = [
+      'hud-agent-row',
+      depth > 0 ? 'is-subagent' : '',
+      group === 'idle' && !visible ? 'is-idle-hidden' : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+    return (
+      <div
+        key={agent.key}
+        className={classes}
+        aria-hidden={visible ? undefined : true}
+        style={depth > 0 ? { paddingLeft: `${depth * 16}px` } : undefined}
+      >
+        <button
+          type="button"
+          className={`agent is-${agent.status}`}
+          aria-pressed={focused === agent.key}
+          onClick={() => onFocus(agent.key)}
+        >
+          <span className="agent-head">
+            <span className="dot" aria-hidden="true" />
+            <span className="agent-name">{agent.name}</span>
+            {number !== null && <span className="agent-key mono">{number}</span>}
+          </span>
+          <span className="agent-subtags mono">
+            <span className="agent-subtag agent-lane">{agent.key}</span>
+            <span className="agent-subtag agent-status">{STATUS_TEXT[agent.status] ?? agent.status}</span>
+            {depth > 0 && <span className="agent-subtag agent-subagent">subagent</span>}
+          </span>
+        </button>
+        <button
+          type="button"
+          className="agent-log"
+          aria-pressed={isOpen}
+          aria-label={logButtonAriaLabel(agent.name, isOpen)}
+          onClick={() => onToggleTerminal(agent.key)}
+        >
+          Log
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="hud">
@@ -364,64 +434,48 @@ export default function Hud({
         </div>
       </div>
 
-      <nav className="hud-agents" aria-label="Agents">
-        {rows.map(({ agent, depth, number }) => {
-          const isOpen = isTerminalOpen(openTerminals, agent.key)
-          return (
-            <div
-              key={agent.key}
-              className={`hud-agent-row${depth > 0 ? ' is-subagent' : ''}`}
-              style={depth > 0 ? { paddingLeft: `${depth * 16}px` } : undefined}
-            >
+      <div
+        className="hud-agents-box"
+        ref={agentsBoxRef}
+        style={chatOpen ? { paddingBottom: `${chatSpace}px` } : undefined}
+      >
+        <nav className="hud-agents" aria-label="Agents">
+          {activeRows.map(renderAgentRow)}
+          {list.idleCount > 0 && (
+            <div className="hud-agent-row">
               <button
                 type="button"
-                className={`agent is-${agent.status}`}
-                aria-pressed={focused === agent.key}
-                onClick={() => onFocus(agent.key)}
+                className="idle-toggle"
+                aria-expanded={idleOpen}
+                onClick={() => setIdleOpen((open) => !open)}
               >
-                <span className="agent-head">
-                  <span className="dot" aria-hidden="true" />
-                  <span className="agent-name">{agent.name}</span>
-                  {number !== null && <span className="agent-key mono">{number}</span>}
-                </span>
-                <span className="agent-subtags mono">
-                  <span className="agent-subtag agent-lane">{agent.key}</span>
-                  <span className="agent-subtag agent-status">{STATUS_TEXT[agent.status] ?? agent.status}</span>
-                  {depth > 0 && <span className="agent-subtag agent-subagent">subagent</span>}
-                </span>
-              </button>
-              <button
-                type="button"
-                className="agent-log"
-                aria-pressed={isOpen}
-                aria-label={logButtonAriaLabel(agent.name, isOpen)}
-                onClick={() => onToggleTerminal(agent.key)}
-              >
-                Log
+                <span className="idle-toggle-label">{idleLabel}</span>
+                <span className="agent-key mono">{idleOpen ? '-' : '+'}</span>
               </button>
             </div>
-          )
-        })}
-        <div className="hud-agent-row">
-          <button
-            type="button"
-            className="overview"
-            aria-pressed={focused === null}
-            onClick={onOverview}
-          >
-            <span className="overview-label">Overview</span>
-            <span className="agent-key mono">0</span>
-          </button>
-          <button
-            type="button"
-            className="agent-log"
-            aria-pressed={areAllTerminalsOpen(snapshot?.agents, openTerminals)}
-            onClick={() => onShowTerminals(!areAllTerminalsOpen(snapshot?.agents, openTerminals))}
-          >
-            {toggleAllTerminalsLabel(snapshot?.agents, openTerminals)}
-          </button>
-        </div>
-      </nav>
+          )}
+          {idleRows.map(renderAgentRow)}
+          <div className="hud-agent-row">
+            <button
+              type="button"
+              className="overview"
+              aria-pressed={focused === null}
+              onClick={onOverview}
+            >
+              <span className="overview-label">Overview</span>
+              <span className="agent-key mono">0</span>
+            </button>
+            <button
+              type="button"
+              className="agent-log"
+              aria-pressed={areAllTerminalsOpen(snapshot?.agents, openTerminals)}
+              onClick={() => onShowTerminals(!areAllTerminalsOpen(snapshot?.agents, openTerminals))}
+            >
+              {toggleAllTerminalsLabel(snapshot?.agents, openTerminals)}
+            </button>
+          </div>
+        </nav>
+      </div>
 
       {logOpen && (
         <aside id="hud-log-drawer" className="hud-log" aria-label="Event log">
