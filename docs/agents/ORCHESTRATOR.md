@@ -12,11 +12,10 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 
 ## Where things stand
 
-- `main` is 0.1.262. The ulolTris milestone passed on 2026-10-24 (see the changelog); LowBeam is next. The room follows lane runs (`--lanes`), task queues (`run-lane --queue` and several tasks in Dispatch) and the owner's Claude Code and OpenCode sessions (`--sessions`). Paperclip is optional. It was uninstalled on 2026-10-24 at the owner's word (`npm uninstall -g paperclipai`; `~\.paperclip` kept), and the lane runner is the room's source (`SOURCES.md`).
-- When Paperclip does not answer, the drawer reads tasks, live runs and costs from the lane records. Approvals are empty then, and backups belong to Paperclip.
-- The five OpenCode lanes and the `claude` lane are live, each with its own worktree. The OpenCode lanes each have their own `npm ci` and run the same model. Hermes and AGY are retired. Only the first OpenCode lane may start the real Paperclip, and only to check the shape of GET routes; everyone else uses `npm run fake-paperclip` on a free port.
-- The room, version 3 (the owner's redesign, see `PLAN.md`), is merged. The planner loop runs in the drawer. The cost board is a screen panel at the bottom right (V19).
-- The next milestone is the owner's queue on ulolTris, then LowBeam. H1 to H4 wait for the owner (`HARNESSES.md`).
+- `main` is 0.1.291 (2026-10-25). The ulolTris and LowBeam milestones passed. Paperclip is gone from the app (Y1 to Y3). The room's orchestrator runs in the app (K1 to K3, R3 and R4: Claude Code or OpenCode), and the page is a lens over the room with a dock below (I1, I2).
+- Ten OpenCode lanes (`opencode`, `opencode2` to `opencode10`) and `claude` are live, each with its own worktree. Hermes and AGY are retired.
+- In flight when the owner's machine shut down after midnight on 2026-10-25: R7, B2, O2, O3, T1, H5, W7, Q6a, I3 and Q6c, each on the lane its brief names. Check each worktree's `git status` and its run log before you rerun or merge it; a run cut off by the shutdown has no record in `runs.jsonl`.
+- Next: Q6b and O5 after O2 (`HIERARCHY.md`), then the room checked by eye in the lens at 1280 by 800. Lanes run only related tests while they work and merges do the same; the full suite runs in CI.
 
 ## Standing rules from the owner
 
