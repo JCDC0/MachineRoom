@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
+- The HUD agent list puts the orchestrator first, shows working, queued, failed and finished lanes above one collapsible idle row, scrolls above the open orchestrator chat, and the waiting card sits beside the chat at 1280 by 800 and 900 by 700 (task N2).
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).
 - The orchestrator chat says why a turn stopped when Claude gave a reason (the first live try on ulolTris hit the subscription's session limit and the chat only said `exit 1`).
 - Review fixes on K1: the orchestrator starts its lanes through the bridge (`POST /api/control/runs` with `worktree: true`, which passes `--worktree` to run-lane), so they keep running after its `claude -p` turn exits; its instructions get the bridge address as `{{BRIDGE}}`; `claude` is looked up on PATH so Windows never runs one from the project folder; the run route refuses the orchestrator lane.
