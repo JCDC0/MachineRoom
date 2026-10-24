@@ -1,26 +1,26 @@
 const STATUS_COPY = {
   connecting: {
     badge: 'Connecting',
-    title: 'Connecting to Paperclip',
+    title: 'Connecting to the live feed',
     detail: 'Opening the live event feed. The room updates as soon as the stream answers.',
     tone: 'normal',
   },
   live: {
     badge: 'Connected',
     title: 'Waiting for the first run',
-    detail: 'The room is waiting for the first run. Assign an issue to an agent in Paperclip to start one.',
+    detail: 'The room is waiting for the first run. Start one from Dispatch (C) or with npm run run-lane, or assign an issue in Paperclip if one runs.',
     tone: 'live',
   },
   reconnecting: {
     badge: 'Reconnecting',
-    title: 'Connection to Paperclip dropped',
+    title: 'The live feed dropped',
     detail: 'The live stream closed unexpectedly. The viewer will retry automatically.',
     tone: 'error',
   },
   disconnected: {
     badge: 'Disconnected',
-    title: 'Paperclip is not reachable',
-    detail: 'Could not reach the live stream. Check that Paperclip or the bridge is running. It will retry automatically.',
+    title: 'The live feed is not reachable',
+    detail: 'Could not reach the live stream. Check that the bridge is running. It will retry automatically.',
     tone: 'error',
   },
 }

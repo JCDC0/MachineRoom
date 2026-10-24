@@ -395,7 +395,7 @@ export function createControlApi(options) {
 
   function laneAgentList(fallback) {
     const cents = new Map(fallback.costs.byAgent.map((row) => [row.agentId, row.costCents]))
-    return fallback.agents.map((agent) => mapAgent(agent, cents.get(agent.id)))
+    return fallback.agents.map((agent) => ({ ...mapAgent(agent, cents.get(agent.id)), role: null }))
   }
 
   async function upstream(method, path, body) {

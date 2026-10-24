@@ -159,6 +159,7 @@ describe('the lane costs routes', () => {
       ['agent-opencode2', 'opencode2', 'OpenCode 2', 12],
     ])
     expect(list.every((agent) => agent.budgetMonthlyCents === 0)).toBe(true)
+    expect(list.every((agent) => agent.role === null)).toBe(true)
   })
 
   it('answers the same error as before when the lane source is off', async () => {
