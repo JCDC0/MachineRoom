@@ -30,7 +30,7 @@ function tempDir(prefix = 'mr-lanes-') {
 }
 
 function lanesFor(worktrees) {
-  const lanes = { ...realLanes }
+  const lanes = { ...realLanes, agy: { ...realLanes.agy, retired: false } }
   for (const [lane, worktree] of Object.entries(worktrees)) lanes[lane] = { ...realLanes[lane], worktree }
   return lanes
 }
@@ -85,15 +85,15 @@ function git(cwd, args) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'agy', 'claude'])
+    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'claude'])
     expect(agents.filter((agent) => agent.key !== 'agy' && agent.key !== 'claude').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
     expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
-    expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
+    expect(agents.some((agent) => agent.key === 'hermes' || agent.key === 'agy')).toBe(false)
   })
 
   it('lists AGY once its lane has a command line, with the process adapter', () => {
-    expect(laneAgents(realLanes).find((agent) => agent.key === 'agy')).toMatchObject({
+    expect(laneAgents({ ...realLanes, agy: { ...realLanes.agy, retired: false } }).find((agent) => agent.key === 'agy')).toMatchObject({
       id: 'agent-agy',
       key: 'agy',
       name: 'agy',

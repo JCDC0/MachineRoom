@@ -158,6 +158,7 @@
   "agy": {
     "name": "agy",
     "harness": "agy",
+    "retired": true,
     "model": "Gemini 3.8 Flash (High)",
     "models": {
       "C3d": "Gemini 4 Argon (Medium)",

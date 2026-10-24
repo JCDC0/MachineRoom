@@ -62,7 +62,7 @@ npm run build
 npm run serve -- up --lanes
 ```
 
-`--lanes` (or `MACHINEROOM_LANES=1`) shows lane runs live. Start a lane in another terminal (`npm run run-lane -- opencode <brief>`, see Working with lanes): the bridge sees its log appear in `%TEMP%\machineroom-runs`, the lane turns working, its reads and writes land on the project's cards as the log grows, and the run turns green or red when `run-lane` records how it ended. Each lane in `docs/agents/lanes.json` with a `cli` block is an agent, and a retired lane is left out. AGY is a lane too (`npm run run-lane -- agy <brief>`).
+`--lanes` (or `MACHINEROOM_LANES=1`) shows lane runs live. Start a lane in another terminal (`npm run run-lane -- opencode <brief>`, see Working with lanes): the bridge sees its log appear in `%TEMP%\machineroom-runs`, the lane turns working, its reads and writes land on the project's cards as the log grows, and the run turns green or red when `run-lane` records how it ended. Each lane in `docs/agents/lanes.json` with a `cli` block is an agent, and a retired lane is left out. AGY has a lane too, retired for now (it was too slow); remove `"retired": true` from its entry to bring it back.
 
 The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it.
 
