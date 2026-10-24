@@ -74,6 +74,7 @@ export function createOrchestrators({
   sendJson,
   readJsonBody,
   changedFiles = branchChanges,
+  onMasked,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -94,6 +95,7 @@ export function createOrchestrators({
     promptFile,
     bridgeUrl,
     onNotice,
+    onMasked,
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -147,6 +149,7 @@ export function createOrchestrators({
       promptFile,
       bridgeUrl,
       onNotice,
+      onMasked,
       extraInstructions: subPrompt(sub, ORCHESTRATOR_KEY),
       onReply: (text) => {
         if (stopped) return

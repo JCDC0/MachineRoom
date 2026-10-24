@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The orchestrator's chat masks a key in every message it stores, sends or restores, and the count joins the health `masked` total (task Q6b).
+- The orchestrator writes its chat file through `<file>.tmp`, keeps a file that fails to parse as `<file>.bad`, refuses a second room on the same project with a lock, writes a failed record for a turn the room ended, and saves the room-started turn times (task Q6b).
+- `docs/agents/ORCHESTRATOR-AGENT.md` says to always send `tasks`, and to run without `worktree` on a project with no `.git` (task Q6b).
 - The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
