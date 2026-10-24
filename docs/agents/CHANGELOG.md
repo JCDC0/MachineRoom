@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The agent dock shows a sub orchestrator's lanes, scope, restriction and who set them, and a lane in a sector shows the sector's name and rules, in the order the brief asks (task O7).
+
 - The orchestrator reports its context use and window and compacts a session at 80 percent into a 40 line summary behind a switch in the agent dock, and `POST /api/orchestrator/autocompact` sets it (task O5).
 
 - The Meters panel reads this month's spend and tokens per lane from the run records only: it has no budget editor, confirm card or save, and says budgets are not set there (task Q10).

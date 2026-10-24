@@ -44,6 +44,55 @@ const costRow = {
   share: 1,
 }
 
+const mainRow = {
+  id: 'orchestrator',
+  name: 'Orchestrator',
+  harness: 'claude',
+  model: 'opus',
+  state: 'idle',
+  contextTokens: null,
+  contextWindow: 200000,
+  autocompact: true,
+  lanes: ['claude'],
+  scope: [],
+  restricted: false,
+  setBy: 'owner',
+}
+
+const subRow = {
+  id: 'ui',
+  name: 'UI',
+  harness: 'opencode',
+  model: 'opencode-go/deepseek-v4.1-flash',
+  state: 'idle',
+  contextTokens: null,
+  contextWindow: 200000,
+  autocompact: true,
+  lanes: ['opencode', 'opencode3'],
+  scope: ['src/ui/**', 'src/styles.css'],
+  restricted: true,
+  setBy: 'owner',
+}
+
+const subAgent = {
+  id: 'agent-sub-ui',
+  key: 'sub-ui',
+  name: 'UI',
+  harness: 'opencode',
+  model: 'opencode-go/deepseek-v4.1-flash',
+  status: 'idle',
+}
+
+const freeLane = {
+  id: 'agent-claude',
+  key: 'claude',
+  name: 'Claude',
+  harness: 'claude',
+  model: 'opus',
+  status: 'idle',
+}
+
+
 describe('agentContext', () => {
   it('an idle lane', () => {
     const result = agentContext({
@@ -222,6 +271,109 @@ describe('agentContext', () => {
     expect(result.log[11].text).toBe('line 20')
     expect(result.command).toBe('line 20')
   })
+
+  it('a sub orchestrator shows its lanes, scope, restriction and setter', () => {
+    const result = agentContext({
+      agent: subAgent,
+      lanes: [lane, subAgent, orchestrator],
+      costs: board([]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+      orchestrator: [mainRow, subRow],
+    })
+
+    expect(result.isOrchestrator).toBe(false)
+    expect(result.key).toBe('sub-ui')
+    expect(result.name).toBe('UI')
+    expect(result.sector).toBeNull()
+    expect(result.lanes).toBe('opencode, opencode3')
+    expect(result.scope).toBe('src/ui/**\nsrc/styles.css')
+    expect(result.restricted).toBe('yes')
+    expect(result.setBy).toBe('owner')
+  })
+
+  it('a sub orchestrator with no lanes and an open scope', () => {
+    const openRow = { ...subRow, lanes: [], scope: [], restricted: false, setBy: 'orchestrator' }
+    const result = agentContext({
+      agent: subAgent,
+      lanes: [lane, subAgent],
+      costs: board([]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+      orchestrator: openRow,
+    })
+
+    expect(result.lanes).toBe('none')
+    expect(result.scope).toBe('whole project')
+    expect(result.restricted).toBe('no')
+    expect(result.setBy).toBe('orchestrator')
+  })
+
+  it('a lane in a sub orchestrator sector names the sub and its rules', () => {
+    const result = agentContext({
+      agent: lane,
+      lanes: [lane, orchestrator],
+      costs: board([]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+      orchestrator: [mainRow, subRow],
+    })
+
+    expect(result.sector).toBe('UI')
+    expect(result.lanes).toBeNull()
+    expect(result.scope).toBe('src/ui/**\nsrc/styles.css')
+    expect(result.restricted).toBe('yes')
+    expect(result.setBy).toBe('owner')
+  })
+
+  it('a lane in no sector shows no sector rows', () => {
+    const result = agentContext({
+      agent: freeLane,
+      lanes: [freeLane, orchestrator],
+      costs: board([]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+      orchestrator: [mainRow, subRow],
+    })
+
+    expect(result.sector).toBeNull()
+    expect(result.lanes).toBeNull()
+    expect(result.scope).toBeNull()
+    expect(result.restricted).toBeNull()
+    expect(result.setBy).toBeNull()
+  })
+
+  it('missing orchestrator data shows not reported and never throws', () => {
+    const result = agentContext({
+      agent: subAgent,
+      lanes: [subAgent],
+      costs: null,
+      liveRuns: null,
+      tasks: null,
+      log: null,
+      orchestrator: null,
+    })
+
+    expect(result.lanes).toBe('not reported')
+    expect(result.scope).toBe('not reported')
+    expect(result.restricted).toBe('not reported')
+    expect(result.setBy).toBe('not reported')
+
+    const partial = agentContext({
+      agent: lane,
+      lanes: [lane],
+      orchestrator: [{ id: 'ui', name: 'UI', lanes: ['opencode'] }, null, 'bad'],
+    })
+
+    expect(partial.sector).toBe('UI')
+    expect(partial.scope).toBe('not reported')
+    expect(partial.restricted).toBe('not reported')
+    expect(partial.setBy).toBe('not reported')
+  })
 })
 
 describe('AgentDock', () => {
@@ -282,6 +434,52 @@ describe('AgentDock', () => {
     expect(html).toContain('Focus')
     expect(html).not.toContain('Open chat')
     expect(html).not.toContain('Autocompact')
+  })
+
+  it('draws the sub orchestrator rows in the brief order', () => {
+    const html = renderToString(
+      createElement(AgentDock, {
+        agent: subAgent,
+        lanes: [lane, subAgent, orchestrator],
+        costs: board([]),
+        liveRuns: [],
+        tasks: [],
+        log: [],
+        orchestrator: [mainRow, subRow],
+      })
+    )
+
+    const order = ['Status', 'Lanes', 'Scope', 'Restricted', 'Set by', 'Key', 'Harness', 'Model']
+    const places = order.map((label) => html.indexOf(label))
+    expect(places.every((place) => place >= 0)).toBe(true)
+    expect(places).toEqual([...places].sort((a, b) => a - b))
+    expect(html).toContain('opencode, opencode3')
+    expect(html).toContain('src/ui/**')
+    expect(html).toContain('src/styles.css')
+    expect(html).toContain('white-space:pre-line')
+  })
+
+  it('draws a lane sector row before the rest', () => {
+    const html = renderToString(
+      createElement(AgentDock, {
+        agent: lane,
+        lanes: [lane, orchestrator],
+        costs: board([]),
+        liveRuns: [],
+        tasks: [],
+        log: [],
+        orchestrator: [mainRow, subRow],
+      })
+    )
+
+    expect(html).toContain('Sector')
+    expect(html).toContain('UI')
+    expect(html).not.toContain('Lanes')
+    expect(html.indexOf('Status')).toBeLessThan(html.indexOf('Sector'))
+    expect(html.indexOf('Sector')).toBeLessThan(html.indexOf('Scope'))
+    expect(html.indexOf('Scope')).toBeLessThan(html.indexOf('Restricted'))
+    expect(html.indexOf('Restricted')).toBeLessThan(html.indexOf('Set by'))
+    expect(html.indexOf('Set by')).toBeLessThan(html.indexOf('Key'))
   })
 })
 
