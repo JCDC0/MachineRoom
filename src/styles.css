@@ -312,6 +312,16 @@ summary:focus-visible,
   background: var(--green);
 }
 
+.hud-legend .is-line {
+  flex-basis: 100%;
+}
+
+.hud-legend .is-line::before {
+  width: calc(var(--space) * 2);
+  height: 2px;
+  background: var(--white);
+}
+
 .hud-agents {
   grid-column: 1;
   grid-row: 2;
@@ -802,6 +812,144 @@ summary:focus-visible,
   margin: 0;
   font-size: 12px;
   color: rgb(255 255 255 / 0.9);
+}
+
+.mr-guide-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.78);
+  display: grid;
+  place-items: center;
+  padding: calc(var(--space) * 3);
+  z-index: 12;
+}
+
+.mr-guide {
+  width: min(520px, 100%);
+  max-height: calc(100vh - var(--space) * 6);
+  overflow-y: auto;
+  background-color: var(--black);
+  background-image: var(--corner-ticks);
+  border: 1px solid var(--white);
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+}
+
+.mr-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space) * 2);
+  padding: 6px calc(var(--space) * 2);
+  background: var(--white);
+  color: var(--black);
+}
+
+.mr-guide-title {
+  font-family: var(--sans);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--black);
+}
+
+.mr-guide-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--black);
+}
+
+.mr-guide-skip {
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--black);
+  color: var(--white);
+  border: 1px solid var(--black);
+}
+
+.mr-guide-skip:hover {
+  color: var(--yellow);
+}
+
+.mr-guide-label {
+  margin: 0;
+  padding: calc(var(--space) * 2) calc(var(--space) * 2) 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--yellow);
+}
+
+.mr-guide-text {
+  margin: 0;
+  padding: var(--space) calc(var(--space) * 2) 0;
+  font-family: var(--sans);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--white);
+}
+
+.mr-guide-dots {
+  list-style: none;
+  margin: 0;
+  padding: calc(var(--space) * 2) calc(var(--space) * 2) 0;
+  display: flex;
+  gap: var(--space);
+}
+
+.mr-guide-dot {
+  width: calc(var(--space) * 2);
+  height: 2px;
+  background: rgb(255 255 255 / 0.28);
+}
+
+.mr-guide-dot.is-done {
+  background: rgb(255 255 255 / 0.7);
+}
+
+.mr-guide-dot.is-current {
+  background: var(--yellow);
+}
+
+.mr-guide-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: calc(var(--space) * 2);
+}
+
+.mr-guide-next {
+  min-width: 96px;
+  padding: var(--space) calc(var(--space) * 2);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+  border: 1px solid var(--yellow);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.mr-guide-next:hover {
+  background: rgb(229 255 0 / 0.18);
+}
+
+.mr-guide :focus-visible {
+  outline: 1px solid var(--yellow);
+  outline-offset: 2px;
 }
 
 .hud-settings-backdrop {
