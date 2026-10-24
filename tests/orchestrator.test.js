@@ -35,7 +35,7 @@ const FAKE_CLAUDE = [
   '    await new Promise((done) => setTimeout(done, 20))',
   '  }',
   '}',
-  "const reply = mode === 'empty' ? '' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "const reply = mode === 'empty' ? '' : mode === 'fail' ? 'You have hit your session limit.' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125 }))",
   "if (mode === 'fail') process.exitCode = 3",
 ].join('\n')
@@ -248,7 +248,7 @@ describe('one orchestrator turn', () => {
     rig.behaviour.mode = 'fail'
     rig.send('Fail now')
     await waitIdle(rig, 2)
-    expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: exit 3.')
+    expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: You have hit your session limit.')
   })
 
   it('uses the three-sentence fallback when the prompt file is missing', async () => {

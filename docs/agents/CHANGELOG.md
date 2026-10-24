@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The orchestrator chat says why a turn stopped when Claude gave a reason (the first live try on ulolTris hit the subscription's session limit and the chat only said `exit 1`).
 - Review fixes on K1: the orchestrator starts its lanes through the bridge (`POST /api/control/runs` with `worktree: true`, which passes `--worktree` to run-lane), so they keep running after its `claude -p` turn exits; its instructions get the bridge address as `{{BRIDGE}}`; `claude` is looked up on PATH so Windows never runs one from the project folder; the run route refuses the orchestrator lane.
 - The room greets a first visit with a five step guide card (Next and Skip, Done at the end), a Guide button in the help panel opens it again, and the legend adds the line from an agent to the file it is working on (task N1).
 - The room has an orchestrator chat: a bottom left panel with the conversation, the state line, the message box and the confirm cards, opened by an ORCHESTRATOR button beside CONTROL or by `/`, and the waiting card points a beginner at it (task K2).

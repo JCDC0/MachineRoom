@@ -346,7 +346,9 @@ export function createOrchestrator({
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const text = failed
       ? Number.isInteger(code)
-        ? `The orchestrator stopped: exit ${code}.`
+        ? report && !turn.killed
+          ? `The orchestrator stopped: ${report}`
+          : `The orchestrator stopped: exit ${code}.`
         : STOPPED_REPLY
       : report || EMPTY_REPLY
     addMessage('orchestrator', text)
