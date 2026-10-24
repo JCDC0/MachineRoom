@@ -50,11 +50,11 @@ describe('guide steps', () => {
   it('holds five short steps, each with a label and one sentence', () => {
     expect(GUIDE_STEPS).toHaveLength(5)
     expect(GUIDE_STEPS.map((step) => step.label)).toEqual([
-      'Your project',
-      'Agents',
+      'The lens',
+      'The dock',
       'The tunnel',
-      'Colours',
-      'Get started',
+      'The chat',
+      'The keys',
     ])
     for (const step of GUIDE_STEPS) {
       expect(step.text.endsWith('.')).toBe(true)
@@ -64,26 +64,30 @@ describe('guide steps', () => {
     }
   })
 
-  it('names the project, the agents, the tunnel, the colours and the keys', () => {
-    expect(GUIDE_STEPS[0].text).toContain('middle is your project')
-    expect(GUIDE_STEPS[0].text).toContain('name sits under the ring')
-    expect(GUIDE_STEPS[0].text).toContain('folder cards branch out')
+  it('names the lens, the dock, the tunnel and colours, the chat and the keys', () => {
+    expect(GUIDE_STEPS[0].text).toContain('room sits in the lens at the top')
+    expect(GUIDE_STEPS[0].text).toContain('project name is at its top left')
+    expect(GUIDE_STEPS[0].text).toContain('folder cards')
 
-    expect(GUIDE_STEPS[1].text).toContain('shape on the ring is an agent')
-    expect(GUIDE_STEPS[1].text).toContain('chip beside it')
-    expect(GUIDE_STEPS[1].text).toContain('name and status')
+    expect(GUIDE_STEPS[1].text).toContain('dock below has three columns')
+    expect(GUIDE_STEPS[1].text).toContain('agent list on the left')
+    expect(GUIDE_STEPS[1].text).toContain("selected agent's context in the middle")
+    expect(GUIDE_STEPS[1].text).toContain('settings and costs on the right')
 
     expect(GUIDE_STEPS[2].text).toContain('yellow tunnel')
     expect(GUIDE_STEPS[2].text).toContain('packets run along it')
+    expect(GUIDE_STEPS[2].text).toContain('white is a read or write')
+    expect(GUIDE_STEPS[2].text).toContain('green is finished')
+    expect(GUIDE_STEPS[2].text).toContain('red is a failure')
 
-    expect(GUIDE_STEPS[3].text).toContain('White is a read or write')
-    expect(GUIDE_STEPS[3].text).toContain('yellow is working')
-    expect(GUIDE_STEPS[3].text).toContain('green is finished')
-    expect(GUIDE_STEPS[3].text).toContain('red is a failure')
+    expect(GUIDE_STEPS[3].text).toContain('chat sits at the bottom right')
+    expect(GUIDE_STEPS[3].text).toContain('click ORCHESTRATOR')
+    expect(GUIDE_STEPS[3].text).toContain('Attach adds a sub orchestrator')
+    expect(GUIDE_STEPS[3].text).toContain('tabs switch between them')
 
-    expect(GUIDE_STEPS[4].text).toContain('click ORCHESTRATOR')
     expect(GUIDE_STEPS[4].text).toContain('C opens the control drawer')
-    expect(GUIDE_STEPS[4].text).toContain('? lists the keys')
+    expect(GUIDE_STEPS[4].text).toContain('L the event log')
+    expect(GUIDE_STEPS[4].text).toContain('? lists every key')
   })
 
   it('clamps a step number to the list', () => {
@@ -190,8 +194,8 @@ describe('Guide card', () => {
     const html = renderToString(createElement(Guide, { initialStep: 0 }))
     expect(html).toContain('class="mr-guide-backdrop"')
     expect(html).toContain('class="mr-guide"')
-    expect(html).toContain('Your project')
-    expect(html).toContain('The middle is your project')
+    expect(html).toContain('The lens')
+    expect(html).toContain('The room sits in the lens at the top')
     expect(html).toContain('1 / 5')
     expect(html).toContain('>Skip</button>')
     expect(html).toContain('>Next</button>')
@@ -202,7 +206,7 @@ describe('Guide card', () => {
 
   it('shows Done on the last step', () => {
     const html = renderToString(createElement(Guide, { initialStep: 4 }))
-    expect(html).toContain('Get started')
+    expect(html).toContain('The keys')
     expect(html).toContain('5 / 5')
     expect(html).toContain('>Done</button>')
     expect(html).not.toContain('>Next</button>')

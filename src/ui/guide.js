@@ -5,24 +5,24 @@ export const GUIDE_SEEN = '1'
 
 export const GUIDE_STEPS = [
   {
-    label: 'Your project',
-    text: 'The middle is your project: its name sits under the ring, and the folder cards branch out from it.',
+    label: 'The lens',
+    text: 'The room sits in the lens at the top: your project name is at its top left, and the hub, the folder cards and the agents fill it.',
   },
   {
-    label: 'Agents',
-    text: 'Each shape on the ring is an agent, and its chip beside it shows the name and status.',
+    label: 'The dock',
+    text: "The dock below has three columns: the agent list on the left, the selected agent's context in the middle, and the settings and costs on the right.",
   },
   {
     label: 'The tunnel',
-    text: 'A working agent sends a yellow tunnel to the file it is touching, and packets run along it.',
+    text: 'A working agent sends a yellow tunnel to the file it touches, and packets run along it; white is a read or write, green is finished and red is a failure.',
   },
   {
-    label: 'Colours',
-    text: 'White is a read or write, yellow is working, green is finished, red is a failure.',
+    label: 'The chat',
+    text: 'The orchestrator chat sits at the bottom right: press / or click ORCHESTRATOR, Attach adds a sub orchestrator, and its tabs switch between them.',
   },
   {
-    label: 'Get started',
-    text: 'Press / or click ORCHESTRATOR to say what you want built, C opens the control drawer, and ? lists the keys.',
+    label: 'The keys',
+    text: 'C opens the control drawer, L the event log, T an agent log, F follow mode, 0 the overview, and ? lists every key.',
   },
 ]
 
