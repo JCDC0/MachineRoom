@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The orchestrator chat draws a reply's Markdown as paragraphs, headings, lists, code blocks and inline code, with bold and italic markers dropped, and the state line names the current command while a turn runs (task R8).
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).
 - The orchestrator chat says why a turn stopped when Claude gave a reason (the first live try on ulolTris hit the subscription's session limit and the chat only said `exit 1`).

@@ -6,17 +6,25 @@ import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
 import Waiting from '../src/ui/Waiting.jsx'
 import {
   ORCH_STOP_CONFIRM,
+  OrchestratorActivity,
   canSend,
   charCount,
+  chatBlocks,
   chatLines,
   clampDraft,
   isSendKey,
   listsOrchestrator,
   needsStartConfirm,
   normalizeChat,
+  orchestratorDoing,
+  statusDetail,
   statusText,
   statusTone,
 } from '../src/ui/orchestratorChat.js'
+
+function textOf(spans) {
+  return spans.map((span) => span.text).join('')
+}
 
 const SNAPSHOT = {
   position: 0,
@@ -167,6 +175,103 @@ describe('orchestratorChat helpers', () => {
     expect(listsOrchestrator([{ key: 'boss', name: 'Boss', orchestrator: true }])).toBe(true)
     expect(listsOrchestrator(null)).toBe(false)
   })
+
+  it('names the current command on the working line only', () => {
+    expect(statusDetail('working', 'npm test')).toBe('Orchestrator is working: npm test')
+    expect(statusDetail('working', '  ')).toBe('Orchestrator is working')
+    expect(statusDetail('idle', 'npm test')).toBe('Orchestrator is waiting for you')
+    expect(statusDetail('paused', 'npm test')).toBe('Paused')
+  })
+
+  it('reads the orchestrator command from the room state', () => {
+    expect(orchestratorDoing([{ key: 'orchestrator', status: 'working', label: 'npm test' }])).toBe(
+      'npm test'
+    )
+    expect(orchestratorDoing([{ key: 'orchestrator', status: 'queued', label: 'npm run build' }])).toBe(
+      'npm run build'
+    )
+    expect(orchestratorDoing([{ key: 'orchestrator', status: 'done', label: 'done' }])).toBe('')
+    expect(orchestratorDoing([{ key: 'opencode', status: 'working', label: 'npm test' }])).toBe('')
+    expect(orchestratorDoing([])).toBe('')
+    expect(orchestratorDoing(null)).toBe('')
+  })
+})
+
+describe('chatBlocks', () => {
+  it('turns paragraphs into blocks and keeps their lines', () => {
+    expect(chatBlocks('One line\ntwo lines\n\nSecond para')).toEqual([
+      { kind: 'paragraph', spans: [{ kind: 'text', text: 'One line\ntwo lines' }] },
+      { kind: 'paragraph', spans: [{ kind: 'text', text: 'Second para' }] },
+    ])
+    expect(chatBlocks('')).toEqual([])
+    expect(chatBlocks(null)).toEqual([])
+  })
+
+  it('draws headings as plain text with their level', () => {
+    const blocks = chatBlocks('# Plan\n\n### Next step')
+    expect(blocks[0]).toMatchObject({ kind: 'heading', level: 1 })
+    expect(textOf(blocks[0].spans)).toBe('Plan')
+    expect(blocks[1]).toMatchObject({ kind: 'heading', level: 3 })
+    expect(textOf(blocks[1].spans)).toBe('Next step')
+  })
+
+  it('groups bullet and numbered lists', () => {
+    const blocks = chatBlocks('- one\n- two\n\n1. first\n2. second')
+    expect(blocks).toHaveLength(2)
+    expect(blocks[0]).toMatchObject({ kind: 'list', ordered: false, start: 1 })
+    expect(blocks[0].items.map((item) => textOf(item.spans))).toEqual(['one', 'two'])
+    expect(blocks[1]).toMatchObject({ kind: 'list', ordered: true, start: 1 })
+    expect(blocks[1].items.map((item) => textOf(item.spans))).toEqual(['first', 'second'])
+
+    const [started] = chatBlocks('3. three\n4. four')
+    expect(started).toMatchObject({ kind: 'list', ordered: true, start: 3 })
+    expect(started.items.map((item) => textOf(item.spans))).toEqual(['three', 'four'])
+  })
+
+  it('drops bold and italic markers, including nested ones', () => {
+    const [plain] = chatBlocks('**bold** and *italic* and __strong__ and _em_')
+    expect(textOf(plain.spans)).toBe('bold and italic and strong and em')
+
+    const [nested] = chatBlocks('**bold with *italic* and `code`**')
+    expect(textOf(nested.spans)).toBe('bold with italic and code')
+    expect(nested.spans.filter((span) => span.kind === 'code')).toEqual([
+      { kind: 'code', text: 'code' },
+    ])
+
+    const [outer] = chatBlocks('*outer **inner** outer*')
+    expect(textOf(outer.spans)).toBe('outer inner outer')
+  })
+
+  it('reads inline code without reading its Markdown', () => {
+    const [block] = chatBlocks('Run `npm test` then **stop**.')
+    expect(textOf(block.spans)).toBe('Run npm test then stop.')
+    expect(block.spans).toContainEqual({ kind: 'code', text: 'npm test' })
+
+    const [literal] = chatBlocks('`**not bold**`')
+    expect(literal.spans).toEqual([{ kind: 'code', text: '**not bold**' }])
+  })
+
+  it('keeps a code block exactly as written', () => {
+    const [code] = chatBlocks('```md\n# not a heading\n**not bold**\n- not a list\n```')
+    expect(code).toEqual({ kind: 'code', text: '# not a heading\n**not bold**\n- not a list' })
+    expect(chatBlocks('~~~\n`inline` stays\n~~~')[0]).toEqual({
+      kind: 'code',
+      text: '`inline` stays',
+    })
+    expect(chatBlocks('```\nno close')[0]).toEqual({ kind: 'code', text: 'no close' })
+  })
+
+  it('keeps HTML as text', () => {
+    const [block] = chatBlocks('<script>alert(1)</script>')
+    expect(block.spans).toEqual([{ kind: 'text', text: '<script>alert(1)</script>' }])
+    const [mixed] = chatBlocks('Use <b>this</b> and **that**')
+    expect(textOf(mixed.spans)).toBe('Use <b>this</b> and that')
+  })
+
+  it('leaves unmatched markers and a lone star as written', () => {
+    expect(textOf(chatBlocks('a ** b')[0].spans)).toBe('a ** b')
+    expect(textOf(chatBlocks('src/*.js and *.ts')[0].spans)).toBe('src/*.js and *.ts')
+  })
 })
 
 describe('OrchestratorChat panel', () => {
@@ -194,6 +299,62 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('Enter sends. Shift+Enter adds a line.')
     expect(html).toContain('>Send</button>')
     expect(html).toContain('>Stop</button>')
+  })
+
+  it('draws orchestrator and room messages as blocks and keeps owner messages plain', () => {
+    const chat = {
+      state: 'working',
+      messages: [
+        { id: 'm1', from: 'owner', text: '**plain** `<owner>`' },
+        { id: 'm2', from: 'orchestrator', text: '## Plan\n\n- **one**\n- two\n\nRun `npm test`.\n\n```sh\nnpm test\n```' },
+        { id: 'm3', from: 'room', text: '### Run ended' },
+      ],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain('class="mr-orch-blocks is-orchestrator"')
+    expect(html).toContain('class="mr-orch-block is-heading"')
+    expect(html).toContain('class="mr-orch-block is-list"')
+    expect(html).toContain('<pre class="mr-orch-block is-code"><code>npm test</code></pre>')
+    expect(html).toContain('<code class="mr-orch-code">npm test</code>')
+    expect(html).toContain('class="mr-orch-blocks is-room"')
+    expect(html).toContain('**plain**')
+    expect(html).toContain('&lt;owner&gt;')
+  })
+
+  it('keeps a script in a reply as text, never as HTML', () => {
+    const chat = {
+      state: 'idle',
+      messages: [{ id: 'm1', from: 'orchestrator', text: '<script>alert(1)</script>' }],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+    expect(html).not.toContain('<script>')
+  })
+
+  it('names the command the room shows on the working line', () => {
+    const chat = { state: 'working', messages: [{ id: 'm1', from: 'owner', text: 'Go.' }] }
+    const withProp = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        activity: 'npm test',
+      })
+    )
+    expect(withProp).toContain('Orchestrator is working: npm test')
+
+    const withRoom = renderToString(
+      createElement(
+        OrchestratorActivity.Provider,
+        { value: 'npm run build' },
+        createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+      )
+    )
+    expect(withRoom).toContain('Orchestrator is working: npm run build')
   })
 
   it('shows the confirm card with the exact first message before the first send', () => {
