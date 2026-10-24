@@ -41,10 +41,26 @@ export const CLIENT_METHODS = [
 const DECISIONS = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
 const RUN_ID = /^[A-Z]\d+[a-z]?$/
 const RUN_RECENT_LIMIT = 20
+const TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
+const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
+const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
+const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
+const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
 const HOUR_MS = 60 * 60 * 1000
 const BACKUP_STALE_HOURS = 26
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const slug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+
+function tasksProblem(tasks) {
+  if (!Array.isArray(tasks) || tasks.length < 1 || tasks.length > 20) return TASKS_PROBLEM
+  for (const task of tasks) {
+    if (typeof task !== 'string') return TASKS_PROBLEM
+    const text = task.trim()
+    if (text.length < 1 || text.length > 4000) return TASKS_PROBLEM
+    if (task.split(/\r?\n/).some((line) => line.trim() === '---')) return TASK_SEPARATOR_PROBLEM
+  }
+  return null
+}
 
 const AGENT_DEFAULTS = { reasoningEffort: null, maxTurnsPerRun: null, timeoutSec: null, subagentsAllowed: false, subagentDepth: 0, instructions: '', reportsToAgentId: null }
 
@@ -529,13 +545,23 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!info || typeof info !== 'object') throw new Error('Choose a lane from the list.')
         if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
         const projectRun = body.briefs === undefined
+        const queue = body.tasks !== undefined
+        if (queue && (body.task !== undefined || body.briefs !== undefined)) throw new Error(RUN_KIND_PROBLEM)
         const briefs = projectRun ? [] : body.briefs
         let task = ''
+        let tasks = []
         if (projectRun) {
-          if (typeof body.task !== 'string' || body.task.trim().length < 1 || body.task.length > 4000) {
-            throw new Error('Write the task in 1 to 4000 characters.')
+          if (queue) {
+            if (body.allowDirty === true) throw new Error(QUEUE_DIRTY_PROBLEM)
+            const problem = tasksProblem(body.tasks)
+            if (problem) throw new Error(problem)
+            tasks = body.tasks
+          } else {
+            if (typeof body.task !== 'string' || body.task.trim().length < 1 || body.task.length > 4000) {
+              throw new Error(TASK_PROBLEM)
+            }
+            task = body.task
           }
-          task = body.task
         } else {
           if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 5) throw new Error('Choose one to five briefs.')
           const known = new Set(parseBriefs(briefsText).map((brief) => brief.id))
@@ -543,6 +569,10 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
         if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
+        if (queue) {
+          entry.queue = true
+          entry.tasks = tasks.length
+        }
         runsState.running.push(entry)
         emit({ topic: 'runs' })
         const liveRun = startLiveRun(lane)
@@ -567,7 +597,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           }
           if (projectRun) {
             record.project = 'MachineRoom'
-            record.task = task.slice(0, 200)
+            if (queue) {
+              record.queue = true
+              record.tasks = tasks.length
+            } else {
+              record.task = task.slice(0, 200)
+            }
           }
           runsState.recent.unshift(record)
           if (runsState.recent.length > RUN_RECENT_LIMIT) runsState.recent.pop()

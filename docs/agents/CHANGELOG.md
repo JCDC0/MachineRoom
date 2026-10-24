@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Dispatch panel starts a queue on the room's project: several tasks in the box, separated by a line of `---`, run as `run-lane --project --queue`, which writes the queue file, refuses an uncommitted project or an allow-dirty switch, and carries `queue` and the task count in the runs list (task S8b).
+
 - TASKS.md has S8: `run-lane --queue` runs a list of tasks on a project one after another, runs the project's tests after each, commits each passing task on a new `machineroom/queue-<stamp>` branch and stops at the first failure, never touching main or pushing. The owner's milestone runs it on ulolTris, then LowBeam.
 - Review note on S7b: one fix and the wiring. The reader imported `node:sqlite` at the top, so every bridge would have loaded SQLite and printed Node's experimental warning once the sessions source imported it; it now loads it with `process.getBuiltinModule` when it first opens the database. Claude added the reader to `createSessionsSource`'s default readers, so `--sessions` follows Claude Code and OpenCode sessions, and named OpenCode in the flag's usage line, the README and ARCHITECTURE. The `--replay` digests did not change.
 - Review note on S7a: no fixes. The reader sends only `tool_use` and `tool_result` items, so a prompt or the assistant's prose never leaves the session file; frames still pass the bridge's key masking. Its tests also pass with TEMP set to an 8.3 short path, as on the Windows runner. The `--replay` digests did not change. Full suite on the merge: 127 files, 2410 tests.
