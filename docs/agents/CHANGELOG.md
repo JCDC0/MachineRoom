@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The git-heavy test files copy a repository made once instead of building one for every test, and the static viewer tests share one bridge, so a full test run is faster with all 2151 tests still running (task T1).
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).

@@ -1,14 +1,34 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { buildCommand, candidatePlan, laneEnv, parseCandidateArgs, runCandidate } from '../scripts/candidate.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-candidate-no-git-config')
 const cleanups = []
+let repoTemplate = ''
+let templateRoot = ''
+
+beforeAll(() => {
+  templateRoot = makeTempDir('mr-candidate-template-')
+  repoTemplate = join(templateRoot, 'repo')
+  mkdirSync(repoTemplate)
+  git(repoTemplate, ['init', '-b', 'main'])
+  git(repoTemplate, ['config', 'user.name', 'MachineRoom Test'])
+  git(repoTemplate, ['config', 'user.email', 'test@example.invalid'])
+  git(repoTemplate, ['config', 'commit.gpgsign', 'false'])
+  git(repoTemplate, ['config', 'core.autocrlf', 'false'])
+  writeFileSync(join(repoTemplate, 'notes.txt'), 'one\n')
+  git(repoTemplate, ['add', 'notes.txt'])
+  git(repoTemplate, ['commit', '-m', 'first'])
+})
+
+afterAll(() => {
+  rmSync(templateRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+})
 
 afterEach(async () => {
   while (cleanups.length > 0) {
@@ -48,15 +68,7 @@ function makeLaneRepo() {
   const base = tempDir('mr-candidate-')
   const repo = join(base, 'repo')
   const worktree = join(base, 'lane')
-  mkdirSync(repo, { recursive: true })
-  git(repo, ['init', '-b', 'main'])
-  git(repo, ['config', 'user.name', 'MachineRoom Test'])
-  git(repo, ['config', 'user.email', 'test@example.invalid'])
-  git(repo, ['config', 'commit.gpgsign', 'false'])
-  git(repo, ['config', 'core.autocrlf', 'false'])
-  writeFileSync(join(repo, 'notes.txt'), 'one\n')
-  git(repo, ['add', 'notes.txt'])
-  git(repo, ['commit', '-m', 'first'])
+  cpSync(repoTemplate, repo, { recursive: true })
   git(repo, ['worktree', 'add', '-b', 'feat/candidate', worktree])
   return { base, repo, worktree }
 }

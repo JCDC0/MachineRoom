@@ -3,13 +3,14 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const BIN = join(rootDir, 'bin', 'machine-room.mjs')
 const cleanups = []
+let shared
 
 afterEach(async () => {
   while (cleanups.length > 0) {
@@ -18,6 +19,34 @@ afterEach(async () => {
       await cleanup()
     } catch {}
   }
+})
+
+beforeAll(async () => {
+  const base = makeTempDir('machine-room-serve-')
+  const sharedDist = join(base, 'dist')
+  mkdirSync(sharedDist, { recursive: true })
+  writeFileSync(join(sharedDist, 'index.html'), '<!doctype html><title>Room</title>')
+  writeFileSync(join(sharedDist, 'app.js'), 'console.log("room")\n')
+  writeFileSync(join(sharedDist, 'style.css'), 'body { color: white; }\n')
+  writeFileSync(join(sharedDist, 'data.jsonl'), '{"a":1}\n')
+  writeFileSync(join(sharedDist, 'blob.bin'), Buffer.from([0, 1, 2, 3]))
+  writeFileSync(join(base, 'outside.txt'), 'outside secret')
+  const runs = join(base, 'runs')
+  mkdirSync(runs, { recursive: true })
+  const bridge = createBridge({
+    port: 0,
+    projectRoot: base,
+    env: {},
+    staticDir: sharedDist,
+    lanesSource: { folder: runs, lanes: {}, repoRoot: base, pollMs: 20 },
+  })
+  const info = await bridge.start()
+  shared = { base, url: `http://127.0.0.1:${info.port}`, bridge }
+})
+
+afterAll(async () => {
+  await shared.bridge.stop()
+  rmSync(shared.base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
 function makeDist() {
@@ -49,12 +78,6 @@ async function startBridge(staticDir) {
   const info = await bridge.start()
   cleanups.push(() => bridge.stop())
   return { base, url: `http://127.0.0.1:${info.port}` }
-}
-
-async function startWithDist() {
-  const { base, dist } = makeDist()
-  const started = await startBridge(dist)
-  return { ...started, dist }
 }
 
 function rawGet(base, path, headers = {}) {
@@ -108,7 +131,7 @@ function childEnv(tempRoot) {
 
 describe('static viewer files from the bridge', () => {
   it('serves index.html at the root', async () => {
-    const { url } = await startWithDist()
+    const { url } = shared
     const response = await fetch(`${url}/`)
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8')
@@ -121,27 +144,27 @@ describe('static viewer files from the bridge', () => {
     ['/data.jsonl', 'application/x-ndjson; charset=utf-8'],
     ['/blob.bin', 'application/octet-stream'],
   ])('serves %s as %s', async (path, type) => {
-    const { url } = await startWithDist()
+    const { url } = shared
     const response = await fetch(`${url}${path}`)
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toBe(type)
   })
 
   it('keeps the Host and Origin checks in front of the viewer', async () => {
-    const { url } = await startWithDist()
+    const { url } = shared
     expect((await rawGet(url, '/', { Host: 'evil.example' })).status).toBe(403)
     expect((await rawGet(url, '/', { Origin: 'http://evil.example' })).status).toBe(403)
   })
 
   it('serves index.html for a deep link with no file extension', async () => {
-    const { url } = await startWithDist()
+    const { url } = shared
     const response = await fetch(`${url}/room/agents/alpha`)
     expect(response.status).toBe(200)
     expect(await response.text()).toContain('<title>Room</title>')
   })
 
   it('answers HEAD without a body', async () => {
-    const { url } = await startWithDist()
+    const { url } = shared
     const response = await fetch(`${url}/app.js`, { method: 'HEAD' })
     expect(response.status).toBe(200)
     expect(response.headers.get('content-length')).toBe(String(Buffer.byteLength('console.log("room")\n')))
@@ -149,7 +172,7 @@ describe('static viewer files from the bridge', () => {
   })
 
   it('keeps the JSON 404 for an unknown API path', async () => {
-    const { url } = await startWithDist()
+    const { url } = shared
     const response = await fetch(`${url}/api/x`)
     expect(response.status).toBe(404)
     expect(response.headers.get('content-type')).toContain('application/json')
@@ -157,13 +180,13 @@ describe('static viewer files from the bridge', () => {
   })
 
   it('refuses a POST to a static path', async () => {
-    const { url } = await startWithDist()
+    const { url } = shared
     const response = await fetch(`${url}/app.js`, { method: 'POST' })
     expect([404, 405]).toContain(response.status)
   })
 
   it('never serves a file outside the dist folder', async () => {
-    const { url } = await startWithDist()
+    const { url } = shared
     const attempts = [
       '/../package.json',
       '/%2e%2e/package.json',

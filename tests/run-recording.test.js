@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
 import { writeRecording } from '../scripts/recording-files.mjs'
@@ -185,6 +185,12 @@ describe('agentsFile and treeFile', () => {
 })
 
 const temporary = []
+const templates = new Map()
+let templateRoot = ''
+
+afterAll(() => {
+  if (templateRoot) rmSync(templateRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+})
 
 function tempFolder() {
   const dir = makeTempDir('mr-recording-')
@@ -198,8 +204,12 @@ function git(cwd, args) {
   return String(result.stdout ?? '').trim()
 }
 
-function worktreeWith(files) {
-  const dir = tempFolder()
+function templateFor(files) {
+  const key = JSON.stringify(files)
+  if (templates.has(key)) return templates.get(key)
+  if (!templateRoot) templateRoot = makeTempDir('mr-recording-template-')
+  const dir = join(templateRoot, `repo-${templates.size}`)
+  mkdirSync(dir)
   git(dir, ['init', '-q', '-b', 'main'])
   for (const [name, text] of Object.entries(files)) {
     const path = join(dir, name)
@@ -208,6 +218,13 @@ function worktreeWith(files) {
   }
   git(dir, ['add', '-A'])
   git(dir, ['-c', 'user.email=test@example.com', '-c', 'user.name=test', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'one'])
+  templates.set(key, dir)
+  return dir
+}
+
+function worktreeWith(files) {
+  const dir = join(tempFolder(), 'repo')
+  cpSync(templateFor(files), dir, { recursive: true })
   return { dir, sha: git(dir, ['rev-parse', 'HEAD']) }
 }
 
