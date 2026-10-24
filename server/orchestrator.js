@@ -4,7 +4,7 @@ import { appendFileSync, createWriteStream, mkdirSync, readFileSync, writeFileSy
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { childEnvironment, claudeReport, runRecord } from '../src/briefs/run.js'
+import { childEnvironment, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
 
@@ -20,12 +20,15 @@ export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orch
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
 export const STOPPED_REPLY = 'The orchestrator stopped.'
+export const RESTART_MESSAGE = 'The room restarted during a turn. Send the message again if it still matters.'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const PROMPT_FILE = join(REPO_ROOT, 'docs', 'agents', 'ORCHESTRATOR-AGENT.md')
 const PROMPT_LIMIT = 20000
 const RECORD_COMMITS = 10
 const DEFAULT_LANE = { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } }
+const DEFAULT_OPENCODE_MODEL = 'opencode/deepseek-v4.1-flash-free'
+const VARIABLE = /%([^%]+)%/g
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -83,12 +86,15 @@ function instructionFor(file, projectRoot, runsFolder, bridgeUrl) {
 
 // A bare name is looked up on PATH, so Windows never runs a claude.exe that sits in the project folder.
 function programFor(bin) {
-  if (/[\/]/.test(bin)) return bin
-  return programPath(bin) ?? bin
+  const text = String(bin).replace(VARIABLE, (whole, name) => {
+    const value = process.env[name]
+    return typeof value === 'string' && value !== '' ? value : whole
+  })
+  if (/[\/]/.test(text)) return text
+  return programPath(text) ?? text
 }
 
-function costOf(log) {
-  let cost = null
+function opencodeSessionId(log) {
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
     let item
@@ -97,10 +103,9 @@ function costOf(log) {
     } catch {
       continue
     }
-    if (item?.type !== 'result' || item.parent_tool_use_id) continue
-    if (typeof item.total_cost_usd === 'number' && Number.isFinite(item.total_cost_usd)) cost = item.total_cost_usd
+    if (typeof item?.sessionID === 'string' && item.sessionID.trim() !== '') return item.sessionID
   }
-  return cost
+  return null
 }
 
 function blockFor(message) {
@@ -119,10 +124,6 @@ function turnText(messages) {
     size += block.length + 2
   }
   return blocks.join('\n\n')
-}
-
-function reportText(log) {
-  return claudeReport(log).join('\n').trim()
 }
 
 function recordLine(record) {
@@ -165,8 +166,9 @@ export function createOrchestrator({
   const folder = resolve(runsFolder)
   const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
-  const model = String(lane.cli.model ?? 'opus')
-  const bin = String(lane.cli.bin ?? 'claude')
+  const harness = String(lane.cli.harness ?? 'claude') === 'opencode' ? 'opencode' : 'claude'
+  const model = String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
+  const bin = String(lane.cli.bin ?? (harness === 'opencode' ? 'opencode' : 'claude'))
   const conversationFile = join(folder, `orchestrator-${projectHash(root)}.json`)
   const messages = []
   const pending = []
@@ -185,7 +187,8 @@ export function createOrchestrator({
   function persist() {
     try {
       mkdirSync(folder, { recursive: true })
-      writeFileSync(conversationFile, `${JSON.stringify({ project: root, sessionId, state, messages }, null, 2)}\n`)
+      const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
+      writeFileSync(conversationFile, `${JSON.stringify({ project: root, sessionId, state, messages, pending: waiting }, null, 2)}\n`)
     } catch {}
   }
 
@@ -198,6 +201,7 @@ export function createOrchestrator({
     }
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
+    if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
     const list = Array.isArray(saved.messages) ? saved.messages : []
     for (const item of list) {
@@ -212,6 +216,15 @@ export function createOrchestrator({
       })
     }
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    if (saved.state === 'working') {
+      messages.push({ id: randomUUID(), from: 'room', text: RESTART_MESSAGE, at: iso(now()) })
+      while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    }
+    const waitingIds = Array.isArray(saved.pending) ? saved.pending : []
+    for (const id of waitingIds) {
+      const message = messages.find((item) => item.id === id && item.from === 'owner')
+      if (message && !pending.includes(message)) pending.push(message)
+    }
   }
 
   function setState(next) {
@@ -277,12 +290,12 @@ export function createOrchestrator({
     const hasOwner = turnMessages.some((message) => message.from === 'owner')
     if (!hasOwner) roomTurns.push(now())
     const first = !sessionId
-    if (first) sessionId = randomUUID()
+    if (first && harness === 'claude') sessionId = randomUUID()
     const startedAt = now()
     const name = `${ORCHESTRATOR_KEY}-chat-${stamp(startedAt)}`
     const logPath = join(folder, `${name}.log`)
     const metaPath = join(folder, `${name}.meta.json`)
-    const turn = { startedAt, logPath, killed: false, done: false, child: null, timer: null }
+    const turn = { startedAt, logPath, metaPath, killed: false, done: false, child: null, timer: null }
     running = turn
     setState('working')
     try {
@@ -294,20 +307,29 @@ export function createOrchestrator({
       setState('idle')
       return
     }
-    const args = [
-      '-p',
-      turnText(turnMessages),
-      '--output-format',
-      'stream-json',
-      '--verbose',
-      '--model',
-      model,
-      '--dangerously-skip-permissions',
-      first ? '--session-id' : '--resume',
-      sessionId,
-      '--append-system-prompt',
-      instructionFor(promptFile, root, folder, String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? '')),
-    ]
+    const message = turnText(turnMessages)
+    const instruction = instructionFor(promptFile, root, folder, String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''))
+    let args
+    if (harness === 'opencode') {
+      args = ['run', '--format', 'json', '--model', model, '--auto', '--title', name]
+      if (!first) args.push('--session', sessionId)
+      args.push(first ? `${instruction}\n\n${message}` : message)
+    } else {
+      args = [
+        '-p',
+        message,
+        '--output-format',
+        'stream-json',
+        '--verbose',
+        '--model',
+        model,
+        '--dangerously-skip-permissions',
+        first ? '--session-id' : '--resume',
+        sessionId,
+        '--append-system-prompt',
+        instruction,
+      ]
+    }
     const stream = createWriteStream(logPath)
     stream.on('error', () => {})
     turn.timer = setTimeout(() => {
@@ -346,7 +368,17 @@ export function createOrchestrator({
     turn.done = true
     if (turn.timer) clearTimeout(turn.timer)
     const logText = readText(turn.logPath)
-    const report = reportText(logText)
+    const summary = summarizeRun({ harness, log: logText })
+    const report = replyText(harness, logText)
+    if (harness === 'opencode') {
+      const savedSessionId = opencodeSessionId(logText)
+      if (savedSessionId) {
+        sessionId = savedSessionId
+        try {
+          writeFileSync(turn.metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
+        } catch {}
+      }
+    }
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const text = failed
       ? Number.isInteger(code)
@@ -363,7 +395,9 @@ export function createOrchestrator({
       minutes: Math.round(((now() - turn.startedAt) / 60000) * 10) / 10,
       exitCode: code,
       killed: turn.killed,
-      costUsd: costOf(logText),
+      costUsd: summary.costUsd,
+      inputTokens: summary.inputTokens,
+      outputTokens: summary.outputTokens,
       log: turn.logPath,
     })
     try {
@@ -436,6 +470,8 @@ export function createOrchestrator({
       if (turn.timer) clearTimeout(turn.timer)
       killTree(turn.child)
     }
+    persist()
+    notify()
   }
 
   restore()
@@ -443,6 +479,7 @@ export function createOrchestrator({
     mkdirSync(folder, { recursive: true })
   } catch {}
   persist()
+  maybeStartTurn()
 
   return { answer, send, stop, onFrame, close }
 }

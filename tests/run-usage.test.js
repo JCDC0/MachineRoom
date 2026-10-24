@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { summarizeRun } from '../src/briefs/run.js'
+import { replyText, summarizeRun } from '../src/briefs/run.js'
 
 const stepLine = (tokens, cost = 0) => JSON.stringify({
   type: 'step_finish',
@@ -52,5 +52,16 @@ describe('OpenCode usage', () => {
     const summary = summaryOf(log)
     expect(summary.inputTokens).toBe(12 + 8)
     expect(summary.outputTokens).toBe(40)
+  })
+})
+
+describe('replyText', () => {
+  it('keeps a whole long reply for each harness', () => {
+    const text = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join('\n')
+    const claude = `${JSON.stringify({ type: 'result', result: 'old' })}\n${JSON.stringify({ type: 'result', result: text })}\n`
+    const opencode = `${JSON.stringify({ type: 'text', part: { text } })}\n`
+    expect(replyText('claude', claude)).toBe(text)
+    expect(replyText('opencode', opencode)).toBe(text)
+    expect(replyText('claude', '')).toBe('')
   })
 })

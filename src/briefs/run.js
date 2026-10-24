@@ -609,6 +609,10 @@ function reportHead(log) {
 }
 
 function opencodeReport(log) {
+  return headLines(opencodeReply(log))
+}
+
+function opencodeReply(log) {
   let words = null
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
@@ -623,7 +627,7 @@ function opencodeReport(log) {
     if (typeof text !== 'string' || !text.trim()) continue
     words = text
   }
-  return headLines(words ?? '')
+  return words ?? ''
 }
 
 function opencodeUsage(log) {
@@ -775,6 +779,10 @@ function claudeSummary(log, worktree) {
 }
 
 export function claudeReport(log) {
+  return headLines(claudeReply(log))
+}
+
+function claudeReply(log) {
   let words = null
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
@@ -789,7 +797,11 @@ export function claudeReport(log) {
     if (typeof text !== 'string' || !text.trim()) continue
     words = text
   }
-  return headLines(words ?? '')
+  return words ?? ''
+}
+
+export function replyText(harness, log) {
+  return (harness === 'opencode' ? opencodeReply(log) : claudeReply(log)).trim()
 }
 
 export function summarizeRun({ harness, log, worktree } = {}) {

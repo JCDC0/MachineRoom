@@ -2,10 +2,13 @@
 
 ## Unreleased
 
+- The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).
 - The Dispatch panel starts a project lane in its own worktree, on by default, with the allow-uncommitted switch hidden while it is on, and it marks a running lane so it cannot be picked (task R5).
 - A new `src/model/hierarchy.js` reads and checks sub orchestrator ladders, glob scopes, sector arcs and sub prompts, with tests (task O1).
+- The orchestrator recovers after a room restart: a running turn is killed and its state saved when the bridge stops, a saved `working` state reopens as `idle` with a room message, and an owner message that waited behind the turn starts a turn after the restart (task R4).
+- The orchestrator can run on OpenCode as well as Claude Code: the lane's `cli.harness` picks `claude -p` or `opencode run --format json` with its saved session, the first OpenCode turn carries the filled instructions, and the reply, cost and tokens come from the turn's own log (task R3).
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
 - The HUD agent list puts the orchestrator first, shows working, queued, failed and finished lanes above one collapsible idle row, scrolls above the open orchestrator chat, and the waiting card sits beside the chat at 1280 by 800 and 900 by 700 (task N2).
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).
