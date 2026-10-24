@@ -36,7 +36,7 @@ export function routeFields(choice, agents = [], models = []) {
     return {
       agentId: null,
       model: null,
-      note: `No agent in Paperclip runs the ${choice.lane} lane.`,
+      note: `The ${choice.lane} lane is not in docs/agents/lanes.json.`,
     }
   }
   const offered = modelsFor(agent, models)

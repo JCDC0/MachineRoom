@@ -105,7 +105,7 @@ describe('routeFields', () => {
     expect(result).toEqual({
       agentId: null,
       model: null,
-      note: 'No agent in Paperclip runs the hermes lane.',
+      note: 'The hermes lane is not in docs/agents/lanes.json.',
     })
   })
 

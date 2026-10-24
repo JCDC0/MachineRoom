@@ -1,8 +1,8 @@
 # Machine Room
 
-A browser viewer that shows coding agents working on a project as a 3D machine room. OpenCode and Claude Code runs, task queues and your own Claude Code and OpenCode sessions appear live: the agents park on a hub, the project folders sit on a sphere around them, and every read and write lights the file it touches. It can also follow a local Paperclip instance, and it replays recorded runs.
+A browser viewer that shows coding agents working on a project as a 3D machine room. OpenCode and Claude Code runs, task queues and your own Claude Code and OpenCode sessions appear live: the agents park on a hub, the project folders sit on a sphere around them, and every read and write lights the file it touches. It also replays recorded runs.
 
-MachineRoom grew out of [Paperclip](https://github.com/paperclipai/paperclip): it began as a viewer for a Paperclip instance, and its idea of a company of agents with tasks, budgets and approvals comes from there. The room now runs its agents through its own lane runner (`npm run run-lane`) and follows your own sessions, and it can still follow a Paperclip instance when one runs. MachineRoom is an independent project and is not made by or endorsed by Paperclip.
+MachineRoom grew out of [Paperclip](https://github.com/paperclipai/paperclip), where its idea of a company of agents with tasks, budgets and approvals comes from. It is an independent project, not made by or endorsed by Paperclip. The room now runs its agents through its own lane runner (`npm run run-lane`) and follows your own sessions.
 
 ## Screenshots
 
@@ -47,7 +47,7 @@ Or start it from the MachineRoom folder and name the project:
 npm run serve -- up --lanes --sessions --root <project folder>
 ```
 
-`up` checks for Paperclip first. With `--lanes` or `--sessions` and no Paperclip running, it says Paperclip is not needed and opens the room. Open the address it prints.
+`up` checks the project folder, git, the runs folder and the lane programs, then opens the room. Open the address it prints.
 
 - `--lanes` shows the runs started by `run-lane`, including the tasks you start in Dispatch.
 - `--sessions` shows your own Claude Code and OpenCode sessions on that project, read only.
@@ -87,23 +87,21 @@ Hermes and AGY are retired for now in `docs/agents/lanes.json`. Remove `"retired
 - While any agent works, cards off the working agents' paths dim to 0.25 with their lines, and the cards on a path to a touched file glow with a soft light on the border.
 - Settings: the Settings button at the top right opens a panel. Folder depth is a slider from 1 to 3, 2 by default, for how many folder levels are always drawn. Five screen effects have an on switch and a strength: fish eye, chromatic aberration, vignette, grain and fine dust. Fish eye, chromatic aberration and grain start off. Vignette and fine dust start on at low strength. The fine dust is motes in the 3D space around the room, not noise on the screen. The choices are saved in this browser with the connection.
 - Fine dust: 1400 small points across the space around the room, from 400 to 9000 units out. They drift slowly, and they hold still under reduced motion.
-- Cost board: a flat panel at the bottom right, above the transport bar, 280 pixels wide. It shows the spend against the budget, a row per agent with cost, tokens and a share bar, and the provider quota windows. It is hidden under 900 pixels wide. When the lane source is on and Paperclip does not answer, it shows this month's spend per lane from the run records.
-- Health chip: under the Replay and Live switch, and only when something is wrong. It names a bridge that does not answer, a Paperclip that is not connected, routes that changed or a route check that did not run. It stays quiet about Paperclip while the lane or session source is on.
-- Control drawer on `C`: Dispatch, Tasks, Approvals, Meters, Plan, Agents and Reviews. The drawer section below describes each tab.
+- Cost board: a flat panel at the bottom right, above the transport bar, 280 pixels wide. It shows this month's spend per lane from the run records, with the tokens those records carry and a share bar. It is hidden under 900 pixels wide.
+- Health chip: under the Replay and Live switch, and only when something is wrong. It names a bridge that does not answer or a source that failed.
+- Control drawer on `C`: Dispatch, Tasks, Meters, Plan, Team and Reviews. The drawer section below describes each tab.
 
 There is no randomness. The same recording always draws the same room.
 
 ## Develop it
 
-`npm run dev` serves the viewer on port 5173 and `npm run bridge` runs the bridge on port 5174, with no build. `npm run build` then `npm run serve` serves the built viewer and the bridge on one port.
-
-With the dev server, `/?live` goes straight to Paperclip through the Vite proxy, which forwards `/paperclip` to `http://127.0.0.1:3100`. A production build has no proxy, so use the bridge route there.
+`npm run dev` serves the viewer on port 5173, with no build. `npm run build` then `npm run serve` serves the built viewer and the bridge on one port.
 
 The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it.
 
 ## Replays
 
-The replay and the simulated feed need neither Paperclip nor a lane.
+The replay and the simulated feed need no lane.
 
 The first visit shows a connect screen, and the replay is one of its choices. An address skips the screen:
 
@@ -112,7 +110,7 @@ The first visit shows a connect screen, and the replay is one of its choices. An
 - `&fps` adds a line in the HUD's top left panel with the median and p95 frame time over the last 120 frames.
 - `/?live&simulate` plays the same recording through the live path. The badge reads `Demo`. Add `&speed=3` to play faster; the speed is clamped from 0.25 to 64.
 - `/?recording=<name>` opens a recording of a lane run.
-- `/?live&bridge=http://127.0.0.1:5174` follows a bridge: its lane runs with `--lanes`, its sessions with `--sessions`, and Paperclip when one runs.
+- `/?live&bridge=http://127.0.0.1:5174` follows a bridge: its lane runs with `--lanes` and its sessions with `--sessions`.
 - `/?connect` shows the connect screen again.
 
 Drag to turn the view. Scroll to zoom.
@@ -137,14 +135,13 @@ Open `/?replay&scale=200000&fps`. The frame line sits in the top left panel. `np
 
 ## The control drawer
 
-The drawer needs a control client. It is there in replay, the demo and a live room through a bridge; it is not there when the page talks to Paperclip directly through the Vite proxy. With a control client, the drawer has up to seven tabs.
+The drawer needs a control client. It is there in replay, the demo and a live room through a bridge. With a control client, the drawer has up to six tabs.
 
-- Dispatch: pick an open brief to see its prompt and route. The Route row suggests a lane and model, with a Use button when the policy names one. You can also create a task for a Paperclip agent, and, when `--lanes` is on, run one task or a queue on the room's project. The Runs list shows running and recent lane runs.
-- Tasks: open and finished tasks. A task with a live run reads `running AGENT` or `queued AGENT`. Open one to read its thread and post a comment. In lane mode the tasks come from the lane runs, and a write is refused.
-- Approvals: pending requests with Approve, Request changes and Reject, an optional note, and a list of decided ones. In lane mode the list is empty.
-- Meters: company and agent budgets, spend, provider quotas, and the age of the newest Paperclip backup. Back up now sits behind a confirm card. In lane mode spend comes from the run records and backups belong to Paperclip.
-- Plan: write a goal and ask the planner behind a confirm card. Each brief shows its size, files, tests and route. Tick the ones to add to `docs/agents/TASKS.md` behind a second confirm card, then open one in Dispatch with `Dispatch <id>`.
-- Agents: hire an agent, or edit its name, role, model, limits, budget and instructions. The harness is fixed once the agent is hired.
+- Dispatch: pick an open brief to see its prompt and route. The Route row suggests a lane and model, with a Use button when the policy names one. When `--lanes` is on, you can run one task or a queue on the room's project. The Runs list shows running and recent lane runs.
+- Tasks: open and finished tasks from the lane runs. A task with a live run reads `running AGENT` or `queued AGENT`. Open one to read its thread. A write is refused.
+- Meters: this month's spend per lane from the run records. A budget change is refused.
+- Plan: write a goal and ask the planner behind a confirm card; the bridge answers that plans come from lane runs. Each brief shows its size, files, tests and route. Tick the ones to add to `docs/agents/TASKS.md` behind a second confirm card, then open one in Dispatch with `Dispatch <id>`.
+- Team: the lanes from `docs/agents/lanes.json`. New lanes are added in that file.
 - Reviews: each lane's branch, commits ahead, files and last run. Click a row for the diff. Merge opens a confirm card with a message and merges the head you read.
 
 ## Working with lanes
@@ -187,34 +184,16 @@ A queue needs a clean git folder, so keep the queue file outside it or commit it
 
 With `--lanes`, the Dispatch panel can start the same kind of run on the room's own folder: pick a lane, write one task or several separated by a line of `---`, and turn on `Allow uncommitted changes` when the folder has them and you run a single task. A queue needs a clean folder, so that switch is off then.
 
-With `--sessions`, the room follows your own Claude Code and OpenCode sessions on that folder too, and needs no Paperclip. Start it with `npm run serve -- up --sessions --root C:\GitHub\Other`. It reads the session files Claude Code keeps in `.claude/projects` under your profile for that folder, keeps only the lines whose `cwd` is the folder or inside it, shows each prompt as a run and each tool call on the room's cards, and follows a subagent through its own file. A run that `run-lane` starts on the same folder is skipped, because the runner names its session and the bridge leaves that session out, so the room does not show it twice. OpenCode sessions come from OpenCode's own database (`.local/share/opencode/opencode.db` under your profile), opened read-only; the bridge reads only its two session tables, never the ones that hold your accounts and keys. Only tool calls and their results reach the room, never your prompts or the replies.
+With `--sessions`, the room follows your own Claude Code and OpenCode sessions on that folder too. Start it with `npm run serve -- up --sessions --root C:\GitHub\Other`. It reads the session files Claude Code keeps in `.claude/projects` under your profile for that folder, keeps only the lines whose `cwd` is the folder or inside it, shows each prompt as a run and each tool call on the room's cards, and follows a subagent through its own file. A run that `run-lane` starts on the same folder is skipped, because the runner names its session and the bridge leaves that session out, so the room does not show it twice. OpenCode sessions come from OpenCode's own database (`.local/share/opencode/opencode.db` under your profile), opened read-only; the bridge reads only its two session tables, never the ones that hold your accounts and keys. Only tool calls and their results reach the room, never your prompts or the replies.
 
 A lane's `cli.model` can name a `provider/model` from any OpenAI-compatible provider in OpenCode's own config. The key stays in that config or an environment variable, never in `docs/agents/lanes.json` or this repository. MachineRoom does not set up a provider and does not read the key.
 
-## With Paperclip
-
-MachineRoom began as a Paperclip viewer and can still follow a local Paperclip instance, beside the lanes and sessions or alone. It never starts Paperclip.
-
-Start Paperclip yourself, in its own terminal, with `paperclipai run`, then add `--company <id>` to `up`: the company to follow, from Paperclip's company list (`PAPERCLIP_COMPANY_ID` does the same). `--paperclip <url>` or `PAPERCLIP_URL` names a Paperclip other than `http://127.0.0.1:3100`.
-
-`up` runs the checks, prints one `ok` or `FAIL` line for each, then serves the room and prints the address to open:
-
-- Paperclip answers, and its version.
-- Its spec lists every route the bridge uses.
-- The company is in Paperclip's list.
-- The project folder exists.
-- Automatic database backups are on, and the newest is under a day old.
-
-Without Paperclip the Paperclip checks print FAIL. A failed check does not close the room. A part whose routes changed stays off, and its panel says so. With `--lanes` and no Paperclip, the drawer reads tasks, live runs and costs from the lane records; approvals are empty, and backups belong to Paperclip.
-
-`npm run serve -- doctor` runs those checks alone, starts nothing, and exits 1 when one fails. `doctor` takes `--paperclip`, `--company` and `--root`. `serve` and `up` also take `--port <n>`. The environment variables `PAPERCLIP_URL`, `PAPERCLIP_COMPANY_ID` and `PROJECT_ROOT` do the same; `PORT` sets the port for `serve` and `up`.
-
 ## What it never does
 
-- It never starts or stops Paperclip. Start it yourself with `paperclipai run`.
 - It never pushes to a remote.
 - It merges a lane only after the Reviews confirm card. The bridge also refuses a merge without an explicit confirm and the lane's exact head.
-- It starts a lane run or asks the planner only after a confirm card that says it spends money. `Start task` is different: it creates a task in Paperclip, which can wake its agent at once, so that path can spend without a card.
+- It starts a lane run or asks the planner only after a confirm card that says it spends money.
+- It never starts a run on this checkout or on a lane worktree from `docs/agents/lanes.json`.
 
 ## Keys
 
@@ -230,7 +209,7 @@ Without Paperclip the Paperclip checks print FAIL. A failed check does not close
 - `C` toggle the control drawer
 - `?` toggle keyboard help
 
-MachineRoom prints and stores no key. The bridge needs no key to run: the assistant route runs OpenCode, which uses the login on this computer, and only the optional decision route reads `OPENROUTER_API_KEY` from the environment (without it that route answers 404). The assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second. The proxy route has no bridge; the page masks the frames it reads itself, with the same rule and the same 1 second hold.
+MachineRoom prints and stores no key. The bridge needs no key to run: the assistant route runs OpenCode, which uses the login on this computer, and only the optional decision route reads `OPENROUTER_API_KEY` from the environment (without it that route answers 404). The assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second.
 
 ## Recordings
 
@@ -241,14 +220,14 @@ Every run started with `npm run run-lane` on a brief, including Run now in Dispa
 ```
 npm test
 npm run build
-npm run doctor
+npm run serve -- doctor
 npm run history-audit
 npm run pack-check
 ```
 
 - `npm test` runs vitest in Node with no browser.
 - `npm run build` also catches broken imports.
-- `npm run doctor` compares a running Paperclip's spec with the routes and fields the bridge uses, and names each missing or changed one.
+- `npm run serve -- doctor` checks the project folder, git, the runs folder and the lane programs, starts nothing, and exits 1 when a check fails.
 - `npm run history-audit` scans main, the tags and the tracked files for keys, e-mail addresses, Windows user paths, the profile name and paths into one private folder. A key shows only its first 4 characters and its length. It exits 1 on any finding.
 - `npm run pack-check` checks what `npm pack` would hold. It fails on a file the one-port command needs but the pack leaves out, and on `.env`, tests, recordings, `node_modules`, `.git` or a log file in the pack.
 

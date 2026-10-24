@@ -1,3 +1,5 @@
+This note describes Paperclip, which was removed on 2026-10-24.
+
 # Where the room gets its events
 
 Written 2026-10-24 by Claude, after the real AGY subagent run (run `ffd660e6`). Updated at 0.1.260: S6a, S6b and S7 are built, and Paperclip is optional. The rest is still a plan. It answers two questions from the owner: what Paperclip costs us, and whether a direct source would remove those costs quickly.

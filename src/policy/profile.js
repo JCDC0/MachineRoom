@@ -42,7 +42,7 @@ function namesTest(text, paths) {
 }
 
 function isReversible(text) {
-  return !/needs the owner's yes|writes to paperclip|\bspends\b/i.test(text)
+  return !/needs the owner's yes|\bspends\b/i.test(text)
 }
 
 function touchesAny(paths, exact, folders) {

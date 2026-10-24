@@ -1,3 +1,5 @@
+This note describes Paperclip, which was removed on 2026-10-24.
+
 # Paperclip database backups
 
 Read from the code of Paperclip 2026.1012.0, installed on 2026-10-20. Nothing was started, stopped or called. No Paperclip code is copied here, only route paths and field names.

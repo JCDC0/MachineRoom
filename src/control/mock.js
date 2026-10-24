@@ -36,8 +36,6 @@ export const CLIENT_METHODS = [
   'plan',
   'acceptPlan',
   'decide',
-  'backupStatus',
-  'backupNow',
   'subscribe',
 ]
 
@@ -49,8 +47,6 @@ const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
 const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
-const HOUR_MS = 60 * 60 * 1000
-const BACKUP_STALE_HOURS = 26
 const clone = (value) => JSON.parse(JSON.stringify(value))
 const slug = (name) => String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 
@@ -313,7 +309,6 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
-  const backupState = { latestMs: now() - 49.5 * HOUR_MS, running: false }
 
   function emit(event) {
     for (const listener of [...listeners]) listener({ ...event })
@@ -756,36 +751,6 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!named || Object.keys(questions).length === 0) throw new Error('Send at least one question.')
         throw new Error('No key is set for the decision model.')
       }),
-
-    backupStatus: () =>
-      call('backupStatus', () => {
-        const ageHours = Math.round(((now() - backupState.latestMs) / HOUR_MS) * 10) / 10
-        const stale = ageHours > BACKUP_STALE_HOURS
-        return {
-          enabled: true,
-          status: stale ? 'warning' : 'ok',
-          latestAt: new Date(backupState.latestMs).toISOString(),
-          ageHours,
-          warnings: stale ? ['database_backup_stale'] : [],
-          checkedAt: new Date(now()).toISOString(),
-        }
-      }),
-
-    async backupNow() {
-      if (backupState.running) throw new Error('A backup is already running.')
-      backupState.running = true
-      try {
-        return await call('backupNow', () => {
-          const done = new Date(now())
-          const pad = (value) => String(value).padStart(2, '0')
-          const stamp = `${done.getFullYear()}${pad(done.getMonth() + 1)}${pad(done.getDate())}-${pad(done.getHours())}${pad(done.getMinutes())}${pad(done.getSeconds())}`
-          backupState.latestMs = done.getTime()
-          return { ok: true, name: `paperclip-${stamp}.sql.gz`, sizeBytes: 796653, prunedCount: 0, finishedAt: done.toISOString() }
-        })
-      } finally {
-        backupState.running = false
-      }
-    },
 
     subscribe(listener) {
       listeners.add(listener)

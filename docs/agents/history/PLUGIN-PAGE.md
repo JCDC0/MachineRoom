@@ -1,3 +1,5 @@
+This note describes Paperclip, which was removed on 2026-10-24.
+
 # Can the room ship as a page inside Paperclip? (E2a)
 
 Decision (the owner, 2026-10-22): keep the separate app and do not build the plugin page for now. It adds nothing to the way the owner works, it would let a key reach the browser before masking and turn the confirm rule into a page-only check, and Paperclip's plugin runtime is early. Come back to it if the owner starts working inside Paperclip's own UI often, or if people ask for it after the public release.

@@ -296,7 +296,7 @@ export default function PlanPanel({
       {confirmOpen && (
         <div className="brief-confirm-card plan-confirm-card" role="region" aria-label="Confirm plan request">
           <div className="brief-confirm-warning">
-            Ask PLANNER to split this goal into briefs? It creates a task in Paperclip and spends from PLANNER's budget.
+            Ask PLANNER to split this goal into briefs? The bridge refuses plan requests now: plans come from lane runs.
           </div>
           <div className="brief-confirm-actions">
             <button
