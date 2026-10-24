@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
+import AgentDock from './AgentDock.jsx'
 import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
@@ -60,7 +61,6 @@ export default function Hud({
   snapshot,
   focused,
   speeds,
-  rootName,
   fpsStats = null,
   markers = [],
   log = [],
@@ -92,7 +92,6 @@ export default function Hud({
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
   const [idleOpen, setIdleOpen] = useState(false)
-  const [chatSpace, setChatSpace] = useState(0)
   const [guideOpen, setGuideOpen] = useState(
     () => typeof window !== 'undefined' && shouldShowGuide() && guideCanOpen(document)
   )
@@ -104,7 +103,6 @@ export default function Hud({
   const notice = healthNotice(health)
   const chatAvailable = orchestratorOn(health)
   const logBodyRef = useRef(null)
-  const agentsBoxRef = useRef(null)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
   const visibleShortcuts = (client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')).map(
@@ -143,31 +141,6 @@ export default function Hud({
   useEffect(() => {
     if (!chatAvailable) setChatOpen(false)
   }, [chatAvailable])
-
-  useEffect(() => {
-    if (!chatOpen) {
-      setChatSpace(0)
-      return undefined
-    }
-    const box = agentsBoxRef.current
-    const chat = typeof document === 'undefined' ? null : document.getElementById('hud-orchestrator-chat')
-    if (!box || !chat) return undefined
-
-    function measure() {
-      const bottom = box.getBoundingClientRect().bottom
-      const top = chat.getBoundingClientRect().top
-      setChatSpace(Math.max(0, Math.round(bottom - top + 8)))
-    }
-
-    measure()
-    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null
-    observer?.observe(chat)
-    window.addEventListener('resize', measure)
-    return () => {
-      observer?.disconnect()
-      window.removeEventListener('resize', measure)
-    }
-  }, [chatOpen])
 
   useEffect(() => {
     function onKey(event) {
@@ -285,32 +258,12 @@ export default function Hud({
 
   return (
     <div className="hud">
-      <header className="hud-title">
+      <header className="hud-menu">
         <div className="hud-header-strip">
           <h1>{name}</h1>
+          <span className="hud-status-tag">{mode === 'live' ? 'LIVE' : 'REPLAY'}</span>
         </div>
-        <div className="hud-title-body">
-          <p className="hud-status-line mono">
-            <span className="hud-status-tag">{mode === 'live' ? 'LIVE' : 'REPLAY'}</span>
-            <span className="hud-status-sep">: </span>
-            <span className={`hud-status-value ${mode === 'live' ? 'is-live' : ''}`}>{rootName}</span>
-          </p>
-          {fpsStats ? (
-            <p className="hud-fps-line mono">
-              {`frame ${Math.round(fpsStats.median)} ms, p95 ${Math.round(fpsStats.p95)} ms`}
-            </p>
-          ) : null}
-          <ul className="hud-legend mono" aria-label="Legend">
-            <li className="is-white">activity</li>
-            <li className="is-red">failure</li>
-            <li className="is-yellow">active</li>
-            <li className="is-green">finished</li>
-            <li className="is-line">Line from an agent: the file it is working on</li>
-          </ul>
-        </div>
-      </header>
 
-      <div className="hud-top-right">
         <div className="hud-modes" role="group" aria-label="Mode">
           <button
             type="button"
@@ -328,35 +281,6 @@ export default function Hud({
             Live
           </button>
         </div>
-
-        {notice && (
-          <div className={`hud-health is-${notice.tone}`}>
-            <button
-              type="button"
-              className="hud-health-chip mono"
-              onClick={() => setHealthOpen((open) => !open)}
-              aria-expanded={healthOpen}
-            >
-              {notice.title}
-            </button>
-            {healthOpen && (
-              <div className="hud-health-popover" role="dialog" aria-label="Health details">
-                <ul className="hud-health-lines mono">
-                  {notice.lines.map((line, index) => (
-                    <li key={index}>{line}</li>
-                  ))}
-                </ul>
-                <button
-                  type="button"
-                  className="hud-health-close mono"
-                  onClick={() => setHealthOpen(false)}
-                >
-                  Close
-                </button>
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="hud-actions">
           {client && (
@@ -413,7 +337,7 @@ export default function Hud({
             className="hud-action"
             aria-pressed={settingsOpen}
             aria-expanded={settingsOpen}
-            aria-controls="hud-settings-dialog"
+            aria-controls="hud-settings"
             aria-label="Settings"
             onClick={() => setSettingsOpen((open) => !open)}
           >
@@ -432,75 +356,135 @@ export default function Hud({
             <span className="agent-key mono">?</span>
           </button>
         </div>
-      </div>
 
-      <div
-        className="hud-agents-box"
-        ref={agentsBoxRef}
-        style={chatOpen ? { paddingBottom: `${chatSpace}px` } : undefined}
-      >
-        <nav className="hud-agents" aria-label="Agents">
-          {activeRows.map(renderAgentRow)}
-          {list.idleCount > 0 && (
-            <div className="hud-agent-row">
-              <button
-                type="button"
-                className="idle-toggle"
-                aria-expanded={idleOpen}
-                onClick={() => setIdleOpen((open) => !open)}
-              >
-                <span className="idle-toggle-label">{idleLabel}</span>
-                <span className="agent-key mono">{idleOpen ? '-' : '+'}</span>
-              </button>
-            </div>
-          )}
-          {idleRows.map(renderAgentRow)}
-          <div className="hud-agent-row">
+        {notice && (
+          <div className={`hud-health is-${notice.tone}`}>
             <button
               type="button"
-              className="overview"
-              aria-pressed={focused === null}
-              onClick={onOverview}
+              className="hud-health-chip mono"
+              onClick={() => setHealthOpen((open) => !open)}
+              aria-expanded={healthOpen}
             >
-              <span className="overview-label">Overview</span>
-              <span className="agent-key mono">0</span>
+              {notice.title}
             </button>
-            <button
-              type="button"
-              className="agent-log"
-              aria-pressed={areAllTerminalsOpen(snapshot?.agents, openTerminals)}
-              onClick={() => onShowTerminals(!areAllTerminalsOpen(snapshot?.agents, openTerminals))}
-            >
-              {toggleAllTerminalsLabel(snapshot?.agents, openTerminals)}
-            </button>
-          </div>
-        </nav>
-      </div>
-
-      {logOpen && (
-        <aside id="hud-log-drawer" className="hud-log" aria-label="Event log">
-          <header className="hud-log-header hud-header-strip">
-            <span className="hud-log-title">Event Log</span>
-            <span className="hud-log-count mono">{visibleLog.length}</span>
-          </header>
-          <div className="hud-log-body mono" ref={logBodyRef}>
-            {visibleLog.length === 0 ? (
-              <div className="log-line is-dim">No events recorded.</div>
-            ) : (
-              visibleLog.map((entry, index) => {
-                const stamp = formatTime(entry.time)
-                return (
-                  <div key={`${entry.time ?? index}-${index}`} className={`log-line is-${entry.tone ?? 'normal'}`}>
-                    {stamp && <span className="log-time">{stamp}</span>}
-                    {entry.agent && <span className="log-agent">{entry.agent}</span>}
-                    <span className="log-text">{entry.text}</span>
-                  </div>
-                )
-              })
+            {healthOpen && (
+              <div className="hud-health-popover" role="dialog" aria-label="Health details">
+                <ul className="hud-health-lines mono">
+                  {notice.lines.map((line, index) => (
+                    <li key={index}>{line}</li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="hud-health-close mono"
+                  onClick={() => setHealthOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
             )}
           </div>
-        </aside>
-      )}
+        )}
+      </header>
+
+      <section className="hud-dock" aria-label="Dock">
+        <div className="hud-dock-agents">
+          {fpsStats ? (
+            <p className="hud-fps-line mono">
+              {`frame ${Math.round(fpsStats.median)} ms, p95 ${Math.round(fpsStats.p95)} ms`}
+            </p>
+          ) : null}
+          <div className="hud-agents-box">
+            <nav className="hud-agents" aria-label="Agents">
+              {activeRows.map(renderAgentRow)}
+              {list.idleCount > 0 && (
+                <div className="hud-agent-row">
+                  <button
+                    type="button"
+                    className="idle-toggle"
+                    aria-expanded={idleOpen}
+                    onClick={() => setIdleOpen((open) => !open)}
+                  >
+                    <span className="idle-toggle-label">{idleLabel}</span>
+                    <span className="agent-key mono">{idleOpen ? '-' : '+'}</span>
+                  </button>
+                </div>
+              )}
+              {idleRows.map(renderAgentRow)}
+              <div className="hud-agent-row">
+                <button
+                  type="button"
+                  className="overview"
+                  aria-pressed={focused === null}
+                  onClick={onOverview}
+                >
+                  <span className="overview-label">Overview</span>
+                  <span className="agent-key mono">0</span>
+                </button>
+                <button
+                  type="button"
+                  className="agent-log"
+                  aria-pressed={areAllTerminalsOpen(snapshot?.agents, openTerminals)}
+                  onClick={() => onShowTerminals(!areAllTerminalsOpen(snapshot?.agents, openTerminals))}
+                >
+                  {toggleAllTerminalsLabel(snapshot?.agents, openTerminals)}
+                </button>
+              </div>
+            </nav>
+          </div>
+          <ul className="hud-legend mono" aria-label="Legend">
+            <li className="is-white">activity</li>
+            <li className="is-red">failure</li>
+            <li className="is-yellow">active</li>
+            <li className="is-green">finished</li>
+            <li className="is-line">Line from an agent: the file it is working on</li>
+          </ul>
+          {logOpen && (
+            <aside id="hud-log-drawer" className="hud-log" aria-label="Event log">
+              <header className="hud-log-header hud-header-strip">
+                <span className="hud-log-title">Event Log</span>
+                <span className="hud-log-count mono">{visibleLog.length}</span>
+              </header>
+              <div className="hud-log-body mono" ref={logBodyRef}>
+                {visibleLog.length === 0 ? (
+                  <div className="log-line is-dim">No events recorded.</div>
+                ) : (
+                  visibleLog.map((entry, index) => {
+                    const stamp = formatTime(entry.time)
+                    return (
+                      <div key={`${entry.time ?? index}-${index}`} className={`log-line is-${entry.tone ?? 'normal'}`}>
+                        {stamp && <span className="log-time">{stamp}</span>}
+                        {entry.agent && <span className="log-agent">{entry.agent}</span>}
+                        <span className="log-text">{entry.text}</span>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            </aside>
+          )}
+        </div>
+        <div className="hud-dock-context">
+          <AgentDock
+            agent={focused}
+            lanes={snapshot?.agents ?? []}
+            log={log}
+            onFocus={onFocus}
+            onToggleTerminal={onToggleTerminal}
+            onOpenChat={() => chatAvailable && setChatOpen(true)}
+          />
+        </div>
+        <div className="hud-dock-side">
+          {settingsOpen && (
+            <Settings
+              effects={effects}
+              onChange={onSettingsChange}
+              onClose={() => setSettingsOpen(false)}
+            />
+          )}
+          <div id="hud-dock-costs" className="hud-dock-costs" />
+        </div>
+      </section>
 
       {client && (
         <ControlDrawer
@@ -549,14 +533,6 @@ export default function Hud({
       )}
 
       {guideOpen && <Guide onClose={closeGuide} />}
-
-      {settingsOpen && (
-        <Settings
-          effects={effects}
-          onChange={onSettingsChange}
-          onClose={() => setSettingsOpen(false)}
-        />
-      )}
 
       {!chatAvailable && (
         <Assistant

@@ -14,6 +14,9 @@ import { costBoard } from './model/costs.js'
 import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
+import { name } from './ui/brand.js'
+import { lensStatus } from './ui/lens.js'
+import { version } from '../package.json'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { OrchestratorActivity, orchestratorDoing } from './ui/orchestratorChat.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
@@ -25,7 +28,7 @@ import Waiting from './ui/Waiting.jsx'
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
 const BADGE = {
-  position: 'fixed',
+  position: 'absolute',
   bottom: 96,
   zIndex: 5,
   padding: '2px 8px',
@@ -414,24 +417,61 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const chromaDx = chromaOn ? Number((effects.aberration.strength * 6).toFixed(2)) : 0
   const fishEyeScale = fishEyeOn ? Number((effects.fishEye.strength * 240).toFixed(2)) : 0
 
+  const lens = lensStatus(snapshot.agents, log)
+
   return (
-    <div className="surface" ref={surfaceRef}>
-      <div
-        className="surface-layers"
-        style={hasFilter ? { filter: 'url(#mr-screen-filter)' } : undefined}
+    <div className="stage">
+      <svg
+        className="lens-clip-defs"
+        aria-hidden="true"
+        style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none', overflow: 'hidden' }}
       >
-        <div className="layer" ref={cssRef} aria-hidden="true" />
-        <div className="layer is-over" ref={glRef} aria-hidden="true" />
-      </div>
-      <div className="screen-effects-overlay" aria-hidden="true">
-        <div
-          className="screen-vignette"
-          style={{ opacity: effects.vignette?.on ? effects.vignette.strength : 0 }}
-        />
-        <div
-          className="screen-grain"
-          style={{ opacity: effects.grain?.on ? effects.grain.strength * 0.25 : 0 }}
-        />
+        <defs>
+          <clipPath id="mr-lens-clip" clipPathUnits="objectBoundingBox">
+            <path d="M 0,0.03 Q 0.5,-0.03 1,0.03 L 1,0.97 Q 0.5,1.03 0,0.97 Z" />
+          </clipPath>
+        </defs>
+      </svg>
+      <div className="lens">
+        <div className="lens-frame" ref={surfaceRef}>
+          <div
+            className="surface-layers"
+            style={hasFilter ? { filter: 'url(#mr-screen-filter)' } : undefined}
+          >
+            <div className="layer" ref={cssRef} aria-hidden="true" />
+            <div className="layer is-over" ref={glRef} aria-hidden="true" />
+          </div>
+          <div className="screen-effects-overlay" aria-hidden="true">
+            <div
+              className="screen-vignette"
+              style={{ opacity: effects.vignette?.on ? effects.vignette.strength : 0 }}
+            />
+            <div
+              className="screen-grain"
+              style={{ opacity: effects.grain?.on ? effects.grain.strength * 0.25 : 0 }}
+            />
+          </div>
+          <div className="lens-labels">
+            <p className="lens-corner is-left">
+              <span className="lens-project">{data.tree.rootName}</span>
+              <span className="lens-version mono">
+                {name} {version}
+              </span>
+            </p>
+            <div className="lens-corner is-right">
+              <span className="lens-lanes mono">
+                Working {lens.working} / {lens.total}
+              </span>
+              <span className="lens-bar" aria-hidden="true">
+                <span
+                  className="lens-bar-fill"
+                  style={{ width: `${Math.round(lens.share * 100)}%` }}
+                />
+              </span>
+            </div>
+            <p className={`lens-corner is-bottom mono is-${lens.tone}`}>{lens.activity}</p>
+          </div>
+        </div>
       </div>
       {hasFilter && (
         <svg
@@ -513,7 +553,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           snapshot={snapshot}
           focused={focused}
           speeds={SPEEDS}
-          rootName={data.tree.rootName}
           fpsStats={fpsStats}
           mode={mode}
           client={client}

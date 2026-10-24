@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).
@@ -13,6 +14,7 @@
 - The orchestrator chat draws a reply's Markdown as paragraphs, headings, lists, code blocks and inline code, with bold and italic markers dropped, and the state line names the current command while a turn runs (task R8).
 - The agent context helper and `AgentDock` show a selected lane or the orchestrator in plain rows: harness and model, status, task, current command, this month's cost and tokens, the last 12 log lines and, for the orchestrator, its context share (task I2).
 
+- The page is a fixed menu row, the room in a curved lens viewport with the project name, the working lanes and the newest log line at its corners, and a dock that scrolls below it with the agent list, the empty context column and the settings above the cost board; the orchestrator chat stays fixed at the bottom right (task I1).
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
 - The HUD agent list puts the orchestrator first, shows working, queued, failed and finished lanes above one collapsible idle row, scrolls above the open orchestrator chat, and the waiting card sits beside the chat at 1280 by 800 and 900 by 700 (task N2).
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).
