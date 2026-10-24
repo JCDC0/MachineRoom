@@ -14,8 +14,15 @@ export const ORCHESTRATOR_TURN_LIMIT_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_ROOM_TURNS = 30
 export const ORCHESTRATOR_ROOM_WINDOW_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
+export const DEFAULT_CONTEXT_WINDOW = 200000
+export const AUTOCOMPACT_SHARE = 0.8
+export const COMPACT_PROMPT =
+  'Write a summary of the work so far, the open runs and the next steps, in at most 40 lines. Reply with the summary only.'
+export const COMPACTED_MESSAGE = 'The session was compacted. The next turn starts a new session with the summary.'
 export const CONFIRM_MESSAGE_PROBLEM = 'Confirm the message first.'
 export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
+export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first.'
+export const AUTOCOMPACT_PROBLEM = 'Say whether autocompact is on or off.'
 export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
@@ -117,6 +124,38 @@ function opencodeSessionId(log) {
   return null
 }
 
+function tokenSum(values) {
+  const known = values.filter((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0)
+  return known.length === 0 ? null : Math.round(known.reduce((sum, value) => sum + value, 0))
+}
+
+export function contextTokensFromLog(harness, log) {
+  let found = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (harness === 'opencode') {
+      if (item?.type !== 'step_finish') continue
+      const tokens = item?.part?.tokens
+      if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) continue
+      const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {}
+      const sum = tokenSum([tokens.input, cache.read, cache.write])
+      if (sum !== null) found = sum
+      continue
+    }
+    if (item?.type !== 'result' || item.parent_tool_use_id) continue
+    const usage = item?.usage && typeof item.usage === 'object' ? item.usage : {}
+    const sum = tokenSum([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens])
+    if (sum !== null) found = sum
+  }
+  return found
+}
+
 function blockFor(message) {
   const from = String(message?.from ?? '')
   const label = from === 'owner' ? 'Owner' : from === 'room' ? 'Room' : from.startsWith('sub:') ? `Sub ${from.slice(4)}` : 'Orchestrator'
@@ -181,6 +220,7 @@ export function createOrchestrator({
   onReply = null,
   outsideFiles = null,
   onOutsideScope = null,
+  contextWindow: contextWindowOption = 0,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -196,6 +236,11 @@ export function createOrchestrator({
         : 'claude'
   const model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
   const bin = binOption ? String(binOption) : String(lane.cli.bin ?? (harness === 'opencode' ? 'opencode' : 'claude'))
+  const windowOption = Number.isFinite(contextWindowOption) && contextWindowOption > 0
+    ? Math.round(contextWindowOption)
+    : Number.isFinite(lane.cli.contextWindow) && lane.cli.contextWindow > 0
+      ? Math.round(lane.cli.contextWindow)
+      : 0
   const conversationFile = chatFileFor(root, folder, key)
   const messages = []
   const pending = []
@@ -205,6 +250,11 @@ export function createOrchestrator({
   let state = 'idle'
   let running = null
   let stopped = false
+  let contextTokens = null
+  let contextWindow = windowOption || DEFAULT_CONTEXT_WINDOW
+  let autocompact = true
+  let summary = ''
+  let pendingCompaction = false
 
   function notify() {
     try {
@@ -218,7 +268,7 @@ export function createOrchestrator({
       const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
       writeFileSync(
         conversationFile,
-        `${JSON.stringify({ project: root, sessionId, state, messages, pending: waiting, ...(ladder ? { ladder } : {}) }, null, 2)}\n`
+        `${JSON.stringify({ project: root, sessionId, state, messages, pending: waiting, contextTokens, contextWindow, autocompact, summary, ...(ladder ? { ladder } : {}) }, null, 2)}\n`
       )
     } catch {}
   }
@@ -235,6 +285,14 @@ export function createOrchestrator({
     if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
     if (saved.ladder && typeof saved.ladder === 'object' && !Array.isArray(saved.ladder)) ladder = saved.ladder
+    if (typeof saved.autocompact === 'boolean') autocompact = saved.autocompact
+    if (typeof saved.contextTokens === 'number' && Number.isFinite(saved.contextTokens) && saved.contextTokens >= 0) {
+      contextTokens = Math.round(saved.contextTokens)
+    }
+    if (!windowOption && typeof saved.contextWindow === 'number' && Number.isFinite(saved.contextWindow) && saved.contextWindow > 0) {
+      contextWindow = Math.round(saved.contextWindow)
+    }
+    if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
     const list = Array.isArray(saved.messages) ? saved.messages : []
     for (const item of list) {
       if (!item || typeof item !== 'object') continue
@@ -309,7 +367,12 @@ export function createOrchestrator({
   }
 
   function maybeStartTurn() {
-    if (stopped || running || state === 'paused' || pending.length === 0) return
+    if (stopped || running || state === 'paused') return
+    if (pendingCompaction) {
+      startTurn()
+      return
+    }
+    if (pending.length === 0) return
     const hasOwner = pending.some((message) => message.from === 'owner')
     if (!hasOwner) {
       if (!sessionId) return
@@ -319,16 +382,20 @@ export function createOrchestrator({
   }
 
   function startTurn() {
-    const turnMessages = pending.splice(0, pending.length)
+    const compaction = pendingCompaction
+    pendingCompaction = false
+    const turnMessages = compaction ? [] : pending.splice(0, pending.length)
     const hasOwner = turnMessages.some((message) => message.from === 'owner')
     if (!hasOwner) roomTurns.push(now())
     const first = !sessionId
     if (first && harness === 'claude') sessionId = randomUUID()
+    const carried = first && summary ? summary : ''
+    if (carried) summary = ''
     const startedAt = now()
     const logName = `${logPrefix}-chat-${stamp(startedAt)}`
     const logPath = join(folder, `${logName}.log`)
     const metaPath = join(folder, `${logName}.meta.json`)
-    const turn = { startedAt, logPath, metaPath, killed: false, done: false, child: null, timer: null }
+    const turn = { startedAt, logPath, metaPath, killed: false, done: false, child: null, timer: null, compacting: compaction }
     running = turn
     setState('working')
     try {
@@ -340,18 +407,19 @@ export function createOrchestrator({
       setState('idle')
       return
     }
-    const message = turnText(turnMessages)
+    const message = compaction ? COMPACT_PROMPT : turnText(turnMessages)
     const baseInstruction = instructionFor(promptFile, root, folder, String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''))
     const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
     let args
     if (harness === 'opencode') {
       args = ['run', '--format', 'json', '--model', model, '--auto', '--title', logName]
       if (!first) args.push('--session', sessionId)
-      args.push(first ? `${instruction}\n\n${message}` : message)
+      const body = first ? `${instruction}\n\n${message}` : message
+      args.push(carried ? `${carried}\n\n${body}` : body)
     } else {
       args = [
         '-p',
-        message,
+        carried ? `${carried}\n\n${message}` : message,
         '--output-format',
         'stream-json',
         '--verbose',
@@ -402,7 +470,7 @@ export function createOrchestrator({
     turn.done = true
     if (turn.timer) clearTimeout(turn.timer)
     const logText = readText(turn.logPath)
-    const summary = summarizeRun({ harness, log: logText })
+    const runStats = summarizeRun({ harness, log: logText })
     const report = replyText(harness, logText)
     if (harness === 'opencode') {
       const savedSessionId = opencodeSessionId(logText)
@@ -413,6 +481,8 @@ export function createOrchestrator({
         } catch {}
       }
     }
+    const seen = contextTokensFromLog(harness, logText)
+    if (seen !== null) contextTokens = seen
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const text = failed
       ? Number.isInteger(code)
@@ -429,20 +499,32 @@ export function createOrchestrator({
       minutes: Math.round(((now() - turn.startedAt) / 60000) * 10) / 10,
       exitCode: code,
       killed: turn.killed,
-      costUsd: summary.costUsd,
-      inputTokens: summary.inputTokens,
-      outputTokens: summary.outputTokens,
+      costUsd: runStats.costUsd,
+      inputTokens: runStats.inputTokens,
+      outputTokens: runStats.outputTokens,
       log: turn.logPath,
     })
     try {
       appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
     } catch {}
-    if (typeof onReply === 'function') {
+    if (!turn.compacting && typeof onReply === 'function') {
       try {
         onReply(text)
       } catch {}
     }
     if (running === turn) running = null
+    if (turn.compacting) {
+      summary = failed ? '' : String(report ?? '').trim()
+      sessionId = null
+      contextTokens = null
+      if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
+      addMessage('room', COMPACTED_MESSAGE)
+      if (!stopped) maybeStartTurn()
+      return
+    }
+    if (autocompact && sessionId && contextTokens !== null && contextTokens / contextWindow >= AUTOCOMPACT_SHARE) {
+      pendingCompaction = true
+    }
     if (!stopped) {
       setState(state === 'paused' ? 'paused' : 'idle')
       maybeStartTurn()
@@ -458,6 +540,9 @@ export function createOrchestrator({
       state,
       model,
       project: root,
+      contextTokens,
+      contextWindow,
+      autocompact,
       messages: messages.map((message) => ({ ...message })),
     }
   }
@@ -495,6 +580,15 @@ export function createOrchestrator({
     }
     setState('paused')
     return { status: 200, body: { ok: true } }
+  }
+
+  function setAutocompact(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_AUTOCOMPACT_PROBLEM } }
+    if (typeof body.on !== 'boolean') return { status: 400, body: { error: AUTOCOMPACT_PROBLEM } }
+    autocompact = body.on
+    persist()
+    notify()
+    return { status: 200, body: { id: key, autocompact } }
   }
 
   function getLadder() {
@@ -558,5 +652,5 @@ export function createOrchestrator({
   persist()
   maybeStartTurn()
 
-  return { answer, send, deliver, stop, getLadder, setLadder, onFrame, close }
+  return { answer, send, deliver, stop, setAutocompact, getLadder, setLadder, onFrame, close }
 }

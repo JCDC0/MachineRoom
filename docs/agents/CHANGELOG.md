@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The orchestrator reports its context use and window and compacts a session at 80 percent into a 40 line summary behind a switch in the agent dock, and `POST /api/orchestrator/autocompact` sets it (task O5).
+
 - The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).

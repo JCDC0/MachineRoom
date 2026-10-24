@@ -179,6 +179,28 @@ describe('agentContext', () => {
     expect(result.context).toBeNull()
   })
 
+  it('the orchestrator with context and autocompact from the chat route', () => {
+    const result = agentContext({
+      agent: null,
+      lanes: [lane, orchestrator],
+      costs: board([]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+      orchestrator: { id: 'orchestrator', contextTokens: 170000, contextWindow: 200000, autocompact: false },
+    })
+
+    expect(result.isOrchestrator).toBe(true)
+    expect(result.context).toEqual({
+      tokens: 170000,
+      window: 200000,
+      share: 0.85,
+      percent: 85,
+      label: '85%',
+    })
+    expect(result.autocompact).toBe(false)
+  })
+
   it('the log cut to 12 lines', () => {
     const log = []
     for (let index = 1; index <= 20; index += 1) {
@@ -223,6 +245,25 @@ describe('AgentDock', () => {
     expect(html).toContain('60% of 200000 tokens')
   })
 
+  it('draws the Autocompact switch for the orchestrator', () => {
+    const html = renderToString(
+      createElement(AgentDock, {
+        agent: null,
+        lanes: [lane, orchestrator],
+        costs: board([]),
+        liveRuns: [],
+        tasks: [],
+        log: [],
+        orchestrator: { id: 'orchestrator', contextTokens: 170000, contextWindow: 200000, autocompact: true },
+      })
+    )
+
+    expect(html).toContain('Autocompact')
+    expect(html).toContain('85% of 200000 tokens')
+    expect(html).toContain('role="switch"')
+    expect(html).toContain('checked')
+  })
+
   it('leaves Open chat off a lane', () => {
     const html = renderToString(
       createElement(AgentDock, {
@@ -240,6 +281,7 @@ describe('AgentDock', () => {
     expect(html).toContain('$12.34')
     expect(html).toContain('Focus')
     expect(html).not.toContain('Open chat')
+    expect(html).not.toContain('Autocompact')
   })
 })
 

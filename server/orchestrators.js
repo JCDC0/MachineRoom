@@ -5,6 +5,7 @@ import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hie
 import {
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
+  DEFAULT_CONTEXT_WINDOW,
   MESSAGE_PROBLEM,
   ORCHESTRATOR_KEY,
   ORCHESTRATOR_MESSAGE_LIMIT,
@@ -54,6 +55,7 @@ function sameConfig(left, right) {
     config.harness,
     config.model,
     config.bin,
+    config.contextWindow,
     [...config.lanes].sort(),
     [...config.scope],
     config.restricted,
@@ -122,6 +124,7 @@ export function createOrchestrators({
       harness,
       model: sub.model || String(defaults?.model ?? (harness === 'opencode' ? 'opencode/deepseek-v4.1-flash-free' : 'opus')),
       bin: String(defaults?.bin ?? (harness === 'opencode' ? 'opencode' : 'claude')),
+      contextWindow: Number.isFinite(defaults?.contextWindow) && defaults.contextWindow > 0 ? Math.round(defaults.contextWindow) : 0,
       lanes: [...sub.lanes],
       scope: [...sub.scope],
       restricted: sub.restricted,
@@ -146,6 +149,7 @@ export function createOrchestrators({
       now,
       promptFile,
       bridgeUrl,
+      contextWindow: config.contextWindow > 0 ? config.contextWindow : DEFAULT_CONTEXT_WINDOW,
       onNotice,
       extraInstructions: subPrompt(sub, ORCHESTRATOR_KEY),
       onReply: (text) => {
@@ -197,6 +201,9 @@ export function createOrchestrators({
         harness: answer.harness,
         model: answer.model,
         state: answer.state,
+        contextTokens: answer.contextTokens,
+        contextWindow: answer.contextWindow,
+        autocompact: answer.autocompact,
         lanes: laneKeys.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -212,6 +219,9 @@ export function createOrchestrators({
         harness: harnessFor(sub),
         model: state?.model ?? subConfig(sub).model,
         state: state?.state ?? 'idle',
+        contextTokens: state?.contextTokens ?? null,
+        contextWindow: state?.contextWindow ?? subConfig(sub).contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+        autocompact: state?.autocompact ?? true,
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted,
@@ -334,6 +344,19 @@ export function createOrchestrators({
         return true
       }
       const out = instance.stop(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/autocompact') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.setAutocompact(body)
       sendJson(req, res, out.status, out.body)
       return true
     }

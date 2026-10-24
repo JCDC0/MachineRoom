@@ -7,11 +7,13 @@ export default function AgentDock({
   liveRuns = null,
   tasks = null,
   log = null,
+  orchestrator = null,
   onFocus = () => {},
   onToggleTerminal = () => {},
   onOpenChat = () => {},
+  onAutocompact = () => {},
 }) {
-  const context = agentContext({ agent, lanes, costs, liveRuns, tasks, log })
+  const context = agentContext({ agent, lanes, costs, liveRuns, tasks, log, orchestrator })
   const rows = [
     ['Status', context.status],
     ['Key', context.key],
@@ -38,6 +40,23 @@ export default function AgentDock({
             <dd className="mono">{value}</dd>
           </div>
         ))}
+        {context.isOrchestrator && context.autocompact !== null && (
+          <div className="agent-dock-row">
+            <dt>Autocompact</dt>
+            <dd className="mono">
+              <label>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label="Autocompact"
+                  checked={context.autocompact}
+                  onChange={(event) => onAutocompact(context.key, event.target.checked)}
+                />
+                {context.autocompact ? ' on' : ' off'}
+              </label>
+            </dd>
+          </div>
+        )}
       </dl>
       <ol className="agent-dock-log" aria-label="Recent log lines">
         {context.log.length === 0 ? (

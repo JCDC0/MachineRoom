@@ -395,6 +395,18 @@ describe('the mock client still answers the contract', () => {
     const models = await client.models()
     expect(new Set(models.map((model) => model.tier))).toEqual(new Set(['small', 'medium', 'large']))
   })
+
+  it('turns autocompact off and on for each orchestrator', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    expect((await client.orchestrator()).autocompact).toBe(true)
+    await client.setAutocompact('orchestrator', false)
+    expect((await client.orchestrator()).autocompact).toBe(false)
+    expect((await client.orchestrators()).find((entry) => entry.id === 'orchestrator').autocompact).toBe(false)
+    await client.setAutocompact('frontend', false)
+    expect((await client.orchestrators()).find((entry) => entry.id === 'frontend').autocompact).toBe(false)
+    expect((await client.orchestrator('frontend')).autocompact).toBe(false)
+    await expect(client.setAutocompact('orchestrator', 'yes')).rejects.toThrow('Say whether autocompact is on or off.')
+  })
 })
 
 describe('the control client orchestrator routes', () => {
@@ -430,6 +442,24 @@ describe('the control client orchestrator routes', () => {
       ['POST', 'http://127.0.0.1:9/api/orchestrator/messages', { text: 'Go', id: 'frontend', confirmed: true }],
       ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true }],
       ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true, id: 'frontend' }],
+    ])
+  })
+
+  it('sets autocompact at the named orchestrator', async () => {
+    const { calls, client } = recorder({ id: 'frontend', autocompact: false })
+    await client.setAutocompact('frontend', false)
+    await client.setAutocompact(undefined, true)
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/autocompact',
+        method: 'POST',
+        body: JSON.stringify({ id: 'frontend', on: false, confirmed: true }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/autocompact',
+        method: 'POST',
+        body: JSON.stringify({ id: 'orchestrator', on: true, confirmed: true }),
+      },
     ])
   })
 

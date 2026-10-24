@@ -31,6 +31,7 @@ export const CLIENT_METHODS = [
   'sendOrchestrator',
   'sendToOrchestrator',
   'stopOrchestrator',
+  'setAutocompact',
   'setLadder',
   'startRun',
   'reviews',
@@ -288,6 +289,9 @@ function seed(at) {
       state: 'idle',
       model: 'opus',
       project: 'MachineRoom',
+      contextTokens: 96000,
+      contextWindow: 200000,
+      autocompact: true,
       messages: [
         { id: 'orchestrator-message-1', from: 'owner', text: 'What is running?', at: iso(40) },
         { id: 'orchestrator-message-2', from: 'orchestrator', text: 'OpenCode has one run on JC-19. I will report when it ends.', at: iso(38) },
@@ -335,7 +339,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
   function ensureSubChat(sub) {
     if (subChats.has(sub.id)) return subChats.get(sub.id)
-    const chat = { state: 'idle', model: sub.model, project: 'MachineRoom', messages: [] }
+    const chat = {
+      state: 'idle',
+      model: sub.model,
+      project: 'MachineRoom',
+      contextTokens: null,
+      contextWindow: 200000,
+      autocompact: true,
+      messages: [],
+    }
     subChats.set(sub.id, chat)
     return chat
   }
@@ -365,6 +377,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         harness: 'claude',
         model: state.orchestratorChat.model,
         state: state.orchestratorChat.state,
+        contextTokens: state.orchestratorChat.contextTokens,
+        contextWindow: state.orchestratorChat.contextWindow,
+        autocompact: state.orchestratorChat.autocompact,
         lanes: MOCK_LANE_KEYS.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -376,6 +391,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         harness: sub.harness,
         model: sub.model,
         state: ensureSubChat(sub).state,
+        contextTokens: ensureSubChat(sub).contextTokens,
+        contextWindow: ensureSubChat(sub).contextWindow,
+        autocompact: ensureSubChat(sub).autocompact,
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted !== false,
@@ -666,6 +684,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         chat.state = 'paused'
         emit({ topic: 'orchestrator' })
         return { ok: true }
+      }),
+
+    setAutocompact: (id, on) =>
+      call('setAutocompact', () => {
+        if (typeof on !== 'boolean') throw new Error('Say whether autocompact is on or off.')
+        const chat = chatStore(id)
+        chat.autocompact = on
+        emit({ topic: 'orchestrator' })
+        return { id: id ?? 'orchestrator', autocompact: on }
       }),
 
     setLadder: (next) => call('setLadder', () => replaceLadder(next)),

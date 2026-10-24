@@ -217,6 +217,13 @@ export function createClient({
       return request('POST', '/api/orchestrator/stop', body)
     },
 
+    setAutocompact: (id, on) =>
+      request('POST', '/api/orchestrator/autocompact', {
+        id: id === undefined || id === null || id === '' ? 'orchestrator' : id,
+        on,
+        confirmed: true,
+      }),
+
     setLadder: (ladder) => request('POST', '/api/orchestrator/ladder', { ladder, by: 'owner', confirmed: true }),
 
     startRun: (lane, run) => {
