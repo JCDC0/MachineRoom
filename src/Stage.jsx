@@ -16,6 +16,7 @@ import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
 import { name } from './ui/brand.js'
 import { lensStatus } from './ui/lens.js'
+import { ladderFromAnswer } from './ui/liveLadder.js'
 import { version } from '../package.json'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { OrchestratorActivity, orchestratorDoing } from './ui/orchestratorChat.js'
@@ -91,6 +92,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
+  const latestLadderRef = useRef(null)
   const framesRef = useRef([])
   const lastFrameRef = useRef(0)
   const [fpsStats, setFpsStats] = useState(() => (fps ? { median: 0, p95: 0 } : null))
@@ -156,6 +158,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (latestTasksRef.current) {
       room.setTasks(latestTasksRef.current)
     }
+    if (latestLadderRef.current) {
+      room.setLadder(latestLadderRef.current)
+    }
     setOpenChips(NONE)
     if (!live) {
       const saved = loadSettings(store()).speed
@@ -173,8 +178,49 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }, [agents, data, player])
 
   useEffect(() => {
-    roomRef.current?.setLadder(demoLadder)
-  }, [data, demoLadder])
+    if (demoLadder) {
+      latestLadderRef.current = demoLadder
+      roomRef.current?.setLadder(demoLadder)
+      return undefined
+    }
+    if (!live) {
+      latestLadderRef.current = null
+      roomRef.current?.setLadder(null)
+      return undefined
+    }
+    if (!client || typeof client.orchestrators !== 'function') {
+      latestLadderRef.current = null
+      roomRef.current?.setLadder(null)
+      return undefined
+    }
+    let active = true
+    const latest = latestOnly()
+
+    async function updateLadder() {
+      const isLatest = latest()
+      try {
+        const answer = await client.orchestrators()
+        if (!active || !isLatest()) return
+        const ladder = ladderFromAnswer(answer)
+        latestLadderRef.current = ladder
+        roomRef.current?.setLadder(ladder)
+      } catch {
+        if (!active || !isLatest()) return
+        latestLadderRef.current = null
+        roomRef.current?.setLadder(null)
+      }
+    }
+
+    updateLadder()
+    const timer = setInterval(updateLadder, 60000)
+    const unsubscribe = subscribeToNotices(client, ['orchestrator'], updateLadder)
+
+    return () => {
+      active = false
+      clearInterval(timer)
+      unsubscribe()
+    }
+  }, [client, demoLadder, live])
 
   useEffect(() => {
     setFineDust(effects.dust)
