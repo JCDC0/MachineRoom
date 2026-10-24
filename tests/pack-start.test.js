@@ -85,7 +85,7 @@ describe('a pack starts the room', () => {
 
       const child = spawn(
         process.execPath,
-        [binPath, '--port', '0', '--paperclip', 'http://127.0.0.1:1', '--company', 'pack-test', '--root', emptyRoot],
+        [binPath, '--port', '0', '--lanes', '--root', emptyRoot],
         { cwd: packageDir, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] },
       )
       child.stderr.resume()
@@ -99,7 +99,9 @@ describe('a pack starts the room', () => {
 
         const health = await fetch(`${base}/api/health`)
         expect(health.status).toBe(200)
-        expect((await health.json()).paperclip).toBe(false)
+        const body = await health.json()
+        expect(body.ok).toBe(true)
+        expect(body.lanes).toBe(true)
 
         expect(existsSync(join(packageDir, 'node_modules'))).toBe(false)
       } finally {

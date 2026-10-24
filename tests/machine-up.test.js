@@ -1,16 +1,13 @@
 import { spawn } from 'node:child_process'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:http'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { PAPERCLIP_SURFACE } from '../server/surface.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const root = dirname(fileURLToPath(import.meta.url))
-const BIN = join(root, '..', 'bin', 'machine-room.mjs')
-const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway; features whose routes changed stay off.'
-const PAPERCLIP_NOT_RUNNING = 'Paperclip is not running. Start it yourself with paperclipai run; machine-room never starts it.'
+const root = dirname(dirname(fileURLToPath(import.meta.url)))
+const BIN = join(root, 'bin', 'machine-room.mjs')
+const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway.'
 const OPEN = /^machine-room: open (http:\/\/127\.0\.0\.1:\d+\/\?live&bridge=http:\/\/127\.0\.0\.1:\d+)$/m
 const cleanups = []
 
@@ -23,102 +20,39 @@ afterEach(async () => {
   }
 })
 
-function makeProject() {
-  const folder = makeTempDir('machine-room-up-')
+function makeFolder(prefix) {
+  const folder = makeTempDir(prefix)
   cleanups.push(() => rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return folder
 }
 
+function makeProject() {
+  return makeFolder('machine-room-up-')
+}
+
 function makeDist() {
-  const base = makeTempDir('machine-room-up-dist-')
+  const base = makeFolder('machine-room-up-dist-')
   const dist = join(base, 'dist')
   mkdirSync(dist, { recursive: true })
   writeFileSync(join(dist, 'index.html'), '<!doctype html><title>Room</title>')
-  cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return { base, dist }
 }
 
-function completeSpec(routes = PAPERCLIP_SURFACE) {
-  const paths = {}
-  for (const route of routes) {
-    if (route.socket) continue
-    const item = (paths[route.path] ??= {})
-    const properties = Object.fromEntries((route.body ?? []).map((key) => [key, { type: 'string' }]))
-    item[route.method.toLowerCase()] = {
-      responses: {
-        200: { content: { 'application/json': { schema: { type: 'object', additionalProperties: {} } } } },
-      },
-      ...(route.body?.length ? { requestBody: { content: { 'application/json': { schema: { type: 'object', properties } } } } } : {}),
-    }
-  }
-  return { openapi: '3.0.0', info: { version: '1.0.0' }, paths }
-}
-
-function backupAt(ageHours) {
-  return {
-    enabled: true,
-    status: 'ok',
-    maxAgeHours: 26,
-    latestBackup: {
-      name: 'paperclip-20261020-120000.sql.gz',
-      mtime: new Date(Date.now() - ageHours * 3600000).toISOString(),
-      ageHours,
-      sizeBytes: 1024,
-    },
-    warnings: [],
-  }
-}
-
-function healthWith(databaseBackup) {
-  return { ok: true, version: '2026.1012.0', databaseBackup }
-}
-
-function startFake({ health = healthWith(backupAt(1.5)) } = {}) {
-  const server = createServer((req, res) => {
-    if (req.method === 'GET' && req.url === '/api/health') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(health))
-      return
-    }
-    if (req.method === 'GET' && req.url === '/api/openapi.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(completeSpec()))
-      return
-    }
-    if (req.method === 'GET' && req.url === '/api/companies') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify([{ id: 'company-1', name: 'One' }]))
-      return
-    }
-    if (req.method === 'GET' && req.url === '/api/companies/company-1/agents') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end('[]')
-      return
-    }
-    res.writeHead(404)
-    res.end()
-  })
-  return new Promise((resolveFake) => {
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      cleanups.push(() => new Promise((resolveClose) => server.close(() => resolveClose())))
-      resolveFake({ url: `http://127.0.0.1:${port}` })
-    })
-  })
-}
-
-function childEnv() {
+function childEnv(temp) {
   const env = { ...process.env }
   delete env.PAPERCLIP_URL
   delete env.PAPERCLIP_COMPANY_ID
   delete env.PROJECT_ROOT
   delete env.PORT
+  delete env.MACHINEROOM_LANES
+  delete env.MACHINEROOM_SESSIONS
+  env.TEMP = temp
   return env
 }
 
-function startBin(args) {
+function startBin(args, env) {
   const run = { stdout: '', stderr: '', child: null }
-  run.child = spawn(process.execPath, [BIN, ...args], { env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] })
+  run.child = spawn(process.execPath, [BIN, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] })
   run.child.stdout.on('data', (chunk) => {
     run.stdout += chunk
   })
@@ -149,10 +83,10 @@ function waitForAddress(run, timeoutMs = 20000) {
       if (match) finish(resolveAddress, match[1])
     }
     const onExit = (code) => {
-      finish(rejectAddress, new Error(`the bin exited ${code}. stdout: ${run.stdout} stderr: ${run.stderr}`))
+      finish(rejectAddress, new Error(`the bin exited ${code}. stderr: ${run.stderr}`))
     }
     timer = setTimeout(() => {
-      finish(rejectAddress, new Error(`the bin printed no address. stdout: ${run.stdout} stderr: ${run.stderr}`))
+      finish(rejectAddress, new Error(`the bin printed no address. stderr: ${run.stderr}`))
     }, timeoutMs)
     run.child.stdout.on('data', check)
     run.child.once('exit', onExit)
@@ -180,18 +114,11 @@ async function kill(run) {
 }
 
 describe('machine-room up', () => {
-  it('prints the checks, then the address, and serves the room', async () => {
+  it('prints the checks, then the address, and serves the room with lanes and sessions on', async () => {
     const project = makeProject()
+    const temp = makeFolder('machine-room-up-temp-')
     const { dist } = makeDist()
-    const fake = await startFake()
-    const run = startBin([
-      'up',
-      '--paperclip', fake.url,
-      '--company', 'company-1',
-      '--root', project,
-      '--dist', dist,
-      '--port', '0',
-    ])
+    const run = startBin(['up', '--root', project, '--dist', dist, '--port', '0'], childEnv(temp))
 
     const address = await waitForAddress(run)
     const origin = new URL(address).origin
@@ -201,31 +128,40 @@ describe('machine-room up', () => {
     expect(viewer.status).toBe(200)
     expect(await viewer.text()).toContain('<title>Room</title>')
 
+    const health = await fetch(`${origin}/api/health`).then((response) => response.json())
+    expect(health).toMatchObject({ ok: true, lanes: true, sessions: true })
+
     const lines = outputLines(run)
     expect(lines.at(-1)).toBe(`machine-room: open ${address}`)
     const checks = lines.slice(0, -1)
-    expect(checks).toHaveLength(5)
-    expect(checks.every((line) => line.startsWith('ok '))).toBe(true)
-    expect(checks[0]).toContain('Paperclip answers at')
-    expect(checks[4]).toContain('The newest database backup is 1.5 hours old.')
+    expect(checks.length).toBeGreaterThan(3)
+    expect(checks.every((line) => /^(ok|FAIL) /.test(line))).toBe(true)
+    expect(checks[0]).toContain('The project folder')
+    expect(checks[1]).toContain('Git is found at')
     expect(lines).not.toContain(SOME_CHECKS_FAILED)
-    expect(lines).not.toContain(PAPERCLIP_NOT_RUNNING)
 
     await kill(run)
   }, 30000)
 
-  it('prints the failed backup line and the warning, then still serves the room', async () => {
+  it('keeps the session source off with --no-sessions', async () => {
     const project = makeProject()
+    const temp = makeFolder('machine-room-up-temp-')
     const { dist } = makeDist()
-    const fake = await startFake({ health: healthWith(backupAt(30)) })
-    const run = startBin([
-      'up',
-      '--paperclip', fake.url,
-      '--company', 'company-1',
-      '--root', project,
-      '--dist', dist,
-      '--port', '0',
-    ])
+    const run = startBin(['up', '--no-sessions', '--root', project, '--dist', dist, '--port', '0'], childEnv(temp))
+
+    const address = await waitForAddress(run)
+    const origin = new URL(address).origin
+    const health = await fetch(`${origin}/api/health`).then((response) => response.json())
+    expect(health).toMatchObject({ lanes: true, sessions: false })
+
+    await kill(run)
+  }, 30000)
+
+  it('prints a failed check and the warning, then still serves the room', async () => {
+    const project = makeProject()
+    const temp = makeFolder('machine-room-up-temp-')
+    const { dist } = makeDist()
+    const run = startBin(['up', '--root', join(project, 'missing'), '--dist', dist, '--port', '0'], childEnv(temp))
 
     const address = await waitForAddress(run)
     const origin = new URL(address).origin
@@ -236,71 +172,17 @@ describe('machine-room up', () => {
     expect(addressAt).toBeGreaterThan(0)
     expect(lines[addressAt - 1]).toBe(SOME_CHECKS_FAILED)
     expect(lines.slice(0, addressAt).filter((line) => line.startsWith('FAIL '))).toHaveLength(1)
-    expect(lines).toContainEqual(expect.stringContaining('The newest database backup is 30 hours old.'))
-
-    await kill(run)
-  }, 30000)
-
-  it('says Paperclip is not needed when the lane source is on, with no FAIL line', async () => {
-    const project = makeProject()
-    const { dist } = makeDist()
-    const run = startBin([
-      'up',
-      '--lanes',
-      '--paperclip', 'http://127.0.0.1:1',
-      '--root', project,
-      '--dist', dist,
-      '--port', '0',
-    ])
-
-    await waitForAddress(run)
-    const lines = outputLines(run)
-    const addressAt = lines.findIndex((line) => line.startsWith('machine-room: open '))
-    expect(lines[addressAt - 1]).toBe('Paperclip is not running, and the lane and session sources do not need it.')
-    expect(lines.some((line) => line.startsWith('FAIL'))).toBe(false)
-    expect(lines).not.toContain(PAPERCLIP_NOT_RUNNING)
-
-    await kill(run)
-  }, 30000)
-
-  it('says Paperclip is not running and serves the room without it', async () => {
-    const project = makeProject()
-    const { dist } = makeDist()
-    const run = startBin([
-      'up',
-      '--paperclip', 'http://127.0.0.1:1',
-      '--company', 'company-1',
-      '--root', project,
-      '--dist', dist,
-      '--port', '0',
-    ])
-
-    const address = await waitForAddress(run)
-    const origin = new URL(address).origin
-    const viewer = await fetch(`${origin}/`)
-    expect(viewer.status).toBe(200)
-    expect(await viewer.text()).toContain('<title>Room</title>')
-
-    const lines = outputLines(run)
-    const addressAt = lines.findIndex((line) => line.startsWith('machine-room: open '))
-    expect(addressAt).toBeGreaterThan(0)
-    expect(lines[addressAt - 1]).toBe(PAPERCLIP_NOT_RUNNING)
-    expect(lines.some((line) => line.startsWith('FAIL Paperclip does not answer at'))).toBe(true)
+    expect(lines).toContainEqual(expect.stringContaining('does not exist.'))
 
     await kill(run)
   }, 30000)
 
   it('stops with exit 1 when the build is missing', async () => {
     const project = makeProject()
+    const temp = makeFolder('machine-room-up-temp-')
     const { dist } = makeDist()
     rmSync(join(dist, 'index.html'))
-    const run = startBin([
-      'up',
-      '--paperclip', 'http://127.0.0.1:1',
-      '--company', 'company-1',
-      '--root', project,
-      '--dist', dist,
-    ])
+    const run = startBin(['up', '--root', project, '--dist', dist], childEnv(temp))
 
     const { code } = await waitForExit(run.child)
     expect(code).toBe(1)

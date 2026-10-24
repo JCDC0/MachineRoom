@@ -1,10 +1,7 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:http'
 import { join } from 'node:path'
-import { createElement } from 'react'
-import { renderToString } from 'react-dom/server'
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { createControlApi } from '../server/control.js'
+import { afterEach, describe, expect, it } from 'vitest'
+import { AGENT_REFUSAL } from '../server/control.js'
 import { createBridge } from '../server/index.js'
 import { createLanesSource, readLanes } from '../server/lanes-source.js'
 import {
@@ -14,22 +11,23 @@ import {
   readRecentLaneRecords,
   runNameOf,
 } from '../server/lane-tasks.js'
-import { createClient } from '../src/control/client.js'
-import { createMockClient } from '../src/control/mock.js'
 import { agentTasks } from '../src/model/liveTasks.js'
-import ApprovalsPanel, { emptyApprovalsText } from '../src/ui/panels/ApprovalsPanel.jsx'
-import { getJson, postJson, waitFor } from './helpers/loop.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const BASE_TIME = Date.parse('2026-10-24T10:00:00Z')
 const iso = (minutesAgo) => new Date(BASE_TIME - minutesAgo * 60000).toISOString()
-const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
 
 const AGENTS = [
   { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local' },
   { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local' },
   { id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process' },
 ]
+
+const LANES = {
+  opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/deepseek-v4.1-flash' } },
+  opencode2: { name: 'OpenCode 2', cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/deepseek-v4.1-flash' } },
+  agy: { name: 'agy', cli: { harness: 'agy', bin: 'agy.exe', model: 'gemini-3.8-flash-high' } },
+}
 
 const BRIEFS = [
   { id: 'L1', title: 'Costs and meters from the lane records' },
@@ -38,20 +36,6 @@ const BRIEFS = [
 ]
 
 const cleanups = []
-let originalTemp = null
-let tempRoot = ''
-
-beforeAll(() => {
-  originalTemp = process.env.TEMP
-  tempRoot = makeTempDir('mr-lane-tasks-')
-  process.env.TEMP = tempRoot
-})
-
-afterAll(() => {
-  if (originalTemp === undefined) delete process.env.TEMP
-  else process.env.TEMP = originalTemp
-  rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
-})
 
 afterEach(async () => {
   while (cleanups.length > 0) {
@@ -66,7 +50,15 @@ function tempDir(prefix = 'mr-lane-task-') {
   return dir
 }
 
-function record({ lane, briefs = [], log, startedAt = iso(20), minutes = 2, exitCode = 0, killed = false, project, task } = {}) {
+function useTemp(dir) {
+  const previous = process.env.TEMP
+  process.env.TEMP = dir
+  cleanups.push(() => {
+    process.env.TEMP = previous
+  })
+}
+
+function record({ lane, briefs = [], log, startedAt = iso(20), minutes = 2, exitCode = 0, killed = false, costUsd = null, project, task } = {}) {
   const value = {
     lane,
     briefs,
@@ -76,7 +68,7 @@ function record({ lane, briefs = [], log, startedAt = iso(20), minutes = 2, exit
     minutes,
     exitCode,
     killed,
-    costUsd: null,
+    costUsd,
     log,
     branch: '',
     commits: [],
@@ -86,75 +78,55 @@ function record({ lane, briefs = [], log, startedAt = iso(20), minutes = 2, exit
   return value
 }
 
-async function startLaneBridge({ lanes = true, paperclipUrl = DEAD_PAPERCLIP } = {}) {
-  const runs = join(process.env.TEMP, 'machineroom-runs')
+async function startLaneBridge({ lanes = true } = {}) {
+  const base = tempDir()
+  const runs = join(base, 'machineroom-runs')
   mkdirSync(runs, { recursive: true })
-  const projectRoot = process.cwd()
+  useTemp(base)
   const bridge = createBridge({
-    paperclipUrl,
-    companyId: 'comp-lanes',
-    projectRoot,
+    projectRoot: base,
     port: 0,
     env: {},
-    surfaceEveryMs: 0,
     reconnectMinMs: 60000,
     reconnectMaxMs: 60000,
-    lanesSource: lanes ? { folder: runs, pollMs: 20, quietMs: 60000 } : null,
+    lanesSource: lanes ? { folder: runs, lanes: LANES, repoRoot: base, pollMs: 20, quietMs: 60000 } : null,
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  return { url, runs, projectRoot }
+  return { url, runs }
 }
 
-async function startHangingUpstream() {
-  const asked = []
-  const sockets = new Set()
-  const server = createServer((req) => {
-    asked.push(req.url)
-  })
-  server.on('connection', (socket) => {
-    sockets.add(socket)
-    socket.on('close', () => sockets.delete(socket))
-  })
-  cleanups.push(
-    () =>
-      new Promise((resolve) => {
-        for (const socket of sockets) socket.destroy()
-        server.close(resolve)
-      })
-  )
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-  return { url: `http://127.0.0.1:${server.address().port}`, asked }
+async function getJson(url, path) {
+  const response = await fetch(`${url}${path}`)
+  return { status: response.status, body: await response.json() }
 }
 
-async function startAnsweringUpstream(answer) {
-  const asked = []
-  const server = createServer((req, res) => {
-    asked.push(req.url)
-    const [status, body] = answer(req)
-    res.writeHead(status, { 'content-type': 'application/json' })
-    res.end(JSON.stringify(body))
+async function postJson(url, path, body) {
+  const response = await fetch(`${url}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
   })
-  cleanups.push(() => new Promise((resolve) => server.close(resolve)))
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-  return { url: `http://127.0.0.1:${server.address().port}`, asked }
+  return { status: response.status, body: await response.json() }
 }
 
-const laneSource = (agents, openRuns = []) => ({ agents, openRuns: () => openRuns })
-
-async function askControl(options, path, method = 'GET') {
-  let sent = null
-  const api = createControlApi({
-    companyId: 'comp-1',
-    sendJson: (req, res, status, body) => {
-      sent = { status, body }
-    },
-    readJsonBody: async () => ({}),
-    timeoutMs: 2000,
-    ...options,
+async function patchJson(url, path, body) {
+  const response = await fetch(`${url}${path}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
   })
-  const handled = await api.handle({ method }, {}, new URL(`http://bridge${path}`))
-  return { handled, ...sent }
+  return { status: response.status, body: await response.json() }
+}
+
+async function waitFor(fn, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const value = await fn()
+    if (value) return value
+    await new Promise((resolve) => setTimeout(resolve, 15))
+  }
+  throw new Error('condition not met in time')
 }
 
 describe('lane tasks', () => {
@@ -284,17 +256,15 @@ describe('lane tasks', () => {
     writeFileSync(join(runs, `${name}.meta.json`), `${JSON.stringify({ lane: 'opencode', project })}\n`)
     writeFileSync(join(runs, `${name}.log`), '')
 
-    const runsOpen = await waitFor(() => (source.openRuns().length > 0 ? source.openRuns() : null), {
-      what: 'the lane source to open the run',
-    })
+    const runsOpen = await waitFor(() => (source.openRuns().length > 0 ? source.openRuns() : null), 3000)
     expect(runsOpen).toHaveLength(1)
     expect(runsOpen[0]).toMatchObject({ name, lane: 'opencode', project })
     expect(runsOpen[0].startedAt).toEqual(expect.any(String))
   })
 })
 
-describe('the lane routes with no Paperclip', () => {
-  it('answers tasks, live runs and approvals from the lane runs', async () => {
+describe('the lane routes', () => {
+  it('answers tasks, live runs, comments and approvals from the lane runs', async () => {
     const { url, runs } = await startLaneBridge()
     const openName = 'opencode-L2-20261024-120000'
     const goodName = 'opencode-L1-20261024-100000'
@@ -306,7 +276,7 @@ describe('the lane routes with no Paperclip', () => {
     writeFileSync(
       join(runs, 'runs.jsonl'),
       [
-        record({ lane: 'opencode', briefs: ['L1'], log: join(runs, `${goodName}.log`), startedAt: iso(30), exitCode: 0 }),
+        record({ lane: 'opencode', briefs: ['L1'], log: join(runs, `${goodName}.log`), startedAt: iso(30), exitCode: 0, costUsd: 0.5 }),
         record({ lane: 'opencode2', briefs: ['S6g'], log: join(runs, `${failedName}.log`), startedAt: iso(40), exitCode: 1 }),
         record({
           lane: 'opencode',
@@ -322,13 +292,10 @@ describe('the lane routes with no Paperclip', () => {
         .concat('\n')
     )
 
-    const issues = await waitFor(
-      async () => {
-        const { status, body } = await getJson(`${url}/api/control/issues`)
-        return status === 200 && Array.isArray(body) && body.some((issue) => issue.id === openName) ? body : null
-      },
-      { what: 'the open lane task' }
-    )
+    const issues = await waitFor(async () => {
+      const { status, body } = await getJson(url, '/api/control/issues')
+      return status === 200 && Array.isArray(body) && body.some((issue) => issue.id === openName) ? body : null
+    })
     expect(issues).toHaveLength(4)
     const open = issues.find((issue) => issue.id === openName)
     expect(open).toMatchObject({ identifier: 'L2', status: 'in_progress', assigneeAgentId: 'agent-opencode' })
@@ -337,7 +304,7 @@ describe('the lane routes with no Paperclip', () => {
     expect(issues.find((issue) => issue.id === failedName)).toMatchObject({ identifier: 'S6g', status: 'blocked' })
     expect(issues.find((issue) => issue.id === projectName)).toMatchObject({ identifier: 'project', title: task, status: 'done' })
 
-    const live = await getJson(`${url}/api/control/live-runs`)
+    const live = await getJson(url, '/api/control/live-runs')
     expect(live).toEqual({
       status: 200,
       body: {
@@ -359,120 +326,60 @@ describe('the lane routes with no Paperclip', () => {
     const mapping = agentTasks(live.body.runs, issues, [{ id: 'agent-opencode', key: 'opencode' }])
     expect(mapping.get('opencode')).toBe('L2')
 
-    expect(await getJson(`${url}/api/control/comments?issueId=${encodeURIComponent(openName)}`)).toEqual({ status: 200, body: [] })
-    expect(await getJson(`${url}/api/control/approvals`)).toEqual({ status: 200, body: [] })
-    const health = await createClient({ baseUrl: url }).health()
-    expect(health).toMatchObject({ lanes: true, paperclip: false })
+    expect(await getJson(url, `/api/control/comments?issueId=${encodeURIComponent(openName)}`)).toEqual({ status: 200, body: [] })
+    expect(await getJson(url, '/api/control/approvals')).toEqual({ status: 200, body: [] })
 
-    const created = await postJson(`${url}/api/control/issues`, { title: 'Make a task', assigneeAgentId: 'agent-opencode' })
+    const cost = await getJson(url, '/api/control/costs')
+    expect(cost.body.summary.spendCents).toBe(50)
+    expect(cost.body.quota).toEqual([])
+
+    const created = await postJson(url, '/api/control/issues', { title: 'Make a task', assigneeAgentId: 'agent-opencode' })
     expect(created).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })
-    const withoutAgent = await postJson(`${url}/api/control/issues`, { title: 'Make a task' })
+    const withoutAgent = await postJson(url, '/api/control/issues', { title: 'Make a task' })
     expect(withoutAgent).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })
-    const commented = await postJson(`${url}/api/control/comments`, { issueId: openName, body: 'Please read this.' })
+    const commented = await postJson(url, '/api/control/comments', { issueId: openName, body: 'Please read this.' })
     expect(commented).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })
   })
 
-  it('leaves the routes as they were with the lane source off', async () => {
-    const { url } = await startLaneBridge({ lanes: false })
-    expect((await getJson(`${url}/api/control/issues`)).status).toBe(502)
-    expect((await getJson(`${url}/api/control/live-runs`)).status).toBe(502)
-    expect((await getJson(`${url}/api/control/approvals`)).status).toBe(502)
-    expect((await getJson(`${url}/api/control/comments?issueId=x`)).status).toBe(502)
-  })
-})
-
-describe('the lane fallbacks and the Paperclip probe', () => {
-  it('answers the lane reads at once when the probe says Paperclip is down', async () => {
-    const upstream = await startAnsweringUpstream(() => [500, { error: 'boom' }])
-    const options = { paperclipUrl: upstream.url, lanes: () => laneSource(AGENTS), paperclipUp: () => false }
-
-    const issues = await askControl(options, '/api/control/issues')
-    expect(issues.status).toBe(200)
-    expect(Array.isArray(issues.body)).toBe(true)
-    expect(await askControl(options, '/api/control/live-runs')).toMatchObject({ status: 200, body: { runs: [] } })
-    expect(await askControl(options, '/api/control/approvals')).toMatchObject({ status: 200, body: [] })
-    expect(await askControl(options, '/api/control/comments?issueId=anything')).toMatchObject({ status: 200, body: [] })
-
-    const costs = await askControl(options, '/api/control/costs')
-    expect(costs.status).toBe(200)
-    expect(costs.body.byAgent.map((row) => row.agentId)).toEqual(AGENTS.map((agent) => agent.id))
-
-    const agents = await askControl(options, '/api/control/agents')
+  it('lists the lane agents and refuses every agent write', async () => {
+    const { url } = await startLaneBridge()
+    const agents = await getJson(url, '/api/control/agents')
     expect(agents.status).toBe(200)
-    expect(agents.body.map((agent) => agent.key)).toEqual(AGENTS.map((agent) => agent.key))
-    expect(upstream.asked).toEqual([])
-  })
-
-  it('reads Paperclip when the probe says it is up, and still falls back to lanes on an error', async () => {
-    const upstream = await startAnsweringUpstream((req) =>
-      req.url.includes('/issues') ? [200, [{ id: 'issue-1', identifier: 'JC-1', title: 'From Paperclip' }]] : [500, { error: 'boom' }]
-    )
-    const options = { paperclipUrl: upstream.url, lanes: () => laneSource(AGENTS), paperclipUp: () => true }
-
-    const issues = await askControl(options, '/api/control/issues')
-    expect(issues.body.map((issue) => issue.id)).toEqual(['issue-1'])
-
-    const costs = await askControl(options, '/api/control/costs')
-    expect(costs.status).toBe(200)
-    expect(costs.body.byAgent.map((row) => row.agentId)).toEqual(AGENTS.map((agent) => agent.id))
-    expect(upstream.asked).toEqual([
-      '/api/companies/comp-1/issues',
-      '/api/companies/comp-1/costs/summary',
-      '/api/companies/comp-1/costs/by-agent',
-      '/api/companies/comp-1/costs/quota-windows',
+    expect(agents.body.map((agent) => [agent.key, agent.name, agent.role, agent.budgetMonthlyCents])).toEqual([
+      ['opencode', 'OpenCode', null, 0],
+      ['opencode2', 'OpenCode 2', null, 0],
+      ['agy', 'agy', null, 0],
     ])
+
+    expect(await postJson(url, '/api/control/agents', { name: 'Scout', adapterType: 'claude_local' })).toEqual({
+      status: 409,
+      body: { error: AGENT_REFUSAL },
+    })
+    expect(await patchJson(url, '/api/control/agents/agent-opencode', { model: 'm' })).toEqual({
+      status: 409,
+      body: { error: AGENT_REFUSAL },
+    })
+    expect(await postJson(url, '/api/control/agents/agent-opencode/budget', { budgetMonthlyCents: 250 })).toEqual({
+      status: 409,
+      body: { error: AGENT_REFUSAL },
+    })
+    const missing = await postJson(url, '/api/control/agents/%E0%A4%A/budget', { budgetMonthlyCents: 250 })
+    expect(missing).toEqual({ status: 404, body: { error: 'That agent no longer exists.' } })
   })
 
-  it('answers through the bridge at once when its Paperclip probe is down', async () => {
-    const upstream = await startHangingUpstream()
-    const { url } = await startLaneBridge({ paperclipUrl: upstream.url })
-    const started = Date.now()
-    const issues = await getJson(`${url}/api/control/issues`)
-    expect(issues.status).toBe(200)
-    expect(Array.isArray(issues.body)).toBe(true)
-    expect(Date.now() - started).toBeLessThan(3000)
-    expect(upstream.asked.filter((path) => path.includes('/issues'))).toEqual([])
-  })
-
-  it('lets a real Paperclip error through when the source has no lane agent', async () => {
-    const upstream = await startAnsweringUpstream(() => [500, { error: 'boom' }])
-    const options = { paperclipUrl: upstream.url, lanes: () => laneSource([]), paperclipUp: () => false }
-
-    for (const path of [
-      '/api/control/issues',
-      '/api/control/live-runs',
-      '/api/control/approvals',
-      '/api/control/costs',
-      '/api/control/agents',
-      '/api/control/comments?issueId=anything',
-    ]) {
-      expect(await askControl(options, path), path).toMatchObject({
-        status: 502,
-        body: { error: 'Paperclip could not complete that.' },
-      })
-    }
-  })
-})
-
-describe('the Approvals tab in lane mode', () => {
-  it('says lanes need no approvals when the health says lanes and no Paperclip', () => {
-    const client = createMockClient({ latencyMs: 0 })
-    const html = renderToString(
-      createElement(ApprovalsPanel, {
-        client,
-        initialApprovals: [],
-        initialAgents: [],
-        initialHealth: { lanes: true, paperclip: false },
-      })
+  it('reads the run records with the live lane source off', async () => {
+    const { url, runs } = await startLaneBridge({ lanes: false })
+    const name = 'opencode-L1-20261024-100000'
+    writeFileSync(
+      join(runs, 'runs.jsonl'),
+      `${JSON.stringify(record({ lane: 'opencode', briefs: ['L1'], log: join(runs, `${name}.log`), startedAt: iso(30), exitCode: 0 }))}\n`
     )
-    expect(html).toContain('Lane runs need no approvals.')
-    expect(html).not.toContain('No approvals found.')
-  })
 
-  it('keeps the old empty line for a Paperclip room', () => {
-    expect(emptyApprovalsText({ lanes: true, paperclip: true })).toBe('No approvals found.')
-    expect(emptyApprovalsText({ lanes: false })).toBe('No approvals found.')
-    expect(emptyApprovalsText(null)).toBe('No approvals found.')
-    expect(emptyApprovalsText({ lanes: true, paperclip: false })).toBe('Lane runs need no approvals.')
+    const issues = await getJson(url, '/api/control/issues')
+    expect(issues.status).toBe(200)
+    expect(issues.body.map((issue) => issue.id)).toEqual([name])
+    expect(await getJson(url, '/api/control/live-runs')).toEqual({ status: 200, body: { runs: [] } })
+    expect(await getJson(url, '/api/control/approvals')).toEqual({ status: 200, body: [] })
+    expect(await getJson(url, '/api/control/comments?issueId=x')).toEqual({ status: 200, body: [] })
   })
 })

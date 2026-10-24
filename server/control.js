@@ -1,6 +1,7 @@
-import { CANNOT_TAKE_TASKS, EFFORTS, cleanAgentDraft, cleanAgentPatch, fieldProblem, taskDraftProblem } from '../src/control/agents.js'
+import { EFFORTS } from '../src/control/agents.js'
 import { readLaneCosts } from './lane-costs.js'
 import { LANE_TASK_REFUSAL, laneTaskState, readLaneBriefs, readRecentLaneRecords } from './lane-tasks.js'
+import { laneAgents, readLanes } from './lanes-source.js'
 import { MODELS } from './models.js'
 import { runsFile } from './runs.js'
 
@@ -14,23 +15,18 @@ const AGENT_STATUS = {
   terminated: 'error',
 }
 
-const OVERRIDE_KEYS = ['model', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed']
-const CONFIG_SETTING_KEYS = ['model', 'maxTurnsPerRun', 'timeoutSec']
 const EFFORT_KEYS = {
   claude_local: 'effort',
   codex_local: 'modelReasoningEffort',
   grok_local: 'reasoningEffort',
   kimi_local: 'effort',
   opencode_local: 'variant',
-  paperclip_runner: 'modelReasoningEffort',
   pi_local: 'thinking',
 }
-const TERMINAL_RUN = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
-const LIVE_RUN = new Set(['queued', 'running'])
+
 const RUN_NOTICES = new Set(['heartbeat.run.queued', 'heartbeat.run.status'])
-export const LIVE_RUN_LIMIT = 50
 const DECISION_ROUTES = { approve: 'approve', reject: 'reject', 'request-revision': 'request-revision' }
-export const UPSTREAM_TIMEOUT_MS = 15000
+export const AGENT_REFUSAL = 'Agents come from docs/agents/lanes.json.'
 
 function plainId(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : ''
@@ -79,27 +75,12 @@ function subagentsOf(raw) {
   return { subagentsAllowed: allowed, subagentDepth: allowed ? depth : 0 }
 }
 
-function metadataOf(raw) {
-  return raw?.metadata && typeof raw.metadata === 'object' && !Array.isArray(raw.metadata) ? { ...raw.metadata } : {}
-}
-
-function mergedSubagents(changes, raw) {
-  const before = subagentsOf(raw)
-  const allowed = 'subagentsAllowed' in changes ? changes.subagentsAllowed : before.subagentsAllowed
-  let depth = 'subagentDepth' in changes ? changes.subagentDepth : before.subagentDepth
-  if ('subagentsAllowed' in changes) {
-    if (!allowed) depth = 0
-    else if (!('subagentDepth' in changes) && depth === 0) depth = 1
-  }
-  return { allowed, depth }
-}
-
 export function changeEvents(frame) {
   const type = frame?.type
   const payload = frame?.payload ?? {}
   if (type === 'agent.status') return [{ topic: 'agents' }]
   if (RUN_NOTICES.has(type)) {
-    const costs = type === 'heartbeat.run.status' && TERMINAL_RUN.has(payload.status) ? [{ topic: 'costs' }] : []
+    const costs = type === 'heartbeat.run.status' && ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(payload.status) ? [{ topic: 'costs' }] : []
     return [{ topic: 'agents' }, { topic: 'issues' }, ...costs, { topic: 'liveRuns' }]
   }
   if (type !== 'activity.logged') return []
@@ -145,211 +126,27 @@ export function mapAgent(raw, spendCents) {
   }
 }
 
-export function mapOverrides(overrides) {
-  const config = overrides?.adapterConfig
-  if (!config || typeof config !== 'object') return null
-  const out = {}
-  for (const key of OVERRIDE_KEYS) {
-    if (config[key] !== undefined && config[key] !== null && config[key] !== '') out[key] = config[key]
-  }
-  return Object.keys(out).length ? out : null
-}
-
-export function mapIssue(raw) {
-  return {
-    id: String(raw?.id ?? ''),
-    identifier: String(raw?.identifier ?? ''),
-    title: String(raw?.title ?? ''),
-    description: String(raw?.description ?? ''),
-    status: String(raw?.status ?? 'todo'),
-    priority: String(raw?.priority ?? 'medium'),
-    assigneeAgentId: plainId(raw?.assigneeAgentId) || null,
-    parentId: plainId(raw?.parentId) || null,
-    overrides: mapOverrides(raw?.assigneeAdapterOverrides),
-    createdAt: String(raw?.createdAt ?? ''),
-    updatedAt: String(raw?.updatedAt ?? ''),
-  }
-}
-
-function textOrNull(value) {
-  return typeof value === 'string' && value ? value : null
-}
-
-export function mapLiveRun(raw) {
-  return {
-    runId: textOrNull(raw?.id),
-    agentId: textOrNull(raw?.agentId),
-    agentName: textOrNull(raw?.agentName),
-    adapterType: textOrNull(raw?.adapterType),
-    status: textOrNull(raw?.status),
-    issueId: textOrNull(raw?.issueId),
-    startedAt: textOrNull(raw?.startedAt),
-    lastOutputAt: textOrNull(raw?.lastOutputAt),
-  }
-}
-
-function createdTime(raw) {
-  const time = Date.parse(raw?.createdAt ?? '')
-  return Number.isFinite(time) ? time : -Infinity
-}
-
-export function liveRunList(list) {
-  const live = (Array.isArray(list) ? list : []).filter((raw) => LIVE_RUN.has(raw?.status))
-  live.sort((a, b) => createdTime(b) - createdTime(a) || 0)
-  return live.slice(0, LIVE_RUN_LIMIT).map(mapLiveRun)
-}
-
-export function mapComment(raw, agentNames = new Map()) {
-  const authorAgentId = plainId(raw?.authorAgentId) || null
-  const name =
-    typeof raw?.authorName === 'string' && raw.authorName
-      ? raw.authorName
-      : authorAgentId
-        ? agentNames.get(authorAgentId) ?? 'Agent'
-        : 'You'
-  return {
-    id: String(raw?.id ?? ''),
-    issueId: String(raw?.issueId ?? ''),
-    authorAgentId,
-    authorName: name,
-    body: String(raw?.body ?? ''),
-    createdAt: String(raw?.createdAt ?? ''),
-  }
-}
-
-export function mapApproval(raw, decisionNote) {
-  const payload = raw?.payload && typeof raw.payload === 'object' ? raw.payload : {}
-  const note = raw?.decisionNote ?? raw?.decision?.note ?? payload.decisionNote ?? decisionNote
-  const approval = {
-    id: String(raw?.id ?? ''),
-    type: String(raw?.type ?? ''),
-    status: String(raw?.status ?? 'pending'),
-    summary: String(raw?.summary ?? payload.summary ?? payload.title ?? ''),
-    requestedByAgentId: plainId(raw?.requestedByAgentId) || null,
-    createdAt: String(raw?.createdAt ?? ''),
-  }
-  const agentId = plainId(raw?.agentId) || plainId(payload.agentId)
-  if (agentId) approval.agentId = agentId
-  if (note) approval.decisionNote = String(note)
-  return approval
-}
-
-export function mapCosts({ summary, rows, quota }) {
+export function mapCosts(costs) {
   return {
     summary: {
-      spendCents: money(summary?.spendCents),
-      budgetCents: money(summary?.budgetCents),
-      utilizationPercent: Number.isFinite(summary?.utilizationPercent) ? summary.utilizationPercent : 0,
+      spendCents: money(costs?.summary?.spendCents),
+      budgetCents: money(costs?.summary?.budgetCents),
+      utilizationPercent: Number.isFinite(costs?.summary?.utilizationPercent) ? costs.summary.utilizationPercent : null,
     },
-    byAgent: (Array.isArray(rows) ? rows : []).map((row) => ({
+    byAgent: (Array.isArray(costs?.byAgent) ? costs.byAgent : []).map((row) => ({
       agentId: String(row?.agentId ?? ''),
       agentName: String(row?.agentName ?? ''),
       costCents: money(row?.costCents),
-      inputTokens: money(row?.inputTokens),
-      outputTokens: money(row?.outputTokens),
+      inputTokens: Number.isInteger(row?.inputTokens) && row.inputTokens >= 0 ? row.inputTokens : null,
+      outputTokens: Number.isInteger(row?.outputTokens) && row.outputTokens >= 0 ? row.outputTokens : null,
     })),
-    quota: (Array.isArray(quota) ? quota : []).map((entry) => {
-      const item = {
-        provider: String(entry?.provider ?? ''),
-        ok: entry?.ok !== false,
-        windows: (Array.isArray(entry?.windows) ? entry.windows : []).map((window) => ({
-          label: String(window?.label ?? ''),
-          usedPercent: Number.isFinite(window?.usedPercent) ? window.usedPercent : null,
-          resetsAt: typeof window?.resetsAt === 'string' && window.resetsAt ? window.resetsAt : null,
-          detail: typeof window?.detail === 'string' && window.detail ? window.detail : null,
-        })),
-      }
-      if (entry?.error) item.error = String(entry.error)
-      return item
-    }),
+    quota: [],
   }
-}
-
-export function buildCreateIssueBody(draft, overrides, project = {}) {
-  const body = {
-    title: String(draft.title).trim(),
-    description: String(draft.description ?? ''),
-    assigneeAgentId: draft.assigneeAgentId,
-    priority: draft.priority ?? 'medium',
-    status: 'todo',
-  }
-  if (project.projectId) body.projectId = project.projectId
-  if (project.projectWorkspaceId) body.projectWorkspaceId = project.projectWorkspaceId
-  if (overrides) body.assigneeAdapterOverrides = { adapterConfig: overrides }
-  return body
-}
-
-export function issueOverrides(draft) {
-  if (!draft || typeof draft !== 'object') return null
-  const out = {}
-  for (const key of OVERRIDE_KEYS) {
-    if (draft[key] !== undefined && draft[key] !== null && draft[key] !== '') out[key] = draft[key]
-  }
-  return Object.keys(out).length ? out : null
-}
-
-export function buildHireBody(clean) {
-  const adapterConfig = {}
-  for (const key of CONFIG_SETTING_KEYS) {
-    if (clean[key] !== null) adapterConfig[key] = clean[key]
-  }
-  const effortKey = EFFORT_KEYS[clean.adapterType]
-  if (effortKey && clean.reasoningEffort !== null) adapterConfig[effortKey] = clean.reasoningEffort
-  const metadata = { subagents: { allowed: clean.subagentsAllowed, depth: clean.subagentDepth } }
-  if (!effortKey && clean.reasoningEffort !== null) metadata.reasoningEffort = clean.reasoningEffort
-  const body = {
-    name: clean.name,
-    role: clean.role,
-    adapterType: clean.adapterType,
-    adapterConfig,
-    metadata,
-    budgetMonthlyCents: clean.budgetMonthlyCents,
-  }
-  if (clean.reportsToAgentId !== null) body.reportsTo = clean.reportsToAgentId
-  if (clean.instructions) {
-    body.instructionsBundle = { entryFile: 'AGENTS.md', files: { 'AGENTS.md': clean.instructions } }
-  }
-  return body
-}
-
-export function buildUpdateBody(clean, raw) {
-  const changes = { ...clean }
-  const budgetMonthlyCents = 'budgetMonthlyCents' in changes ? changes.budgetMonthlyCents : undefined
-  delete changes.budgetMonthlyCents
-  const status = changes.status
-  delete changes.status
-  const patch = {}
-  if ('name' in changes) patch.name = changes.name
-  if ('role' in changes) patch.role = changes.role
-  if ('reportsToAgentId' in changes) patch.reportsTo = changes.reportsToAgentId
-  const adapterConfig = {}
-  for (const key of CONFIG_SETTING_KEYS) {
-    if (key in changes) adapterConfig[key] = changes[key]
-  }
-  const effortKey = EFFORT_KEYS[String(raw?.adapterType ?? '')]
-  if ('reasoningEffort' in changes && effortKey) adapterConfig[effortKey] = changes.reasoningEffort
-  if (Object.keys(adapterConfig).length) patch.adapterConfig = adapterConfig
-  const metadata = metadataOf(raw)
-  let metadataChanged = false
-  if ('reasoningEffort' in changes && !effortKey) {
-    metadataChanged = true
-    if (changes.reasoningEffort === null) delete metadata.reasoningEffort
-    else metadata.reasoningEffort = changes.reasoningEffort
-  }
-  if ('subagentsAllowed' in changes || 'subagentDepth' in changes) {
-    metadataChanged = true
-    metadata.subagents = mergedSubagents(changes, raw)
-  }
-  if (metadataChanged) patch.metadata = metadata
-  return { patch, budgetMonthlyCents, status }
 }
 
 export function createControlApi(options) {
-  const { paperclipUrl, companyId, projectId, projectWorkspaceId, sendJson, readJsonBody, featureOn } = options
-  const base = String(paperclipUrl).replace(/\/+$/, '')
-  const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : UPSTREAM_TIMEOUT_MS
+  const { sendJson, readJsonBody } = options
   const lanes = typeof options.lanes === 'function' ? options.lanes : () => null
-  const paperclipUp = typeof options.paperclipUp === 'function' ? options.paperclipUp : () => true
 
   function laneNow() {
     try {
@@ -360,143 +157,42 @@ export function createControlApi(options) {
     }
   }
 
-  function laneAgents() {
+  function laneAgentList() {
     try {
       const source = lanes()
-      return source && Array.isArray(source.agents) ? source.agents : []
-    } catch {
-      return []
-    }
+      if (source && Array.isArray(source.agents)) return source.agents
+    } catch {}
+    return laneAgents(readLanes())
   }
 
-  function probeDown() {
+  function laneCosts(agents = laneAgentList()) {
     try {
-      return paperclipUp() === false
+      return readLaneCosts({ agents })
     } catch {
-      return false
-    }
-  }
-
-  function laneFallback() {
-    const agents = laneAgents()
-    if (agents.length === 0) return null
-    try {
-      return { agents, costs: readLaneCosts({ agents }) }
-    } catch {
-      return null
+      return readLaneCosts({ agents: [] })
     }
   }
 
   function laneState() {
     const source = laneNow()
-    if (!source) return null
-    const agents = laneAgents()
-    if (agents.length === 0) return null
     let openRuns = []
-    try {
-      openRuns = source.openRuns()
-    } catch {
-      openRuns = []
+    if (source) {
+      try {
+        openRuns = source.openRuns()
+      } catch {
+        openRuns = []
+      }
     }
     return laneTaskState({
       openRuns,
-      agents,
+      agents: laneAgentList(),
       records: readRecentLaneRecords(runsFile()),
       briefs: readLaneBriefs(),
     })
   }
 
-  function laneAgentIds() {
-    const source = laneNow()
-    if (!source) return new Set()
-    return new Set((Array.isArray(source.agents) ? source.agents : []).map((agent) => agent?.id).filter(Boolean))
-  }
-
-  function laneAgentList(fallback) {
-    const cents = new Map(fallback.costs.byAgent.map((row) => [row.agentId, row.costCents]))
-    return fallback.agents.map((agent) => ({ ...mapAgent(agent, cents.get(agent.id)), role: null }))
-  }
-
-  async function upstream(method, path, body) {
-    const signal = AbortSignal.timeout(timeoutMs)
-    let response
-    try {
-      response = await fetch(`${base}${path}`, {
-        method,
-        headers: body === undefined ? {} : { 'content-type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal,
-      })
-    } catch {
-      return { status: 0, json: null, timedOut: signal.aborted }
-    }
-    let json = null
-    try {
-      json = await response.json()
-    } catch {
-      if (signal.aborted) return { status: 0, json: null, timedOut: true }
-      json = null
-    }
-    return { status: response.status, json }
-  }
-
   function fail(req, res, status, message) {
     sendJson(req, res, status, { error: message })
-  }
-
-  function featureOff(req, res, feature) {
-    if (typeof featureOn !== 'function' || featureOn(feature) !== false) return false
-    fail(req, res, 503, `Paperclip changed: ${feature} is off. Run npm run doctor to see which routes.`)
-    return true
-  }
-
-  function upstreamFailure(answer, missing, generic) {
-    if (answer.status === 0) return answer.timedOut ? [504, 'Paperclip did not answer in time.'] : [502, 'Paperclip is not reachable.']
-    if (answer.status === 404) return [404, missing]
-    if (answer.status >= 500) return [502, 'Paperclip could not complete that.']
-    return [400, generic]
-  }
-
-  async function sendAgent(req, res, agentId) {
-    const spend = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`)
-    const agents = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
-    if (agents.status !== 200) {
-      const [status, message] = upstreamFailure(agents, 'That agent no longer exists.', 'Paperclip could not read the agents.')
-      fail(req, res, status, message)
-      return
-    }
-    const rows = Array.isArray(spend.json) ? spend.json : []
-    const list = Array.isArray(agents.json) ? agents.json : []
-    const found = list.find((agent) => agent?.id === agentId)
-    if (!found) {
-      fail(req, res, 404, 'That agent no longer exists.')
-      return
-    }
-    const row = rows.find((item) => item?.agentId === agentId)
-    sendJson(req, res, 200, mapAgent(found, Number.isInteger(row?.costCents) ? row.costCents : undefined))
-  }
-
-  async function readAgents(req, res) {
-    const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
-    if (answer.status !== 200) {
-      const [code, message] = upstreamFailure(answer, 'That agent no longer exists.', 'Paperclip could not read the agents.')
-      fail(req, res, code, message)
-      return null
-    }
-    return Array.isArray(answer.json) ? answer.json : []
-  }
-
-  async function hireApproval(rawAgent, fromAnswer) {
-    const company = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}`)
-    const flagged = company.json?.requireBoardApprovalForNewAgents === true
-    const waiting = rawAgent?.status === 'pending_approval'
-    if (!flagged && !waiting) return null
-    const listed = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/approvals`)
-    const rows = Array.isArray(listed.json) ? listed.json : []
-    const ofAgent = (row) => row?.type === 'hire_agent' && plainId(row?.payload?.agentId ?? row?.agentId) === plainId(rawAgent?.id)
-    const match = rows.find((row) => ofAgent(row) && row?.status === 'pending') ?? rows.find(ofAgent)
-    if (match) return mapApproval(match)
-    return fromAnswer && typeof fromAnswer === 'object' ? mapApproval(fromAnswer) : null
   }
 
   async function handle(req, res, url) {
@@ -509,370 +205,76 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/agents') {
-      if (probeDown()) {
-        const early = laneFallback()
-        if (early) {
-          sendJson(req, res, 200, laneAgentList(early))
-          return true
-        }
-      }
-      const [agents, spend] = await Promise.all([
-        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`),
-        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),
-      ])
-      if (agents.status !== 200 || spend.status !== 200) {
-        const fallback = laneFallback()
-        if (fallback) {
-          sendJson(req, res, 200, laneAgentList(fallback))
-          return true
-        }
-        const [status, message] = upstreamFailure(agents.status !== 200 ? agents : spend, 'That agent no longer exists.', 'Paperclip could not read the agents.')
-        sendJson(req, res, status, { error: message })
-        return true
-      }
-      const rows = Array.isArray(spend.json) ? spend.json : []
-      const list = Array.isArray(agents.json) ? agents.json : []
-      const out = list.map((agent) => {
-        const row = rows.find((item) => item?.agentId === agent?.id)
-        return mapAgent(agent, Number.isInteger(row?.costCents) ? row.costCents : undefined)
-      })
-      sendJson(req, res, 200, out)
+      const agents = laneAgentList()
+      const costs = laneCosts(agents)
+      const cents = new Map(costs.byAgent.map((row) => [row.agentId, row.costCents]))
+      sendJson(
+        req,
+        res,
+        200,
+        agents.map((agent) => ({ ...mapAgent(agent, cents.get(agent.id)), role: null }))
+      )
       return true
     }
 
     if (method === 'POST' && path === '/api/control/agents') {
-      if (featureOff(req, res, 'team')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      let clean
-      try {
-        clean = cleanAgentDraft(body)
-      } catch (error) {
-        fail(req, res, 400, error.message)
-        return true
-      }
-      const key = slugKey(clean.name)
-      if (!key) {
-        fail(req, res, 400, 'The name needs letters or numbers.')
-        return true
-      }
-      const list = await readAgents(req, res)
-      if (list === null) return true
-      if (list.some((agent) => keyOf(agent) === key)) {
-        fail(req, res, 400, 'An agent with that name already exists.')
-        return true
-      }
-      if (clean.reportsToAgentId && !list.some((agent) => agent?.id === clean.reportsToAgentId)) {
-        fail(req, res, 400, 'The agent it reports to no longer exists.')
-        return true
-      }
-      const hired = await upstream('POST', `/api/companies/${encodeURIComponent(companyId)}/agent-hires`, buildHireBody(clean))
-      if (hired.status >= 300 || !hired.json) {
-        const [code, message] = upstreamFailure(hired, 'Paperclip did not accept that agent.', 'Paperclip did not accept that agent.')
-        fail(req, res, code, message)
-        return true
-      }
-      const rawAgent = hired.json.agent ?? hired.json
-      const approval = await hireApproval(rawAgent, hired.json.approval)
-      sendJson(req, res, 201, { agent: mapAgent(rawAgent), approval })
+      fail(req, res, 409, AGENT_REFUSAL)
       return true
     }
 
     const updateAgent = /^\/api\/control\/agents\/([^/]+)$/.exec(path)
     if (method === 'PATCH' && updateAgent) {
-      if (featureOff(req, res, 'team')) return true
+      const id = decodedId(updateAgent[1])
+      if (id === null) {
+        fail(req, res, 404, 'That agent no longer exists.')
+        return true
+      }
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      let id
-      try {
-        id = decodeURIComponent(updateAgent[1])
-      } catch {
-        fail(req, res, 404, 'That agent no longer exists.')
-        return true
-      }
-      const list = await readAgents(req, res)
-      if (list === null) return true
-      const raw = list.find((agent) => agent?.id === id)
-      if (!raw) {
-        fail(req, res, 404, 'That agent no longer exists.')
-        return true
-      }
-      if (raw.status === 'terminated') {
-        fail(req, res, 400, 'That agent was terminated.')
-        return true
-      }
-      if (raw.status === 'pending_approval') {
-        fail(req, res, 400, 'Approve the hire first.')
-        return true
-      }
-      let clean
-      try {
-        clean = cleanAgentPatch(body)
-      } catch (error) {
-        fail(req, res, 400, error.message)
-        return true
-      }
-      if ('instructions' in clean) {
-        fail(req, res, 400, 'The instructions cannot be changed here yet.')
-        return true
-      }
-      if (clean.reportsToAgentId === raw.id) {
-        fail(req, res, 400, 'An agent cannot report to itself.')
-        return true
-      }
-      if (clean.reportsToAgentId && !list.some((agent) => agent?.id === clean.reportsToAgentId)) {
-        fail(req, res, 400, 'The agent it reports to no longer exists.')
-        return true
-      }
-      if ('name' in clean && list.some((agent) => agent?.id !== raw.id && keyOf(agent) === slugKey(clean.name))) {
-        fail(req, res, 400, 'An agent with that name already exists.')
-        return true
-      }
-      const allowed = 'subagentsAllowed' in clean ? clean.subagentsAllowed : subagentsOf(raw).subagentsAllowed
-      if ('subagentDepth' in clean && !allowed) {
-        fail(req, res, 400, 'Turn subagents on to set a depth.')
-        return true
-      }
-      const { patch, budgetMonthlyCents, status } = buildUpdateBody(clean, raw)
-      if (Object.keys(patch).length > 0) {
-        const patched = await upstream('PATCH', `/api/agents/${encodeURIComponent(id)}`, patch)
-        if (patched.status >= 300) {
-          const [code, message] = upstreamFailure(patched, 'That agent no longer exists.', 'Paperclip did not accept that update.')
-          fail(req, res, code, message)
-          return true
-        }
-      }
-      if (budgetMonthlyCents !== undefined) {
-        const budgeted = await upstream('PATCH', `/api/agents/${encodeURIComponent(id)}/budgets`, { budgetMonthlyCents })
-        if (budgeted.status >= 300) {
-          const [code, message] = upstreamFailure(budgeted, 'That agent no longer exists.', 'Paperclip did not accept that budget.')
-          fail(req, res, code, message)
-          return true
-        }
-      }
-      const turn = status === 'paused' && raw.status !== 'paused' ? 'pause' : status === 'active' && raw.status === 'paused' ? 'resume' : null
-      if (turn) {
-        const turned = await upstream('POST', `/api/agents/${encodeURIComponent(id)}/${turn}`)
-        if (turned.status >= 300) {
-          const [code, message] = upstreamFailure(turned, 'That agent no longer exists.', turn === 'pause' ? 'Paperclip could not pause that agent.' : 'Paperclip could not resume that agent.')
-          fail(req, res, code, message)
-          return true
-        }
-      }
-      await sendAgent(req, res, id)
+      fail(req, res, 409, AGENT_REFUSAL)
       return true
     }
 
     if (method === 'GET' && path === '/api/control/issues') {
-      if (featureOff(req, res, 'tasks')) return true
       const status = url.searchParams.get('status')
-      if (probeDown()) {
-        const early = laneState()
-        if (early) {
-          const list = status ? early.issues.filter((issue) => issue.status === status) : early.issues
-          sendJson(req, res, 200, list)
-          return true
-        }
-      }
-      const query = status ? `?status=${encodeURIComponent(status)}` : ''
-      const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/issues${query}`)
-      if (answer.status !== 200) {
-        const lane = laneState()
-        if (lane) {
-          const list = status ? lane.issues.filter((issue) => issue.status === status) : lane.issues
-          sendJson(req, res, 200, list)
-          return true
-        }
-        const [code, message] = upstreamFailure(answer, 'That task no longer exists.', 'Paperclip could not read the tasks.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      const list = (Array.isArray(answer.json) ? answer.json : []).map(mapIssue)
-      list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-      sendJson(req, res, 200, list)
+      const issues = laneState().issues
+      sendJson(req, res, 200, status ? issues.filter((issue) => issue.status === status) : issues)
       return true
     }
 
     if (method === 'GET' && path === '/api/control/live-runs') {
-      if (featureOff(req, res, 'tasks')) return true
-      if (probeDown()) {
-        const early = laneState()
-        if (early) {
-          sendJson(req, res, 200, { runs: early.liveRuns })
-          return true
-        }
-      }
-      const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/live-runs?limit=${LIVE_RUN_LIMIT}`)
-      if (answer.status !== 200) {
-        const lane = laneState()
-        if (lane) {
-          sendJson(req, res, 200, { runs: lane.liveRuns })
-          return true
-        }
-        const [code, message] = upstreamFailure(answer, 'Paperclip has no live runs route.', 'Paperclip could not read the live runs.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      sendJson(req, res, 200, { runs: liveRunList(answer.json) })
+      sendJson(req, res, 200, { runs: laneState().liveRuns })
       return true
     }
 
     if (method === 'POST' && path === '/api/control/issues') {
-      if (featureOff(req, res, 'tasks')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const draft = body
-      const title = typeof draft?.title === 'string' ? draft.title.trim() : ''
-      if (!title) {
-        sendJson(req, res, 400, { error: 'A title is required.' })
-        return true
-      }
-      const assigneeAgentId = plainId(draft?.assigneeAgentId)
-      const laneIds = laneNow() ? laneAgentIds() : null
-      let known = { status: 0, json: null }
-      if (laneIds) {
-        known = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
-        if (known.status !== 200 || (assigneeAgentId && laneIds.has(assigneeAgentId))) {
-          sendJson(req, res, 409, { error: LANE_TASK_REFUSAL })
-          return true
-        }
-      } else if (assigneeAgentId) {
-        known = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
-      }
-      const list = Array.isArray(known.json) ? known.json : []
-      const assignee = known.status === 200 ? list.find((agent) => agent?.id === assigneeAgentId) : null
-      if (!assignee) {
-        sendJson(req, res, 400, { error: 'Choose an agent for this task.' })
-        return true
-      }
-      if (CANNOT_TAKE_TASKS.includes(assignee.status)) {
-        sendJson(req, res, 400, { error: 'That agent cannot take tasks yet.' })
-        return true
-      }
-      const problem = taskDraftProblem(draft)
-      if (problem) {
-        sendJson(req, res, 400, { error: problem })
-        return true
-      }
-      const overrides = issueOverrides(draft)
-      const created = await upstream(
-        'POST',
-        `/api/companies/${encodeURIComponent(companyId)}/issues`,
-        buildCreateIssueBody({ ...draft, title }, overrides, { projectId, projectWorkspaceId })
-      )
-      if (created.status >= 300 || !created.json) {
-        const [code, message] = upstreamFailure(created, 'Paperclip did not accept that task.', 'Paperclip did not accept that task.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      sendJson(req, res, 201, mapIssue(created.json))
+      fail(req, res, 409, LANE_TASK_REFUSAL)
       return true
     }
 
     if (method === 'GET' && path === '/api/control/comments') {
-      if (featureOff(req, res, 'tasks')) return true
-      const issueId = plainId(url.searchParams.get('issueId'))
-      const lane = laneNow() ? laneState() : null
-      if (lane && lane.issues.some((issue) => issue.id === issueId)) {
-        sendJson(req, res, 200, [])
-        return true
-      }
-      if (lane && probeDown()) {
-        sendJson(req, res, 200, [])
-        return true
-      }
-      const [comments, agents] = await Promise.all([
-        upstream('GET', `/api/issues/${encodeURIComponent(issueId)}/comments`),
-        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`),
-      ])
-      if (comments.status === 404) {
-        sendJson(req, res, 200, [])
-        return true
-      }
-      if (comments.status !== 200) {
-        if (lane) {
-          sendJson(req, res, 200, [])
-          return true
-        }
-        const [code, message] = upstreamFailure(comments, 'That task no longer exists.', 'Paperclip could not read the thread.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      const names = new Map()
-      if (Array.isArray(agents.json)) {
-        for (const agent of agents.json) names.set(agent?.id, String(agent?.name ?? 'Agent'))
-      }
-      const list = (Array.isArray(comments.json) ? comments.json : []).map((entry) => mapComment(entry, names))
-      list.sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
-      sendJson(req, res, 200, list)
+      sendJson(req, res, 200, [])
       return true
     }
 
     if (method === 'POST' && path === '/api/control/comments') {
-      if (featureOff(req, res, 'tasks')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const issueId = plainId(body?.issueId)
-      const text = typeof body?.body === 'string' ? body.body.trim() : ''
-      if (!text) {
-        sendJson(req, res, 400, { error: 'Write a comment first.' })
-        return true
-      }
-      const lane = laneNow() ? laneState() : null
-      if (lane && lane.issues.some((issue) => issue.id === issueId)) {
-        sendJson(req, res, 409, { error: LANE_TASK_REFUSAL })
-        return true
-      }
-      const posted = await upstream('POST', `/api/issues/${encodeURIComponent(issueId)}/comments`, { body: text })
-      if (posted.status === 404) {
-        sendJson(req, res, 404, { error: 'That task no longer exists.' })
-        return true
-      }
-      if (posted.status >= 300 || !posted.json) {
-        if (lane && posted.status === 0) {
-          sendJson(req, res, 409, { error: LANE_TASK_REFUSAL })
-          return true
-        }
-        const [code, message] = upstreamFailure(posted, 'That task no longer exists.', 'Paperclip did not accept that comment.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      if (posted.json.id) {
-        sendJson(req, res, 201, mapComment(posted.json))
-        return true
-      }
-      const thread = await upstream('GET', `/api/issues/${encodeURIComponent(issueId)}/comments`)
-      const list = Array.isArray(thread.json) ? thread.json : []
-      sendJson(req, res, 201, mapComment(list[list.length - 1] ?? { issueId, body: text }))
+      fail(req, res, 409, LANE_TASK_REFUSAL)
       return true
     }
 
     if (method === 'GET' && path === '/api/control/approvals') {
-      if (featureOff(req, res, 'approvals')) return true
-      const hasLanes = laneAgents().length > 0
-      if (probeDown() && hasLanes) {
-        sendJson(req, res, 200, [])
-        return true
-      }
-      const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/approvals`)
-      if (answer.status !== 200) {
-        if (hasLanes) {
-          sendJson(req, res, 200, [])
-          return true
-        }
-        const [code, message] = upstreamFailure(answer, 'That approval no longer exists.', 'Paperclip could not read the approvals.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      const list = (Array.isArray(answer.json) ? answer.json : []).map((entry) => mapApproval(entry))
-      list.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-      sendJson(req, res, 200, list)
+      sendJson(req, res, 200, [])
       return true
     }
 
     const decide = /^\/api\/control\/approvals\/([^/]+)\/decide$/.exec(path)
     if (method === 'POST' && decide) {
-      if (featureOff(req, res, 'approvals')) return true
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const decision = typeof body?.decision === 'string' ? body.decision : ''
@@ -880,80 +282,24 @@ export function createControlApi(options) {
         sendJson(req, res, 400, { error: `Unknown decision: ${decision}` })
         return true
       }
-      const id = decodedId(decide[1])
-      if (id === null) {
-        sendJson(req, res, 404, { error: 'That approval no longer exists.' })
-        return true
-      }
-      const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : undefined
-      const posted = await upstream('POST', `/api/approvals/${encodeURIComponent(id)}/${DECISION_ROUTES[decision]}`, note ? { decisionNote: note } : {})
-      if (posted.status >= 300) {
-        const already = typeof posted.json?.error === 'string' && /only pending|already/i.test(posted.json.error)
-        const [code, message] = already
-          ? [400, 'That approval is already decided.']
-          : upstreamFailure(posted, 'That approval no longer exists.', 'Paperclip did not accept that decision.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      const read = await upstream('GET', `/api/approvals/${encodeURIComponent(id)}`)
-      const record = read.status === 200 ? read.json : posted.json
-      sendJson(req, res, 200, mapApproval(record, note))
+      sendJson(req, res, 404, { error: 'That approval no longer exists.' })
       return true
     }
 
     const budget = /^\/api\/control\/agents\/([^/]+)\/budget$/.exec(path)
     if (method === 'POST' && budget) {
-      if (featureOff(req, res, 'meters')) return true
-      const body = await readJsonBody(req, res)
-      if (body === null) return true
-      const cents = body?.budgetMonthlyCents
-      const problem = fieldProblem('budgetMonthlyCents', cents)
-      if (problem) {
-        sendJson(req, res, 400, { error: problem })
-        return true
-      }
-      const id = decodedId(budget[1])
-      if (id === null) {
+      if (decodedId(budget[1]) === null) {
         sendJson(req, res, 404, { error: 'That agent no longer exists.' })
         return true
       }
-      const patched = await upstream('PATCH', `/api/agents/${encodeURIComponent(id)}/budgets`, { budgetMonthlyCents: cents })
-      if (patched.status >= 300) {
-        const [code, message] = upstreamFailure(patched, 'That agent no longer exists.', 'Paperclip did not accept that budget.')
-        sendJson(req, res, code, { error: message })
-        return true
-      }
-      await sendAgent(req, res, id)
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      fail(req, res, 409, AGENT_REFUSAL)
       return true
     }
 
     if (method === 'GET' && path === '/api/control/costs') {
-      if (featureOff(req, res, 'meters')) return true
-      if (probeDown()) {
-        const early = laneFallback()
-        if (early) {
-          sendJson(req, res, 200, early.costs)
-          return true
-        }
-      }
-      const [summary, rows, quota] = await Promise.all([
-        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/summary`),
-        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),
-        upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/quota-windows`),
-      ])
-      for (const answer of [summary, rows, quota]) {
-        if (answer.status !== 200) {
-          const fallback = laneFallback()
-          if (fallback) {
-            sendJson(req, res, 200, fallback.costs)
-            return true
-          }
-          const [code, message] = upstreamFailure(answer, 'That company no longer exists.', 'Paperclip could not read the costs.')
-          sendJson(req, res, code, { error: message })
-          return true
-        }
-      }
-      sendJson(req, res, 200, mapCosts({ summary: summary.json, rows: rows.json, quota: quota.json }))
+      sendJson(req, res, 200, mapCosts(laneCosts()))
       return true
     }
 

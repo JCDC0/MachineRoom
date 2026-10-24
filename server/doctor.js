@@ -1,117 +1,54 @@
-import { statSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { compareSurface, describeSurface, normalizePaperclipUrl, readSpec, shownPaperclipUrl } from './surface.js'
+import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { isAbsolute, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { programPath } from './programPath.js'
 
-const CHECK_TIMEOUT_MS = 10000
-const BACKUP_MAX_AGE_HOURS = 24
-const BACKUP_HINT = 'Make one with paperclipai db:backup while Paperclip runs.'
+const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
+const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
 export function doctorSettings(options = {}, env = process.env, cwd = process.cwd()) {
   return {
-    paperclipUrl: options.paperclipUrl ?? env.PAPERCLIP_URL ?? 'http://127.0.0.1:3100',
-    companyId: options.companyId ?? env.PAPERCLIP_COMPANY_ID ?? '',
     projectRoot: options.projectRoot ?? env.PROJECT_ROOT ?? cwd,
+    runsFolder: options.runsFolder ?? join(env.TEMP || tmpdir(), 'machineroom-runs'),
+    lanesFile: options.lanesFile ?? join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
   }
 }
 
-function warningCodes(block) {
-  const warnings = Array.isArray(block?.warnings) ? block.warnings : []
-  return warnings.map((warning) => warning?.code).filter((code) => typeof code === 'string' && code !== '')
+function expand(bin, env) {
+  let missing = ''
+  const text = String(bin).replace(VARIABLE, (whole, name) => {
+    const value = env?.[name]
+    if (typeof value !== 'string' || value === '') {
+      missing = name
+      return whole
+    }
+    return value
+  })
+  return { text, missing }
 }
 
-function ageHoursOf(latest, now) {
-  if (Number.isFinite(latest?.ageHours)) return latest.ageHours
-  if (typeof latest?.mtime !== 'string' || latest.mtime === '') return null
-  const time = Date.parse(latest.mtime)
-  if (!Number.isFinite(time)) return null
-  return (now - time) / 3600000
-}
-
-function hoursText(hours) {
-  const rounded = Math.round(hours * 10) / 10
-  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1)
-}
-
-function backupLine(block, now) {
-  if (!block || typeof block !== 'object') {
-    return { ok: false, text: `Automatic database backups are off. ${BACKUP_HINT}` }
-  }
-  const codes = warningCodes(block)
-  const warningText = codes.length > 0 ? ` Paperclip warns ${codes.join(', ')}.` : ''
-  if (block.enabled !== true) {
-    return { ok: false, text: `Automatic database backups are off.${warningText} ${BACKUP_HINT}` }
-  }
-  const latest = block.latestBackup
-  if (!latest || typeof latest !== 'object') {
-    return { ok: false, text: `No database backup found.${warningText} ${BACKUP_HINT}` }
-  }
-  const age = ageHoursOf(latest, now)
-  if (!Number.isFinite(age) || age < 0) {
-    return { ok: false, text: `The newest database backup has no readable age.${warningText} ${BACKUP_HINT}` }
-  }
-  const ageText = `The newest database backup is ${hoursText(age)} hours old.`
-  if (age > BACKUP_MAX_AGE_HOURS) return { ok: false, text: `${ageText}${warningText} ${BACKUP_HINT}` }
-  return { ok: true, text: `${ageText}${warningText}` }
-}
-
-async function readHealth(base, fetchImpl) {
-  let response
+function isFile(path) {
   try {
-    response = await fetchImpl(`${base}/api/health`, { signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) })
+    return statSync(path).isFile()
   } catch {
-    return null
-  }
-  if (!response.ok && response.status !== 503) return null
-  try {
-    const body = await response.json()
-    return body && typeof body === 'object' ? body : null
-  } catch {
-    return null
+    return false
   }
 }
 
-function unhealthyText(health) {
-  const reason = typeof health?.error === 'string' && health.error ? ` (${health.error})` : ''
-  return `Paperclip answers but says it is unhealthy${reason}. Check its database.`
-}
-
-async function routeLine(base, fetchImpl) {
-  let spec
-  try {
-    spec = await readSpec(base, { fetchImpl, timeoutMs: CHECK_TIMEOUT_MS })
-  } catch (error) {
-    return { ok: false, text: `The Paperclip spec could not be read: ${error.message}` }
+function laneProgram(bin, env) {
+  const expanded = expand(bin, env)
+  if (expanded.missing) return { problem: `The environment variable ${expanded.missing} is not set.` }
+  const path = expanded.text
+  if (isAbsolute(path) || path.includes('/') || path.includes('\\')) {
+    return isFile(path) ? { path } : { problem: null }
   }
-  const result = compareSurface(spec)
-  if (result.ok) {
-    const word = result.checked === 1 ? 'route' : 'routes'
-    return { ok: true, text: `Paperclip lists every route the bridge uses (${result.checked} ${word} checked).` }
+  const endings = process.platform === 'win32' && !/\.(exe|com)$/i.test(path) ? [path, `${path}.exe`, `${path}.com`] : [path]
+  for (const name of endings) {
+    const found = programPath(name, { env })
+    if (found) return { path: found }
   }
-  return {
-    ok: false,
-    text: `The Paperclip spec does not match the routes the bridge uses. ${describeSurface(result).join(' ')}`,
-  }
-}
-
-async function companyLine(base, companyId, fetchImpl) {
-  let response
-  try {
-    response = await fetchImpl(`${base}/api/companies`, { signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) })
-  } catch {
-    return { ok: false, text: 'Paperclip did not list its companies.' }
-  }
-  if (!response.ok) return { ok: false, text: 'Paperclip did not list its companies.' }
-  let companies
-  try {
-    companies = await response.json()
-  } catch {
-    return { ok: false, text: 'Paperclip did not list its companies.' }
-  }
-  if (!Array.isArray(companies)) return { ok: false, text: 'Paperclip did not list its companies.' }
-  if (!companies.some((company) => company && company.id === companyId)) {
-    return { ok: false, text: `Company ${companyId} is not in Paperclip's company list.` }
-  }
-  return { ok: true, text: `Company ${companyId} is in Paperclip's company list.` }
+  return { problem: null }
 }
 
 function folderLine(projectRoot) {
@@ -126,56 +63,87 @@ function folderLine(projectRoot) {
   return { ok: true, text: `The project folder ${folder} exists.` }
 }
 
-export async function runDoctor(options = {}) {
-  const settings = doctorSettings(options)
-  const fetchImpl = options.fetchImpl ?? fetch
-  const now = options.now ?? Date.now()
+function gitLine(env) {
+  const found = programPath('git', { env })
+  if (!found) return { ok: false, text: 'Git is not on the PATH.' }
+  return { ok: true, text: `Git is found at ${found}.` }
+}
+
+function runsLine(folder) {
+  const path = resolve(folder)
+  try {
+    const stats = statSync(path)
+    if (!stats.isDirectory()) return { ok: false, text: `The runs folder ${path} is not a folder.` }
+  } catch {
+    try {
+      mkdirSync(path, { recursive: true })
+    } catch {
+      return { ok: false, text: `The runs folder ${path} could not be made.` }
+    }
+  }
+  try {
+    accessSync(path, constants.W_OK)
+  } catch {
+    return { ok: false, text: `The runs folder ${path} cannot be written to.` }
+  }
+  return { ok: true, text: `The runs folder ${path} is ready.` }
+}
+
+function readLaneFile(file) {
+  let text
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch {
+    return { problem: `The lane file ${file} could not be read.` }
+  }
+  let lanes
+  try {
+    lanes = JSON.parse(text)
+  } catch {
+    return { problem: `The lane file ${file} is not JSON.` }
+  }
+  if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) {
+    return { problem: `The lane file ${file} is not a list of lanes.` }
+  }
+  return { lanes }
+}
+
+function laneLines(file, env) {
+  const read = readLaneFile(file)
+  if (read.problem) return [{ ok: false, text: read.problem }]
+  const lines = []
+  for (const [key, lane] of Object.entries(read.lanes)) {
+    if (!lane || typeof lane !== 'object' || Array.isArray(lane)) continue
+    if (lane.retired === true) continue
+    if (!lane.cli || typeof lane.cli !== 'object' || typeof lane.cli.bin !== 'string' || lane.cli.bin === '') continue
+    const name = typeof lane.name === 'string' && lane.name ? lane.name : key
+    const found = laneProgram(lane.cli.bin, env)
+    if (found.path) {
+      lines.push({ ok: true, text: `The ${name} lane starts from ${found.path}.` })
+    } else if (found.problem) {
+      lines.push({ ok: false, text: `The ${name} lane program cannot start. ${found.problem}` })
+    } else {
+      lines.push({ ok: false, text: `The ${name} lane program was not found: ${lane.cli.bin}.` })
+    }
+  }
+  return lines
+}
+
+export function runDoctor(options = {}) {
+  const env = options.env ?? process.env
+  const settings = doctorSettings(options, env)
   const lines = []
   let ok = true
-  let paperclipDown = false
 
   function add(result) {
     if (!result.ok) ok = false
     lines.push(`${result.ok ? 'ok' : 'FAIL'} ${result.text}`)
   }
 
-  let base = null
-  try {
-    base = normalizePaperclipUrl(String(settings.paperclipUrl))
-  } catch (error) {
-    add({ ok: false, text: error.message })
-  }
-
-  let health = null
-  let healthOk = false
-  if (base) {
-    const place = shownPaperclipUrl(base)
-    health = await readHealth(base, fetchImpl)
-    const version = typeof health?.version === 'string' ? health.version.trim() : ''
-    if (!health || version === '') {
-      paperclipDown = true
-      add({ ok: false, text: `Paperclip does not answer at ${place}.` })
-    } else if (health.status === 'unhealthy') {
-      add({ ok: false, text: unhealthyText(health) })
-    } else {
-      healthOk = true
-      add({ ok: true, text: `Paperclip answers at ${place} (version ${version}).` })
-    }
-  }
-
-  if (healthOk) {
-    add(await routeLine(base, fetchImpl))
-
-    if (!settings.companyId) {
-      add({ ok: false, text: 'No company id. Pass --company or set PAPERCLIP_COMPANY_ID.' })
-    } else {
-      add(await companyLine(base, settings.companyId, fetchImpl))
-    }
-  }
-
   add(folderLine(settings.projectRoot))
+  add(gitLine(env))
+  add(runsLine(settings.runsFolder))
+  for (const line of laneLines(settings.lanesFile, env)) add(line)
 
-  if (healthOk) add(backupLine(health.databaseBackup, now))
-
-  return { exitCode: ok ? 0 : 1, lines, paperclipDown }
+  return { exitCode: ok ? 0 : 1, lines }
 }

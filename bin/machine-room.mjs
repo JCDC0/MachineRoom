@@ -11,39 +11,36 @@ const USAGE = [
   '       machine-room doctor [options]',
   '',
   'Commands:',
-  '  up                  run the doctor checks, then serve the room whether they pass or not',
-  '  doctor              check Paperclip, its routes, the company, the folder and the backups',
+  '  up                  run the doctor checks, then serve the room with the lane and session sources on',
+  '  doctor              check the folder, git, the runs folder and the lane programs',
   '',
   'Options:',
-  '  --paperclip <url>   Paperclip address (PAPERCLIP_URL)',
-  '  --company <id>      Paperclip company id (PAPERCLIP_COMPANY_ID)',
   '  --root <folder>     project folder (PROJECT_ROOT)',
   '  --port <n>          port to listen on (PORT)',
   '  --dist <folder>     built viewer folder (default: dist beside bin)',
   '  --lanes             show lane runs live from the run-lane logs (MACHINEROOM_LANES=1)',
   '  --sessions          show Claude Code and OpenCode sessions on the project live (MACHINEROOM_SESSIONS=1)',
+  '  --no-sessions       keep the session source off when up runs it by default',
   '  --help              show this help',
 ].join('\n')
 
 const OPTION_NAMES = {
-  '--paperclip': 'paperclipUrl',
-  '--company': 'companyId',
   '--root': 'projectRoot',
   '--port': 'port',
   '--dist': 'dist',
 }
 
 const DOCTOR_OPTION_NAMES = {
-  '--paperclip': 'paperclipUrl',
-  '--company': 'companyId',
   '--root': 'projectRoot',
 }
 
-const FLAGS = new Set(['--lanes', '--sessions'])
+const FLAGS = {
+  '--lanes': 'lanes',
+  '--sessions': 'sessions',
+  '--no-sessions': 'noSessions',
+}
 
-const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway; features whose routes changed stay off.'
-const PAPERCLIP_NOT_RUNNING = 'Paperclip is not running. Start it yourself with paperclipai run; machine-room never starts it.'
-const PAPERCLIP_NOT_NEEDED = 'Paperclip is not running, and the lane and session sources do not need it.'
+const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway.'
 
 function parseArgs(argv, names = OPTION_NAMES) {
   const options = { help: false }
@@ -55,8 +52,8 @@ function parseArgs(argv, names = OPTION_NAMES) {
     }
     const equals = arg.indexOf('=')
     const flag = equals === -1 ? arg : arg.slice(0, equals)
-    if (FLAGS.has(flag)) {
-      options[flag.slice(2)] = true
+    if (Object.hasOwn(FLAGS, flag)) {
+      options[FLAGS[flag]] = true
       continue
     }
     if (!Object.hasOwn(names, flag)) throw new Error(`Unknown option ${flag}.`)
@@ -104,8 +101,6 @@ function prepare(options) {
 
 async function startRoom(options, dist) {
   const bridge = createBridge({
-    paperclipUrl: options.paperclipUrl,
-    companyId: options.companyId,
     projectRoot: options.projectRoot,
     port: options.port,
     staticDir: dist,
@@ -149,20 +144,11 @@ async function serve(options) {
 
 async function up(options) {
   const dist = prepare(options)
-  const result = await runDoctor(options)
-  const ownSources = options.lanes === true || options.sessions === true
-  if (result.paperclipDown && ownSources) {
-    for (const line of result.lines) if (!line.startsWith('FAIL Paperclip')) console.log(line)
-    console.log(PAPERCLIP_NOT_NEEDED)
-    await startRoom(options, dist)
-    return
-  }
+  options.lanes = true
+  options.sessions = options.noSessions !== true
+  const result = runDoctor(options)
   for (const line of result.lines) console.log(line)
-  if (result.paperclipDown) {
-    console.log(PAPERCLIP_NOT_RUNNING)
-  } else if (result.exitCode !== 0) {
-    console.log(SOME_CHECKS_FAILED)
-  }
+  if (result.exitCode !== 0) console.log(SOME_CHECKS_FAILED)
   await startRoom(options, dist)
 }
 
@@ -186,7 +172,7 @@ if (options.help) {
 }
 
 if (command === 'doctor') {
-  const result = await runDoctor(options)
+  const result = runDoctor(options)
   for (const line of result.lines) console.log(line)
   process.exitCode = result.exitCode
 } else if (command === 'up') {

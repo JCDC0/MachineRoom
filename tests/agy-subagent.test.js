@@ -1,6 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { apply, createState } from '../src/model/state.js'
-import { playFrames, postJson, readFrames, roomInputs, runEnded, startLoop, waitForPaperclip } from './helpers/loop.js'
 import { loadScenario } from './helpers.js'
 
 describe('an agy run with a child conversation', () => {
@@ -97,54 +96,6 @@ describe('a real agy run with a subagent', () => {
     expect(together).not.toBeNull()
     expect(together.parentFocus).toEqual(['src/strings.js'])
     expect(together.childFocus).toEqual([])
-    expect(state.agents.get('agy~1')).toMatchObject({ status: 'done', parent: 'agy', depth: 1 })
-    expect(state.agents.get('agy')).toMatchObject({ status: 'done', runs: 1 })
-  })
-})
-
-const loops = []
-
-async function loop() {
-  const started = await startLoop()
-  loops.push(started)
-  return started
-}
-
-afterEach(async () => {
-  while (loops.length > 0) await loops.pop().stop()
-})
-
-describe('an agy task through the fake Paperclip', () => {
-  it('shows the parent and the subagent working at the same activity', async () => {
-    const { url } = await loop()
-    await waitForPaperclip(url)
-    const { agents, tree } = await roomInputs(url)
-    const agy = agents.find((agent) => agent.key === 'agy')
-    expect(agy).toMatchObject({ adapterType: 'process' })
-
-    const created = await postJson(`${url}/api/control/issues`, {
-      title: 'Check the notes beside the fix',
-      assigneeAgentId: agy.id,
-      confirmed: true,
-    })
-    expect(created.status).toBe(201)
-
-    const frames = await readFrames(url, runEnded(agy.id))
-    let together = null
-    const { state, activities } = playFrames(frames, agents, tree, (activity, current) => {
-      if (together) return
-      const parent = current.agents.get('agy')
-      const child = current.agents.get('agy~1')
-      if (parent?.status === 'working' && child?.status === 'working') {
-        together = { type: activity.type, parentFocus: [...parent.focus], childFocus: [...child.focus] }
-      }
-    })
-
-    expect(together).not.toBeNull()
-    expect(together.childFocus).toEqual([])
-    const childEnd = activities.find((activity) => activity.type === 'agent.end' && activity.agent === 'agy~1')
-    const runEnd = activities.find((activity) => activity.type === 'run.end' && activity.agent === 'agy')
-    expect(childEnd.time).toBeLessThan(runEnd.time)
     expect(state.agents.get('agy~1')).toMatchObject({ status: 'done', parent: 'agy', depth: 1 })
     expect(state.agents.get('agy')).toMatchObject({ status: 'done', runs: 1 })
   })

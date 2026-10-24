@@ -364,38 +364,20 @@ export function createBridge(options = {}) {
   let surface = { ok: null, checkedAt: null, error: 'not checked yet' }
   const featureIsOff = (feature) => surfaceFeatures(surface)[feature] === false
   const control = createControlApi({
-    paperclipUrl,
-    companyId,
-    projectId,
-    projectWorkspaceId,
     sendJson,
     readJsonBody,
-    featureOn: (feature) => !featureIsOff(feature),
-    timeoutMs: upstreamTimeoutMs,
     lanes: () => lanesSource,
-    paperclipUp: () => paperclipOpen,
   })
   const policy = createPolicyApi({
-    paperclipUrl,
-    companyId,
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
     readJsonBody,
-    featureOn: (feature) => !featureIsOff(feature),
-    timeoutMs: upstreamTimeoutMs,
+    lanes: () => lanesSource,
   })
   const plans = createPlansApi({
-    paperclipUrl,
-    companyId,
-    projectId,
-    projectWorkspaceId,
-    projectRoot,
-    briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
     readJsonBody,
-    featureOn: (feature) => !featureIsOff(feature),
-    timeoutMs: upstreamTimeoutMs,
   })
   const assistant = createAssistantApi({
     sendJson,

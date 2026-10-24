@@ -1,5 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:http'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -10,14 +9,14 @@ const POLICY = {
   tiers: {
     small: [
       { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
+      { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
     ],
     medium: [
       { lane: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-      { lane: 'agy', model: 'Gemini 3.8 Flash (High)', reasoning: 'high', provider: 'antigravity' },
+      { lane: 'claude', model: 'sonnet', reasoning: 'high', provider: 'anthropic' },
     ],
     large: [
-      { lane: 'agy', model: 'Gemini 4 Argon (Medium)', reasoning: 'medium', provider: 'antigravity' },
+      { lane: 'claude', model: 'opus', reasoning: 'high', provider: 'anthropic' },
       { lane: 'owner', model: null, reasoning: null, provider: null },
     ],
   },
@@ -44,53 +43,41 @@ afterEach(async () => {
   }
 })
 
-function sendJson(res, status, body) {
-  const payload = JSON.stringify(body)
-  res.writeHead(status, { 'Content-Type': 'application/json' })
-  res.end(payload)
+function tempDir(prefix = 'mr-policy-') {
+  const dir = makeTempDir(prefix)
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  return dir
 }
 
-async function startPaperclip({ summary = { spendCents: 0, budgetCents: 100000 }, quota = [] } = {}) {
-  const server = createServer((req, res) => {
-    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-    if (req.method === 'GET' && url.pathname === '/api/companies/comp-1/costs/summary') {
-      sendJson(res, 200, summary)
-      return
-    }
-    if (req.method === 'GET' && url.pathname === '/api/companies/comp-1/costs/quota-windows') {
-      sendJson(res, 200, quota)
-      return
-    }
-    sendJson(res, 404, { error: 'not found' })
-  })
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
-  const fake = {
-    url: `http://127.0.0.1:${server.address().port}`,
-    close: () =>
-      new Promise((resolve) => {
-        server.closeAllConnections?.()
-        server.close(() => resolve())
-      }),
-  }
-  cleanups.push(fake.close)
-  return fake
+function writeRuns(base, costs) {
+  const folder = join(base, 'machineroom-runs')
+  mkdirSync(folder, { recursive: true })
+  const startedAt = new Date().toISOString()
+  const lines = costs.map((costUsd) => JSON.stringify({ lane: 'opencode', startedAt, costUsd }))
+  writeFileSync(join(folder, 'runs.jsonl'), `${lines.join('\n')}\n`)
 }
 
-async function startRouteBridge({ policy = JSON.stringify(POLICY), paperclipUrl }) {
-  const briefsDir = makeTempDir('mr-policy-')
-  cleanups.push(() => rmSync(briefsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [] } = {}) {
+  const briefsDir = tempDir()
   if (policy !== null) writeFileSync(join(briefsDir, 'policy.json'), policy)
+  const base = tempDir()
+  if (costs.length > 0) writeRuns(base, costs)
+  const previousTemp = process.env.TEMP
+  process.env.TEMP = base
+  cleanups.push(() => {
+    process.env.TEMP = previousTemp
+  })
   const bridge = createBridge({
-    paperclipUrl,
-    companyId: 'comp-1',
     projectRoot: '',
     briefsDir,
     port: 0,
-    surfaceEveryMs: 0,
+    env: {},
+    reconnectMinMs: 60000,
+    reconnectMaxMs: 60000,
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  return { url, briefsDir }
+  return { url, briefsDir, base }
 }
 
 async function postRoute(url, body) {
@@ -104,27 +91,24 @@ async function postRoute(url, body) {
 
 describe('POST /api/control/route', () => {
   it('refuses a missing, a broken and a bad policy file', async () => {
-    const paperclip = await startPaperclip()
-
-    const missing = await startRouteBridge({ policy: null, paperclipUrl: paperclip.url })
+    const missing = await startRouteBridge({ policy: null })
     const missingAnswer = await postRoute(missing.url, { profile: SMALL })
     expect(missingAnswer.status).toBe(404)
     expect(missingAnswer.body).toEqual({ error: 'The policy file is missing.' })
 
-    const broken = await startRouteBridge({ policy: '{', paperclipUrl: paperclip.url })
+    const broken = await startRouteBridge({ policy: '{' })
     const brokenAnswer = await postRoute(broken.url, { profile: SMALL })
     expect(brokenAnswer.status).toBe(400)
     expect(brokenAnswer.body).toEqual({ error: 'The policy file is not JSON.' })
 
-    const bad = await startRouteBridge({ policy: JSON.stringify({ ...POLICY, quotaSkipPercent: 200 }), paperclipUrl: paperclip.url })
+    const bad = await startRouteBridge({ policy: JSON.stringify({ ...POLICY, quotaSkipPercent: 200 }) })
     const badAnswer = await postRoute(bad.url, { profile: SMALL })
     expect(badAnswer.status).toBe(400)
     expect(badAnswer.body).toEqual({ error: 'policy.quotaSkipPercent must be a number from 0 to 100.' })
   })
 
   it('refuses a profile that is not an object', async () => {
-    const paperclip = await startPaperclip()
-    const { url } = await startRouteBridge({ paperclipUrl: paperclip.url })
+    const { url } = await startRouteBridge()
     for (const profile of [undefined, null, 'small', 5, ['small']]) {
       const answer = await postRoute(url, { profile })
       expect(answer.status, String(profile)).toBe(400)
@@ -133,8 +117,7 @@ describe('POST /api/control/route', () => {
   })
 
   it('refuses failures that are not a whole number from 0 to 5', async () => {
-    const paperclip = await startPaperclip()
-    const { url } = await startRouteBridge({ paperclipUrl: paperclip.url })
+    const { url } = await startRouteBridge()
     for (const failures of [-1, 1.5, 6, '2', null]) {
       const answer = await postRoute(url, { profile: SMALL, failures })
       expect(answer.status, String(failures)).toBe(400)
@@ -142,9 +125,8 @@ describe('POST /api/control/route', () => {
     }
   })
 
-  it('routes from the policy with the quota and the spend from Paperclip', async () => {
-    const paperclip = await startPaperclip({ summary: { spendCents: 2500, budgetCents: 100000 } })
-    const { url } = await startRouteBridge({ paperclipUrl: paperclip.url })
+  it('routes from the policy with no spend in the lane records', async () => {
+    const { url } = await startRouteBridge()
     const answer = await postRoute(url, { profile: MEDIUM, failures: 0 })
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual({
@@ -154,28 +136,16 @@ describe('POST /api/control/route', () => {
     })
   })
 
-  it('skips a provider above 90 percent and a provider it could not read', async () => {
-    const paperclip = await startPaperclip({
-      quota: [
-        { provider: 'opencode', ok: true, windows: [{ label: 'Current week', usedPercent: 97, resetsAt: null, detail: null }] },
-        { provider: 'antigravity', ok: false, error: 'Usage not available', windows: [{ label: 'Current week', usedPercent: 100 }] },
-      ],
-    })
-    const { url } = await startRouteBridge({ paperclipUrl: paperclip.url })
-    const answer = await postRoute(url, { profile: MEDIUM })
-    expect(answer.status).toBe(200)
+  it('escalates a failure to the next tier', async () => {
+    const { url } = await startRouteBridge()
+    const answer = await postRoute(url, { profile: SMALL, failures: 1 })
     expect(answer.body.tier).toBe('medium')
-    expect(answer.body.choice).toEqual({
-      lane: 'agy',
-      model: 'Gemini 3.8 Flash (High)',
-      reasoning: 'high',
-      provider: 'antigravity',
-    })
+    expect(answer.body.choice.lane).toBe('opencode')
+    expect(answer.body.reason).toBe('The medium tier runs opencode on opencode-go/deepseek-v4.1-flash at max. Escalated from the small tier after 1 failure.')
   })
 
-  it('routes without a choice when the company spent its monthly limit', async () => {
-    const paperclip = await startPaperclip({ summary: { spendCents: 3000, budgetCents: 100000 } })
-    const { url } = await startRouteBridge({ paperclipUrl: paperclip.url })
+  it('routes without a choice when the lane records reach the company limit', async () => {
+    const { url } = await startRouteBridge({ costs: [20, 10] })
     const answer = await postRoute(url, { profile: MEDIUM })
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual({
@@ -185,19 +155,15 @@ describe('POST /api/control/route', () => {
     })
   })
 
-  it('says quota and spend were not read when Paperclip is down', async () => {
-    const { url } = await startRouteBridge({ paperclipUrl: 'http://127.0.0.1:1' })
-    const answer = await postRoute(url, { profile: MEDIUM })
-    expect(answer.status).toBe(200)
+  it('does not skip a provider, since the lane records carry no quota window', async () => {
+    const { url } = await startRouteBridge()
+    const answer = await postRoute(url, { profile: SMALL })
     expect(answer.body.choice).toEqual({
-      lane: 'opencode',
+      lane: 'opencode2',
       model: 'opencode-go/deepseek-v4.1-flash',
       reasoning: 'max',
       provider: 'opencode',
     })
-    expect(answer.body.reason).toBe(
-      'The medium tier runs opencode on opencode-go/deepseek-v4.1-flash at max. Quota and spend were not read.'
-    )
   })
 })
 
