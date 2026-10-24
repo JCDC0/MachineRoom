@@ -39,6 +39,10 @@ const BADGE = {
   border: '1px solid currentColor',
   background: 'rgb(0 0 0 / 0.7)',
 }
+const DEMO_SUBS = [
+  { id: 'frontend', name: 'Frontend', lanes: ['opencode'], scope: ['src/**'], restricted: true, setBy: 'owner' },
+  { id: 'backend', name: 'Backend', lanes: ['claude'], scope: ['server/**'], restricted: true, setBy: 'owner' },
+]
 
 export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode, fps = false }) {
   const surfaceRef = useRef(null)
@@ -46,15 +50,30 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const cssRef = useRef(null)
   const roomRef = useRef(null)
   const live = data.live ?? null
+  const demoLadder = useMemo(() => {
+    if (live || typeof window === 'undefined') return null
+    if (new URLSearchParams(window.location.search).get('ladder') !== 'demo') return null
+    return { subs: DEMO_SUBS }
+  }, [live])
+  const agents = useMemo(() => {
+    if (!demoLadder) return data.agents
+    const subs = demoLadder.subs.map((sub) => ({
+      id: `sub-${sub.id}`,
+      key: `sub-${sub.id}`,
+      name: sub.name,
+      subOrchestrator: true,
+    }))
+    return [...data.agents, ...subs]
+  }, [data.agents, demoLadder])
   const player = useMemo(() => {
     const handlers = {
       tree: data.tree,
-      agents: data.agents,
+      agents,
       onActivity: (activity, state) => roomRef.current?.onActivity(activity, state),
     }
     if (live) return createLivePlayer(handlers)
     return createPlayer({ ...handlers, activities: data.activities, onReset: (state) => roomRef.current?.reset(state) })
-  }, [data, live])
+  }, [data, live, agents])
   const client = useMemo(() => {
     if (!live || live.simulated) return createMockClient()
     return live.bridge ? createClient({ baseUrl: live.bridge }) : null
@@ -90,7 +109,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   )
   const pathsRef = useRef(assistantPaths)
   pathsRef.current = assistantPaths
-  const timeline = useMemo(() => (live ? null : buildTimeline(data.activities, player.stamps, data.agents)), [live, data, player])
+  const timeline = useMemo(() => (live ? null : buildTimeline(data.activities, player.stamps, agents)), [live, data, player, agents])
   const log = useMemo(
     () => (timeline ? entriesUpTo(timeline.entries, snapshot.position) : liveLog),
     [timeline, snapshot.position, liveLog]
@@ -108,7 +127,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       gl: glRef.current,
       css: cssRef.current,
       rootName: data.tree.rootName,
-      agents: data.agents,
+      agents,
       getState: () => player.state,
       beforeFrame: (ms) => {
         if (fps) {
@@ -151,7 +170,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       room.dispose()
       roomRef.current = null
     }
-  }, [data, player])
+  }, [agents, data, player])
+
+  useEffect(() => {
+    roomRef.current?.setLadder(demoLadder)
+  }, [data, demoLadder])
 
   useEffect(() => {
     setFineDust(effects.dust)
@@ -247,8 +270,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     if (!live) return undefined
-    const pipeline = createPipeline({ agents: data.agents, tree: data.tree })
-    const entryFor = createLogger(data.agents)
+    const pipeline = createPipeline({ agents, tree: data.tree })
+    const entryFor = createLogger(agents)
     let known = player.state.files.size
     const learned = () => {
       if (player.state.files.size === known) return
@@ -280,7 +303,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     else if (live.bridge) link = openBridge({ url: live.bridge, ...handlers })
     else link = openStream({ url: socketUrl(live.base, live.companyId), ...handlers })
     return () => link.close()
-  }, [data, live, player])
+  }, [agents, data, live, player])
 
   useEffect(() => {
     function onKey(event) {
@@ -299,7 +322,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         room?.overview()
         setFocused(null)
       } else if (/^[1-9]$/.test(event.key)) {
-        const agent = data.agents[Number(event.key) - 1]
+        const agent = agents[Number(event.key) - 1]
         if (agent) {
           setFollow(false)
           room?.focus(agent.key)
@@ -319,7 +342,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [data, player])
+  }, [agents, player])
 
   function changeSpeed(value) {
     player.setSpeed(value)
@@ -361,9 +384,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   const dispatcher = createDispatcher({
     client,
-    context: () => ({ agents: data.agents.map(({ key, name }) => ({ key, name })), paths: pathsRef.current }),
-    agentName: (key) => data.agents.find((agent) => agent.key === key)?.name ?? key,
-    agentId: (key) => data.agents.find((agent) => agent.key === key)?.id,
+    context: () => ({ agents: agents.map(({ key, name }) => ({ key, name })), paths: pathsRef.current }),
+    agentName: (key) => agents.find((agent) => agent.key === key)?.name ?? key,
+    agentId: (key) => agents.find((agent) => agent.key === key)?.id,
     focusAgent: (key, view) => {
       setFollow(false)
       roomRef.current?.focus(key, view)

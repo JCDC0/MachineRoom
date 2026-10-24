@@ -6,9 +6,16 @@ export const SPARE = ['shells', 'knot35', 'helix', 'prism']
 export const SHAPE_NAMES = ['compound', 'knot', 'stella', 'geodesic', ORCHESTRATOR_SHAPE, ...SPARE]
 
 const ORCHESTRATOR = /orchestrat/i
+const SUB_PREFIX = 'sub-'
+
+export function isSubOrchestrator(agent) {
+  if (!agent) return false
+  if (agent.subOrchestrator === true) return true
+  return String(agent.key ?? '').startsWith(SUB_PREFIX)
+}
 
 export function isOrchestrator(agent) {
-  if (!agent) return false
+  if (!agent || isSubOrchestrator(agent)) return false
   if (agent.orchestrator === true || agent.role === 'ceo') return true
   return ORCHESTRATOR.test(String(agent.name ?? '')) || ORCHESTRATOR.test(String(agent.key ?? ''))
 }
@@ -23,7 +30,11 @@ export function shapesFor(roster) {
   const used = new Set()
   const names = roster.map((agent) => {
     const kind = agent.shape ?? agent.parser ?? agent.key
-    const wanted = isOrchestrator(agent) && !used.has(ORCHESTRATOR_SHAPE) ? ORCHESTRATOR_SHAPE : Object.hasOwn(PREFERRED, kind) ? PREFERRED[kind] : null
+    if (isOrchestrator(agent) || isSubOrchestrator(agent)) {
+      used.add(ORCHESTRATOR_SHAPE)
+      return ORCHESTRATOR_SHAPE
+    }
+    const wanted = Object.hasOwn(PREFERRED, kind) ? PREFERRED[kind] : null
     if (wanted && !used.has(wanted)) {
       used.add(wanted)
       return wanted

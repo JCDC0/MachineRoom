@@ -1,8 +1,9 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
+import { sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
-import { HUB_CENTER, ORCHESTRATOR_HOME, PARK_LIFT, slotPoint } from './hub.js'
-import { isOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
+import { HUB_CENTER, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, sectorSlotAngles, slotAngle } from './hub.js'
+import { isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
 import { GREEN, RED, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 
 const STYLE = {
@@ -30,10 +31,23 @@ const PACKET_SIZE = 3
 export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
+export const SUB_ORCHESTRATOR_SCALE = 0.7
+export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.7
+
+export function subOrchestratorPlace(arc, out = null) {
+  const start = Number(arc?.start)
+  const end = Number(arc?.end)
+  const mid = Number.isFinite(start) && Number.isFinite(end) ? (start + end) / 2 : 0
+  const point = out ?? { x: 0, y: 0, z: 0 }
+  point.x = Math.cos(mid) * HUB_RADIUS
+  point.y = HUB_Y + SUB_ORCHESTRATOR_LIFT
+  point.z = Math.sin(mid) * HUB_RADIUS
+  return point
+}
 
 export function agentPresence(agent, everRan = false) {
   const active = agent?.status === 'working' || agent?.status === 'queued'
-  const dim = !(active || everRan || isOrchestrator(agent))
+  const dim = !(active || everRan || isOrchestrator(agent) || isSubOrchestrator(agent))
   return {
     dim,
     opacity: dim ? UNSEEN_OPACITY : 1,
@@ -196,12 +210,38 @@ export function createAgents(scene, roster, cssScene = null) {
   const views = new Map()
   const pickables = []
   const shapes = shapesFor(roster)
-  const parked = roster.filter((agent) => !isOrchestrator(agent))
+  const parked = roster.filter((agent) => !isOrchestrator(agent) && !isSubOrchestrator(agent))
+  const parkedKeys = parked.map((agent) => agent.key)
+  const agentByKey = new Map(roster.map((agent) => [agent.key, agent]))
   const rosterKeys = new Set(roster.map((agent) => agent.key))
   const usedShapes = new Set(shapes)
   const retired = new Map()
   const pendingChipRemovals = new Set()
   let parkedIndex = 0
+  let sectorList = []
+  let slotAngles = sectorSlotAngles(null, parkedKeys)
+
+  function subIdOf(agent) {
+    const key = String(agent?.key ?? '')
+    return key.startsWith('sub-') ? key.slice(4) : key
+  }
+
+  function subHome(agent) {
+    const id = subIdOf(agent)
+    const arc = sectorList.find((entry) => entry.id === id) ?? { start: 0, end: 0 }
+    const place = subOrchestratorPlace(arc)
+    return new THREE.Vector3(place.x, place.y, place.z)
+  }
+
+  function laneHome(key, index) {
+    const angle = slotAngles.get(key) ?? slotAngle(index, Math.max(1, parkedKeys.length))
+    return new THREE.Vector3(Math.cos(angle) * HUB_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * HUB_RADIUS)
+  }
+
+  function layoutHomes(ladder) {
+    sectorList = hasSubs(ladder) ? sectorArcs(ladder, parkedKeys) : []
+    slotAngles = sectorSlotAngles(ladder, parkedKeys)
+  }
 
   function queuePacket(view, at) {
     view.packetSends.push(at)
@@ -241,10 +281,11 @@ export function createAgents(scene, roster, cssScene = null) {
     view.packets.visible = true
   }
 
-  function addView(agent, { index, shapeName, home, scale = 1, parentKey = null }) {
+  function addView(agent, { index, shapeName, home, scale = 1, parentKey = null, subOrchestrator = false }) {
     const group = new THREE.Group()
     const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(WHITE, 0.35))
     const orchestrator = parentKey === null && isOrchestrator(agent)
+    const sub = parentKey === null && subOrchestrator
     const rings = [flatRing(130, 0.2, -110)]
     if (orchestrator) rings.push(flatRing(158, 0.14, -110))
     const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
@@ -261,6 +302,7 @@ export function createAgents(scene, roster, cssScene = null) {
     strip.visible = false
     const packets = packetPoints()
     const parentLink = parentKey ? lineBetween(lineMaterial(WHITE, 0.3)) : null
+    const orchestratorLink = sub ? lineBetween(lineMaterial(WHITE, 0.3)) : null
 
     const callout = makeCallout(agent.name)
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
@@ -268,6 +310,7 @@ export function createAgents(scene, roster, cssScene = null) {
 
     scene.add(group, link, strip, packets, calloutLine)
     if (parentLink) scene.add(parentLink)
+    if (orchestratorLink) scene.add(orchestratorLink)
     cssScene?.add(callout.object)
     pickables.push(picker)
     const view = {
@@ -275,6 +318,7 @@ export function createAgents(scene, roster, cssScene = null) {
       name: agent.name,
       index: orchestrator ? -1 : index,
       orchestrator,
+      subOrchestrator: sub,
       parentKey,
       shapeName,
       group,
@@ -286,6 +330,7 @@ export function createAgents(scene, roster, cssScene = null) {
       calloutLine,
       link,
       parentLink,
+      orchestratorLink,
       scale,
       fadeStart: 0,
       strip,
@@ -321,7 +366,8 @@ export function createAgents(scene, roster, cssScene = null) {
     view.callout.element.remove()
     scene.remove(view.group, view.link, view.strip, view.packets, view.calloutLine)
     if (view.parentLink) scene.remove(view.parentLink)
-    for (const root of [view.group, view.link, view.strip, view.packets, view.calloutLine, view.parentLink]) {
+    if (view.orchestratorLink) scene.remove(view.orchestratorLink)
+    for (const root of [view.group, view.link, view.strip, view.packets, view.calloutLine, view.parentLink, view.orchestratorLink]) {
       if (!root) continue
       root.traverse((object) => {
         object.geometry?.dispose()
@@ -367,14 +413,20 @@ export function createAgents(scene, roster, cssScene = null) {
     }
   }
 
+  layoutHomes(null)
   roster.forEach((agent, rosterIndex) => {
     const orchestrator = isOrchestrator(agent)
-    const index = orchestrator ? -1 : parkedIndex
-    if (!orchestrator) parkedIndex += 1
-    const home = orchestrator
-      ? ORCHESTRATOR_HOME.clone()
-      : slotPoint(index, parked.length).add(new THREE.Vector3(0, PARK_LIFT, 0))
-    addView(agent, { index, shapeName: shapes[rosterIndex], home })
+    const sub = isSubOrchestrator(agent)
+    const index = orchestrator || sub ? -1 : parkedIndex
+    if (!orchestrator && !sub) parkedIndex += 1
+    const home = orchestrator ? ORCHESTRATOR_HOME.clone() : sub ? subHome(agent) : laneHome(agent.key, index)
+    addView(agent, {
+      index,
+      shapeName: shapes[rosterIndex],
+      home,
+      scale: sub ? SUB_ORCHESTRATOR_SCALE : 1,
+      subOrchestrator: sub,
+    })
   })
 
   function setStatus(view, status, now) {
@@ -424,6 +476,13 @@ export function createAgents(scene, roster, cssScene = null) {
     const isStill = still()
     const ended = []
     syncViews(state, terminals)
+    let mainView = null
+    for (const view of views.values()) {
+      if (view.orchestrator) {
+        mainView = view
+        break
+      }
+    }
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
@@ -432,7 +491,7 @@ export function createAgents(scene, roster, cssScene = null) {
       const style = STYLE[status] ?? STYLE.idle
       const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
       const ran = Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
-      const presence = agentPresence({ status, orchestrator: view.orchestrator }, ran)
+      const presence = agentPresence({ status, orchestrator: view.orchestrator || view.subOrchestrator }, ran)
       if (!view.presenceReady) {
         view.presence = presence.dim ? 0 : 1
         view.presenceReady = true
@@ -545,6 +604,13 @@ export function createAgents(scene, roster, cssScene = null) {
           view.parentLink.visible = false
         }
       }
+      if (view.orchestratorLink) {
+        const mainAt = mainView ? mainView.group.position : ORCHESTRATOR_HOME
+        setEnds(view.orchestratorLink, mainAt, view.group.position)
+        view.orchestratorLink.material.color.setHex(WHITE)
+        view.orchestratorLink.material.opacity = 0.3 * opacityFactor
+        view.orchestratorLink.visible = opacityFactor > 0.01
+      }
 
       const pointer = view.pointer ?? (working ? focusPointer(state, entry) : null)
       let color = null
@@ -610,6 +676,19 @@ export function createAgents(scene, roster, cssScene = null) {
     }
   }
 
+  function setLadder(ladder) {
+    layoutHomes(ladder)
+    const isStill = still()
+    for (const view of views.values()) {
+      if (view.parentKey) continue
+      const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
+      if (view.orchestrator) view.home.copy(ORCHESTRATOR_HOME)
+      else if (view.subOrchestrator) view.home.copy(subHome(agent))
+      else view.home.copy(laneHome(view.key, view.index))
+      if (isStill) view.group.position.copy(view.home)
+    }
+  }
+
   function dispose() {
     for (const view of [...views.values()]) removeView(view)
     pendingChipRemovals.clear()
@@ -617,5 +696,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, dispose, hubCenter: HUB_CENTER }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, dispose, hubCenter: HUB_CENTER }
 }

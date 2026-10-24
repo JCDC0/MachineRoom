@@ -160,7 +160,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const rootLabel = textSprite(String(rootName || 'project').toUpperCase(), { scale: 1.4, color: 'rgba(255,255,255,.6)' })
   rootLabel.position.copy(HUB_CENTER).add(new THREE.Vector3(0, -260, 0))
   scene.add(rootLabel)
-  const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
+  const roster = agents.map((agent) => ({
+    key: agent.key,
+    name: agent.name,
+    shape: agent.parser ?? agent.key,
+    role: agent.role ?? null,
+    subOrchestrator: agent.subOrchestrator === true,
+  }))
   const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster, { onPick })
   const board = createCostBoard(surface, { onPick })
@@ -550,6 +556,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     },
     setTasks(tasksMap) {
       agentSet.setTasks(tasksMap)
+    },
+    setLadder(ladder) {
+      hub.setLadder(ladder)
+      agentSet.setLadder(ladder)
     },
     dispose() {
       cancelAnimationFrame(frameId)
