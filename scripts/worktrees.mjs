@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { lstatSync, readFileSync, rmdirSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -144,6 +144,24 @@ export function cleanDecision({ dirty = false, ahead = 0, merged = true, running
   return { remove: true, reason: '' }
 }
 
+export function removeNodeModulesLink(folder) {
+  const target = join(folder, 'node_modules')
+  let stat
+  try {
+    stat = lstatSync(target)
+  } catch {
+    return false
+  }
+  if (!stat.isSymbolicLink()) return false
+  try {
+    if (process.platform === 'win32') rmdirSync(target)
+    else unlinkSync(target)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function worktreeLine(row) {
   const branch = row.branch || 'detached'
   const ahead = Number.isFinite(row.ahead) ? Math.max(0, Math.floor(row.ahead)) : 0
@@ -258,6 +276,7 @@ export function runWorktrees({ argv = process.argv.slice(2), log = console.log, 
         row.reason = removalReason(row, decision)
         continue
       }
+      removeNodeModulesLink(row.path)
       const removed = git(listed.project, ['worktree', 'remove', row.path])
       if (removed.ok) row.removed = true
       else row.reason = `git could not remove it: ${lastLine(removed.stderr)}`

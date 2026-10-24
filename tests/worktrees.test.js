@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, rmdirSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -10,6 +10,7 @@ import {
   lockHolder,
   parseWorktreeList,
   parseWorktreesArgs,
+  removeNodeModulesLink,
   runWorktrees,
   statusChanges,
   worktreeLane,
@@ -73,6 +74,21 @@ function addWorktree(project, base, lane, branch) {
   const path = join(base, `sample-mr-${lane}`)
   git(project, ['worktree', 'add', '-b', branch, path])
   return path
+}
+
+function linkNodeModules(project, worktree) {
+  const source = join(project, 'node_modules')
+  mkdirSync(join(source, 'pkg'), { recursive: true })
+  writeFileSync(join(source, 'pkg', 'index.js'), 'module.exports = 1\n')
+  const link = join(worktree, 'node_modules')
+  symlinkSync(source, link, process.platform === 'win32' ? 'junction' : 'dir')
+  cleanups.push(() => {
+    try {
+      if (process.platform === 'win32') rmdirSync(link)
+      else unlinkSync(link)
+    } catch {}
+  })
+  return link
 }
 
 function makeLaneWorktrees() {
@@ -225,6 +241,16 @@ describe('worktreeLine', () => {
   })
 })
 
+describe('removeNodeModulesLink', () => {
+  it('leaves a real node_modules folder alone', () => {
+    const folder = tempDir('mr-worktrees-real-')
+    mkdirSync(join(folder, 'node_modules'))
+    writeFileSync(join(folder, 'node_modules', 'keep.txt'), 'keep\n')
+    expect(removeNodeModulesLink(folder)).toBe(false)
+    expect(readFileSync(join(folder, 'node_modules', 'keep.txt'), 'utf8')).toBe('keep\n')
+  })
+})
+
 describe('parseWorktreesArgs', () => {
   it('reads the project, --clean and --json', () => {
     expect(parseWorktreesArgs(['--project', 'C:\\Work\\sample', '--clean', '--json'])).toEqual({
@@ -280,6 +306,20 @@ describe('the lane worktrees of a real project', () => {
     expect(git(project, ['rev-parse', '--verify', '--quiet', 'refs/heads/feat/dirty']).trim()).toHaveLength(40)
     expect(git(project, ['rev-parse', '--verify', '--quiet', 'refs/heads/feat/ahead']).trim()).toHaveLength(40)
     expect(git(project, ['worktree', 'list', '--porcelain'])).not.toContain('sample-mr-clean')
+  }, 60000)
+
+  it('removes a clean worktree whose node_modules link is a junction and keeps the project modules', () => {
+    const { project, runs, clean } = makeLaneWorktrees()
+    linkNodeModules(project, clean)
+    const listed = collectWorktrees({ project, runs })
+    expect(listed.worktrees.find((row) => row.lane === 'clean')).toMatchObject({ dirty: false, merged: true })
+    const lines = []
+    const code = runWorktrees({ argv: ['--project', project, '--clean'], runs, log: (line) => lines.push(line), error: () => {} })
+    expect(code).toBe(0)
+    expect(existsSync(clean)).toBe(false)
+    expect(readFileSync(join(project, 'node_modules', 'pkg', 'index.js'), 'utf8')).toBe('module.exports = 1\n')
+    expect(lines.find((line) => line.startsWith('clean | '))).toMatch(/ \| removed$/)
+    expect(lines).toContain('Removed 1 of 3.')
   }, 60000)
 
   it('leaves a clean worktree whose lane lock names a live process', () => {
