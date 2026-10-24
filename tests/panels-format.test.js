@@ -107,7 +107,7 @@ describe('format helpers for panels', () => {
   })
 })
 
-describe('meter numbers from Paperclip', () => {
+describe('meter numbers from the lane records', () => {
   it('clamps a percent to 0 to 100 and drops one that is not a number', () => {
     expect(clampPercent(45.4)).toBe(45)
     expect(clampPercent(5000)).toBe(100)
@@ -133,24 +133,24 @@ describe('meter numbers from Paperclip', () => {
     const html = renderToString(
       createElement(MetersPanel, {
         client: {},
-        initialBackupStatus: {},
         initialCosts: {
           summary: { budgetCents: 10000, spendCents: 4500, utilizationPercent: 5000 },
-          byAgent: { agentId: 'a1' },
-          quota: [
+          byAgent: [
             null,
-            { ok: true, provider: 'openrouter', windows: [null, { label: 'day', usedPercent: -30 }, { label: { bad: true }, usedPercent: NaN, detail: { bad: true } }] },
-            { ok: true, provider: 'anthropic' },
-            { ok: false, provider: 'gemini', error: { message: 'object' } },
+            'x',
+            4,
+            [],
+            { agentId: 'a1', agentName: { bad: true }, costCents: 'lots', inputTokens: -30, outputTokens: NaN },
           ],
         },
-        initialAgents: [{ id: 'a1', name: { first: 'x' }, role: ['r'], budgetMonthlyCents: 'lots' }],
       })
     )
     expect(html).toContain('width:100%')
     expect(html).not.toContain('5000%')
-    expect(html).toContain('width:0%')
-    expect(html).not.toContain('-30%')
+    expect(html).toContain('$0.00')
+    expect(html).toContain('tokens not reported')
     expect(html).not.toContain('NaN')
+    expect(html).not.toContain('-30')
+    expect(html).not.toContain('object Object')
   })
 })

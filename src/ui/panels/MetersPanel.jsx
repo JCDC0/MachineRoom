@@ -1,30 +1,29 @@
 import { useEffect, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
-import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf, timeUntil } from './format.js'
+import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf } from './format.js'
 import { subscribeToNotices } from './notices.js'
 
-export function budgetConfirmText(name, cents) {
-  return `Set ${visibleText(name)}'s monthly budget to ${formatCents(cents)}?`
+function tokenCount(value) {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
 
-export default function MetersPanel({
-  client,
-  initialCosts = null,
-  initialAgents = [],
-  initialEditingAgentId = null,
-  initialEditDollarValue = '',
-  initialConfirmOpen = false,
-}) {
+function formatTokens(count) {
+  if (count == null) return '?'
+  if (count < 1000) return String(Math.floor(count))
+  return `${(count / 1000).toFixed(1)}k`
+}
+
+function tokenText(row) {
+  const input = tokenCount(row.inputTokens)
+  const output = tokenCount(row.outputTokens)
+  if (input === null && output === null) return 'tokens not reported'
+  return `${formatTokens(input)} in / ${formatTokens(output)} out`
+}
+
+export default function MetersPanel({ client, initialCosts = null }) {
   const [costs, setCosts] = useState(initialCosts)
-  const [agents, setAgents] = useState(initialAgents)
   const [loading, setLoading] = useState(() => initialCosts == null)
   const [loadError, setLoadError] = useState(null)
-
-  const [editingAgentId, setEditingAgentId] = useState(initialEditingAgentId)
-  const [editDollarValue, setEditDollarValue] = useState(initialEditDollarValue)
-  const [savingBudget, setSavingBudget] = useState(false)
-  const [budgetError, setBudgetError] = useState(null)
-  const [budgetConfirmOpen, setBudgetConfirmOpen] = useState(Boolean(initialConfirmOpen))
 
   async function loadData({ isInitial = false } = {}) {
     if (isInitial) {
@@ -32,12 +31,8 @@ export default function MetersPanel({
       setLoadError(null)
     }
     try {
-      const [costData, agentList] = await Promise.all([
-        client.costs(),
-        client.agents(),
-      ])
+      const costData = await client.costs()
       setCosts(costData && typeof costData === 'object' ? costData : null)
-      setAgents(listOf(agentList))
     } catch (err) {
       if (isInitial) {
         setLoadError(err.message || 'Could not load meters.')
@@ -54,62 +49,18 @@ export default function MetersPanel({
   }, [client])
 
   useEffect(() => {
-    return subscribeToNotices(client, ['agents', 'costs'], () => {
+    return subscribeToNotices(client, ['costs'], () => {
       loadData()
     })
   }, [client])
 
-  function startEditing(agent) {
-    setEditingAgentId(agent.id)
-    setEditDollarValue(Number.isFinite(agent.budgetMonthlyCents) ? (agent.budgetMonthlyCents / 100).toFixed(2) : '')
-    setBudgetError(null)
-  }
-
-  function cancelEditing() {
-    setEditingAgentId(null)
-    setEditDollarValue('')
-    setBudgetError(null)
-    setBudgetConfirmOpen(false)
-  }
-
-  function requestBudgetSave() {
-    const parsed = parseFloat(editDollarValue)
-    if (Number.isNaN(parsed) || parsed < 0) {
-      setBudgetError('Enter a valid dollar amount zero or greater.')
-      return
-    }
-    setBudgetError(null)
-    setBudgetConfirmOpen(true)
-  }
-
-  async function saveBudget(agentId, cents) {
-    if (!Number.isFinite(cents) || cents < 0) {
-      setBudgetError('Enter a valid dollar amount zero or greater.')
-      setBudgetConfirmOpen(false)
-      return
-    }
-    setSavingBudget(true)
-    setBudgetError(null)
-    try {
-      const updated = await client.setAgentBudget(agentId, cents)
-      setAgents((prev) =>
-        prev.map((a) => (a.id === agentId ? { ...a, budgetMonthlyCents: updated.budgetMonthlyCents } : a))
-      )
-      setEditingAgentId(null)
-      setBudgetConfirmOpen(false)
-    } catch (err) {
-      setBudgetError(err.message || 'Could not update budget.')
-    } finally {
-      setSavingBudget(false)
-    }
-  }
-
   const summary = costs?.summary ?? null
-  const quota = listOf(costs?.quota)
   const byAgent = listOf(costs?.byAgent)
-  const companyBudget = Number.isFinite(summary?.budgetCents) ? summary.budgetCents : 0
   const companySpend = Number.isFinite(summary?.spendCents) ? summary.spendCents : 0
-  const companyPercent = clampPercent(summary?.utilizationPercent) ?? percentOf(companySpend, companyBudget)
+  const companyBudget = Number.isFinite(summary?.budgetCents) ? summary.budgetCents : 0
+  const companyPercent = companyBudget > 0
+    ? clampPercent(summary?.utilizationPercent) ?? percentOf(companySpend, companyBudget)
+    : 0
 
   return (
     <div className="meters-panel">
@@ -138,232 +89,54 @@ export default function MetersPanel({
         <div className="panel-state is-dim mono">No cost data available.</div>
       ) : (
         <>
-
-      <section className="meters-section" aria-label="Company budget">
-        <h4 className="meters-section-title">Company Budget</h4>
-        <div className="meters-summary-card">
-          {companyBudget === 0 ? (
-            <div className="meter-label-dim mono">No budget set</div>
-          ) : (
-            <>
+          <section className="meters-section" aria-label="This month">
+            <h4 className="meters-section-title">This month</h4>
+            <div className="meters-summary-card">
               <div className="meter-stats-row">
+                <span className="mono">Spent this month</span>
                 <span className="mono">
-                  {formatCents(companySpend)} of {formatCents(companyBudget)}
+                  {companyBudget > 0
+                    ? `${formatCents(companySpend)} of ${formatCents(companyBudget)}`
+                    : formatCents(companySpend)}
                 </span>
               </div>
-              <div className="meter-bar">
-                <div className="meter-track" aria-hidden="true">
-                  <div
-                    className={`meter-fill ${meterTone(companyPercent) === 'full' ? 'is-full' : ''}`}
-                    style={{ width: `${companyPercent}%` }}
-                  />
+              {companyBudget > 0 && (
+                <div className="meter-bar">
+                  <div className="meter-track" aria-hidden="true">
+                    <div
+                      className={`meter-fill ${meterTone(companyPercent) === 'full' ? 'is-full' : ''}`}
+                      style={{ width: `${companyPercent}%` }}
+                    />
+                  </div>
+                  <span className="meter-percent mono">{`${companyPercent}%`}</span>
                 </div>
-                <span className="meter-percent mono">{`${companyPercent}%`}</span>
-              </div>
-            </>
-          )}
-        </div>
-      </section>
+              )}
+            </div>
+          </section>
 
-      <section className="meters-section" aria-label="Agent budgets">
-        <h4 className="meters-section-title">Agent Budgets</h4>
-        <div className="meters-agents-list">
-          {listOf(agents).map((agent) => {
-            const isEditing = editingAgentId === agent.id
-            const agentCost = byAgent.find((c) => c?.agentId === agent.id)?.costCents
-            const spend = agentCost ?? agent.spentMonthlyCents ?? 0
-            const budget = Number.isFinite(agent.budgetMonthlyCents) ? agent.budgetMonthlyCents : 0
-            const pct = percentOf(spend, budget)
-            const parsedBudget = parseFloat(editDollarValue)
-            const pendingCents = Number.isNaN(parsedBudget) ? null : Math.round(parsedBudget * 100)
-
-            return (
-              <div key={agent.id} className="meter-agent-row">
-                <div className="meter-agent-head">
-                  <span className="meter-agent-name">{textOf(agent.name)}</span>
-                  <span className="meter-agent-role mono">{textOf(agent.role)}</span>
-                </div>
-
-                {budget === 0 ? (
-                  <div className="meter-stats-row">
-                    <span className="meter-label-dim mono">No limit</span>
-                    <span className="mono">{formatCents(spend)} spent</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="meter-stats-row">
-                      <span className="mono">
-                        {formatCents(spend)} of {formatCents(budget)}
-                      </span>
-                    </div>
-                    <div className="meter-bar">
-                      <div className="meter-track" aria-hidden="true">
-                        <div
-                          className={`meter-fill ${meterTone(pct) === 'full' ? 'is-full' : ''}`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                      <span className="meter-percent mono">{`${pct}%`}</span>
-                    </div>
-                  </>
-                )}
-
-                {isEditing ? (
-                  <div className="meter-inline-edit">
-                    {budgetError && !budgetConfirmOpen && (
-                      <div className="panel-banner is-error" role="alert">
-                        {budgetError}
-                      </div>
-                    )}
-                    <div className="meter-edit-input-row">
-                      <span className="meter-dollar-prefix">$</span>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
-                        value={editDollarValue}
-                        onChange={(e) => setEditDollarValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault()
-                            requestBudgetSave()
-                          } else if (e.key === 'Escape') {
-                            e.preventDefault()
-                            e.stopPropagation()
-                            cancelEditing()
-                          }
-                        }}
-                        placeholder="0.00"
-                        autoFocus
-                        disabled={savingBudget || budgetConfirmOpen}
-                        aria-label={`Budget in dollars for ${agent.name}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={requestBudgetSave}
-                        disabled={savingBudget || budgetConfirmOpen}
-                      >
-                        Save
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEditing}
-                        disabled={savingBudget}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                    {budgetConfirmOpen && (
-                      <div className="brief-confirm-card meter-confirm-card" role="region" aria-label="Confirm budget">
-                        <div className="brief-confirm-warning">
-                          {budgetConfirmText(agent.name, pendingCents)}
-                        </div>
-                        <div className="brief-confirm-actions">
-                          <button
-                            type="button"
-                            className="brief-confirm-btn"
-                            disabled={savingBudget || pendingCents == null || pendingCents < 0}
-                            onClick={() => saveBudget(agent.id, pendingCents)}
-                          >
-                            Set budget
-                          </button>
-                          <button
-                            type="button"
-                            className="brief-cancel-btn"
-                            disabled={savingBudget}
-                            onClick={() => {
-                              setBudgetConfirmOpen(false)
-                              setBudgetError(null)
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                        {budgetError && (
-                          <div className="brief-confirm-error mono" role="alert">
-                            {budgetError}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="meter-edit-action">
-                    <button
-                      type="button"
-                      className="meter-edit-btn"
-                      onClick={() => startEditing(agent)}
-                    >
-                      Set budget
-                    </button>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      </section>
-
-      {quota.length > 0 && (
-        <section className="meters-section" aria-label="Provider quotas">
-          <h4 className="meters-section-title">Quota</h4>
-          <div className="meters-quota-list">
-            {quota.map((item) => {
-              if (!item.ok) {
+          <section className="meters-section" aria-label="Lane spend">
+            <h4 className="meters-section-title">Lane spend</h4>
+            <div className="meters-agents-list">
+              {byAgent.map((row, index) => {
+                const agentId = textOf(row.agentId)
+                const name = visibleText(textOf(row.agentName) || agentId) || 'Lane'
                 return (
-                  <div key={textOf(item.provider)} className="quota-provider-card is-error">
-                    <div className="quota-provider-name">{textOf(item.provider)}</div>
-                    <div className="quota-error-label">Could not read quota</div>
-                    <div className="quota-error-text mono">{textOf(item.error)}</div>
+                  <div key={`${agentId}-${index}`} className="meter-agent-row">
+                    <div className="meter-agent-head">
+                      <span className="meter-agent-name">{name}</span>
+                      <span className="mono">{formatCents(row.costCents)}</span>
+                    </div>
+                    <div className="meter-label-dim mono">{tokenText(row)}</div>
                   </div>
                 )
-              }
-
-              return (
-                <div key={textOf(item.provider)} className="quota-provider-card">
-                  <div className="quota-provider-name">{textOf(item.provider)}</div>
-                  <div className="quota-windows-list">
-                    {listOf(item.windows).map((w, index) => {
-                      const usedPercent = clampPercent(w?.usedPercent)
-                      const hasPct = usedPercent !== null
-
-                      return (
-                        <div key={`${textOf(w.label)}-${index}`} className="quota-window-row">
-                          <div className="quota-window-head">
-                            <span className="quota-window-label">{textOf(w.label)}</span>
-                            {hasPct && w.resetsAt && (
-                              <span className="quota-window-reset mono">
-                                resets in {timeUntil(w.resetsAt)}
-                              </span>
-                            )}
-                          </div>
-
-                          {hasPct ? (
-                            <div className="meter-bar">
-                              <div className="meter-track" aria-hidden="true">
-                                <div
-                                  className={`meter-fill ${meterTone(usedPercent) === 'full' ? 'is-full' : ''}`}
-                                  style={{ width: `${usedPercent}%` }}
-                                />
-                              </div>
-                              <span className="quota-percent-label meter-percent mono">{`${usedPercent}%`}</span>
-                            </div>
-                          ) : (
-                            <div className="quota-detail-text mono">{textOf(w.detail)}</div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </section>
-      )}
+              })}
+            </div>
+            <div className="meter-label-dim mono">
+              Spend comes from the lane run records. Budgets are not set here.
+            </div>
+          </section>
         </>
       )}
     </div>
   )
 }
-
