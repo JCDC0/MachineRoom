@@ -74,6 +74,14 @@ export function nameLabel(name) {
   return label.length > 32 ? `${label.slice(0, 31)}~` : label
 }
 
+export function showsNameLabel(agent, sector) {
+  if (!isSubOrchestrator(agent)) return true
+  const name = typeof agent?.name === 'string' ? agent.name.trim() : ''
+  const sectorName = typeof sector?.name === 'string' ? sector.name.trim() : ''
+  if (!name || !sectorName) return true
+  return name.toLowerCase() !== sectorName.toLowerCase()
+}
+
 export function childPlace(parentPlace, index = 0) {
   const x = Number(parentPlace?.x) || 0
   const y = Number(parentPlace?.y) || 0
@@ -683,6 +691,12 @@ export function createAgents(scene, roster, cssScene = null) {
     for (const view of views.values()) {
       if (view.parentKey) continue
       const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
+      if (view.subOrchestrator) {
+        const sector = sectorList.find((entry) => entry.id === subIdOf(agent))
+        view.label.visible = showsNameLabel(agent, sector)
+      } else {
+        view.label.visible = true
+      }
       if (view.orchestrator) view.home.copy(ORCHESTRATOR_HOME)
       else if (view.subOrchestrator) view.home.copy(subHome(agent))
       else view.home.copy(laneHome(view.key, view.index))
