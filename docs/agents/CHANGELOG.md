@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A project run resolves the project, this checkout, the main checkout and every lane worktree before its checks, refuses the user profile and folders that hold it, the OS temp folder and the runs folder, starts the harness with `PWD` set and `OLDPWD` and `INIT_CWD` removed, masks keys in the recording log and the stored task, and records Claude Code runs (task Q5a).
+
 - Briefs Q5a, Q5b and Q5c: the V5 audit's findings X1 to X17, in three parts that touch separate files.
 
 - Two fixes from the first browser check of L3: the lane fallback of `/api/control/agents` gave lane agents the role `general`, so Dispatch's `Run on this project` section, which lists only agents with no Paperclip role, never showed; lane agents now answer with `role: null`, with a test. The waiting overlay no longer tells the owner to assign an issue in Paperclip: it names Dispatch and `npm run run-lane` first, and its titles say the live feed instead of Paperclip. A task typed in Dispatch then ran on OpenCode 2 on a scratch project and made its change there.

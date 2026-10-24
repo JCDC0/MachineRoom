@@ -9,6 +9,14 @@ import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
 const scenarioTree = JSON.parse(readFileSync(new URL('../public/fixtures/scenario-a-tree.json', import.meta.url), 'utf8'))
+const scenarioHLog = readFileSync(new URL('../public/fixtures/scenario-h-run.jsonl', import.meta.url), 'utf8')
+  .trim()
+  .split(/\r?\n/)
+  .map((line) => JSON.parse(line))
+  .filter((frame) => frame.type === 'heartbeat.run.log')
+  .map((frame) => frame.payload.chunk)
+  .join('')
+  .replace(/\r?\n$/, '')
 const scenarioChunks = readFileSync(new URL('../public/fixtures/scenario-a-run.jsonl', import.meta.url), 'utf8')
   .split('\n')
   .filter(Boolean)
@@ -377,6 +385,68 @@ describe('writeRecording', () => {
     expect(agents.agents[0]).toMatchObject({ key: 'agy', adapterType: 'process', parser: 'agy' })
     const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
     expect(tree.files).toEqual(['src/strings.js'])
+  })
+
+  it('writes the three recording files for a Claude record from scenario-h', () => {
+    const tree = JSON.parse(readFileSync(new URL('../public/fixtures/scenario-h-tree.json', import.meta.url), 'utf8'))
+    const { dir, sha } = worktreeWith(Object.fromEntries(tree.files.map((name) => [name, 'x\n'])))
+    const root = tempFolder()
+    const logPath = join(root, 'claude-T10-20261024-101010.log')
+    writeFileSync(logPath, `${scenarioHLog}\n`)
+    const record = {
+      lane: 'claude',
+      startedAt: '2026-10-24T09:11:59.000Z',
+      minutes: 3,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: 'feat/s6g',
+      commits: [`${sha} one`],
+    }
+    const written = writeRecording({ record, lanes: { claude: { ...lanes.claude, worktree: dir } }, root, env: {} })
+
+    expect(written.name).toBe('claude-T10-20261024-101010')
+    expect(written.frames).toBe(31)
+    expect(written.toolCalls).toBe(14)
+    const frames = readFrames(written.runPath)
+    expect(frames[frames.length - 1].payload).toMatchObject({ status: 'succeeded', error: null })
+    const agents = JSON.parse(readFileSync(written.agentsPath, 'utf8'))
+    expect(agents.agents[0]).toMatchObject({ key: 'claude', adapterType: 'claude_local', parser: 'claude' })
+    const writtenTree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect([...writtenTree.files].sort()).toEqual([...tree.files].sort())
+  })
+
+  it('masks a key in the log before it writes the recording', () => {
+    const { dir, sha } = worktreeWith({ 'README.md': 'x\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'opencode-T10-key.log')
+    const key = `sk-${'b'.repeat(32)}`
+    writeFileSync(logPath, `${JSON.stringify({
+      type: 'tool_use',
+      timestamp: Date.parse('2026-10-20T10:10:10.000Z'),
+      part: {
+        type: 'tool',
+        id: 'key-call',
+        tool: 'bash',
+        state: { status: 'completed', input: { command: `echo OPENROUTER_API_KEY=${key}` }, output: '' },
+      },
+    })}\n`)
+    const record = {
+      lane: 'opencode',
+      startedAt: '2026-10-20T10:10:10.000Z',
+      minutes: 1,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: 'feat/t10',
+      commits: [`${sha} one`],
+    }
+    const written = writeRecording({ record, lanes: { opencode: { ...lanes.opencode, worktree: dir } }, root, env: {} })
+
+    expect(written.toolCalls).toBe(1)
+    const text = readFileSync(written.runPath, 'utf8')
+    expect(text).not.toContain(key)
+    expect(text).toContain('OPENROUTER_API_KEY=[key]')
   })
 
   it('writes an index with the new entry and no index error', () => {

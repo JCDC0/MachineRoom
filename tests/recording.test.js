@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { agentsFile, createRunLineReader, framesFromRun } from '../src/briefs/recording.js'
 import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
+import { prepare } from '../src/model/source.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadRecording } from './helpers.js'
 
@@ -165,6 +166,53 @@ describe('AGY as a lane', () => {
     expect(frames[2].payload.chunk).toBe(`${agyLines[4]}\n`)
     expect(Date.parse(frames[2].createdAt)).toBeGreaterThan(Date.parse(frames[1].createdAt))
     expect(frames[frames.length - 1].payload).toMatchObject({ status: 'succeeded', error: null })
+  })
+})
+
+describe('Claude Code as a lane', () => {
+  const claudeChunks = readFileSync(new URL('../public/fixtures/scenario-h-run.jsonl', import.meta.url), 'utf8')
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => JSON.parse(line))
+    .filter((frame) => frame.type === 'heartbeat.run.log')
+    .map((frame) => frame.payload.chunk)
+  const claudeLines = claudeChunks.map((chunk) => chunk.replace(/\r?\n$/, ''))
+
+  it('names the Claude agent with the claude_local adapter the parser picker reads as Claude', () => {
+    expect(agentsFile('claude', lanes)).toEqual({
+      projectRoot: 'MachineRoom-claude',
+      agents: [{ id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude' }],
+    })
+  })
+
+  it('marks the scenario-h lines that the Claude parser turns into activities as read', () => {
+    const readLine = createRunLineReader('claude')
+    const entries = claudeLines.map((line) => readLine(line))
+    const read = entries.filter((entry) => entry?.read)
+    expect(read).toHaveLength(28)
+    expect(read[0].chunk).toBe(`${claudeLines[1]}\n`)
+    expect(read[0].at).toBeNull()
+    expect(read.every((entry) => entry.chunk.endsWith('\n'))).toBe(true)
+    expect(entries[0]).toMatchObject({ read: false })
+    expect(entries[claudeLines.length - 1]).toMatchObject({ read: false })
+  })
+
+  it('builds the frames of a Claude log', () => {
+    const log = claudeLines.join('\n')
+    const record = { lane: 'claude', startedAt: '2026-10-24T09:11:59.000Z', minutes: 3, exitCode: 0, killed: false }
+    const frames = framesFromRun({ harness: 'claude', log, record })
+    expect(frames).toHaveLength(31)
+    expect(frames[0].payload.agentId).toBe('agent-claude')
+    expect(frames[1].payload.status).toBe('running')
+    expect(frames[2].payload.chunk).toBe(`${claudeLines[1]}\n`)
+    expect(frames[frames.length - 1].payload).toMatchObject({ status: 'succeeded', error: null })
+
+    const agents = agentsFile('claude', lanes)
+    const tree = { root: 'agent-sandbox', files: ['src/math.js', 'src/strings.js', 'docs/claude-notes.md', 'docs/notes.md', 'package.json', 'test/math.test.js'] }
+    const { activities } = prepare({ frames, agentsFile: agents, treeFile: tree })
+    const starts = activities.filter((activity) => activity.type === 'tool.start')
+    expect(starts.length).toBeGreaterThan(0)
+    expect(starts.some((activity) => activity.label.startsWith('write '))).toBe(true)
   })
 })
 

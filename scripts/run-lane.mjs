@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, childEnvironment, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -48,8 +48,17 @@ function gitCheckout(cwd) {
   return String(result.stdout ?? '').trim() === 'true'
 }
 
-function projectFolder(value) {
+function realPath(value) {
   const folder = resolve(String(value ?? ''))
+  try {
+    return realpathSync.native(folder)
+  } catch {
+    return folder
+  }
+}
+
+function projectFolder(value) {
+  const folder = realPath(String(value ?? ''))
   let stat
   try {
     stat = statSync(folder)
@@ -58,6 +67,17 @@ function projectFolder(value) {
   }
   if (!stat.isDirectory()) throw new Error(`The project folder ${folder} is not a folder.`)
   return folder
+}
+
+function resolvedLanes(lanes) {
+  return Object.fromEntries(Object.entries(lanes ?? {}).map(([key, lane]) => {
+    if (!lane || typeof lane !== 'object' || typeof lane.worktree !== 'string' || lane.worktree.trim() === '') return [key, lane]
+    return [key, { ...lane, worktree: realPath(lane.worktree) }]
+  }))
+}
+
+function runsFolder() {
+  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
 function readTask(options) {
@@ -94,6 +114,12 @@ function gitRead(cwd, args) {
   const result = spawnSync(git, args, { cwd, encoding: 'utf8', windowsHide: true })
   if (result.error || result.status !== 0) return null
   return String(result.stdout ?? '').trim()
+}
+
+function gitCommonDir(cwd) {
+  const common = gitRead(cwd, ['rev-parse', '--git-common-dir'])
+  if (!common) return ''
+  return realPath(resolve(cwd, common))
 }
 
 let mainCheckoutPath = null
@@ -237,9 +263,14 @@ async function main() {
     const dirty = gitCheckout(project) ? gitStatus(project).trim() !== '' : false
     const problems = projectProblems({
       project,
-      root,
-      mainCheckout: mainCheckout(),
-      lanes,
+      root: realPath(root),
+      mainCheckout: realPath(mainCheckout()),
+      lanes: resolvedLanes(lanes),
+      home: realPath(homedir()),
+      temp: realPath(process.env.TEMP || tmpdir()),
+      runs: realPath(runsFolder()),
+      commonDir: gitCommonDir(project),
+      repoCommonDir: gitCommonDir(root),
       dirty,
       allowDirty: options.allowDirty === true,
     })
@@ -314,7 +345,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   const log = createWriteStream(logPath)
   const startedAt = Date.now()
   // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
-  const child = spawn(command.file, command.args, { cwd: command.cwd, env: { ...process.env, PWD: command.cwd }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  const child = spawn(command.file, command.args, { cwd: command.cwd, env: childEnvironment(process.env, command.cwd), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
   child.stdout?.pipe(log, { end: false })
   child.stderr?.pipe(log, { end: false })
 

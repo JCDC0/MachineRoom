@@ -146,7 +146,7 @@ export function failureText(record) {
 
 export function framesFromRun({ harness, log, session, record } = {}) {
   if (!record || typeof record !== 'object') throw new Error('There is no run record to turn into a recording.')
-  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy') throw new Error(`The recording does not know the ${harness} log.`)
+  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude') throw new Error(`The recording does not know the ${harness} log.`)
   const start = msFrom(record.startedAt)
   if (start === null) throw new Error('The run record has no start time.')
   const ids = idsFor(record.lane, record.startedAt)

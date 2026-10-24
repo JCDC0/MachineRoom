@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -16,6 +16,7 @@ import { getJson, postJson, waitFor } from './helpers/loop.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const REAL_REPO_ROOT = realpathSync.native(REPO_ROOT)
 const TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
 const cleanups = []
 
@@ -169,9 +170,51 @@ describe('the runs route with a task', () => {
     const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', confirmed: true })
     expect(res.status).toBe(400)
     expect(res.body).toEqual({
-      error: `The project folder ${REPO_ROOT} is this checkout. Run on another project.`,
+      error: `The project folder ${REAL_REPO_ROOT} is this checkout. Run on another project.`,
     })
     expect(readArgs(out)).toBeNull()
+  })
+
+  it('refuses a junction to this checkout', async (context) => {
+    const base = tempDir('mr-project-dispatch-')
+    const link = join(base, 'repo-link')
+    try {
+      symlinkSync(REPO_ROOT, link, 'junction')
+    } catch {
+      context.skip()
+      return
+    }
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const { url } = await startBridge({ projectRoot: link, runnerPath: writeRunner(runnerDir, out) })
+
+    const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', confirmed: true })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe(`The project folder ${REAL_REPO_ROOT} is this checkout. Run on another project.`)
+    expect(readArgs(out)).toBeNull()
+  })
+
+  it('refuses the runs folder', async () => {
+    const base = tempDir('mr-project-dispatch-')
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs, { recursive: true })
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const { url } = await startBridge({ projectRoot: runs, runnerPath: writeRunner(runnerDir, out) })
+
+    const previous = process.env.TEMP
+    process.env.TEMP = base
+    try {
+      const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', confirmed: true })
+      expect(res.status).toBe(400)
+      expect(res.body).toEqual({
+        error: `The project folder ${runs} is the runs folder or inside it. Run on another project.`,
+      })
+      expect(readArgs(out)).toBeNull()
+    } finally {
+      if (previous === undefined) delete process.env.TEMP
+      else process.env.TEMP = previous
+    }
   })
 
   it('keeps the brief route unchanged, even on a dirty project', async () => {

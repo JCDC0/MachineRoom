@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, realpathSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
@@ -19,6 +19,15 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const REPO_LANES = join(REPO_ROOT, 'docs', 'agents', 'lanes.json')
 const GIT_TIMEOUT_MS = 10 * 1000
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
+
+function realPath(value) {
+  const folder = resolve(String(value ?? ''))
+  try {
+    return realpathSync.native(folder)
+  } catch {
+    return folder
+  }
+}
 
 function git(folder, args) {
   return new Promise((done) => {
@@ -52,10 +61,31 @@ let mainCheckoutPromise = null
 function mainCheckout() {
   if (!mainCheckoutPromise) {
     mainCheckoutPromise = git(REPO_ROOT, ['rev-parse', '--git-common-dir']).then((common) => {
-      return common && common.trim() ? dirname(resolve(REPO_ROOT, common.trim())) : REPO_ROOT
+      return common && common.trim() ? realPath(dirname(resolve(REPO_ROOT, common.trim()))) : realPath(REPO_ROOT)
     })
   }
   return mainCheckoutPromise
+}
+
+function gitCommonDir(folder) {
+  return git(folder, ['rev-parse', '--git-common-dir']).then((common) => {
+    const text = String(common ?? '').trim()
+    return text ? realPath(resolve(folder, text)) : ''
+  })
+}
+
+let repoCommonDirPromise = null
+
+function repoCommonDir() {
+  if (!repoCommonDirPromise) repoCommonDirPromise = gitCommonDir(REPO_ROOT)
+  return repoCommonDirPromise
+}
+
+function resolvedLanes(lanes) {
+  return Object.fromEntries(Object.entries(lanes ?? {}).map(([key, lane]) => {
+    if (!lane || typeof lane !== 'object' || typeof lane.worktree !== 'string' || lane.worktree.trim() === '') return [key, lane]
+    return [key, { ...lane, worktree: realPath(lane.worktree) }]
+  }))
 }
 
 export function runsFile() {
@@ -98,7 +128,7 @@ export function readOutcomeRecords(file) {
 }
 
 export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {} }) {
-  const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
+  const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const command = runnerCommand ?? { file: process.execPath, args: ['scripts/run-lane.mjs'] }
   const running = new Map()
@@ -287,9 +317,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const dirty = await projectDirty(resolvedRoot)
       const problems = projectProblems({
         project: resolvedRoot,
-        root: REPO_ROOT,
+        root: realPath(REPO_ROOT),
         mainCheckout: await mainCheckout(),
-        lanes,
+        lanes: resolvedLanes(lanes),
+        home: realPath(homedir()),
+        temp: realPath(process.env.TEMP || tmpdir()),
+        runs: realPath(join(process.env.TEMP || tmpdir(), 'machineroom-runs')),
+        commonDir: await gitCommonDir(resolvedRoot),
+        repoCommonDir: await repoCommonDir(),
         dirty,
         allowDirty,
       })

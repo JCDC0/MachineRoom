@@ -3,6 +3,7 @@ import { createAgyParser } from '../model/parsers/agy.js'
 import { createClaudeParser } from '../model/parsers/claude.js'
 import { createHermesParser } from '../model/parsers/hermes.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
+import { maskKeys } from './audit.js'
 import { branchFor } from './briefs.js'
 
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
@@ -407,17 +408,39 @@ export function pathInside(child, parent) {
   return one.startsWith(two.endsWith('/') ? two : `${two}/`)
 }
 
-export function projectProblems({ project, root, mainCheckout, lanes, dirty, allowDirty } = {}) {
+export function childEnvironment(env, cwd) {
+  const next = { ...(env ?? {}) }
+  delete next.PWD
+  delete next.OLDPWD
+  delete next.INIT_CWD
+  if (typeof cwd === 'string' && cwd.trim() !== '') next.PWD = cwd
+  return next
+}
+
+function knownPath(value) {
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+function samePath(one, two) {
+  return pathInside(one, two) && pathInside(two, one)
+}
+
+export function projectProblems({
+  project, root, mainCheckout, lanes, dirty, allowDirty,
+  home, temp, runs, commonDir, repoCommonDir,
+} = {}) {
   const folder = String(project ?? '').trim()
   if (!folder) return ['--project needs a folder.']
   const problems = []
   const checkouts = [root, mainCheckout]
-    .filter((value) => typeof value === 'string' && value.trim() !== '')
-    .filter((value, index, list) => list.findIndex((other) => pathInside(value, other) && pathInside(other, value)) === index)
+    .filter(knownPath)
+    .filter((value, index, list) => list.findIndex((other) => samePath(value, other)) === index)
   if (checkouts.some((checkout) => pathInside(folder, checkout))) {
     problems.push(`The project folder ${folder} is this checkout. Run on another project.`)
   } else if (checkouts.some((checkout) => pathInside(checkout, folder))) {
     problems.push(`The project folder ${folder} holds this checkout. Name one project folder, not a folder of projects.`)
+  } else if (knownPath(commonDir) && knownPath(repoCommonDir) && samePath(commonDir, repoCommonDir)) {
+    problems.push(`The project folder ${folder} is a git checkout of this repository. Run on another project.`)
   }
   if (problems.length === 0) {
     for (const [key, lane] of Object.entries(lanes ?? {})) {
@@ -428,6 +451,19 @@ export function projectProblems({ project, root, mainCheckout, lanes, dirty, all
         break
       }
     }
+  }
+  if (problems.length === 0 && knownPath(home)) {
+    if (samePath(folder, home)) {
+      problems.push(`The project folder ${folder} is the user profile. Run on another project.`)
+    } else if (pathInside(home, folder)) {
+      problems.push(`The project folder ${folder} holds the user profile. Name one project folder, not a folder of profiles.`)
+    }
+  }
+  if (problems.length === 0 && knownPath(temp) && samePath(folder, temp)) {
+    problems.push(`The project folder ${folder} is the OS temp folder. Run on another project.`)
+  }
+  if (problems.length === 0 && knownPath(runs) && pathInside(folder, runs)) {
+    problems.push(`The project folder ${folder} is the runs folder or inside it. Run on another project.`)
   }
   if (problems.length === 0 && dirty === true && allowDirty !== true) {
     problems.push(`The project folder ${folder} has uncommitted changes. Commit or discard them, or pass --allow-dirty.`)
@@ -761,7 +797,7 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     commits: Array.isArray(commits) ? commits.map(String) : [],
   }
   if (typeof project === 'string' && project.trim() !== '') record.project = project
-  if (typeof task === 'string' && task !== '') record.task = task.slice(0, 200)
+  if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, 200)
   return record
 }
 
