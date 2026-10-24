@@ -1,12 +1,8 @@
 import { basename } from '../model/paths.js'
-import { createAgyParser } from '../model/parsers/agy.js'
-import { createClaudeParser } from '../model/parsers/claude.js'
-import { LINE as HERMES_LINE } from '../model/parsers/hermes.js'
-import { createOpencodeParser } from '../model/parsers/opencode.js'
+import { harnessByKey } from '../harnesses/index.js'
 import { RECORDING_NAME } from '../startup.js'
 import { sessionToolLines } from './run.js'
 
-const ADAPTERS = { agy: 'process', claude: 'claude_local', hermes: 'hermes_local', opencode: 'opencode_local' }
 const RUNNING_DELAY = 1000
 const END_PAD = 1000
 const MS_FLOOR = 1e11
@@ -100,32 +96,8 @@ function hermesEntries(session) {
 }
 
 export function createRunLineReader(harness) {
-  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude') throw new Error(`The line reader does not know the ${harness} log.`)
-  const parser = harness === 'agy'
-    ? createAgyParser({ rootName: '', files: [], dirs: [] })
-    : harness === 'opencode'
-      ? createOpencodeParser({ rootName: '', files: [], dirs: [] })
-      : harness === 'claude'
-        ? createClaudeParser({ rootName: '', files: [], dirs: [] })
-        : null
-  return function readLine(line, at = null) {
-    const text = String(line ?? '')
-    if (!text.trim()) return null
-    if (harness === 'hermes') {
-      return { chunk: `${text}\n`, at: Number.isFinite(at) ? at : null, read: HERMES_LINE.test(text) }
-    }
-    let time = Number.isFinite(at) ? at : null
-    if (time === null) {
-      try {
-        const item = JSON.parse(text)
-        if (typeof item?.timestamp === 'number' && Number.isFinite(item.timestamp)) time = item.timestamp
-      } catch {
-        time = null
-      }
-    }
-    const activities = parser.push(`${text}\n`, time ?? 0)
-    return { chunk: `${text}\n`, at: time, read: activities.length > 0 }
-  }
+  if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The line reader does not know the ${harness} log.`)
+  return harnessByKey[harness].readLine()
 }
 
 function logEntries(harness, log) {
@@ -146,7 +118,7 @@ export function failureText(record) {
 
 export function framesFromRun({ harness, log, session, record } = {}) {
   if (!record || typeof record !== 'object') throw new Error('There is no run record to turn into a recording.')
-  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude') throw new Error(`The recording does not know the ${harness} log.`)
+  if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The recording does not know the ${harness} log.`)
   const start = msFrom(record.startedAt)
   if (start === null) throw new Error('The run record has no start time.')
   const ids = idsFor(record.lane, record.startedAt)
@@ -206,8 +178,8 @@ export function agentsFile(lane, lanes) {
   const entry = lanes && Object.hasOwn(lanes, key) ? lanes[key] : null
   if (!entry) throw new Error(`There is no lane named ${key}.`)
   const harness = entry.cli?.harness ?? key
-  const adapterType = Object.hasOwn(ADAPTERS, harness) ? ADAPTERS[harness] : null
-  if (!adapterType) throw new Error(`The recording does not know the ${harness} adapter.`)
+  if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The recording does not know the ${harness} adapter.`)
+  const adapterType = harnessByKey[harness].adapterType
   return {
     projectRoot: basename(entry.worktree ?? ''),
     agents: [

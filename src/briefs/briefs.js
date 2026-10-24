@@ -1,6 +1,7 @@
+import { OWNER_ORDER } from '../harnesses/index.js'
+
 const BRIEF_LINE = /^\*\*([A-Z]\d+[a-z]?)\. (.+?)\.\*\*\s*(.*)$/
 const OWNER_TAIL = /^(.*?)\s*\(([^()]*)\)$/
-const OWNER_NAMES = ['hermes', 'opencode', 'agy', 'claude']
 const DONE_MARKER = /\b(merged as|built as|done)\b/i
 
 export function parseBriefs(markdown) {
@@ -23,7 +24,7 @@ export function parseBriefs(markdown) {
       id,
       title,
       ownerText,
-      owners: OWNER_NAMES.filter((name) => new RegExp(`\\b${name}\\b`).test(lower)),
+      owners: OWNER_ORDER.filter((name) => new RegExp(`\\b${name}\\b`).test(lower)),
       done: DONE_MARKER.test(ownerText),
       section,
       text: text.trim(),

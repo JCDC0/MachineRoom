@@ -1,15 +1,11 @@
 import { basename } from '../model/paths.js'
-import { createAgyParser } from '../model/parsers/agy.js'
-import { createClaudeParser } from '../model/parsers/claude.js'
-import { createHermesParser } from '../model/parsers/hermes.js'
-import { createOpencodeParser } from '../model/parsers/opencode.js'
+import { finiteNumber, summaryOf } from '../harnesses/common.js'
+import { harnessByKey } from '../harnesses/index.js'
 import { maskKeys } from './audit.js'
 import { branchFor } from './briefs.js'
 
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
 
-const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
-const REPORT_LINES = 20
 const OVERRIDES = [
   { key: 'model', pattern: /^[A-Za-z0-9][\w./:@-]*$/, problem: '--model needs a model id, for example minimax/minimax-m3.1-flash:free.' },
   { key: 'reasoning', pattern: /^[a-z]+$/, problem: '--reasoning needs a level such as low, medium, high or xhigh.' },
@@ -28,44 +24,15 @@ export function unattendedPrompt(prompt) {
   return `${prompt}\n\n${UNATTENDED_NOTE}`
 }
 
-function expandBin(bin, env) {
-  return String(bin).replace(VARIABLE, (whole, name) => {
-    const value = env?.[name]
-    if (typeof value !== 'string' || value === '') throw new Error(`The environment variable ${name} is not set.`)
-    return value
-  })
-}
-
 export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sessionId } = {}) {
   if (!lane || typeof lane !== 'object') throw new Error('There is no lane to run.')
   const cli = lane.cli
   if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
   const harness = cli.harness
-  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude') throw new Error(`The runner does not know the ${harness} command line.`)
+  if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The runner does not know the ${harness} command line.`)
   const folder = typeof cwd === 'string' && cwd.trim() !== '' ? cwd : lane.worktree
   if (typeof folder !== 'string' || folder.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
-  const file = expandBin(cli.bin, env)
-  const reasoning = lane.reasoning ? String(lane.reasoning) : ''
-  if (harness === 'claude') {
-    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', cli.model, '--dangerously-skip-permissions']
-    if (typeof sessionId === 'string' && sessionId !== '') args.push('--session-id', sessionId)
-    return { file, args, cwd: folder }
-  }
-  if (harness === 'hermes') {
-    const args = ['-z', prompt, '-m', cli.model, '--provider', cli.provider]
-    if (cli.toolsets) args.push('-t', String(cli.toolsets))
-    if (reasoning) args.push('--reasoning', reasoning)
-    if (usageFile) args.push('--usage-file', usageFile)
-    return { file, args, cwd: folder }
-  }
-  if (harness === 'agy') {
-    const args = ['--print', prompt, '--output-format', 'stream-json']
-    if (cli.model) args.push('--model', String(cli.model))
-    args.push('--dangerously-skip-permissions')
-    return { file, args, cwd: folder }
-  }
-  const model = reasoning ? `${cli.model}#${reasoning}` : cli.model
-  return { file, args: ['run', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: folder }
+  return harnessByKey[harness].command({ cli, prompt, env, usageFile, title, folder, reasoning: lane.reasoning, sessionId })
 }
 
 export const DEFAULT_MINUTES = 100
@@ -92,10 +59,6 @@ function startTime(record) {
   if (typeof value !== 'string' || value.trim() === '') return null
   const time = Date.parse(value)
   return Number.isFinite(time) ? time : null
-}
-
-function finiteNumber(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
 function roundTo(value, places) {
@@ -500,10 +463,6 @@ export function projectProblems({
   return problems
 }
 
-function unique(values) {
-  return [...new Set(values)].sort()
-}
-
 function toolArguments(value) {
   if (value && typeof value === 'object') return value
   try {
@@ -596,220 +555,21 @@ export function sessionToolLines(exportText) {
   return lines
 }
 
-function headLines(text) {
-  const report = String(text ?? '').replace(/\s+$/, '')
-  if (!report) return []
-  return report.split(/\r?\n/).slice(0, REPORT_LINES)
-}
-
-function reportHead(log) {
-  const lines = String(log ?? '').split(/\r?\n/)
-  const firstTool = lines.findIndex((line) => line.trimStart().startsWith('┊'))
-  return headLines((firstTool === -1 ? lines : lines.slice(0, firstTool)).join('\n'))
-}
-
-function opencodeReport(log) {
-  return headLines(opencodeReply(log))
-}
-
-function opencodeReply(log) {
-  let words = null
-  for (const line of String(log ?? '').split(/\r?\n/)) {
-    if (!line.trim()) continue
-    let item
-    try {
-      item = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (item?.type !== 'text') continue
-    const text = item?.part?.text
-    if (typeof text !== 'string' || !text.trim()) continue
-    words = text
-  }
-  return words ?? ''
-}
-
-function opencodeUsage(log) {
-  let cost = null
-  const inputs = []
-  const outputs = []
-  for (const line of String(log ?? '').split(/\r?\n/)) {
-    if (!line.trim()) continue
-    let item
-    try {
-      item = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (item?.type !== 'step_finish') continue
-    const stepCost = item?.part?.cost
-    if (typeof stepCost === 'number' && Number.isFinite(stepCost)) cost = (cost ?? 0) + stepCost
-    const tokens = item?.part?.tokens
-    if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) continue
-    const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {}
-    inputs.push(tokens.input, cache.read, cache.write)
-    outputs.push(tokens.output, tokens.reasoning)
-  }
-  return {
-    costUsd: cost === null ? null : Math.round(cost * 1e6) / 1e6,
-    inputTokens: sumTokens(inputs),
-    outputTokens: sumTokens(outputs),
-  }
-}
-
-function opencodeSummary(log, worktree) {
-  const parser = createOpencodeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
-  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('opencode', activities, opencodeReport(log), opencodeUsage(log))
-}
-
-function lastJsonLine(log, match) {
-  let last = null
-  for (const line of String(log ?? '').split(/\r?\n/)) {
-    if (!line.trim()) continue
-    let item
-    try {
-      item = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (match(item)) last = item
-  }
-  return last
-}
-
-function tokenCount(value) {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
-}
-
-function sumTokens(values) {
-  const known = values.map(tokenCount).filter((value) => value !== null)
-  return known.length === 0 ? null : known.reduce((sum, value) => sum + value, 0)
-}
-
-function claudeUsage(log) {
-  const line = lastJsonLine(log, (item) => item?.type === 'result')
-  if (!line) return { costUsd: null, inputTokens: null, outputTokens: null }
-  const models = line.modelUsage && typeof line.modelUsage === 'object' ? Object.values(line.modelUsage).filter((item) => item && typeof item === 'object') : []
-  if (models.length > 0) {
-    // modelUsage holds the run's totals; usage holds only the last turn.
-    return {
-      costUsd: finiteNumber(line.total_cost_usd),
-      inputTokens: sumTokens(models.flatMap((item) => [item.inputTokens, item.cacheCreationInputTokens, item.cacheReadInputTokens])),
-      outputTokens: sumTokens(models.map((item) => item.outputTokens)),
-    }
-  }
-  const usage = line.usage && typeof line.usage === 'object' ? line.usage : {}
-  return {
-    costUsd: finiteNumber(line.total_cost_usd),
-    inputTokens: sumTokens([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens]),
-    outputTokens: tokenCount(usage.output_tokens),
-  }
-}
-
-function agyUsage(log) {
-  const line = lastJsonLine(log, (item) => item?.event === 'result')
-  const usage = line?.result?.usage
-  const inputTokens = tokenCount(usage?.input_tokens)
-  const output = tokenCount(usage?.output_tokens)
-  const thinking = tokenCount(usage?.thinking_tokens)
-  const outputTokens = output === null && thinking === null ? null : (output ?? 0) + (thinking ?? 0)
-  return { costUsd: null, inputTokens, outputTokens }
-}
-
-function agyReport(log) {
-  let words = null
-  for (const line of String(log ?? '').split(/\r?\n/)) {
-    if (!line.trim()) continue
-    let item
-    try {
-      item = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (item?.event !== 'result') continue
-    const text = item?.result?.response
-    if (typeof text !== 'string' || !text.trim()) continue
-    words = text
-  }
-  return headLines(words ?? '')
-}
-
-function agySummary(log, worktree) {
-  const parser = createAgyParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
-  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('agy', activities, agyReport(log), agyUsage(log))
-}
-
-function summaryOf(harness, activities, head, { costUsd = null, inputTokens = null, outputTokens = null } = {}) {
-  const calls = activities.filter((activity) => activity.type === 'tool.start')
-  const written = []
-  const read = []
-  for (const call of calls) {
-    for (const touch of call.touches ?? []) {
-      if (touch.kind !== 'file') continue
-      if (touch.mode === 'write') written.push(touch.path)
-      if (touch.mode === 'read') read.push(touch.path)
-    }
-  }
-  return {
-    harness,
-    toolCalls: calls.length,
-    failed: activities.filter((activity) => activity.type === 'tool.end' && activity.ok === false).length,
-    written: unique(written),
-    read: unique(read),
-    head,
-    costUsd,
-    inputTokens,
-    outputTokens,
-  }
-}
-
-function hermesSummary(log, worktree) {
-  const parser = createHermesParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
-  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('hermes', activities, reportHead(log))
-}
-
-function claudeSummary(log, worktree) {
-  const parser = createClaudeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
-  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('claude', activities, claudeReport(log), claudeUsage(log))
-}
-
 export function claudeReport(log) {
-  return headLines(claudeReply(log))
-}
-
-function claudeReply(log) {
-  let words = null
-  for (const line of String(log ?? '').split(/\r?\n/)) {
-    if (!line.trim()) continue
-    let item
-    try {
-      item = JSON.parse(line)
-    } catch {
-      continue
-    }
-    if (item?.type !== 'result' || item.parent_tool_use_id) continue
-    const text = item.result
-    if (typeof text !== 'string' || !text.trim()) continue
-    words = text
-  }
-  return words ?? ''
+  return harnessByKey.claude.report(log)
 }
 
 export function replyText(harness, log) {
-  return (harness === 'opencode' ? opencodeReply(log) : claudeReply(log)).trim()
+  const key = harness === 'opencode' ? 'opencode' : 'claude'
+  return harnessByKey[key].reply(log).trim()
 }
 
 export function summarizeRun({ harness, log, worktree } = {}) {
-  if (harness === 'opencode') return opencodeSummary(log, worktree)
-  if (harness === 'agy') return agySummary(log, worktree)
-  if (harness === 'claude') return claudeSummary(log, worktree)
-  if (harness !== 'hermes') throw new Error(`The summary does not know the ${harness} log.`)
-  return hermesSummary(log, worktree)
+  if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The summary does not know the ${harness} log.`)
+  const descriptor = harnessByKey[harness]
+  const parser = descriptor.createParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
+  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
+  return summaryOf(descriptor.key, activities, descriptor.report(log), descriptor.usage(log))
 }
 
 function reportLines(head) {

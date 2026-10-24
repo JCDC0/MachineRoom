@@ -1,9 +1,10 @@
+import { AGENT_ORDER } from '../harnesses/index.js'
 import { indexFor } from './fileIndex.js'
 import { createParser } from './parsers/index.js'
 import { shorten } from './parsers/common.js'
 import { ancestors } from './paths.js'
 
-export const AGENT_ORDER = ['claude', 'hermes', 'opencode', 'agy']
+export { AGENT_ORDER }
 
 export function orderAgents(agents) {
   const rank = (agent) => {

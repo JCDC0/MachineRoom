@@ -4,6 +4,7 @@
 
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator chat has a tab per orchestrator, an Attach form that saves the whole ladder and lists the bridge's problems, and Detach behind a confirm card, with the ladder form helpers and the client and mock routes behind them (task O4).
+- A new `src/harnesses/` holds one browser-safe descriptor per harness for its command line, parser, line reader, report, reply and usage, and the runner, the recording builder, the parser picker, the agent order and the brief owners read the registry instead of naming harnesses (task H5).
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - The Reviews tab follows lanes on the room's project: when the room's root is another repository it lists the worktrees beside the project, compares each lane against the project's current branch and fast-forwards that branch after a confirm, and the panel names the branch (task R10).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
