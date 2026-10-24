@@ -17,12 +17,14 @@ function readTitle(html) {
   return match ? match[1] : null
 }
 
-function childEnv() {
+function childEnv(tempDir) {
   const env = { ...process.env }
   delete env.PAPERCLIP_URL
   delete env.PAPERCLIP_COMPANY_ID
   delete env.PROJECT_ROOT
   delete env.PORT
+  env.TEMP = tempDir
+  env.TMP = tempDir
   return env
 }
 
@@ -67,6 +69,7 @@ describe('a pack starts the room', () => {
     const packDir = makeTempDir('machine-room-pack-start-')
     const unpackDir = makeTempDir('machine-room-unpacked-')
     const emptyRoot = makeTempDir('machine-room-project-')
+    const runsDir = makeTempDir('machine-room-pack-runs-')
     try {
       const packed = packTo(root, packDir, PACK_BUDGET_MS)
       if (packed.error?.code === 'ETIMEDOUT' || packed.signal) {
@@ -85,8 +88,8 @@ describe('a pack starts the room', () => {
 
       const child = spawn(
         process.execPath,
-        [binPath, '--port', '0', '--root', emptyRoot],
-        { cwd: packageDir, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] },
+        [binPath, '--port', '0', '--root', emptyRoot, '--lanes'],
+        { cwd: packageDir, env: childEnv(runsDir), stdio: ['ignore', 'pipe', 'pipe'] },
       )
       child.stderr.resume()
       try {
@@ -99,7 +102,14 @@ describe('a pack starts the room', () => {
 
         const health = await fetch(`${base}/api/health`)
         expect(health.status).toBe(200)
-        expect(await health.json()).toMatchObject({ ok: true, lanes: false, sessions: false })
+        expect(await health.json()).toMatchObject({ ok: true, lanes: true, sessions: false })
+
+        const agents = await fetch(`${base}/api/agents`)
+        expect(agents.status).toBe(200)
+        expect((await agents.json()).map((agent) => agent.key)).toContain('opencode')
+
+        const orchestrator = await fetch(`${base}/api/orchestrator`)
+        expect(orchestrator.status).toBe(200)
 
         expect(existsSync(join(packageDir, 'node_modules'))).toBe(false)
       } finally {
@@ -109,6 +119,7 @@ describe('a pack starts the room', () => {
       rmSync(packDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
       rmSync(unpackDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
       rmSync(emptyRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      rmSync(runsDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   }, 120000)
 })
