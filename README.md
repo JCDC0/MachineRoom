@@ -175,6 +175,8 @@ npm run run-lane -- opencode --project C:\GitHub\Other --task-file task.md
 
 The runner refuses this checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. It runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
 
+Add `--worktree` to run in a git worktree of the project instead of the project itself. The runner puts the worktree beside the project at `<parent of the project>\<project folder name>-mr-<lane>`, makes it from the project's HEAD when it is missing, and reuses it when it is there and clean. It refuses a worktree with uncommitted changes and names its path. When the project has `node_modules`, the worktree gets a junction to it on Windows or a symlink elsewhere. A queue with `--worktree` makes its branch in the worktree. The run's record names the worktree as the project, so a room started on the project still shows the run. `--dry-run` prints the worktree path and whether it would be made.
+
 To run a queue of tasks on that folder, write them in a plain text file with a line that holds only `---` between them, then:
 
 ```
