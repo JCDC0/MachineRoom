@@ -9,10 +9,8 @@ import {
   textOf,
   percentOf,
   meterTone,
-  timeUntil,
   timeAgo,
   statusLabel,
-  approvalTypeLabel,
 } from '../src/ui/panels/format.js'
 
 describe('format helpers for panels', () => {
@@ -49,19 +47,6 @@ describe('format helpers for panels', () => {
     expect(meterTone(100)).toBe('full')
   })
 
-  it('formats time until future date', () => {
-    const now = Date.parse('2026-10-18T12:00:00Z')
-    expect(timeUntil('2026-10-18T11:59:00Z', now)).toBe('now')
-    expect(timeUntil('2026-10-18T12:00:00Z', now)).toBe('now')
-    expect(timeUntil('2026-10-18T12:12:00Z', now)).toBe('12m')
-    expect(timeUntil('2026-10-18T16:12:00Z', now)).toBe('4h 12m')
-    expect(timeUntil('2026-10-18T16:00:00Z', now)).toBe('4h')
-    expect(timeUntil('2026-10-21T14:00:00Z', now)).toBe('3d 2h')
-    expect(timeUntil('2026-10-21T12:00:00Z', now)).toBe('3d')
-    expect(timeUntil('', now)).toBe('now')
-    expect(timeUntil(null, now)).toBe('now')
-  })
-
   it('formats time ago from past date', () => {
     const now = Date.parse('2026-10-18T12:00:00Z')
     expect(timeAgo('2026-10-18T12:00:00Z', now)).toBe('just now')
@@ -94,16 +79,6 @@ describe('format helpers for panels', () => {
     expect(statusLabel('custom_unknown_status')).toBe('custom unknown status')
     expect(statusLabel('')).toBe('')
     expect(statusLabel(null)).toBe('')
-  })
-
-  it('maps approval types to plain words', () => {
-    expect(approvalTypeLabel('hire_agent')).toBe('Hire request')
-    expect(approvalTypeLabel('budget_override_required')).toBe('Budget override')
-    expect(approvalTypeLabel('approve_ceo_strategy')).toBe('Plan approval')
-    expect(approvalTypeLabel('request_board_approval')).toBe('Board approval')
-    expect(approvalTypeLabel('custom_type')).toBe('custom type')
-    expect(approvalTypeLabel('')).toBe('')
-    expect(approvalTypeLabel(null)).toBe('')
   })
 })
 

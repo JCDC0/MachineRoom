@@ -5,7 +5,6 @@ import { MODELS } from '../server/models.js'
 import { createMockClient } from '../src/control/mock.js'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
 import {
-  ADAPTER_TO_HARNESS,
   defaultModelLabel,
   modelFits,
   modelsFor,
@@ -21,15 +20,6 @@ const SAMPLE_MODELS = [
   { id: 'xiaomi/mimo-v2.6-pro', label: 'MiMo v2.6 Pro', harness: 'hermes', tier: 'medium', free: false },
   { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', harness: 'agy', tier: 'small', free: false },
 ]
-
-describe('ADAPTER_TO_HARNESS', () => {
-  it('maps each adapter type to its harness', () => {
-    expect(ADAPTER_TO_HARNESS.claude_local).toBe('claude')
-    expect(ADAPTER_TO_HARNESS.hermes_local).toBe('hermes')
-    expect(ADAPTER_TO_HARNESS.opencode_local).toBe('opencode')
-    expect(ADAPTER_TO_HARNESS.process).toBe('agy')
-  })
-})
 
 describe('defaultModelLabel', () => {
   it('returns Default model when no agent is chosen', () => {

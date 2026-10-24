@@ -2,16 +2,15 @@ import { describe, expect, it } from 'vitest'
 import { shapesFor } from '../src/engine/shapes.js'
 import { parserFor, toAgents } from '../src/live/source.js'
 import { groupBriefsByOwner } from '../src/ui/panels/briefs.js'
-import { approvalTypeLabel, statusLabel } from '../src/ui/panels/format.js'
+import { statusLabel } from '../src/ui/panels/format.js'
 import { openRank } from '../src/ui/panels/TasksPanel.jsx'
 
 const NAMES = ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']
 
 describe('lookups keyed by text from a run or a brief', () => {
-  it('label a status or approval type named like an object key as plain text', () => {
+  it('label a status named like an object key as plain text', () => {
     for (const name of NAMES) {
       expect(statusLabel(name), name).toBe(name.replace(/_/g, ' '))
-      expect(approvalTypeLabel(name), name).toBe(name.replace(/_/g, ' '))
     }
     expect(statusLabel('in_progress')).toBe('in progress')
   })

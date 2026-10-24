@@ -5,6 +5,8 @@
 - The agent dock shows a sub orchestrator's lanes, scope, restriction and who set them, and a lane in a sector shows the sector's name and rules, in the order the brief asks (task O7).
 
 - A sub orchestrator's shape drops its own name label when that name matches its sector's, so the sector label on the ring, the chip and the callout name it once (task V26).
+- The dead Paperclip leftovers are gone: `src/ui/panels/agentForm.js` and `src/assistant/llm.js` with their tests, plus the unused exports `redact`, `resolveExplicit`, `finalizeModelAction`, `laneForBrief`, `pickAssignee`, `groupBriefs`, `ADAPTER_TO_HARNESS`, `timeUntil`, `approvalTypeLabel`, `runResultWord`, `formatMinutes`, `timeSince`, `formatRecordLine` and `runningLine` (task Q11).
+
 - The orchestrator reports its context use and window and compacts a session at 80 percent into a 40 line summary behind a switch in the agent dock, and `POST /api/orchestrator/autocompact` sets it (task O5).
 
 - The Meters panel reads this month's spend and tokens per lane from the run records only: it has no budget editor, confirm card or save, and says budgets are not set there (task Q10).

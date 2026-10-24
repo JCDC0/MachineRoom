@@ -6,9 +6,7 @@ import {
   formatBriefTitle,
   getFirstOwner,
   groupBriefsByOwner,
-  laneForBrief,
   ownerToLane,
-  pickAssignee,
   runLaneFor,
   validLanes,
 } from '../src/ui/panels/briefs.js'
@@ -44,9 +42,6 @@ describe('ownerToLane', () => {
     expect(ownerToLane({ owners: ['opencode'] })).toBe('opencode')
     expect(ownerToLane({ owners: ['agy'] })).toBe('agy')
     expect(ownerToLane({ owners: ['OpenCode', 'AGY'] })).toBe('opencode')
-    expect(laneForBrief('Hermes')).toBe('hermes')
-    expect(laneForBrief('OpenCode')).toBe('opencode')
-    expect(laneForBrief('AGY')).toBe('agy')
   })
 
   it('returns a lane for Claude and null for the owner or no valid lane', () => {
@@ -133,7 +128,6 @@ describe('chooseAssignee', () => {
     expect(chooseAssignee({ owners: ['hermes'] }, exactAgents)).toBe('a1')
     expect(chooseAssignee({ owners: ['opencode'] }, exactAgents)).toBe('a2')
     expect(chooseAssignee({ owners: ['agy'] }, exactAgents)).toBe('a3')
-    expect(pickAssignee('HERMES', exactAgents)).toBe('a1')
   })
 
   it('matches agent names in the mock client and picks the first owner when multiple owners exist', () => {

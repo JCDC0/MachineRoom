@@ -41,13 +41,6 @@ export function containsSecret(text) {
   )
 }
 
-export function redact(text) {
-  return String(text)
-    .replace(/\b(sk|pk|ghp|gho|xox[bap]|hf)[-_][A-Za-z0-9_-]{12,}/g, '[hidden]')
-    .replace(/\bAIza[0-9A-Za-z_-]{20,}/g, '[hidden]')
-    .replace(/\b[A-Za-z0-9_-]{32,}\b/g, (match) => (match.includes('/') ? match : '[hidden]'))
-}
-
 function nameTokens(agent) {
   const parts = new Set()
   for (const word of [agent.name, agent.key]) for (const token of tokenize(word)) if (!STOP.has(token) && token.length >= 2) parts.add(token)
@@ -109,11 +102,6 @@ function scorePaths(tokens, paths, min) {
 export function resolvePaths(text, paths) {
   const tokens = tokenize(text).filter((token) => !PATH_STOP.has(token) && token.length >= 2)
   return scorePaths(tokens, paths, 40)
-}
-
-export function resolveExplicit(text, paths) {
-  const tokens = tokenize(text).filter((token) => /[/.]/.test(token) && token.length >= 3)
-  return scorePaths(tokens, paths, 80)
 }
 
 export function rankPaths(text, paths, limit = 20) {
@@ -267,13 +255,4 @@ export function interpret(text, context) {
   if (agent) return done(context, { type: 'focus_agent', agent: agent.key, view: 'wide' }, 'action', `Showing ${agent.name}.`)
 
   return { kind: 'unknown', say: HELP_SAY, fallback: true }
-}
-
-export function finalizeModelAction(action, context) {
-  if (action && action.type === 'focus_path' && typeof action.query === 'string') {
-    const found = resolvePaths(action.query, context.paths)
-    if (!found.match) return { ok: false, error: 'No such folder or file.' }
-    return validateAction({ type: 'focus_path', path: found.match }, context)
-  }
-  return validateAction(action, context)
 }

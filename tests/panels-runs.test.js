@@ -3,8 +3,6 @@ import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   formatCost,
-  formatMinutes,
-  formatRecordLine,
   NO_IDLE_LANE_PROBLEM,
   planLaneTasks,
   PROJECT_SPLIT_DELAY,
@@ -19,11 +17,8 @@ import {
   projectWorktreeName,
   recordLine,
   resultWord,
-  runResultWord,
   runStartLine,
-  runningLine,
   splitTasks,
-  timeSince,
   timeSinceStart,
 } from '../src/ui/panels/runs.js'
 
@@ -31,7 +26,6 @@ describe('resultWord', () => {
   it('returns finished when exitCode is 0 and killed is false', () => {
     expect(resultWord({ exitCode: 0, killed: false })).toBe('finished')
     expect(resultWord({ exitCode: 0 })).toBe('finished')
-    expect(runResultWord({ exitCode: 0 })).toBe('finished')
   })
 
   it('returns stopped when killed is true', () => {
@@ -64,7 +58,6 @@ describe('timeSinceStart', () => {
   it('returns just now when difference is less than 60 seconds', () => {
     expect(timeSinceStart(base, base + 10000)).toBe('just now')
     expect(timeSinceStart(base, base + 59000)).toBe('just now')
-    expect(timeSince(base, base + 5000)).toBe('just now')
   })
 
   it('returns minutes ago when under an hour', () => {
@@ -109,18 +102,6 @@ describe('formatCost', () => {
   })
 })
 
-describe('formatMinutes', () => {
-  it('formats finite numbers with min suffix', () => {
-    expect(formatMinutes(0)).toBe('0 min')
-    expect(formatMinutes(12)).toBe('12 min')
-  })
-
-  it('returns minutes unknown for null or non-numbers', () => {
-    expect(formatMinutes(null)).toBe('minutes unknown')
-    expect(formatMinutes(undefined)).toBe('minutes unknown')
-  })
-})
-
 describe('recordLine', () => {
   it('formats a finished record with cost, minutes, and start time', () => {
     const record = {
@@ -137,7 +118,6 @@ describe('recordLine', () => {
     expect(line).toBe('hermes | T7 | finished | cost unknown | 0 min | 2026-10-19T20:30:00.000Z')
     expect(line).not.toContain('C:\\private\\folder')
     expect(line).not.toContain('log.txt')
-    expect(formatRecordLine(record)).toBe(line)
   })
 
   it('formats a stopped record when killed', () => {
@@ -186,23 +166,6 @@ describe('runStartLine', () => {
     expect(runStartLine(null)).toBe('The bridge sent no answer.')
     expect(runStartLine(undefined)).toBe('The bridge sent no answer.')
     expect(runStartLine({ lane: '  ' })).toBe('The run started.')
-  })
-})
-
-describe('runningLine', () => {
-  it('formats running entry with lane, briefs, and time ago', () => {
-    const entry = {
-      lane: 'hermes',
-      briefs: ['T7'],
-      startedAt: '2026-10-19T20:00:00.000Z',
-    }
-    const now = Date.parse('2026-10-19T20:05:00.000Z')
-    expect(runningLine(entry, now)).toBe('hermes | T7 | 5 min ago')
-  })
-
-  it('handles missing fields', () => {
-    expect(runningLine({})).toBe('unknown | none | time unknown')
-    expect(runningLine(null)).toBe('')
   })
 })
 

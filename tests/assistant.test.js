@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ACTION_TYPES, CARD_SAY, CONFIRMED, cardFirst, validateAction } from '../src/assistant/actions.js'
-import { containsSecret, finalizeModelAction, interpret, redact, resolveAgents, resolvePaths } from '../src/assistant/intent.js'
-import { askModel, buildPrompt, parseReply } from '../src/assistant/llm.js'
+import { containsSecret, interpret, resolveAgents, resolvePaths } from '../src/assistant/intent.js'
 import { ACTION_CASES } from './probes/assistant.js'
 import { context } from './probes/context.js'
 
@@ -208,102 +207,6 @@ describe('secrets', () => {
     expect(containsSecret('api keys for hermes')).toBe(false)
     expect(containsSecret('what is agy doing')).toBe(false)
     expect(containsSecret('docs/agents/ARCHITECTURE.md and the other long path names here')).toBe(false)
-  })
-
-  it('redacts a key before any text leaves the machine', () => {
-    expect(redact('use sk-proj-abcdefghijklmnop please')).toBe('use [hidden] please')
-    expect(redact('go to src/engine')).toBe('go to src/engine')
-  })
-})
-
-describe('model fallback', () => {
-  it('builds a prompt with names only and no paths', () => {
-    const prompt = buildPrompt('show me the thing', context)
-    expect(prompt).toContain('hermes (Hermes)')
-    expect(prompt).toContain('Request: show me the thing')
-    expect(prompt).not.toContain('src/engine/room.js')
-  })
-
-  it('does not build a prompt for text that holds a key', () => {
-    expect(buildPrompt('here is sk-proj-abcdefghijklmnop', context)).toBeNull()
-  })
-
-  it('parses a clean reply', () => {
-    const result = parseReply('{"type":"focus_agent","agent":"agy","view":"close","say":"Going to agy."}', context)
-    expect(result).toEqual({ kind: 'action', action: { type: 'focus_agent', agent: 'agy', view: 'close' }, say: 'Going to agy.' })
-  })
-
-  it('parses a reply wrapped in a code fence and text', () => {
-    const reply = 'Sure!\n```json\n{"type":"open_panel","tab":"meters","say":"Costs."}\n```'
-    expect(parseReply(reply, context).action).toEqual({ type: 'open_panel', tab: 'meters' })
-  })
-
-  it('resolves a path query on this side', () => {
-    const result = parseReply('{"type":"focus_path","query":"engine","say":"There."}', context)
-    expect(result.action).toEqual({ type: 'focus_path', path: 'src/engine' })
-    expect(parseReply('{"type":"focus_path","query":"zebra"}', context).kind).toBe('unknown')
-  })
-
-  it('marks a write as a proposal', () => {
-    const result = parseReply('{"type":"propose_budget","agent":"hermes","cents":200}', context)
-    expect(result.kind).toBe('propose')
-  })
-
-  it('refuses an invented agent, an invented type and a bad number', () => {
-    expect(parseReply('{"type":"focus_agent","agent":"gpt","view":"wide"}', context).kind).toBe('unknown')
-    expect(parseReply('{"type":"run_shell","cmd":"del *"}', context).kind).toBe('unknown')
-    expect(parseReply('{"type":"propose_budget","agent":"hermes","cents":"free"}', context).kind).toBe('unknown')
-  })
-
-  it('refuses text that is not json', () => {
-    expect(parseReply('I think you want agy.', context).kind).toBe('unknown')
-    expect(parseReply('{"type": ', context).kind).toBe('unknown')
-    expect(parseReply('', context).kind).toBe('unknown')
-    expect(parseReply(undefined, context).kind).toBe('unknown')
-  })
-
-  it('turns "none" into a question', () => {
-    const result = parseReply('{"type":"none","say":"Do you mean costs or approvals?"}', context)
-    expect(result.kind).toBe('ask')
-    expect(result.say).toBe('Do you mean costs or approvals?')
-  })
-
-  it('cuts a long say to a short one', () => {
-    const result = parseReply(`{"type":"overview","say":"${'word '.repeat(100)}"}`, context)
-    expect(result.say.length).toBeLessThanOrEqual(160)
-  })
-
-  it('runs the model through an injected function', async () => {
-    const seen = []
-    const result = await askModel('uh show agy work', context, async (prompt) => {
-      seen.push(prompt)
-      return '{"type":"focus_agent","agent":"agy","view":"close","say":"Going."}'
-    })
-    expect(seen).toHaveLength(1)
-    expect(result.action.agent).toBe('agy')
-  })
-
-  it('never calls the model for a key', async () => {
-    let called = false
-    const result = await askModel('sk-proj-abcdefghijklmnop', context, async () => {
-      called = true
-      return '{}'
-    })
-    expect(called).toBe(false)
-    expect(result.kind).toBe('blocked')
-  })
-
-  it('falls back to a plain message when the model fails', async () => {
-    const result = await askModel('hello', context, async () => {
-      throw new Error('offline')
-    })
-    expect(result.kind).toBe('unknown')
-    expect(result.say).toMatch(/plain commands/i)
-  })
-
-  it('finalizes a model action with the same checks', () => {
-    expect(finalizeModelAction({ type: 'focus_path', query: 'layout.js' }, context).ok).toBe(true)
-    expect(finalizeModelAction({ type: 'focus_path', path: '../secret' }, context).ok).toBe(false)
   })
 })
 
