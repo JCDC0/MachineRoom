@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
 import {
   CONFIRM_MESSAGE_PROBLEM,
@@ -24,23 +24,58 @@ function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
-export function branchChanges(record, lanes = {}) {
-  let folder = typeof record?.project === 'string' && record.project.trim() ? record.project.trim() : ''
-  if (!folder && typeof record?.lane === 'string' && lanes?.[record.lane]?.worktree) folder = lanes[record.lane].worktree
-  if (!folder) return []
-  try {
-    const out = execFileSync(gitPath(), ['-C', folder, 'diff', '--name-only', 'main...HEAD'], {
+export const SCOPE_UNREAD_PROBLEM = 'The scope could not be read.'
+
+function gitText(folder, args) {
+  return String(
+    execFileSync(gitPath(), ['-C', folder, ...args], {
       encoding: 'utf8',
       timeout: 10000,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'ignore'],
     })
-    return String(out)
+  )
+}
+
+function projectBranch(folder) {
+  if (!folder) return ''
+  try {
+    const name = gitText(folder, ['symbolic-ref', '--short', 'HEAD']).trim()
+    return name && name !== 'HEAD' ? name : ''
+  } catch {
+    return ''
+  }
+}
+
+function projectPrefix(project) {
+  try {
+    const top = gitText(project, ['rev-parse', '--show-toplevel']).trim()
+    if (!top) return ''
+    const start = relative(resolve(top), resolve(project)).replace(/\\/g, '/')
+    if (!start || start === '..' || start.startsWith('../') || isAbsolute(start)) return ''
+    return `${start}/`
+  } catch {
+    return ''
+  }
+}
+
+export function branchChanges(record, lanes = {}, options = {}) {
+  let folder = typeof record?.project === 'string' && record.project.trim() ? record.project.trim() : ''
+  if (!folder && typeof record?.lane === 'string' && lanes?.[record.lane]?.worktree) folder = lanes[record.lane].worktree
+  if (!folder) return []
+  const project = typeof options?.project === 'string' && options.project.trim() ? options.project.trim() : folder
+  const base = projectBranch(project)
+  if (!base) return null
+  try {
+    const prefix = projectPrefix(project)
+    return gitText(folder, ['diff', '--name-only', '--relative', `${base}...HEAD`])
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
+      .map((line) => (prefix && line.startsWith(prefix) ? line.slice(prefix.length) : line))
+      .filter(Boolean)
   } catch {
-    return []
+    return null
   }
 }
 
@@ -163,7 +198,15 @@ export function createOrchestrators({
       },
       outsideFiles: (record) => {
         if (sub.restricted !== true) return []
-        return outsideScope(changedFiles(record, lanes), sub)
+        const changes = changedFiles(record, lanes, { project: root })
+        if (!Array.isArray(changes)) {
+          if (!stopped && instances.has(config.id)) {
+            const parent = instances.get(ORCHESTRATOR_KEY)
+            if (parent) parent.deliver('room', SCOPE_UNREAD_PROBLEM)
+          }
+          return []
+        }
+        return outsideScope(changes, sub, { windows: process.platform === 'win32' })
       },
       onOutsideScope: (text) => {
         if (stopped) return
