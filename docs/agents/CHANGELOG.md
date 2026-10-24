@@ -4,6 +4,7 @@
 
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
+- The Reviews tab follows lanes on the room's project: when the room's root is another repository it lists the worktrees beside the project, compares each lane against the project's current branch and fast-forwards that branch after a confirm, and the panel names the branch (task R10).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).
 - The Dispatch panel starts a project lane in its own worktree, on by default, with the allow-uncommitted switch hidden while it is on, and it marks a running lane so it cannot be picked (task R5).
