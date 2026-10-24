@@ -91,6 +91,7 @@ export default function Hud({
   onSettingsChange = () => {},
 }) {
   const [logOpen, setLogOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
@@ -177,6 +178,7 @@ export default function Hud({
         setHelpOpen(false)
         setHealthOpen(false)
         setSettingsOpen(false)
+        setMenuOpen(false)
         return
       }
       if (hudKeyBlocked(event.target)) return
@@ -261,11 +263,21 @@ export default function Hud({
 
   return (
     <div className="hud">
-      <header className="hud-menu">
+      <header className={`hud-menu${menuOpen ? ' is-open' : ''}`}>
         <div className="hud-header-strip">
           <h1>{name}</h1>
           <span className="hud-status-tag">{mode === 'live' ? 'LIVE' : 'REPLAY'}</span>
         </div>
+
+        <button
+          type="button"
+          className="hud-menu-toggle"
+          aria-expanded={menuOpen}
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? 'Close' : 'Menu'}
+        </button>
 
         <div className="hud-modes" role="group" aria-label="Mode">
           <button
