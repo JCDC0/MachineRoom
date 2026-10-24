@@ -186,15 +186,113 @@ function readContext(selected, run) {
   return null
 }
 
+function orchestratorRows(value) {
+  if (Array.isArray(value)) return value.filter(isObject)
+  if (isObject(value)) {
+    if (Array.isArray(value.orchestrators)) return value.orchestrators.filter(isObject)
+    return [value]
+  }
+  return []
+}
+
 function withOrchestratorData(selected, orchestrator) {
-  if (!isObject(orchestrator)) return selected
+  const main = orchestratorRows(orchestrator).find((row) => clean(row.id).toLowerCase() === 'orchestrator')
+  if (!main) return selected
   const next = { ...selected }
   for (const key of ['contextTokens', 'contextWindow']) {
-    const value = numberOrNull(orchestrator[key])
+    const value = numberOrNull(main[key])
     if (value !== null) next[key] = value
   }
-  if (typeof orchestrator.autocompact === 'boolean') next.autocompact = orchestrator.autocompact
+  if (typeof main.autocompact === 'boolean') next.autocompact = main.autocompact
   return next
+}
+
+function subIdOf(agent) {
+  for (const field of ['key', 'id']) {
+    const value = clean(agent?.[field])
+    if (value.toLowerCase().startsWith('sub-')) {
+      const id = value.slice(4).trim()
+      if (id) return id
+    }
+  }
+  return ''
+}
+
+function orchestratorRowFor(rows, id) {
+  const wanted = id.toLowerCase()
+  return (
+    rows.find((row) => {
+      const rowId = clean(row.id).toLowerCase()
+      return rowId === wanted || rowId === `sub-${wanted}`
+    }) ?? null
+  )
+}
+
+function isSubRow(row) {
+  if (!isObject(row)) return false
+  return clean(row.id).toLowerCase() !== 'orchestrator' && clean(row.key).toLowerCase() !== 'orchestrator'
+}
+
+function sectorRowFor(rows, selected) {
+  const lane = clean(selected?.key).toLowerCase()
+  const laneId = clean(selected?.id).toLowerCase()
+  return (
+    rows.find((row) => {
+      if (!isSubRow(row) || !Array.isArray(row.lanes)) return false
+      return row.lanes.some((entry) => {
+        const value = clean(entry).toLowerCase()
+        return Boolean(value) && (value === lane || value === laneId)
+      })
+    }) ?? null
+  )
+}
+
+function lanesText(row) {
+  if (!isObject(row) || !Array.isArray(row.lanes)) return NOT_REPORTED
+  const lanes = row.lanes.map(clean).filter(Boolean)
+  return lanes.length > 0 ? lanes.join(', ') : NONE
+}
+
+function scopeText(row) {
+  if (!isObject(row) || !Array.isArray(row.scope)) return NOT_REPORTED
+  const globs = row.scope.map(clean).filter(Boolean)
+  return globs.length > 0 ? globs.join('\n') : 'whole project'
+}
+
+function restrictedText(value) {
+  if (value === true) return 'yes'
+  if (value === false) return 'no'
+  return NOT_REPORTED
+}
+
+function setByText(value) {
+  const word = clean(value).toLowerCase()
+  if (word === 'owner' || word === 'orchestrator') return word
+  return NOT_REPORTED
+}
+
+function sectorData(selected, orchestrator) {
+  const rows = orchestratorRows(orchestrator)
+  const subId = subIdOf(selected)
+  if (subId) {
+    const row = orchestratorRowFor(rows, subId)
+    return {
+      sector: null,
+      lanes: lanesText(row),
+      scope: scopeText(row),
+      restricted: restrictedText(row?.restricted),
+      setBy: setByText(row?.setBy),
+    }
+  }
+  const row = sectorRowFor(rows, selected)
+  if (!row) return { sector: null, lanes: null, scope: null, restricted: null, setBy: null }
+  return {
+    sector: clean(row.name) || clean(row.id) || NOT_REPORTED,
+    lanes: null,
+    scope: scopeText(row),
+    restricted: restrictedText(row.restricted),
+    setBy: setByText(row.setBy),
+  }
 }
 
 export function agentContext({ agent = null, lanes = null, costs = null, liveRuns = null, tasks = null, log = null, orchestrator = null } = {}) {
@@ -238,6 +336,8 @@ export function agentContext({ agent = null, lanes = null, costs = null, liveRun
     ? `${formatTokens(inputTokens)} in / ${formatTokens(outputTokens)} out`
     : NOT_REPORTED
 
+  const sectorInfo = sectorData(source, orchestrator)
+
   return {
     isOrchestrator,
     key,
@@ -252,6 +352,11 @@ export function agentContext({ agent = null, lanes = null, costs = null, liveRun
     tokens,
     inputTokens,
     outputTokens,
+    sector: sectorInfo.sector,
+    lanes: sectorInfo.lanes,
+    scope: sectorInfo.scope,
+    restricted: sectorInfo.restricted,
+    setBy: sectorInfo.setBy,
     log: entries.slice(-DOCK_LOG_LIMIT),
     context: isOrchestrator ? readContext(source, run) : null,
     autocompact: isOrchestrator && typeof source?.autocompact === 'boolean' ? source.autocompact : null,

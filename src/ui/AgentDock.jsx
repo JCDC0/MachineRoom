@@ -14,16 +14,21 @@ export default function AgentDock({
   onAutocompact = () => {},
 }) {
   const context = agentContext({ agent, lanes, costs, liveRuns, tasks, log, orchestrator })
-  const rows = [
-    ['Status', context.status],
+  const rows = [['Status', context.status]]
+  if (context.sector !== null) rows.push(['Sector', context.sector])
+  if (context.lanes !== null) rows.push(['Lanes', context.lanes])
+  if (context.scope !== null) rows.push(['Scope', context.scope])
+  if (context.restricted !== null) rows.push(['Restricted', context.restricted])
+  if (context.setBy !== null) rows.push(['Set by', context.setBy])
+  rows.push(
     ['Key', context.key],
     ['Harness', context.harness],
     ['Model', context.model],
     ['Task', context.task],
     ['Command', context.command],
     ['Cost', context.cost],
-    ['Tokens', context.tokens],
-  ]
+    ['Tokens', context.tokens]
+  )
   if (context.isOrchestrator && context.context) {
     rows.push(['Context', `${context.context.label} of ${context.context.window} tokens`])
   }
@@ -37,7 +42,12 @@ export default function AgentDock({
         {rows.map(([label, value]) => (
           <div className="agent-dock-row" key={label}>
             <dt>{label}</dt>
-            <dd className="mono">{value}</dd>
+            <dd
+              className="mono"
+              style={String(value).includes('\n') ? { whiteSpace: 'pre-line' } : undefined}
+            >
+              {value}
+            </dd>
           </div>
         ))}
         {context.isOrchestrator && context.autocompact !== null && (
