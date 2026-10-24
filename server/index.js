@@ -655,6 +655,21 @@ export function createBridge(options = {}) {
     }
   }
 
+  function holdsRunStart(parsed) {
+    return (
+      parsed?.type === 'heartbeat.run.queued' ||
+      (parsed?.type === 'heartbeat.run.status' && parsed.payload?.status === 'running')
+    )
+  }
+
+  function trimHistory() {
+    while (history.length > HISTORY_LIMIT) {
+      const index = history.findIndex((item) => !item.pinned)
+      if (index === -1) return
+      history.splice(index, 1)
+    }
+  }
+
   function emit(parsed) {
     if (typeof parsed.id === 'number' && parsed.id > nextId) {
       nextId = parsed.id
@@ -663,9 +678,16 @@ export function createBridge(options = {}) {
     }
     const id = String(parsed.id ?? nextId)
     const data = JSON.stringify(parsed)
-    const entry = { id, data }
+    const runId = parsed?.payload?.runId
+    const endsRun = parsed?.type === 'heartbeat.run.status' && RUN_END_STATUSES.has(parsed.payload?.status)
+    const entry = { id, data, runId, pinned: holdsRunStart(parsed) }
     history.push(entry)
-    if (history.length > HISTORY_LIMIT) history.shift()
+    if (runId !== undefined && runId !== null && endsRun) {
+      for (const item of history) {
+        if (item.runId === runId) item.pinned = false
+      }
+    }
+    trimHistory()
     const notices = changeEvents(parsed)
     for (const client of clients) {
       writeSseFrame(client, entry)
@@ -1072,6 +1094,7 @@ export function createBridge(options = {}) {
         })
         if (!upstream.ok) {
           if (lanesSource) {
+            rememberLaneParsers()
             sendJson(req, res, 200, laneAgents)
             return
           }
@@ -1082,6 +1105,7 @@ export function createBridge(options = {}) {
         sendJson(req, res, 200, [...rememberAgents(agentListOf(raw)), ...laneAgents])
       } catch {
         if (lanesSource) {
+          rememberLaneParsers()
           sendJson(req, res, 200, laneAgents)
           return
         }
@@ -1181,6 +1205,7 @@ export function createBridge(options = {}) {
   })
 
   async function start() {
+    rememberLaneParsers()
     lanesSource?.start()
     await startWatcher()
     if (stopped) throw new Error('The bridge stopped before it started.')

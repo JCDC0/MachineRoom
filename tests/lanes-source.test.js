@@ -1,8 +1,11 @@
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
+import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { createLanesSource, laneAgents } from '../server/lanes-source.js'
+import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf } from '../server/lanes-source.js'
+import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
 import { readFrames, waitFor } from './helpers/loop.js'
@@ -64,6 +67,19 @@ function endFrame(frames) {
   return frames.find(
     (frame) => frame.type === 'heartbeat.run.status' && ['succeeded', 'failed'].includes(frame.payload.status)
   )
+}
+
+function sleep(ms) {
+  return new Promise((resolveWait) => setTimeout(resolveWait, ms))
+}
+
+function git(cwd, args) {
+  return execFileSync(gitPath(), ['-c', 'user.email=test@example.com', '-c', 'user.name=Test', ...args], {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    windowsHide: true,
+  }).trim()
 }
 
 describe('lane agents', () => {
@@ -297,5 +313,265 @@ describe('the live lane source', () => {
     expect(response.status).toBe(502)
     const body = await response.json()
     expect(body.error).toBe('upstream unreachable')
+  })
+})
+
+describe('the V5 audit fixes in the lane source', () => {
+  it('adopts a log skipped at start for its age once the log grows (X3)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-130000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    const past = new Date(Date.now() - 120000)
+    utimesSync(logPath, past, past)
+
+    const { frames } = startSource({ runs, lanes })
+    await sleep(150)
+    expect(frames).toEqual([])
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\new.js`, { id: 'new' })}\n`)
+    await waitFor(() => logFrames(frames).length === 2, { what: 'the log adopted after growth' })
+    const paths = logFrames(frames).map((frame) =>
+      JSON.parse(frame.payload.chunk).part.state.input.path.replace(/\\/g, '/')
+    )
+    expect(paths).toEqual([`${worktree.replace(/\\/g, '/')}/src/old.js`, `${worktree.replace(/\\/g, '/')}/src/new.js`])
+  })
+
+  it('reopens a run ended for quiet when its log grows again, with the same runId (X4)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const { frames } = startSource({ runs, lanes, quietMs: 120 })
+    const logPath = join(runs, 'opencode-S6a-20261024-130500.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\one.js`, { id: 'one' })}\n`)
+
+    const ended = await waitFor(() => endFrame(frames), { what: 'the quiet end' })
+    expect(ended.payload).toMatchObject({ status: 'failed', error: 'no record' })
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\two.js`, { id: 'two' })}\n`)
+    const reopened = await waitFor(
+      () =>
+        frames
+          .filter((frame) => frame.type === 'heartbeat.run.status' && frame.payload.status === 'running')
+          .slice(1)[0],
+      { what: 'the reopened running status' }
+    )
+    expect(reopened.payload.runId).toBe(ended.payload.runId)
+    await waitFor(() => logFrames(frames).length === 2, { what: 'the later line' })
+    expect(logFrames(frames)[1].payload.seq).toBe(2)
+  })
+
+  it('waits for the lane lock before a quiet end (X4)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const { frames } = startSource({ runs, lanes, quietMs: 120 })
+    writeFileSync(join(runs, 'opencode.lock'), String(process.pid))
+    writeFileSync(join(runs, 'opencode-S6a-20261024-131000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+
+    await sleep(400)
+    expect(endFrame(frames)).toBeUndefined()
+
+    rmSync(join(runs, 'opencode.lock'), { force: true })
+    const ended = await waitFor(() => endFrame(frames), { what: 'the quiet end after the lock' })
+    expect(ended.payload).toMatchObject({ status: 'failed', error: 'no record' })
+  })
+
+  it('emits the held last line before the run ends (X5)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const { frames } = startSource({ runs, lanes })
+    const logPath = join(runs, 'opencode-S6a-20261024-131500.log')
+    const first = toolLine(`${worktree}\\src\\a.js`, { id: 'first' })
+    const second = toolLine(`${worktree}\\src\\b.js`, { id: 'second' })
+    writeFileSync(logPath, `${first}\n${second}`)
+
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the first line' })
+    appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ log: logPath, exitCode: 0, killed: false })}\n`)
+    const ended = await waitFor(() => endFrame(frames), { what: 'the end' })
+    expect(ended.payload.status).toBe('succeeded')
+    const logs = logFrames(frames)
+    expect(logs).toHaveLength(2)
+    expect(logs[1].payload.chunk).toBe(`${second}\n`)
+  })
+
+  it('sends a log frame only for a line the reader marks read (X6)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const { frames } = startSource({ runs, lanes })
+    const logPath = join(runs, 'opencode-S6a-20261024-132000.log')
+    writeFileSync(logPath, `{"type":"text","part":{"text":"thinking"}}\n${toolLine(`${worktree}\\src\\a.js`)}\n`)
+
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the tool line' })
+    await sleep(100)
+    expect(logFrames(frames)).toHaveLength(1)
+    expect(logFrames(frames)[0].payload.seq).toBe(1)
+  })
+
+  it('keeps an open run queued and running frames in the bridge history (X6)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'MachineRoom')
+    mkdirSync(projectRoot, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const bridge = createBridge({
+      paperclipUrl: DEAD_PAPERCLIP,
+      companyId: 'comp-lanes',
+      projectRoot,
+      port: 0,
+      env: {},
+      surfaceEveryMs: 0,
+      reconnectMinMs: 60000,
+      reconnectMaxMs: 60000,
+      lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const lines = []
+    for (let index = 0; index < 505; index += 1) {
+      lines.push(toolLine(`${worktree}\\src\\f${index}.js`, { id: `call-${index}` }))
+    }
+    writeFileSync(join(runs, 'opencode-S6a-20261024-132500.log'), `${lines.join('\n')}\n`)
+
+    const frames = await readFrames(url, (list) => list.length >= 500, { timeoutMs: 20000 })
+    expect(frames[0].type).toBe('heartbeat.run.queued')
+    expect(frames[1].type).toBe('heartbeat.run.status')
+    expect(frames[1].payload).toMatchObject({ status: 'running' })
+    expect(frames.filter((frame) => frame.type === 'heartbeat.run.log')).toHaveLength(498)
+  })
+
+  it('reads the run records again only after the file changed, and only the appended bytes (X13)', () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const file = join(runs, 'runs.jsonl')
+    const firstLog = join(runs, 'a.log')
+    const secondLog = join(runs, 'b.log')
+    writeFileSync(file, `${JSON.stringify({ log: firstLog, exitCode: 0 })}\n`)
+    const cache = createRecordsCache(file)
+    const first = cache.read()
+    expect([...first.values()].map((record) => record.exitCode)).toEqual([0])
+    expect(cache.reads).toBe(1)
+    expect(cache.read()).toBe(first)
+    expect(cache.reads).toBe(1)
+
+    appendFileSync(file, `${JSON.stringify({ log: secondLog, exitCode: 1 })}\n`)
+    const second = cache.read()
+    expect(cache.reads).toBe(2)
+    expect([...second.values()].map((record) => record.exitCode).sort((left, right) => left - right)).toEqual([0, 1])
+
+    const thirdRecord = JSON.stringify({ log: firstLog, exitCode: 2 })
+    appendFileSync(file, thirdRecord.slice(0, 10))
+    const partial = cache.read()
+    expect(cache.reads).toBe(3)
+    expect(partial.size).toBe(2)
+    appendFileSync(file, `${thirdRecord.slice(10)}\n`)
+    const third = cache.read()
+    expect(cache.reads).toBe(4)
+    expect([...third.values()].map((record) => record.exitCode).sort((left, right) => left - right)).toEqual([1, 2])
+
+    const before = statSync(file)
+    writeFileSync(file, readFileSync(file, 'utf8').replace('"exitCode":2', '"exitCode":3'))
+    utimesSync(file, before.atime, new Date(before.mtimeMs + 2000))
+    const rewritten = cache.read()
+    expect([...rewritten.values()].map((record) => record.exitCode).sort((left, right) => left - right)).toEqual([1, 3])
+  })
+
+  it('drops a held partial line past 1 MB and reads on from the next newline (X14)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const { frames } = startSource({ runs, lanes })
+    const logPath = join(runs, 'opencode-S6a-20261024-133000.log')
+    writeFileSync(logPath, 'x'.repeat(1024 * 1024 + 2048))
+
+    await sleep(200)
+    expect(logFrames(frames)).toHaveLength(0)
+
+    const line = toolLine(`${worktree}\\src\\a.js`)
+    appendFileSync(logPath, `\n${line}\n`)
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the line after the huge one' })
+    expect(logFrames(frames)[0].payload.chunk).toBe(`${line}\n`)
+  })
+
+  it('shows a worktree run when the room root is the repository main checkout (X15)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const main = join(base, 'MachineRoom')
+    mkdirSync(main, { recursive: true })
+    git(main, ['init'])
+    git(main, ['commit', '--allow-empty', '-m', 'base'])
+    const worktree = join(base, 'MachineRoom-opencode3')
+    git(main, ['worktree', 'add', '--detach', worktree])
+    expect(resolve(mainCheckoutOf(worktree)).toLowerCase()).toBe(resolve(main).toLowerCase())
+
+    const lanes = lanesFor({ opencode: worktree })
+    const { frames } = startSource({ runs, projectRoot: main, repoRoot: worktree, lanes })
+    writeFileSync(join(runs, 'opencode-S6a-20261024-133500.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the worktree run' })
+    expect(JSON.parse(logFrames(frames)[0].payload.chunk).part.state.input.path.replace(/\\/g, '/')).toBe(
+      `${main.replace(/\\/g, '/')}/src/a.js`
+    )
+  })
+
+  it('registers the lane parsers at bridge start and after a lane-only agents answer (X16)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'MachineRoom')
+    mkdirSync(projectRoot, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const requests = []
+    const upstream = createServer((req, res) => {
+      requests.push(req.url ?? '')
+      res.writeHead(500, { 'content-type': 'application/json' })
+      res.end('{}')
+    })
+    cleanups.push(
+      () =>
+        new Promise((resolveClose) => {
+          upstream.closeAllConnections()
+          upstream.close(() => resolveClose())
+        })
+    )
+    await new Promise((resolveListen) => upstream.listen(0, '127.0.0.1', resolveListen))
+    const bridge = createBridge({
+      paperclipUrl: `http://127.0.0.1:${upstream.address().port}`,
+      companyId: 'comp-lanes',
+      projectRoot,
+      port: 0,
+      env: {},
+      surfaceEveryMs: 0,
+      reconnectMinMs: 60000,
+      reconnectMaxMs: 60000,
+      lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const agentsReads = () => requests.filter((path) => path.endsWith('/agents')).length
+    await waitFor(() => agentsReads() >= 1, { what: 'the first agents read' })
+    await sleep(100)
+
+    const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
+    expect(agents.some((agent) => agent.key === 'opencode')).toBe(true)
+
+    writeFileSync(join(runs, 'opencode-S6a-20261024-134000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    const frames = await readFrames(url, (list) => list.some((frame) => frame.type === 'heartbeat.run.log'))
+    expect(frames).toHaveLength(3)
+    const before = agentsReads()
+    await sleep(300)
+    expect(agentsReads()).toBe(before)
   })
 })

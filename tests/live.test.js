@@ -331,6 +331,29 @@ describe('incremental pipeline', () => {
     expect(player.snapshot().agents.map((agent) => agent.status)).toEqual(clean.snapshot().agents.map((agent) => agent.status))
   })
 
+  it('opens a run again when a running status follows its end, and reads its later lines', () => {
+    const line = recording.frames.find((frame, index) => {
+      if (frame.type !== 'heartbeat.run.log') return false
+      const probe = createPipeline({ agents: recording.agents, tree: recording.tree })
+      return [...probe.push({ ...frame, payload: { ...frame.payload, runId: `probe${index}` } }), ...probe.flush()].some((activity) => activity.type.startsWith('tool.'))
+    })
+    const agent = recording.agents.find((item) => item.id === line.payload.agentId)
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const status = (status, at) => ({ type: 'heartbeat.run.status', createdAt: at, payload: { agentId: agent.id, runId: 'r1', status } })
+    const out = [
+      ...pipeline.push(status('running', '2026-01-01T00:00:00Z')),
+      ...pipeline.push(status('failed', '2026-01-01T00:10:00Z')),
+      ...pipeline.push(status('running', '2026-01-01T00:11:00Z')),
+      ...pipeline.push({ ...line, createdAt: '2026-01-01T00:11:01Z', payload: { ...line.payload, runId: 'r1', seq: 7, ts: '2026-01-01T00:11:01Z' } }),
+      ...pipeline.push(status('succeeded', '2026-01-01T00:12:00Z')),
+      ...pipeline.flush(),
+    ].filter((activity) => activity.runId === 'r1')
+    const types = out.map((activity) => activity.type)
+    expect(types.filter((type) => type === 'run.start')).toHaveLength(2)
+    expect(types.some((type) => type.startsWith('tool.'))).toBe(true)
+    expect(out.filter((activity) => activity.type === 'run.end').map((activity) => activity.ok)).toEqual([false, true])
+  })
+
   it('ignores frames from agents it does not know', () => {
     const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
     expect(pipeline.push({ type: 'heartbeat.run.queued', createdAt: '2026-01-01T00:00:00Z', payload: { agentId: 'nobody' } })).toEqual([])

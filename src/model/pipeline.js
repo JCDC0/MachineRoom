@@ -71,6 +71,12 @@ export function createPipeline({ agents, tree }) {
       lastRunTime.set(runId, time)
       emit({ time, type: 'run.queued' })
     } else if (frame.type === 'heartbeat.run.status') {
+      if (payload.status === 'running' && ended.has(runId)) {
+        // The lane source reopens a run it ended for quiet when its log grows again.
+        ended.delete(runId)
+        seen.delete(`${runId}:running`)
+        for (const status of RUN_END) seen.delete(`${runId}:${status}`)
+      }
       if (!once(`${runId}:${payload.status}`)) return []
       lastRunTime.set(runId, time)
       if (payload.status === 'running') {
