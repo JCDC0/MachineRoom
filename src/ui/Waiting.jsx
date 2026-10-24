@@ -32,7 +32,7 @@ export default function Waiting({ agents = [], status = 'connecting', orchestrat
   const hasOrchestrator = typeof orchestrator === 'boolean' ? orchestrator : listsOrchestrator(agents)
   const detail =
     status === 'live' && hasOrchestrator
-      ? 'Nothing is running yet. Press / or click ORCHESTRATOR and tell it what you want built.'
+      ? 'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat opens at the bottom right.'
       : copy.detail
   const names = agents.map((agent) => agent.name).filter(Boolean)
   const agentSummary =

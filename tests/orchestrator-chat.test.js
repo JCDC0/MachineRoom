@@ -653,7 +653,7 @@ describe('Hud and Waiting with an orchestrator', () => {
       })
     )
     expect(html).toContain(
-      'Nothing is running yet. Press / or click ORCHESTRATOR and tell it what you want built.'
+      'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat opens at the bottom right.'
     )
   })
 
