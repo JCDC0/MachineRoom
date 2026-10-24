@@ -1,4 +1,6 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { agentsFile, createRunLineReader, framesFromRun } from '../src/briefs/recording.js'
 import { buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
 import { apply, createState } from '../src/model/state.js'
@@ -114,6 +116,55 @@ describe('final state of the recording', () => {
     const nextStart = activities.findIndex((a, i) => i > firstFailure && a.agent === 'opencode' && a.type === 'run.start')
     apply(live, activities[nextStart])
     expect(live.agents.get('opencode').status).toBe('working')
+  })
+})
+
+const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
+const agyChunks = readFileSync(new URL('../public/fixtures/scenario-g-run.jsonl', import.meta.url), 'utf8')
+  .trim()
+  .split(/\r?\n/)
+  .map((line) => JSON.parse(line))
+  .filter((frame) => frame.type === 'heartbeat.run.log')
+  .map((frame) => frame.payload.chunk)
+const agyLines = agyChunks.map((chunk) => chunk.replace(/\r?\n$/, ''))
+
+describe('AGY as a lane', () => {
+  it('names the AGY agent with the process adapter the parser picker reads as AGY', () => {
+    expect(agentsFile('agy', lanes)).toEqual({
+      projectRoot: 'MachineRoom-agy',
+      agents: [{ id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy' }],
+    })
+  })
+
+  it('marks the scenario-g lines that the AGY parser turns into activities as read', () => {
+    const readLine = createRunLineReader('agy')
+    const entries = agyLines.map((line) => readLine(line))
+    const read = entries.filter((entry) => entry?.read)
+    expect(read).toHaveLength(19)
+    expect(read[0].chunk).toBe(`${agyLines[4]}\n`)
+    expect(read[0].at).toBeNull()
+    expect(read.every((entry) => entry.chunk.endsWith('\n'))).toBe(true)
+    expect(entries[0]).toMatchObject({ read: false })
+    expect(entries[agyLines.length - 1]).toMatchObject({ read: false })
+    expect(readLine('')).toBeNull()
+  })
+
+  it('builds the frames of an AGY log after the running frame', () => {
+    const log = agyLines.slice(4, 6).join('\n')
+    const record = { lane: 'agy', startedAt: '2026-10-23T16:39:12.299Z', minutes: 1, exitCode: 0, killed: false }
+    const frames = framesFromRun({ harness: 'agy', log, record })
+    expect(frames.map((frame) => frame.type)).toEqual([
+      'heartbeat.run.queued',
+      'heartbeat.run.status',
+      'heartbeat.run.log',
+      'heartbeat.run.log',
+      'heartbeat.run.status',
+    ])
+    expect(frames[0].payload.agentId).toBe('agent-agy')
+    expect(frames[1].payload.status).toBe('running')
+    expect(frames[2].payload.chunk).toBe(`${agyLines[4]}\n`)
+    expect(Date.parse(frames[2].createdAt)).toBeGreaterThan(Date.parse(frames[1].createdAt))
+    expect(frames[frames.length - 1].payload).toMatchObject({ status: 'succeeded', error: null })
   })
 })
 

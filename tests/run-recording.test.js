@@ -344,7 +344,39 @@ describe('writeRecording', () => {
   it('refuses an unknown lane and a lane with no command line', () => {
     const root = tempFolder()
     expect(() => writeRecording({ record: { lane: 'claude' }, lanes, root, env: {} })).toThrow(/no lane named claude/)
-    expect(() => writeRecording({ record: { lane: 'agy' }, lanes, root, env: {} })).toThrow(/no command line/)
+    const noCli = { ...lanes, agy: { ...lanes.agy, cli: undefined } }
+    expect(() => writeRecording({ record: { lane: 'agy' }, lanes: noCli, root, env: {} })).toThrow(/no command line/)
+  })
+
+  it('writes the three recording files for an AGY record', () => {
+    const { dir, sha } = worktreeWith({ 'src/strings.js': 'x\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'agy-S6b-20261024-101010.log')
+    writeFileSync(logPath, [
+      JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'c1', step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'read_file', tool_info: { parameters: { Path: 'src/strings.js' } } } }),
+      JSON.stringify({ event: 'step_update', step_update: { conversation_id: 'c1', step_index: 1, state: 'DONE', step_type: 'tool', tool_name: 'read_file', tool_info: { parameters: { Path: 'src/strings.js' }, output: 'ok' } } }),
+    ].join('\n'))
+    const record = {
+      lane: 'agy',
+      startedAt: '2026-10-24T10:10:10.000Z',
+      minutes: 2,
+      exitCode: 0,
+      killed: false,
+      log: logPath,
+      branch: 'feat/s6b',
+      commits: [`${sha} one`],
+    }
+    const written = writeRecording({ record, lanes: { agy: { ...lanes.agy, worktree: dir } }, root, env: {} })
+
+    expect(written.name).toBe('agy-S6b-20261024-101010')
+    expect(written.frames).toBe(5)
+    expect(written.toolCalls).toBe(1)
+    const frames = readFrames(written.runPath)
+    expect(frames[frames.length - 1].payload).toMatchObject({ status: 'succeeded', error: null })
+    const agents = JSON.parse(readFileSync(written.agentsPath, 'utf8'))
+    expect(agents.agents[0]).toMatchObject({ key: 'agy', adapterType: 'process', parser: 'agy' })
+    const tree = JSON.parse(readFileSync(written.treePath, 'utf8'))
+    expect(tree.files).toEqual(['src/strings.js'])
   })
 
   it('writes an index with the new entry and no index error', () => {

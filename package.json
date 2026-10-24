@@ -23,6 +23,7 @@
     "src/model/commands.js",
     "src/model/fileIndex.js",
     "src/model/paths.js",
+    "src/model/parsers/agy.js",
     "src/model/parsers/common.js",
     "src/model/parsers/hermes.js",
     "src/model/parsers/opencode.js",

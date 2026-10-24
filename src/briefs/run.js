@@ -1,4 +1,5 @@
 import { basename } from '../model/paths.js'
+import { createAgyParser } from '../model/parsers/agy.js'
 import { createHermesParser } from '../model/parsers/hermes.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
 import { branchFor } from './briefs.js'
@@ -38,7 +39,7 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
   const cli = lane.cli
   if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
   const harness = cli.harness
-  if (harness !== 'hermes' && harness !== 'opencode') throw new Error(`The runner does not know the ${harness} command line.`)
+  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy') throw new Error(`The runner does not know the ${harness} command line.`)
   if (typeof lane.worktree !== 'string' || lane.worktree.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
   const file = expandBin(cli.bin, env)
   const reasoning = lane.reasoning ? String(lane.reasoning) : ''
@@ -47,6 +48,12 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
     if (cli.toolsets) args.push('-t', String(cli.toolsets))
     if (reasoning) args.push('--reasoning', reasoning)
     if (usageFile) args.push('--usage-file', usageFile)
+    return { file, args, cwd: lane.worktree }
+  }
+  if (harness === 'agy') {
+    const args = ['--print', prompt, '--output-format', 'stream-json']
+    if (cli.model) args.push('--model', String(cli.model))
+    args.push('--dangerously-skip-permissions')
     return { file, args, cwd: lane.worktree }
   }
   const model = reasoning ? `${cli.model}#${reasoning}` : cli.model
@@ -484,6 +491,30 @@ function opencodeSummary(log, worktree) {
   return summaryOf('opencode', activities, opencodeReport(log), logCost(log))
 }
 
+function agyReport(log) {
+  let words = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.event !== 'result') continue
+    const text = item?.result?.response
+    if (typeof text !== 'string' || !text.trim()) continue
+    words = text
+  }
+  return headLines(words ?? '')
+}
+
+function agySummary(log, worktree) {
+  const parser = createAgyParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
+  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
+  return summaryOf('agy', activities, agyReport(log), null)
+}
+
 function summaryOf(harness, activities, head, costUsd) {
   const calls = activities.filter((activity) => activity.type === 'tool.start')
   const written = []
@@ -514,6 +545,7 @@ function hermesSummary(log, worktree) {
 
 export function summarizeRun({ harness, log, worktree } = {}) {
   if (harness === 'opencode') return opencodeSummary(log, worktree)
+  if (harness === 'agy') return agySummary(log, worktree)
   if (harness !== 'hermes') throw new Error(`The summary does not know the ${harness} log.`)
   return hermesSummary(log, worktree)
 }
