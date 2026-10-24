@@ -6,11 +6,11 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { createLanesSource } from '../server/lanes-source.js'
 import { chatFileFor } from '../server/orchestrator.js'
-import { createOrchestrators } from '../server/orchestrators.js'
+import { branchChanges, createOrchestrators, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
-import { makeTempDir } from './helpers/tempRoot.js'
+import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
@@ -115,31 +115,33 @@ function git(folder, args) {
   if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr ?? '').trim()}`)
 }
 
-function makeWorktree(base) {
+function makeWorktree(project, base) {
   const folder = join(base, 'worktree')
-  mkdirSync(join(folder, 'src', 'ui'), { recursive: true })
+  git(project, ['worktree', 'add', '-b', 'feat/k2', folder])
+  mkdirSync(join(folder, 'Src', 'ui'), { recursive: true })
   mkdirSync(join(folder, 'server'), { recursive: true })
-  writeFileSync(join(folder, 'README.md'), 'readme\n')
-  writeFileSync(join(folder, 'src', 'ui', 'a.jsx'), 'one\n')
-  git(folder, ['init', '-b', 'main'])
-  git(folder, ['config', 'user.email', 'test@example.com'])
-  git(folder, ['config', 'user.name', 'Test'])
-  git(folder, ['add', '.'])
-  git(folder, ['commit', '-m', 'base'])
-  git(folder, ['switch', '-c', 'feat/k2'])
-  writeFileSync(join(folder, 'src', 'ui', 'a.jsx'), 'two\n')
+  writeFileSync(join(folder, 'Src', 'ui', 'a.jsx'), 'two\n')
   writeFileSync(join(folder, 'server', 'x.js'), 'outside\n')
   git(folder, ['add', '.'])
   git(folder, ['commit', '-m', 'change'])
   return folder
 }
 
-function makeBase({ ladder = null } = {}) {
+function makeBase({ ladder = null, branch = '' } = {}) {
   const base = makeTempDir('mr-orchestrators-')
   const runs = join(base, 'runs')
   const projectRoot = join(base, 'project')
   mkdirSync(runs, { recursive: true })
   mkdirSync(projectRoot, { recursive: true })
+  if (branch) {
+    mkdirSync(join(projectRoot, 'Src', 'ui'), { recursive: true })
+    writeFileSync(join(projectRoot, 'Src', 'ui', 'a.jsx'), 'one\n')
+    git(projectRoot, ['init', '-b', branch])
+    git(projectRoot, ['config', 'user.email', 'test@example.com'])
+    git(projectRoot, ['config', 'user.name', 'Test'])
+    git(projectRoot, ['add', '.'])
+    git(projectRoot, ['commit', '-m', 'base'])
+  }
   const script = join(base, 'fake-agent.mjs')
   writeFileSync(script, FAKE_AGENT)
   const promptFile = join(base, 'orchestrator-agent.md')
@@ -264,6 +266,55 @@ function pagePost(url, body) {
     body: JSON.stringify(body),
   })
 }
+
+describe('branchChanges', () => {
+  it('diffs against the project branch, not main', () => {
+    const base = makeTempDir('mr-branch-')
+    cleanups.push(() => removeTempDir(base))
+    const project = join(base, 'project')
+    mkdirSync(join(project, 'src', 'ui'), { recursive: true })
+    writeFileSync(join(project, 'src', 'ui', 'a.jsx'), 'one\n')
+    git(project, ['init', '-b', 'trunk'])
+    git(project, ['config', 'user.email', 'test@example.com'])
+    git(project, ['config', 'user.name', 'Test'])
+    git(project, ['add', '.'])
+    git(project, ['commit', '-m', 'base'])
+
+    const worktree = join(base, 'worktree')
+    git(project, ['worktree', 'add', '-b', 'feat/k2', worktree])
+    mkdirSync(join(worktree, 'server'), { recursive: true })
+    writeFileSync(join(worktree, 'src', 'ui', 'a.jsx'), 'two\n')
+    writeFileSync(join(worktree, 'server', 'x.js'), 'outside\n')
+    git(worktree, ['add', '.'])
+    git(worktree, ['commit', '-m', 'change'])
+
+    expect(branchChanges({ project: worktree }, {}, { project })).toEqual(['server/x.js', 'src/ui/a.jsx'])
+  })
+
+  it('lists paths relative to a project that sits below the repository root', () => {
+    const base = makeTempDir('mr-branch-')
+    cleanups.push(() => removeTempDir(base))
+    const repo = join(base, 'repo')
+    const project = join(repo, 'packages', 'app')
+    mkdirSync(join(project, 'src'), { recursive: true })
+    writeFileSync(join(project, 'src', 'a.js'), 'one\n')
+    git(repo, ['init', '-b', 'main'])
+    git(repo, ['config', 'user.email', 'test@example.com'])
+    git(repo, ['config', 'user.name', 'Test'])
+    git(repo, ['add', '.'])
+    git(repo, ['commit', '-m', 'base'])
+
+    const worktree = join(base, 'worktree')
+    git(repo, ['worktree', 'add', '-b', 'feat/k2', worktree])
+    mkdirSync(join(worktree, 'packages', 'app', 'server'), { recursive: true })
+    writeFileSync(join(worktree, 'packages', 'app', 'src', 'a.js'), 'two\n')
+    writeFileSync(join(worktree, 'packages', 'app', 'server', 'y.js'), 'outside\n')
+    git(worktree, ['add', '.'])
+    git(worktree, ['commit', '-m', 'change'])
+
+    expect(branchChanges({ project: worktree }, {}, { project })).toEqual(['server/y.js', 'src/a.js'])
+  })
+})
 
 describe('the orchestrator registry', () => {
   it('keeps the main orchestrator alone and unchanged when there is no ladder', async () => {
@@ -580,8 +631,8 @@ describe('starting lanes from a sub orchestrator', () => {
   })
 
   it('warns a restricted sub and the main about files outside the scope', async () => {
-    const files = makeBase({ ladder: { subs: [FRONTEND] } })
-    const worktree = makeWorktree(files.base)
+    const files = makeBase({ ladder: { subs: [FRONTEND] }, branch: 'trunk' })
+    const worktree = makeWorktree(files.projectRoot, files.base)
     const rig = makeRig(files)
     rig.registry.main.send({ text: 'Hello', confirmed: true })
     await waitIdle(rig.registry, 'orchestrator', 1)
@@ -593,12 +644,27 @@ describe('starting lanes from a sub orchestrator', () => {
     rig.registry.onFrame(frame('opencode-K2-20261025-130000'))
     const warning = await waitFor(() => messagesOf(rig.registry, 'frontend').find((message) => message.from === 'room' && message.text.startsWith('Outside the scope, do not merge:')))
     expect(warning.text).toContain('- server/x.js')
-    expect(warning.text).not.toContain('src/ui/a.jsx')
+    if (process.platform === 'win32') expect(warning.text).not.toContain('Src/ui/a.jsx')
+    else expect(warning.text).toContain('- Src/ui/a.jsx')
     expect(warning.text).toContain('Run opencode-K2-20261025-130000 on lane opencode ended: succeeded.')
     await waitFor(() => messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text === warning.text))
 
     const prompt = await waitFor(() => rig.calls().map((call) => call.args[call.args.indexOf('-p') + 1]).find((text) => typeof text === 'string' && text.includes('Outside the scope')))
     expect(prompt.startsWith('Room: Outside the scope, do not merge:')).toBe(true)
+  })
+
+  it('tells the parent when the scope could not be read', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const rig = makeRig(files)
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Do the work', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+    await waitIdle(rig.registry, 'orchestrator', 2)
+
+    appendRecord(rig, { logName: 'opencode-K2-20261025-140000', startedBy: 'frontend', project: rig.projectRoot })
+    rig.registry.onFrame(frame('opencode-K2-20261025-140000'))
+    await waitFor(() => messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text === SCOPE_UNREAD_PROBLEM))
   })
 })
 
