@@ -1,0 +1,88 @@
+#!/usr/bin/env node
+import { appendFileSync, readFileSync } from 'node:fs'
+
+const args = process.argv.slice(2)
+const valueAfter = (flag) => {
+  const index = args.indexOf(flag)
+  return index === -1 ? '' : String(args[index + 1] ?? '')
+}
+const messageFile = String(process.env.MR_E2E_MESSAGE_FILE ?? '')
+if (messageFile) {
+  const at = args.indexOf('-p')
+  if (at !== -1) {
+    try {
+      args[at + 1] = readFileSync(messageFile, 'utf8')
+    } catch {}
+  }
+}
+const instructionFile = String(process.env.MR_E2E_INSTRUCTION_FILE ?? '')
+let instruction = valueAfter('--append-system-prompt')
+if (instructionFile) {
+  try {
+    instruction = readFileSync(instructionFile, 'utf8')
+  } catch {}
+}
+const resumed = args.includes('--resume')
+const callsFile = String(process.env.MR_E2E_CLAUDE_CALLS ?? '')
+const lane = String(process.env.MR_E2E_LANE ?? 'opencode')
+const task = 'Write the lane note from the fake lane.\n\nWrite one file in the working folder and print one tool line.'
+
+function note(entry) {
+  if (!callsFile) return
+  appendFileSync(callsFile, `${JSON.stringify(entry)}\n`)
+}
+
+console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake-e2e' }))
+
+if (resumed) {
+  console.log(
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Reading the room message.' }] },
+    })
+  )
+  console.log(
+    JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      result: 'Second turn: the lane report reached me.',
+      total_cost_usd: 0.02,
+      usage: { input_tokens: 20, output_tokens: 5 },
+    })
+  )
+  note({ turn: 'second', args })
+} else {
+  const found = /(https?:\/\/(?:127\.0\.0\.1|localhost):\d+)/.exec(instruction)
+  const bridge = found ? found[1] : ''
+  let status = 0
+  let body = ''
+  if (bridge) {
+    try {
+      const response = await fetch(`${bridge}/api/control/runs`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ lane, tasks: [task], worktree: true, confirmed: true }),
+      })
+      status = response.status
+      body = await response.text()
+    } catch (error) {
+      body = String(error?.message ?? error)
+    }
+  }
+  console.log(
+    JSON.stringify({
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Starting the fake lane.' }] },
+    })
+  )
+  console.log(
+    JSON.stringify({
+      type: 'result',
+      subtype: 'success',
+      result: 'Started the fake lane.',
+      total_cost_usd: 0.01,
+      usage: { input_tokens: 10, output_tokens: 3 },
+    })
+  )
+  note({ turn: 'first', args, cwd: process.cwd(), instruction, status, body })
+}

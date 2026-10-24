@@ -266,6 +266,8 @@ export function createBridge(options = {}) {
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     runnerCommand: options.runnerCommand,
+    lanesFile: options.lanesFile,
+    runsFolder: options.runsFolder ?? options.orchestratorFolder,
     sendJson,
     readJsonBody,
     orchestrators: () => orchestrators,
