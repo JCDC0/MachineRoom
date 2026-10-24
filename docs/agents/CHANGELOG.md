@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Read what changed from 0.1.276 to 0.1.307 and wrote `docs/agents/AUDIT-2026-10-V7.md`, with 13 findings, the sharpest about a ladder write that claims to be the owner and a scope check that reads no commits on a project without `main` (task Q9).
 - The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
