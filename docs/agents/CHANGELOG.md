@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
 - The orchestrator chat names the project folder: the header shows its base name beside the model and the first-message card gives the full path (task Q6c).
 - Folder card names stay at 11 pixels or more on screen in the lens overview, the dock legend has its own row, and the lens bow and its black bars are clear (task I3).
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
