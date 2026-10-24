@@ -60,7 +60,7 @@ White is activity: a read or a write. Yellow is active: the folder and the file 
 
 | Harness | State | What the room reads |
 | --- | --- | --- |
-| OpenCode | In use: lanes `opencode`, `opencode2` to `opencode5` | `tool_use` lines, with the tool, its file or command and its result |
+| OpenCode | In use: lanes `opencode`, `opencode2` to `opencode6` | `tool_use` lines, with the tool, its file or command and its result |
 | Claude Code | In use: lane `claude` | stream-json `tool_use` and `tool_result` lines, and a `Task` or `Agent` child while it works |
 | Hermes | Supported, retired | plain `read` and `delegate` lines |
 | AGY | Supported, retired | `step_update` lines, and `invoke_subagent` for a subagent |
@@ -149,7 +149,7 @@ The drawer needs a control client. It is there in replay, the demo and a live ro
 
 ## Working with lanes
 
-A lane is one agent with its own worktree and branch, listed in `docs/agents/lanes.json`. Five OpenCode lanes (`opencode` and `opencode2` to `opencode5`) and the `claude` lane are live. `hermes` and `agy` are retired, so `npm run run-lane` refuses them. Remove `"retired": true` from a lane entry to bring it back. The drawer can start a local lane run on an open brief and show the result.
+A lane is one agent with its own worktree and branch, listed in `docs/agents/lanes.json`. Six OpenCode lanes (`opencode` and `opencode2` to `opencode6`) and the `claude` lane are live. `hermes` and `agy` are retired, so `npm run run-lane` refuses them. Remove `"retired": true` from a lane entry to bring it back. The drawer can start a local lane run on an open brief and show the result.
 
 - Start a lane run. Press `C`, open Dispatch, pick a brief, then Run now. The confirm card names the lane, model and brief and says it spends money. Confirm starts the lane in its own worktree. The Runs list shows its last lines and its record.
 - Start one from a terminal. `npm run run-lane -- opencode <brief>` starts a lane on the open brief you name. The `claude` lane runs Claude Code, and `npm run run-lane -- claude --project <folder> --task "Fix the failing test."` starts it on another folder. `--dry-run` prints the command, `--list` shows the last 10 runs, and `--stats` shows runs, minutes and cost per lane and model.

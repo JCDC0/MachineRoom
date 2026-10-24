@@ -212,6 +212,8 @@ export function createLanesSource(options = {}) {
   const mainCheckout = mainCheckoutOf(repoRoot)
   if (mainCheckout) worktreeRoots.add(pathKey(mainCheckout))
   const worktreeRunsShown = !roomRoot || worktreeRoots.has(pathKey(roomRoot))
+  const roomCheckout = roomRoot ? mainCheckoutOf(roomRoot) : ''
+  const sameRepo = new Map()
   const quietMs = Number(options.quietMs ?? DEFAULT_QUIET_MS)
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
   const primeMs = Number(options.primeMs ?? DEFAULT_PRIME_MS)
@@ -234,6 +236,13 @@ export function createLanesSource(options = {}) {
     } catch {}
   }
 
+  function inRoomRepo(project) {
+    if (!roomCheckout) return false
+    const key = pathKey(project)
+    if (!sameRepo.has(key)) sameRepo.set(key, pathKey(mainCheckoutOf(project) || '') === pathKey(roomCheckout))
+    return sameRepo.get(key)
+  }
+
   function beginRun(name, path, agent, keepPaths = false, project = '') {
     const startedAt = now()
     const run = {
@@ -250,7 +259,7 @@ export function createLanesSource(options = {}) {
       decoder: new StringDecoder('utf8'),
       skipLine: false,
       feed: createRunLineReader(agent.parser),
-      rewrite: keepPaths ? (line) => line : rewriter(lanes[agent.key]?.worktree, roomRoot),
+      rewrite: keepPaths ? (line) => line : rewriter(project || lanes[agent.key]?.worktree, roomRoot),
       startedAt,
       lastGrowth: startedAt,
     }
@@ -311,7 +320,8 @@ export function createLanesSource(options = {}) {
         continue
       }
       const meta = metaFor(path)
-      if (meta && pathKey(meta.project) !== pathKey(roomRoot)) {
+      const ownProject = meta && pathKey(meta.project) === pathKey(roomRoot)
+      if (meta && !ownProject && !inRoomRepo(meta.project)) {
         seen.add(key)
         continue
       }
@@ -320,7 +330,7 @@ export function createLanesSource(options = {}) {
         continue
       }
       seen.add(key)
-      beginRun(entry.name.slice(0, -4), path, agent, Boolean(meta), meta?.project ?? '')
+      beginRun(entry.name.slice(0, -4), path, agent, Boolean(ownProject), meta?.project ?? '')
     }
   }
 

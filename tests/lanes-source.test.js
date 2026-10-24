@@ -85,7 +85,7 @@ function git(cwd, args) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'claude'])
+    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'claude'])
     expect(agents.filter((agent) => agent.key !== 'agy' && agent.key !== 'claude').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
     expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
@@ -523,6 +523,31 @@ describe('the V5 audit fixes in the lane source', () => {
     expect(JSON.parse(logFrames(frames)[0].payload.chunk).part.state.input.path.replace(/\\/g, '/')).toBe(
       `${main.replace(/\\/g, '/')}/src/a.js`
     )
+  })
+
+  it('shows a project run in another worktree of the room root repository, on the root paths (S9)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const main = join(base, 'Game')
+    mkdirSync(main, { recursive: true })
+    git(main, ['init'])
+    git(main, ['commit', '--allow-empty', '-m', 'base'])
+    const worktree = join(base, 'Game-opencode')
+    git(main, ['worktree', 'add', '--detach', worktree])
+    const other = join(base, 'Elsewhere')
+    mkdirSync(other, { recursive: true })
+    git(other, ['init'])
+
+    const { frames } = startSource({ runs, projectRoot: main, repoRoot: join(base, 'MachineRoom'), lanes: lanesFor({ opencode: join(base, 'MachineRoom-opencode') }) })
+    writeFileSync(join(runs, 'opencode-elsewhere-20261024-140000.meta.json'), JSON.stringify({ project: other }))
+    writeFileSync(join(runs, 'opencode-elsewhere-20261024-140000.log'), `${toolLine(`${other}\\src\\b.js`)}\n`)
+    writeFileSync(join(runs, 'opencode-queue-20261024-140001.meta.json'), JSON.stringify({ project: worktree }))
+    writeFileSync(join(runs, 'opencode-queue-20261024-140001.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the worktree project run' })
+    expect(JSON.parse(logFrames(frames)[0].payload.chunk).part.state.input.path.replace(/\\/g, '/')).toBe(
+      `${main.replace(/\\/g, '/')}/src/a.js`
+    )
+    expect(frames.some((frame) => frame.payload?.runId === 'run-opencode-elsewhere-20261024-140000')).toBe(false)
   })
 
   it('registers the lane parsers at bridge start and after a lane-only agents answer (X16)', async () => {
