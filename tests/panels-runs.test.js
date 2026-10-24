@@ -12,6 +12,7 @@ import {
   projectRunConfirm,
   projectRunBody,
   projectRunLabel,
+  projectRunLanes,
   projectSplitLabel,
   projectTaskProblem,
   projectWorktreeName,
@@ -358,6 +359,19 @@ describe('projectRunBody', () => {
   it('falls back to an empty task for junk input', () => {
     expect(projectRunBody()).toEqual({ task: '', allowDirty: false })
     expect(projectRunBody({ task: 7, worktree: 'yes' })).toEqual({ task: '', allowDirty: false })
+  })
+})
+
+describe('projectRunLanes', () => {
+  it('leaves out the sub orchestrators', () => {
+    const agents = [
+      { key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null },
+      { key: 'sub-frontend', name: 'Frontend', adapterType: 'claude_local', role: null, subOrchestrator: true },
+      { key: 'sub-backend', name: 'Backend', adapterType: 'claude_local', role: null },
+    ]
+    expect(projectRunLanes(agents, [{ lane: 'opencode' }])).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: true },
+    ])
   })
 })
 
