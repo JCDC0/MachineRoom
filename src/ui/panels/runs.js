@@ -1,3 +1,5 @@
+import { harnessByAdapter } from '../../harnesses/index.js'
+
 export function resultWord(record) {
   if (record?.killed) return 'stopped'
   if (record?.exitCode === 0) return 'finished'
@@ -70,7 +72,10 @@ export const PROJECT_TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
 export const PROJECT_TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 export const PROJECT_TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 
-const PROJECT_RUN_ADAPTERS = new Set(['opencode_local', 'claude_local', 'process'])
+function runsOnProject(agent) {
+  const adapterType = typeof agent.adapterType === 'string' ? agent.adapterType : ''
+  return Object.hasOwn(harnessByAdapter, adapterType)
+}
 
 export function projectRunLanes(agents, running) {
   const list = Array.isArray(agents) ? agents : []
@@ -85,7 +90,7 @@ export function projectRunLanes(agents, running) {
   for (const agent of list) {
     if (!agent || typeof agent !== 'object') continue
     if (agent.role !== null && agent.role !== undefined) continue
-    if (!PROJECT_RUN_ADAPTERS.has(agent.adapterType)) continue
+    if (!runsOnProject(agent)) continue
     const key = typeof agent.key === 'string' ? agent.key.trim() : ''
     if (!key || seen.has(key)) continue
     seen.add(key)

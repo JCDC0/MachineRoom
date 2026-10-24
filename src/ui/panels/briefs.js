@@ -1,4 +1,34 @@
-export const VALID_LANES = Object.freeze(['hermes', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'opencode8', 'opencode9', 'opencode10', 'agy', 'claude'])
+import lanes from '../../../docs/agents/lanes.json'
+import { harnessByKey } from '../../harnesses/index.js'
+
+function laneHarness(lane) {
+  const name = String(lane ?? '').trim().toLowerCase()
+  if (!name) return null
+  if (Object.hasOwn(harnessByKey, name)) return harnessByKey[name]
+  const match = /^(.*?)(\d+)$/.exec(name)
+  if (!match) return null
+  return Object.hasOwn(harnessByKey, match[1]) ? harnessByKey[match[1]] : null
+}
+
+export const VALID_LANES = Object.freeze(
+  Object.entries(lanes)
+    .filter(([key, entry]) => key !== 'orchestrator' && entry && typeof entry === 'object' && entry.cli)
+    .map(([key]) => key)
+)
+
+export function validLanes(agents) {
+  if (!Array.isArray(agents)) return [...VALID_LANES]
+  const names = []
+  const seen = new Set()
+  for (const agent of agents) {
+    if (!agent || typeof agent !== 'object') continue
+    const key = typeof agent.key === 'string' ? agent.key.trim() : ''
+    if (!key || seen.has(key) || !laneHarness(key)) continue
+    seen.add(key)
+    names.push(key)
+  }
+  return names
+}
 
 export const OWNER_LABELS = Object.freeze({
   hermes: 'Hermes',
@@ -41,11 +71,11 @@ export function formatBriefTitle(brief) {
   return id || title
 }
 
-export function ownerToLane(briefOrOwner) {
+export function ownerToLane(briefOrOwner, lanes) {
   const first = getFirstOwner(briefOrOwner)
   if (!first) return null
-  if (VALID_LANES.includes(first)) return first
-  return null
+  const names = lanes === undefined ? VALID_LANES : laneNames(lanes)
+  return names.some((name) => String(name).toLowerCase() === first) ? first : null
 }
 
 export const laneForBrief = ownerToLane
@@ -62,11 +92,15 @@ function runningLaneNames(running) {
 
 function laneNames(lanes) {
   if (Array.isArray(lanes)) {
+    if (lanes.some((item) => item && typeof item === 'object')) return validLanes(lanes)
     return lanes
       .filter((name) => typeof name === 'string' && name.trim())
       .map((name) => name.trim())
   }
-  if (lanes && typeof lanes === 'object') return Object.keys(lanes)
+  if (lanes && typeof lanes === 'object') {
+    if (Array.isArray(lanes.agents)) return validLanes(lanes.agents)
+    return Object.keys(lanes)
+  }
   return [...VALID_LANES]
 }
 

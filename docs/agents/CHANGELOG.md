@@ -6,6 +6,7 @@
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
 - The first visit guide names the lens, the dock and its three columns, the tunnel and the colours, the chat with its tabs, and the keys, and the waiting card points at the chat at the bottom right (task N3).
 - A new `server/harnesses/` holds one Node descriptor per harness with a session reader, and `server/sessions-source.js` ticks the readers the registry lists instead of naming Claude Code and OpenCode (task H7, step H3 of HARNESSES.md).
+- The parser maps and the UI lane lists read the harness registry and the agent list instead of fixed arrays: the live source and Dispatch model list, the valid brief lanes, the project run lanes and the route picker (task H6).
 - The orchestrator chat names the project folder: the header shows its base name beside the model and the first-message card gives the full path (task Q6c).
 - Folder card names stay at 11 pixels or more on screen in the lens overview, the dock legend has its own row, and the lens bow and its black bars are clear (task I3).
 - `run-lane` holds `<runs>/project-<hash>.lock` with its pid for every `--project` run, or the worktree folder with `--worktree`, so a second run on one project stops with one sentence and lanes in their own worktrees still run side by side; the queue branch is `machineroom/queue-<lane>-<stamp>` (task Q6a).

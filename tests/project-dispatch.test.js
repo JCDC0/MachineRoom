@@ -469,6 +469,7 @@ describe('the project run helpers', () => {
       { key: 'opencode', name: 'OpenCode', running: false },
       { key: 'agy', name: 'agy', running: false },
       { key: 'claude', name: 'Claude Code', running: false },
+      { key: 'hermes', name: 'Hermes', running: false },
     ])
     expect(projectRunLanes(null)).toEqual([])
     expect(projectRunLanes([null, 7, 'opencode'])).toEqual([])
@@ -479,11 +480,13 @@ describe('the project run helpers', () => {
       { key: 'opencode', name: 'OpenCode', running: true },
       { key: 'agy', name: 'agy', running: false },
       { key: 'claude', name: 'Claude Code', running: false },
+      { key: 'hermes', name: 'Hermes', running: true },
     ])
     expect(projectRunLanes(AGENTS, [])).toEqual([
       { key: 'opencode', name: 'OpenCode', running: false },
       { key: 'agy', name: 'agy', running: false },
       { key: 'claude', name: 'Claude Code', running: false },
+      { key: 'hermes', name: 'Hermes', running: false },
     ])
   })
 
