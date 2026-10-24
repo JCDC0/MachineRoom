@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
 import { cleanTempRoot, staleFolders } from './helpers/cleanTemp.js'
@@ -18,7 +18,7 @@ afterAll(() => {
 describe('makeTempDir', () => {
   it('puts the folder under the root in the process id folder', () => {
     const dir = track(makeTempDir('temp-root-'))
-    expect(dirname(dir)).toBe(join(TEMP_ROOT, String(process.pid)))
+    expect(dirname(dir)).toBe(realpathSync.native(join(TEMP_ROOT, String(process.pid))))
     expect(existsSync(dir)).toBe(true)
     expect(basename(dir).startsWith('temp-root-')).toBe(true)
   })
