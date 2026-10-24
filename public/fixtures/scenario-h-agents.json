@@ -1,0 +1,12 @@
+{
+  "projectRoot": "agent-sandbox",
+  "agents": [
+    {
+      "id": "289ac9c7-2797-47cd-aa8c-7550e4443c04",
+      "key": "claude",
+      "name": "Claude Code",
+      "adapterType": "claude_local",
+      "parser": "claude"
+    }
+  ]
+}

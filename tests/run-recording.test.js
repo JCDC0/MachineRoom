@@ -170,8 +170,8 @@ describe('agentsFile and treeFile', () => {
   })
 
   it('refuses an unknown lane and an unknown harness', () => {
-    expect(() => agentsFile('claude', lanes)).toThrow(/no lane named claude/)
-    expect(() => framesFromRun({ harness: 'claude', log: '', record: { lane: 'claude', startedAt: '2026-10-19T00:00:00.000Z' } })).toThrow(/does not know/)
+    expect(() => agentsFile('nobody', lanes)).toThrow(/no lane named nobody/)
+    expect(() => framesFromRun({ harness: 'codex', log: '', record: { lane: 'claude', startedAt: '2026-10-19T00:00:00.000Z' } })).toThrow(/does not know/)
     expect(() => framesFromRun({ harness: 'opencode', log: '', record: {} })).toThrow(/start time/)
   })
 })
@@ -343,7 +343,7 @@ describe('writeRecording', () => {
 
   it('refuses an unknown lane and a lane with no command line', () => {
     const root = tempFolder()
-    expect(() => writeRecording({ record: { lane: 'claude' }, lanes, root, env: {} })).toThrow(/no lane named claude/)
+    expect(() => writeRecording({ record: { lane: 'nobody' }, lanes, root, env: {} })).toThrow(/no lane named nobody/)
     const noCli = { ...lanes, agy: { ...lanes.agy, cli: undefined } }
     expect(() => writeRecording({ record: { lane: 'agy' }, lanes: noCli, root, env: {} })).toThrow(/no command line/)
   })

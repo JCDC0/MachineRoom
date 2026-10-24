@@ -1,11 +1,12 @@
 import { basename } from '../model/paths.js'
 import { createAgyParser } from '../model/parsers/agy.js'
+import { createClaudeParser } from '../model/parsers/claude.js'
 import { LINE as HERMES_LINE } from '../model/parsers/hermes.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
 import { RECORDING_NAME } from '../startup.js'
 import { sessionToolLines } from './run.js'
 
-const ADAPTERS = { agy: 'process', hermes: 'hermes_local', opencode: 'opencode_local' }
+const ADAPTERS = { agy: 'process', claude: 'claude_local', hermes: 'hermes_local', opencode: 'opencode_local' }
 const RUNNING_DELAY = 1000
 const END_PAD = 1000
 const MS_FLOOR = 1e11
@@ -99,12 +100,14 @@ function hermesEntries(session) {
 }
 
 export function createRunLineReader(harness) {
-  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy') throw new Error(`The line reader does not know the ${harness} log.`)
+  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude') throw new Error(`The line reader does not know the ${harness} log.`)
   const parser = harness === 'agy'
     ? createAgyParser({ rootName: '', files: [], dirs: [] })
     : harness === 'opencode'
       ? createOpencodeParser({ rootName: '', files: [], dirs: [] })
-      : null
+      : harness === 'claude'
+        ? createClaudeParser({ rootName: '', files: [], dirs: [] })
+        : null
   return function readLine(line, at = null) {
     const text = String(line ?? '')
     if (!text.trim()) return null

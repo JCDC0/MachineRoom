@@ -91,11 +91,12 @@ function metaPath(logPath) {
   return logPath.replace(/\.log$/i, '.meta.json')
 }
 
-function startSource({ runs, projectRoot, lanes, quietMs = 60000, pollMs = 20 }) {
+function startSource({ runs, projectRoot, lanes, quietMs = 60000, pollMs = 20, repoRoot = projectRoot }) {
   const frames = []
   const source = createLanesSource({
     folder: runs,
     projectRoot,
+    repoRoot,
     lanes,
     quietMs,
     pollMs,

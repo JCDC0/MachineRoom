@@ -87,6 +87,7 @@ export function createLanesSource(options = {}) {
   const agents = laneAgents(lanes)
   const byLane = new Map(agents.map((agent) => [agent.key, agent]))
   const roomRoot = options.projectRoot ? resolve(options.projectRoot) : ''
+  const worktreeRunsShown = !roomRoot || pathKey(roomRoot) === pathKey(options.repoRoot ?? REPO_ROOT)
   const quietMs = Number(options.quietMs ?? DEFAULT_QUIET_MS)
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
   const primeMs = Number(options.primeMs ?? DEFAULT_PRIME_MS)
@@ -161,6 +162,7 @@ export function createLanesSource(options = {}) {
       if (!agent) continue
       const meta = metaFor(path)
       if (meta && pathKey(meta.project) !== pathKey(roomRoot)) continue
+      if (!meta && !worktreeRunsShown) continue
       beginRun(entry.name.slice(0, -4), path, agent, Boolean(meta))
     }
   }

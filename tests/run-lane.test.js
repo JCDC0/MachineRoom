@@ -45,6 +45,14 @@ describe('commandFor', () => {
     ])
   })
 
+  it('builds the Claude Code command for a headless stream-json run', () => {
+    expect(commandFor({ lane: lanes.claude, prompt, env, usageFile, title })).toEqual({
+      file: 'claude',
+      args: ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', 'sonnet', '--dangerously-skip-permissions'],
+      cwd: lanes.claude.worktree,
+    })
+  })
+
   it('leaves out the usage file and the reasoning when the lane has none', () => {
     const lane = { ...lanes.hermes, reasoning: undefined }
     const command = commandFor({ lane, prompt, env, title })
@@ -303,6 +311,32 @@ describe('summarizeRun', () => {
       '  ',
       '  Stopping here as instructed.',
     ])
+  })
+
+  it('counts the tool calls of a Claude Code stream-json log', () => {
+    const log = [
+      {
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Read', input: { file_path: 'C:\\GitHub\\MachineRoom-claude\\src\\math.js' } }] },
+        parent_tool_use_id: null,
+      },
+      { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', is_error: false }] }, parent_tool_use_id: null },
+      {
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 't2', name: 'Bash', input: { command: 'npm test' } }] },
+        parent_tool_use_id: null,
+      },
+      { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't2', is_error: true }] }, parent_tool_use_id: null },
+      {
+        type: 'assistant',
+        message: { role: 'assistant', content: [{ type: 'tool_use', id: 't3', name: 'Task', input: { description: 'Read the notes', subagent_type: 'Explore' } }] },
+        parent_tool_use_id: null,
+      },
+    ].map((item) => JSON.stringify(item)).join('\n')
+    const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\GitHub\\MachineRoom-claude' })
+    expect(summary).toEqual({
+      harness: 'claude', toolCalls: 3, failed: 1, written: [], read: ['src/math.js'], head: [], costUsd: null,
+    })
   })
 
   it('adds up the cost of every step that carries one', () => {

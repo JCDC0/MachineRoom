@@ -1,0 +1,14 @@
+{
+  "root": "agent-sandbox",
+  "files": [
+    "docs/claude-notes.md",
+    "docs/notes.md",
+    "package.json",
+    "src/math.js",
+    "src/strings.js",
+    "test/math.test.js"
+  ],
+  "created": [
+    "docs/claude-notes.md"
+  ]
+}

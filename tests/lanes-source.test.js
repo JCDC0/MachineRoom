@@ -40,11 +40,12 @@ function toolLine(path, { at = Date.now(), id = 'call-1', tool = 'read' } = {}) 
   })
 }
 
-function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 20 }) {
+function startSource({ runs, projectRoot = '', lanes, quietMs = 60000, pollMs = 20, repoRoot = projectRoot }) {
   const frames = []
   const source = createLanesSource({
     folder: runs,
     projectRoot,
+    repoRoot,
     lanes,
     quietMs,
     pollMs,
@@ -68,9 +69,10 @@ function endFrame(frames) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'agy'])
-    expect(agents.filter((agent) => agent.key !== 'agy').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
+    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'agy', 'claude'])
+    expect(agents.filter((agent) => agent.key !== 'agy' && agent.key !== 'claude').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
+    expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
     expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
   })
 
@@ -102,7 +104,7 @@ describe('the live lane source', () => {
       surfaceEveryMs: 0,
       reconnectMinMs: 60000,
       reconnectMaxMs: 60000,
-      lanesSource: { folder: runs, lanes, quietMs: 60000, pollMs: 20 },
+      lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
     })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
@@ -216,6 +218,16 @@ describe('the live lane source', () => {
 
     const ended = await waitFor(() => endFrame(frames), { what: 'the quiet end' })
     expect(ended.payload).toMatchObject({ status: 'failed', error: 'no record' })
+  })
+
+  it('leaves out a lane worktree run when the room is on another project', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const lanes = lanesFor({ opencode: join(base, 'MachineRoom-opencode') })
+    const { source, frames } = startSource({ runs, lanes, projectRoot: join(base, 'Other'), repoRoot: join(base, 'MachineRoom') })
+    writeFileSync(join(runs, 'opencode-S6a-20261024-123000.log'), `${toolLine(`${join(base, 'MachineRoom-opencode')}\\src\\a.js`)}\n`)
+    source.tick()
+    expect(frames).toEqual([])
   })
 
   it('keeps two lanes apart with their own runId and seq', async () => {

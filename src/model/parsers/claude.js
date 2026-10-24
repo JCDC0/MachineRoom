@@ -1,3 +1,4 @@
+import { relativeTo } from '../paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const KINDS = [
@@ -9,6 +10,9 @@ const KINDS = [
 ]
 const FILE_NAME = /^(Read|Edit|MultiEdit|NotebookEdit|Write)\s+(.+)$/i
 const FILE_KINDS = new Set(['read', 'edit', 'write'])
+const STREAM_FILES = new Set(['read', 'write', 'edit', 'multiedit', 'notebookedit'])
+const STREAM_FOLDERS = new Set(['glob', 'grep', 'ls'])
+const STREAM_TASKS = new Set(['task', 'agent'])
 
 function kindOf(name) {
   return KINDS.find(([pattern]) => pattern.test(name))?.[1] ?? 'other'
@@ -16,7 +20,10 @@ function kindOf(name) {
 
 export function createClaudeParser(ctx) {
   const calls = new Map()
+  const children = new Map()
+  const childCounts = new Map()
   const out = []
+  const parentKey = ctx.agentKey ?? 'agent'
 
   function start(call, time) {
     if (call.started) return
@@ -31,15 +38,92 @@ export function createClaudeParser(ctx) {
       touches = commandTouch(ctx, call.command ?? '')
       label = `$ ${shorten(call.command ?? 'terminal')}`
     }
-    out.push(toolStart({ time, id: call.id, tool: call.kind, label, touches }))
+    out.push({ ...toolStart({ time, id: call.id, tool: call.kind, label, touches }), agent: call.owner ?? parentKey })
   }
 
-  function handle(json, time) {
-    if (json?.type !== 'acpx.tool_call' || !json.toolCallId) return
+  function ownerOf(parentId) {
+    if (typeof parentId !== 'string' || parentId === '') return parentKey
+    return children.get(parentId) ?? parentKey
+  }
+
+  function folderTouch(raw) {
+    const relative = raw === undefined || raw === null || raw === '' ? '' : relativeTo(ctx.rootName, raw)
+    if (relative === null) return null
+    return { path: relative, mode: 'list', kind: 'dir' }
+  }
+
+  function spawn(call, time, description) {
+    const type = typeof call.input.subagent_type === 'string' ? call.input.subagent_type.trim() : ''
+    const name = type || description || 'subagent'
+    const label = description || name
+    const number = (childCounts.get(call.owner) ?? 0) + 1
+    childCounts.set(call.owner, number)
+    const child = `${call.owner}~${number}`
+    children.set(call.id, child)
+    out.push({ time, type: 'agent.spawn', agent: call.owner, child, name: shorten(name, 40), label })
+  }
+
+  function streamStart(item, json, time) {
+    const id = typeof item.id === 'string' ? item.id : ''
+    if (!id || calls.has(id)) return
+    const name = String(item.name ?? '')
+    const lower = name.toLowerCase()
+    const input = item.input && typeof item.input === 'object' && !Array.isArray(item.input) ? item.input : {}
+    const owner = ownerOf(json.parent_tool_use_id)
+    const call = { id, name, owner, input, kind: 'other', path: null, command: null, started: false, task: false }
+    calls.set(id, call)
+    let touches = []
+    let label = name || 'tool'
+    if (STREAM_FILES.has(lower)) {
+      call.kind = lower === 'read' ? 'read' : lower === 'write' ? 'write' : 'edit'
+      const raw = input.file_path ?? input.notebook_path
+      if (typeof raw === 'string' && raw !== '') {
+        const found = fileTouch(ctx, raw, call.kind)
+        touches = found.touches
+        label = labelFor(call.kind, found.relative, raw)
+      } else {
+        label = `${call.kind} file`
+      }
+    } else if (STREAM_FOLDERS.has(lower)) {
+      call.kind = 'search'
+      const touch = folderTouch(input.path)
+      if (touch) touches = [touch]
+      label = `${lower} ${touch ? touch.path || '.' : shorten(String(input.path ?? '')) || '.'}`
+    } else if (lower === 'bash') {
+      call.kind = 'shell'
+      call.command = typeof input.command === 'string' ? input.command : ''
+      touches = commandTouch(ctx, call.command)
+      label = `$ ${shorten(call.command || 'bash')}`
+    } else if (STREAM_TASKS.has(lower)) {
+      const description = typeof input.description === 'string' ? input.description.trim() : ''
+      label = description ? `task: ${shorten(description)}` : 'task'
+    }
+    out.push({ ...toolStart({ time, id, tool: call.kind, label, touches }), agent: owner })
+    if (STREAM_TASKS.has(lower)) {
+      call.task = true
+      const description = typeof input.description === 'string' ? input.description.trim() : ''
+      spawn(call, time, description)
+    }
+  }
+
+  function streamEnd(item, time) {
+    const id = typeof item.tool_use_id === 'string' ? item.tool_use_id : ''
+    const call = calls.get(id)
+    if (!call || call.ended) return
+    call.ended = true
+    const ok = item.is_error !== true
+    out.push({ ...toolEnd({ time, id, ok }), agent: call.owner })
+    if (call.task) {
+      const child = children.get(id)
+      if (child) out.push({ time, type: 'agent.end', agent: child, ok })
+    }
+  }
+
+  function handleAcpx(json, time) {
     const name = json.name ?? ''
     let call = calls.get(json.toolCallId)
     if (!call) {
-      call = { id: json.toolCallId, kind: kindOf(name), name, path: null, command: null, started: false }
+      call = { id: json.toolCallId, kind: kindOf(name), name, path: null, command: null, started: false, owner: parentKey }
       calls.set(json.toolCallId, call)
     }
     const fileName = FILE_NAME.exec(name)
@@ -54,11 +138,26 @@ export function createClaudeParser(ctx) {
     if (ready || finished) start(call, time)
     if (finished) {
       const output = call.kind === 'shell' ? json.text : ''
-      out.push(toolEnd({ time, id: call.id, ok: json.status === 'completed' && !looksFailed(output) }))
+      out.push({ ...toolEnd({ time, id: call.id, ok: json.status === 'completed' && !looksFailed(output) }), agent: call.owner })
     }
   }
 
-  const reader = createLineReader((line, time) => handle(parseJson(line), time))
+  function handleStream(json, time) {
+    if (!json || (json.type !== 'assistant' && json.type !== 'user')) return
+    const content = json.message?.content
+    if (!Array.isArray(content)) return
+    for (const item of content) {
+      if (!item || typeof item !== 'object') continue
+      if (json.type === 'assistant' && item.type === 'tool_use') streamStart(item, json, time)
+      if (json.type === 'user' && item.type === 'tool_result') streamEnd(item, time)
+    }
+  }
+
+  const reader = createLineReader((line, time) => {
+    const json = parseJson(line)
+    if (json?.type === 'acpx.tool_call' && json.toolCallId) handleAcpx(json, time)
+    else handleStream(json, time)
+  })
   return {
     push(chunk, time) {
       out.length = 0
