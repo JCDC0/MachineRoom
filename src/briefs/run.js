@@ -732,7 +732,25 @@ function hermesSummary(log, worktree) {
 function claudeSummary(log, worktree) {
   const parser = createClaudeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('claude', activities, [], claudeUsage(log))
+  return summaryOf('claude', activities, claudeReport(log), claudeUsage(log))
+}
+
+function claudeReport(log) {
+  let words = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'result' || item.parent_tool_use_id) continue
+    const text = item.result
+    if (typeof text !== 'string' || !text.trim()) continue
+    words = text
+  }
+  return headLines(words ?? '')
 }
 
 export function summarizeRun({ harness, log, worktree } = {}) {

@@ -376,6 +376,16 @@ describe('summarizeRun', () => {
     expect(summary.outputTokens).toBe(738)
   })
 
+  it('reports the reply of the last top-level Claude result line', () => {
+    const log = [
+      JSON.stringify({ type: 'result', result: 'child words', parent_tool_use_id: 'toolu_1' }),
+      JSON.stringify({ type: 'result', result: 'Added clamp.\nNothing else changed.\n' }),
+    ].join('\n')
+    const summary = summarizeRun({ harness: 'claude', log, worktree: 'C:\\scratch' })
+    expect(summary.head).toEqual(['Added clamp.', 'Nothing else changed.'])
+    expect(formatSummary(summary)).toContain('report: first 2 lines')
+  })
+
   it('reads the tokens of the last AGY result line and counts thinking as output', () => {
     const log = [
       JSON.stringify({ event: 'result', result: { usage: { input_tokens: 1, output_tokens: 2, thinking_tokens: 3, total_tokens: 6 } } }),
