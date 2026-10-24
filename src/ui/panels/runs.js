@@ -67,6 +67,11 @@ function runsOnProject(agent) {
   return Object.hasOwn(harnessByAdapter, adapterType)
 }
 
+function isSubOrchestratorAgent(agent) {
+  if (agent.subOrchestrator === true) return true
+  return typeof agent.key === 'string' && agent.key.trim().startsWith('sub-')
+}
+
 export function projectRunLanes(agents, running) {
   const list = Array.isArray(agents) ? agents : []
   const active = new Set(
@@ -79,6 +84,7 @@ export function projectRunLanes(agents, running) {
   const lanes = []
   for (const agent of list) {
     if (!agent || typeof agent !== 'object') continue
+    if (isSubOrchestratorAgent(agent)) continue
     if (agent.role !== null && agent.role !== undefined) continue
     if (!runsOnProject(agent)) continue
     const key = typeof agent.key === 'string' ? agent.key.trim() : ''

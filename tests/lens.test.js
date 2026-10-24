@@ -10,9 +10,19 @@ describe('lensStatus', () => {
       { key: 'opencode~1', status: 'working', depth: 1 },
     ]
     const status = lensStatus(agents, [])
-    expect(status.working).toBe(2)
-    expect(status.total).toBe(3)
-    expect(status.share).toBeCloseTo(2 / 3)
+    expect(status.working).toBe(1)
+    expect(status.total).toBe(2)
+    expect(status.share).toBeCloseTo(1 / 2)
+  })
+
+  it('leaves the main and sub orchestrators out of the count', () => {
+    const agents = [
+      { key: 'orchestrator', name: 'Orchestrator', status: 'working', depth: 0 },
+      { key: 'sub-frontend', name: 'Frontend', status: 'working', depth: 0, subOrchestrator: true },
+      { key: 'sub-backend', status: 'working', depth: 0 },
+      { key: 'opencode', status: 'idle', depth: 0 },
+    ]
+    expect(lensStatus(agents, [])).toMatchObject({ working: 0, total: 1, share: 0 })
   })
 
   it('has no share when there are no lanes', () => {
