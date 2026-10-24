@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.240. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
+Version 0.1.241. A browser viewer that shows coding agents working on one project as a 3D machine room. It can replay a recorded run or follow a live Paperclip instance.
 
 MachineRoom grew out of Paperclip: it began as its viewer and took its idea of a company of agents with tasks, budgets and approvals. On 2026-10-24 the owner uninstalled Paperclip from this machine (its data folder `~\.paperclip` is kept) and chose the lane runner as the room's source (`SOURCES.md`). S6a (0.1.233) shows lane runs live from the run-lane logs (`--lanes`); until each Paperclip-backed drawer part has a replacement, the Paperclip code stays as an optional source; on this machine live mode, Tasks, Approvals, Meters, the cost board, Team and Backups have no Paperclip to read.
 

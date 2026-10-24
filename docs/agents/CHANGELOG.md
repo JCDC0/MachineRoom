@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- CI on 0.1.240 failed on Linux in two of S6f's tests: their dry runs read the real `lanes.json`, whose OpenCode binary sits under `%APPDATA%`, which Linux does not set. The test helper now falls back to the file's fake `APPDATA` and `LOCALAPPDATA` beneath the real environment; the tests pass with both unset.
+
 - `run-lane` sets `PWD` to the run's folder when it starts a harness. OpenCode takes its folder from `PWD`, so a project run started from a shell in this checkout worked in this checkout instead of the project (found on a scratch project: OpenCode read this repository's files, found no target and stopped without a change). `--standalone` did not change it. With the fix, OpenCode, AGY and Claude Code each made their change in the scratch project and nowhere else.
 
 - A real Claude Code run (Sonnet, through `run-lane -- claude --project` on a scratch git project) confirmed the stream shapes S6g read from the docs, with one difference: this Claude Code's `Agent` tool answers at once and runs the subagent in the background, so the parser ended the child before its first line. A good `Agent` or `Task` result that comes before any line of its child now leaves the child open until the parent's run ends; a failed one still ends it, and a child heard from first still ends at its result. In the room the run showed Claude Code and its `Explore` subagent (`claude~1`) working at once, the child listed under its parent, and the parent's read and write of `src/math.js` beside the child's read of `src/strings.js`.

@@ -50,11 +50,11 @@ function pathKey(value) {
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved
 }
 
-function runLane(args, env = {}) {
+function runLane(args, extra = {}) {
   return new Promise((done, fail) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...env },
+      env: { ...env, ...process.env, ...extra },
     })
     let stdout = ''
     let stderr = ''
