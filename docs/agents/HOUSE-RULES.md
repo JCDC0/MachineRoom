@@ -14,6 +14,7 @@ MachineRoom is a React and three.js viewer that shows coding agents working on a
 - Run `npm test` after every change and `npm run build` before you commit. Both must pass. If a test is red, stop and fix it before you go on.
 - Add one line per change under `Unreleased` in `docs/agents/CHANGELOG.md`, unless the task lists the files you may touch and the changelog is not one of them.
 - Never read, print, store or commit an API key or token.
+- Never write the owner's Windows user name or a real home path into a file, a test, a fixture, a doc or a commit message, even inside an example command or a probe's output. Write `C:\Users\<name>` instead, and build a test path from `os.userInfo().username` at run time. `npm run history-audit` refuses a push that carries one.
 - Stop every process you start and delete any scratch or log file you wrote.
 
 ## Report
