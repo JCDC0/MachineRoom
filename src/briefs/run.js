@@ -626,8 +626,10 @@ function opencodeReport(log) {
   return headLines(words ?? '')
 }
 
-function logCost(log) {
-  let total = null
+function opencodeUsage(log) {
+  let cost = null
+  const inputs = []
+  const outputs = []
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
     let item
@@ -637,17 +639,25 @@ function logCost(log) {
       continue
     }
     if (item?.type !== 'step_finish') continue
-    const cost = item?.part?.cost
-    if (typeof cost !== 'number' || !Number.isFinite(cost)) continue
-    total = (total ?? 0) + cost
+    const stepCost = item?.part?.cost
+    if (typeof stepCost === 'number' && Number.isFinite(stepCost)) cost = (cost ?? 0) + stepCost
+    const tokens = item?.part?.tokens
+    if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) continue
+    const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {}
+    inputs.push(tokens.input, cache.read, cache.write)
+    outputs.push(tokens.output, tokens.reasoning)
   }
-  return total === null ? null : Math.round(total * 1e6) / 1e6
+  return {
+    costUsd: cost === null ? null : Math.round(cost * 1e6) / 1e6,
+    inputTokens: sumTokens(inputs),
+    outputTokens: sumTokens(outputs),
+  }
 }
 
 function opencodeSummary(log, worktree) {
   const parser = createOpencodeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
   const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
-  return summaryOf('opencode', activities, opencodeReport(log), { costUsd: logCost(log) })
+  return summaryOf('opencode', activities, opencodeReport(log), opencodeUsage(log))
 }
 
 function lastJsonLine(log, match) {
