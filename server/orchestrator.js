@@ -644,7 +644,6 @@ export function createOrchestrator({
           : `The orchestrator stopped: exit ${code}.`
         : STOPPED_REPLY
       : report || EMPTY_REPLY
-    addMessage('orchestrator', text)
     const record = runRecord({
       lane: logPrefix,
       model,
@@ -660,12 +659,14 @@ export function createOrchestrator({
     try {
       appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
     } catch {}
+    if (running === turn) running = null
+    if (stopped) return
+    addMessage('orchestrator', text)
     if (!turn.compacting && typeof onReply === 'function') {
       try {
         onReply(text)
       } catch {}
     }
-    if (running === turn) running = null
     if (turn.compacting) {
       summary = failed ? '' : String(report ?? '').trim()
       sessionId = null
