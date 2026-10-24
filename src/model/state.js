@@ -4,10 +4,13 @@ const LINE_LIMIT = 80
 export const CALL_LIMIT = 500
 export const MAX_DEPTH = 3
 
-function makeAgent(key, name, parent = null, depth = 0, runId = null) {
+function makeAgent(key, name, parent = null, depth = 0, runId = null, source = null) {
   return {
     key,
     name,
+    id: typeof source?.id === 'string' ? source.id : null,
+    harness: typeof source?.harness === 'string' ? source.harness : null,
+    model: typeof source?.model === 'string' ? source.model : null,
     status: 'idle',
     runId,
     label: '',
@@ -36,7 +39,7 @@ export function createState(tree, agents) {
   const dirs = new Map()
   for (const path of tree.dirs) dirs.set(path, { path, opened: false })
   const roster = new Map()
-  for (const agent of agents) roster.set(agent.key, makeAgent(agent.key, agent.name))
+  for (const agent of agents) roster.set(agent.key, makeAgent(agent.key, agent.name, null, 0, null, agent))
   return {
     files,
     dirs,
