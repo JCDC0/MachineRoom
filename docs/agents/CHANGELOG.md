@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `npm run worktrees -- --project FOLDER` lists a project's lane worktrees with their branch, commits ahead of the project's current branch, uncommitted changes and merge state, and `--clean` removes only the clean merged ones without deleting a branch or touching a lane whose lock file names a live process (task W7).
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).

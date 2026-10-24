@@ -56,6 +56,7 @@
     "pack-check": "node scripts/pack-check.mjs",
     "history-audit": "node scripts/history-audit.mjs",
     "review-lane": "node scripts/review-lane.mjs",
+    "worktrees": "node scripts/worktrees.mjs",
     "bump": "node scripts/bump.mjs",
     "scale-probe": "node scripts/scale-probe.mjs",
     "scale-live": "node scripts/scale-live.mjs",
