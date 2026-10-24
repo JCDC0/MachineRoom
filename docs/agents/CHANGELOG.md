@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The agent context helper and `AgentDock` show a selected lane or the orchestrator in plain rows: harness and model, status, task, current command, this month's cost and tokens, the last 12 log lines and, for the orchestrator, its context share (task I2).
+
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
 - The HUD agent list puts the orchestrator first, shows working, queued, failed and finished lanes above one collapsible idle row, scrolls above the open orchestrator chat, and the waiting card sits beside the chat at 1280 by 800 and 900 by 700 (task N2).
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).
