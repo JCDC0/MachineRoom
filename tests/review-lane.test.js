@@ -1,8 +1,8 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { afterAll, afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { main, parseReviewArgs, removeReviewTree, reviewLane } from '../scripts/review-lane.mjs'
 import {
   briefCheck,
@@ -50,6 +50,7 @@ afterAll(() => {
     else process.env[name] = SAVED_TEMP[name]
   }
   rmSync(SYSTEM_TEMP, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  rmSync(templateRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
 function added(path, lines, start = 1) {
@@ -345,6 +346,24 @@ const FAKE_TEST = [
 
 const CHANGELOG_TEXT = ['# Changelog', '', '## Unreleased', '', '- An older line.', '', '## 0.1.0', '', '- First.', ''].join('\n')
 
+const FIXTURE_PACKAGE = `${JSON.stringify({ name: 'fixture', version: '0.1.1', private: true, scripts: { test: 'node fake-test.mjs', build: 'node -e "console.log(\'built\')"' }, dependencies: { three: '1.0.0' } }, null, 2)}\n`
+let mainTemplate = ''
+let templateRoot = ''
+
+beforeAll(() => {
+  templateRoot = makeTempDir('mr-review-template-')
+  mainTemplate = join(templateRoot, 'repo')
+  mkdirSync(mainTemplate)
+  git(mainTemplate, ['init', '-q', '-b', 'main'])
+  write(mainTemplate, 'package.json', FIXTURE_PACKAGE)
+  write(mainTemplate, 'fake-test.mjs', `${FAKE_TEST}\n`)
+  write(mainTemplate, '.gitignore', 'node_modules/\n')
+  write(mainTemplate, 'docs/agents/TASKS.md', '## Briefs\n\n**T9. A task (Hermes).** Add a. Files: `src/a.js`, `docs/agents/CHANGELOG.md`.\n')
+  write(mainTemplate, 'docs/agents/CHANGELOG.md', CHANGELOG_TEXT)
+  write(mainTemplate, 'src/keep.js', 'export const keep = 1\n')
+  commitAll(mainTemplate, '0.1.1: Start.')
+})
+
 function setup() {
   const repo = makeTempDir('mr-review-main-')
   const lane = join(makeTempDir('mr-review-lane-'), 'MachineRoom-hermes')
@@ -353,15 +372,8 @@ function setup() {
   cleanups.push(() => {
     for (const dir of [repo, dirname(lane), runs, tempRoot]) rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
-  git(repo, ['init', '-q', '-b', 'main'])
-  write(repo, 'package.json', `${JSON.stringify({ name: 'fixture', version: '0.1.1', private: true, scripts: { test: 'node fake-test.mjs', build: 'node -e "console.log(\'built\')"' }, dependencies: { three: '1.0.0' } }, null, 2)}\n`)
-  write(repo, 'fake-test.mjs', `${FAKE_TEST}\n`)
-  write(repo, '.gitignore', 'node_modules/\n')
+  cpSync(mainTemplate, repo, { recursive: true })
   write(repo, 'docs/agents/lanes.json', JSON.stringify({ hermes: { name: 'Hermes', worktree: lane, forbidden: ['server/**', 'src/styles.css'] } }, null, 2))
-  write(repo, 'docs/agents/TASKS.md', '## Briefs\n\n**T9. A task (Hermes).** Add a. Files: `src/a.js`, `docs/agents/CHANGELOG.md`.\n')
-  write(repo, 'docs/agents/CHANGELOG.md', CHANGELOG_TEXT)
-  write(repo, 'src/keep.js', 'export const keep = 1\n')
-  commitAll(repo, '0.1.1: Start.')
   write(repo, 'node_modules/marker.txt', 'kept')
   git(repo, ['worktree', 'add', '-q', '-b', 'feat/t9-a-task', lane, 'refs/heads/main'])
   const runsPath = join(runs, 'runs.jsonl')

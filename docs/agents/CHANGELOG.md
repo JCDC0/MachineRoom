@@ -20,6 +20,7 @@
 - `npm run worktrees -- --project FOLDER` lists a project's lane worktrees with their branch, commits ahead of the project's current branch, uncommitted changes and merge state, and `--clean` removes only the clean merged ones without deleting a branch or touching a lane whose lock file names a live process (task W7).
 - The bridge runs a ladder of sub orchestrators beside the main one: their own chats, logs and instructions, the ladder route with the owner's settings protected, `startedBy` routing for lanes, the restricted scope warning, `sub:` reports that wake the parent, and `sub-<id>` agents in the lane source (task O2).
 - The npm pack holds `src/model/hierarchy.js`, which the bridge now imports.
+- The git-heavy test files copy a repository made once instead of building one for every test, and the static viewer tests share one bridge, so a full test run is faster with all 2151 tests still running (task T1).
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - The Reviews tab follows lanes on the room's project: when the room's root is another repository it lists the worktrees beside the project, compares each lane against the project's current branch and fast-forwards that branch after a confirm, and the panel names the branch (task R10).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).

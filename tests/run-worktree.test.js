@@ -1,8 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { prepareWorktree, takeProjectLock, worktreePlan } from '../scripts/run-lane.mjs'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { gitPath } from '../server/programPath.js'
@@ -12,6 +12,23 @@ import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const cleanups = []
+let repoTemplate = ''
+let repoTemplateRoot = ''
+
+beforeAll(() => {
+  repoTemplateRoot = makeTempDir('mr-worktree-template-')
+  repoTemplate = join(repoTemplateRoot, 'Other')
+  mkdirSync(repoTemplate)
+  git(repoTemplate, ['init', '-q', '-b', 'main'])
+  git(repoTemplate, ['config', 'commit.gpgsign', 'false'])
+  writeFileSync(join(repoTemplate, 'readme.txt'), 'start\n')
+  git(repoTemplate, ['add', '-A'])
+  git(repoTemplate, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'start'])
+})
+
+afterAll(() => {
+  rmSync(repoTemplateRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+})
 
 afterEach(() => {
   while (cleanups.length > 0) {
@@ -39,13 +56,7 @@ function git(folder, args) {
 
 function initRepo(parent, name = 'Other') {
   const folder = join(parent, name)
-  mkdirSync(folder)
-  git(folder, ['init'])
-  git(folder, ['config', 'commit.gpgsign', 'false'])
-  writeFileSync(join(folder, 'readme.txt'), 'start\n')
-  git(folder, ['add', '-A'])
-  git(folder, ['commit', '-m', 'start'])
-  git(folder, ['branch', '-M', 'main'])
+  cpSync(repoTemplate, folder, { recursive: true })
   return folder
 }
 
