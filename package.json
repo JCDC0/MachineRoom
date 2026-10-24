@@ -25,6 +25,7 @@
     "src/control/agents.js",
     "src/decider/decide.js",
     "src/decider/wire.js",
+    "src/harnesses/",
     "src/model/commands.js",
     "src/model/fileIndex.js",
     "src/model/paths.js",

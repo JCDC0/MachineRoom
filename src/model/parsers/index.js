@@ -1,23 +1,9 @@
-import { createAgyParser } from './agy.js'
-import { createClaudeParser } from './claude.js'
-import { createHermesParser } from './hermes.js'
-import { createOpencodeParser } from './opencode.js'
-
-const BY_ADAPTER = {
-  claude_local: createClaudeParser,
-  hermes_local: createHermesParser,
-  opencode_local: createOpencodeParser,
-}
-
-const BY_NAME = {
-  claude: createClaudeParser,
-  hermes: createHermesParser,
-  opencode: createOpencodeParser,
-  agy: createAgyParser,
-}
+import { harnessByAdapter, harnessByKey } from '../../harnesses/index.js'
 
 export function createParser(agent, ctx) {
-  const factory = Object.hasOwn(BY_NAME, agent.parser) ? BY_NAME[agent.parser] : Object.hasOwn(BY_ADAPTER, agent.adapterType) ? BY_ADAPTER[agent.adapterType] : null
-  if (!factory) return { push: () => [], flush: () => [] }
-  return factory(ctx)
+  const byName = Object.hasOwn(harnessByKey, agent.parser) ? harnessByKey[agent.parser] : null
+  const byAdapter = Object.hasOwn(harnessByAdapter, agent.adapterType) ? harnessByAdapter[agent.adapterType] : null
+  const descriptor = byName ?? (byAdapter?.parserByAdapter === false ? null : byAdapter)
+  if (!descriptor) return { push: () => [], flush: () => [] }
+  return descriptor.createParser(ctx)
 }

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A new `src/harnesses/` holds one browser-safe descriptor per harness for its command line, parser, line reader, report, reply and usage, and the runner, the recording builder, the parser picker, the agent order and the brief owners read the registry instead of naming harnesses (task H5).
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).
