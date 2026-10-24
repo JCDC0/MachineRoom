@@ -37,14 +37,14 @@ function makeDist() {
 async function startBridge(staticDir) {
   const base = makeTempDir('machine-room-bridge-')
   cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  const runs = join(base, 'runs')
+  mkdirSync(runs, { recursive: true })
   const bridge = createBridge({
     port: 0,
     projectRoot: base,
-    paperclipUrl: 'http://127.0.0.1:1',
-    companyId: 'company-1',
-    reconnectMinMs: 60000,
-    reconnectMaxMs: 60000,
+    env: {},
     staticDir,
+    lanesSource: { folder: runs, lanes: {}, repoRoot: base, pollMs: 20 },
   })
   const info = await bridge.start()
   cleanups.push(() => bridge.stop())
@@ -95,13 +95,15 @@ function waitForExit(child, timeoutMs = 8000) {
   })
 }
 
-function childEnv() {
-  return {
-    ...process.env,
-    PAPERCLIP_URL: 'http://127.0.0.1:1',
-    PAPERCLIP_COMPANY_ID: 'company-1',
-    PORT: '5174',
+function childEnv(tempRoot) {
+  const env = { ...process.env, PORT: '5174' }
+  delete env.PAPERCLIP_URL
+  delete env.PAPERCLIP_COMPANY_ID
+  if (tempRoot) {
+    env.TEMP = tempRoot
+    env.TMP = tempRoot
   }
+  return env
 }
 
 describe('static viewer files from the bridge', () => {
@@ -191,7 +193,7 @@ describe('machine-room bin', () => {
   it('asks for a build when the dist folder has no index.html', async () => {
     const { dist } = makeDist()
     rmSync(join(dist, 'index.html'))
-    const child = spawn(process.execPath, [BIN, '--dist', dist], { env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(process.execPath, [BIN, '--dist', dist], { env: childEnv(join(dist, '..')), stdio: ['ignore', 'pipe', 'pipe'] })
     cleanups.push(() => {
       if (child.exitCode === null && child.signalCode === null) child.kill()
     })
@@ -209,8 +211,8 @@ describe('machine-room bin', () => {
 
   it('serves the API and the viewer on one port', async () => {
     const { base, dist } = makeDist()
-    const child = spawn(process.execPath, [BIN, '--dist', dist, '--root', base, '--port', '0'], {
-      env: childEnv(),
+    const child = spawn(process.execPath, [BIN, '--dist', dist, '--root', base, '--port', '0', '--lanes'], {
+      env: childEnv(base),
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     cleanups.push(() => {
@@ -244,7 +246,7 @@ describe('machine-room bin', () => {
 
     const health = await fetch(`${url}/api/health`)
     expect(health.status).toBe(200)
-    expect((await health.json()).ok).toBe(true)
+    expect(await health.json()).toMatchObject({ ok: true, lanes: true, sessions: false })
 
     const viewer = await fetch(openUrl)
     expect(viewer.status).toBe(200)

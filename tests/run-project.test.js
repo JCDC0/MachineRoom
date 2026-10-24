@@ -19,7 +19,7 @@ import {
 } from '../src/briefs/run.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
-import { waitFor } from './helpers/loop.js'
+import { waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const realLanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))

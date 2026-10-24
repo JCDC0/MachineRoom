@@ -8,7 +8,7 @@ import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf } fro
 import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
-import { readFrames, waitFor } from './helpers/loop.js'
+import { readFrames, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const realLanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -310,9 +310,8 @@ describe('the live lane source', () => {
     const { url } = await bridge.start()
 
     const response = await fetch(`${url}/api/agents`)
-    expect(response.status).toBe(502)
-    const body = await response.json()
-    expect(body.error).toBe('upstream unreachable')
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual([])
   })
 })
 
@@ -550,7 +549,7 @@ describe('the V5 audit fixes in the lane source', () => {
     expect(frames.some((frame) => frame.payload?.runId === 'run-opencode-elsewhere-20261024-140000')).toBe(false)
   })
 
-  it('registers the lane parsers at bridge start and after a lane-only agents answer (X16)', async () => {
+  it('registers the lane parsers at bridge start without asking a Paperclip for agents (X16)', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')
     const projectRoot = join(base, 'MachineRoom')
@@ -585,18 +584,14 @@ describe('the V5 audit fixes in the lane source', () => {
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
 
-    const agentsReads = () => requests.filter((path) => path.endsWith('/agents')).length
-    await waitFor(() => agentsReads() >= 1, { what: 'the first agents read' })
-    await sleep(100)
-
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
     expect(agents.some((agent) => agent.key === 'opencode')).toBe(true)
+    expect(requests.filter((path) => path.endsWith('/agents'))).toEqual([])
 
     writeFileSync(join(runs, 'opencode-S6a-20261024-134000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
     const frames = await readFrames(url, (list) => list.some((frame) => frame.type === 'heartbeat.run.log'))
     expect(frames).toHaveLength(3)
-    const before = agentsReads()
     await sleep(300)
-    expect(agentsReads()).toBe(before)
+    expect(requests).toEqual([])
   })
 })

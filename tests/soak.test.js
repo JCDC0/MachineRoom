@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { viewInput } from '../src/engine/cards.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
@@ -8,7 +10,8 @@ import { makeTree } from '../src/model/paths.js'
 import { SEEN_LIMIT, createPipeline } from '../src/model/pipeline.js'
 import { CALL_LIMIT, RECENT_LIMIT } from '../src/model/state.js'
 import { loadRecording } from './helpers.js'
-import { readFrames, startLoop, waitFor, waitForPaperclip } from './helpers/loop.js'
+import { readFrames, startLaneBridge } from './helpers/bridge.js'
+import { makeTempDir } from './helpers/tempRoot.js'
 
 const COPIES = 18
 const LINE_LIMIT = 80
@@ -131,26 +134,26 @@ describe('a long live session', () => {
     expect(first.files).toBeGreaterThan(3)
   })
 
-  it('keeps the last 500 frames in the bridge history however many runs pass', async () => {
-    const loop = await startLoop({ bridge: { logRetries: 1, logRetryMs: 1 } })
-    try {
-      await waitForPaperclip(loop.url)
-      await waitFor(() => loop.fake.connected() > 0, { what: 'the bridge socket' })
-      const lastId = frames.length
-      let open
-      const opened = new Promise((resolveOpen) => {
-        open = resolveOpen
+  it('keeps the last 500 frames in the bridge history however many lines a lane writes', async () => {
+    const runs = makeTempDir('mr-soak-runs-')
+    const log = join(runs, 'opencode-Y1-20261024-120000.log')
+    const lines = Array.from({ length: HISTORY_LIMIT + 30 }, (_, index) =>
+      JSON.stringify({
+        type: 'tool_use',
+        timestamp: Date.now(),
+        part: { type: 'tool', id: `call-${index}`, tool: 'read', state: { status: 'completed', input: { path: `docs/note-${index}.md` }, output: '' } },
       })
-      const live = readFrames(loop.url, (seen) => seen.at(-1)?.id === lastId, { timeoutMs: 60000, history: false, onOpen: open })
-      await opened
-      for (const frame of frames) loop.fake.sendFrame(frame)
-      const streamed = await live
-      expect(streamed).toHaveLength(frames.length)
+    )
+    writeFileSync(log, `${lines.join('\n')}\n`)
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log, exitCode: 0, killed: false })}\n`)
 
-      const kept = await readFrames(loop.url, (seen) => seen.at(-1)?.id === lastId)
+    const loop = await startLaneBridge({ runsDir: runs, lanesSource: { quietMs: 200 } })
+    try {
+      const kept = await readFrames(loop.url, (seen) => seen.at(-1)?.type === 'heartbeat.run.status' && seen.at(-1).payload?.status === 'succeeded', {
+        timeoutMs: 60000,
+      })
       expect(kept).toHaveLength(HISTORY_LIMIT)
-      expect(kept[0].id).toBe(lastId - HISTORY_LIMIT + 1)
-      expect(runIds(frames).size).toBeGreaterThanOrEqual(200)
+      expect(kept.at(-1).payload.status).toBe('succeeded')
     } finally {
       await loop.stop()
     }

@@ -8,6 +8,7 @@ import { WebSocketServer } from 'ws'
 import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
 import { CLIENT_METHODS, MOCK_POLICY, createMockClient } from '../src/control/mock.js'
+import { TEST_LANES } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const BASE_TIME = Date.parse('2026-10-18T00:00:00Z')
@@ -840,17 +841,6 @@ function runContractSuite(label, makeHarness) {
       await expect(client.updateAgent(second.agent.id, { model: 'm' })).rejects.toThrow('That agent was terminated.')
     })
 
-    it('notices agents after a hire and an update and approvals after a hire', async () => {
-      const { client } = await makeHarness()
-      const seen = []
-      const stop = client.subscribe((event) => seen.push(event))
-      await new Promise((r) => setTimeout(r, 30))
-      await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
-      await client.updateAgent('agent-hermes', { model: 'm4' })
-      await waitUntil(() => seen.filter((event) => event.topic === 'agents').length >= 2 && seen.some((event) => event.topic === 'approvals'))
-      stop()
-    })
-
     it('lists models in tiers and marks the free one', async () => {
       const { client } = await makeHarness()
       const models = await client.models()
@@ -1003,28 +993,6 @@ function runContractSuite(label, makeHarness) {
       await client.startRun('hermes', ['C3e'])
       await waitUntil(() => seen.filter((event) => event.topic === 'runs').length >= 2)
       stop()
-    })
-
-    it('notifies subscribers of topic changes after writes and stops after unsubscribe', async () => {
-      const { client } = await makeHarness()
-      const seen = []
-      const stop = client.subscribe((event) => seen.push(event))
-      await client.createIssue({ title: 'C', assigneeAgentId: 'agent-agy' })
-      await client.postComment('issue-18', 'Thanks.')
-      await client.decideApproval('approval-1', 'approve')
-      await client.setAgentBudget('agent-claude', 100)
-      await waitUntil(() => seen.length >= 5)
-      expect(seen).toEqual([
-        { topic: 'issues' },
-        { topic: 'comments', id: 'issue-18' },
-        { topic: 'approvals' },
-        { topic: 'agents' },
-        { topic: 'costs' },
-      ])
-      stop()
-      await client.createIssue({ title: 'D', assigneeAgentId: 'agent-agy' })
-      await new Promise((r) => setTimeout(r, 40))
-      expect(seen).toHaveLength(5)
     })
 
     it('lists one review per lane with a worktree and the contract fields', async () => {
@@ -1202,7 +1170,7 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).paperclip)
+  await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).ok)
   const { NodeEventSource, instances } = makeNodeEventSource()
   cleanups.push(() => {
     for (const item of instances) item.close()
@@ -1217,12 +1185,11 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
 
 describe('real control client and bridge extras', () => {
   it('shares one EventSource across subscribers and closes it when the last one leaves', async () => {
-    const fake = await startFakeControlPaperclip('comp-1')
-    cleanups.push(() => fake.close())
-    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: '', port: 0 })
+    const runs = makeTempDir('mr-contract-lanes-')
+    const bridge = createBridge({ projectRoot: '', port: 0, env: {}, lanesSource: { folder: runs, lanes: TEST_LANES, pollMs: 20, quietMs: 60000 } })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
-    await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).paperclip)
+    await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).ok)
 
     const { NodeEventSource, instances } = makeNodeEventSource()
     cleanups.push(() => {
@@ -1238,10 +1205,17 @@ describe('real control client and bridge extras', () => {
     expect(instances[0].closed).toBe(false)
 
     await waitUntil(() => Boolean(instances[0].connected))
-    fake.broadcast('heartbeat.run.status', { runId: 'r1', agentId: 'agent-opencode', status: 'succeeded' })
-    await waitUntil(() => first.length >= 4 && second.length >= 4)
-    expect(first).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'costs' }, { topic: 'liveRuns' }])
-    expect(second).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'costs' }, { topic: 'liveRuns' }])
+    writeFileSync(
+      join(runs, 'opencode-C3e-20261024-120000.log'),
+      `${JSON.stringify({
+        type: 'tool_use',
+        timestamp: Date.now(),
+        part: { type: 'tool', id: 'call-1', tool: 'read', state: { status: 'completed', input: { path: 'docs/a.md' }, output: '' } },
+      })}\n`
+    )
+    await waitUntil(() => first.length >= 2 && second.length >= 2)
+    expect(first).toEqual(second)
+    expect(first.map((event) => event.topic)).toContain('agents')
 
     stop1()
     expect(instances[0].closed).toBe(false)

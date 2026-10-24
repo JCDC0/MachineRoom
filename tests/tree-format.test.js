@@ -6,7 +6,7 @@ import { discoverBridge, openBridge } from '../src/live/bridge.js'
 import { loadTree } from '../src/live/source.js'
 import { FOLDER_SHAPE as PAGE_SHAPE, FOLDER_SHAPE_ACCEPT, readFileList } from '../src/live/tree.js'
 import { makeScaleTree } from '../scripts/scale-probe.mjs'
-import { getJson, startLoop, waitForPaperclip } from './helpers/loop.js'
+import { getJson, startLaneBridge, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const wire = (value) => JSON.parse(JSON.stringify(value))
@@ -200,9 +200,9 @@ describe('the bridge', () => {
 
   it('answers GET /api/tree in the folder shape only when the page asks for it', async () => {
     const files = ['README.md', 'src/model/a.js', 'src/b.js', 'données/été.md']
-    const loop = await startLoop({ bridge: { projectRoot: makeProject(files) } })
+    const loop = await startLaneBridge({ projectRoot: makeProject(files) })
     loops.push(loop)
-    await waitForPaperclip(loop.url)
+    await waitForBridge(loop.url)
     const plain = (await getJson(`${loop.url}/api/tree`)).body
     expect(plain).toEqual({ root: 'project', files: [...files].sort(), created: [] })
     const packed = (await getJson(`${loop.url}/api/tree`, { headers: { Accept: FOLDER_SHAPE_ACCEPT } })).body
@@ -216,9 +216,9 @@ describe('the bridge', () => {
 
   it('sends the first tree event in the folder shape only to a page that asks for it', async () => {
     const root = makeProject(['a.js', 'src/b.js'])
-    const loop = await startLoop({ bridge: { projectRoot: root, debounceMs: 50 } })
+    const loop = await startLaneBridge({ projectRoot: root, bridge: { debounceMs: 50 } })
     loops.push(loop)
-    await waitForPaperclip(loop.url)
+    await waitForBridge(loop.url)
     let opened
     const ready = new Promise((resolve) => {
       opened = resolve

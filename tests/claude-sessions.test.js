@@ -474,7 +474,7 @@ describe('sessions source', () => {
     expect(frames.length).toBeGreaterThan(0)
 
     const health = await fetch(`${url}/api/health`).then((response) => response.json())
-    expect(health).toMatchObject({ ok: true, paperclip: false, lanes: false, sessions: true })
+    expect(health).toMatchObject({ ok: true, lanes: false, sessions: true })
 
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
     expect(agents).toEqual([AGENT])
