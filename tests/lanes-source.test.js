@@ -68,11 +68,20 @@ function endFrame(frames) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5'])
-    expect(agents.every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
+    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'agy'])
+    expect(agents.filter((agent) => agent.key !== 'agy').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
     expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
-    expect(agents.some((agent) => agent.key === 'agy')).toBe(false)
+  })
+
+  it('lists AGY once its lane has a command line, with the process adapter', () => {
+    expect(laneAgents(realLanes).find((agent) => agent.key === 'agy')).toMatchObject({
+      id: 'agent-agy',
+      key: 'agy',
+      name: 'agy',
+      adapterType: 'process',
+      parser: 'agy',
+    })
   })
 })
 
@@ -129,7 +138,7 @@ describe('the live lane source', () => {
     const lane = agents.find((agent) => agent.id === 'agent-opencode')
     expect(lane).toMatchObject({ key: 'opencode', name: 'OpenCode', parser: 'opencode' })
     expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
-    expect(agents.some((agent) => agent.key === 'agy')).toBe(false)
+    expect(agents.find((agent) => agent.key === 'agy')).toMatchObject({ parser: 'agy', adapterType: 'process' })
 
     const tree = makeTree({ root: basename(projectRoot), files: [] })
     const activities = buildActivities(frames, { agents, tree })

@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.236",
+  "version": "0.1.237",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -23,6 +23,7 @@
     "src/model/commands.js",
     "src/model/fileIndex.js",
     "src/model/paths.js",
+    "src/model/parsers/agy.js",
     "src/model/parsers/common.js",
     "src/model/parsers/hermes.js",
     "src/model/parsers/opencode.js",

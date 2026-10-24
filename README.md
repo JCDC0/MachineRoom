@@ -62,7 +62,7 @@ npm run build
 npm run serve -- up --lanes
 ```
 
-`--lanes` (or `MACHINEROOM_LANES=1`) shows lane runs live. Start a lane in another terminal (`npm run run-lane -- opencode <brief>`, see Working with lanes): the bridge sees its log appear in `%TEMP%\machineroom-runs`, the lane turns working, its reads and writes land on the project's cards as the log grows, and the run turns green or red when `run-lane` records how it ended. Each lane in `docs/agents/lanes.json` with a `cli` block is an agent, and a retired lane is left out. AGY is not a lane yet.
+`--lanes` (or `MACHINEROOM_LANES=1`) shows lane runs live. Start a lane in another terminal (`npm run run-lane -- opencode <brief>`, see Working with lanes): the bridge sees its log appear in `%TEMP%\machineroom-runs`, the lane turns working, its reads and writes land on the project's cards as the log grows, and the run turns green or red when `run-lane` records how it ended. Each lane in `docs/agents/lanes.json` with a `cli` block is an agent, and a retired lane is left out. AGY is a lane too (`npm run run-lane -- agy <brief>`).
 
 The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it.
 
@@ -136,7 +136,7 @@ A lane is one agent with its own worktree and branch, listed in `docs/agents/lan
 
 - Start a lane run. Press `C`, open Dispatch, pick a brief, then Run now. The confirm card names the lane, model and brief and says it spends money. Confirm starts the lane in its own worktree. The Runs list shows its last lines and its record.
 - Start one from a terminal. `npm run run-lane -- opencode <brief>` starts a lane on the open brief you name. `--dry-run` prints the command, `--list` shows the last 10 runs, and `--stats` shows runs, minutes and cost per lane and model.
-- Record a hand run. `npm run hand-run -- agy <brief> --minutes 40` writes the run of a lane started by hand. `npm run outcome -- <branch> merged --grade A-` records how a lane run ended.
+- Record a hand run. `npm run hand-run -- <lane> <brief> --minutes 40` writes the run of a lane started by hand; a lane with a command line, AGY included, runs through `run-lane` instead. `npm run outcome -- <branch> merged --grade A-` records how a lane run ended.
 - See it in the room. A lane run is not a Paperclip run, so the live room does not draw it. When it ends, it writes a recording under `public/recordings/` and prints `room: /?recording=<name>`; open that address to replay it in the room.
 - Try a lane's build beside the stable room. `npm run candidate -- <lane>` builds that worktree and serves it on port 5175, with its own bridge. Leave the stable room running and compare the two. It refuses a lane with no worktree, a worktree with uncommitted changes, and a port in use. See `docs/agents/CANDIDATE.md`.
 - Review and merge. Press `C`, open Reviews. Each lane shows its branch, commits ahead, files and last run; click it for the diff. Merge is offered on a lane with commits ahead and no uncommitted changes, after a confirm card with a one-line message. The bridge merges one lane at a time, needs the main checkout on main with no uncommitted changes, a clean lane and the lane's exact head, stops on a conflict and leaves main as it was. It never pushes.

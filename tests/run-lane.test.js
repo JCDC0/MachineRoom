@@ -30,6 +30,21 @@ describe('commandFor', () => {
     })
   })
 
+  it('builds the AGY command in the lane worktree', () => {
+    expect(commandFor({ lane: lanes.agy, prompt, env, usageFile, title })).toEqual({
+      file: 'C:\\Users\\me\\AppData\\Local\\agy\\bin\\agy.exe',
+      args: ['--print', prompt, '--output-format', 'stream-json', '--model', 'gemini-3.8-flash-high', '--dangerously-skip-permissions'],
+      cwd: lanes.agy.worktree,
+    })
+  })
+
+  it('leaves the AGY model flag out when the lane names no model', () => {
+    const lane = { ...lanes.agy, cli: { ...lanes.agy.cli, model: undefined } }
+    expect(commandFor({ lane, prompt, env, title }).args).toEqual([
+      '--print', prompt, '--output-format', 'stream-json', '--dangerously-skip-permissions',
+    ])
+  })
+
   it('leaves out the usage file and the reasoning when the lane has none', () => {
     const lane = { ...lanes.hermes, reasoning: undefined }
     const command = commandFor({ lane, prompt, env, title })
@@ -52,7 +67,7 @@ describe('commandFor', () => {
   })
 
   it('refuses a lane with no command line', () => {
-    expect(() => commandFor({ lane: lanes.agy, prompt, env, title })).toThrow(/no command line/)
+    expect(() => commandFor({ lane: { ...lanes.hermes, cli: undefined }, prompt, env, title })).toThrow(/no command line/)
   })
 
   it('refuses a lane with no worktree, so the harness never starts in the folder the runner was started from', () => {
@@ -246,6 +261,13 @@ describe('briefProblems', () => {
 
 const fixture = readFileSync(new URL('./fixtures/opencode-run-json.jsonl', import.meta.url), 'utf8')
 const opencodeLog = (items) => items.map((item) => JSON.stringify(item)).join('\n')
+const agyChunks = readFileSync(new URL('../public/fixtures/scenario-g-run.jsonl', import.meta.url), 'utf8')
+  .trim()
+  .split(/\r?\n/)
+  .map((line) => JSON.parse(line))
+  .filter((frame) => frame.type === 'heartbeat.run.log')
+  .map((frame) => frame.payload.chunk)
+const agyLog = agyChunks.join('\n')
 
 describe('summarizeRun', () => {
   it('counts the tool calls of a real OpenCode JSON log', () => {
@@ -330,6 +352,24 @@ describe('summarizeRun', () => {
     expect(summary.head[0]).toBe('line 1')
     expect(summary.head[19]).toBe('line 20')
     expect(summarizeRun({ harness: 'hermes', log: 'a\nb\n', worktree: '' }).head).toEqual(['a', 'b'])
+  })
+
+  it('counts the tool steps and files of a real AGY log', () => {
+    const summary = summarizeRun({ harness: 'agy', log: agyLog, worktree: 'C:\\Users\\user\\AppData\\Local\\Temp\\agent-sandbox' })
+    expect(summary.harness).toBe('agy')
+    expect(summary.toolCalls).toBe(13)
+    expect(summary.failed).toBe(0)
+    expect(summary.written).toEqual(['docs/main-notes.md'])
+    expect(summary.read).toEqual(['docs/main-notes.md', 'docs/subagent-notes.md', 'src/strings.js', 'test/strings.test.js'])
+    expect(summary.costUsd).toBeNull()
+    expect(summary.head[0]).toMatch(/^I have started the subagent/)
+    expect(formatSummary(summary)).toContain('estimated cost: not reported')
+  })
+
+  it('handles an empty AGY log', () => {
+    expect(summarizeRun({ harness: 'agy', log: '', worktree: 'C:\\scratch' })).toEqual({
+      harness: 'agy', toolCalls: 0, failed: 0, written: [], read: [], head: [], costUsd: null,
+    })
   })
 
   it('counts the tool lines of a real Hermes run and still shows the report', () => {
