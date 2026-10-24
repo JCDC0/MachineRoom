@@ -11,6 +11,8 @@
 - The orchestrator can run on OpenCode as well as Claude Code: the lane's `cli.harness` picks `claude -p` or `opencode run --format json` with its saved session, the first OpenCode turn carries the filled instructions, and the reply, cost and tokens come from the turn's own log (task R3).
 - The pack now holds the agent docs the room reads at run time, `docs/agents/lanes.json`, `TASKS.md`, `HOUSE-RULES.md`, `policy.json` and `ORCHESTRATOR-AGENT.md`, and `npm run pack-check` names any of them the pack leaves out (task R1).
 - The orchestrator chat draws a reply's Markdown as paragraphs, headings, lists, code blocks and inline code, with bold and italic markers dropped, and the state line names the current command while a turn runs (task R8).
+- The agent context helper and `AgentDock` show a selected lane or the orchestrator in plain rows: harness and model, status, task, current command, this month's cost and tokens, the last 12 log lines and, for the orchestrator, its context share (task I2).
+
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
 - The HUD agent list puts the orchestrator first, shows working, queued, failed and finished lanes above one collapsible idle row, scrolls above the open orchestrator chat, and the waiting card sits beside the chat at 1280 by 800 and 900 by 700 (task N2).
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).
