@@ -66,9 +66,9 @@ describe('agentForLane', () => {
     expect(agentForLane('agy', [SAMPLE_AGENTS[0]])).toBeNull()
   })
 
-  it('returns null for an unmapped lane or invalid inputs', () => {
+  it('maps claude to claude_local and leaves an unmapped lane null', () => {
+    expect(agentForLane('claude', SAMPLE_AGENTS)).toEqual(SAMPLE_AGENTS[0])
     expect(agentForLane('owner', SAMPLE_AGENTS)).toBeNull()
-    expect(agentForLane('claude', SAMPLE_AGENTS)).toBeNull()
     expect(agentForLane('unknown', SAMPLE_AGENTS)).toBeNull()
     expect(agentForLane('', SAMPLE_AGENTS)).toBeNull()
     expect(agentForLane(null, SAMPLE_AGENTS)).toBeNull()

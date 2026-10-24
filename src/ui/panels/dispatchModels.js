@@ -1,9 +1,8 @@
-export const ADAPTER_TO_HARNESS = Object.freeze({
-  claude_local: 'claude',
-  hermes_local: 'hermes',
-  opencode_local: 'opencode',
-  process: 'agy',
-})
+import { harnessByAdapter } from '../../harnesses/index.js'
+
+export const ADAPTER_TO_HARNESS = Object.freeze(
+  Object.fromEntries(Object.entries(harnessByAdapter).map(([adapterType, harness]) => [adapterType, harness.key]))
+)
 
 function normalizeAgent(agent) {
   if (!agent) return null
@@ -34,12 +33,12 @@ export function modelsFor(agent, options = []) {
   if (!norm) {
     return [defaultOption]
   }
-  if (!norm.adapterType || !Object.hasOwn(ADAPTER_TO_HARNESS, norm.adapterType)) {
+  if (!norm.adapterType || !Object.hasOwn(harnessByAdapter, norm.adapterType)) {
     return [defaultOption]
   }
-  const harness = ADAPTER_TO_HARNESS[norm.adapterType]
+  const harness = harnessByAdapter[norm.adapterType]
   const list = Array.isArray(options) ? options : []
-  const matching = list.filter((item) => item && item.harness === harness)
+  const matching = list.filter((item) => item && item.harness === harness.key)
   return [defaultOption, ...matching]
 }
 

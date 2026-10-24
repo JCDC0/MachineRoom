@@ -10,6 +10,7 @@ import {
   ownerToLane,
   pickAssignee,
   runLaneFor,
+  validLanes,
 } from '../src/ui/panels/briefs.js'
 
 const SAMPLE_AGENTS = [
@@ -62,6 +63,32 @@ describe('ownerToLane', () => {
   it('uses only the first owner even when another owner follows', () => {
     expect(ownerToLane({ owners: ['claude', 'agy'] })).toBe('claude')
     expect(ownerToLane({ owners: ['agy', 'claude'] })).toBe('agy')
+  })
+})
+
+describe('validLanes', () => {
+  const AGENTS = [
+    { key: 'opencode', name: 'OpenCode', parser: 'opencode' },
+    { key: 'opencode2', name: 'OpenCode 2', parser: 'opencode' },
+    { key: 'claude', name: 'Claude Code', parser: 'claude' },
+    { key: 'claude-session', name: 'Claude Code session', parser: 'claude' },
+    { key: 'orchestrator', name: 'Orchestrator', parser: 'claude' },
+    { key: ' custom ', name: 'Custom', parser: 'custom' },
+  ]
+
+  it('lists the lanes in the agent list and leaves sessions and the orchestrator out', () => {
+    expect(validLanes(AGENTS)).toEqual(['opencode', 'opencode2', 'claude'])
+  })
+
+  it('reads the lanes from the agent list when one is passed', () => {
+    expect(ownerToLane({ owners: ['opencode2'] }, AGENTS)).toBe('opencode2')
+    expect(ownerToLane({ owners: ['opencode3'] }, AGENTS)).toBeNull()
+  })
+
+  it('falls back to the lane list with no agents', () => {
+    expect(validLanes(null)).toContain('opencode')
+    expect(validLanes(null)).toContain('claude')
+    expect(validLanes([])).toEqual([])
   })
 })
 

@@ -1,22 +1,18 @@
 # Pluggable harnesses (planned)
 
-Status: planned on 2026-10-24 at the owner's request. H1 is done (0.1.287): `src/harnesses/` holds the registry and one descriptor per harness. H2, H3 and H4 are not started. The room runs on OpenCode and Claude Code for now; Hermes and AGY are retired in `docs/agents/lanes.json` but stay supported. The aim is that a new coding harness can be added later with one file and one lanes entry, and that a harness the owner turns off stays plugged in, just unused.
+Status: planned on 2026-10-24 at the owner's request. H1 is done (0.1.287): `src/harnesses/` holds the registry and one descriptor per harness. H2 is done (0.1.295): the parser maps and the UI lane lists read the registry. H3 and H4 are not started. The room runs on OpenCode and Claude Code for now; Hermes and AGY are retired in `docs/agents/lanes.json` but stay supported. The aim is that a new coding harness can be added later with one file and one lanes entry, and that a harness the owner turns off stays plugged in, just unused.
 
 ## Where a harness is named today
 
-Adding a harness means touching each of these:
+After H1 and H2, adding a harness means touching these:
 
 | Place | What it holds |
 | --- | --- |
-| `src/model/parsers/index.js`, `src/model/parsers/unreadable.js` | the parser for each `parser` key, and the list of parsers the unread-line counter knows |
-| `src/model/pipeline.js` | `AGENT_ORDER` |
-| `src/briefs/run.js` | `commandFor` (the command line per harness), `summarizeRun`, the report and usage readers per log shape |
-| `src/briefs/recording.js` | `ADAPTERS` (harness to adapter type), `createRunLineReader`, the log entries per harness |
-| `src/briefs/briefs.js` | `OWNER_NAMES` |
-| `server/index.js`, `src/live/source.js`, `src/ui/panels/dispatchModels.js` | adapter type to parser maps |
-| `src/ui/panels/briefs.js`, `src/ui/panels/runs.js`, `src/ui/panels/route.js` | `VALID_LANES`, `PROJECT_RUN_ADAPTERS`, a Hermes special case |
+| `src/model/parsers/unreadable.js` | the list of parsers the unread-line counter knows |
 | `src/engine/shapes.js` | the wireframe shape per agent key |
 | `server/claude-sessions.js`, `server/opencode-sessions.js` (S7) | a reader of the harness's own session files |
+
+The parser maps in `src/live/source.js` and `src/ui/panels/dispatchModels.js` read `harnessByAdapter`. The UI lane lists read the registry and the agent list: `VALID_LANES` and `validLanes` in `src/ui/panels/briefs.js` read `docs/agents/lanes.json` and an agent list, and the project run lanes and route picker in `src/ui/panels/runs.js` and `src/ui/panels/route.js` read the agents `/api/agents` sends. The bridge puts each agent's parser in `/api/agents`, so `server/index.js` has no adapter map.
 
 ## The plan
 
@@ -24,7 +20,7 @@ One descriptor per harness, in two halves, because the browser bundle must not p
 
 - `src/harnesses/<key>.js`, pure and browser-safe: `key` (the `cli.harness` value in `lanes.json`), `name`, `adapterType`, `createParser`, `command({ cli, prompt, folder, env, title, sessionId })` returning `{ file, args, cwd }`, `readLine` (a factory: it returns the line reader, because the parser keeps state across lines; used by recordings and the live lane source), `report(log)` and `usage(log)`, and an optional `shape`. AGY's adapter `process` is generic, so its descriptor sets `parserByAdapter: false` and the parser picker uses it only when an agent names `parser: agy`.
 - `server/harnesses/<key>.js`, Node only and optional: `createSessionsReader` (the S7 reader interface).
-- `src/harnesses/index.js` and `server/harnesses/index.js` list them, with `harnessByKey` and `harnessByAdapter`, and the agent and brief owner orders. Every place in the table reads the registry instead of naming harnesses.
+- `src/harnesses/index.js` and `server/harnesses/index.js` list them, with `harnessByKey` and `harnessByAdapter`, and the agent and brief owner orders. The steps below move every place in the table onto the registry.
 
 On and off stay where they are: a lane's `"retired": true` in `lanes.json` turns it off, and a harness with no live lane is simply unused. The UI lists come from `/api/agents` and the registry, not from fixed arrays.
 
@@ -33,7 +29,7 @@ A generic path for later harnesses: an `acp` harness that runs any Agent Client 
 ## Steps, when the owner starts them
 
 1. H1 (done, 0.1.287). The registry and descriptors for the four harnesses we have, with no change in behaviour: the `--replay` digests and the full suite stay the same.
-2. H2. The UI lists and adapter maps read the registry and `/api/agents`.
+2. H2 (done, 0.1.295). The UI lists and adapter maps read the registry and `/api/agents`.
 3. H3. The S7 session readers register through `server/harnesses`, so a harness brings its own.
 4. H4. The `acp` harness, tested on `opencode acp` with the probe in `scripts/acp-probe.mjs`.
 

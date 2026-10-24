@@ -1,24 +1,32 @@
 import { createSplitMasker } from '../briefs/audit.js'
+import { harnessByAdapter } from '../harnesses/index.js'
 import { AGENT_ORDER } from '../model/pipeline.js'
 import { FOLDER_SHAPE_ACCEPT, readFileList, readTreeVersion, rememberTreeVersion } from './tree.js'
 
 const BACKOFF_START = 1000
 const BACKOFF_LIMIT = 15000
 
-const PARSERS = {
-  claude_local: 'claude',
-  hermes_local: 'hermes',
-  opencode_local: 'opencode',
-}
-
 function slug(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent'
 }
 
+function adapterHarness(adapterType) {
+  const type = typeof adapterType === 'string' ? adapterType : ''
+  return Object.hasOwn(harnessByAdapter, type) ? harnessByAdapter[type] : null
+}
+
+function adapterParser(adapterType) {
+  const harness = adapterHarness(adapterType)
+  return harness && harness.parserByAdapter !== false ? harness.key : null
+}
+
 export function parserFor(raw) {
-  if (Object.hasOwn(PARSERS, raw.adapterType)) return PARSERS[raw.adapterType]
-  if (raw.adapterType === 'process' && /agy/i.test(raw.name)) return 'agy'
-  return null
+  const direct = adapterParser(raw?.adapterType)
+  if (direct) return direct
+  const harness = adapterHarness(raw?.adapterType)
+  if (!harness) return null
+  const name = typeof raw?.name === 'string' ? raw.name.toLowerCase() : ''
+  return name.includes(harness.key) ? harness.key : null
 }
 
 export function toAgents(rawAgents) {
@@ -26,7 +34,7 @@ export function toAgents(rawAgents) {
   const agents = rawAgents.map((raw) => {
     const parser = parserFor(raw)
     const role = typeof raw?.role === 'string' && raw.role !== '' ? raw.role : null
-    let key = Object.hasOwn(PARSERS, raw.adapterType) ? PARSERS[raw.adapterType] : slug(raw.name)
+    let key = adapterParser(raw.adapterType) ?? slug(raw.name)
     if (taken.has(key)) {
       key = slug(raw.name)
       for (let n = 2; taken.has(key); n += 1) key = `${slug(raw.name)}-${n}`
