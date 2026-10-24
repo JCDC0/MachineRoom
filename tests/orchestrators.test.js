@@ -1,0 +1,612 @@
+import { spawn, spawnSync } from 'node:child_process'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createBridge } from '../server/index.js'
+import { createLanesSource } from '../server/lanes-source.js'
+import { chatFileFor } from '../server/orchestrator.js'
+import { createOrchestrators } from '../server/orchestrators.js'
+import { gitPath } from '../server/programPath.js'
+import { parseRunArgs, runRecord } from '../src/briefs/run.js'
+import { getJson, postJson } from './helpers/bridge.js'
+import { makeTempDir } from './helpers/tempRoot.js'
+
+const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
+const LANES = {
+  orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } },
+  opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+  opencode2: { name: 'OpenCode 2', harness: 'OpenCode', cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+  claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'sonnet' } },
+}
+const FRONTEND = {
+  id: 'frontend',
+  name: 'Frontend',
+  harness: 'claude',
+  model: 'sonnet',
+  lanes: ['opencode'],
+  scope: ['src/ui/**'],
+  restricted: true,
+  setBy: 'owner',
+}
+
+const FAKE_AGENT = [
+  "import { appendFileSync, existsSync } from 'node:fs'",
+  'const args = process.argv.slice(2)',
+  "const calls = String(process.env.MR_CALLS ?? '')",
+  "if (calls) appendFileSync(calls, JSON.stringify({ pid: process.pid, args, cwd: process.cwd() }) + '\\n')",
+  "const mode = String(process.env.MR_MODE ?? 'reply')",
+  "const claude = args.includes('-p')",
+  "const prompt = claude ? String(args[args.indexOf('-p') + 1] ?? '') : String(args.at(-1) ?? '')",
+  'const hold = async () => {',
+  "  while (!existsSync(String(process.env.MR_RELEASE ?? ''))) {",
+  '    await new Promise((done) => setTimeout(done, 20))',
+  '  }',
+  '}',
+  'if (claude) {',
+  "  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }))",
+  "  console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Working.' }] } }))",
+  "  if (mode === 'hold') await hold()",
+  "  const reply = mode === 'empty' ? '' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "  console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: 12, output_tokens: 3 } }))",
+  '} else {',
+  "  const at = args.indexOf('--session')",
+  "  const sessionId = at === -1 ? 'ses_fake_first' : String(args[at + 1] ?? '')",
+  "  console.log(JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: sessionId, part: { type: 'step-start' } }))",
+  "  console.log(JSON.stringify({ type: 'tool_use', timestamp: 2, sessionID: sessionId, part: { id: 'prt_1', type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'src/math.js' } } } }))",
+  "  if (mode === 'hold') await hold()",
+  "  console.log(JSON.stringify({ type: 'text', timestamp: 3, sessionID: sessionId, part: { type: 'text', text: 'Working.' } }))",
+  "  const reply = 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "  console.log(JSON.stringify({ type: 'text', timestamp: 4, sessionID: sessionId, part: { type: 'text', text: reply } }))",
+  "  console.log(JSON.stringify({ type: 'step_finish', timestamp: 5, sessionID: sessionId, part: { type: 'step-finish', cost: 0.25, tokens: { input: 12, output: 3 } } }))",
+  '}',
+].join('\n')
+
+const RUNNER = [
+  "import { appendFileSync } from 'node:fs'",
+  'const args = process.argv.slice(2)',
+  "const target = String(args.shift() ?? '')",
+  "appendFileSync(target, JSON.stringify(args) + '\\n')",
+  "console.log('args ' + args.join(' '))",
+].join('\n')
+
+const cleanups = []
+
+afterEach(async () => {
+  while (cleanups.length > 0) {
+    const fn = cleanups.pop()
+    await fn()
+  }
+})
+
+function sleep(ms) {
+  return new Promise((resolveWait) => setTimeout(resolveWait, ms))
+}
+
+async function waitFor(check, timeoutMs = 15000, what = 'the condition') {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = await check()
+    if (value) return value
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}.`)
+    await sleep(15)
+  }
+}
+
+function readLines(file) {
+  if (!existsSync(file)) return []
+  return readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      try {
+        return JSON.parse(line)
+      } catch {
+        return null
+      }
+    })
+    .filter(Boolean)
+}
+
+function git(folder, args) {
+  const result = spawnSync(gitPath(), args, { cwd: folder, encoding: 'utf8', windowsHide: true })
+  if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr ?? '').trim()}`)
+}
+
+function makeWorktree(base) {
+  const folder = join(base, 'worktree')
+  mkdirSync(join(folder, 'src', 'ui'), { recursive: true })
+  mkdirSync(join(folder, 'server'), { recursive: true })
+  writeFileSync(join(folder, 'README.md'), 'readme\n')
+  writeFileSync(join(folder, 'src', 'ui', 'a.jsx'), 'one\n')
+  git(folder, ['init', '-b', 'main'])
+  git(folder, ['config', 'user.email', 'test@example.com'])
+  git(folder, ['config', 'user.name', 'Test'])
+  git(folder, ['add', '.'])
+  git(folder, ['commit', '-m', 'base'])
+  git(folder, ['switch', '-c', 'feat/k2'])
+  writeFileSync(join(folder, 'src', 'ui', 'a.jsx'), 'two\n')
+  writeFileSync(join(folder, 'server', 'x.js'), 'outside\n')
+  git(folder, ['add', '.'])
+  git(folder, ['commit', '-m', 'change'])
+  return folder
+}
+
+function makeBase({ ladder = null } = {}) {
+  const base = makeTempDir('mr-orchestrators-')
+  const runs = join(base, 'runs')
+  const projectRoot = join(base, 'project')
+  mkdirSync(runs, { recursive: true })
+  mkdirSync(projectRoot, { recursive: true })
+  const script = join(base, 'fake-agent.mjs')
+  writeFileSync(script, FAKE_AGENT)
+  const promptFile = join(base, 'orchestrator-agent.md')
+  writeFileSync(promptFile, PROMPT)
+  const callsFile = join(base, 'calls.jsonl')
+  const releaseFile = join(base, 'release')
+  const behaviour = { mode: 'reply' }
+  const spawnFake = (file, args, options) => {
+    const env = { ...(options.env ?? process.env), MR_CALLS: callsFile, MR_MODE: behaviour.mode, MR_RELEASE: releaseFile }
+    return spawn(process.execPath, [script, ...args], { ...options, env })
+  }
+  if (ladder) {
+    writeFileSync(
+      chatFileFor(projectRoot, runs, 'orchestrator'),
+      `${JSON.stringify({ project: projectRoot, sessionId: null, state: 'idle', messages: [], pending: [], ladder })}\n`
+    )
+  }
+  const files = {
+    base,
+    runs,
+    projectRoot,
+    script,
+    promptFile,
+    callsFile,
+    releaseFile,
+    behaviour,
+    spawnFake,
+    calls: () => readLines(callsFile),
+    chat: (id = 'orchestrator') => {
+      try {
+        return JSON.parse(readFileSync(chatFileFor(projectRoot, runs, id), 'utf8'))
+      } catch {
+        return null
+      }
+    },
+  }
+  cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  return files
+}
+
+function makeRig(files) {
+  const registry = createOrchestrators({
+    projectRoot: files.projectRoot,
+    runsFolder: files.runs,
+    lanes: LANES,
+    spawn: files.spawnFake,
+    promptFile: files.promptFile,
+    bridgeUrl: () => 'http://127.0.0.1:5999',
+    onNotice: () => {},
+  })
+  cleanups.push(() => registry.close())
+  return { ...files, registry }
+}
+
+async function makeBridge(files, { runnerCommand } = {}) {
+  const bridge = createBridge({
+    projectRoot: files.projectRoot,
+    port: 0,
+    env: {},
+    briefsDir: join(REPO_ROOT, 'docs', 'agents'),
+    ...(runnerCommand ? { runnerCommand } : {}),
+    orchestratorPrompt: files.promptFile,
+    lanesSource: { folder: files.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
+    orchestratorSpawn: files.spawnFake,
+  })
+  cleanups.push(() => bridge.stop())
+  const { url } = await bridge.start()
+  return { ...files, bridge, url }
+}
+
+function messagesOf(registry, id = 'orchestrator') {
+  const instance = registry.find(id)
+  return instance ? instance.answer().messages : []
+}
+
+function turnMessages(registry, id = 'orchestrator') {
+  return messagesOf(registry, id).filter((message) => message.from === 'orchestrator')
+}
+
+function frame(runName, status = 'succeeded', lane = 'opencode') {
+  return { type: 'heartbeat.run.status', payload: { runId: `run-${runName}`, agentId: `agent-${lane}`, status } }
+}
+
+function appendRecord(files, { logName, lane = 'opencode', startedBy, project = '' }) {
+  const log = join(files.runs, `${logName}.log`)
+  writeFileSync(log, 'a log\n')
+  const record = {
+    lane,
+    briefs: ['K1'],
+    model: 'm',
+    startedAt: '2026-10-25T12:00:00.000Z',
+    minutes: 2,
+    exitCode: 0,
+    killed: false,
+    costUsd: 0.5,
+    log,
+    branch: 'feat/k1-work',
+    commits: ['abc1234 Work'],
+    ...(startedBy ? { startedBy } : {}),
+    ...(project ? { project } : {}),
+  }
+  appendFileSync(join(files.runs, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
+  return record
+}
+
+async function waitIdle(registry, id, turns) {
+  await waitFor(
+    () => registry.find(id)?.answer().state === 'idle' && turnMessages(registry, id).length === turns,
+    15000,
+    `${id} turn ${turns} to end`
+  )
+}
+
+function pagePost(url, body) {
+  return getJson(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
+    body: JSON.stringify(body),
+  })
+}
+
+describe('the orchestrator registry', () => {
+  it('keeps the main orchestrator alone and unchanged when there is no ladder', async () => {
+    const rig = makeRig(makeBase())
+    const list = rig.registry.list()
+    expect(list).toHaveLength(1)
+    expect(list[0]).toMatchObject({
+      id: 'orchestrator',
+      name: 'Orchestrator',
+      harness: 'claude',
+      model: 'opus',
+      state: 'idle',
+      scope: [],
+      restricted: false,
+      setBy: 'owner',
+    })
+    expect([...list[0].lanes].sort()).toEqual(['claude', 'opencode', 'opencode2'])
+    expect(rig.registry.find('frontend')).toBeNull()
+    expect(rig.chat()).toBeTruthy()
+    expect(Object.hasOwn(rig.chat(), 'ladder')).toBe(false)
+
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    const record = readLines(join(rig.runs, 'runs.jsonl')).at(-1)
+    expect(record.lane).toBe('orchestrator')
+    expect(basename(record.log)).toMatch(/^orchestrator-chat-/)
+    expect(rig.calls()[0].args).toContain('-p')
+
+    appendRecord(rig, { logName: 'opencode-K1-20261025-120000' })
+    rig.registry.onFrame(frame('opencode-K1-20261025-120000'))
+    await waitIdle(rig.registry, 'orchestrator', 2)
+    expect(rig.calls()[1].args[1]).toContain('Run opencode-K1-20261025-120000 on lane opencode ended: succeeded.')
+  })
+
+  it('attaches a sub from the owner ladder, answers its chat by id and removes it', async () => {
+    const rig = await makeBridge(makeBase())
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
+
+    const attached = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [FRONTEND] },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(attached.status).toBe(200)
+    expect(attached.body.ladder.subs).toHaveLength(1)
+
+    const list = (await getJson(`${rig.url}/api/orchestrators`)).body
+    expect(list).toHaveLength(2)
+    expect(list[1]).toMatchObject({
+      id: 'frontend',
+      name: 'Frontend',
+      harness: 'claude',
+      model: 'sonnet',
+      state: 'idle',
+      lanes: ['opencode'],
+      scope: ['src/ui/**'],
+      restricted: true,
+      setBy: 'owner',
+    })
+
+    const chat = await getJson(`${rig.url}/api/orchestrator?id=frontend`)
+    expect(chat.status).toBe(200)
+    expect(chat.body).toMatchObject({ id: 'frontend', name: 'Frontend', parent: 'orchestrator', model: 'sonnet' })
+    expect(chat.body.messages).toEqual([])
+    expect((await getJson(`${rig.url}/api/orchestrator?id=missing`)).status).toBe(404)
+
+    const sent = await postJson(`${rig.url}/api/orchestrator/messages`, { id: 'frontend', text: 'Build the header', confirmed: true })
+    expect(sent.status).toBe(202)
+    await waitFor(() => rig.chat('frontend')?.messages.some((message) => message.from === 'orchestrator'))
+    const call = rig.calls().find((item) => item.args.includes('--append-system-prompt'))
+    const instruction = call.args[call.args.indexOf('--append-system-prompt') + 1]
+    expect(instruction).toContain(`project=${rig.projectRoot}`)
+    expect(instruction).toContain('Your id is `frontend`')
+    expect(instruction).toContain('Your parent is `orchestrator`')
+    expect(instruction).toContain('Your scope: `src/ui/**`')
+
+    expect((await postJson(`${rig.url}/api/orchestrator/stop`, { id: 'frontend', confirmed: true })).body).toEqual({ ok: true })
+    expect((await getJson(`${rig.url}/api/orchestrator?id=frontend`)).body.state).toBe('paused')
+
+    const removed = await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'owner', confirmed: true })
+    expect(removed.status).toBe(200)
+    expect((await getJson(`${rig.url}/api/orchestrator?id=frontend`)).status).toBe(404)
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
+  })
+
+  it('refuses a ladder that does not read and a write without a confirmation', async () => {
+    const rig = await makeBridge(makeBase())
+    const unconfirmed = await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'owner' })
+    expect(unconfirmed.body).toEqual({ error: 'Confirm the ladder first.' })
+
+    const missing = await postJson(`${rig.url}/api/orchestrator/ladder`, { by: 'owner', confirmed: true })
+    expect(missing.status).toBe(400)
+    expect(missing.body.problems).toEqual(['The ladder is not an object.'])
+
+    const bad = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [{ ...FRONTEND, id: 'Frontend' }] },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(bad.status).toBe(400)
+    expect(bad.body.problems).toContain('The sub id "Frontend" must be 1 to 24 lower case letters, digits or dashes.')
+
+    const wrongLane = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [{ ...FRONTEND, lanes: ['nope'] }] },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(wrongLane.status).toBe(400)
+    expect(wrongLane.body.problems).toContain('Sub "frontend" names the lane "nope", which is not a lane key.')
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
+  })
+
+  it('lets only the owner change a scope the owner set', async () => {
+    const rig = await makeBridge(makeBase())
+    expect((await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })).status).toBe(200)
+
+    const changedScope = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [{ ...FRONTEND, scope: ['src/ui/**', 'src/engine/**'] }] },
+      by: 'orchestrator',
+      confirmed: true,
+    })
+    expect(changedScope.status).toBe(403)
+    expect(changedScope.body.problems[0]).toContain('Sub "frontend" was set by the owner')
+
+    const changedRestriction = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [{ ...FRONTEND, restricted: false }] },
+      by: 'orchestrator',
+      confirmed: true,
+    })
+    expect(changedRestriction.status).toBe(403)
+
+    const same = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [FRONTEND] },
+      by: 'orchestrator',
+      confirmed: true,
+    })
+    expect(same.status).toBe(200)
+
+    const removal = await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'orchestrator', confirmed: true })
+    expect(removal.status).toBe(403)
+    expect(removal.body.problems[0]).toContain('only the owner can remove it')
+
+    const page = await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'orchestrator', confirmed: true })
+    expect(page.status).toBe(403)
+    expect(page.body).toEqual({ error: 'A page cannot change the ladder as the orchestrator.' })
+
+    const owner = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [{ ...FRONTEND, scope: ['src/ui/**', 'src/engine/**'] }] },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(owner.status).toBe(200)
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body[1].scope).toEqual(['src/ui/**', 'src/engine/**'])
+  })
+
+  it('sends a message from the main orchestrator to a sub only from a request with no origin', async () => {
+    const rig = await makeBridge(makeBase())
+    await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
+
+    const page = await pagePost(`${rig.url}/api/orchestrator/messages`, {
+      id: 'frontend',
+      text: 'Do the goal',
+      from: 'orchestrator',
+      confirmed: true,
+    })
+    expect(page.status).toBe(403)
+    expect(page.body).toEqual({ error: 'A page cannot send a message as the orchestrator.' })
+
+    const unconfirmed = await postJson(`${rig.url}/api/orchestrator/messages`, {
+      id: 'frontend',
+      text: 'Do the goal',
+      from: 'orchestrator',
+    })
+    expect(unconfirmed.status).toBe(400)
+
+    const toMain = await postJson(`${rig.url}/api/orchestrator/messages`, {
+      text: 'Do the goal',
+      from: 'orchestrator',
+      confirmed: true,
+    })
+    expect(toMain.status).toBe(400)
+
+    const sent = await postJson(`${rig.url}/api/orchestrator/messages`, {
+      id: 'frontend',
+      text: 'Do the goal',
+      from: 'orchestrator',
+      confirmed: true,
+    })
+    expect(sent.status).toBe(202)
+    expect(rig.chat('frontend').messages.some((message) => message.from === 'orchestrator' && message.text === 'Do the goal')).toBe(true)
+  })
+})
+
+describe('starting lanes from a sub orchestrator', () => {
+  it('refuses a lane outside the sector and passes --started-by for one inside it', async () => {
+    const files = makeBase()
+    const runner = join(files.base, 'runner.mjs')
+    writeFileSync(runner, RUNNER)
+    const runnerCalls = join(files.base, 'runner-calls.jsonl')
+    const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
+    await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
+
+    const outside = await postJson(`${rig.url}/api/control/runs`, {
+      lane: 'opencode2',
+      briefs: ['K1'],
+      startedBy: 'frontend',
+      confirmed: true,
+    })
+    expect(outside.status).toBe(403)
+    expect(outside.body.error).toContain('Frontend')
+    expect(outside.body.error).toContain('opencode2')
+
+    const unknown = await postJson(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      briefs: ['K1'],
+      startedBy: 'missing',
+      confirmed: true,
+    })
+    expect(unknown.status).toBe(400)
+
+    const inside = await postJson(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      briefs: ['K1'],
+      startedBy: 'frontend',
+      confirmed: true,
+    })
+    expect(inside.status).toBe(202)
+    await waitFor(() => readLines(runnerCalls).length === 1)
+    expect(readLines(runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
+
+    const main = await postJson(`${rig.url}/api/control/runs`, { lane: 'opencode2', briefs: ['K1'], confirmed: true })
+    expect(main.status).toBe(202)
+    await waitFor(() => readLines(runnerCalls).length === 2)
+    expect(readLines(runnerCalls)[1]).not.toContain('--started-by')
+  })
+
+  it('parses --started-by and writes it into the run record', () => {
+    expect(parseRunArgs(['opencode', 'K1', '--started-by', 'frontend'])).toMatchObject({ startedBy: 'frontend' })
+    expect(parseRunArgs(['opencode', 'K1', '--started-by=orchestrator'])).toMatchObject({ startedBy: 'orchestrator' })
+    expect(() => parseRunArgs(['opencode', 'K1', '--started-by', 'Front End'])).toThrow('--started-by needs an orchestrator id.')
+    expect(parseRunArgs(['opencode', 'K1']).startedBy).toBeUndefined()
+    expect(runRecord({ lane: 'opencode', startedBy: 'frontend' }).startedBy).toBe('frontend')
+    expect(Object.hasOwn(runRecord({ lane: 'opencode' }), 'startedBy')).toBe(false)
+  })
+
+  it('wakes only the starter when a lane run ends', async () => {
+    const rig = makeRig(makeBase({ ladder: { subs: [FRONTEND] } }))
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Do the work', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+    await waitIdle(rig.registry, 'orchestrator', 2)
+
+    appendRecord(rig, { logName: 'opencode-K1-20261025-120000', startedBy: 'frontend' })
+    rig.registry.onFrame(frame('opencode-K1-20261025-120000'))
+    await waitFor(() => messagesOf(rig.registry, 'frontend').some((message) => message.from === 'room' && message.text.includes('Run opencode-K1-20261025-120000')))
+    await waitIdle(rig.registry, 'frontend', 2)
+    expect(messagesOf(rig.registry, 'orchestrator').filter((message) => message.from === 'room')).toHaveLength(0)
+    await waitFor(() => messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'sub:frontend'))
+
+    appendRecord(rig, { logName: 'opencode-K1-20261025-120500' })
+    rig.registry.onFrame(frame('opencode-K1-20261025-120500'))
+    await waitFor(() =>
+      messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text.includes('Run opencode-K1-20261025-120500'))
+    )
+    expect(messagesOf(rig.registry, 'frontend').filter((message) => message.from === 'room')).toHaveLength(1)
+  })
+
+  it('warns a restricted sub and the main about files outside the scope', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const worktree = makeWorktree(files.base)
+    const rig = makeRig(files)
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Do the work', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+    await waitIdle(rig.registry, 'orchestrator', 2)
+
+    appendRecord(rig, { logName: 'opencode-K2-20261025-130000', startedBy: 'frontend', project: worktree })
+    rig.registry.onFrame(frame('opencode-K2-20261025-130000'))
+    const warning = await waitFor(() => messagesOf(rig.registry, 'frontend').find((message) => message.from === 'room' && message.text.startsWith('Outside the scope, do not merge:')))
+    expect(warning.text).toContain('- server/x.js')
+    expect(warning.text).not.toContain('src/ui/a.jsx')
+    expect(warning.text).toContain('Run opencode-K2-20261025-130000 on lane opencode ended: succeeded.')
+    await waitFor(() => messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text === warning.text))
+
+    const prompt = await waitFor(() => rig.calls().map((call) => call.args[call.args.indexOf('-p') + 1]).find((text) => typeof text === 'string' && text.includes('Outside the scope')))
+    expect(prompt.startsWith('Room: Outside the scope, do not merge:')).toBe(true)
+  })
+})
+
+describe('a sub orchestrator report', () => {
+  it('lands in the parent chat as sub:<id> and wakes the parent', async () => {
+    const rig = makeRig(makeBase({ ladder: { subs: [FRONTEND] } }))
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Write the header', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+    await waitIdle(rig.registry, 'orchestrator', 2)
+
+    const report = messagesOf(rig.registry, 'orchestrator').find((message) => message.from === 'sub:frontend')
+    expect(report).toBeTruthy()
+    expect(report.text).toContain('Reply:')
+    expect(report.text).toContain('Write the header')
+    const prompt = rig.calls()[rig.calls().length - 1].args[1]
+    expect(prompt.startsWith('Sub frontend:')).toBe(true)
+  })
+})
+
+describe('sub orchestrator agents', () => {
+  it('lists each sub as an agent and reads its chat log as that agent', async () => {
+    const rig = await makeBridge(makeBase({ ladder: { subs: [{ ...FRONTEND, harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }] } }))
+    const agents = (await getJson(`${rig.url}/api/agents`)).body
+    expect(agents.find((agent) => agent.key === 'sub-frontend')).toMatchObject({
+      id: 'agent-sub-frontend',
+      name: 'Frontend',
+      parser: 'opencode',
+      subOrchestrator: true,
+    })
+
+    const frames = []
+    const source = createLanesSource({
+      folder: rig.runs,
+      projectRoot: rig.projectRoot,
+      repoRoot: rig.projectRoot,
+      lanes: LANES,
+      subOrchestrators: () => [{ id: 'frontend', name: 'Frontend', harness: 'opencode' }],
+      pollMs: 20,
+      quietMs: 60000,
+      onFrame: (item) => frames.push(item),
+    })
+    cleanups.push(() => source.stop())
+    expect(source.agents.find((agent) => agent.key === 'sub-frontend')).toMatchObject({ parser: 'opencode', subOrchestrator: true })
+    source.start()
+    writeFileSync(
+      join(rig.runs, 'sub-frontend-chat-20261025-120000-000.log'),
+      `${JSON.stringify({
+        type: 'tool_use',
+        timestamp: 2,
+        sessionID: 'ses_sub',
+        part: { id: 'prt_1', type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'src/math.js' } } },
+      })}\n`
+    )
+    const line = await waitFor(
+      () => frames.find((item) => item.type === 'heartbeat.run.log' && item.payload.agentId === 'agent-sub-frontend'),
+      15000,
+      'the sub chat log line'
+    )
+    expect(line.payload.chunk).toContain('tool_use')
+  })
+})

@@ -162,7 +162,7 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {} }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const command = runnerCommand ?? { file: process.execPath, args: ['scripts/run-lane.mjs'] }
@@ -205,16 +205,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     notify({ topic: 'runs' })
   }
 
-  function startRun(lane, briefs, projectRun = null) {
+  function startRun(lane, briefs, projectRun = null, startedBy = '') {
     const entry = { lane, briefs: [...briefs], startedAt: new Date().toISOString(), lastLines: [] }
     if (projectRun?.queue) {
       entry.queue = true
       entry.tasks = projectRun.taskCount
     }
+    const startedArgs = startedBy ? ['--started-by', startedBy] : []
     const item = { entry, tail: '' }
     const args = projectRun
       ? projectRun.queue
-        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue]
+        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...startedArgs]
         : [
             ...command.args,
             lane,
@@ -224,8 +225,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             projectRun.task,
             ...(projectRun.worktree ? ['--worktree'] : []),
             ...(projectRun.allowDirty ? ['--allow-dirty'] : []),
+            ...startedArgs,
           ]
-      : [...command.args, lane, ...briefs]
+      : [...command.args, lane, ...briefs, ...startedArgs]
     const child = spawn(command.file, args, {
       cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
       shell: false,
@@ -354,6 +356,26 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
+    let startedBy = ''
+    if (Object.hasOwn(body, 'startedBy')) {
+      const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
+      if (!wanted) {
+        sendJson(req, res, 400, { error: 'startedBy needs an orchestrator id.' })
+        return true
+      }
+      const registry = typeof orchestrators === 'function' ? orchestrators() : null
+      const sector = registry ? registry.sector(wanted) : null
+      if (!sector) {
+        sendJson(req, res, 400, { error: 'There is no orchestrator with that id.' })
+        return true
+      }
+      if (wanted !== 'orchestrator' && Array.isArray(sector.lanes) && !sector.lanes.includes(lane)) {
+        sendJson(req, res, 403, { error: `The ${sector.name} sector does not hold the lane ${lane}.` })
+        return true
+      }
+      startedBy = wanted
+    }
+
     let briefs = []
     let task = ''
     let allowDirty = false
@@ -436,7 +458,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         briefs,
         projectRun
           ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount, worktree }
-          : null
+          : null,
+        startedBy
       )
     } catch {
       sendJson(req, res, 500, { error: 'The bridge could not start that run.' })

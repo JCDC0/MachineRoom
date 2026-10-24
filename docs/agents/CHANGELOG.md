@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The bridge runs a ladder of sub orchestrators beside the main one: their own chats, logs and instructions, the ladder route with the owner's settings protected, `startedBy` routing for lanes, the restricted scope warning, `sub:` reports that wake the parent, and `sub-<id>` agents in the lane source (task O2).
+- The npm pack holds `src/model/hierarchy.js`, which the bridge now imports.
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).

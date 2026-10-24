@@ -22,6 +22,7 @@
     "src/decider/wire.js",
     "src/model/commands.js",
     "src/model/fileIndex.js",
+    "src/model/hierarchy.js",
     "src/model/paths.js",
     "src/model/parsers/agy.js",
     "src/model/parsers/common.js",

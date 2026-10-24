@@ -45,6 +45,36 @@ curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/star
 - Say what you started: the lane and one line on each task.
 - The room wakes you when each run ends. Do not poll.
 
+## Sub orchestrators
+
+- You may attach a sub orchestrator for part of the project. Do it when the owner asks or agrees.
+- The ladder holds the subs. Read it with `curl -s {{BRIDGE}}/api/orchestrators`.
+- Attach, change or remove a sub with one confirmed write of the whole ladder:
+
+```
+{ "ladder": { "subs": [ { "id": "frontend", "name": "Frontend", "harness": "opencode", "model": "opencode-go/deepseek-v4.1-flash", "lanes": ["opencode2", "opencode3"], "scope": ["src/ui/**"], "restricted": true, "setBy": "orchestrator" } ] }, "by": "orchestrator", "confirmed": true }
+```
+
+```
+curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/ladder.json {{BRIDGE}}/api/orchestrator/ladder
+```
+
+- A 200 answer replaces the ladder, starts the new subs and stops the removed ones.
+- The owner's settings win. You cannot change the scope or the restriction of a sub whose `setBy` is `owner`, and you cannot remove it. A 403 answer names it.
+- A request from the room's page counts as the owner. Send this route from your own shell, where the request has no Origin.
+- Give a sub a goal with a confirmed message. A page cannot send it as you, so send it from your own shell:
+
+```
+{ "id": "frontend", "text": "Your goal", "from": "orchestrator", "confirmed": true }
+```
+
+```
+curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/goal-frontend.json {{BRIDGE}}/api/orchestrator/messages
+```
+
+- Start a lane for a sub by adding `"startedBy": "frontend"` to the run body. That run's end wakes the sub, not you.
+- A sub reports back as a message from `sub:frontend` in your chat. Treat it as a lane report.
+
 ## When a run ends
 
 - Read its record in `{{RUNS}}/runs.jsonl` and its log.

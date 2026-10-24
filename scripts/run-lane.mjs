@@ -138,12 +138,27 @@ function printWorktree(plan) {
   console.log(`worktree: ${plan.made ? 'would be made' : 'would be reused'}`)
 }
 
+function startedByOption(argv) {
+  const index = argv.findIndex((arg) => arg === '--started-by' || arg.startsWith('--started-by='))
+  if (index === -1) return { args: argv, startedBy: '' }
+  const arg = argv[index]
+  const value = arg === '--started-by' ? argv[index + 1] : arg.slice('--started-by='.length)
+  if (typeof value !== 'string' || !/^[a-z0-9-]{1,24}$/.test(value)) throw new Error('--started-by needs an orchestrator id.')
+  const args = [...argv.slice(0, index), ...(arg === '--started-by' ? argv.slice(index + 2) : argv.slice(index + 1))]
+  return { args, startedBy: value }
+}
+
 function runOptions(argv) {
   const queued = argv.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
   if (!queued) return parseRunArgs(argv)
-  const worktree = argv.includes('--worktree')
-  const options = parseQueueArgs(argv.filter((arg) => arg !== '--worktree'))
-  return worktree ? { ...options, worktree: true } : options
+  const started = startedByOption(argv)
+  const worktree = started.args.includes('--worktree')
+  const options = parseQueueArgs(started.args.filter((arg) => arg !== '--worktree'))
+  return {
+    ...options,
+    ...(started.startedBy ? { startedBy: started.startedBy } : {}),
+    ...(worktree ? { worktree: true } : {}),
+  }
 }
 
 function resolvedLanes(lanes) {
@@ -632,6 +647,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     log: logPath,
     branch,
     commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
+    ...(options.startedBy ? { startedBy: options.startedBy } : {}),
     ...(project ? { project, task } : {}),
   })
   if (queue) {
