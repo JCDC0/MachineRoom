@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The page holds at 900 by 700, 768 by 1024 and 375 by 812: the lens keeps at least 300 pixels, the dock stacks the agent list, the agent context, the settings and the costs in that order, the menu folds into one button below 900 pixels, and on a phone the transport stacks and the orchestrator chat is a full-width panel over the dock (task V24).
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
 - The first visit guide names the lens, the dock and its three columns, the tunnel and the colours, the chat with its tabs, and the keys, and the waiting card points at the chat at the bottom right (task N3).

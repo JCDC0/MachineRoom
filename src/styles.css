@@ -8,6 +8,7 @@
   --space: 8px;
   --menu-h: 52px;
   --transport-h: 56px;
+  --lens-h: max(360px, 58vh);
   --sans: 'Jost', system-ui, sans-serif;
   --mono: 'Space Mono', ui-monospace, monospace;
   --corner-ticks:
@@ -123,7 +124,7 @@ summary:focus-visible,
 .lens {
   position: relative;
   flex: 0 0 auto;
-  height: max(360px, 58vh);
+  height: var(--lens-h);
   background: var(--black);
 }
 
@@ -323,6 +324,19 @@ summary:focus-visible,
   padding: 0 calc(var(--space) * 1.5);
 }
 
+.hud-menu-toggle {
+  display: none;
+  align-self: center;
+  margin-left: auto;
+  flex: 0 0 auto;
+  padding: 6px calc(var(--space) * 1.5);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .hud-menu > .hud-header-strip h1 {
   font-family: var(--sans);
   font-size: 13px;
@@ -505,6 +519,7 @@ summary:focus-visible,
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   scrollbar-width: thin;
   padding: calc(var(--space) * 2);
   display: grid;
@@ -5338,4 +5353,132 @@ summary:focus-visible,
   gap: 2px;
   font-size: 12px;
   line-height: 1.4;
+}
+
+@media (max-width: 1023px) {
+  .mr-orch {
+    max-height: calc(100vh - var(--menu-h) - var(--lens-h) - var(--transport-h) - var(--space) * 4);
+  }
+}
+
+@media (max-width: 899px) {
+  .hud-menu {
+    padding: 0 calc(var(--space) * 2);
+  }
+
+  .hud-menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .hud-menu > .hud-modes,
+  .hud-menu > .hud-actions,
+  .hud-menu > .hud-health {
+    display: none;
+  }
+
+  .hud-menu.is-open {
+    height: auto;
+    min-height: var(--menu-h);
+    flex-wrap: wrap;
+    align-content: flex-start;
+    align-items: stretch;
+    row-gap: var(--space);
+    padding-top: var(--space);
+    padding-bottom: var(--space);
+  }
+
+  .hud-menu.is-open > .hud-modes {
+    display: grid;
+    width: 100%;
+  }
+
+  .hud-menu.is-open > .hud-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    width: 100%;
+    align-items: stretch;
+  }
+
+  .hud-menu.is-open > .hud-actions .hud-action {
+    justify-content: center;
+  }
+
+  .hud-menu.is-open > .hud-health {
+    display: flex;
+    width: 100%;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --lens-h: max(300px, 42vh);
+    --transport-h: 124px;
+  }
+
+  .hud-dock {
+    padding: var(--space);
+    gap: var(--space);
+  }
+
+  .lens-corner.is-left {
+    left: 12px;
+    top: 24px;
+  }
+
+  .lens-corner.is-right {
+    right: 12px;
+    top: 24px;
+  }
+
+  .lens-corner.is-bottom {
+    right: 12px;
+    bottom: 24px;
+    max-width: calc(100% - 24px);
+  }
+
+  .transport {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--space);
+    padding: var(--space);
+    margin: 0 var(--space) var(--space);
+  }
+
+  .transport > button {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+  }
+
+  .transport > span.mono {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
+    text-align: right;
+  }
+
+  .transport .scrubber {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .transport .speeds {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-content: space-between;
+  }
+
+  .mr-orch {
+    left: 0;
+    right: 0;
+    bottom: calc(var(--transport-h) + var(--space) * 2);
+    width: 100%;
+    max-width: 100%;
+    border-right: none;
+    border-left: none;
+    border-bottom: none;
+    border-radius: 0;
+  }
 }
