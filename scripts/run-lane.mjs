@@ -6,6 +6,7 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
+import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { briefProblems, childEnvironment, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
@@ -75,6 +76,82 @@ function resolvedLanes(lanes) {
     if (!lane || typeof lane !== 'object' || typeof lane.worktree !== 'string' || lane.worktree.trim() === '') return [key, lane]
     return [key, { ...lane, worktree: realPath(lane.worktree) }]
   }))
+}
+
+function projectTestCommand(project, given) {
+  if (typeof given === 'string' && given.trim() !== '') return given
+  const file = join(project, 'package.json')
+  if (!existsSync(file)) return ''
+  try {
+    const pkg = JSON.parse(readFileSync(file, 'utf8'))
+    const script = pkg?.scripts?.test
+    return typeof script === 'string' && script.trim() !== '' ? 'npm test' : ''
+  } catch {
+    return ''
+  }
+}
+
+function runTestCommand(command, cwd, minutes) {
+  return new Promise((done) => {
+    let child
+    try {
+      child = spawn(command, [], {
+        cwd,
+        shell: true,
+        windowsHide: true,
+        env: childEnvironment(process.env, cwd),
+        stdio: ['ignore', 'inherit', 'inherit'],
+      })
+    } catch (error) {
+      done({ ok: false, code: null, killed: false, error })
+      return
+    }
+    let killed = false
+    const timer = setTimeout(() => {
+      killed = true
+      killTree(child)
+    }, minutes * 60 * 1000)
+    child.once('error', (error) => {
+      clearTimeout(timer)
+      done({ ok: false, code: null, killed, error })
+    })
+    child.once('close', (code) => {
+      clearTimeout(timer)
+      done({ ok: !killed && code === 0, code, killed })
+    })
+  })
+}
+
+function queueGit(project, branch, lane) {
+  const run = (args, allowFailure = false) => {
+    const result = spawnSync(gitPath(), args, {
+      cwd: project,
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+    })
+    if (result.error) throw new Error(`git did not run in ${project}.`)
+    if (!allowFailure && result.status !== 0) {
+      throw new Error(`git ${args[0]} failed in ${project}: ${String(result.stderr ?? '').trim()}`)
+    }
+    return result
+  }
+  return {
+    branch,
+    lane,
+    exists: (name) => run(['rev-parse', '--verify', '--quiet', `refs/heads/${name}`], true).status === 0,
+    create: (name) => {
+      run(['switch', '-c', name])
+    },
+    status: () => String(run(['status', '--porcelain']).stdout ?? ''),
+    add: () => {
+      run(['add', '-A'])
+    },
+    commit: (message) => {
+      run(['commit', '-m', message])
+      return String(run(['rev-parse', '--short', 'HEAD']).stdout ?? '').trim()
+    },
+  }
 }
 
 function runsFolder() {
@@ -246,8 +323,81 @@ function outcomeRuns(options) {
   return 0
 }
 
+function projectRefusals(project, lanes, allowDirty) {
+  const dirty = gitCheckout(project) ? gitStatus(project).trim() !== '' : false
+  return projectProblems({
+    project,
+    root: realPath(root),
+    mainCheckout: realPath(mainCheckout()),
+    lanes: resolvedLanes(lanes),
+    home: realPath(homedir()),
+    temp: realPath(process.env.TEMP || tmpdir()),
+    runs: realPath(runsFolder()),
+    commonDir: gitCommonDir(project),
+    repoCommonDir: gitCommonDir(root),
+    dirty,
+    allowDirty,
+  })
+}
+
+async function runQueueProject({ options, lane, lanes }) {
+  const project = projectFolder(options.project)
+  if (!gitCheckout(project)) throw new Error(`The project folder ${project} is not a git folder. A queue needs one.`)
+  const problems = projectRefusals(project, lanes, false)
+  if (problems.length > 0) {
+    problems.forEach((sentence) => console.log(sentence))
+    return 1
+  }
+  const file = resolve(options.queue)
+  let text
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch {
+    throw new Error(`The queue file ${file} could not be read.`)
+  }
+  const tasks = parseQueue(text)
+  if (tasks.length === 0) throw new Error('The queue file has no tasks.')
+  const test = projectTestCommand(project, options.test)
+  const queueStamp = stamp()
+  const branch = `machineroom/queue-${queueStamp}`
+  if (options.dryRun) {
+    console.log(`lane: ${options.lane}`)
+    console.log(`project: ${project}`)
+    console.log(`branch: ${branch}`)
+    console.log(`tests: ${test || 'none, the project has no tests'}`)
+    tasks.forEach((task, index) => console.log(`${index + 1}. ${task}`))
+    return 0
+  }
+  const folder = runsFolder()
+  mkdirSync(folder, { recursive: true })
+  const lock = takeLaneLock(folder, options.lane)
+  try {
+    const result = await runQueue({
+      tasks,
+      git: queueGit(project, branch, options.lane),
+      runTask: async (task, number) => {
+        console.log(`task ${number} of ${tasks.length}`)
+        const prompt = unattendedPrompt(task)
+        const name = `${options.lane}-queue-${queueStamp}-${number}`
+        const logPath = join(folder, `${name}.log`)
+        const usageFile = join(folder, `${name}.usage.json`)
+        const run = await startLane({
+          options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
+          project, task, queue: { branch, index: number },
+        })
+        return { code: run.code, killed: run.killed }
+      },
+      runTests: test ? async () => runTestCommand(test, project, options.minutes) : null,
+    })
+    formatQueueSummary({ branch: result.branch, results: result.results, tests: test }).forEach((line) => console.log(line))
+    return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
+  } finally {
+    releaseLaneLock(lock)
+  }
+}
+
 async function main() {
-  const options = parseRunArgs(process.argv.slice(2))
+  const options = parseQueueArgs(process.argv.slice(2)) ?? parseRunArgs(process.argv.slice(2))
   if (options.list) return listRuns()
   if (options.stats) return statsRuns(options)
   if (options.outcomes) return outcomeRuns(options)
@@ -259,22 +409,10 @@ async function main() {
     console.log(`The ${options.lane} lane is retired.`)
     return 1
   }
+  if (options.queue) return await runQueueProject({ options, lane, lanes })
   if (options.project) {
     const project = projectFolder(options.project)
-    const dirty = gitCheckout(project) ? gitStatus(project).trim() !== '' : false
-    const problems = projectProblems({
-      project,
-      root: realPath(root),
-      mainCheckout: realPath(mainCheckout()),
-      lanes: resolvedLanes(lanes),
-      home: realPath(homedir()),
-      temp: realPath(process.env.TEMP || tmpdir()),
-      runs: realPath(runsFolder()),
-      commonDir: gitCommonDir(project),
-      repoCommonDir: gitCommonDir(root),
-      dirty,
-      allowDirty: options.allowDirty === true,
-    })
+    const problems = projectRefusals(project, lanes, options.allowDirty === true)
     if (problems.length > 0) {
       problems.forEach((sentence) => console.log(sentence))
       return 1
@@ -294,7 +432,8 @@ async function main() {
     mkdirSync(folder, { recursive: true })
     const lock = takeLaneLock(folder, options.lane)
     try {
-      return await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task })
+      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task })
+      return run.code
     } finally {
       releaseLaneLock(lock)
     }
@@ -329,13 +468,14 @@ async function main() {
   mkdirSync(folder, { recursive: true })
   const lock = takeLaneLock(folder, options.lane)
   try {
-    return await startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name })
+    const run = await startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name })
+    return run.code
   } finally {
     releaseLaneLock(lock)
   }
 }
 
-async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '' }) {
+async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null }) {
   if (!project) {
     const status = gitStatus(lane.worktree)
     if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
@@ -343,7 +483,14 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
 
   const sessionId = randomUUID()
   const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, sessionId, ...(project ? { cwd: project } : {}) })
-  if (project) writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify({ lane: options.lane, project, sessionId })}\n`)
+  if (project) {
+    const meta = { lane: options.lane, project, sessionId }
+    if (queue) {
+      meta.queue = queue.branch
+      meta.index = queue.index
+    }
+    writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
+  }
   const log = createWriteStream(logPath)
   const startedAt = Date.now()
   // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
@@ -402,9 +549,13 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
     ...(project ? { project, task } : {}),
   })
+  if (queue) {
+    record.queue = queue.branch
+    record.queueIndex = queue.index
+  }
   appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
   console.log(`record: ${runsFile()}`)
-  if (project) return result.code ?? 1
+  if (project) return { code: result.code ?? 1, killed }
   try {
     const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
     console.log(`room: /?recording=${written.name}`)
@@ -412,7 +563,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   } catch (error) {
     console.log(`room: not recorded (${String(error?.message ?? error)})`)
   }
-  return result.code ?? 1
+  return { code: result.code ?? 1, killed }
 }
 
 main().then((code) => {
