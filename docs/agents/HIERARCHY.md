@@ -1,6 +1,6 @@
-# Orchestrators in a ladder (planned)
+# Orchestrators in a ladder (built)
 
-Status: planned on 2026-10-24 at the owner's request. Briefs O1 to O5 in `TASKS.md`.
+Status: built. The plan was written on 2026-10-24 at the owner's request. O1 to O7 are merged, and each step below gives its version. V23 made the sectors readable, V25 grouped the dock's agent list, V26 named each sector once, and S10 added the demo replay (`?replay&fixture=scenario-i`). Two points from the version 7 audit wait for the owner: X1 and X3. In X1 the actor comes from the body, so the sector gate is advisory. In X3 the scope check reads only committed work. Briefs O1 to O7 in `TASKS.md`.
 
 ## What the owner asked for
 
@@ -35,7 +35,7 @@ A ladder is a small JSON object kept with the main orchestrator's state (`<runs>
 }
 ```
 
-Rules, all checked by a pure module (`src/model/hierarchy.js`, O1):
+Rules, all checked by `src/model/hierarchy.js`:
 
 - An id is lower case letters, digits and dashes, 1 to 24 characters, and never `orchestrator` or a lane key.
 - A lane belongs to at most one sub orchestrator. Lanes in no sub belong to the main orchestrator.
@@ -47,8 +47,8 @@ Rules, all checked by a pure module (`src/model/hierarchy.js`, O1):
 
 - Each orchestrator is one instance of what `server/orchestrator.js` does today: its own session, chat, state, turn limit and wake budget. The sub's instructions are `ORCHESTRATOR-AGENT.md` plus a short section that names its id, lanes, scope, whether it is restricted, its sector branch `machineroom/sector-<id>` and its parent.
 - A lane run started by an orchestrator records `startedBy` (its id). The run's end wakes only that orchestrator.
-- A sub orchestrator's run route refuses a lane outside its sector.
-- Restricted scope is checked twice: the sub's task text names the scope, and the merge check refuses a lane branch whose `git diff --name-only` names a file outside the scope, with a room message saying which files.
+- A sub orchestrator's run route refuses a lane outside its sector. The route trusts the actor named in the body, so X1 leaves the check advisory.
+- Restricted scope is checked twice: the sub's task text names the scope, and the merge check refuses a lane branch whose `git diff --name-only` names a file outside the scope, with a room message saying which files. X3 leaves uncommitted work out of that check.
 - A sub orchestrator reports to its parent by a message in the parent's chat from `sub:<id>`, which wakes the parent like a room message.
 - The owner can talk to any orchestrator from the chat (a tab per orchestrator). Attach, detach, scope and restriction are confirmed writes.
 
@@ -64,8 +64,24 @@ Each orchestrator session grows with every turn. The room reads the context use 
 
 ## Steps
 
-1. O1. The pure model and its tests (no server, no UI).
-2. O2. The server: instances, `startedBy`, wake routing, the run route check, the scope merge check, sub reports, and the routes. After R3 and R4.
-3. O3. The ring sectors and sub orchestrator shapes in the room. After R9.
-4. O4. Chat tabs and the attach form. After I1 and R8.
-5. O5. Context use and autocompact. After O2.
+These steps are merged. The version follows each one.
+
+1. O1. The pure model and its tests, no server and no UI (0.1.282).
+2. O2. The server: instances, `startedBy`, wake routing, the run route check, the scope merge check, sub reports, and the routes (0.1.305).
+3. O3. The ring sectors and sub orchestrator shapes in the room (0.1.295).
+4. O4. Chat tabs and the attach form (0.1.291).
+5. O5. Context use and autocompact (0.1.311).
+6. O6. The live ladder reaches the room from `client.orchestrators()` (0.1.298).
+7. O7. The dock shows a sub orchestrator's sector, scope and restriction (0.1.316).
+
+The next briefs made the ladder easier to see and use:
+
+- V23. The sector arcs and labels are readable, and the subs sit apart (0.1.309).
+- V25. The dock's agent list groups by sector (0.1.317).
+- V26. Each sector is named once (0.1.318).
+- S10. The demo replay where the subs and their lanes work (0.1.314). Open `?replay&fixture=scenario-i`.
+
+Two points wait for the owner:
+
+- X1. The actor comes from the body, so the sector gate is advisory. See `AUDIT-2026-10-V7.md`.
+- X3. The scope check reads only committed work, so uncommitted edits are not listed. See `AUDIT-2026-10-V7.md`.
