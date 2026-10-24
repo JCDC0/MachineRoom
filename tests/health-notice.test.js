@@ -60,6 +60,12 @@ describe('healthNotice', () => {
     expect(healthNotice({ ok: true, lanes: true, paperclip: true, surface: { ok: false, missing: [{ method: 'GET', path: '/x' }] } })).toMatchObject({ tone: 'red' })
   })
 
+  it('stays quiet about Paperclip when the session source is on', () => {
+    expect(healthNotice({ ok: true, sessions: true, paperclip: false, surface: { ok: null, error: 'down' } })).toBe(null)
+    expect(healthNotice({ error: true, sessions: true })).toMatchObject({ title: 'The bridge is not answering' })
+    expect(healthNotice({ ok: true, sessions: true, paperclip: true, surface: { ok: false, missing: [{ method: 'GET', path: '/x' }] } })).toMatchObject({ tone: 'red' })
+  })
+
   it('reports changed routes with singular route', () => {
     const notice = healthNotice({
       ok: true,

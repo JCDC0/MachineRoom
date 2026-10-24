@@ -160,6 +160,8 @@ The runner refuses this checkout, a lane worktree and a git folder with uncommit
 
 With `--lanes`, the Dispatch panel can start the same kind of run on the room's own folder: pick a lane, write the task, and turn on `Allow uncommitted changes` when the folder has them.
 
+With `--sessions`, the room follows your own Claude Code sessions on that folder instead, and needs no Paperclip. Start it with `npm run serve -- up --sessions --root C:\GitHub\Other`. It reads the session files Claude Code keeps in `.claude/projects` under your profile for that folder, keeps only the lines whose `cwd` is the folder or inside it, shows each prompt as a run and each tool call on the room's cards, and follows a subagent through its own file. A run that `run-lane` starts on the same folder is skipped, because the runner names its session and the bridge leaves that session out, so the room does not show it twice.
+
 A lane's `cli.model` can name a `provider/model` from any OpenAI-compatible provider in OpenCode's own config. The key stays in that config or an environment variable, never in `docs/agents/lanes.json` or this repository. MachineRoom does not set up a provider and does not read the key.
 
 ## What it never does

@@ -53,6 +53,13 @@ describe('commandFor', () => {
     })
   })
 
+  it('adds the run session id to the Claude Code command so the room can skip it', () => {
+    const command = commandFor({ lane: lanes.claude, prompt, env, usageFile, title, sessionId: 'abc-123' })
+    expect(command.args.slice(-2)).toEqual(['--session-id', 'abc-123'])
+    expect(commandFor({ lane: lanes.claude, prompt, env, usageFile, title }).args).not.toContain('--session-id')
+    expect(commandFor({ lane: lanes.claude, prompt, env, usageFile, title, sessionId: '' }).args).not.toContain('--session-id')
+  })
+
   it('leaves out the usage file and the reasoning when the lane has none', () => {
     const lane = { ...lanes.hermes, reasoning: undefined }
     const command = commandFor({ lane, prompt, env, title })

@@ -36,7 +36,7 @@ function expandBin(bin, env) {
   })
 }
 
-export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd } = {}) {
+export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sessionId } = {}) {
   if (!lane || typeof lane !== 'object') throw new Error('There is no lane to run.')
   const cli = lane.cli
   if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
@@ -47,7 +47,9 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd } = {
   const file = expandBin(cli.bin, env)
   const reasoning = lane.reasoning ? String(lane.reasoning) : ''
   if (harness === 'claude') {
-    return { file, args: ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', cli.model, '--dangerously-skip-permissions'], cwd: folder }
+    const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', cli.model, '--dangerously-skip-permissions']
+    if (typeof sessionId === 'string' && sessionId !== '') args.push('--session-id', sessionId)
+    return { file, args, cwd: folder }
   }
   if (harness === 'hermes') {
     const args = ['-z', prompt, '-m', cli.model, '--provider', cli.provider]
