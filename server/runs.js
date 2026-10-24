@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { readFileSync, realpathSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -14,11 +14,17 @@ export const LAST_LINE_LIMIT = 5
 export const BRIEF_ID = /^[A-Z]\d+[a-z]?$/
 export const TASK_LIMIT = 4000
 export const TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
+export const TASKS_LIMIT = 20
+export const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
+export const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
+export const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
+export const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
 const NO_PROJECT = 'The bridge has no project folder.'
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const REPO_LANES = join(REPO_ROOT, 'docs', 'agents', 'lanes.json')
 const GIT_TIMEOUT_MS = 10 * 1000
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
+const RUNS_BODY_LIMIT = 256 * 1024
 
 function realPath(value) {
   const folder = resolve(String(value ?? ''))
@@ -54,6 +60,35 @@ async function projectDirty(folder) {
   if (inside === null || inside.trim() !== 'true') return false
   const status = await git(folder, ['status', '--porcelain'])
   return status !== null && status.trim() !== ''
+}
+
+function stamp(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
+}
+
+function hasSeparatorLine(text) {
+  return text.split(/\r?\n/).some((line) => line.trim() === '---')
+}
+
+export function tasksProblem(tasks) {
+  if (!Array.isArray(tasks) || tasks.length < 1 || tasks.length > TASKS_LIMIT) return TASKS_PROBLEM
+  for (const task of tasks) {
+    if (typeof task !== 'string') return TASKS_PROBLEM
+    const text = task.trim()
+    if (text.length < 1 || text.length > TASK_LIMIT) return TASKS_PROBLEM
+    if (hasSeparatorLine(task)) return TASK_SEPARATOR_PROBLEM
+  }
+  return null
+}
+
+function queuePath(lane) {
+  return join(dirname(runsFile()), `${lane}-queue-${stamp()}.queue.txt`)
+}
+
+function writeQueue(file, tasks) {
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, tasks.map((task) => task.trim()).join('\n---\n'))
 }
 
 let mainCheckoutPromise = null
@@ -154,6 +189,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       briefs: [...item.entry.briefs],
       startedAt: item.entry.startedAt,
       lastLines: [...item.entry.lastLines],
+      ...(item.entry.queue ? { queue: true, tasks: item.entry.tasks } : {}),
     }
   }
 
@@ -171,17 +207,23 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
   function startRun(lane, briefs, projectRun = null) {
     const entry = { lane, briefs: [...briefs], startedAt: new Date().toISOString(), lastLines: [] }
+    if (projectRun?.queue) {
+      entry.queue = true
+      entry.tasks = projectRun.taskCount
+    }
     const item = { entry, tail: '' }
     const args = projectRun
-      ? [
-          ...command.args,
-          lane,
-          '--project',
-          projectRun.project,
-          '--task',
-          projectRun.task,
-          ...(projectRun.allowDirty ? ['--allow-dirty'] : []),
-        ]
+      ? projectRun.queue
+        ? [...command.args, lane, '--project', projectRun.project, '--queue', projectRun.queue]
+        : [
+            ...command.args,
+            lane,
+            '--project',
+            projectRun.project,
+            '--task',
+            projectRun.task,
+            ...(projectRun.allowDirty ? ['--allow-dirty'] : []),
+          ]
       : [...command.args, lane, ...briefs]
     const child = spawn(command.file, args, {
       cwd: projectRun ? REPO_ROOT : resolvedRoot || undefined,
@@ -259,11 +301,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
-    const body = await readJsonBody(req, res)
+    const body = await readJsonBody(req, res, RUNS_BODY_LIMIT)
     if (body === null) return true
 
     if (body.confirmed !== true) {
       sendJson(req, res, 400, { error: 'Confirm the run first.' })
+      return true
+    }
+
+    const hasTasks = body.tasks !== undefined
+    if (hasTasks && (body.task !== undefined || body.briefs !== undefined)) {
+      sendJson(req, res, 400, { error: RUN_KIND_PROBLEM })
       return true
     }
 
@@ -303,13 +351,27 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     let briefs = []
     let task = ''
     let allowDirty = false
+    let queueFile = ''
+    let taskCount = 0
     if (projectRun) {
-      if (typeof body.task !== 'string' || body.task.trim().length < 1 || body.task.length > TASK_LIMIT) {
+      if (hasTasks) {
+        if (body.allowDirty === true) {
+          sendJson(req, res, 400, { error: QUEUE_DIRTY_PROBLEM })
+          return true
+        }
+        const tasksListProblem = tasksProblem(body.tasks)
+        if (tasksListProblem) {
+          sendJson(req, res, 400, { error: tasksListProblem })
+          return true
+        }
+        taskCount = body.tasks.length
+      } else if (typeof body.task !== 'string' || body.task.trim().length < 1 || body.task.length > TASK_LIMIT) {
         sendJson(req, res, 400, { error: TASK_PROBLEM })
         return true
+      } else {
+        task = body.task
+        allowDirty = body.allowDirty === true
       }
-      task = body.task
-      allowDirty = body.allowDirty === true
       if (!resolvedRoot) {
         sendJson(req, res, 400, { error: NO_PROJECT })
         return true
@@ -350,9 +412,25 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
+    if (hasTasks) {
+      queueFile = queuePath(lane)
+      try {
+        writeQueue(queueFile, body.tasks)
+      } catch {
+        sendJson(req, res, 500, { error: 'The bridge could not write the queue file.' })
+        return true
+      }
+    }
+
     let entry
     try {
-      entry = startRun(lane, briefs, projectRun ? { project: resolvedRoot, task, allowDirty } : null)
+      entry = startRun(
+        lane,
+        briefs,
+        projectRun
+          ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount }
+          : null
+      )
     } catch {
       sendJson(req, res, 500, { error: 'The bridge could not start that run.' })
       return true

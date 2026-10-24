@@ -63,7 +63,12 @@ export function runningLine(entry, now) {
 }
 
 export const PROJECT_TASK_LIMIT = 4000
+export const PROJECT_TASK_COUNT_LIMIT = 20
+export const PROJECT_QUEUE_TEXT_LIMIT = PROJECT_TASK_LIMIT * PROJECT_TASK_COUNT_LIMIT + 4000
 export const PROJECT_CONFIRM_LIMIT = 120
+export const PROJECT_TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
+export const PROJECT_TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
+export const PROJECT_TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 
 const PROJECT_RUN_ADAPTERS = new Set(['opencode_local', 'claude_local', 'process'])
 
@@ -84,18 +89,54 @@ export function projectRunLanes(agents) {
   return lanes
 }
 
+export function splitTasks(text) {
+  if (typeof text !== 'string') return []
+  const tasks = []
+  let lines = []
+  const add = () => {
+    const task = lines.join('\n').trim()
+    if (task) tasks.push(task)
+    lines = []
+  }
+  for (const line of text.split(/\r?\n/)) {
+    if (line.trim() === '---') add()
+    else lines.push(line)
+  }
+  add()
+  return tasks
+}
+
 export function projectTaskProblem(task) {
-  if (typeof task !== 'string' || task.trim().length < 1 || task.length > PROJECT_TASK_LIMIT) {
-    return 'Write the task in 1 to 4000 characters.'
+  const list = Array.isArray(task) ? task : [task]
+  if (list.length > PROJECT_TASK_COUNT_LIMIT) return PROJECT_TASKS_PROBLEM
+  if (list.length === 0) return PROJECT_TASK_PROBLEM
+  for (const item of list) {
+    if (typeof item !== 'string') return PROJECT_TASK_PROBLEM
+    const text = item.trim()
+    if (text.length < 1 || text.length > PROJECT_TASK_LIMIT) return PROJECT_TASK_PROBLEM
+    if (text.split(/\r?\n/).some((line) => line.trim() === '---')) {
+      return PROJECT_TASK_SEPARATOR_PROBLEM
+    }
   }
   return null
 }
 
-export function projectRunConfirm({ lane, project, task } = {}) {
-  const taskText = typeof task === 'string' ? task.trim() : ''
-  return {
+export function projectRunLabel(count) {
+  return Number.isInteger(count) && count > 1 ? `Run ${count} tasks in order` : 'Run'
+}
+
+export function projectRunConfirm({ lane, project, task, tasks } = {}) {
+  const list = Array.isArray(tasks) ? tasks : []
+  const first = list.length > 0 && typeof list[0] === 'string' ? list[0] : ''
+  const taskText = typeof task === 'string' ? task.trim() : first.trim()
+  const confirm = {
     lane: typeof lane === 'string' ? lane.trim() : '',
     project: typeof project === 'string' && project.trim() ? project.trim() : 'this project',
     task: taskText.slice(0, PROJECT_CONFIRM_LIMIT),
   }
+  if (list.length > 1) {
+    confirm.queue = true
+    confirm.count = list.length
+  }
+  return confirm
 }

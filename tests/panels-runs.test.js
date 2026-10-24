@@ -1,13 +1,21 @@
 import { describe, expect, it } from 'vitest'
+import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   formatCost,
   formatMinutes,
   formatRecordLine,
+  PROJECT_TASK_PROBLEM,
+  PROJECT_TASK_SEPARATOR_PROBLEM,
+  PROJECT_TASKS_PROBLEM,
+  projectRunConfirm,
+  projectRunLabel,
+  projectTaskProblem,
   recordLine,
   resultWord,
   runResultWord,
   runningLine,
+  splitTasks,
   timeSince,
   timeSinceStart,
 } from '../src/ui/panels/runs.js'
@@ -174,6 +182,96 @@ describe('runningLine', () => {
   it('handles missing fields', () => {
     expect(runningLine({})).toBe('unknown | none | time unknown')
     expect(runningLine(null)).toBe('')
+  })
+})
+
+describe('splitTasks', () => {
+  it('reads one task', () => {
+    expect(splitTasks('Fix the typo.')).toEqual(['Fix the typo.'])
+    expect(splitTasks('  Fix the typo.  \n')).toEqual(['Fix the typo.'])
+    expect(splitTasks('First line.\nSecond line.')).toEqual(['First line.\nSecond line.'])
+  })
+
+  it('reads three tasks', () => {
+    expect(splitTasks('One.\n---\nTwo.\n---\nThree.')).toEqual(['One.', 'Two.', 'Three.'])
+    expect(splitTasks('One.\r\n---\r\nTwo.\r\n---\r\nThree.')).toEqual(['One.', 'Two.', 'Three.'])
+    expect(splitTasks('  One.  \n---\n  Two.  \n---\n  Three.  ')).toEqual(['One.', 'Two.', 'Three.'])
+  })
+
+  it('drops blank blocks', () => {
+    expect(splitTasks('')).toEqual([])
+    expect(splitTasks('   \n\n')).toEqual([])
+    expect(splitTasks('\n---\nOne.\n---\n\n---\nTwo.\n---\n')).toEqual(['One.', 'Two.'])
+  })
+
+  it('treats a line of --- with spaces around it as a separator', () => {
+    expect(splitTasks('One.\n  ---  \nTwo.')).toEqual(['One.', 'Two.'])
+    expect(splitTasks('One.\n\t---\t\nTwo.')).toEqual(['One.', 'Two.'])
+    expect(splitTasks('One.\n-----\nTwo.')).toEqual(['One.\n-----\nTwo.'])
+  })
+})
+
+describe('projectTaskProblem with a task list', () => {
+  it('checks each task in the list', () => {
+    expect(projectTaskProblem(['one', 'two'])).toBeNull()
+    expect(projectTaskProblem([])).toBe(PROJECT_TASK_PROBLEM)
+    expect(projectTaskProblem(['one', ''])).toBe(PROJECT_TASK_PROBLEM)
+    expect(projectTaskProblem(['one', '   '])).toBe(PROJECT_TASK_PROBLEM)
+    expect(projectTaskProblem(['one', 7])).toBe(PROJECT_TASK_PROBLEM)
+    expect(projectTaskProblem(['one', 'x'.repeat(4001)])).toBe(PROJECT_TASK_PROBLEM)
+    expect(projectTaskProblem(Array.from({ length: 21 }, () => 'x'))).toBe(PROJECT_TASKS_PROBLEM)
+    expect(projectTaskProblem(['one\n---\ntwo'])).toBe(PROJECT_TASK_SEPARATOR_PROBLEM)
+  })
+})
+
+describe('projectRunLabel', () => {
+  it('counts a queue in the button label', () => {
+    expect(projectRunLabel(0)).toBe('Run')
+    expect(projectRunLabel(1)).toBe('Run')
+    expect(projectRunLabel(2)).toBe('Run 2 tasks in order')
+    expect(projectRunLabel(20)).toBe('Run 20 tasks in order')
+    expect(projectRunLabel('3')).toBe('Run')
+    expect(projectRunLabel(undefined)).toBe('Run')
+  })
+})
+
+describe('projectRunConfirm with a task list', () => {
+  it('keeps the single task shape and names a queue', () => {
+    expect(projectRunConfirm({ lane: 'opencode', project: 'Other', tasks: ['One.'] })).toEqual({
+      lane: 'opencode',
+      project: 'Other',
+      task: 'One.',
+    })
+    expect(projectRunConfirm({ lane: 'opencode', project: 'Other', tasks: ['One.', 'Two.', 'Three.'] })).toEqual({
+      lane: 'opencode',
+      project: 'Other',
+      task: 'One.',
+      queue: true,
+      count: 3,
+    })
+    expect(projectRunConfirm({ lane: 'opencode', tasks: ['One.', 'Two.'] })).toEqual({
+      lane: 'opencode',
+      project: 'this project',
+      task: 'One.',
+      queue: true,
+      count: 2,
+    })
+  })
+})
+
+describe('the control client startRun', () => {
+  it('passes a task queue through to the bridge', async () => {
+    const bodies = []
+    const client = createClient({
+      baseUrl: 'http://127.0.0.1:5174',
+      fetchImpl: async (url, options) => {
+        bodies.push(JSON.parse(options.body))
+        return { ok: true, json: async () => ({ lane: 'opencode', briefs: [], queue: true, tasks: 2 }) }
+      },
+    })
+    const answer = await client.startRun('opencode', { tasks: ['One.', 'Two.'] })
+    expect(bodies).toEqual([{ lane: 'opencode', tasks: ['One.', 'Two.'], confirmed: true }])
+    expect(answer).toMatchObject({ lane: 'opencode', queue: true, tasks: 2 })
   })
 })
 

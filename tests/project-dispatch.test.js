@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
+import { QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM } from '../server/runs.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   PROJECT_CONFIRM_LIMIT,
@@ -51,18 +52,25 @@ function writeProject(dir) {
   )
 }
 
-function writeRunner(dir, out) {
+function writeRunner(dir, out, waitMs = 0) {
   const path = join(dir, 'runner.mjs')
-  writeFileSync(
-    path,
-    [
-      "import { writeFileSync } from 'node:fs'",
-      'const args = process.argv.slice(2)',
-      `writeFileSync(${JSON.stringify(out)}, JSON.stringify(args))`,
-      "console.log('args ' + args.join(' '))",
-    ].join('\n')
-  )
+  const lines = [
+    "import { writeFileSync } from 'node:fs'",
+    'const args = process.argv.slice(2)',
+    `writeFileSync(${JSON.stringify(out)}, JSON.stringify(args))`,
+    "console.log('args ' + args.join(' '))",
+  ]
+  if (waitMs > 0) lines.push(`await new Promise((resolve) => setTimeout(resolve, ${waitMs}))`)
+  writeFileSync(path, lines.join('\n'))
   return path
+}
+
+function queueFiles(folder) {
+  try {
+    return readdirSync(folder).filter((name) => name.endsWith('.queue.txt'))
+  } catch {
+    return []
+  }
 }
 
 function readArgs(out) {
@@ -235,6 +243,126 @@ describe('the runs route with a task', () => {
   })
 })
 
+describe('the runs route with a queue', () => {
+  it('writes the queue file and starts run-lane with --queue', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const temp = tempDir('mr-project-temp-')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out, 400) })
+    const previous = process.env.TEMP
+    process.env.TEMP = temp
+    try {
+      const res = await postJson(`${url}/api/control/runs`, {
+        lane: 'opencode',
+        tasks: ['  Fix the typo.  ', 'Add a test.'],
+        confirmed: true,
+      })
+      expect(res.status).toBe(202)
+      expect(res.body).toMatchObject({ lane: 'opencode', briefs: [], queue: true, tasks: 2 })
+
+      const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+      expect(args.slice(0, 4)).toEqual(['opencode', '--project', project, '--queue'])
+      const file = args[4]
+      expect(basename(file)).toMatch(/^opencode-queue-\d{8}-\d{6}\.queue\.txt$/)
+      expect(file).toBe(join(temp, 'machineroom-runs', basename(file)))
+      expect(readFileSync(file, 'utf8')).toBe('Fix the typo.\n---\nAdd a test.')
+
+      const entry = await waitFor(
+        async () => (await getJson(`${url}/api/control/runs`)).body.running.find((item) => item.lane === 'opencode'),
+        { what: 'the queue entry' }
+      )
+      expect(entry).toMatchObject({ lane: 'opencode', briefs: [], queue: true, tasks: 2 })
+      await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+      expect(queueFiles(join(temp, 'machineroom-runs'))).toHaveLength(1)
+    } finally {
+      if (previous === undefined) delete process.env.TEMP
+      else process.env.TEMP = previous
+    }
+  })
+
+  it('accepts twenty tasks of 4000 characters', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const temp = tempDir('mr-project-temp-')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
+    const previous = process.env.TEMP
+    process.env.TEMP = temp
+    try {
+      const tasks = Array.from({ length: 20 }, (_, index) => `${'x'.repeat(3996)}${String(index).padStart(4, '0')}`)
+      const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', tasks, confirmed: true })
+      expect(res.status).toBe(202)
+      expect(res.body).toMatchObject({ queue: true, tasks: 20 })
+
+      const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+      const text = readFileSync(args[4], 'utf8')
+      expect(text.split('\n---\n')).toEqual(tasks)
+      await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+    } finally {
+      if (previous === undefined) delete process.env.TEMP
+      else process.env.TEMP = previous
+    }
+  })
+
+  it('refuses a task list the queue cannot hold', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const temp = tempDir('mr-project-temp-')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
+    const previous = process.env.TEMP
+    process.env.TEMP = temp
+    try {
+      const cases = [
+        { tasks: [], error: TASKS_PROBLEM },
+        { tasks: Array.from({ length: 21 }, (_, index) => `Task ${index}`), error: TASKS_PROBLEM },
+        { tasks: [''], error: TASKS_PROBLEM },
+        { tasks: ['   '], error: TASKS_PROBLEM },
+        { tasks: ['x'.repeat(4001)], error: TASKS_PROBLEM },
+        { tasks: [42], error: TASKS_PROBLEM },
+        { tasks: ['one\n  ---  \ntwo'], error: TASK_SEPARATOR_PROBLEM },
+        { tasks: ['one'], task: 'two', error: RUN_KIND_PROBLEM },
+        { tasks: ['one'], briefs: ['C3e'], error: RUN_KIND_PROBLEM },
+        { tasks: ['one'], allowDirty: true, error: QUEUE_DIRTY_PROBLEM },
+      ]
+      for (const { error, ...body } of cases) {
+        const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', ...body, confirmed: true })
+        expect(res.status, error).toBe(400)
+        expect(res.body, error).toEqual({ error })
+      }
+      expect(readArgs(out)).toBeNull()
+      expect(queueFiles(join(temp, 'machineroom-runs'))).toHaveLength(0)
+    } finally {
+      if (previous === undefined) delete process.env.TEMP
+      else process.env.TEMP = previous
+    }
+  })
+
+  it('refuses a queue on a dirty project and on this checkout', async () => {
+    const dirtyProject = tempDir('mr-project-dispatch-')
+    execFileSync(gitPath(), ['init'], { cwd: dirtyProject, stdio: 'ignore' })
+    writeFileSync(join(dirtyProject, 'notes.txt'), 'uncommitted\n')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const { url } = await startBridge({ projectRoot: dirtyProject, runnerPath: writeRunner(runnerDir, out) })
+
+    const dirty = await postJson(`${url}/api/control/runs`, { lane: 'opencode', tasks: ['Fix it.'], confirmed: true })
+    expect(dirty.status).toBe(400)
+    expect(dirty.body).toEqual({
+      error: `The project folder ${dirtyProject} has uncommitted changes. Commit or discard them, or pass --allow-dirty.`,
+    })
+
+    const checkout = await startBridge({ projectRoot: REPO_ROOT, runnerPath: writeRunner(runnerDir, out) })
+    const refused = await postJson(`${checkout.url}/api/control/runs`, { lane: 'opencode', tasks: ['Fix it.'], confirmed: true })
+    expect(refused.status).toBe(400)
+    expect(refused.body).toEqual({
+      error: `The project folder ${REAL_REPO_ROOT} is this checkout. Run on another project.`,
+    })
+    expect(readArgs(out)).toBeNull()
+  })
+})
+
 describe('the mock startRun with a task', () => {
   it('starts a project run and keeps its task in the record', async () => {
     const client = createMockClient({ latencyMs: 0, runMs: 40 })
@@ -250,6 +378,28 @@ describe('the mock startRun with a task', () => {
       { what: 'the mock project record' }
     )
     expect(record).toMatchObject({ lane: 'opencode', briefs: [], project: 'MachineRoom', task: 'Fix the typo.' })
+  })
+})
+
+describe('the mock startRun with a queue', () => {
+  it('starts a queue and keeps its count in the entry and the record', async () => {
+    const client = createMockClient({ latencyMs: 0, runMs: 60 })
+    await expect(client.startRun('opencode', { tasks: [] })).rejects.toThrow(TASKS_PROBLEM)
+    await expect(client.startRun('opencode', { tasks: ['one'], allowDirty: true })).rejects.toThrow(QUEUE_DIRTY_PROBLEM)
+    await expect(client.startRun('opencode', { tasks: ['one'], task: 'two' })).rejects.toThrow(RUN_KIND_PROBLEM)
+    await expect(client.startRun('opencode', { tasks: ['one\n---\ntwo'] })).rejects.toThrow(TASK_SEPARATOR_PROBLEM)
+
+    const entry = await client.startRun('opencode', { tasks: ['Fix the typo.', 'Add a test.'] })
+    expect(entry).toMatchObject({ lane: 'opencode', briefs: [], queue: true, tasks: 2 })
+    const running = (await client.runs()).running
+    expect(running[0]).toMatchObject({ lane: 'opencode', queue: true, tasks: 2 })
+
+    const record = await waitFor(
+      async () => (await client.runs()).recent.find((item) => item.lane === 'opencode' && item.queue === true),
+      { what: 'the mock queue record' }
+    )
+    expect(record).toMatchObject({ lane: 'opencode', briefs: [], project: 'MachineRoom', queue: true, tasks: 2 })
+    expect(record.task).toBeUndefined()
   })
 })
 

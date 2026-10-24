@@ -11,7 +11,7 @@ import {
 import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
 import { agentForLane, routeFields } from './route.js'
-import { PROJECT_TASK_LIMIT, projectRunConfirm, projectRunLanes, projectTaskProblem, recordLine, resultWord, timeSinceStart } from './runs.js'
+import { PROJECT_QUEUE_TEXT_LIMIT, projectRunConfirm, projectRunLabel, projectRunLanes, projectTaskProblem, recordLine, resultWord, splitTasks, timeSinceStart } from './runs.js'
 import { profileFromBrief } from '../../policy/profile.js'
 
 export default function DispatchPanel({
@@ -381,13 +381,15 @@ export default function DispatchPanel({
   }
 
   function openProjectConfirm() {
-    if (!projectLane || projectTaskProblem(projectTask)) return
+    const tasks = splitTasks(projectTask)
+    if (!projectLane || projectTaskProblem(tasks)) return
     setProjectShowConfirm(true)
     setProjectError(null)
   }
 
   async function handleConfirmProjectRun() {
-    const problem = projectTaskProblem(projectTask)
+    const tasks = splitTasks(projectTask)
+    const problem = projectTaskProblem(tasks)
     if (!projectLane || problem || typeof client?.startRun !== 'function') {
       if (problem) setProjectError(problem)
       return
@@ -395,7 +397,11 @@ export default function DispatchPanel({
     setProjectStarting(true)
     setProjectError(null)
     try {
-      await client.startRun(projectLane, { task: projectTask, allowDirty: projectAllowDirty })
+      if (tasks.length > 1) {
+        await client.startRun(projectLane, { tasks })
+      } else {
+        await client.startRun(projectLane, { task: projectTask, allowDirty: projectAllowDirty })
+      }
       setProjectShowConfirm(false)
       setProjectTask('')
       setProjectAllowDirty(false)
@@ -542,8 +548,15 @@ export default function DispatchPanel({
     (item) => !item.tier || !['small', 'medium', 'large'].includes(item.tier)
   )
   const projectLanes = projectRunLanes(agents)
-  const projectConfirm = projectRunConfirm({ lane: projectLane, project: projectName, task: projectTask })
-  const projectProblem = projectTaskProblem(projectTask)
+  const projectTasks = splitTasks(projectTask)
+  const projectQueue = projectTasks.length > 1
+  const projectConfirm = projectRunConfirm({
+    lane: projectLane,
+    project: projectName,
+    task: projectTask,
+    tasks: projectTasks,
+  })
+  const projectProblem = projectTaskProblem(projectTasks)
   const canStartProject = typeof client?.startRun === 'function' && Boolean(projectLane) && !projectProblem
 
   return (
@@ -592,8 +605,8 @@ export default function DispatchPanel({
               id="project-run-task"
               rows={4}
               value={projectTask}
-              maxLength={PROJECT_TASK_LIMIT}
-              placeholder="What should the agent do in this project?"
+              maxLength={PROJECT_QUEUE_TEXT_LIMIT}
+              placeholder="What should the agent do in this project? Separate tasks with a line of ---"
               onChange={(event) => {
                 setProjectTask(event.target.value)
                 setProjectShowConfirm(false)
@@ -606,7 +619,8 @@ export default function DispatchPanel({
             <label>
               <input
                 type="checkbox"
-                checked={projectAllowDirty}
+                checked={projectQueue ? false : projectAllowDirty}
+                disabled={projectQueue}
                 onChange={(event) => {
                   setProjectAllowDirty(event.target.checked)
                   setProjectShowConfirm(false)
@@ -615,6 +629,9 @@ export default function DispatchPanel({
               />
               <span>Allow uncommitted changes</span>
             </label>
+            {projectQueue && (
+              <div className="brief-state is-dim mono">A queue needs a clean project</div>
+            )}
           </div>
 
           <div className="panel-actions">
@@ -624,7 +641,7 @@ export default function DispatchPanel({
               disabled={!canStartProject}
               onClick={openProjectConfirm}
             >
-              Run
+              {projectRunLabel(projectTasks.length)}
             </button>
           </div>
 
@@ -633,8 +650,18 @@ export default function DispatchPanel({
               <div className="brief-confirm-meta mono">
                 <span className="brief-confirm-lane">Lane: {projectConfirm.lane}</span>
                 <span className="brief-confirm-project">Project: {projectConfirm.project}</span>
-                <span className="brief-confirm-task">Task: {projectConfirm.task}</span>
+                {projectQueue ? (
+                  <span className="brief-confirm-tasks">Tasks: {projectConfirm.count} in order</span>
+                ) : (
+                  <span className="brief-confirm-task">Task: {projectConfirm.task}</span>
+                )}
               </div>
+              {projectQueue && (
+                <div className="brief-confirm-warning">
+                  The tasks run one after another on a new branch in the project, each committed when the
+                  project's tests pass, stopping at the first failure, never on main and never pushed.
+                </div>
+              )}
               <div className="brief-confirm-warning">
                 This starts the agent on this computer and spends money.
               </div>
@@ -847,9 +874,11 @@ export default function DispatchPanel({
                   <div className="runs-entry-head mono">
                     <span className="runs-entry-lane">{entry.lane}</span>
                     <span className="runs-entry-briefs">
-                      {Array.isArray(entry.briefs) && entry.briefs.length > 0
-                        ? entry.briefs.join(' ')
-                        : 'none'}
+                      {entry.queue
+                        ? `${entry.tasks} task${entry.tasks === 1 ? '' : 's'} in order`
+                        : Array.isArray(entry.briefs) && entry.briefs.length > 0
+                          ? entry.briefs.join(' ')
+                          : 'none'}
                     </span>
                     <span className="runs-entry-time">{timeSinceStart(entry.startedAt)}</span>
                   </div>
