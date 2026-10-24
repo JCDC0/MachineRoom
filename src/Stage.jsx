@@ -92,6 +92,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
   const [effects, setEffects] = useState(() => loadEffectSettings(store()))
+  const [ladder, setLadder] = useState(null)
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const [dockCosts, setDockCosts] = useState(null)
@@ -186,18 +187,22 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }, [agents, data, player])
 
   useEffect(() => {
+    function apply(next) {
+      latestLadderRef.current = next
+      setLadder(next)
+    }
     if (demoLadder) {
-      latestLadderRef.current = demoLadder
+      apply(demoLadder)
       roomRef.current?.setLadder(demoLadder)
       return undefined
     }
     if (!live) {
-      latestLadderRef.current = null
+      apply(null)
       roomRef.current?.setLadder(null)
       return undefined
     }
     if (!client || typeof client.orchestrators !== 'function') {
-      latestLadderRef.current = null
+      apply(null)
       roomRef.current?.setLadder(null)
       return undefined
     }
@@ -209,12 +214,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       try {
         const answer = await client.orchestrators()
         if (!active || !isLatest()) return
-        const ladder = ladderFromAnswer(answer)
-        latestLadderRef.current = ladder
-        roomRef.current?.setLadder(ladder)
+        const next = ladderFromAnswer(answer)
+        apply(next)
+        roomRef.current?.setLadder(next)
       } catch {
         if (!active || !isLatest()) return
-        latestLadderRef.current = null
+        apply(null)
         roomRef.current?.setLadder(null)
       }
     }
@@ -661,6 +666,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           onToggleTerminal={toggleTerminal}
           onShowTerminals={showTerminals}
           health={health}
+          ladder={ladder}
           effects={effects}
           onSettingsChange={handleSettingsChange}
         />

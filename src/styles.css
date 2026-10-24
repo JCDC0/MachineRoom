@@ -692,6 +692,34 @@ summary:focus-visible,
   width: 100%;
 }
 
+.hud-agent-group {
+  align-items: center;
+  padding: 2px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 0.16);
+}
+
+.hud-agent-group .agent-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgb(255 255 255 / 0.82);
+}
+
+.hud-agent-group .agent-subtag {
+  padding: 0;
+  background: none;
+  color: rgb(255 255 255 / 0.58);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.hud-agent-group .agent-lane {
+  text-align: right;
+}
+
 .hud-agent-row .agent,
 .hud-agent-row .overview {
   flex: 1 1 auto;
