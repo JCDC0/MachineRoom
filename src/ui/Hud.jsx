@@ -432,13 +432,6 @@ export default function Hud({
               </div>
             </nav>
           </div>
-          <ul className="hud-legend mono" aria-label="Legend">
-            <li className="is-white">activity</li>
-            <li className="is-red">failure</li>
-            <li className="is-yellow">active</li>
-            <li className="is-green">finished</li>
-            <li className="is-line">Line from an agent: the file it is working on</li>
-          </ul>
           {logOpen && (
             <aside id="hud-log-drawer" className="hud-log" aria-label="Event log">
               <header className="hud-log-header hud-header-strip">
@@ -484,6 +477,13 @@ export default function Hud({
           )}
           <div id="hud-dock-costs" className="hud-dock-costs" />
         </div>
+        <ul className="hud-legend mono" aria-label="Legend">
+          <li className="is-white">activity</li>
+          <li className="is-red">failure</li>
+          <li className="is-yellow">active</li>
+          <li className="is-green">finished</li>
+          <li className="is-line">Line from an agent: the file it is working on</li>
+        </ul>
       </section>
 
       {client && (

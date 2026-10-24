@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Folder card names stay at 11 pixels or more on screen in the lens overview, the dock legend has its own row, and the lens bow and its black bars are clear (task I3).
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).

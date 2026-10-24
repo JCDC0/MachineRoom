@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FIT_MIN, FOV, OVERVIEW, fitView, viewBasis } from '../src/engine/camera.js'
+import { CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, fitView, minTextScale, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -54,6 +54,28 @@ describe('fitView', () => {
 
   it('backs off on a narrow window', () => {
     expect(fitView(room, { aspect: 0.8 }).dist).toBeGreaterThan(fitView(room, { aspect: 1.78 }).dist)
+  })
+
+  it('keeps every sphere inside the view when the lens is short and wide', () => {
+    const aspect = 1280 / 464
+    expect(inside(fitView(room, { aspect }), room, aspect)).toBe(true)
+  })
+
+  it('does not come closer on the lens than on the taller window', () => {
+    const lens = fitView(room, { aspect: 1280 / 464 })
+    const taller = fitView(room, { aspect: 1280 / 748 })
+    expect(lens.dist).toBeGreaterThanOrEqual(taller.dist)
+  })
+
+  it('grows a card name to 11 pixels at the lens distance', () => {
+    const height = 464
+    const view = fitView(room, { aspect: 1280 / height })
+    const screenScale = height / (2 * Math.tan((FOV * Math.PI) / 360) * view.dist)
+    const scale = minTextScale(screenScale, CARD_NAME_FONT, CARD_NAME_MIN)
+    expect(scale).toBeGreaterThan(1)
+    expect(CARD_NAME_FONT * screenScale * scale).toBeCloseTo(CARD_NAME_MIN, 5)
+    expect(minTextScale(0)).toBe(1)
+    expect(minTextScale(1)).toBe(1)
   })
 
   it('backs off as the room grows', () => {
