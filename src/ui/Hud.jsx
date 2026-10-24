@@ -3,8 +3,10 @@ import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import Assistant from './Assistant.jsx'
+import Guide from './Guide.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
+import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
 import { orchestratorOn } from './orchestratorChat.js'
 import {
@@ -114,6 +116,9 @@ export default function Hud({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
+  const [guideOpen, setGuideOpen] = useState(
+    () => typeof window !== 'undefined' && shouldShowGuide() && guideCanOpen(document)
+  )
   const [internalHelpOpen, setHelpOpen] = useState(
     () => Boolean(initialHelpOpen || controlledHelpOpen)
   )
@@ -132,6 +137,17 @@ export default function Hud({
   const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
   const rows = agentRows(snapshot?.agents ?? [])
   const context = { agents, paths: assistantPaths }
+
+  function closeGuide() {
+    markGuideSeen()
+    setGuideOpen(false)
+  }
+
+  function openGuide() {
+    if (typeof document === 'undefined' || !guideCanOpen(document)) return
+    setHelpOpen(false)
+    setGuideOpen(true)
+  }
 
   useEffect(() => {
     if (controlOpen) {
@@ -214,11 +230,12 @@ export default function Hud({
               {`frame ${Math.round(fpsStats.median)} ms, p95 ${Math.round(fpsStats.p95)} ms`}
             </p>
           ) : null}
-          <ul className="hud-legend mono" aria-label="Colour legend">
+          <ul className="hud-legend mono" aria-label="Legend">
             <li className="is-white">activity</li>
             <li className="is-red">failure</li>
             <li className="is-yellow">active</li>
             <li className="is-green">finished</li>
+            <li className="is-line">Line from an agent: the file it is working on</li>
           </ul>
         </div>
       </header>
@@ -452,6 +469,9 @@ export default function Hud({
           >
             <header className="hud-help-header hud-header-strip">
               <h2 id="hud-help-title">Keyboard Shortcuts</h2>
+              <button type="button" className="hud-help-close" onClick={openGuide}>
+                Guide
+              </button>
               <button
                 type="button"
                 className="hud-help-close"
@@ -473,6 +493,8 @@ export default function Hud({
           </section>
         </div>
       )}
+
+      {guideOpen && <Guide onClose={closeGuide} />}
 
       {settingsOpen && (
         <Settings

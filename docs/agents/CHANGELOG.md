@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Review fixes on K1: the orchestrator starts its lanes through the bridge (`POST /api/control/runs` with `worktree: true`, which passes `--worktree` to run-lane), so they keep running after its `claude -p` turn exits; its instructions get the bridge address as `{{BRIDGE}}`; `claude` is looked up on PATH so Windows never runs one from the project folder; the run route refuses the orchestrator lane.
+- The room greets a first visit with a five step guide card (Next and Skip, Done at the end), a Guide button in the help panel opens it again, and the legend adds the line from an agent to the file it is working on (task N1).
 - The room has an orchestrator chat: a bottom left panel with the conversation, the state line, the message box and the confirm cards, opened by an ORCHESTRATOR button beside CONTROL or by `/`, and the waiting card points a beginner at it (task K2).
 - A lane run on another project takes `--worktree` to run in a git worktree beside the project at `<parent>/<project>-mr-<lane>`, made from the project's HEAD when missing and reused when clean, with a `node_modules` link and a refusal that names a dirty worktree; a queue makes its branch there and `--dry-run` prints the path and whether it would be made (task K3).
 - `docs/agents/ORCHESTRATOR-AGENT.md` gives the orchestrator lane its system prompt: find out what the owner wants, plan tasks that touch different files, start lanes in worktrees, check their branches, merge what passes with a straight-line history and report (task K3).
