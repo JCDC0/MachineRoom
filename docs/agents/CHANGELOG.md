@@ -7,6 +7,7 @@
 - A closed orchestrator's killed turn writes its run record without adding a message, notice or turn, so a ladder change cannot overwrite a new sub's chat file (task Q12e).
 - A sub orchestrator's report in the parent's chat carries a `Sub <id>` label, so it no longer reads as the main orchestrator's own message (task Q12c).
 - A live page keeps the agent key the bridge sends and the sub orchestrator flag, so a sub is drawn above its sector instead of as a lane (task Q12g).
+- `docs/agents/HIERARCHY.md` now says the ladder is built: O1 to O7 with their versions, the V23, V25, V26 and S10 changes, and the two points X1 and X3 that wait for the owner (task D10).
 
 - History audit: a range audit (`--from`) leaves out removed lines, which were in the history before the range, so CI does not fail when a commit deletes a test that held a fake key.
 
