@@ -52,17 +52,30 @@ export function laneAgents(lanes) {
   return agents
 }
 
-export function subOrchestratorAgent(sub) {
+function subModel(sub, harness, lanes) {
+  const own = typeof sub?.model === 'string' ? sub.model.trim() : ''
+  if (own) return own
+  for (const entry of [lanes?.orchestrator, ...Object.values(lanes ?? {})]) {
+    if (!entry || typeof entry !== 'object' || entry.retired === true) continue
+    if (!entry.cli || entry.cli.harness !== harness) continue
+    const model = typeof entry.cli.model === 'string' ? entry.cli.model.trim() : ''
+    if (model) return model
+  }
+  return null
+}
+
+export function subOrchestratorAgent(sub, lanes = {}) {
   const id = typeof sub?.id === 'string' ? sub.id.trim() : ''
   if (!id) return null
   const key = `sub-${id}`
   const name = typeof sub?.name === 'string' && sub.name.trim() ? sub.name.trim() : id
   const harness = String(sub?.harness ?? '') === 'opencode' ? 'opencode' : 'claude'
+  const model = subModel(sub, harness, lanes)
   try {
     const agent = agentsFile(key, { [key]: { name, cli: { harness } } }).agents[0]
-    if (agent) return { ...agent, key, role: null, subOrchestrator: true }
+    if (agent) return { ...agent, key, role: null, harness, model, subOrchestrator: true }
   } catch {}
-  return { id: `agent-${key}`, key, name, adapterType: null, parser: harness, role: null, subOrchestrator: true }
+  return { id: `agent-${key}`, key, name, adapterType: null, parser: harness, role: null, harness, model, subOrchestrator: true }
 }
 
 function pathKey(path) {
@@ -272,7 +285,7 @@ export function createLanesSource(options = {}) {
       subs = []
     }
     for (const sub of Array.isArray(subs) ? subs : []) {
-      const agent = subOrchestratorAgent(sub)
+      const agent = subOrchestratorAgent(sub, lanes)
       if (agent && !list.some((item) => item.key === agent.key)) list.push(agent)
     }
     return list
