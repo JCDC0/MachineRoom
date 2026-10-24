@@ -24,6 +24,7 @@
     "src/model/fileIndex.js",
     "src/model/paths.js",
     "src/model/parsers/common.js",
+    "src/model/parsers/claude.js",
     "src/model/parsers/hermes.js",
     "src/model/parsers/opencode.js",
     "src/model/parsers/unreadable.js",

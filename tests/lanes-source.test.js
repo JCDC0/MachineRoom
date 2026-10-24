@@ -68,9 +68,10 @@ function endFrame(frames) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5'])
-    expect(agents.every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
+    expect(agents.map((agent) => agent.key)).toEqual(['opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'claude'])
+    expect(agents.filter((agent) => agent.key !== 'claude').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
+    expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
     expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
     expect(agents.some((agent) => agent.key === 'agy')).toBe(false)
   })

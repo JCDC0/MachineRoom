@@ -205,6 +205,7 @@ describe('the fake Paperclip server', () => {
     expect(sources).toEqual({
       agy: 'scenario-g-run.jsonl',
       claude_local: 'sandbox-run.jsonl',
+      'claude-code': 'scenario-h-run.jsonl',
       hermes_local: 'sandbox-run.jsonl',
       opencode_local: 'sandbox-run.jsonl',
       process: 'sandbox-run.jsonl',
@@ -215,6 +216,6 @@ describe('the fake Paperclip server', () => {
     expect(logs(scripts.get('orchestrator'))).toHaveLength(2)
     expect(logs(scripts.get('opencode-go'))).toHaveLength(3)
     expect(logs(scripts.get('opencode-go')).map((step) => step.payload.chunk).join('').match(/"tool":"subagent"/g)).toHaveLength(2)
-    expect(scripts.has('claude-code')).toBe(false)
+    expect(scripts.has('claude-code')).toBe(true)
   })
 })

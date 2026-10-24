@@ -1,4 +1,5 @@
 import { basename } from '../model/paths.js'
+import { createClaudeParser } from '../model/parsers/claude.js'
 import { createHermesParser } from '../model/parsers/hermes.js'
 import { createOpencodeParser } from '../model/parsers/opencode.js'
 import { branchFor } from './briefs.js'
@@ -38,10 +39,13 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title }) {
   const cli = lane.cli
   if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
   const harness = cli.harness
-  if (harness !== 'hermes' && harness !== 'opencode') throw new Error(`The runner does not know the ${harness} command line.`)
+  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'claude') throw new Error(`The runner does not know the ${harness} command line.`)
   if (typeof lane.worktree !== 'string' || lane.worktree.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
   const file = expandBin(cli.bin, env)
   const reasoning = lane.reasoning ? String(lane.reasoning) : ''
+  if (harness === 'claude') {
+    return { file, args: ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', cli.model, '--dangerously-skip-permissions'], cwd: lane.worktree }
+  }
   if (harness === 'hermes') {
     const args = ['-z', prompt, '-m', cli.model, '--provider', cli.provider]
     if (cli.toolsets) args.push('-t', String(cli.toolsets))
@@ -512,8 +516,15 @@ function hermesSummary(log, worktree) {
   return summaryOf('hermes', activities, reportHead(log), null)
 }
 
+function claudeSummary(log, worktree) {
+  const parser = createClaudeParser({ rootName: basename(String(worktree ?? '')), files: [], dirs: [] })
+  const activities = [...parser.push(String(log ?? ''), 0), ...parser.flush(0)]
+  return summaryOf('claude', activities, [], null)
+}
+
 export function summarizeRun({ harness, log, worktree } = {}) {
   if (harness === 'opencode') return opencodeSummary(log, worktree)
+  if (harness === 'claude') return claudeSummary(log, worktree)
   if (harness !== 'hermes') throw new Error(`The summary does not know the ${harness} log.`)
   return hermesSummary(log, worktree)
 }

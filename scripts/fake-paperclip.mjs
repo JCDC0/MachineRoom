@@ -41,6 +41,7 @@ const FIXTURE_AGENT_KEYS = new Map([
   ['orchestrator', 'orchestrator'],
   ['opencode', 'opencode-go'],
   ['agy', 'agy'],
+  ['claude', 'claude-code'],
 ])
 const KIND_PREFIX = new Map([
   ['company', 'c0000000'],

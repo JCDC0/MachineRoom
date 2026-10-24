@@ -153,8 +153,8 @@ describe('parsePlan', () => {
   })
 
   it('says a brief names an owner that is not a lane', () => {
-    expect(problems(plan(good({ owner: 'claude' })))).toEqual([
-      'Brief C7a names an owner that is not a lane: claude.',
+    expect(problems(plan(good({ owner: 'codex' })))).toEqual([
+      'Brief C7a names an owner that is not a lane: codex.',
     ])
   })
 
@@ -297,7 +297,9 @@ describe('briefMarkdown', () => {
   })
 
   it('reads back a brief whose owner is not in lanes.json', () => {
-    const [brief] = parseBriefs(briefMarkdown(good({ owner: 'claude' }), lanes))
-    expect(brief).toMatchObject({ id: 'C7a', title: 'A plan', owners: ['claude'] })
+    const withoutHermes = { ...lanes }
+    delete withoutHermes.hermes
+    const [brief] = parseBriefs(briefMarkdown(good({ owner: 'hermes' }), withoutHermes))
+    expect(brief).toMatchObject({ id: 'C7a', title: 'A plan', owners: ['hermes'] })
   })
 })

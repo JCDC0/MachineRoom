@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Claude Code runs headless as a lane: its stream-json parser reads the file, search and Bash tools, a `Task` or `Agent` call gives the child its own tool calls and strip until its result ends it, and the `claude` lane runs `claude -p ... --output-format stream-json` (task S6g).
 - Briefs S6f (a lane run on another project), S6b (AGY as a lane) and S6g (Claude Code as a lane), for the Sunday target.
 
 - Review note on S6a: one fix. The source polled `runs.jsonl` (61 KB here) five times a second even with no lane running; it now reads the records only while a run is open. The README's run section now starts from `npm run serve -- up --lanes`, with Paperclip as the optional second source. The lane found that the page recomputes agent keys from adapter and name, so lanes `opencode2` to `opencode5` show as `opencode-2` to `opencode-5`; matching goes by `agentId`, so it was left. Not checked: a real lane run seen live in a browser. The `--replay` digests did not change. Full suite on the merge: 120 files, 2238 tests.
