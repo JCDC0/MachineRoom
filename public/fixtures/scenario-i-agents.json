@@ -1,0 +1,43 @@
+{
+  "projectRoot": "agent-sandbox",
+  "agents": [
+    {
+      "id": "10000000-0000-4000-8000-000000000001",
+      "key": "orchestrator",
+      "name": "Orchestrator",
+      "adapterType": "claude_local",
+      "parser": "claude",
+      "role": "ceo"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000002",
+      "key": "opencode",
+      "name": "OpenCode",
+      "adapterType": "opencode_local",
+      "parser": "opencode"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000003",
+      "key": "claude",
+      "name": "Claude Code",
+      "adapterType": "claude_local",
+      "parser": "claude"
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000004",
+      "key": "sub-frontend",
+      "name": "Frontend",
+      "adapterType": "opencode_local",
+      "parser": "opencode",
+      "subOrchestrator": true
+    },
+    {
+      "id": "10000000-0000-4000-8000-000000000005",
+      "key": "sub-backend",
+      "name": "Backend",
+      "adapterType": "opencode_local",
+      "parser": "opencode",
+      "subOrchestrator": true
+    }
+  ]
+}

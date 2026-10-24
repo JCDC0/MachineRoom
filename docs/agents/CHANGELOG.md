@@ -5,6 +5,7 @@
 - The orchestrator reports its context use and window and compacts a session at 80 percent into a 40 line summary behind a switch in the agent dock, and `POST /api/orchestrator/autocompact` sets it (task O5).
 
 - The Meters panel reads this month's spend and tokens per lane from the run records only: it has no budget editor, confirm card or save, and says budgets are not set there (task Q10).
+- `?replay&fixture=scenario-i` plays a two minute replay where the main orchestrator, the two demo sub orchestrators and their lanes work, the fixture sets the demo ladder by itself, and one lane run fails its test (task S10).
 - The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - Dispatch's project section can give each of several tasks its own idle lane and worktree, pairing them in picker order with `planLaneTasks`, refusing when there are too few idle lanes, and starting one run per task three seconds apart with each start's answer shown (task R11).
 - The hub's sector arcs are brighter and wider with a clear gap, their labels stay at 12 pixels or more on screen, and subs float further from the main orchestrator so their chips and callouts stay apart (task V23).

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { replayDigest, replaySources } from '../scripts/scale-probe.mjs'
 import { loadScenario } from './helpers.js'
 
 function callLog(activities) {
@@ -19,6 +20,15 @@ function writtenFiles(activities) {
   for (const a of activities) {
     if (a.type !== 'tool.start') continue
     for (const touch of a.touches) if (touch.mode === 'write' && touch.kind === 'file') paths.add(touch.path)
+  }
+  return [...paths].sort()
+}
+
+function touchedFiles(activities) {
+  const paths = new Set()
+  for (const a of activities) {
+    if (a.type !== 'tool.start') continue
+    for (const touch of a.touches) if (touch.kind === 'file') paths.add(touch.path)
   }
   return [...paths].sort()
 }
@@ -181,5 +191,80 @@ describe('scenario D: a tool error', () => {
 
   it('writes nothing', () => {
     expect(writtenFiles(activities)).toEqual([])
+  })
+})
+
+describe('scenario I: the sub orchestrators work', () => {
+  const { agents, activities } = loadScenario('scenario-i')
+  const starts = activities.filter((a) => a.type === 'run.start')
+  const ends = activities.filter((a) => a.type === 'run.end')
+  const calls = activities.filter((a) => a.type === 'tool.start')
+
+  it('lists the orchestrator, the two subs and their two lanes', () => {
+    expect(agents.map((agent) => agent.key).sort()).toEqual([
+      'claude',
+      'opencode',
+      'orchestrator',
+      'sub-backend',
+      'sub-frontend',
+    ])
+  })
+
+  it('counts nine runs, twenty three tool calls and nine touched files in about two minutes', () => {
+    expect(starts).toHaveLength(9)
+    expect(ends).toHaveLength(9)
+    expect(calls).toHaveLength(23)
+    expect(touchedFiles(activities)).toEqual([
+      'server/control.js',
+      'server/index.js',
+      'server/lane-costs.js',
+      'server/lanes-source.js',
+      'src/engine/cards.js',
+      'src/model/state.js',
+      'src/styles.css',
+      'src/ui/Hud.jsx',
+      'src/ui/lens.js',
+    ])
+    const first = Math.min(...activities.map((activity) => activity.time))
+    const last = Math.max(...activities.map((activity) => activity.time))
+    expect(last - first).toBeGreaterThanOrEqual(110000)
+    expect(last - first).toBeLessThanOrEqual(135000)
+  })
+
+  it('gives each sub its own run start and run end', () => {
+    for (const key of ['sub-frontend', 'sub-backend']) {
+      const subStarts = starts.filter((activity) => activity.agent === key)
+      const subEnds = ends.filter((activity) => activity.agent === key)
+      expect(subStarts).toHaveLength(2)
+      expect(subEnds).toHaveLength(2)
+      expect(subStarts.map((activity) => activity.runId).sort()).toEqual(subEnds.map((activity) => activity.runId).sort())
+      expect(subEnds.every((activity) => activity.ok)).toBe(true)
+    }
+  })
+
+  it('fails one lane run and leaves the rest green', () => {
+    const failed = ends.filter((activity) => !activity.ok)
+    expect(failed).toHaveLength(1)
+    expect(failed[0].agent).toBe('claude')
+    expect(failed[0].error).toBe('1 test failed')
+    const testCall = calls.find((activity) => activity.label === '$ npm test')
+    const testEnd = activities.find((activity) => activity.type === 'tool.end' && activity.runId === testCall.runId && activity.id === testCall.id)
+    expect(testEnd.ok).toBe(false)
+  })
+
+  it('writes five files across both sectors', () => {
+    expect(writtenFiles(activities)).toEqual([
+      'server/control.js',
+      'server/lane-costs.js',
+      'server/lanes-source.js',
+      'src/engine/cards.js',
+      'src/ui/lens.js',
+    ])
+  })
+
+  it('produces the same replay digest on two loads', () => {
+    const source = replaySources().find((entry) => entry.name === 'fixtures/scenario-i')
+    expect(source).toBeTruthy()
+    expect(replayDigest(source).digest).toEqual(replayDigest(source).digest)
   })
 })

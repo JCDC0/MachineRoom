@@ -1,0 +1,19 @@
+{
+  "root": "agent-sandbox",
+  "files": [
+    "docs/notes.md",
+    "package.json",
+    "server/control.js",
+    "server/index.js",
+    "server/lane-costs.js",
+    "server/lanes-source.js",
+    "src/engine/cards.js",
+    "src/model/state.js",
+    "src/styles.css",
+    "src/ui/Hud.jsx",
+    "src/ui/lens.js",
+    "test/server.test.js",
+    "test/ui.test.js"
+  ],
+  "created": []
+}
