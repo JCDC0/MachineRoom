@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The orchestrator chat names the project folder: the header shows its base name beside the model and the first-message card gives the full path (task Q6c).
+- Folder card names stay at 11 pixels or more on screen in the lens overview, the dock legend has its own row, and the lens bow and its black bars are clear (task I3).
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator chat has a tab per orchestrator, an Attach form that saves the whole ladder and lists the bridge's problems, and Detach behind a confirm card, with the ladder form helpers and the client and mock routes behind them (task O4).
 - A new `src/harnesses/` holds one browser-safe descriptor per harness for its command line, parser, line reader, report, reply and usage, and the runner, the recording builder, the parser picker, the agent order and the brief owners read the registry instead of naming harnesses (task H5).

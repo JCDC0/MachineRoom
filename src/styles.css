@@ -131,7 +131,9 @@ summary:focus-visible,
   position: absolute;
   inset: 0;
   overflow: hidden;
-  clip-path: url(#mr-lens-clip);
+  clip-path: none;
+  border-radius: 50% / 7%;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.18), inset 0 0 64px rgb(255 255 255 / 0.05);
   cursor: grab;
 }
 
@@ -165,18 +167,18 @@ summary:focus-visible,
 
 .lens-corner.is-left {
   left: 24px;
-  top: 24px;
+  top: 40px;
 }
 
 .lens-corner.is-right {
   right: 24px;
-  top: 24px;
+  top: 40px;
   align-items: flex-end;
 }
 
 .lens-corner.is-bottom {
   right: 24px;
-  bottom: 24px;
+  bottom: 40px;
   display: block;
   max-width: 60%;
   white-space: nowrap;
@@ -489,6 +491,14 @@ summary:focus-visible,
   width: calc(var(--space) * 2);
   height: 2px;
   background: var(--white);
+}
+
+.hud-dock > .hud-legend {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  column-gap: calc(var(--space) * 3);
+  padding-top: calc(var(--space) * 1.5);
+  border-top: 1px solid var(--line);
 }
 
 .hud-dock {
@@ -4550,9 +4560,11 @@ summary:focus-visible,
   font-size: 15px;
   font-weight: 500;
   letter-spacing: 0.04em;
+  line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
   text-overflow: ellipsis;
+  transform-origin: left top;
 }
 
 .mr-card-meta {

@@ -4,6 +4,7 @@ import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
 import { ROOT_DROP, SPHERE_CENTER, STACK_LIMIT, layoutSphere } from './sphere.js'
+import { CARD_NAME_FONT, CARD_NAME_MIN, minTextScale } from './camera.js'
 import { easeRate, still } from './sprites.js'
 
 export const CARD_W = 248
@@ -18,6 +19,7 @@ export const CARD_TAB_H = 8
 export const CARD_TAB_LEFT = -1
 export const CARD_TAB_TOP = -9
 export const CARD_SCALES = { closed: 1, open: 1.2, files: 1.8 }
+export const CARD_NAME_CAP = 1.4
 const FLASH_MS = 1100
 const FAIL_MS = 2600
 const FADE_MS = 400
@@ -323,6 +325,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   const right = new THREE.Vector3(1, 0, 0)
   const up = new THREE.Vector3(0, 1, 0)
   const back = new THREE.Vector3(0, 0, 1)
+  const nameView = new THREE.Vector3()
   const rootHome = new THREE.Vector3(SPHERE_CENTER.x, SPHERE_CENTER.y - ROOT_DROP, SPHERE_CENTER.z)
   const projection = new THREE.Vector3()
   let planKey = ''
@@ -400,6 +403,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       path,
       element,
       backs,
+      name,
       meta,
       items,
       band,
@@ -420,6 +424,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       lastHeight: -1,
       opacity: 1,
       lastOpacity: 1,
+      nameScale: 1,
       dimLevel: 0,
       lastDimLevel: -1,
       fade: null,
@@ -828,6 +833,9 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const rowFrameKey = rowFrame.key(state, mask, flashVersion, rowRevision)
     const rowsDue = rowFrameKey !== lastRowFrameKey
     lastRowFrameKey = rowFrameKey
+    const first = cards.size > 0 ? cards.values().next().value : null
+    const viewportHeight = first?.element.parentElement?.clientHeight || 0
+    const focal = viewportHeight > 0 ? viewportHeight / 2 / Math.tan(((camera.fov || 50) * Math.PI) / 360) : 0
     let removed = false
     for (const card of [...cards.values()]) {
       if (card.fade) {
@@ -886,6 +894,18 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       }
       if (!card.occluder.quaternion.equals(camera.quaternion)) {
         card.occluder.quaternion.copy(camera.quaternion)
+      }
+      if (focal > 0) {
+        nameView.copy(position).applyMatrix4(camera.matrixWorldInverse)
+        const depth = -nameView.z
+        const screenScale = depth > 0 ? (focal / depth) * card.scale : 0
+        const scale = minTextScale(screenScale, CARD_NAME_FONT, CARD_NAME_MIN)
+        if (Math.abs(scale - card.nameScale) > 0.01) {
+          card.nameScale = scale
+          const rounded = Math.round(scale * 1000) / 1000
+          card.name.style.transform = rounded === 1 ? '' : `scale(${rounded})`
+          card.name.style.maxWidth = rounded === 1 ? '' : `${Math.max(24, Math.floor((CARD_NAME_CAP * CARD_W) / rounded))}px`
+        }
       }
 
       const flashing = hasFlashes ? flashes.get(card.path) : null
