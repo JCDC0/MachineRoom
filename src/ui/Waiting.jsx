@@ -1,3 +1,5 @@
+import { listsOrchestrator } from './orchestratorChat.js'
+
 const STATUS_COPY = {
   connecting: {
     badge: 'Connecting',
@@ -8,7 +10,7 @@ const STATUS_COPY = {
   live: {
     badge: 'Connected',
     title: 'Waiting for the first run',
-    detail: 'The room is waiting for the first run. Start one from Dispatch (C) or with npm run run-lane, or assign an issue in Paperclip if one runs.',
+    detail: 'The room is waiting for the first run. Start one from Dispatch (C) or with npm run run-lane.',
     tone: 'live',
   },
   reconnecting: {
@@ -25,8 +27,13 @@ const STATUS_COPY = {
   },
 }
 
-export default function Waiting({ agents = [], status = 'connecting', children }) {
+export default function Waiting({ agents = [], status = 'connecting', orchestrator, children }) {
   const copy = STATUS_COPY[status] ?? STATUS_COPY.connecting
+  const hasOrchestrator = typeof orchestrator === 'boolean' ? orchestrator : listsOrchestrator(agents)
+  const detail =
+    status === 'live' && hasOrchestrator
+      ? 'Nothing is running yet. Press / or click ORCHESTRATOR and tell it what you want built.'
+      : copy.detail
   const names = agents.map((agent) => agent.name).filter(Boolean)
   const agentSummary =
     names.length === 0
@@ -49,7 +56,7 @@ export default function Waiting({ agents = [], status = 'connecting', children }
             {copy.title}
             <span className="waiting-cursor" aria-hidden="true">_</span>
           </h2>
-          <p className="waiting-detail">{copy.detail}</p>
+          <p className="waiting-detail">{detail}</p>
           <p className="waiting-agents mono">{agentSummary}</p>
           {children && <div className="waiting-actions">{children}</div>}
         </div>

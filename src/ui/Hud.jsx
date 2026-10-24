@@ -3,8 +3,10 @@ import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import Assistant from './Assistant.jsx'
+import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
 import { healthNotice } from './healthNotice.js'
+import { orchestratorOn } from './orchestratorChat.js'
 import {
   areAllTerminalsOpen,
   isTerminalOpen,
@@ -111,16 +113,21 @@ export default function Hud({
   const [logOpen, setLogOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
+  const [chatOpen, setChatOpen] = useState(false)
   const [internalHelpOpen, setHelpOpen] = useState(
     () => Boolean(initialHelpOpen || controlledHelpOpen)
   )
   const helpOpen = controlledHelpOpen !== undefined ? Boolean(controlledHelpOpen) : internalHelpOpen
   const [healthOpen, setHealthOpen] = useState(false)
   const notice = healthNotice(health)
+  const chatAvailable = orchestratorOn(health)
   const logBodyRef = useRef(null)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
-  const visibleShortcuts = client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')
+  const visibleShortcuts = (client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')).map(
+    ([keys, description]) =>
+      chatAvailable && keys === '/' ? [keys, 'Talk to the orchestrator'] : [keys, description]
+  )
 
   const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
   const rows = agentRows(snapshot?.agents ?? [])
@@ -131,6 +138,10 @@ export default function Hud({
       setLogOpen(false)
     }
   }, [controlOpen])
+
+  useEffect(() => {
+    if (!chatAvailable) setChatOpen(false)
+  }, [chatAvailable])
 
   useEffect(() => {
     if (controlTarget?.nonce != null) {
@@ -161,6 +172,9 @@ export default function Hud({
           if (next) setControlOpen(false)
           return next
         })
+      } else if (chatAvailable && event.key === '/') {
+        event.preventDefault()
+        setChatOpen(true)
       } else if (client && (event.key === 'c' || event.key === 'C')) {
         event.preventDefault()
         setControlOpen((open) => {
@@ -175,7 +189,7 @@ export default function Hud({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [client])
+  }, [client, chatAvailable])
 
   useEffect(() => {
     if (logOpen && logBodyRef.current) {
@@ -275,6 +289,19 @@ export default function Hud({
             >
               <span>Control</span>
               <span className="agent-key mono">C</span>
+            </button>
+          )}
+          {client && chatAvailable && (
+            <button
+              type="button"
+              className="hud-action"
+              aria-pressed={chatOpen}
+              aria-expanded={chatOpen}
+              aria-controls="hud-orchestrator-chat"
+              onClick={() => setChatOpen((open) => !open)}
+            >
+              <span>Orchestrator</span>
+              <span className="agent-key mono">/</span>
             </button>
           )}
           <button
@@ -455,14 +482,24 @@ export default function Hud({
         />
       )}
 
-      <Assistant
-        context={context}
-        onAction={onAssistantAction}
-        onAssistantAction={onAssistantAction}
-        ask={askAssistant}
-        askAssistant={askAssistant}
-        initialOpen={assistantOpen}
-      />
+      {!chatAvailable && (
+        <Assistant
+          context={context}
+          onAction={onAssistantAction}
+          onAssistantAction={onAssistantAction}
+          ask={askAssistant}
+          askAssistant={askAssistant}
+          initialOpen={assistantOpen}
+        />
+      )}
+
+      {client && chatAvailable && (
+        <OrchestratorChat
+          client={client}
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
 
       <Transport
         snapshot={snapshot}
