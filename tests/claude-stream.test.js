@@ -149,6 +149,71 @@ describe('claude stream-json', () => {
     ])
   })
 
+  it('ends a foreground child that speaks before its result without a tool line', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines(
+        assistant([use('task-text', 'Task', { description: 'Read the notes', subagent_type: 'Explore' })]),
+        assistant([{ type: 'text', text: 'The notes are short.' }], 'task-text'),
+        result('task-text')
+      ),
+      6000
+    )
+    expect(out.filter((activity) => activity.type === 'agent.end')).toEqual([
+      { time: 6000, type: 'agent.end', agent: 'claude~1', ok: true },
+    ])
+  })
+
+  it('keeps a background child open when its lines arrive before its result', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines(
+        assistant([use('task-bg', 'Agent', { description: 'Count the files', run_in_background: true })]),
+        assistant([use('c1', 'Read', { file_path: 'src/strings.js' })], 'task-bg'),
+        result('c1', false, 'task-bg'),
+        result('task-bg')
+      ),
+      7000
+    )
+    expect(starts(out).find((activity) => activity.id === 'c1').agent).toBe('claude~1')
+    expect(out.filter((activity) => activity.type === 'agent.end')).toEqual([])
+  })
+
+  it('shows the base name of a folder outside the project in a search label', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines(
+        assistant([use('g1', 'Glob', { path: 'C:\\Users\\someone\\Documents\\secret' })]),
+        assistant([use('g2', 'Grep', { path: 'C:\\Users\\someone\\Documents\\secret' })]),
+        assistant([use('g3', 'LS', { path: 'C:/Users/someone/Documents' })])
+      ),
+      8000
+    )
+    const found = Object.fromEntries(starts(out).map((activity) => [activity.id, activity]))
+    expect(found.g1).toMatchObject({ tool: 'search', label: 'glob secret' })
+    expect(found.g1.touches).toEqual([])
+    expect(found.g2).toMatchObject({ label: 'grep secret' })
+    expect(found.g2.touches).toEqual([])
+    expect(found.g3).toMatchObject({ label: 'ls Documents' })
+    expect(found.g3.touches).toEqual([])
+    expect(JSON.stringify(out)).not.toContain('someone')
+  })
+
+  it('keeps a Bash command but shortens a path under the profile folder', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines(
+        assistant([use('b1', 'Bash', { command: 'cat C:\\Users\\someone\\Documents\\secret.txt && npm test' })]),
+        assistant([use('b2', 'Bash', { command: 'cat "C:/Users/someone/My Documents/notes.txt"' })])
+      ),
+      9000
+    )
+    const found = Object.fromEntries(starts(out).map((activity) => [activity.id, activity]))
+    expect(found.b1).toMatchObject({ tool: 'shell', label: '$ cat secret.txt && npm test' })
+    expect(found.b2).toMatchObject({ tool: 'shell', label: '$ cat "notes.txt"' })
+    expect(JSON.stringify(out)).not.toContain('someone')
+  })
+
   it('feeds a lane log through the claude reader and keeps the tool lines', () => {
     const read = createRunLineReader('claude')
     expect(read(JSON.stringify({ type: 'system', subtype: 'init', tools: ['Read'] })).read).toBe(false)

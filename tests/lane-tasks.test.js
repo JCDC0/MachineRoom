@@ -1,8 +1,10 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { createControlApi } from '../server/control.js'
 import { createBridge } from '../server/index.js'
 import { createLanesSource, readLanes } from '../server/lanes-source.js'
 import {
@@ -84,12 +86,12 @@ function record({ lane, briefs = [], log, startedAt = iso(20), minutes = 2, exit
   return value
 }
 
-async function startLaneBridge({ lanes = true } = {}) {
+async function startLaneBridge({ lanes = true, paperclipUrl = DEAD_PAPERCLIP } = {}) {
   const runs = join(process.env.TEMP, 'machineroom-runs')
   mkdirSync(runs, { recursive: true })
   const projectRoot = process.cwd()
   const bridge = createBridge({
-    paperclipUrl: DEAD_PAPERCLIP,
+    paperclipUrl,
     companyId: 'comp-lanes',
     projectRoot,
     port: 0,
@@ -102,6 +104,57 @@ async function startLaneBridge({ lanes = true } = {}) {
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
   return { url, runs, projectRoot }
+}
+
+async function startHangingUpstream() {
+  const asked = []
+  const sockets = new Set()
+  const server = createServer((req) => {
+    asked.push(req.url)
+  })
+  server.on('connection', (socket) => {
+    sockets.add(socket)
+    socket.on('close', () => sockets.delete(socket))
+  })
+  cleanups.push(
+    () =>
+      new Promise((resolve) => {
+        for (const socket of sockets) socket.destroy()
+        server.close(resolve)
+      })
+  )
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return { url: `http://127.0.0.1:${server.address().port}`, asked }
+}
+
+async function startAnsweringUpstream(answer) {
+  const asked = []
+  const server = createServer((req, res) => {
+    asked.push(req.url)
+    const [status, body] = answer(req)
+    res.writeHead(status, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(body))
+  })
+  cleanups.push(() => new Promise((resolve) => server.close(resolve)))
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  return { url: `http://127.0.0.1:${server.address().port}`, asked }
+}
+
+const laneSource = (agents, openRuns = []) => ({ agents, openRuns: () => openRuns })
+
+async function askControl(options, path, method = 'GET') {
+  let sent = null
+  const api = createControlApi({
+    companyId: 'comp-1',
+    sendJson: (req, res, status, body) => {
+      sent = { status, body }
+    },
+    readJsonBody: async () => ({}),
+    timeoutMs: 2000,
+    ...options,
+  })
+  const handled = await api.handle({ method }, {}, new URL(`http://bridge${path}`))
+  return { handled, ...sent }
 }
 
 describe('lane tasks', () => {
@@ -325,6 +378,79 @@ describe('the lane routes with no Paperclip', () => {
     expect((await getJson(`${url}/api/control/live-runs`)).status).toBe(502)
     expect((await getJson(`${url}/api/control/approvals`)).status).toBe(502)
     expect((await getJson(`${url}/api/control/comments?issueId=x`)).status).toBe(502)
+  })
+})
+
+describe('the lane fallbacks and the Paperclip probe', () => {
+  it('answers the lane reads at once when the probe says Paperclip is down', async () => {
+    const upstream = await startAnsweringUpstream(() => [500, { error: 'boom' }])
+    const options = { paperclipUrl: upstream.url, lanes: () => laneSource(AGENTS), paperclipUp: () => false }
+
+    const issues = await askControl(options, '/api/control/issues')
+    expect(issues.status).toBe(200)
+    expect(Array.isArray(issues.body)).toBe(true)
+    expect(await askControl(options, '/api/control/live-runs')).toMatchObject({ status: 200, body: { runs: [] } })
+    expect(await askControl(options, '/api/control/approvals')).toMatchObject({ status: 200, body: [] })
+    expect(await askControl(options, '/api/control/comments?issueId=anything')).toMatchObject({ status: 200, body: [] })
+
+    const costs = await askControl(options, '/api/control/costs')
+    expect(costs.status).toBe(200)
+    expect(costs.body.byAgent.map((row) => row.agentId)).toEqual(AGENTS.map((agent) => agent.id))
+
+    const agents = await askControl(options, '/api/control/agents')
+    expect(agents.status).toBe(200)
+    expect(agents.body.map((agent) => agent.key)).toEqual(AGENTS.map((agent) => agent.key))
+    expect(upstream.asked).toEqual([])
+  })
+
+  it('reads Paperclip when the probe says it is up, and still falls back to lanes on an error', async () => {
+    const upstream = await startAnsweringUpstream((req) =>
+      req.url.includes('/issues') ? [200, [{ id: 'issue-1', identifier: 'JC-1', title: 'From Paperclip' }]] : [500, { error: 'boom' }]
+    )
+    const options = { paperclipUrl: upstream.url, lanes: () => laneSource(AGENTS), paperclipUp: () => true }
+
+    const issues = await askControl(options, '/api/control/issues')
+    expect(issues.body.map((issue) => issue.id)).toEqual(['issue-1'])
+
+    const costs = await askControl(options, '/api/control/costs')
+    expect(costs.status).toBe(200)
+    expect(costs.body.byAgent.map((row) => row.agentId)).toEqual(AGENTS.map((agent) => agent.id))
+    expect(upstream.asked).toEqual([
+      '/api/companies/comp-1/issues',
+      '/api/companies/comp-1/costs/summary',
+      '/api/companies/comp-1/costs/by-agent',
+      '/api/companies/comp-1/costs/quota-windows',
+    ])
+  })
+
+  it('answers through the bridge at once when its Paperclip probe is down', async () => {
+    const upstream = await startHangingUpstream()
+    const { url } = await startLaneBridge({ paperclipUrl: upstream.url })
+    const started = Date.now()
+    const issues = await getJson(`${url}/api/control/issues`)
+    expect(issues.status).toBe(200)
+    expect(Array.isArray(issues.body)).toBe(true)
+    expect(Date.now() - started).toBeLessThan(3000)
+    expect(upstream.asked.filter((path) => path.includes('/issues'))).toEqual([])
+  })
+
+  it('lets a real Paperclip error through when the source has no lane agent', async () => {
+    const upstream = await startAnsweringUpstream(() => [500, { error: 'boom' }])
+    const options = { paperclipUrl: upstream.url, lanes: () => laneSource([]), paperclipUp: () => false }
+
+    for (const path of [
+      '/api/control/issues',
+      '/api/control/live-runs',
+      '/api/control/approvals',
+      '/api/control/costs',
+      '/api/control/agents',
+      '/api/control/comments?issueId=anything',
+    ]) {
+      expect(await askControl(options, path), path).toMatchObject({
+        status: 502,
+        body: { error: 'Paperclip could not complete that.' },
+      })
+    }
   })
 })
 

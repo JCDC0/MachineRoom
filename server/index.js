@@ -372,6 +372,7 @@ export function createBridge(options = {}) {
     featureOn: (feature) => !featureIsOff(feature),
     timeoutMs: upstreamTimeoutMs,
     lanes: () => lanesSource,
+    paperclipUp: () => paperclipOpen,
   })
   const policy = createPolicyApi({
     paperclipUrl,

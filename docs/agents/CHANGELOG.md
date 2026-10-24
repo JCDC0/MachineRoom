@@ -3,6 +3,10 @@
 ## Unreleased
 
 - A project run resolves the project, this checkout, the main checkout and every lane worktree before its checks, refuses the user profile and folders that hold it, the OS temp folder and the runs folder, starts the harness with `PWD` set and `OLDPWD` and `INIT_CWD` removed, masks keys in the recording log and the stored task, and records Claude Code runs (task Q5a).
+- A `run.end` for a run that is not the agent's current run no longer ends that agent; it ends only the working children of that run, so two runs of one lane cannot show the lane finished while the newer one works (X7).
+- The lane fallbacks answer the agents, tasks, live runs, approvals, comments and costs reads from the lane runs at once when the bridge's last Paperclip probe is down. They fall back only when the source has a lane agent, and a Paperclip error goes through when it has none (X8).
+- The Claude parser hears a child from any line that carries its call, not only a tool line, and keeps an `Agent` or `Task` with `run_in_background: true` open at its result (X9).
+- A `Glob`, `Grep` or `LS` label for a folder outside the project shows its base name, and a stream-json `Bash` label shortens an absolute path under the user profile folder to its base name (X10).
 
 - Briefs Q5a, Q5b and Q5c: the V5 audit's findings X1 to X17, in three parts that touch separate files.
 

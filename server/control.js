@@ -349,6 +349,7 @@ export function createControlApi(options) {
   const base = String(paperclipUrl).replace(/\/+$/, '')
   const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : UPSTREAM_TIMEOUT_MS
   const lanes = typeof options.lanes === 'function' ? options.lanes : () => null
+  const paperclipUp = typeof options.paperclipUp === 'function' ? options.paperclipUp : () => true
 
   function laneNow() {
     try {
@@ -359,11 +360,28 @@ export function createControlApi(options) {
     }
   }
 
-  function laneFallback() {
-    const source = lanes()
-    if (!source || !Array.isArray(source.agents)) return null
+  function laneAgents() {
     try {
-      return { agents: source.agents, costs: readLaneCosts({ agents: source.agents }) }
+      const source = lanes()
+      return source && Array.isArray(source.agents) ? source.agents : []
+    } catch {
+      return []
+    }
+  }
+
+  function probeDown() {
+    try {
+      return paperclipUp() === false
+    } catch {
+      return false
+    }
+  }
+
+  function laneFallback() {
+    const agents = laneAgents()
+    if (agents.length === 0) return null
+    try {
+      return { agents, costs: readLaneCosts({ agents }) }
     } catch {
       return null
     }
@@ -372,13 +390,14 @@ export function createControlApi(options) {
   function laneState() {
     const source = laneNow()
     if (!source) return null
+    const agents = laneAgents()
+    if (agents.length === 0) return null
     let openRuns = []
     try {
       openRuns = source.openRuns()
     } catch {
       openRuns = []
     }
-    const agents = Array.isArray(source.agents) ? source.agents : []
     return laneTaskState({
       openRuns,
       agents,
@@ -490,6 +509,13 @@ export function createControlApi(options) {
     }
 
     if (method === 'GET' && path === '/api/control/agents') {
+      if (probeDown()) {
+        const early = laneFallback()
+        if (early) {
+          sendJson(req, res, 200, laneAgentList(early))
+          return true
+        }
+      }
       const [agents, spend] = await Promise.all([
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`),
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),
@@ -640,6 +666,14 @@ export function createControlApi(options) {
     if (method === 'GET' && path === '/api/control/issues') {
       if (featureOff(req, res, 'tasks')) return true
       const status = url.searchParams.get('status')
+      if (probeDown()) {
+        const early = laneState()
+        if (early) {
+          const list = status ? early.issues.filter((issue) => issue.status === status) : early.issues
+          sendJson(req, res, 200, list)
+          return true
+        }
+      }
       const query = status ? `?status=${encodeURIComponent(status)}` : ''
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/issues${query}`)
       if (answer.status !== 200) {
@@ -661,6 +695,13 @@ export function createControlApi(options) {
 
     if (method === 'GET' && path === '/api/control/live-runs') {
       if (featureOff(req, res, 'tasks')) return true
+      if (probeDown()) {
+        const early = laneState()
+        if (early) {
+          sendJson(req, res, 200, { runs: early.liveRuns })
+          return true
+        }
+      }
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/live-runs?limit=${LIVE_RUN_LIMIT}`)
       if (answer.status !== 200) {
         const lane = laneState()
@@ -736,6 +777,10 @@ export function createControlApi(options) {
         sendJson(req, res, 200, [])
         return true
       }
+      if (lane && probeDown()) {
+        sendJson(req, res, 200, [])
+        return true
+      }
       const [comments, agents] = await Promise.all([
         upstream('GET', `/api/issues/${encodeURIComponent(issueId)}/comments`),
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`),
@@ -804,9 +849,14 @@ export function createControlApi(options) {
 
     if (method === 'GET' && path === '/api/control/approvals') {
       if (featureOff(req, res, 'approvals')) return true
+      const hasLanes = laneAgents().length > 0
+      if (probeDown() && hasLanes) {
+        sendJson(req, res, 200, [])
+        return true
+      }
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/approvals`)
       if (answer.status !== 200) {
-        if (laneNow()) {
+        if (hasLanes) {
           sendJson(req, res, 200, [])
           return true
         }
@@ -879,6 +929,13 @@ export function createControlApi(options) {
 
     if (method === 'GET' && path === '/api/control/costs') {
       if (featureOff(req, res, 'meters')) return true
+      if (probeDown()) {
+        const early = laneFallback()
+        if (early) {
+          sendJson(req, res, 200, early.costs)
+          return true
+        }
+      }
       const [summary, rows, quota] = await Promise.all([
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/summary`),
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),
