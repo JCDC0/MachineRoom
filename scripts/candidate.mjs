@@ -22,16 +22,12 @@ const USAGE = [
   '',
   'Options:',
   '  --port <n>         port for the candidate, default 5175',
-  '  --paperclip <url>  pass a Paperclip address to the candidate',
-  '  --company <id>     pass a company id to the candidate',
   '  --root <folder>    pass a project folder to the candidate',
   '  --help             show this help',
 ].join('\n')
 
 const OPTION_NAMES = {
   '--port': 'port',
-  '--paperclip': 'paperclipUrl',
-  '--company': 'companyId',
   '--root': 'projectRoot',
 }
 
@@ -45,8 +41,6 @@ export function parseCandidateArgs(argv) {
   const options = {
     lane: '',
     port: DEFAULT_PORT,
-    paperclipUrl: '',
-    companyId: '',
     projectRoot: '',
     help: false,
   }
@@ -251,8 +245,6 @@ export function readLanes(cwd = process.cwd()) {
 
 export function candidateArgs(plan, options) {
   const args = [plan.bin, '--dist', plan.dist, '--port', String(plan.port)]
-  if (options.paperclipUrl) args.push('--paperclip', options.paperclipUrl)
-  if (options.companyId) args.push('--company', options.companyId)
   if (options.projectRoot) args.push('--root', options.projectRoot)
   return args
 }

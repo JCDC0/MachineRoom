@@ -5,10 +5,8 @@ import { createBridge } from '../server/index.js'
 import { laneCosts, readLaneCosts } from '../server/lane-costs.js'
 import { boardLines } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
-import { backupsNotRunning, laneModeFromHealth } from '../src/ui/panels/backup.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
 const NOW = Date.parse('2026-10-24T12:00:00.000Z')
 
 const AGENTS = [
@@ -120,15 +118,11 @@ describe('the lane costs routes', () => {
       record('opencode', new Date().toISOString(), 0.5, { inputTokens: 1200, outputTokens: 300 }),
       record('opencode', new Date().toISOString(), 0.1, { project: 'C:\\GitHub\\Other', inputTokens: 800, outputTokens: 200 }),
       record('opencode2', new Date().toISOString(), 0.1234),
-      record('agy', new Date().toISOString(), null, { inputTokens: 5000, outputTokens: 600 }),
     ])
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-lanes',
       projectRoot: base,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
       reconnectMinMs: 60000,
       reconnectMaxMs: 60000,
       ...(lanes ? { lanesSource: { folder: runs, lanes: LANES, repoRoot: base, quietMs: 60000, pollMs: 20 } } : {}),
@@ -138,7 +132,7 @@ describe('the lane costs routes', () => {
     return url
   }
 
-  it('answers costs and agents from the lane records when the lane source is on and Paperclip is dead', async () => {
+  it('answers costs and agents from the lane records', async () => {
     const url = await startBridge()
 
     const costs = await fetch(`${url}/api/control/costs`)
@@ -162,20 +156,23 @@ describe('the lane costs routes', () => {
     expect(list.every((agent) => agent.role === null)).toBe(true)
   })
 
-  it('answers the same error as before when the lane source is off', async () => {
+  it('reads the same records with the live lane source off', async () => {
     const url = await startBridge({ lanes: false })
 
     const costs = await fetch(`${url}/api/control/costs`)
-    expect(costs.status).toBe(502)
-    expect(await costs.json()).toEqual({ error: 'Paperclip is not reachable.' })
+    expect(costs.status).toBe(200)
+    expect((await costs.json()).summary.spendCents).toBe(72)
 
     const agents = await fetch(`${url}/api/control/agents`)
-    expect(agents.status).toBe(502)
-    expect(await agents.json()).toEqual({ error: 'Paperclip is not reachable.' })
+    expect(agents.status).toBe(200)
+    const list = await agents.json()
+    const byKey = new Map(list.map((agent) => [agent.key, agent.spentMonthlyCents]))
+    expect(byKey.get('opencode')).toBe(60)
+    expect(byKey.get('opencode2')).toBe(12)
   })
 })
 
-describe('the board and the backup line in lane mode', () => {
+describe('the board in lane mode', () => {
   it('shows the lanes spend and null tokens without NaN', () => {
     const costs = laneCosts({
       records: [
@@ -213,25 +210,5 @@ describe('the board and the backup line in lane mode', () => {
       reported: false,
     })
     expect(JSON.stringify(lines)).not.toContain('NaN')
-  })
-
-  it('gives the Backups sentence only when Paperclip is down in lane mode', () => {
-    expect(backupsNotRunning({ laneMode: true, paperclipDown: true })).toBe(
-      'Backups belong to Paperclip, which is not running.'
-    )
-    expect(backupsNotRunning({ laneMode: true, paperclipDown: false })).toBeNull()
-    expect(backupsNotRunning({ laneMode: false, paperclipDown: true })).toBeNull()
-    expect(backupsNotRunning()).toBeNull()
-  })
-
-  it('tells lane mode apart from a health answer', () => {
-    expect(laneModeFromHealth({ lanes: true, paperclip: false })).toBe(true)
-    expect(laneModeFromHealth({ lanes: true, paperclip: false, paperclipVersion: null })).toBe(true)
-    expect(laneModeFromHealth({ lanes: true, paperclip: true })).toBe(false)
-    expect(laneModeFromHealth({ lanes: true })).toBe(true)
-    expect(laneModeFromHealth({ lanes: false, paperclip: false })).toBe(false)
-    expect(laneModeFromHealth({ paperclip: false })).toBe(false)
-    expect(laneModeFromHealth(null)).toBe(false)
-    expect(laneModeFromHealth('lanes')).toBe(false)
   })
 })

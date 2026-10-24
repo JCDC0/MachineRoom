@@ -25,7 +25,6 @@ const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1):(\d+)$/
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 const VITE_PORT = 5173
 const BODY_LIMIT = 64 * 1024
-const AGENTS_TIMEOUT_MS = 15000
 
 function localOrigin(origin) {
   const match = LOCAL_ORIGIN.exec(String(origin ?? ''))
@@ -235,7 +234,6 @@ function createReadJsonBody(sendJson) {
 }
 
 export function createBridge(options = {}) {
-  const paperclipUrl = (options.paperclipUrl ?? process.env.PAPERCLIP_URL ?? 'http://127.0.0.1:3100').replace(/\/+$/, '')
   const companyId = options.companyId ?? process.env.PAPERCLIP_COMPANY_ID ?? ''
   const projectId = options.projectId ?? process.env.PAPERCLIP_PROJECT_ID ?? ''
   const projectWorkspaceId = options.projectWorkspaceId ?? process.env.PAPERCLIP_WORKSPACE_ID ?? ''
@@ -246,7 +244,6 @@ export function createBridge(options = {}) {
   const debounceMs = Number(options.debounceMs ?? 300)
   const pollMs = Number(options.pollMs ?? Math.min(debounceMs, 200))
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
-  const upstreamTimeoutMs = Number(options.upstreamTimeoutMs ?? AGENTS_TIMEOUT_MS)
   const env = options.env ?? process.env
   const origins = namedOrigins(env.MACHINEROOM_ORIGINS)
   for (const entry of origins.skipped) {
@@ -284,35 +281,20 @@ export function createBridge(options = {}) {
     readJsonBody,
   })
   const control = createControlApi({
-    paperclipUrl,
-    companyId,
-    projectId,
-    projectWorkspaceId,
     sendJson,
     readJsonBody,
-    timeoutMs: upstreamTimeoutMs,
     lanes: () => lanesSource,
-    paperclipUp: () => false,
   })
   const policy = createPolicyApi({
-    paperclipUrl,
-    companyId,
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
     readJsonBody,
-    timeoutMs: upstreamTimeoutMs,
+    lanes: () => lanesSource,
   })
   const plans = createPlansApi({
-    paperclipUrl,
-    companyId,
-    projectId,
-    projectWorkspaceId,
-    projectRoot,
-    briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
     readJsonBody,
-    timeoutMs: upstreamTimeoutMs,
   })
   const assistant = createAssistantApi({
     sendJson,

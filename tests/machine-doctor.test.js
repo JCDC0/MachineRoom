@@ -1,16 +1,13 @@
 import { spawn } from 'node:child_process'
-import { rmSync } from 'node:fs'
-import { createServer } from 'node:http'
+import { existsSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runDoctor } from '../server/doctor.js'
-import { PAPERCLIP_SURFACE } from '../server/surface.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BIN = join(root, 'bin', 'machine-room.mjs')
-const BACKUP_HINT = 'Make one with paperclipai db:backup while Paperclip runs.'
 const cleanups = []
 
 afterEach(async () => {
@@ -22,75 +19,30 @@ afterEach(async () => {
   }
 })
 
-function makeProject() {
-  const folder = makeTempDir('machine-room-doctor-')
+function makeFolder(prefix) {
+  const folder = makeTempDir(prefix)
   cleanups.push(() => rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   return folder
 }
 
-function completeSpec(routes = PAPERCLIP_SURFACE) {
-  const paths = {}
-  for (const route of routes) {
-    if (route.socket) continue
-    const item = (paths[route.path] ??= {})
-    const properties = Object.fromEntries((route.body ?? []).map((key) => [key, { type: 'string' }]))
-    item[route.method.toLowerCase()] = {
-      responses: {
-        200: { content: { 'application/json': { schema: { type: 'object', additionalProperties: {} } } } },
-      },
-      ...(route.body?.length ? { requestBody: { content: { 'application/json': { schema: { type: 'object', properties } } } } } : {}),
-    }
-  }
-  return { openapi: '3.0.0', info: { version: '1.0.0' }, paths }
+function writeLanes(lanes) {
+  const folder = makeFolder('machine-room-doctor-lanes-')
+  const file = join(folder, 'lanes.json')
+  writeFileSync(file, JSON.stringify(lanes))
+  return file
 }
 
-function backupAt(ageHours, warnings = []) {
-  return {
-    enabled: true,
-    status: warnings.length > 0 ? 'warning' : 'ok',
-    maxAgeHours: 26,
-    latestBackup: {
-      name: 'paperclip-20261020-120000.sql.gz',
-      mtime: new Date(Date.now() - ageHours * 3600000).toISOString(),
-      ageHours,
-      sizeBytes: 1024,
-    },
-    warnings: warnings.map((code) => ({ code, message: 'A warning.' })),
-  }
-}
-
-function healthWith(databaseBackup) {
-  return { ok: true, version: '2026.1012.0', databaseBackup }
-}
-
-function startFake({ health, healthStatus = 200, spec = completeSpec(), companies = [{ id: 'company-1', name: 'One' }] }) {
-  const seen = []
-  const server = createServer((req, res) => {
-    seen.push(`${req.method} ${req.url}`)
-    if (req.method === 'GET' && req.url === '/api/health') {
-      res.writeHead(healthStatus, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(health))
-      return
-    }
-    if (req.method === 'GET' && req.url === '/api/openapi.json') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(spec))
-      return
-    }
-    if (req.method === 'GET' && req.url === '/api/companies') {
-      res.writeHead(200, { 'Content-Type': 'application/json' })
-      res.end(JSON.stringify(companies))
-      return
-    }
-    res.writeHead(404)
-    res.end()
-  })
-  return new Promise((resolveFake) => {
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      cleanups.push(() => new Promise((resolveClose) => server.close(() => resolveClose())))
-      resolveFake({ url: `http://127.0.0.1:${port}`, seen })
-    })
+function doctor(options = {}) {
+  const project = makeFolder('machine-room-doctor-project-')
+  const runs = join(makeFolder('machine-room-doctor-runs-'), 'machineroom-runs')
+  return runDoctor({
+    projectRoot: project,
+    runsFolder: runs,
+    lanesFile: writeLanes({
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
+    }),
+    env: { ...process.env },
+    ...options,
   })
 }
 
@@ -98,12 +50,16 @@ function failures(lines) {
   return lines.filter((line) => line.startsWith('FAIL '))
 }
 
-function childEnv(extra = {}) {
+function childEnv(temp) {
   const env = { ...process.env }
   delete env.PAPERCLIP_URL
   delete env.PAPERCLIP_COMPANY_ID
   delete env.PROJECT_ROOT
-  return { ...env, ...extra }
+  delete env.PORT
+  delete env.MACHINEROOM_LANES
+  delete env.MACHINEROOM_SESSIONS
+  env.TEMP = temp
+  return env
 }
 
 function runBin(args, env) {
@@ -116,7 +72,7 @@ function runBin(args, env) {
     let stderr = ''
     const timer = setTimeout(() => {
       child.kill()
-      rejectRun(new Error(`the doctor bin did not exit. stderr: ${stderr}`))
+      rejectRun(new Error('the doctor bin did not exit'))
     }, 15000)
     child.stdout.on('data', (chunk) => {
       stdout += chunk
@@ -130,168 +86,171 @@ function runBin(args, env) {
     })
     child.once('exit', (code) => {
       clearTimeout(timer)
-      resolveRun({ code, stdout, stderr })
+      resolveRun({ code, stdout: String(stdout ?? ''), stderr: String(stderr ?? '') })
     })
   })
 }
 
 describe('machine-room doctor', () => {
-  it('passes every check against a healthy Paperclip', async () => {
-    const project = makeProject()
-    const fake = await startFake({ health: healthWith(backupAt(1.5)) })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: 'company-1', projectRoot: project })
+  it('passes the folder, git, the runs folder and the lane programs', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const base = makeFolder('machine-room-doctor-runs-')
+    const runs = join(base, 'machineroom-runs')
+    const lanes = writeLanes({
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
+      claude: { name: 'Claude Code', cli: { harness: 'claude', bin: '%NODE_BIN%' } },
+    })
+    const result = runDoctor({
+      projectRoot: project,
+      runsFolder: runs,
+      lanesFile: lanes,
+      env: { ...process.env, NODE_BIN: process.execPath },
+    })
 
     expect(result.exitCode).toBe(0)
-    expect(result.lines.every((line) => /^(ok|FAIL) /.test(line))).toBe(true)
     expect(failures(result.lines)).toEqual([])
     expect(result.lines).toHaveLength(5)
-    expect(result.lines[0]).toContain('Paperclip answers at')
-    expect(result.lines[0]).toContain('version 2026.1012.0')
-    expect(result.lines[1]).toContain('every route the bridge uses')
-    expect(result.lines[2]).toContain("Company company-1 is in Paperclip's company list.")
-    expect(result.lines[3]).toContain('The project folder')
-    expect(result.lines[4]).toContain('The newest database backup is 1.5 hours old.')
+    expect(result.lines[0]).toContain('The project folder')
+    expect(result.lines[1]).toContain('Git is found at')
+    expect(result.lines[2]).toBe(`ok The runs folder ${runs} is ready.`)
+    expect(result.lines[3]).toContain('The OpenCode lane starts from')
+    expect(result.lines[4]).toContain('The Claude Code lane starts from')
+    expect(statSync(runs).isDirectory()).toBe(true)
   })
 
-  it('stops the checks that need Paperclip when it is down', async () => {
-    const project = makeProject()
-    const result = await runDoctor({ paperclipUrl: 'http://127.0.0.1:1', companyId: 'company-1', projectRoot: project })
-
-    expect(result.exitCode).toBe(1)
-    expect(result.lines).toHaveLength(2)
-    expect(result.lines[0]).toBe('FAIL Paperclip does not answer at http://127.0.0.1:1.')
-    expect(result.lines[1]).toContain('The project folder')
-    expect(result.lines.join('\n')).not.toContain('/api/openapi.json')
-    expect(result.lines.join('\n')).not.toContain('database backup')
-  })
-
-  it('says Paperclip is unhealthy when it answers 503 with its version', async () => {
-    const project = makeProject()
-    const fake = await startFake({
-      health: { status: 'unhealthy', version: '2026.1012.0', error: 'database_unreachable' },
-      healthStatus: 503,
-    })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: 'company-1', projectRoot: project })
-
-    expect(result.exitCode).toBe(1)
-    expect(result.lines[0]).toBe('FAIL Paperclip answers but says it is unhealthy (database_unreachable). Check its database.')
-    expect(fake.seen).not.toContain('GET /api/openapi.json')
-  })
-
-  it('names a route the Paperclip spec dropped', async () => {
-    const project = makeProject()
-    const spec = completeSpec()
-    delete spec.paths['/api/companies/{companyId}/costs/summary']
-    const fake = await startFake({ health: healthWith(backupAt(1.5)), spec })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: 'company-1', projectRoot: project })
-
-    expect(result.exitCode).toBe(1)
-    expect(failures(result.lines)).toHaveLength(1)
-    expect(failures(result.lines)[0]).toContain('GET /api/companies/{companyId}/costs/summary')
-    expect(failures(result.lines)[0]).toContain('the spec does not list this route')
-  })
-
-  it('fails a company that Paperclip does not list', async () => {
-    const project = makeProject()
-    const fake = await startFake({
-      health: healthWith(backupAt(1.5)),
-      companies: [{ id: 'another-company', name: 'Another' }],
-    })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: 'missing', projectRoot: project })
-
-    expect(result.exitCode).toBe(1)
-    expect(failures(result.lines)).toEqual(["FAIL Company missing is not in Paperclip's company list."])
-  })
-
-  it('fails and does not ask for companies when no company is given', async () => {
-    const project = makeProject()
-    const fake = await startFake({ health: healthWith(backupAt(1.5)) })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: '', projectRoot: project })
-
-    expect(result.exitCode).toBe(1)
-    expect(failures(result.lines)).toEqual(['FAIL No company id. Pass --company or set PAPERCLIP_COMPANY_ID.'])
-    expect(fake.seen).not.toContain('GET /api/companies')
-  })
-
-  it('fails a project folder that does not exist', async () => {
-    const project = makeProject()
-    const fake = await startFake({ health: healthWith(backupAt(1.5)) })
-    const result = await runDoctor({
-      paperclipUrl: fake.url,
-      companyId: 'company-1',
-      projectRoot: join(project, 'missing'),
-    })
+  it('fails a project folder that does not exist', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const result = doctor({ projectRoot: join(project, 'missing') })
 
     expect(result.exitCode).toBe(1)
     expect(failures(result.lines)).toHaveLength(1)
     expect(failures(result.lines)[0]).toContain('does not exist')
   })
 
-  it('fails when automatic database backups are off', async () => {
-    const project = makeProject()
-    const fake = await startFake({ health: healthWith({ enabled: false }) })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: 'company-1', projectRoot: project })
+  it('fails a project path that is a file', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const file = join(project, 'notes.txt')
+    writeFileSync(file, 'x')
+    const result = doctor({ projectRoot: file })
 
     expect(result.exitCode).toBe(1)
-    expect(failures(result.lines)).toEqual([`FAIL Automatic database backups are off. ${BACKUP_HINT}`])
+    expect(failures(result.lines)).toEqual([`FAIL The project folder ${file} is not a folder.`])
   })
 
-  it('fails when Paperclip has no database backup', async () => {
-    const project = makeProject()
-    const fake = await startFake({
-      health: healthWith({ enabled: true, latestBackup: null, warnings: [{ code: 'database_backup_missing' }] }),
-    })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: 'company-1', projectRoot: project })
+  it('fails when git is not on the PATH', () => {
+    const result = doctor({ env: { PATH: '' } })
 
-    const line = failures(result.lines)[0]
+    expect(result.exitCode).toBe(1)
+    expect(failures(result.lines)).toContain('FAIL Git is not on the PATH.')
+  })
+
+  it('fails a lane program that was not found', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const runs = join(makeFolder('machine-room-doctor-runs-'), 'machineroom-runs')
+    const missing = join(project, 'no-such-program.exe')
+    const lanes = writeLanes({
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
+      opencode2: { name: 'OpenCode 2', cli: { harness: 'opencode', bin: missing } },
+    })
+    const result = runDoctor({ projectRoot: project, runsFolder: runs, lanesFile: lanes, env: { ...process.env } })
+
+    expect(result.exitCode).toBe(1)
+    expect(failures(result.lines)).toEqual([`FAIL The OpenCode 2 lane program was not found: ${missing}.`])
+  })
+
+  it('fails a lane program whose environment variable is not set', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const runs = join(makeFolder('machine-room-doctor-runs-'), 'machineroom-runs')
+    const lanes = writeLanes({
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: join('%MACHINEROOM_MISSING_BIN%', 'opencode.exe') } },
+    })
+    const env = { ...process.env }
+    delete env.MACHINEROOM_MISSING_BIN
+    const result = runDoctor({ projectRoot: project, runsFolder: runs, lanesFile: lanes, env })
+
     expect(result.exitCode).toBe(1)
     expect(failures(result.lines)).toHaveLength(1)
-    expect(line).toContain('No database backup found.')
-    expect(line).toContain('database_backup_missing')
-    expect(line.endsWith(BACKUP_HINT)).toBe(true)
+    expect(failures(result.lines)[0]).toContain('The OpenCode lane program cannot start.')
+    expect(failures(result.lines)[0]).toContain('The environment variable MACHINEROOM_MISSING_BIN is not set.')
   })
 
-  it('fails a backup that is 25 hours old and lists the warning code', async () => {
-    const project = makeProject()
-    const fake = await startFake({
-      health: healthWith(backupAt(25, ['database_backup_stale'])),
+  it('keeps a retired lane out of the checks', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const runs = join(makeFolder('machine-room-doctor-runs-'), 'machineroom-runs')
+    const lanes = writeLanes({
+      hermes: { name: 'Hermes', retired: true, cli: { harness: 'hermes', bin: join(project, 'gone.exe') } },
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath } },
     })
-    const result = await runDoctor({ paperclipUrl: fake.url, companyId: 'company-1', projectRoot: project })
+    const result = runDoctor({ projectRoot: project, runsFolder: runs, lanesFile: lanes, env: { ...process.env } })
 
-    const line = failures(result.lines)[0]
-    expect(result.exitCode).toBe(1)
-    expect(failures(result.lines)).toHaveLength(1)
-    expect(line).toContain('The newest database backup is 25 hours old.')
-    expect(line).toContain('database_backup_stale')
-    expect(line.endsWith(BACKUP_HINT)).toBe(true)
+    expect(result.exitCode).toBe(0)
+    expect(result.lines.join('\n')).not.toContain('Hermes')
   })
 
+  it('fails a lane file that is missing, broken or not a list', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const runs = join(makeFolder('machine-room-doctor-runs-'), 'machineroom-runs')
+    const folder = makeFolder('machine-room-doctor-lanes-')
+
+    const missing = runDoctor({ projectRoot: project, runsFolder: runs, lanesFile: join(folder, 'gone.json'), env: { ...process.env } })
+    expect(missing.exitCode).toBe(1)
+    expect(failures(missing.lines)[0]).toContain('could not be read')
+
+    const brokenPath = join(folder, 'broken.json')
+    writeFileSync(brokenPath, '{')
+    const broken = runDoctor({ projectRoot: project, runsFolder: runs, lanesFile: brokenPath, env: { ...process.env } })
+    expect(broken.exitCode).toBe(1)
+    expect(failures(broken.lines)[0]).toContain('is not JSON')
+
+    const listPath = join(folder, 'list.json')
+    writeFileSync(listPath, '[]')
+    const list = runDoctor({ projectRoot: project, runsFolder: runs, lanesFile: listPath, env: { ...process.env } })
+    expect(list.exitCode).toBe(1)
+    expect(failures(list.lines)[0]).toContain('is not a list of lanes')
+  })
+
+  it('fails a runs path that is a file', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const base = makeFolder('machine-room-doctor-runs-')
+    const file = join(base, 'runs.txt')
+    writeFileSync(file, 'x')
+    const result = doctor({ projectRoot: project, runsFolder: file })
+
+    expect(result.exitCode).toBe(1)
+    expect(failures(result.lines)).toEqual([`FAIL The runs folder ${file} is not a folder.`])
+  })
+})
+
+describe('the machine-room doctor command', () => {
   it('runs as a child process and exits 0 when every check passes', async () => {
-    const project = makeProject()
-    const fake = await startFake({ health: healthWith(backupAt(1.5)) })
-    const env = childEnv({
-      PAPERCLIP_URL: fake.url,
-      PAPERCLIP_COMPANY_ID: 'company-1',
-      PROJECT_ROOT: project,
-    })
-    const run = await runBin(['doctor'], env)
+    const project = makeFolder('machine-room-doctor-project-')
+    const temp = makeFolder('machine-room-doctor-temp-')
+    const run = await runBin(['doctor', '--root', project], childEnv(temp))
 
     expect(run.code).toBe(0)
-    const lines = run.stdout.trim().split(/\r?\n/)
-    expect(lines).toHaveLength(5)
-    expect(lines.every((line) => line.startsWith('ok '))).toBe(true)
     expect(run.stderr).toBe('')
+    const lines = run.stdout.trim().split(/\r?\n/)
+    expect(lines.length).toBeGreaterThan(3)
+    expect(lines.every((line) => line.startsWith('ok '))).toBe(true)
+    expect(existsSync(join(temp, 'machineroom-runs'))).toBe(true)
   })
 
-  it('runs as a child process and exits 1 when a check fails', async () => {
-    const project = makeProject()
-    const fake = await startFake({
-      health: healthWith(backupAt(1.5)),
-      companies: [{ id: 'another-company', name: 'Another' }],
-    })
-    const run = await runBin(['doctor', '--paperclip', fake.url, '--company', 'missing', '--root', project], childEnv())
+  it('exits 1 on a failed check', async () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const temp = makeFolder('machine-room-doctor-temp-')
+    const run = await runBin(['doctor', '--root', join(project, 'missing')], childEnv(temp))
 
     expect(run.code).toBe(1)
-    expect(run.stdout).toContain("FAIL Company missing is not in Paperclip's company list.")
+    expect(run.stdout).toContain('FAIL The project folder')
+    expect(run.stdout).toContain('does not exist.')
+  })
+
+  it('prints its help', async () => {
+    const temp = makeFolder('machine-room-doctor-temp-')
+    const run = await runBin(['--help'], childEnv(temp))
+
+    expect(run.code).toBe(0)
+    expect(run.stdout).toContain('Usage: machine-room')
+    expect(run.stdout).toContain('--no-sessions')
   })
 })

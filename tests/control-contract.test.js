@@ -1,31 +1,26 @@
-import { execFileSync, spawn } from 'node:child_process'
-import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import { createServer, request as httpRequest } from 'node:http'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, afterEach, describe, expect, it } from 'vitest'
-import { WebSocketServer } from 'ws'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { AGENT_REFUSAL } from '../server/control.js'
+import { LANE_TASK_REFUSAL } from '../server/lane-tasks.js'
+import { PLAN_REFUSAL } from '../server/plans.js'
 import { createClient } from '../src/control/client.js'
 import { CLIENT_METHODS, MOCK_POLICY, createMockClient } from '../src/control/mock.js'
-import { TEST_LANES } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const BASE_TIME = Date.parse('2026-10-18T00:00:00Z')
-const iso = (minutesAgo) => new Date(BASE_TIME - minutesAgo * 60000).toISOString()
+const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-contract-no-git-config')
 
 const SAMPLE_TASKS_MD = [
   '## Open work',
   '',
-  '**B6. Late join replay (OpenCode).** Let the event stream send the kept history to a viewer that connects without Last-Event-ID, behind a history query. Test it in tests/bridge.test.js.',
+  '**B6. Late join replay (OpenCode).** Let the event stream send the kept history to a viewer. Test it in tests/bridge.test.js.',
   '',
-  '**U4. Reject a foreign Host header in the bridge (OpenCode).** Answer 403 when the Host header is not localhost, 127.0.0.1 or [::1]. Add tests for each.',
+  '**U4. Reject a foreign Host header in the bridge (OpenCode).** Answer 403 when the Host header is not local.',
   '',
-  '**C3e. HUD polish (AGY).** Move the assistant window above the transport bar and check the result by eye at two window sizes.',
-  '',
-  '**P5. Recover cut and redacted tool lines (Hermes).** Recover the tool name and path from a broken OpenCode log line, with tests.',
-  '',
-  '**M1. Exit test with a real Paperclip (Claude and the owner).** Create a task for Hermes from the drawer and read its comment in the thread.',
+  '**C3e. HUD polish (AGY).** Move the assistant window above the transport bar.',
   '',
   '**C2. Control client (OpenCode, merged as 0.1.34).** Make the contract real.',
 ].join('\n')
@@ -33,32 +28,10 @@ const SAMPLE_TASKS_MD = [
 const SAMPLE_HOUSE_RULES_MD = [
   '# House rules',
   '',
-  '## About',
-  '',
-  'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
-  '',
   '## Rules',
   '',
   '- Work only in your own worktree and branch. Never push.',
   '- Run npm test after every change.',
-  '',
-  '## Report',
-  '',
-  'Give the report in your reply, not in a file.',
-].join('\n')
-
-const SAMPLE_LANES_JSON = {
-  hermes: { name: 'Hermes', harness: 'Hermes', model: 'deepseek/deepseek-v4.1-flash-1017', worktree: 'C:\\GitHub\\MachineRoom-hermes', role: 'You take cheap tasks with named files and clear tests.', forbidden: ['server/**', 'src/ui/**', 'src/engine/**', 'src/control/**'], notes: [], cli: { harness: 'hermes', bin: 'hermes.exe', model: 'deepseek/deepseek-v4.1-flash-1017' } },
-  opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [], cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
-  agy: { name: 'agy', harness: 'agy', model: 'Gemini 3.8 Flash (High)', models: { C3e: 'Gemini 4 Argon' }, worktree: 'C:\\GitHub\\MachineRoom-agy', role: 'You own the HUD.', forbidden: ['server/**', 'src/engine/**', 'src/control/**'], notes: [] },
-}
-
-const TINY_ORCHESTRATOR = [
-  'const args = process.argv.slice(2)',
-  "const at = args.indexOf('-p')",
-  "const text = at === -1 ? '' : String(args[at + 1] ?? '')",
-  "console.log(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Working.' }] } }))",
-  "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: `Mock reply to ${text.split('\\n')[0].slice(0, 40)}`, total_cost_usd: 0.02 }))",
 ].join('\n')
 
 const TINY_RUNNER = [
@@ -71,476 +44,11 @@ const TINY_RUNNER = [
   'await new Promise((done) => setTimeout(done, 300))',
   "const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')",
   "mkdirSync(folder, { recursive: true })",
-  "const record = { lane: args[0], briefs: args.slice(1), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: null, log: null, branch: '', commits: [] }",
+  "const record = { lane: args[0], briefs: args.slice(1), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: 0.2, log: null, branch: '', commits: [] }",
   "appendFileSync(join(folder, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
 ].join('\n')
 
-function seedPaperclipState() {
-  return {
-    agents: [
-      { id: 'agent-claude', urlKey: 'claude-code', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer', status: 'idle', adapterConfig: { model: 'claude-haiku-5-5' }, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-hermes', urlKey: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: 'engineer', status: 'idle', adapterConfig: {}, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-opencode', urlKey: 'opencode-go', name: 'OpenCode Go', adapterType: 'opencode_local', role: 'engineer', status: 'running', adapterConfig: { model: 'opencode-go/qwen3.8-flash' }, budgetMonthlyCents: 500, spentMonthlyCents: 8 },
-      { id: 'agent-agy', urlKey: 'agy', name: 'agy', adapterType: 'process', role: 'designer', status: 'idle', adapterConfig: {}, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-orchestrator', urlKey: 'orchestrator', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo', status: 'paused', adapterConfig: {}, budgetMonthlyCents: 300, spentMonthlyCents: 291 },
-    ],
-    issues: [
-      { id: 'issue-18', identifier: 'JC-18', title: 'Fix the typo in README.md', description: 'Change Teh to The and commit.', status: 'done', priority: 'medium', assigneeAgentId: 'agent-opencode', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(90), updatedAt: iso(88) },
-      { id: 'issue-19', identifier: 'JC-19', title: 'Record a failing test scenario', description: 'Add a test that fails, then fix it.', status: 'in_progress', priority: 'high', assigneeAgentId: 'agent-opencode', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(40), updatedAt: iso(3) },
-      { id: 'issue-20', identifier: 'JC-20', title: 'Summarise the source files', description: 'Write docs/summary.md.', status: 'todo', priority: 'low', assigneeAgentId: 'agent-hermes', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(20), updatedAt: iso(20) },
-      { id: 'issue-21', identifier: 'JC-21', title: 'Review the layout change', description: 'Read the diff and report problems.', status: 'in_review', priority: 'medium', assigneeAgentId: 'agent-claude', parentId: 'issue-19', assigneeAdapterOverrides: null, createdAt: iso(15), updatedAt: iso(6) },
-      { id: 'issue-22', identifier: 'JC-22', title: 'Plan the control panels', description: 'Break the work into small tasks.', status: 'blocked', priority: 'critical', assigneeAgentId: 'agent-orchestrator', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(10), updatedAt: iso(9) },
-    ],
-    comments: {
-      'issue-18': [
-        { id: 'comment-1', issueId: 'issue-18', authorAgentId: 'agent-opencode', body: 'Fixed the typo in README.md.\n\n- Changed "Teh quick" to "The quick".\n- Committed as f12c3db.', createdAt: iso(88) },
-      ],
-      'issue-22': [
-        { id: 'comment-2', issueId: 'issue-22', authorAgentId: null, body: 'Keep each task under 20 minutes.', createdAt: iso(10) },
-        { id: 'comment-3', issueId: 'issue-22', authorAgentId: 'agent-orchestrator', body: 'Blocked: my monthly budget is almost spent. I need an override to continue.', createdAt: iso(9) },
-      ],
-    },
-    approvals: [
-      { id: 'approval-1', type: 'budget_override_required', status: 'pending', payload: { summary: 'Orchestrator asks to raise its monthly budget from 300 to 600 cents.' }, requestedByAgentId: 'agent-orchestrator', createdAt: iso(9), decisionNote: null },
-      { id: 'approval-2', type: 'hire_agent', status: 'pending', payload: { summary: 'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).' }, requestedByAgentId: 'agent-orchestrator', createdAt: iso(7), decisionNote: null },
-      { id: 'approval-3', type: 'request_board_approval', status: 'approved', payload: { summary: 'Run the recording scenarios on the free model.' }, requestedByAgentId: 'agent-claude', createdAt: iso(300), decisionNote: null },
-    ],
-    liveRuns: [
-      { id: 'run-live-1', companyId: 'comp-1', status: 'running', invocationSource: 'assignment', startedAt: iso(3), finishedAt: null, createdAt: iso(3), agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', issueId: 'issue-19', lastOutputAt: iso(1), logBytes: 2048 },
-      { id: 'run-old-1', companyId: 'comp-1', status: 'succeeded', invocationSource: 'assignment', startedAt: iso(90), finishedAt: iso(88), createdAt: iso(90), agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', issueId: 'issue-18', lastOutputAt: iso(88), logBytes: 512 },
-    ],
-    costsSummary: { companyId: 'comp-1', spendCents: 299, budgetCents: 1000, utilizationPercent: 29 },
-    costsByAgent: [
-      { agentId: 'agent-orchestrator', agentName: 'Orchestrator', costCents: 291, inputTokens: 412000, outputTokens: 38000 },
-      { agentId: 'agent-opencode', agentName: 'OpenCode Go', costCents: 8, inputTokens: 20400, outputTokens: 30600 },
-      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 0, inputTokens: 41892, outputTokens: 4126 },
-    ],
-    quotaWindows: [
-      {
-        provider: 'anthropic',
-        ok: true,
-        windows: [
-          { label: 'Current session', usedPercent: 5, resetsAt: new Date(BASE_TIME + 4 * 3600000).toISOString(), detail: null },
-          { label: 'Current week (all models)', usedPercent: 42, resetsAt: new Date(BASE_TIME + 3 * 86400000).toISOString(), detail: null },
-          { label: 'Extra usage', usedPercent: null, resetsAt: null, detail: 'Not enabled' },
-        ],
-      },
-      { provider: 'openai', ok: false, error: 'Codex app-server: spawn codex ENOENT', windows: [] },
-    ],
-  }
-}
-
-function readBody(req) {
-  return new Promise((resolve) => {
-    const chunks = []
-    req.on('data', (chunk) => chunks.push(chunk))
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'))
-      } catch {
-        resolve({})
-      }
-    })
-  })
-}
-
-function sendJson(res, status, data) {
-  const payload = JSON.stringify(data)
-  res.writeHead(status, { 'Content-Type': 'application/json' })
-  res.end(payload)
-}
-
-function startFakeControlPaperclip(companyId = 'comp-1', { requireApproval = true } = {}) {
-  const state = seedPaperclipState()
-  const sockets = new Set()
-  const createdIssues = []
-  const createdHires = []
-  const agentPatches = []
-  let issueCounter = 22
-  let commentCounter = 3
-  let approvalCounter = 3
-  let frameCounter = 0
-
-  function broadcast(type, payload) {
-    frameCounter += 1
-    const text = JSON.stringify({
-      id: frameCounter,
-      companyId,
-      type,
-      createdAt: new Date(BASE_TIME).toISOString(),
-      payload,
-    })
-    for (const ws of sockets) {
-      if (ws.readyState === ws.OPEN) ws.send(text)
-    }
-  }
-
-  const server = createServer(async (req, res) => {
-    const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-    const path = url.pathname
-    const method = req.method ?? 'GET'
-
-    if (method === 'GET' && path === `/api/companies/${companyId}/agents`) {
-      sendJson(res, 200, state.agents)
-      return
-    }
-
-    if (method === 'GET' && path === `/api/companies/${companyId}`) {
-      sendJson(res, 200, { id: companyId, name: 'MachineRoom', requireBoardApprovalForNewAgents: requireApproval })
-      return
-    }
-
-    if (method === 'POST' && path === `/api/companies/${companyId}/agent-hires`) {
-      const body = await readBody(req)
-      createdHires.push(body)
-      const key = String(body.name ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-      const stamp = new Date(BASE_TIME).toISOString()
-      const agent = {
-        id: `agent-${key}`,
-        urlKey: key,
-        name: String(body.name ?? ''),
-        role: body.role ?? 'general',
-        adapterType: body.adapterType ?? '',
-        adapterConfig: body.adapterConfig ?? {},
-        metadata: body.metadata ?? {},
-        reportsTo: body.reportsTo ?? null,
-        budgetMonthlyCents: body.budgetMonthlyCents ?? 0,
-        spentMonthlyCents: 0,
-        status: requireApproval ? 'pending_approval' : 'idle',
-        createdAt: stamp,
-        updatedAt: stamp,
-      }
-      state.agents.push(agent)
-      broadcast('activity.logged', {
-        entityType: 'agent',
-        entityId: agent.id,
-        action: 'agent.hire_created',
-        details: { name: agent.name, requiresApproval: requireApproval },
-      })
-      if (requireApproval) {
-        approvalCounter += 1
-        const approval = {
-          id: `approval-${approvalCounter}`,
-          type: 'hire_agent',
-          status: 'pending',
-          payload: { summary: `Hire "${agent.name}".`, agentId: agent.id },
-          requestedByAgentId: null,
-          createdAt: stamp,
-          decisionNote: null,
-        }
-        state.approvals.unshift(approval)
-        broadcast('activity.logged', {
-          entityType: 'approval',
-          entityId: approval.id,
-          action: 'approval.created',
-          details: { type: 'hire_agent', linkedAgentId: agent.id },
-        })
-      }
-      sendJson(res, 201, agent)
-      return
-    }
-
-    const agentPatch = /^\/api\/agents\/([^/]+)$/.exec(path)
-    if (method === 'PATCH' && agentPatch) {
-      const id = decodeURIComponent(agentPatch[1])
-      const agent = state.agents.find((item) => item.id === id)
-      if (!agent) {
-        sendJson(res, 404, { error: 'Agent not found' })
-        return
-      }
-      const body = await readBody(req)
-      agentPatches.push({ id, body })
-      if (body.adapterConfig && typeof body.adapterConfig === 'object') {
-        agent.adapterConfig = { ...agent.adapterConfig, ...body.adapterConfig }
-      }
-      if (body.metadata && typeof body.metadata === 'object') agent.metadata = body.metadata
-      if (body.name !== undefined) agent.name = body.name
-      if (body.role !== undefined) agent.role = body.role
-      if (body.reportsTo !== undefined) agent.reportsTo = body.reportsTo
-      if (body.status !== undefined) agent.status = body.status
-      broadcast('activity.logged', {
-        entityType: 'agent',
-        entityId: agent.id,
-        action: 'agent.updated',
-        details: { changedTopLevelKeys: Object.keys(body).sort() },
-      })
-      sendJson(res, 200, agent)
-      return
-    }
-
-    if (method === 'GET' && path === `/api/companies/${companyId}/issues`) {
-      const status = url.searchParams.get('status')
-      const list = status ? state.issues.filter((item) => item.status === status) : state.issues
-      sendJson(res, 200, list)
-      return
-    }
-
-    if (method === 'POST' && path === `/api/companies/${companyId}/issues`) {
-      const body = await readBody(req)
-      createdIssues.push(body)
-      issueCounter += 1
-      const stamp = new Date(BASE_TIME).toISOString()
-      const issue = {
-        id: `issue-${issueCounter}`,
-        identifier: `JC-${issueCounter}`,
-        title: body.title,
-        description: body.description ?? '',
-        status: body.status ?? 'todo',
-        priority: body.priority ?? 'medium',
-        assigneeAgentId: body.assigneeAgentId ?? null,
-        parentId: body.parentId ?? null,
-        assigneeAdapterOverrides: body.assigneeAdapterOverrides ?? null,
-        createdAt: stamp,
-        updatedAt: stamp,
-      }
-      state.issues.unshift(issue)
-      broadcast('activity.logged', {
-        entityType: 'issue',
-        entityId: issue.id,
-        action: 'issue.created',
-        details: { identifier: issue.identifier, title: issue.title, status: issue.status },
-      })
-      sendJson(res, 201, issue)
-      return
-    }
-
-    const commentsRoute = /^\/api\/issues\/([^/]+)\/comments$/.exec(path)
-    if (commentsRoute) {
-      const issueId = decodeURIComponent(commentsRoute[1])
-      const issue = state.issues.find((item) => item.id === issueId)
-      if (!issue) {
-        sendJson(res, 404, { error: 'Issue not found' })
-        return
-      }
-      if (method === 'GET') {
-        sendJson(res, 200, state.comments[issueId] ?? [])
-        return
-      }
-      if (method === 'POST') {
-        const body = await readBody(req)
-        commentCounter += 1
-        const comment = {
-          id: `comment-${commentCounter}`,
-          issueId,
-          authorAgentId: null,
-          body: body.body,
-          createdAt: new Date(BASE_TIME).toISOString(),
-        }
-        state.comments[issueId] = [...(state.comments[issueId] ?? []), comment]
-        broadcast('activity.logged', {
-          entityType: 'issue',
-          entityId: issueId,
-          action: 'issue.comment_added',
-          details: { commentId: comment.id },
-        })
-        sendJson(res, 201, comment)
-        return
-      }
-    }
-
-    if (method === 'GET' && path === `/api/companies/${companyId}/approvals`) {
-      sendJson(res, 200, state.approvals)
-      return
-    }
-
-    const approvalGet = /^\/api\/approvals\/([^/]+)$/.exec(path)
-    if (method === 'GET' && approvalGet) {
-      const id = decodeURIComponent(approvalGet[1])
-      const approval = state.approvals.find((item) => item.id === id)
-      if (!approval) {
-        sendJson(res, 404, { error: 'Approval not found' })
-        return
-      }
-      sendJson(res, 200, approval)
-      return
-    }
-
-    const approvalDecide = /^\/api\/approvals\/([^/]+)\/(approve|reject|request-revision)$/.exec(path)
-    if (method === 'POST' && approvalDecide) {
-      const id = decodeURIComponent(approvalDecide[1])
-      const verb = approvalDecide[2]
-      const approval = state.approvals.find((item) => item.id === id)
-      if (!approval) {
-        sendJson(res, 404, { error: 'Approval not found' })
-        return
-      }
-      if (approval.status !== 'pending') {
-        sendJson(res, 422, { error: 'Only pending approvals can be decided' })
-        return
-      }
-      const body = await readBody(req)
-      const statusMap = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
-      approval.status = statusMap[verb]
-      approval.decisionNote = body.decisionNote ?? null
-      const linkedAgentId = approval.type === 'hire_agent' ? (approval.payload?.agentId ?? null) : null
-      const linked = linkedAgentId ? state.agents.find((item) => item.id === linkedAgentId) : null
-      if (linked && linked.status === 'pending_approval') {
-        if (approval.status === 'approved') linked.status = 'idle'
-        else if (approval.status === 'rejected') linked.status = 'terminated'
-      }
-      broadcast('activity.logged', {
-        entityType: 'approval',
-        entityId: approval.id,
-        action: `approval.${approval.status}`,
-        details: { type: approval.type },
-      })
-      sendJson(res, 200, approval)
-      return
-    }
-
-    if (method === 'GET' && path === `/api/companies/${companyId}/costs/summary`) {
-      sendJson(res, 200, state.costsSummary)
-      return
-    }
-
-    if (method === 'GET' && path === `/api/companies/${companyId}/costs/by-agent`) {
-      sendJson(res, 200, state.costsByAgent)
-      return
-    }
-
-    if (method === 'GET' && path === `/api/companies/${companyId}/live-runs`) {
-      sendJson(res, 200, state.liveRuns)
-      return
-    }
-
-    if (method === 'GET' && path === `/api/companies/${companyId}/costs/quota-windows`) {
-      sendJson(res, 200, state.quotaWindows)
-      return
-    }
-
-    const agentTurn = /^\/api\/agents\/([^/]+)\/(pause|resume)$/.exec(path)
-    if (method === 'POST' && agentTurn) {
-      const agent = state.agents.find((item) => item.id === decodeURIComponent(agentTurn[1]))
-      if (!agent) {
-        sendJson(res, 404, { error: 'Agent not found' })
-        return
-      }
-      agent.status = agentTurn[2] === 'pause' ? 'paused' : 'idle'
-      broadcast('activity.logged', { entityType: 'agent', entityId: agent.id, action: agentTurn[2] === 'pause' ? 'agent.paused' : 'agent.resumed', details: {} })
-      sendJson(res, 200, agent)
-      return
-    }
-
-    const agentBudget = /^\/api\/agents\/([^/]+)\/budgets$/.exec(path)
-    if (method === 'PATCH' && agentBudget) {
-      const id = decodeURIComponent(agentBudget[1])
-      const agent = state.agents.find((item) => item.id === id)
-      if (!agent) {
-        sendJson(res, 404, { error: 'Agent not found' })
-        return
-      }
-      const body = await readBody(req)
-      agent.budgetMonthlyCents = body.budgetMonthlyCents
-      broadcast('activity.logged', {
-        entityType: 'agent',
-        entityId: agent.id,
-        action: 'agent.budget_updated',
-        details: { budgetMonthlyCents: agent.budgetMonthlyCents },
-      })
-      sendJson(res, 200, agent)
-      return
-    }
-
-    sendJson(res, 404, { error: 'API route not found' })
-  })
-
-  const wss = new WebSocketServer({ noServer: true })
-  server.on('upgrade', (req, socket, head) => {
-    if (req.url === `/api/companies/${companyId}/events/ws`) {
-      wss.handleUpgrade(req, socket, head, (ws) => {
-        sockets.add(ws)
-        ws.on('close', () => sockets.delete(ws))
-      })
-    } else {
-      socket.destroy()
-    }
-  })
-
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => {
-      const { port } = server.address()
-      resolve({
-        url: `http://127.0.0.1:${port}`,
-        state,
-        createdIssues,
-        createdHires,
-        agentPatches,
-        broadcast,
-        close() {
-          for (const ws of sockets) ws.terminate()
-          sockets.clear()
-          return new Promise((resolveClose) => {
-            wss.close(() => server.close(() => resolveClose()))
-          })
-        },
-      })
-    })
-  })
-}
-
-function makeNodeEventSource() {
-  const instances = []
-
-  class NodeEventSource {
-    constructor(url) {
-      this.url = url
-      this.closed = false
-      this.connected = false
-      this.listeners = new Map()
-      this.buffer = ''
-      instances.push(this)
-      this.req = httpRequest(url, (res) => {
-        this.connected = true
-        res.setEncoding('utf8')
-        res.on('data', (chunk) => {
-          this.buffer += chunk
-          const blocks = this.buffer.split('\n\n')
-          this.buffer = blocks.pop() ?? ''
-          for (const block of blocks) {
-            const trimmed = block.trim()
-            if (!trimmed || trimmed.startsWith(':')) continue
-            let event = 'message'
-            let data = ''
-            for (const line of trimmed.split('\n')) {
-              if (line.startsWith('event:')) event = line.slice(6).trim()
-              else if (line.startsWith('data:')) data += line.slice(5).trim()
-            }
-            const handlers = this.listeners.get(event) ?? []
-            for (const handler of [...handlers]) handler({ data })
-          }
-        })
-      })
-      this.req.on('error', () => {})
-      this.req.end()
-    }
-
-    addEventListener(name, handler) {
-      const list = this.listeners.get(name) ?? []
-      list.push(handler)
-      this.listeners.set(name, list)
-    }
-
-    close() {
-      this.closed = true
-      this.req.destroy()
-    }
-  }
-
-  return { NodeEventSource, instances }
-}
-
-async function waitUntil(fn, timeoutMs = 3000) {
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    if (await fn()) return
-    await new Promise((r) => setTimeout(r, 15))
-  }
-  throw new Error('condition not met in time')
-}
-
-const cleanups = []
-const REAL_TMP = tmpdir()
-const NO_GIT_CONFIG = join(REAL_TMP, 'machineroom-contract-no-git-config')
+const SMALL = { files: 1, hasTests: true, clarity: 'clear', reversible: true, touchesSecrets: false, touchesDeploy: false }
 
 function testGit(cwd, args) {
   return execFileSync('git', args, {
@@ -563,14 +71,13 @@ function testGit(cwd, args) {
   })
 }
 
-let sharedLaneGit = null
+const cleanups = []
+let shared = null
 
-function laneGit() {
-  if (sharedLaneGit) return sharedLaneGit
+beforeAll(() => {
   const base = makeTempDir('mr-contract-git-')
   const repo = join(base, 'repo')
   const worktree = join(base, 'lane-worktree')
-  const missing = join(base, 'gone')
   mkdirSync(join(repo, 'docs', 'agents'), { recursive: true })
   testGit(repo, ['init', '-b', 'main'])
   testGit(repo, ['config', 'user.name', 'MachineRoom Test'])
@@ -580,28 +87,42 @@ function laneGit() {
   writeFileSync(join(repo, 'package.json'), JSON.stringify({ name: 'machine-room', version: '0.1.35' }))
   writeFileSync(join(repo, 'docs', 'agents', 'TASKS.md'), SAMPLE_TASKS_MD)
   writeFileSync(join(repo, 'docs', 'agents', 'HOUSE-RULES.md'), SAMPLE_HOUSE_RULES_MD)
-  const lanes = {
-    hermes: { ...SAMPLE_LANES_JSON.hermes, worktree },
-    opencode: { ...SAMPLE_LANES_JSON.opencode, worktree: repo },
-    agy: { ...SAMPLE_LANES_JSON.agy, worktree: missing },
-  }
-  writeFileSync(join(repo, 'docs', 'agents', 'lanes.json'), JSON.stringify(lanes))
   writeFileSync(join(repo, 'docs', 'agents', 'policy.json'), JSON.stringify(MOCK_POLICY))
+  writeFileSync(
+    join(repo, 'docs', 'agents', 'lanes.json'),
+    JSON.stringify({
+      opencode: {
+        name: 'OpenCode',
+        harness: 'OpenCode',
+        role: 'You own the bridge.',
+        forbidden: [],
+        worktree,
+        cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/deepseek-v4.1-flash' },
+      },
+      claude: {
+        name: 'Claude Code',
+        harness: 'Claude Code',
+        role: 'You review.',
+        forbidden: [],
+        worktree: repo,
+        cli: { harness: 'claude', bin: 'claude', model: 'sonnet' },
+      },
+    })
+  )
   writeFileSync(join(repo, 'notes.txt'), 'hello\n')
   testGit(repo, ['add', '.'])
   testGit(repo, ['commit', '-m', 'first'])
-  testGit(repo, ['worktree', 'add', '-b', 'feat/x', worktree])
+  testGit(repo, ['worktree', 'add', '-b', 'feat/contract-lane', worktree])
   writeFileSync(join(worktree, 'notes.txt'), 'hello again\n')
   writeFileSync(join(worktree, 'extra.js'), 'export const x = 1\n')
   testGit(worktree, ['add', '.'])
   testGit(worktree, ['commit', '-m', 'second'])
-  sharedLaneGit = { base, repo, worktree, missing, lanes }
-  return sharedLaneGit
-}
+  shared = { base, repo, worktree }
+})
 
 afterAll(() => {
-  if (sharedLaneGit) rmSync(sharedLaneGit.base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
-  sharedLaneGit = null
+  if (shared) rmSync(shared.base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  shared = null
 })
 
 afterEach(async () => {
@@ -611,718 +132,228 @@ afterEach(async () => {
   }
 })
 
-function runContractSuite(label, makeHarness) {
-  describe(`control contract (${label})`, () => {
-    it('has every method of the contract', async () => {
-      const { client } = await makeHarness()
-      for (const name of CLIENT_METHODS) expect(typeof client[name], name).toBe('function')
-    })
+function tempDir(prefix) {
+  const dir = makeTempDir(prefix)
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  return dir
+}
 
-    it('lists agents with the contract fields', async () => {
-      const { client } = await makeHarness()
-      const agents = await client.agents()
-      expect(agents).toHaveLength(5)
-      for (const agent of agents) {
-        for (const key of ['id', 'key', 'name', 'adapterType', 'role', 'status', 'model', 'reasoningEffort', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed', 'subagentDepth', 'instructions', 'reportsToAgentId', 'budgetMonthlyCents', 'spentMonthlyCents']) {
-          expect(agent, `${agent.name} ${key}`).toHaveProperty(key)
-        }
-      }
-      expect(agents.find((a) => a.id === 'agent-opencode').spentMonthlyCents).toBe(8)
-      expect(agents.find((a) => a.id === 'agent-orchestrator').spentMonthlyCents).toBe(291)
-    })
-
-    it('filters issues by status', async () => {
-      const { client } = await makeHarness()
-      const all = await client.issues()
-      expect(all).toHaveLength(5)
-      const todo = await client.issues({ status: 'todo' })
-      expect(todo.length).toBeGreaterThan(0)
-      expect(todo.every((issue) => issue.status === 'todo')).toBe(true)
-    })
-
-    it('creates an issue with overrides and puts it first', async () => {
-      const { client } = await makeHarness()
-      const before = await client.issues()
-      const issue = await client.createIssue({
-        title: '  Add a test  ',
-        assigneeAgentId: 'agent-opencode',
-        model: 'opencode/deepseek-v4.1-flash-free',
-        maxTurnsPerRun: 8,
-        timeoutSec: 300,
-        subagentsAllowed: false,
-      })
-      expect(issue.title).toBe('Add a test')
-      expect(issue.status).toBe('todo')
-      expect(issue.identifier).toBe('JC-23')
-      expect(issue.overrides).toEqual({
-        model: 'opencode/deepseek-v4.1-flash-free',
-        maxTurnsPerRun: 8,
-        timeoutSec: 300,
-        subagentsAllowed: false,
-      })
-      const afterFirst = await client.issues()
-      expect(afterFirst).toHaveLength(before.length + 1)
-      expect(afterFirst[0].id).toBe(issue.id)
-
-      const plain = await client.createIssue({ title: 'Plain task', assigneeAgentId: 'agent-opencode', model: '' })
-      expect(plain.overrides).toBeNull()
-    })
-
-    it('refuses an issue with no title or an unknown agent', async () => {
-      const { client } = await makeHarness()
-      await expect(client.createIssue({ title: ' ', assigneeAgentId: 'agent-opencode' })).rejects.toThrow(/title/i)
-      await expect(client.createIssue({ title: 'x', assigneeAgentId: 'nobody' })).rejects.toThrow(/agent/i)
-    })
-
-    it('refuses a task outside the agent limits, with a bad priority, or for a waiting or terminated agent', async () => {
-      const { client } = await makeHarness()
-      const task = { title: 'Do it', assigneeAgentId: 'agent-opencode' }
-      await expect(client.createIssue({ ...task, maxTurnsPerRun: 5000 })).rejects.toThrow('Turns per run must be a whole number from 1 to 200.')
-      await expect(client.createIssue({ ...task, maxTurnsPerRun: 2.5 })).rejects.toThrow('Turns per run must be a whole number from 1 to 200.')
-      await expect(client.createIssue({ ...task, timeoutSec: 864000 })).rejects.toThrow('The time limit must be a whole number of seconds from 10 to 7200.')
-      await expect(client.createIssue({ ...task, model: { id: 'x' } })).rejects.toThrow('The model must be 1 to 120 characters, or empty.')
-      await expect(client.createIssue({ ...task, subagentsAllowed: 'yes' })).rejects.toThrow('Subagents must be yes or no.')
-      await expect(client.createIssue({ ...task, priority: 'urgent' })).rejects.toThrow('The priority must be critical, high, medium or low.')
-      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
-      await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agent.id })).rejects.toThrow('That agent cannot take tasks yet.')
-      await client.decideApproval(approval.id, 'reject')
-      await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agent.id })).rejects.toThrow('That agent cannot take tasks yet.')
-      expect(await client.issues()).toHaveLength(5)
-      expect((await client.createIssue({ ...task, priority: 'high', maxTurnsPerRun: 200, timeoutSec: 7200 })).priority).toBe('high')
-    })
-
-    it('reads comments oldest first and adds a comment to the end of the thread', async () => {
-      const { client } = await makeHarness()
-      const initial = await client.comments('issue-22')
-      expect(initial.map((c) => c.id)).toEqual(['comment-2', 'comment-3'])
-      expect(initial[0].authorName).toBe('You')
-      expect(initial[1].authorName).toBe('Orchestrator')
-      const comment = await client.postComment('issue-18', 'Looks good.')
-      expect(comment.authorName).toBe('You')
-      const thread = await client.comments('issue-18')
-      expect(thread.at(-1).body).toBe('Looks good.')
-      expect(await client.comments('issue-99')).toEqual([])
-    })
-
-    it('answers an empty thread for a task id that is only an inherited name', async () => {
-      const { client } = await makeHarness()
-      for (const id of ['constructor', 'toString', '__proto__']) expect(await client.comments(id), id).toEqual([])
-    })
-
-    it('refuses an empty comment and a comment on a missing task', async () => {
-      const { client } = await makeHarness()
-      await expect(client.postComment('issue-18', '  ')).rejects.toThrow(/comment/i)
-      await expect(client.postComment('issue-99', 'hi')).rejects.toThrow(/exist/i)
-    })
-
-    it('lists the live runs with the contract fields, newest first', async () => {
-      const { client } = await makeHarness()
-      expect(await client.liveRuns()).toEqual([
-        {
-          runId: 'run-live-1',
-          agentId: 'agent-opencode',
-          agentName: 'OpenCode Go',
-          adapterType: 'opencode_local',
-          status: 'running',
-          issueId: 'issue-19',
-          startedAt: iso(3),
-          lastOutputAt: iso(1),
-        },
-      ])
-    })
-
-    it('reads the orchestrator chat, sends it a message and stops it', async () => {
-      const { client, settle } = await makeHarness()
-      const seen = []
-      const stopNotices = client.subscribe((event) => seen.push(event.topic))
-      await settle()
-      const before = await client.orchestrator()
-      expect(['idle', 'working', 'paused']).toContain(before.state)
-      expect(typeof before.model).toBe('string')
-      expect(typeof before.project).toBe('string')
-      expect(Array.isArray(before.messages)).toBe(true)
-      for (const message of before.messages) {
-        expect(typeof message.id).toBe('string')
-        expect(['owner', 'orchestrator', 'room']).toContain(message.from)
-        expect(typeof message.text).toBe('string')
-        expect(typeof message.at).toBe('string')
-      }
-
-      await expect(client.sendToOrchestrator('Build the chat')).rejects.toThrow('Confirm the message first.')
-      await expect(client.sendToOrchestrator('  ', { confirmed: true })).rejects.toThrow('Write a message from 1 to 8000 characters.')
-      const sent = await client.sendToOrchestrator('Build the chat', { confirmed: true })
-      expect(typeof sent.id).toBe('string')
-      await waitUntil(async () => {
-        const chat = await client.orchestrator()
-        return chat.messages.some((message) => message.id === sent.id) && chat.messages.length > before.messages.length + 1
-      })
-
-      await expect(client.stopOrchestrator()).rejects.toThrow('Confirm the stop first.')
-      expect(await client.stopOrchestrator({ confirmed: true })).toEqual({ ok: true })
-      await waitUntil(async () => (await client.orchestrator()).state === 'paused')
-
-      const resumed = await client.sendToOrchestrator('Go on', { confirmed: true })
-      expect(typeof resumed.id).toBe('string')
-      await waitUntil(async () => {
-        const chat = await client.orchestrator()
-        return chat.state !== 'paused' && chat.messages.some((message) => message.id === resumed.id)
-      })
-      await waitUntil(async () => (await client.orchestrator()).state === 'idle')
-      await waitUntil(() => seen.includes('orchestrator'))
-      stopNotices()
-    })
-
-    it('lists approvals and decides an approval once', async () => {
-      const { client } = await makeHarness()
-      const list = await client.approvals()
-      expect(list).toHaveLength(3)
-      const done = await client.decideApproval('approval-1', 'approve', 'ok')
-      expect(done.status).toBe('approved')
-      expect(done.decisionNote).toBe('ok')
-      await expect(client.decideApproval('approval-1', 'reject')).rejects.toThrow(/already/i)
-      expect((await client.decideApproval('approval-2', 'request-revision')).status).toBe('revision_requested')
-      await expect(client.decideApproval('approval-2', 'nope')).rejects.toThrow(/unknown decision/i)
-      await expect(client.decideApproval('missing', 'approve')).rejects.toThrow(/exist/i)
-    })
-
-    it('refuses a decision that is only an inherited name and leaves the approval pending', async () => {
-      const { client } = await makeHarness()
-      for (const decision of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
-        await expect(client.decideApproval('approval-1', decision)).rejects.toThrow(`Unknown decision: ${decision}`)
-      }
-      const list = await client.approvals()
-      expect(list.find((item) => item.id === 'approval-1').status).toBe('pending')
-    })
-
-    it('reports costs and quota windows, including one that could not be read', async () => {
-      const { client } = await makeHarness()
-      const { quota, summary, byAgent } = await client.costs()
-      expect(summary).toEqual({ spendCents: 299, budgetCents: 1000, utilizationPercent: 29 })
-      expect(byAgent).toHaveLength(3)
-      expect(quota.find((item) => item.ok).windows.some((window) => window.usedPercent === null)).toBe(true)
-      expect(quota.find((item) => !item.ok).error).toBeTruthy()
-    })
-
-    it('sets a budget and refuses a bad one', async () => {
-      const { client } = await makeHarness()
-      expect((await client.setAgentBudget('agent-claude', 250)).budgetMonthlyCents).toBe(250)
-      await expect(client.setAgentBudget('agent-claude', -1)).rejects.toThrow(/cents/i)
-      await expect(client.setAgentBudget('agent-claude', 1000001)).rejects.toThrow('The budget must be a whole number of cents, from 0 to 1,000,000.')
-      await expect(client.setAgentBudget('agent-claude', 1e300)).rejects.toThrow('The budget must be a whole number of cents, from 0 to 1,000,000.')
-      expect((await client.setAgentBudget('agent-claude', 1000000)).budgetMonthlyCents).toBe(1000000)
-      await expect(client.setAgentBudget('nobody', 10)).rejects.toThrow(/agent/i)
-    })
-
-    it('hires an agent and maps the answer to the agent and its approval', async () => {
-      const { client } = await makeHarness()
-      const { agent, approval } = await client.hireAgent({
-        name: 'Scout',
-        adapterType: 'hermes_local',
-        role: 'researcher',
-        model: 'xiaomi/mimo-v2.6-pro',
-        reasoningEffort: 'high',
-        maxTurnsPerRun: 4,
-        timeoutSec: 120,
-        budgetMonthlyCents: 250,
-        subagentsAllowed: true,
-        subagentDepth: 2,
-        reportsToAgentId: 'agent-hermes',
-        instructions: 'Be brief.',
-      })
-      expect(agent).toMatchObject({
-        name: 'Scout',
-        adapterType: 'hermes_local',
-        role: 'researcher',
-        status: 'pending_approval',
-        model: 'xiaomi/mimo-v2.6-pro',
-        reasoningEffort: 'high',
-        maxTurnsPerRun: 4,
-        timeoutSec: 120,
-        budgetMonthlyCents: 250,
-        subagentsAllowed: true,
-        subagentDepth: 2,
-        reportsToAgentId: 'agent-hermes',
-      })
-      expect(approval).toMatchObject({ type: 'hire_agent', status: 'pending', agentId: agent.id })
-      const list = await client.agents()
-      expect(list.some((item) => item.id === agent.id)).toBe(true)
-    })
-
-    it('refuses a bad hire and a bad update with plain sentences', async () => {
-      const { client } = await makeHarness()
-      await expect(client.hireAgent({ adapterType: 'claude_local' })).rejects.toThrow('A name is required.')
-      await expect(client.hireAgent({ name: 'Planner' })).rejects.toThrow('Choose a harness.')
-      await expect(client.hireAgent({ name: 'Hermes', adapterType: 'hermes_local' })).rejects.toThrow('An agent with that name already exists.')
-      await expect(client.hireAgent({ name: '!!!', adapterType: 'process' })).rejects.toThrow('The name needs letters or numbers.')
-      await expect(client.hireAgent({ name: 'Planner', adapterType: 'claude_local', reportsToAgentId: 'agent-ghost' })).rejects.toThrow('The agent it reports to no longer exists.')
-      await expect(client.hireAgent({ name: 'Planner', adapterType: 'claude_local', maxTurnsPerRun: 0 })).rejects.toThrow(/1 to 200/)
-      await expect(client.updateAgent('agent-ghost', { model: 'm' })).rejects.toThrow('That agent no longer exists.')
-      await expect(client.updateAgent('agent-hermes', {})).rejects.toThrow('Change at least one setting.')
-      await expect(client.updateAgent('agent-hermes', { adapterType: 'process' })).rejects.toThrow('The harness cannot be changed. Hire a new agent.')
-      await expect(client.updateAgent('agent-hermes', { reportsToAgentId: 'agent-hermes' })).rejects.toThrow('An agent cannot report to itself.')
-      await expect(client.updateAgent('agent-hermes', { name: 'agy' })).rejects.toThrow('An agent with that name already exists.')
-      await expect(client.updateAgent('agent-hermes', { subagentDepth: 2 })).rejects.toThrow('Turn subagents on to set a depth.')
-    })
-
-    it('updates an agent, its subagent settings and its budget', async () => {
-      const { client } = await makeHarness()
-      const updated = await client.updateAgent('agent-hermes', { model: 'm2', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600 })
-      expect(updated).toMatchObject({ model: 'm2', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600 })
-      expect(await client.updateAgent('agent-agy', { subagentsAllowed: true })).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
-      expect(await client.updateAgent('agent-agy', { subagentDepth: 3 })).toMatchObject({ subagentsAllowed: true, subagentDepth: 3 })
-      expect(await client.updateAgent('agent-agy', { subagentsAllowed: false })).toMatchObject({ subagentsAllowed: false, subagentDepth: 0 })
-      expect((await client.updateAgent('agent-hermes', { model: '' })).model).toBeNull()
-      expect((await client.updateAgent('agent-hermes', { budgetMonthlyCents: 250 })).budgetMonthlyCents).toBe(250)
-      expect((await client.updateAgent('agent-hermes', { status: 'paused' })).status).toBe('paused')
-      expect((await client.updateAgent('agent-hermes', { status: 'active' })).status).toBe('idle')
-    })
-
-    it('refuses to change a waiting or a terminated agent and turns a hire ready on approval', async () => {
-      const { client } = await makeHarness()
-      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
-      await expect(client.updateAgent(agent.id, { model: 'm' })).rejects.toThrow('Approve the hire first.')
-      await client.decideApproval(approval.id, 'approve')
-      expect(await client.updateAgent(agent.id, { model: 'm3' })).toMatchObject({ status: 'idle', model: 'm3' })
-      const second = await client.hireAgent({ name: 'Scout', adapterType: 'claude_local' })
-      await client.decideApproval(second.approval.id, 'reject')
-      const rejected = (await client.agents()).find((agent) => agent.id === second.agent.id)
-      expect(rejected.status).toBe('error')
-      await expect(client.updateAgent(second.agent.id, { model: 'm' })).rejects.toThrow('That agent was terminated.')
-    })
-
-    it('lists models in tiers and marks the free one', async () => {
-      const { client } = await makeHarness()
-      const models = await client.models()
-      expect(new Set(models.map((model) => model.tier))).toEqual(new Set(['small', 'medium', 'large']))
-      expect(models.filter((model) => model.free).map((model) => model.id)).toContain('opencode/deepseek-v4.1-flash-free')
-      expect(models.filter((model) => model.id.includes('deepseek-v4.1-flash') && !model.free)).toEqual([
-        { id: 'deepseek/deepseek-v4.1-flash-1017', label: 'DeepSeek v4.1 Flash (OpenRouter)', harness: 'hermes', tier: 'medium', free: false },
-        { id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek v4.1 Flash (Go)', harness: 'opencode', tier: 'medium', free: false },
-      ])
-    })
-
-    it('suggests a route from the policy and refuses a bad profile or failure count', async () => {
-      const { client } = await makeHarness()
-      const profile = { files: 1, hasTests: true, clarity: 'clear', reversible: true, touchesSecrets: false, touchesDeploy: false }
-      const route = await client.suggestRoute(profile)
-      expect(route).toEqual({
-        tier: 'small',
-        choice: { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
-        reason: 'The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.',
-      })
-
-      const escalated = await client.suggestRoute(profile, { failures: 1 })
-      expect(escalated.tier).toBe('medium')
-      expect(escalated.choice.lane).toBe('opencode')
-
-      await expect(client.suggestRoute('small')).rejects.toThrow('Describe the task first.')
-      await expect(client.suggestRoute(profile, { failures: 9 })).rejects.toThrow('Failures must be a whole number from 0 to 5.')
-    })
-
-    it('lists briefs and builds a prompt for one or more briefs and one lane', async () => {
-      const { client } = await makeHarness()
-      const briefs = await client.briefs()
-      expect(briefs.map((brief) => brief.id)).toEqual(['B6', 'U4', 'C3e', 'P5', 'M1', 'C2'])
-      for (const brief of briefs) {
-        for (const key of ['id', 'title', 'ownerText', 'owners', 'done', 'section', 'text']) {
-          expect(brief, `${brief.id} ${key}`).toHaveProperty(key)
-        }
-      }
-      expect(briefs.find((brief) => brief.id === 'C2').done).toBe(true)
-
-      const one = await client.briefPrompt(['C3e'], 'agy')
-      expect(one.lane).toBe('agy')
-      expect(one.model).toBe('Gemini 4 Argon')
-      expect(one.branch).toBe('feat/c3e-hud-polish')
-      expect(one.prompt).toContain('Model to select in agy: Gemini 4 Argon.')
-      expect(one.prompt).toContain('Task C3e: HUD polish.')
-      expect(one.prompt).toContain('Commit with the prefix 0.1.36')
-
-      const two = await client.briefPrompt(['U4', 'B6'], 'opencode')
-      expect(two.branch).toBe('feat/u4-reject-a-foreign')
-      expect(two.prompt).toContain('Do the tasks in order.')
-
-      await expect(client.briefPrompt(['ZZ9'], 'agy')).rejects.toThrow(/Choose a brief/)
-      await expect(client.briefPrompt([], 'agy')).rejects.toThrow(/Choose a brief/)
-      await expect(client.briefPrompt(['C3e'], 'nobody')).rejects.toThrow(/Choose hermes/)
-    })
-
-    it('starts a run on a lane and keeps its record when it ends', async () => {
-      const { client } = await makeHarness()
-      const entry = await client.startRun('hermes', ['C3e'])
-      expect(entry.lane).toBe('hermes')
-      expect(entry.briefs).toEqual(['C3e'])
-      expect(typeof entry.startedAt).toBe('string')
-      expect(entry.lastLines).toEqual([])
-
-      await waitUntil(async () => {
-        const state = await client.runs()
-        return state.running.every((item) => item.lane !== 'hermes') && state.recent.some((record) => record.lane === 'hermes')
-      })
-      const { running, recent } = await client.runs()
-      expect(running).toEqual([])
-      const record = recent.find((item) => item.lane === 'hermes')
-      expect(record).toMatchObject({ lane: 'hermes', briefs: ['C3e'], exitCode: 0, killed: false })
-      expect(typeof record.startedAt).toBe('string')
-    })
-
-    it('refuses a second run on a lane that is already running', async () => {
-      const { client } = await makeHarness()
-      const results = await Promise.allSettled([client.startRun('hermes', ['C3e']), client.startRun('hermes', ['B6'])])
-      const started = results.filter((item) => item.status === 'fulfilled')
-      const refused = results.filter((item) => item.status === 'rejected')
-      expect(started).toHaveLength(1)
-      expect(refused).toHaveLength(1)
-      expect(String(refused[0].reason.message)).toMatch(/already running/i)
-      await waitUntil(async () => (await client.runs()).running.length === 0)
-    })
-
-    it('refuses a bad lane, a lane with no command line and bad briefs with plain sentences', async () => {
-      const { client } = await makeHarness()
-      await expect(client.startRun('nobody', ['C3e'])).rejects.toThrow('Choose a lane from the list.')
-      await expect(client.startRun('agy', ['C3e'])).rejects.toThrow('That lane has no command line.')
-      await expect(client.startRun('hermes', [])).rejects.toThrow('Choose one to five briefs.')
-      await expect(client.startRun('hermes', ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'])).rejects.toThrow('Choose one to five briefs.')
-      await expect(client.startRun('hermes', ['c3e'])).rejects.toThrow('Choose a brief from the list.')
-      await expect(client.startRun('hermes', ['Z9'])).rejects.toThrow('Choose a brief from the list.')
-      await expect(client.startRun('hermes', ['C3e&calc'])).rejects.toThrow('Choose a brief from the list.')
-      const { running } = await client.runs()
-      expect(running).toEqual([])
-    })
-
-    it('answers the outcome table', async () => {
-      const harness = await makeHarness()
-      const { client } = harness
-      if (harness.runsTemp) {
-        const folder = join(harness.runsTemp, 'machineroom-runs')
-        mkdirSync(folder, { recursive: true })
-        appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify({ lane: 'seed-lane', model: 'seed-model', branch: 'feat/seed', costUsd: 0.5 })}\n`)
-        appendFileSync(join(folder, 'outcomes.jsonl'), `${JSON.stringify({ branch: 'feat/seed', outcome: 'merged', grade: 'A', fixes: 2 })}\n`)
-      }
-
-      const rows = await client.outcomes()
-      expect(Array.isArray(rows)).toBe(true)
-      for (const row of rows) {
-        for (const key of ['lane', 'model', 'runs', 'merged', 'rejected', 'pending', 'mergeRate', 'averageFixes', 'costUsd', 'decidedCostUsd', 'costPerMerge']) {
-          expect(row, `${row.lane} ${key}`).toHaveProperty(key)
-        }
-        expect(row.runs).toBe(row.merged + row.rejected + row.pending)
-        expect(typeof row.lane).toBe('string')
-        expect(typeof row.model).toBe('string')
-        expect(typeof row.costUsd).toBe('number')
-        expect(typeof row.decidedCostUsd).toBe('number')
-        for (const key of ['mergeRate', 'averageFixes', 'costPerMerge']) {
-          expect(row[key] === null || typeof row[key] === 'number', `${row.lane} ${key}`).toBe(true)
-        }
-      }
-      const keys = rows.map((row) => `${row.lane}\u0000${row.model}`)
-      expect(keys).toEqual([...keys].sort())
-      if (harness.runsTemp) {
-        expect(rows.find((row) => row.lane === 'seed-lane')).toEqual({
-          lane: 'seed-lane',
-          model: 'seed-model',
-          runs: 1,
-          merged: 1,
-          rejected: 0,
-          pending: 0,
-          mergeRate: 1,
-          averageFixes: 2,
-          costUsd: 0.5,
-          decidedCostUsd: 0.5,
-          costPerMerge: 0.5,
-        })
-      }
-    })
-
-    it('notices a run when it starts and when it ends', async () => {
-      const { client, settle } = await makeHarness()
-      const seen = []
-      const stop = client.subscribe((event) => seen.push(event))
-      await settle()
-      await client.startRun('hermes', ['C3e'])
-      await waitUntil(() => seen.filter((event) => event.topic === 'runs').length >= 2)
-      stop()
-    })
-
-    it('lists one review per lane with a worktree and the contract fields', async () => {
-      const { client } = await makeHarness()
-      const reviews = await client.reviews()
-      expect(reviews.length).toBeGreaterThan(0)
-      for (const review of reviews) {
-        expect(typeof review.lane, review.lane).toBe('string')
-        expect(typeof review.worktree, review.lane).toBe('string')
-        if (review.error) {
-          expect(typeof review.error).toBe('string')
-          expect(Object.keys(review).sort()).toEqual(['error', 'lane', 'worktree'])
-        } else {
-          for (const key of ['branch', 'head', 'ahead', 'commits', 'dirty', 'files', 'added', 'deleted', 'lastRun']) {
-            expect(review, `${review.lane} ${key}`).toHaveProperty(key)
-          }
-          expect(review.head, review.lane).toMatch(/^[0-9a-f]{40}$/)
-          expect(Array.isArray(review.commits), review.lane).toBe(true)
-          expect(Number.isInteger(review.ahead), review.lane).toBe(true)
-          expect(typeof review.dirty, review.lane).toBe('boolean')
-          expect(review.lastRun === null || typeof review.lastRun === 'object', review.lane).toBe(true)
-        }
-      }
-    })
-
-    it('answers the diff for a lane and refuses a bad lane the same way', async () => {
-      const { client } = await makeHarness()
-      const reviews = await client.reviews()
-      const good = reviews.find((review) => !review.error)
-      expect(good).toBeTruthy()
-      const diff = await client.reviewDiff(good.lane)
-      expect(diff.lane).toBe(good.lane)
-      expect(typeof diff.branch).toBe('string')
-      expect(diff.head, good.lane).toBe(good.head)
-      expect(diff.head, good.lane).toMatch(/^[0-9a-f]{40}$/)
-      expect(Array.isArray(diff.files)).toBe(true)
-      for (const file of diff.files) {
-        expect(typeof file.path).toBe('string')
-        expect(Number.isInteger(file.added), file.path).toBe(true)
-        expect(Number.isInteger(file.deleted), file.path).toBe(true)
-      }
-      expect(typeof diff.patch).toBe('string')
-      expect(typeof diff.truncated).toBe('boolean')
-
-      for (const lane of ['__proto__', 'constructor', 'nobody']) {
-        await expect(client.reviewDiff(lane), lane).rejects.toThrow('Choose a lane from the list.')
-      }
-    })
-
-    it('merges a lane once at the head that was read, then finds nothing left to merge', async () => {
-      const { client } = await makeHarness()
-      const reviews = await client.reviews()
-      const lane = reviews.find((review) => !review.error && review.ahead > 0 && !review.dirty)
-      expect(lane).toBeTruthy()
-      expect(lane.head).toMatch(/^[0-9a-f]{40}$/)
-
-      await expect(client.mergeReview(lane.lane, { head: '0'.repeat(40), message: 'Merge the lane' })).rejects.toThrow(
-        'The lane moved since you read it. Read it again.'
-      )
-      await expect(client.mergeReview(lane.lane, { head: lane.head, message: '' })).rejects.toThrow(
-        'Send the head you read and a message of one line.'
-      )
-
-      const merged = await client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })
-      expect(merged).toMatchObject({ ok: true, lane: lane.lane, branch: lane.branch, head: lane.head })
-      expect(merged.commit).toMatch(/^[0-9a-f]{40}$/)
-
-      await expect(client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })).rejects.toThrow('Nothing to merge.')
-      await expect(client.mergeReview('nobody', { head: lane.head, message: 'Merge the lane' })).rejects.toThrow(
-        'Choose a lane from the list.'
-      )
-    })
-
-    it('asks the planner for a plan and reads its answer', async () => {
-      const { client } = await makeHarness()
-      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local', role: 'pm' })
-      expect(agent.role).toBe('pm')
-      if (approval) await client.decideApproval(approval.id, 'approve')
-
-      await expect(client.askPlanner('')).rejects.toThrow('Write the goal in 1 to 2000 characters.')
-      const created = await client.askPlanner('Split the planner work into briefs with tests.')
-      expect(created.issueId).toBeTruthy()
-      expect(created.identifier).toMatch(/^JC-\d+$/)
-
-      const answer = await client.plan(created.issueId)
-      expect(['waiting', 'ready']).toContain(answer.status)
-      expect(Array.isArray(answer.briefs)).toBe(true)
-      expect(Array.isArray(answer.problems)).toBe(true)
-      if (answer.status === 'waiting') {
-        expect(answer.briefs).toEqual([])
-        expect(answer.problems).toEqual([])
-      } else {
-        expect(answer.briefs.length + answer.problems.length).toBeGreaterThan(0)
-      }
-    })
-
-    it('adds the plan briefs it accepted to the brief list', async () => {
-      const harness = await makeHarness()
-      const { client } = harness
-      const { agent, approval } = await client.hireAgent({ name: 'Planner', adapterType: 'claude_local', role: 'pm' })
-      if (approval) await client.decideApproval(approval.id, 'approve')
-      const created = await client.askPlanner('Split the notes work into briefs with tests.')
-
-      if (harness.fake) {
-        harness.fake.state.comments[created.issueId] = [
-          {
-            id: 'comment-plan',
-            issueId: created.issueId,
-            authorAgentId: agent.id,
-            body: JSON.stringify({
-              briefs: [
-                {
-                  id: 'C8a',
-                  title: 'Write the notes',
-                  owner: 'opencode',
-                  size: 'small',
-                  files: ['notes.txt'],
-                  tests: ['tests/notes.test.js'],
-                  text: 'Write the notes in the repository with tests.',
-                  dependsOn: [],
-                },
-              ],
-            }),
-            createdAt: new Date(BASE_TIME).toISOString(),
-          },
-        ]
-      }
-
-      const answer = await client.plan(created.issueId)
-      expect(answer.status).toBe('ready')
-      const ids = answer.briefs.map((brief) => brief.id)
-      expect(ids.length).toBeGreaterThan(0)
-      await expect(client.acceptPlan(created.issueId, ids, 'comment-old')).rejects.toThrow(
-        'The plan changed since you read it. Read it again.'
-      )
-      const added = await client.acceptPlan(created.issueId, ids, answer.planId)
-      expect(added).toEqual({ added: ids })
-      const briefs = await client.briefs()
-      expect(briefs.some((brief) => brief.id === ids[0])).toBe(true)
-      await expect(client.acceptPlan(created.issueId, ids, answer.planId)).rejects.toThrow(
-        `Brief ${ids[0]} is not in the plan, or has a problem now.`
-      )
-    })
+function useTemp(dir) {
+  const previous = process.env.TEMP
+  process.env.TEMP = dir
+  cleanups.push(() => {
+    process.env.TEMP = previous
   })
 }
 
-runContractSuite('mock', async () => ({
-  client: createMockClient({ latencyMs: 0, now: () => BASE_TIME }),
-  settle: async () => {},
-}))
+function record(lane, briefs, { exitCode = 0, task = '', project = '' } = {}) {
+  return {
+    lane,
+    briefs,
+    model: null,
+    reasoning: null,
+    startedAt: new Date().toISOString(),
+    minutes: 1,
+    exitCode,
+    killed: false,
+    costUsd: 0.5,
+    log: null,
+    branch: '',
+    commits: [],
+    ...(task ? { task } : {}),
+    ...(project ? { project } : {}),
+  }
+}
 
-runContractSuite('real client over bridge and fake Paperclip', async () => {
-  const fake = await startFakeControlPaperclip('comp-1')
-  cleanups.push(() => fake.close())
-  const runsTemp = makeTempDir('mr-contract-runs-')
-  cleanups.push(() => rmSync(runsTemp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
-  const previousTemp = process.env.TEMP
-  process.env.TEMP = runsTemp
-  cleanups.push(() => {
-    process.env.TEMP = previousTemp
-  })
-  const runnerDir = makeTempDir('mr-contract-runner-')
-  cleanups.push(() => rmSync(runnerDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+function writeRuns(runs, records) {
+  mkdirSync(runs, { recursive: true })
+  writeFileSync(join(runs, 'runs.jsonl'), `${records.map((entry) => JSON.stringify(entry)).join('\n')}\n`)
+}
+
+async function makeHarness({ records = [] } = {}) {
+  const base = tempDir('mr-contract-runs-')
+  const runs = join(base, 'machineroom-runs')
+  mkdirSync(runs, { recursive: true })
+  const withLogs = records.map((entry, index) => ({
+    ...entry,
+    log: entry.log ?? join(runs, `${entry.lane}-${entry.briefs[0] ?? 'project'}-20261024-12${String(index).padStart(4, '0')}.log`),
+  }))
+  if (withLogs.length > 0) writeRuns(runs, withLogs)
+  const runnerDir = tempDir('mr-contract-runner-')
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
   writeFileSync(runnerPath, TINY_RUNNER)
-  const orchestratorPath = join(runnerDir, 'tiny-orchestrator.mjs')
-  writeFileSync(orchestratorPath, TINY_ORCHESTRATOR)
-  const orchestratorSpawn = (file, args, options) => spawn(process.execPath, [orchestratorPath, ...args], options)
-  const gitLane = laneGit()
+  useTemp(base)
+  const lanes = JSON.parse(readFileSync(join(shared.repo, 'docs', 'agents', 'lanes.json'), 'utf8'))
   const bridge = createBridge({
-    paperclipUrl: fake.url,
-    companyId: 'comp-1',
-    projectId: 'proj-1',
-    projectWorkspaceId: 'ws-1',
-    projectRoot: gitLane.repo,
+    projectRoot: shared.repo,
     port: 0,
     runnerCommand: { file: process.execPath, args: [runnerPath] },
-    orchestratorSpawn,
-    lanesSource: { folder: join(runsTemp, 'machineroom-runs'), lanes: {}, pollMs: 20, quietMs: 60000 },
+    lanesSource: { folder: runs, lanes, repoRoot: shared.repo, pollMs: 20, quietMs: 60000 },
+    env: {},
+    reconnectMinMs: 60000,
+    reconnectMaxMs: 60000,
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).ok)
-  const { NodeEventSource, instances } = makeNodeEventSource()
-  cleanups.push(() => {
-    for (const item of instances) item.close()
-  })
-  const client = createClient({ baseUrl: url, EventSourceImpl: NodeEventSource })
-  const settle = async () => {
-    await waitUntil(() => instances.some((item) => item.connected))
-    await new Promise((r) => setTimeout(r, 20))
+  const client = createClient({ baseUrl: url })
+  return { client, url, runs, repo: shared.repo, worktree: shared.worktree }
+}
+
+async function waitUntil(fn, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await fn()) return
+    await new Promise((resolve) => setTimeout(resolve, 15))
   }
-  return { client, fake, url, instances, settle, runsTemp }
-})
+  throw new Error('condition not met in time')
+}
 
-describe('real control client and bridge extras', () => {
-  it('shares one EventSource across subscribers and closes it when the last one leaves', async () => {
-    const runs = makeTempDir('mr-contract-lanes-')
-    const bridge = createBridge({ projectRoot: '', port: 0, env: {}, lanesSource: { folder: runs, lanes: TEST_LANES, pollMs: 20, quietMs: 60000 } })
-    cleanups.push(() => bridge.stop())
-    const { url } = await bridge.start()
-    await waitUntil(async () => (await fetch(`${url}/api/health`).then((r) => r.json())).ok)
-
-    const { NodeEventSource, instances } = makeNodeEventSource()
-    cleanups.push(() => {
-      for (const item of instances) item.close()
-    })
-    const client = createClient({ baseUrl: url, EventSourceImpl: NodeEventSource })
-
-    const first = []
-    const second = []
-    const stop1 = client.subscribe((e) => first.push(e))
-    const stop2 = client.subscribe((e) => second.push(e))
-    expect(instances).toHaveLength(1)
-    expect(instances[0].closed).toBe(false)
-
-    await waitUntil(() => Boolean(instances[0].connected))
-    writeFileSync(
-      join(runs, 'opencode-C3e-20261024-120000.log'),
-      `${JSON.stringify({
-        type: 'tool_use',
-        timestamp: Date.now(),
-        part: { type: 'tool', id: 'call-1', tool: 'read', state: { status: 'completed', input: { path: 'docs/a.md' }, output: '' } },
-      })}\n`
-    )
-    await waitUntil(() => first.length >= 2 && second.length >= 2)
-    expect(first).toEqual(second)
-    expect(first.map((event) => event.topic)).toContain('agents')
-
-    stop1()
-    expect(instances[0].closed).toBe(false)
-    stop2()
-    expect(instances[0].closed).toBe(true)
+describe('the control client contract', () => {
+  it('has every method of the contract on the mock and on the bridge client', async () => {
+    const mock = createMockClient({ latencyMs: 0 })
+    for (const name of CLIENT_METHODS) expect(typeof mock[name], `mock ${name}`).toBe('function')
+    const { client } = await makeHarness()
+    for (const name of CLIENT_METHODS) expect(typeof client[name], `bridge ${name}`).toBe('function')
   })
 
-  it('sends model, maxTurnsPerRun and timeoutSec in assigneeAdapterOverrides.adapterConfig', async () => {
-    const fake = await startFakeControlPaperclip('comp-1')
-    cleanups.push(() => fake.close())
-    const bridge = createBridge({
-      paperclipUrl: fake.url,
-      companyId: 'comp-1',
-      projectId: 'proj-1',
-      projectWorkspaceId: 'ws-1',
-      projectRoot: '',
-      port: 0,
-    })
-    cleanups.push(() => bridge.stop())
-    const { url } = await bridge.start()
-    const client = createClient({ baseUrl: url })
+  it('lists the lanes with the spend from the run records', async () => {
+    const { client } = await makeHarness({ records: [record('opencode', ['B6'])] })
+    const agents = await client.agents()
+    expect(agents.map((agent) => [agent.key, agent.name, agent.role, agent.spentMonthlyCents])).toEqual([
+      ['opencode', 'OpenCode', null, 50],
+      ['claude', 'Claude Code', null, 0],
+    ])
+    for (const agent of agents) {
+      for (const key of ['id', 'key', 'name', 'adapterType', 'role', 'status', 'model', 'reasoningEffort', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed', 'subagentDepth', 'instructions', 'reportsToAgentId', 'budgetMonthlyCents', 'spentMonthlyCents']) {
+        expect(agent, `${agent.name} ${key}`).toHaveProperty(key)
+      }
+    }
+  })
 
-    await client.createIssue({
-      title: 'Check overrides',
-      assigneeAgentId: 'agent-opencode',
-      model: 'opencode/deepseek-v4.1-flash-free',
-      maxTurnsPerRun: 6,
-      timeoutSec: 180,
+  it('lists one task per run record with its status and filters by status', async () => {
+    const { client } = await makeHarness({
+      records: [record('opencode', ['B6']), record('claude', ['U4'], { exitCode: 1, task: 'Review the header' })],
     })
+    const all = await client.issues()
+    expect(all).toHaveLength(2)
+    expect(all.every((issue) => issue.identifier === 'B6' || issue.identifier === 'U4')).toBe(true)
+    const done = await client.issues({ status: 'done' })
+    expect(done.map((issue) => issue.identifier)).toEqual(['B6'])
+    const blocked = await client.issues({ status: 'blocked' })
+    expect(blocked.map((issue) => issue.identifier)).toEqual(['U4'])
+  })
 
-    expect(fake.createdIssues[0]).toMatchObject({
-      title: 'Check overrides',
-      assigneeAgentId: 'agent-opencode',
-      projectId: 'proj-1',
-      projectWorkspaceId: 'ws-1',
-      status: 'todo',
-      assigneeAdapterOverrides: {
-        adapterConfig: {
-          model: 'opencode/deepseek-v4.1-flash-free',
-          maxTurnsPerRun: 6,
-          timeoutSec: 180,
-        },
+  it('refuses every task and comment write', async () => {
+    const { client } = await makeHarness()
+    const agents = await client.agents()
+    await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agents[0].id })).rejects.toThrow(LANE_TASK_REFUSAL)
+    await expect(client.postComment('opencode-B6-20261024-120000', 'Hello.')).rejects.toThrow(LANE_TASK_REFUSAL)
+  })
+
+  it('answers an empty thread and no approvals', async () => {
+    const { client } = await makeHarness()
+    expect(await client.comments('opencode-B6-20261024-120000')).toEqual([])
+    expect(await client.approvals()).toEqual([])
+    await expect(client.decideApproval('approval-1', 'approve')).rejects.toThrow('That approval no longer exists.')
+  })
+
+  it('refuses every agent write', async () => {
+    const { client } = await makeHarness()
+    await expect(client.hireAgent({ name: 'Scout', adapterType: 'claude_local' })).rejects.toThrow(AGENT_REFUSAL)
+    await expect(client.updateAgent('agent-opencode', { model: 'm2' })).rejects.toThrow(AGENT_REFUSAL)
+    await expect(client.setAgentBudget('agent-opencode', 250)).rejects.toThrow(AGENT_REFUSAL)
+  })
+
+  it('reports costs from the lane records with no quota window', async () => {
+    const { client } = await makeHarness({ records: [record('opencode', ['B6']), record('opencode', ['U4'])] })
+    const { summary, byAgent, quota } = await client.costs()
+    expect(summary).toEqual({ spendCents: 100, budgetCents: 0, utilizationPercent: null })
+    expect(byAgent).toEqual([
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 100, inputTokens: null, outputTokens: null },
+      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 0, inputTokens: null, outputTokens: null },
+    ])
+    expect(quota).toEqual([])
+  })
+
+  it('lists the live run of an open lane log', async () => {
+    const { client, runs } = await makeHarness()
+    const name = 'opencode-B6-20261024-120000'
+    writeFileSync(join(runs, `${name}.log`), '')
+    const live = await (async () => {
+      let seen = []
+      await waitUntil(async () => {
+        seen = await client.liveRuns()
+        return seen.length > 0
+      })
+      return seen
+    })()
+    expect(live).toEqual([
+      {
+        runId: `run-${name}`,
+        agentId: 'agent-opencode',
+        agentName: 'OpenCode',
+        adapterType: 'opencode_local',
+        status: 'running',
+        issueId: name,
+        startedAt: expect.any(String),
+        lastOutputAt: null,
       },
+    ])
+  })
+
+  it('suggests a route from the policy with the lane spend', async () => {
+    const { client } = await makeHarness()
+    const route = await client.suggestRoute(SMALL)
+    expect(route).toEqual({
+      tier: 'small',
+      choice: { lane: 'opencode2', model: 'opencode-go/deepseek-v4.1-flash', reasoning: 'max', provider: 'opencode' },
+      reason: 'The small tier runs opencode2 on opencode-go/deepseek-v4.1-flash at max.',
     })
+    await expect(client.suggestRoute('small')).rejects.toThrow('Describe the task first.')
+    await expect(client.suggestRoute(SMALL, { failures: 9 })).rejects.toThrow('Failures must be a whole number from 0 to 5.')
+  })
+
+  it('lists briefs and builds a prompt for one lane', async () => {
+    const { client } = await makeHarness()
+    const briefs = await client.briefs()
+    expect(briefs.map((brief) => brief.id)).toEqual(['B6', 'U4', 'C3e', 'C2'])
+    expect(briefs.find((brief) => brief.id === 'C2').done).toBe(true)
+    const one = await client.briefPrompt(['B6'], 'opencode')
+    expect(one.lane).toBe('opencode')
+    expect(one.branch).toBe('feat/b6-late-join-replay')
+    expect(one.prompt).toContain('Task B6: Late join replay.')
+    await expect(client.briefPrompt(['ZZ9'], 'opencode')).rejects.toThrow(/Choose a brief/)
+  })
+
+  it('starts a run and keeps its record', async () => {
+    const { client } = await makeHarness()
+    const entry = await client.startRun('opencode', ['B6'])
+    expect(entry.lane).toBe('opencode')
+    expect(entry.briefs).toEqual(['B6'])
+    await waitUntil(async () => {
+      const state = await client.runs()
+      return state.running.every((item) => item.lane !== 'opencode') && state.recent.some((item) => item.lane === 'opencode')
+    })
+    const { recent } = await client.runs()
+    expect(recent.find((item) => item.lane === 'opencode')).toMatchObject({ lane: 'opencode', briefs: ['B6'], exitCode: 0, killed: false })
+  })
+
+  it('refuses a bad run in plain words', async () => {
+    const { client } = await makeHarness()
+    await expect(client.startRun('nobody', ['B6'])).rejects.toThrow('Choose a lane from the list.')
+    await expect(client.startRun('opencode', [])).rejects.toThrow('Choose one to five briefs.')
+    await expect(client.startRun('opencode', ['ZZ9'])).rejects.toThrow('Choose a brief from the list.')
+  })
+
+  it('asks the planner and reads the plan through the lane records only', async () => {
+    const { client } = await makeHarness()
+    await expect(client.askPlanner('Split the work into briefs.')).rejects.toThrow(PLAN_REFUSAL)
+    await expect(client.plan('opencode-B6-20261024-120000')).rejects.toThrow(PLAN_REFUSAL)
+    await expect(client.acceptPlan('opencode-B6-20261024-120000', ['B6'], 'plan-1')).rejects.toThrow(PLAN_REFUSAL)
   })
 
   it('enforces local origins, JSON content-type and the 64 KB body limit on control routes', async () => {
-    const fake = await startFakeControlPaperclip('comp-1')
-    cleanups.push(() => fake.close())
-    const bridge = createBridge({ paperclipUrl: fake.url, companyId: 'comp-1', projectRoot: '', port: 0 })
-    cleanups.push(() => bridge.stop())
-    const { url } = await bridge.start()
-
+    const { url } = await makeHarness()
     const preflight = await fetch(`${url}/api/control/agents`, {
       method: 'OPTIONS',
       headers: { Origin: 'http://localhost:5173', 'Access-Control-Request-Method': 'PATCH' },
@@ -1351,83 +382,14 @@ describe('real control client and bridge extras', () => {
   })
 })
 
-describe('mock merge confirm', () => {
-  it('refuses a merge that was not confirmed and merges a sample lane only once', async () => {
-    const client = createMockClient({ latencyMs: 0, now: () => BASE_TIME })
-    const reviews = await client.reviews()
-    const lane = reviews.find((review) => !review.error && review.ahead > 0 && !review.dirty)
-    expect(lane).toBeTruthy()
-    for (const confirmed of [false, undefined]) {
-      await expect(
-        client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane', confirmed })
-      ).rejects.toThrow('Confirm the merge first.')
-    }
-    expect((await client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })).ok).toBe(true)
-    await expect(client.mergeReview(lane.lane, { head: lane.head, message: 'Merge the lane' })).rejects.toThrow('Nothing to merge.')
-  })
-})
-
-describe('mock run confirm', () => {
-  it('refuses a run that was not confirmed', async () => {
-    const client = createMockClient({ latencyMs: 0, now: () => BASE_TIME })
-    await expect(client.startRun('hermes', ['C3e'], { confirmed: false })).rejects.toThrow('Confirm the run first.')
-    const { running } = await client.runs()
-    expect(running).toEqual([])
-    const entry = await client.startRun('hermes', ['C3e'])
-    expect(entry.lane).toBe('hermes')
-  })
-})
-
-describe('mock orchestrator', () => {
-  it('sends an orchestrator notice on a message and on a stop', async () => {
-    const client = createMockClient({ latencyMs: 0, now: () => BASE_TIME })
-    const seen = []
-    client.subscribe((event) => seen.push(event.topic))
-    await client.sendToOrchestrator('Build it', { confirmed: true })
-    await client.stopOrchestrator({ confirmed: true })
-    await waitUntil(() => seen.filter((topic) => topic === 'orchestrator').length >= 2)
-    expect((await client.orchestrator()).state).toBe('paused')
-  })
-})
-
-describe('mock live runs', () => {
-  it('adds a run for the lane agent while its sample run lasts and sends liveRuns as it starts and ends', async () => {
-    const client = createMockClient({ latencyMs: 0, runMs: 30, now: () => BASE_TIME })
-    const notices = []
-    client.subscribe((event) => notices.push(event.topic))
-    expect((await client.liveRuns()).map((run) => run.runId)).toEqual(['run-live-1'])
-    await client.startRun('hermes', ['C3e'])
-    const during = await client.liveRuns()
-    expect(during[0]).toMatchObject({ agentId: 'agent-hermes', agentName: 'Hermes', adapterType: 'hermes_local', status: 'running', issueId: 'issue-20', startedAt: iso(0), lastOutputAt: null })
-    expect(during).toHaveLength(2)
-    expect(notices).toEqual(['runs', 'liveRuns'])
-    await waitUntil(() => notices.length >= 4)
-    expect(notices).toEqual(['runs', 'liveRuns', 'liveRuns', 'runs'])
-    expect((await client.liveRuns()).map((run) => run.runId)).toEqual(['run-live-1'])
-  })
-
-  it('queues the run of an agent that is already running', async () => {
-    const client = createMockClient({ latencyMs: 0, runMs: 1000, now: () => BASE_TIME })
-    await client.startRun('opencode', ['C3e'])
-    const [queued] = await client.liveRuns()
-    expect(queued).toMatchObject({ agentId: 'agent-opencode', status: 'queued', issueId: 'issue-19', startedAt: null })
-  })
-
-  it('rejects once when told to fail', async () => {
+describe('the mock client still answers the contract', () => {
+  it('lists agents, issues and models', async () => {
     const client = createMockClient({ latencyMs: 0 })
-    client.failNext('liveRuns', 'Paperclip could not read the live runs.')
-    await expect(client.liveRuns()).rejects.toThrow('Paperclip could not read the live runs.')
-    expect(await client.liveRuns()).toHaveLength(1)
-  })
-})
-
-describe('the real client on a merge conflict', () => {
-  it('keeps the conflicting files on the error', async () => {
-    const body = { error: 'The merge stopped on a conflict. Nothing changed.', files: ['notes.txt', 7] }
-    const fetchImpl = async () => new Response(JSON.stringify(body), { status: 409, headers: { 'content-type': 'application/json' } })
-    const client = createClient({ baseUrl: 'http://127.0.0.1:1', fetchImpl, EventSourceImpl: null })
-    const error = await client.mergeReview('hermes', { head: 'a'.repeat(40), message: 'Merge it' }).catch((caught) => caught)
-    expect(error.message).toBe('The merge stopped on a conflict. Nothing changed.')
-    expect(error.files).toEqual(['notes.txt'])
+    const agents = await client.agents()
+    expect(agents.length).toBeGreaterThan(0)
+    const issues = await client.issues()
+    expect(Array.isArray(issues)).toBe(true)
+    const models = await client.models()
+    expect(new Set(models.map((model) => model.tier))).toEqual(new Set(['small', 'medium', 'large']))
   })
 })

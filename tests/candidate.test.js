@@ -110,18 +110,14 @@ function waitForText(child, marker, timeoutMs = 15000) {
 }
 
 describe('parseCandidateArgs', () => {
-  it('reads the lane, the port and the three options that pass through', () => {
+  it('reads the lane, the port and the project folder', () => {
     expect(parseCandidateArgs([
       'opencode',
       '--port', '6175',
-      '--paperclip', 'http://127.0.0.1:3100',
-      '--company', 'company-1',
       '--root', 'C:\\Project',
     ])).toEqual({
       lane: 'opencode',
       port: 6175,
-      paperclipUrl: 'http://127.0.0.1:3100',
-      companyId: 'company-1',
       projectRoot: 'C:\\Project',
       help: false,
     })
@@ -316,8 +312,6 @@ describe('runCandidate', () => {
       argv: [
         'lane',
         '--port', String(port),
-        '--paperclip', 'http://127.0.0.1:3100',
-        '--company', 'company-1',
         '--root', 'project',
       ],
       cwd: base,
@@ -337,8 +331,6 @@ describe('runCandidate', () => {
       expect(JSON.parse(argsLine)).toEqual([
         '--dist', join(worktree, 'dist'),
         '--port', String(port),
-        '--paperclip', 'http://127.0.0.1:3100',
-        '--company', 'company-1',
         '--root', 'project',
       ])
       expect(logged).toContain(`Candidate from lane (feat/candidate at ${sha}) on http://127.0.0.1:${port}/?live&bridge=http://127.0.0.1:${port}. The stable room keeps its own port.`)

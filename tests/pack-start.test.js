@@ -85,7 +85,7 @@ describe('a pack starts the room', () => {
 
       const child = spawn(
         process.execPath,
-        [binPath, '--port', '0', '--paperclip', 'http://127.0.0.1:1', '--company', 'pack-test', '--root', emptyRoot],
+        [binPath, '--port', '0', '--root', emptyRoot],
         { cwd: packageDir, env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] },
       )
       child.stderr.resume()
