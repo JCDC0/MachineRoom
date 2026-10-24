@@ -15,6 +15,7 @@ import {
   isSendKey,
   needsStartConfirm,
   normalizeChat,
+  projectBaseName,
   statusDetail,
   statusTone,
 } from './orchestratorChat.js'
@@ -298,6 +299,8 @@ export default function OrchestratorChat({
   const count = charCount(draft)
   const working = state === 'working'
   const model = chat.model || (typeof current?.model === 'string' ? current.model : '')
+  const project = chat.project
+  const projectLabel = projectBaseName(project)
   const lines = chatLines(chat)
   const problem = error ?? readError
   const canAttach = Boolean(
@@ -322,7 +325,9 @@ export default function OrchestratorChat({
   ]
   const startText =
     selected === 'orchestrator'
-      ? ORCH_START_CONFIRM
+      ? project
+        ? `The orchestrator works in ${project} with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.`
+        : ORCH_START_CONFIRM
       : `${current?.name || selected} runs on this project with full permissions. It plans for its lanes, works in its scope and reports to the main orchestrator.`
 
   useEffect(() => {
@@ -650,6 +655,11 @@ export default function OrchestratorChat({
           </button>
         ) : null}
         {model ? <span className="mr-orch-model mono">{model}</span> : null}
+        {projectLabel ? (
+          <span className="mr-orch-project mr-orch-model mono" title={project}>
+            {projectLabel}
+          </span>
+        ) : null}
         <button
           type="button"
           className="mr-orch-close"
