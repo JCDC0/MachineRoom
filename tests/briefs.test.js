@@ -78,12 +78,20 @@ describe('helpers', () => {
 
 describe('lanes', () => {
   it('have every field a prompt needs', () => {
-    for (const [key, lane] of Object.entries(lanes)) {
+    const promptLanes = Object.entries(lanes).filter(([key]) => key !== 'orchestrator')
+    for (const [key, lane] of promptLanes) {
       for (const field of ['name', 'harness', 'model', 'worktree', 'role']) expect(typeof lane[field], `${key} ${field}`).toBe('string')
       expect(lane.forbidden.length, key).toBeGreaterThan(1)
       expect(lane.worktree, key).toMatch(/^C:\\GitHub\\MachineRoom-/)
     }
-    expect(new Set(Object.values(lanes).map((lane) => lane.worktree)).size).toBe(Object.keys(lanes).length)
+    expect(new Set(promptLanes.map(([, lane]) => lane.worktree)).size).toBe(promptLanes.length)
+    expect(lanes.orchestrator).toMatchObject({
+      name: 'Orchestrator',
+      harness: 'Claude Code',
+      cli: { harness: 'claude', bin: 'claude', model: 'opus' },
+    })
+    expect(lanes.orchestrator.worktree).toBeUndefined()
+    expect(lanes.orchestrator.role).toBeUndefined()
   })
 
   it('keep each agent out of the files another agent owns', () => {
@@ -127,7 +135,7 @@ describe('buildPrompt', () => {
   })
 
   it('never ends a prompt line in the bare main branch', () => {
-    for (const laneKey of Object.keys(lanes)) {
+    for (const laneKey of Object.keys(lanes).filter((key) => key !== 'orchestrator')) {
       const prompt = make(['U4', 'G5'], laneKey)
       for (const line of prompt.split('\n')) expect(line, `${laneKey}: ${line}`).not.toMatch(/ main$/)
     }

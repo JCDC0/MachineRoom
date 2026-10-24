@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer, request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
@@ -51,6 +51,14 @@ const SAMPLE_LANES_JSON = {
   opencode: { name: 'OpenCode', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [], cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
   agy: { name: 'agy', harness: 'agy', model: 'Gemini 3.8 Flash (High)', models: { C3e: 'Gemini 4 Argon' }, worktree: 'C:\\GitHub\\MachineRoom-agy', role: 'You own the HUD.', forbidden: ['server/**', 'src/engine/**', 'src/control/**'], notes: [] },
 }
+
+const TINY_ORCHESTRATOR = [
+  'const args = process.argv.slice(2)',
+  "const at = args.indexOf('-p')",
+  "const text = at === -1 ? '' : String(args[at + 1] ?? '')",
+  "console.log(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Working.' }] } }))",
+  "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: `Mock reply to ${text.split('\\n')[0].slice(0, 40)}`, total_cost_usd: 0.02 }))",
+].join('\n')
 
 const TINY_RUNNER = [
   "import { appendFileSync, mkdirSync } from 'node:fs'",
@@ -722,6 +730,47 @@ function runContractSuite(label, makeHarness) {
       ])
     })
 
+    it('reads the orchestrator chat, sends it a message and stops it', async () => {
+      const { client, settle } = await makeHarness()
+      const seen = []
+      const stopNotices = client.subscribe((event) => seen.push(event.topic))
+      await settle()
+      const before = await client.orchestrator()
+      expect(['idle', 'working', 'paused']).toContain(before.state)
+      expect(typeof before.model).toBe('string')
+      expect(typeof before.project).toBe('string')
+      expect(Array.isArray(before.messages)).toBe(true)
+      for (const message of before.messages) {
+        expect(typeof message.id).toBe('string')
+        expect(['owner', 'orchestrator', 'room']).toContain(message.from)
+        expect(typeof message.text).toBe('string')
+        expect(typeof message.at).toBe('string')
+      }
+
+      await expect(client.sendToOrchestrator('Build the chat')).rejects.toThrow('Confirm the message first.')
+      await expect(client.sendToOrchestrator('  ', { confirmed: true })).rejects.toThrow('Write a message from 1 to 8000 characters.')
+      const sent = await client.sendToOrchestrator('Build the chat', { confirmed: true })
+      expect(typeof sent.id).toBe('string')
+      await waitUntil(async () => {
+        const chat = await client.orchestrator()
+        return chat.messages.some((message) => message.id === sent.id) && chat.messages.length > before.messages.length + 1
+      })
+
+      await expect(client.stopOrchestrator()).rejects.toThrow('Confirm the stop first.')
+      expect(await client.stopOrchestrator({ confirmed: true })).toEqual({ ok: true })
+      await waitUntil(async () => (await client.orchestrator()).state === 'paused')
+
+      const resumed = await client.sendToOrchestrator('Go on', { confirmed: true })
+      expect(typeof resumed.id).toBe('string')
+      await waitUntil(async () => {
+        const chat = await client.orchestrator()
+        return chat.state !== 'paused' && chat.messages.some((message) => message.id === resumed.id)
+      })
+      await waitUntil(async () => (await client.orchestrator()).state === 'idle')
+      await waitUntil(() => seen.includes('orchestrator'))
+      stopNotices()
+    })
+
     it('lists approvals and decides an approval once', async () => {
       const { client } = await makeHarness()
       const list = await client.approvals()
@@ -1190,6 +1239,9 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
   cleanups.push(() => rmSync(runnerDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
   const runnerPath = join(runnerDir, 'tiny-runner.mjs')
   writeFileSync(runnerPath, TINY_RUNNER)
+  const orchestratorPath = join(runnerDir, 'tiny-orchestrator.mjs')
+  writeFileSync(orchestratorPath, TINY_ORCHESTRATOR)
+  const orchestratorSpawn = (file, args, options) => spawn(process.execPath, [orchestratorPath, ...args], options)
   const gitLane = laneGit()
   const bridge = createBridge({
     paperclipUrl: fake.url,
@@ -1199,6 +1251,8 @@ runContractSuite('real client over bridge and fake Paperclip', async () => {
     projectRoot: gitLane.repo,
     port: 0,
     runnerCommand: { file: process.execPath, args: [runnerPath] },
+    orchestratorSpawn,
+    lanesSource: { folder: join(runsTemp, 'machineroom-runs'), lanes: {}, pollMs: 20, quietMs: 60000 },
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
@@ -1347,6 +1401,18 @@ describe('mock run confirm', () => {
     expect(running).toEqual([])
     const entry = await client.startRun('hermes', ['C3e'])
     expect(entry.lane).toBe('hermes')
+  })
+})
+
+describe('mock orchestrator', () => {
+  it('sends an orchestrator notice on a message and on a stop', async () => {
+    const client = createMockClient({ latencyMs: 0, now: () => BASE_TIME })
+    const seen = []
+    client.subscribe((event) => seen.push(event.topic))
+    await client.sendToOrchestrator('Build it', { confirmed: true })
+    await client.stopOrchestrator({ confirmed: true })
+    await waitUntil(() => seen.filter((topic) => topic === 'orchestrator').length >= 2)
+    expect((await client.orchestrator()).state).toBe('paused')
   })
 })
 
