@@ -48,11 +48,11 @@ describe('ownerToLane', () => {
     expect(laneForBrief('AGY')).toBe('agy')
   })
 
-  it('returns null when owned only by Claude or the owner or has no valid lane', () => {
-    expect(ownerToLane({ owners: ['claude'] })).toBeNull()
+  it('returns a lane for Claude and null for the owner or no valid lane', () => {
+    expect(ownerToLane({ owners: ['claude'] })).toBe('claude')
     expect(ownerToLane({ owners: [] })).toBeNull()
-    expect(ownerToLane('claude')).toBeNull()
-    expect(ownerToLane('Claude')).toBeNull()
+    expect(ownerToLane('claude')).toBe('claude')
+    expect(ownerToLane('Claude')).toBe('claude')
     expect(ownerToLane('owner')).toBeNull()
     expect(ownerToLane('')).toBeNull()
     expect(ownerToLane(null)).toBeNull()
@@ -60,7 +60,7 @@ describe('ownerToLane', () => {
   })
 
   it('uses only the first owner even when another owner follows', () => {
-    expect(ownerToLane({ owners: ['claude', 'agy'] })).toBeNull()
+    expect(ownerToLane({ owners: ['claude', 'agy'] })).toBe('claude')
     expect(ownerToLane({ owners: ['agy', 'claude'] })).toBe('agy')
   })
 })
@@ -89,8 +89,8 @@ describe('runLaneFor', () => {
     expect(runLaneFor({ owners: ['agy'] }, ['agy'], ['agy'])).toBe('agy')
   })
 
-  it('answers null for a brief with no owner lane', () => {
-    expect(runLaneFor({ owners: ['claude'] }, [], LANES)).toBeNull()
+  it('keeps the lane for Claude and answers null for a brief with no owner lane', () => {
+    expect(runLaneFor({ owners: ['claude'] }, [], LANES)).toBe('claude')
     expect(runLaneFor({}, ['opencode'], LANES)).toBeNull()
     expect(runLaneFor(null, [], LANES)).toBeNull()
   })

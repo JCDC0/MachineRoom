@@ -61,3 +61,41 @@ export function runningLine(entry, now) {
   const ago = timeSinceStart(entry.startedAt, now)
   return `${lane} | ${briefs} | ${ago}`
 }
+
+export const PROJECT_TASK_LIMIT = 4000
+export const PROJECT_CONFIRM_LIMIT = 120
+
+const PROJECT_RUN_ADAPTERS = new Set(['opencode_local', 'claude_local', 'process'])
+
+export function projectRunLanes(agents) {
+  const list = Array.isArray(agents) ? agents : []
+  const seen = new Set()
+  const lanes = []
+  for (const agent of list) {
+    if (!agent || typeof agent !== 'object') continue
+    if (agent.role !== null && agent.role !== undefined) continue
+    if (!PROJECT_RUN_ADAPTERS.has(agent.adapterType)) continue
+    const key = typeof agent.key === 'string' ? agent.key.trim() : ''
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    const name = typeof agent.name === 'string' && agent.name.trim() ? agent.name.trim() : key
+    lanes.push({ key, name })
+  }
+  return lanes
+}
+
+export function projectTaskProblem(task) {
+  if (typeof task !== 'string' || task.trim().length < 1 || task.length > PROJECT_TASK_LIMIT) {
+    return 'Write the task in 1 to 4000 characters.'
+  }
+  return null
+}
+
+export function projectRunConfirm({ lane, project, task } = {}) {
+  const taskText = typeof task === 'string' ? task.trim() : ''
+  return {
+    lane: typeof lane === 'string' ? lane.trim() : '',
+    project: typeof project === 'string' && project.trim() ? project.trim() : 'this project',
+    task: taskText.slice(0, PROJECT_CONFIRM_LIMIT),
+  }
+}

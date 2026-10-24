@@ -2761,10 +2761,10 @@ describe('run routes', () => {
 
   it('answers an empty recent list when the records file is missing', async () => {
     useRunsTemp()
-    const { url } = await startRunsBridge()
+    const { url, dir } = await startRunsBridge()
     const res = await fetch(`${url}/api/control/runs`)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ running: [], recent: [] })
+    expect(await res.json()).toEqual({ project: basename(dir), running: [], recent: [] })
   })
 
   it('reads the last 20 records newest first and skips lines that do not parse', async () => {

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
+- Review note on L3: no fixes. `POST /api/control/runs` with a task and no briefs starts `run-lane --project` on the bridge's root, still behind `confirmed: true`, with the project checks and the dirty check on the server; it spawns `node` with `shell: false`, so the task text is one argument. `GET /api/control/runs` now carries the project folder's name for the confirm card. Full suite on the merge: 125 files, 2343 tests.
 - Review note on L4: one fix. Claude Code's `usage` on the result line covers only the last turn (82 output tokens on the real scratch run), while `modelUsage` holds the run's totals per model (738); the summary now sums `modelUsage` and falls back to `usage`, with a test. On the real run the summary reads $0.289, 240,877 input and 738 output tokens. Full suite on the merge: 124 files, 2330 tests.
+- The Dispatch panel starts a run on the room's own project when the lane source is on: `POST /api/control/runs` takes a lane and a task and runs `run-lane --project` with `--task`, the same project checks refuse this checkout, a lane worktree and a dirty folder, and the panel shows a confirm card with a switch for uncommitted changes (task L3).
 - Briefs L3 (start a project run from the drawer), L4 (costs and tokens for Claude Code and AGY, and the Meters check) and Q5 (read what changed on 2026-10-24).
 - Claude Code runs record the cost of their last result line and both Claude Code and AGY record their input and output tokens, the lane costs sum those tokens for the board, and the Meters tab reads lane mode from the bridge health answer (task L4).
 

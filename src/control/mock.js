@@ -291,7 +291,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   let issueCounter = 22
   let commentCounter = 3
   const listeners = new Set()
-  const runsState = { running: [], recent: [] }
+  const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
   const backupState = { latestMs: now() - 49.5 * HOUR_MS, running: false }
 
@@ -520,16 +520,27 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     liveRuns: () => call('liveRuns', () => state.liveRuns),
 
-    startRun: (lane, briefs, options = {}) =>
+    startRun: (lane, run, options = {}) =>
       call('startRun', () => {
+        const body = Array.isArray(run) ? { briefs: run } : run ?? {}
         const confirmed = Object.hasOwn(options, 'confirmed') ? options.confirmed : true
         if (confirmed !== true) throw new Error('Confirm the run first.')
         const info = typeof lane === 'string' && Object.hasOwn(SAMPLE_LANES, lane) ? SAMPLE_LANES[lane] : null
         if (!info || typeof info !== 'object') throw new Error('Choose a lane from the list.')
         if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
-        if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 5) throw new Error('Choose one to five briefs.')
-        const known = new Set(parseBriefs(briefsText).map((brief) => brief.id))
-        if (briefs.some((id) => typeof id !== 'string' || !RUN_ID.test(id) || !known.has(id))) throw new Error('Choose a brief from the list.')
+        const projectRun = body.briefs === undefined
+        const briefs = projectRun ? [] : body.briefs
+        let task = ''
+        if (projectRun) {
+          if (typeof body.task !== 'string' || body.task.trim().length < 1 || body.task.length > 4000) {
+            throw new Error('Write the task in 1 to 4000 characters.')
+          }
+          task = body.task
+        } else {
+          if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 5) throw new Error('Choose one to five briefs.')
+          const known = new Set(parseBriefs(briefsText).map((brief) => brief.id))
+          if (briefs.some((id) => typeof id !== 'string' || !RUN_ID.test(id) || !known.has(id))) throw new Error('Choose a brief from the list.')
+        }
         if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
         runsState.running.push(entry)
@@ -540,7 +551,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           if (index === -1) return
           runsState.running.splice(index, 1)
           endLiveRun(liveRun)
-          runsState.recent.unshift({
+          const record = {
             lane,
             briefs: [...entry.briefs],
             model: typeof info.cli.model === 'string' && info.cli.model ? info.cli.model : null,
@@ -553,7 +564,12 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
             log: null,
             branch: '',
             commits: [],
-          })
+          }
+          if (projectRun) {
+            record.project = 'MachineRoom'
+            record.task = task.slice(0, 200)
+          }
+          runsState.recent.unshift(record)
           if (runsState.recent.length > RUN_RECENT_LIMIT) runsState.recent.pop()
           emit({ topic: 'runs' })
         }, runMs)

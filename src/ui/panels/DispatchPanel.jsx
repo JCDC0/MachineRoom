@@ -11,7 +11,7 @@ import {
 import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
 import { agentForLane, routeFields } from './route.js'
-import { recordLine, resultWord, timeSinceStart } from './runs.js'
+import { PROJECT_TASK_LIMIT, projectRunConfirm, projectRunLanes, projectTaskProblem, recordLine, resultWord, timeSinceStart } from './runs.js'
 import { profileFromBrief } from '../../policy/profile.js'
 
 export default function DispatchPanel({
@@ -62,6 +62,14 @@ export default function DispatchPanel({
   const [runsState, setRunsState] = useState({ running: [], recent: [] })
   const [runsLoading, setRunsLoading] = useState(() => typeof client?.runs === 'function')
   const [runsError, setRunsError] = useState(null)
+  const [projectName, setProjectName] = useState('')
+  const [lanesMode, setLanesMode] = useState(false)
+  const [projectLane, setProjectLane] = useState('')
+  const [projectTask, setProjectTask] = useState('')
+  const [projectAllowDirty, setProjectAllowDirty] = useState(false)
+  const [projectShowConfirm, setProjectShowConfirm] = useState(false)
+  const [projectStarting, setProjectStarting] = useState(false)
+  const [projectError, setProjectError] = useState(null)
 
   const promptReqRef = useRef(0)
   const promptBoxRef = useRef(null)
@@ -129,6 +137,7 @@ export default function DispatchPanel({
         running: Array.isArray(data?.running) ? data.running : [],
         recent: Array.isArray(data?.recent) ? data.recent : [],
       })
+      setProjectName(typeof data?.project === 'string' ? data.project : '')
     } catch (err) {
       setRunsError(err.message || 'Could not load runs.')
     } finally {
@@ -161,6 +170,27 @@ export default function DispatchPanel({
       setRunsState({ running: [], recent: [] })
       setRunsLoading(false)
       setRunsError(null)
+      setProjectName('')
+    }
+  }, [client])
+
+  useEffect(() => {
+    let alive = true
+    async function loadHealth() {
+      if (typeof client?.health !== 'function') {
+        if (alive) setLanesMode(false)
+        return
+      }
+      try {
+        const health = await client.health()
+        if (alive) setLanesMode(health?.lanes === true)
+      } catch {
+        if (alive) setLanesMode(false)
+      }
+    }
+    loadHealth()
+    return () => {
+      alive = false
     }
   }, [client])
 
@@ -350,6 +380,33 @@ export default function DispatchPanel({
     }
   }
 
+  function openProjectConfirm() {
+    if (!projectLane || projectTaskProblem(projectTask)) return
+    setProjectShowConfirm(true)
+    setProjectError(null)
+  }
+
+  async function handleConfirmProjectRun() {
+    const problem = projectTaskProblem(projectTask)
+    if (!projectLane || problem || typeof client?.startRun !== 'function') {
+      if (problem) setProjectError(problem)
+      return
+    }
+    setProjectStarting(true)
+    setProjectError(null)
+    try {
+      await client.startRun(projectLane, { task: projectTask, allowDirty: projectAllowDirty })
+      setProjectShowConfirm(false)
+      setProjectTask('')
+      setProjectAllowDirty(false)
+      loadRuns()
+    } catch (err) {
+      setProjectError(err.message || 'Could not start run.')
+    } finally {
+      setProjectStarting(false)
+    }
+  }
+
   async function handleCopyPrompt() {
     if (!promptText) return
     try {
@@ -484,6 +541,10 @@ export default function DispatchPanel({
   const otherModels = availableModels.filter(
     (item) => !item.tier || !['small', 'medium', 'large'].includes(item.tier)
   )
+  const projectLanes = projectRunLanes(agents)
+  const projectConfirm = projectRunConfirm({ lane: projectLane, project: projectName, task: projectTask })
+  const projectProblem = projectTaskProblem(projectTask)
+  const canStartProject = typeof client?.startRun === 'function' && Boolean(projectLane) && !projectProblem
 
   return (
     <form className="dispatch-form" onSubmit={handleSubmit} noValidate>
@@ -496,6 +557,115 @@ export default function DispatchPanel({
       {submitError && (
         <div className="panel-banner is-error" role="alert">
           {submitError}
+        </div>
+      )}
+
+      {lanesMode && projectLanes.length > 0 && (
+        <div className="panel-field project-run-section">
+          <div className="panel-field-head">
+            <label>Run on this project</label>
+          </div>
+
+          <div className="panel-field">
+            <label htmlFor="project-run-lane">Lane</label>
+            <select
+              id="project-run-lane"
+              value={projectLane}
+              onChange={(event) => {
+                setProjectLane(event.target.value)
+                setProjectShowConfirm(false)
+                setProjectError(null)
+              }}
+            >
+              <option value="">Select a lane</option>
+              {projectLanes.map((lane) => (
+                <option key={lane.key} value={lane.key}>
+                  {lane.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="panel-field">
+            <label htmlFor="project-run-task">Task</label>
+            <textarea
+              id="project-run-task"
+              rows={4}
+              value={projectTask}
+              maxLength={PROJECT_TASK_LIMIT}
+              placeholder="What should the agent do in this project?"
+              onChange={(event) => {
+                setProjectTask(event.target.value)
+                setProjectShowConfirm(false)
+                setProjectError(null)
+              }}
+            />
+          </div>
+
+          <div className="panel-checkbox-field">
+            <label>
+              <input
+                type="checkbox"
+                checked={projectAllowDirty}
+                onChange={(event) => {
+                  setProjectAllowDirty(event.target.checked)
+                  setProjectShowConfirm(false)
+                  setProjectError(null)
+                }}
+              />
+              <span>Allow uncommitted changes</span>
+            </label>
+          </div>
+
+          <div className="panel-actions">
+            <button
+              type="button"
+              className="brief-run-btn"
+              disabled={!canStartProject}
+              onClick={openProjectConfirm}
+            >
+              Run
+            </button>
+          </div>
+
+          {projectShowConfirm && (
+            <div className="brief-confirm-card" role="region" aria-label="Confirm project run">
+              <div className="brief-confirm-meta mono">
+                <span className="brief-confirm-lane">Lane: {projectConfirm.lane}</span>
+                <span className="brief-confirm-project">Project: {projectConfirm.project}</span>
+                <span className="brief-confirm-task">Task: {projectConfirm.task}</span>
+              </div>
+              <div className="brief-confirm-warning">
+                This starts the agent on this computer and spends money.
+              </div>
+              <div className="brief-confirm-actions">
+                <button
+                  type="button"
+                  className="brief-confirm-btn"
+                  disabled={projectStarting}
+                  onClick={handleConfirmProjectRun}
+                >
+                  {projectStarting ? 'Starting' : 'Confirm'}
+                </button>
+                <button
+                  type="button"
+                  className="brief-cancel-btn"
+                  disabled={projectStarting}
+                  onClick={() => {
+                    setProjectShowConfirm(false)
+                    setProjectError(null)
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {projectError && (
+                <div className="brief-confirm-error mono" role="alert">
+                  {projectError}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

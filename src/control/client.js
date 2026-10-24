@@ -198,7 +198,10 @@ export function createClient({
       return Array.isArray(data?.runs) ? data.runs : []
     },
 
-    startRun: (lane, briefs) => request('POST', '/api/control/runs', { lane, briefs, confirmed: true }),
+    startRun: (lane, run) => {
+      const body = Array.isArray(run) ? { briefs: run } : { ...(run ?? {}) }
+      return request('POST', '/api/control/runs', { lane, ...body, confirmed: true })
+    },
 
     reviews: async () => {
       const data = await request('GET', '/api/control/reviews', undefined, REQUEST_LIMITS.reviews)
