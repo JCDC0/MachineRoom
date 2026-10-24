@@ -71,7 +71,7 @@ function hunkStart(line) {
   return { oldLine: Number(match[1]), newLine: Number(match[2]) }
 }
 
-async function readHistory(repo, args, profileName, findings) {
+async function readHistory(repo, args, profileName, findings, { removed = true } = {}) {
   const child = spawn(gitPath(), args, { cwd: repo, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   let error = ''
   child.stderr.on('data', (chunk) => { error += chunk })
@@ -114,7 +114,7 @@ async function readHistory(repo, args, profileName, findings) {
         continue
       }
       if (line.startsWith('-')) {
-        add(line.slice(1), oldLine, file)
+        if (removed) add(line.slice(1), oldLine, file)
         oldLine += 1
         continue
       }
@@ -213,7 +213,7 @@ async function main() {
       return
     }
   }
-  const history = await readHistory(repo, historyArgsFrom(from), profileName, findings)
+  const history = await readHistory(repo, historyArgsFrom(from), profileName, findings, { removed: from === '' })
   if (history.code !== 0) {
     process.stderr.write(`The history could not be read. ${history.stderr.trim() || 'git log failed.'}\n`)
     process.exitCode = 1
