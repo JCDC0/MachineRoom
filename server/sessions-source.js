@@ -1,5 +1,4 @@
-import { createClaudeSessionsReader } from './claude-sessions.js'
-import { createOpencodeSessionsReader } from './opencode-sessions.js'
+import { SESSION_HARNESSES } from './harnesses/index.js'
 import { runsFolder as defaultRunsFolder } from './lanes-source.js'
 
 const DEFAULT_POLL_MS = 1000
@@ -10,7 +9,10 @@ export function createSessionsSource(options = {}) {
   const now = options.now ?? Date.now
   const onFrame = options.onFrame ?? (() => {})
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
-  const makers = Array.isArray(options.readers) && options.readers.length > 0 ? options.readers : [createClaudeSessionsReader, createOpencodeSessionsReader]
+  const makers =
+    Array.isArray(options.readers) && options.readers.length > 0
+      ? options.readers
+      : SESSION_HARNESSES.map((harness) => harness.createSessionsReader)
   const shared = { projectRoot, runsFolder, now, emit: onFrame }
   if (options.home !== undefined) shared.home = options.home
   if (options.quietMs !== undefined) shared.quietMs = options.quietMs

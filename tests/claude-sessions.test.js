@@ -2,6 +2,7 @@ import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { claudeProjectSlug, createClaudeSessionsReader } from '../server/claude-sessions.js'
+import { SESSION_HARNESSES, harnessByAdapter, harnessByKey } from '../server/harnesses/index.js'
 import { createBridge } from '../server/index.js'
 import { createSessionsSource } from '../server/sessions-source.js'
 import { buildActivities } from '../src/model/pipeline.js'
@@ -390,6 +391,16 @@ describe('sessions source', () => {
     expect(source.agents.map((agent) => agent.key)).toEqual(['claude-session', 'opencode-session'])
     expect(source.agents[0]).toEqual(AGENT)
     expect(source.readers).toHaveLength(2)
+  })
+
+  it('registers one session reader per harness that has one', () => {
+    expect(SESSION_HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'opencode'])
+    expect(harnessByKey.claude.createSessionsReader).toBe(createClaudeSessionsReader)
+    expect(typeof harnessByKey.opencode.createSessionsReader).toBe('function')
+    expect(harnessByAdapter.claude_local).toBe(harnessByKey.claude)
+    expect(harnessByAdapter.opencode_local).toBe(harnessByKey.opencode)
+    expect(harnessByKey.hermes.createSessionsReader).toBeUndefined()
+    expect(harnessByKey.agy.createSessionsReader).toBeUndefined()
   })
 
   it('ticks one reader at a time, in order, and keeps going after an error', () => {
