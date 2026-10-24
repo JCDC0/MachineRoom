@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Briefs Q5a, Q5b and Q5c: the V5 audit's findings X1 to X17, in three parts that touch separate files.
+
 - Two fixes from the first browser check of L3: the lane fallback of `/api/control/agents` gave lane agents the role `general`, so Dispatch's `Run on this project` section, which lists only agents with no Paperclip role, never showed; lane agents now answer with `role: null`, with a test. The waiting overlay no longer tells the owner to assign an issue in Paperclip: it names Dispatch and `npm run run-lane` first, and its titles say the live feed instead of Paperclip. A task typed in Dispatch then ran on OpenCode 2 on a scratch project and made its change there.
 
 - Review note on L3: no fixes. `POST /api/control/runs` with a task and no briefs starts `run-lane --project` on the bridge's root, still behind `confirmed: true`, with the project checks and the dirty check on the server; it spawns `node` with `shell: false`, so the task text is one argument. `GET /api/control/runs` now carries the project folder's name for the confirm card. Full suite on the merge: 125 files, 2343 tests.
