@@ -1,4 +1,4 @@
-import { relativeTo } from '../paths.js'
+import { basename, relativeTo } from '../paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const KINDS = [
@@ -13,6 +13,19 @@ const FILE_KINDS = new Set(['read', 'edit', 'write'])
 const STREAM_FILES = new Set(['read', 'write', 'edit', 'multiedit', 'notebookedit'])
 const STREAM_FOLDERS = new Set(['glob', 'grep', 'ls'])
 const STREAM_TASKS = new Set(['task', 'agent'])
+const PROFILE_PATH = /(?:[A-Za-z]:[\\/]Users[\\/][^\\/\s"'<>|?*]+|\/(?:home|Users)\/[^/\s"'<>|?*]+)(?:[\\/][^\\/\s"'<>|?*]+)*/g
+const PROFILE_QUOTED = /(["'])((?:[A-Za-z]:[\\/]Users[\\/]|\/(?:home|Users)\/)[^"']*)\1/g
+
+function shortenProfile(text) {
+  return String(text)
+    .replace(PROFILE_QUOTED, (found, quote, inner) => `${quote}${basename(inner)}${quote}`)
+    .replace(PROFILE_PATH, (found) => basename(found))
+}
+
+function commandLabel(command, fallback) {
+  const text = typeof command === 'string' && command ? command : fallback
+  return `$ ${shorten(shortenProfile(text))}`
+}
 
 function kindOf(name) {
   return KINDS.find(([pattern]) => pattern.test(name))?.[1] ?? 'other'
@@ -74,7 +87,7 @@ export function createClaudeParser(ctx) {
     const lower = name.toLowerCase()
     const input = item.input && typeof item.input === 'object' && !Array.isArray(item.input) ? item.input : {}
     const owner = ownerOf(json.parent_tool_use_id)
-    const call = { id, name, owner, input, kind: 'other', path: null, command: null, started: false, task: false }
+    const call = { id, name, owner, input, kind: 'other', path: null, command: null, started: false, task: false, background: false }
     calls.set(id, call)
     let touches = []
     let label = name || 'tool'
@@ -90,16 +103,18 @@ export function createClaudeParser(ctx) {
       }
     } else if (STREAM_FOLDERS.has(lower)) {
       call.kind = 'search'
-      const touch = folderTouch(input.path)
+      const raw = typeof input.path === 'string' ? input.path : ''
+      const touch = folderTouch(raw)
       if (touch) touches = [touch]
-      label = `${lower} ${touch ? touch.path || '.' : shorten(String(input.path ?? '')) || '.'}`
+      label = `${lower} ${touch ? touch.path || '.' : basename(raw) || '.'}`
     } else if (lower === 'bash') {
       call.kind = 'shell'
       call.command = typeof input.command === 'string' ? input.command : ''
       touches = commandTouch(ctx, call.command)
-      label = `$ ${shorten(call.command || 'bash')}`
+      label = commandLabel(call.command, 'bash')
     } else if (STREAM_TASKS.has(lower)) {
       const description = typeof input.description === 'string' ? input.description.trim() : ''
+      if (input.run_in_background === true) call.background = true
       label = description ? `task: ${shorten(description)}` : 'task'
     }
     out.push({ ...toolStart({ time, id, tool: call.kind, label, touches }), agent: owner })
@@ -119,9 +134,15 @@ export function createClaudeParser(ctx) {
     out.push({ ...toolEnd({ time, id, ok }), agent: call.owner })
     if (call.task) {
       const child = children.get(id)
-      // A good result before any line of the child means it runs in the background; it ends with the parent's run.
-      if (child && (heard.has(child) || !ok)) out.push({ time, type: 'agent.end', agent: child, ok })
+      if (child && (!ok || (!call.background && heard.has(child)))) out.push({ time, type: 'agent.end', agent: child, ok })
     }
+  }
+
+  function hear(json) {
+    const parentId = json?.parent_tool_use_id
+    if (typeof parentId !== 'string' || parentId === '') return
+    const child = children.get(parentId)
+    if (child) heard.add(child)
   }
 
   function handleAcpx(json, time) {
@@ -160,6 +181,7 @@ export function createClaudeParser(ctx) {
 
   const reader = createLineReader((line, time) => {
     const json = parseJson(line)
+    hear(json)
     if (json?.type === 'acpx.tool_call' && json.toolCallId) handleAcpx(json, time)
     else handleStream(json, time)
   })

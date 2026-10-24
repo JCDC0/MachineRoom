@@ -1,11 +1,13 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import {
+  childEnvironment,
   commandFor,
   laneStats,
   parseRunArgs,
@@ -205,6 +207,54 @@ describe('projectProblems', () => {
     if (process.platform !== 'win32') return
     expect(pathInside(root.toUpperCase(), root.toLowerCase())).toBe(true)
   })
+
+  it('refuses a git checkout that shares this repository', () => {
+    const project = 'C:\\src\\clone'
+    const common = 'C:\\GitHub\\MachineRoom\\.git'
+    expect(projectProblems({ project, root, mainCheckout: main, lanes: realLanes, commonDir: common, repoCommonDir: common }))
+      .toEqual([`The project folder ${project} is a git checkout of this repository. Run on another project.`])
+    expect(projectProblems({ project, root, mainCheckout: main, lanes: realLanes, commonDir: 'C:\\src\\clone\\.git', repoCommonDir: common }))
+      .toEqual([])
+  })
+
+  it('refuses the user profile, the OS temp folder and the runs folder', () => {
+    const home = 'C:\\Users\\me'
+    const temp = 'C:\\Users\\me\\AppData\\Local\\Temp'
+    const runs = `${temp}\\machineroom-runs`
+    const data = { root, mainCheckout: main, lanes: realLanes, home, temp, runs }
+
+    expect(projectProblems({ ...data, project: home }))
+      .toEqual([`The project folder ${home} is the user profile. Run on another project.`])
+    expect(projectProblems({ ...data, project: 'C:\\Users' }))
+      .toEqual(['The project folder C:\\Users holds the user profile. Name one project folder, not a folder of profiles.'])
+    expect(projectProblems({ ...data, project: temp }))
+      .toEqual([`The project folder ${temp} is the OS temp folder. Run on another project.`])
+    expect(projectProblems({ ...data, project: runs }))
+      .toEqual([`The project folder ${runs} is the runs folder or inside it. Run on another project.`])
+    expect(projectProblems({ ...data, project: `${runs}\\opencode-20261024-120000` }))
+      .toEqual([`The project folder ${runs}\\opencode-20261024-120000 is the runs folder or inside it. Run on another project.`])
+  })
+
+  it('allows a folder inside the user profile and inside the temp folder', () => {
+    const home = 'C:\\Users\\me'
+    const temp = 'C:\\Users\\me\\AppData\\Local\\Temp'
+    const runs = `${temp}\\machineroom-runs`
+    const data = { root, mainCheckout: main, lanes: realLanes, home, temp, runs }
+
+    expect(projectProblems({ ...data, project: `${home}\\Documents\\Other` })).toEqual([])
+    expect(projectProblems({ ...data, project: `${temp}\\Other` })).toEqual([])
+  })
+})
+
+describe('childEnvironment', () => {
+  it('sets PWD and removes OLDPWD and INIT_CWD', () => {
+    const child = childEnvironment({ PWD: 'C:\\old', OLDPWD: 'C:\\older', INIT_CWD: 'C:\\init', PATH: 'C:\\bin' }, 'C:\\new')
+    expect(child).toEqual({ PWD: 'C:\\new', PATH: 'C:\\bin' })
+  })
+
+  it('leaves no PWD when the run has no folder', () => {
+    expect(childEnvironment({ PWD: 'C:\\old', OLDPWD: 'C:\\older' }, '')).toEqual({})
+  })
 })
 
 describe('scripts/run-lane.mjs on another project', () => {
@@ -221,6 +271,44 @@ describe('scripts/run-lane.mjs on another project', () => {
     expect(result.code).toBe(1)
     expect(result.stdout).toContain('is this checkout')
     expect(result.stdout).not.toContain('cwd:')
+  })
+
+  it('refuses a junction to this checkout', async (context) => {
+    const base = tempDir()
+    const link = join(base, 'repo-link')
+    try {
+      symlinkSync(REPO_ROOT, link, 'junction')
+    } catch {
+      context.skip()
+      return
+    }
+    const result = await runLane(['opencode', '--project', link, '--task', 'Fix it.', '--dry-run'])
+    expect(result.code).toBe(1)
+    expect(result.stdout).toContain('is this checkout')
+    expect(result.stdout).not.toContain('cwd:')
+  })
+
+  it('refuses the OS temp folder and the runs folder', async () => {
+    const base = tempDir()
+    const home = resolve(homedir())
+    const temp = resolve(tmpdir())
+
+    const atHome = await runLane(['opencode', '--project', home, '--task', 'Fix it.', '--dry-run'])
+    expect(atHome.code).toBe(1)
+    expect(atHome.stdout).toMatch(/is the user profile|holds the user profile/)
+    expect(atHome.stdout).not.toContain('cwd:')
+
+    const atTemp = await runLane(['opencode', '--project', temp, '--task', 'Fix it.', '--dry-run'])
+    expect(atTemp.code).toBe(1)
+    expect(atTemp.stdout).toContain('is the OS temp folder')
+    expect(atTemp.stdout).not.toContain('cwd:')
+
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs, { recursive: true })
+    const atRuns = await runLane(['opencode', '--project', runs, '--task', 'Fix it.', '--dry-run'], { TEMP: base })
+    expect(atRuns.code).toBe(1)
+    expect(atRuns.stdout).toContain('is the runs folder or inside it')
+    expect(atRuns.stdout).not.toContain('cwd:')
   })
 
   it('refuses a dirty git folder and runs it with --allow-dirty', async () => {
@@ -301,6 +389,15 @@ describe('the record of a project run', () => {
     ])
     expect(runListLine(written)).toContain('none')
     expect(laneStats([written]).rows[0]).toMatchObject({ lane: 'opencode', runs: 1 })
+  })
+
+  it('masks a key in the task before it stores it', () => {
+    const key = `sk-${'a'.repeat(32)}`
+    const record = runRecord({ lane: 'opencode', briefs: [], task: `Use OPENROUTER_API_KEY=${key} and report.` })
+    expect(record.task).not.toContain(key)
+    expect(record.task).toContain('OPENROUTER_API_KEY=[key]')
+    const written = JSON.parse(JSON.stringify(record))
+    expect(written.task).toBe(record.task)
   })
 
   it('still lists a project run with --list and --stats', async () => {

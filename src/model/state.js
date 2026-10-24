@@ -201,6 +201,12 @@ export function apply(state, activity) {
       say(agent, activity.text, 'error')
       break
     case 'run.end':
+      if (agent.runId !== null && activity.runId !== agent.runId) {
+        for (const child of state.agents.values()) {
+          if (child.status === 'working' && child.runId === activity.runId && isDescendant(state, child, agent.key)) finish(child, activity)
+        }
+        break
+      }
       agent.endedAt = activity.time
       agent.calls.clear()
       agent.focus = []

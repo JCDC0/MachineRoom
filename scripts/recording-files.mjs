@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { maskKeys } from '../src/briefs/audit.js'
 import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
 import { RECORDING_NAME } from '../src/startup.js'
@@ -27,7 +28,7 @@ function laneOf(lanes, record) {
   const lane = lanes && Object.hasOwn(lanes, key) ? lanes[key] : null
   if (!lane) throw refusal(`There is no lane named ${key} in docs/agents/lanes.json.`)
   const harness = lane.cli?.harness
-  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy') throw refusal(`The lane ${key} has no command line, so its run cannot be recorded.`)
+  if (harness !== 'hermes' && harness !== 'opencode' && harness !== 'agy' && harness !== 'claude') throw refusal(`The lane ${key} has no command line, so its run cannot be recorded.`)
   return { key, lane, harness }
 }
 
@@ -138,7 +139,7 @@ export function writeRecording({ record, lanes, root, env, session, exportSessio
   const { key, lane, harness } = laneOf(lanes, record)
   const logPath = String(record.log ?? '')
   if (!logPath || !existsSync(logPath)) throw refusal('The log for that run is gone.')
-  const log = readFileSync(logPath, 'utf8')
+  const log = maskKeys(readFileSync(logPath, 'utf8')).text
   const exportText = harness === 'hermes' ? sessionFor({ lane, key, record, env, session, exportSession }) : ''
   const worktree = String(lane.worktree ?? '')
   if (!worktree) throw refusal(`The lane ${key} has no worktree, so its file list cannot be read.`)

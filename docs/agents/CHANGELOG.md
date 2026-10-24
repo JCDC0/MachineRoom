@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Review note on Q5a and Q5c: one fix. Both were cherry-picked onto main, since their branches grew from the audit commit that still held the owner's user name; the audit rows they marked were joined by hand and masked again. Q5c's new Claude label tests used the owner's real user name in their example paths; they now use `someone`. Claude dry-ran the project checks after the merge: a project under `C:\GitHub` and the scratch project under temp are allowed, `C:\GitHub` and the profile folder are refused. The `--replay` digests did not change. Full suite on the merge: 126 files, 2376 tests.
+- A project run resolves the project, this checkout, the main checkout and every lane worktree before its checks, refuses the user profile and folders that hold it, the OS temp folder and the runs folder, starts the harness with `PWD` set and `OLDPWD` and `INIT_CWD` removed, masks keys in the recording log and the stored task, and records Claude Code runs (task Q5a).
+- A `run.end` for a run that is not the agent's current run no longer ends that agent; it ends only the working children of that run, so two runs of one lane cannot show the lane finished while the newer one works (X7).
+- The lane fallbacks answer the agents, tasks, live runs, approvals, comments and costs reads from the lane runs at once when the bridge's last Paperclip probe is down. They fall back only when the source has a lane agent, and a Paperclip error goes through when it has none (X8).
+- The Claude parser hears a child from any line that carries its call, not only a tool line, and keeps an `Agent` or `Task` with `run_in_background: true` open at its result (X9).
+- A `Glob`, `Grep` or `LS` label for a folder outside the project shows its base name, and a stream-json `Bash` label shortens an absolute path under the user profile folder to its base name (X10).
+
 - Briefs Q5a, Q5b and Q5c: the V5 audit's findings X1 to X17, in three parts that touch separate files.
 
 - Two fixes from the first browser check of L3: the lane fallback of `/api/control/agents` gave lane agents the role `general`, so Dispatch's `Run on this project` section, which lists only agents with no Paperclip role, never showed; lane agents now answer with `role: null`, with a test. The waiting overlay no longer tells the owner to assign an issue in Paperclip: it names Dispatch and `npm run run-lane` first, and its titles say the live feed instead of Paperclip. A task typed in Dispatch then ran on OpenCode 2 on a scratch project and made its change there.
