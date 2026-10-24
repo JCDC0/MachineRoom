@@ -20,6 +20,7 @@ export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orch
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
 export const STOPPED_REPLY = 'The orchestrator stopped.'
+export const RESTART_MESSAGE = 'The room restarted during a turn. Send the message again if it still matters.'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const PROMPT_FILE = join(REPO_ROOT, 'docs', 'agents', 'ORCHESTRATOR-AGENT.md')
@@ -190,7 +191,8 @@ export function createOrchestrator({
   function persist() {
     try {
       mkdirSync(folder, { recursive: true })
-      writeFileSync(conversationFile, `${JSON.stringify({ project: root, sessionId, state, messages }, null, 2)}\n`)
+      const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
+      writeFileSync(conversationFile, `${JSON.stringify({ project: root, sessionId, state, messages, pending: waiting }, null, 2)}\n`)
     } catch {}
   }
 
@@ -203,6 +205,7 @@ export function createOrchestrator({
     }
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
+    if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
     const list = Array.isArray(saved.messages) ? saved.messages : []
     for (const item of list) {
@@ -217,6 +220,15 @@ export function createOrchestrator({
       })
     }
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    if (saved.state === 'working') {
+      messages.push({ id: randomUUID(), from: 'room', text: RESTART_MESSAGE, at: iso(now()) })
+      while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    }
+    const waitingIds = Array.isArray(saved.pending) ? saved.pending : []
+    for (const id of waitingIds) {
+      const message = messages.find((item) => item.id === id && item.from === 'owner')
+      if (message && !pending.includes(message)) pending.push(message)
+    }
   }
 
   function setState(next) {
@@ -462,6 +474,8 @@ export function createOrchestrator({
       if (turn.timer) clearTimeout(turn.timer)
       killTree(turn.child)
     }
+    persist()
+    notify()
   }
 
   restore()
@@ -469,6 +483,7 @@ export function createOrchestrator({
     mkdirSync(folder, { recursive: true })
   } catch {}
   persist()
+  maybeStartTurn()
 
   return { answer, send, stop, onFrame, close }
 }

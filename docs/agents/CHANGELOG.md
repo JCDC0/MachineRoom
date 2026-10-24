@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The orchestrator recovers after a room restart: a running turn is killed and its state saved when the bridge stops, a saved `working` state reopens as `idle` with a room message, and an owner message that waited behind the turn starts a turn after the restart (task R4).
 - The orchestrator can run on OpenCode as well as Claude Code: the lane's `cli.harness` picks `claude -p` or `opencode run --format json` with its saved session, the first OpenCode turn carries the filled instructions, and the reply, cost and tokens come from the turn's own log (task R3).
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).

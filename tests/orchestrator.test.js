@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
-import { createOrchestrator } from '../server/orchestrator.js'
+import { createOrchestrator, RESTART_MESSAGE } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -171,6 +171,34 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
 
 async function waitIdle(rig, count) {
   await waitFor(() => rig.answer().state === 'idle' && rig.calls().length === count, 15000, `turn ${count} to end`)
+}
+
+function restoreRig(rig, { mode = 'reply', file = 'calls-restored.jsonl' } = {}) {
+  const callsFile = join(rig.base, file)
+  const spawnFake = (source, args, options) => {
+    const env = {
+      ...(options.env ?? process.env),
+      MR_CALLS: callsFile,
+      MR_MODE: mode,
+      MR_RELEASE: join(rig.base, 'no-release'),
+    }
+    return spawn(process.execPath, [rig.script, ...args], { ...options, env })
+  }
+  const orchestrator = createOrchestrator({
+    projectRoot: rig.projectRoot,
+    runsFolder: rig.runs,
+    lanes: rig.lanes,
+    spawn: spawnFake,
+    promptFile: rig.promptFile,
+    bridgeUrl: () => 'http://127.0.0.1:5999',
+  })
+  cleanups.push(async () => orchestrator.close())
+  return {
+    orchestrator,
+    callsFile,
+    calls: () => readLines(callsFile),
+    answer: () => orchestrator.answer(),
+  }
 }
 
 function stateFile(rig) {
@@ -507,6 +535,66 @@ describe('the orchestrator conversation file', () => {
     expect(args).not.toContain('--session-id')
     expect(valueAfter(args, '--resume')).toBe(sessionId)
     expect(restored.answer().messages.some((message) => message.text === 'Still there?')).toBe(true)
+  })
+
+  it('kills a running turn on close, saves the working state and says the room restarted', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('A long job')
+    await waitFor(() => rig.calls().length === 1)
+    const pid = rig.calls()[0].pid
+    rig.orchestrator.close()
+    await waitFor(() => {
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+    expect(stateFile(rig).state).toBe('working')
+
+    const restored = restoreRig(rig)
+    expect(restored.answer().state).toBe('idle')
+    expect(restored.answer().messages.at(-1)).toMatchObject({ from: 'room', text: RESTART_MESSAGE })
+    await sleep(80)
+    expect(restored.calls()).toHaveLength(0)
+  })
+
+  it('keeps an owner message that waited for the next turn and runs it after a restart', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('First job')
+    await waitFor(() => rig.calls().length === 1)
+    rig.send('Second job')
+    await sleep(120)
+    expect(rig.calls()).toHaveLength(1)
+    const pid = rig.calls()[0].pid
+    rig.orchestrator.close()
+    await waitFor(() => {
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+
+    const saved = stateFile(rig)
+    expect(saved.state).toBe('working')
+    expect(saved.pending).toHaveLength(1)
+    expect(saved.messages.find((message) => message.id === saved.pending[0])).toMatchObject({
+      from: 'owner',
+      text: 'Second job',
+    })
+
+    const restored = restoreRig(rig)
+    await waitFor(() => restored.calls().length === 1, 15000, 'the waiting message to start')
+    await waitFor(() => restored.answer().state === 'idle')
+    const args = restored.calls()[0].args
+    expect(args[1]).toBe('Second job')
+    expect(valueAfter(args, '--resume')).toBe(saved.sessionId)
+    expect(restored.answer().messages.some((message) => message.text === RESTART_MESSAGE)).toBe(true)
   })
 })
 
