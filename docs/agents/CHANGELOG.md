@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `run-lane` holds `<runs>/project-<hash>.lock` with its pid for every `--project` run, or the worktree folder with `--worktree`, so a second run on one project stops with one sentence and lanes in their own worktrees still run side by side; the queue branch is `machineroom/queue-<lane>-<stamp>` (task Q6a).
+- The bridge refuses a brief run on a room rooted in another repository with `Briefs run in this repository. Use a task or a queue on another project.` (task Q6a).
+- The bridge refuses a queue or a `worktree: true` run on a folder that is not a git checkout with the sentence `run-lane` prints, before it writes the queue file or starts the runner (task Q6a).
+- The bridge allows the Vite origin `http://localhost:5173` and its 127.0.0.1 form only when it has no `staticDir`, so a served room accepts its own port and the named origins only (task Q6a).
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).

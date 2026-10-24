@@ -1,7 +1,8 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { connect } from 'node:net'
-import { basename, join } from 'node:path'
+import { basename, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { extractReplyText } from '../server/assistant.js'
 import { createClient } from '../src/control/client.js'
@@ -11,6 +12,8 @@ import { getJson, postJson, startLaneBridge, waitFor } from './helpers/bridge.js
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const KEY = 'sk-or-v1-' + '0123456789abcdef'.repeat(4)
+const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const RUN_ROOM = join(REPO_ROOT, 'docs', 'agents')
 const cleanups = []
 
 afterEach(async () => {
@@ -389,9 +392,13 @@ describe('run routes', () => {
     const runnerPath = join(tempDir(), 'tiny-runner.mjs')
     writeFileSync(runnerPath, script)
     const started = await laneBridge({
-      projectRoot: dir,
+      projectRoot: RUN_ROOM,
       runsDir: tempDir(),
-      bridge: { runnerCommand: { file: process.execPath, args: [runnerPath] }, env: {} },
+      bridge: {
+        briefsDir: join(dir, 'docs', 'agents'),
+        runnerCommand: { file: process.execPath, args: [runnerPath] },
+        env: {},
+      },
     })
     return { url: started.url, dir, bridge: started.bridge }
   }
@@ -562,7 +569,7 @@ describe('run routes', () => {
     const { url, dir } = await startRunsBridge()
     const res = await fetch(`${url}/api/control/runs`)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ project: basename(dir), running: [], recent: [] })
+    expect(await res.json()).toEqual({ project: basename(RUN_ROOM), running: [], recent: [] })
   })
 
   it('reads the last 20 records newest first and skips lines that do not parse', async () => {
@@ -640,7 +647,7 @@ describe('run routes', () => {
 
   it('refuses a bad lane, a bad brief and a second run on a busy lane with plain sentences', async () => {
     useRunsTemp()
-    const { url } = await startRunsBridge()
+    const { url } = await startRunsBridge({ script: TINY_SLEEPER })
 
     const noLane = await postJson(`${url}/api/control/runs`, { briefs: ['C3e'], confirmed: true })
     expect(noLane.status).toBe(400)

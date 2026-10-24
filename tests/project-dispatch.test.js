@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
-import { QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM } from '../server/runs.js'
+import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM } from '../server/runs.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   PROJECT_CONFIRM_LIMIT,
@@ -31,6 +31,12 @@ afterEach(async () => {
 function tempDir(prefix) {
   const dir = makeTempDir(prefix)
   cleanups.push(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+  return dir
+}
+
+function gitProject(prefix) {
+  const dir = tempDir(prefix)
+  execFileSync(gitPath(), ['init'], { cwd: dir, stdio: 'ignore' })
   return dir
 }
 
@@ -115,14 +121,24 @@ describe('the runs route with a task', () => {
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
-  it('passes --worktree when the body asks for the project run in a worktree, and refuses the orchestrator lane', async () => {
-    const project = tempDir('mr-project-dispatch-')
+  it('passes --worktree when the body asks for the project run in a worktree, and refuses a plain folder and the orchestrator lane', async () => {
+    const plain = tempDir('mr-project-dispatch-')
     const runnerDir = tempDir('mr-project-runner-')
     const out = join(runnerDir, 'args.json')
+    const plainBridge = await startBridge({ projectRoot: plain, runnerPath: writeRunner(runnerDir, out) })
+    const refused = await postJson(`${plainBridge.url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', worktree: true, confirmed: true })
+    expect(refused.status).toBe(400)
+    expect(refused.body).toEqual({
+      error: `The project folder ${plain} is not a git folder. --worktree needs one.`,
+    })
+    expect(readArgs(out)).toBeNull()
+
+    const project = tempDir('mr-project-dispatch-')
+    execFileSync(gitPath(), ['init'], { cwd: project, stdio: 'ignore' })
     const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
 
-    const refused = await postJson(`${url}/api/control/runs`, { lane: 'orchestrator', task: 'Fix it.', confirmed: true })
-    expect(refused.status).toBe(400)
+    const orchestrator = await postJson(`${url}/api/control/runs`, { lane: 'orchestrator', task: 'Fix it.', confirmed: true })
+    expect(orchestrator.status).toBe(400)
     const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', worktree: true, confirmed: true })
     expect(res.status).toBe(202)
     const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
@@ -240,27 +256,24 @@ describe('the runs route with a task', () => {
     }
   })
 
-  it('keeps the brief route unchanged, even on a dirty project', async () => {
+  it('refuses a brief run on a room whose root is another repository', async () => {
     const project = tempDir('mr-project-dispatch-')
     writeProject(project)
     execFileSync(gitPath(), ['init'], { cwd: project, stdio: 'ignore' })
-    writeFileSync(join(project, 'notes.txt'), 'uncommitted\n')
     const runnerDir = tempDir('mr-project-runner-')
     const out = join(runnerDir, 'args.json')
     const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
 
     const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e'], confirmed: true })
-    expect(res.status).toBe(202)
-    expect(res.body).toMatchObject({ lane: 'opencode', briefs: ['C3e'] })
-    const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
-    expect(args).toEqual(['opencode', 'C3e'])
-    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error: BRIEF_PROJECT_PROBLEM })
+    expect(readArgs(out)).toBeNull()
   })
 })
 
 describe('the runs route with a queue', () => {
   it('writes the queue file and starts run-lane with --queue', async () => {
-    const project = tempDir('mr-project-dispatch-')
+    const project = gitProject('mr-project-dispatch-')
     const runnerDir = tempDir('mr-project-runner-')
     const out = join(runnerDir, 'args.json')
     const temp = tempDir('mr-project-temp-')
@@ -297,7 +310,7 @@ describe('the runs route with a queue', () => {
   })
 
   it('accepts twenty tasks of 4000 characters', async () => {
-    const project = tempDir('mr-project-dispatch-')
+    const project = gitProject('mr-project-dispatch-')
     const runnerDir = tempDir('mr-project-runner-')
     const out = join(runnerDir, 'args.json')
     const temp = tempDir('mr-project-temp-')
@@ -346,6 +359,28 @@ describe('the runs route with a queue', () => {
         expect(res.status, error).toBe(400)
         expect(res.body, error).toEqual({ error })
       }
+      expect(readArgs(out)).toBeNull()
+      expect(queueFiles(join(temp, 'machineroom-runs'))).toHaveLength(0)
+    } finally {
+      if (previous === undefined) delete process.env.TEMP
+      else process.env.TEMP = previous
+    }
+  })
+
+  it('refuses a queue on a folder that is not a git checkout before it writes the queue file', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const temp = tempDir('mr-project-temp-')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
+    const previous = process.env.TEMP
+    process.env.TEMP = temp
+    try {
+      const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', tasks: ['Fix it.'], confirmed: true })
+      expect(res.status).toBe(400)
+      expect(res.body).toEqual({
+        error: `The project folder ${project} is not a git folder. A queue needs one.`,
+      })
       expect(readArgs(out)).toBeNull()
       expect(queueFiles(join(temp, 'machineroom-runs'))).toHaveLength(0)
     } finally {

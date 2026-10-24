@@ -1,7 +1,8 @@
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { AGENT_REFUSAL } from '../server/control.js'
@@ -12,6 +13,7 @@ import { CLIENT_METHODS, MOCK_POLICY, createMockClient } from '../src/control/mo
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-contract-no-git-config')
+const RUN_ROOM = resolve(fileURLToPath(new URL('..', import.meta.url)))
 
 const SAMPLE_TASKS_MD = [
   '## Open work',
@@ -185,10 +187,11 @@ async function makeHarness({ records = [] } = {}) {
   useTemp(base)
   const lanes = JSON.parse(readFileSync(join(shared.repo, 'docs', 'agents', 'lanes.json'), 'utf8'))
   const bridge = createBridge({
-    projectRoot: shared.repo,
+    projectRoot: RUN_ROOM,
+    briefsDir: join(shared.repo, 'docs', 'agents'),
     port: 0,
     runnerCommand: { file: process.execPath, args: [runnerPath] },
-    lanesSource: { folder: runs, lanes, repoRoot: shared.repo, pollMs: 20, quietMs: 60000 },
+    lanesSource: { folder: runs, lanes, repoRoot: RUN_ROOM, pollMs: 20, quietMs: 60000 },
     env: {},
     reconnectMinMs: 60000,
     reconnectMaxMs: 60000,

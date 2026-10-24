@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -233,6 +233,33 @@ function runsFolder() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
+function projectHash(project) {
+  const folder = realPath(project)
+  const key = process.platform === 'win32' ? folder.toLowerCase() : folder
+  return createHash('sha256').update(key).digest('hex').slice(0, 8)
+}
+
+export function projectLockName(project) {
+  return `project-${projectHash(project)}`
+}
+
+export function takeProjectLock(folder, project) {
+  const name = projectLockName(project)
+  const path = join(folder, `${name}.lock`)
+  try {
+    return takeLaneLock(folder, name)
+  } catch (error) {
+    const message = String(error?.message ?? error)
+    if (message.includes('stopped half way')) {
+      throw new Error(`Another start on ${project} stopped half way. Start it again.`)
+    }
+    if (message.includes('already running')) {
+      throw new Error(`Another run is already going on ${project}; wait for it to end, or delete ${path} if no run is going.`)
+    }
+    throw error
+  }
+}
+
 function readTask(options) {
   if (options.taskFile) {
     const path = resolve(options.taskFile)
@@ -432,11 +459,11 @@ async function runQueueProject({ options, lane, lanes }) {
   }
   const tasks = parseQueue(text)
   if (tasks.length === 0) throw new Error('The queue file has no tasks.')
-  const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
-  const test = projectTestCommand(plan.made ? project : plan.path, options.test)
   const queueStamp = stamp()
-  const branch = `machineroom/queue-${queueStamp}`
+  const branch = `machineroom/queue-${options.lane}-${queueStamp}`
   if (options.dryRun) {
+    const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
+    const test = projectTestCommand(plan.made ? project : plan.path, options.test)
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${project}`)
     if (options.worktree) printWorktree(plan)
@@ -447,8 +474,18 @@ async function runQueueProject({ options, lane, lanes }) {
   }
   const folder = runsFolder()
   mkdirSync(folder, { recursive: true })
-  const lock = takeLaneLock(folder, options.lane)
+  const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
+  const projectLock = takeProjectLock(folder, lockTarget)
+  let lock
   try {
+    lock = takeLaneLock(folder, options.lane)
+  } catch (error) {
+    releaseLaneLock(projectLock)
+    throw error
+  }
+  try {
+    const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
+    const test = projectTestCommand(plan.made ? project : plan.path, options.test)
     const target = options.worktree ? prepareWorktree(project, options.lane) : plan
     const result = await runQueue({
       tasks,
@@ -471,6 +508,7 @@ async function runQueueProject({ options, lane, lanes }) {
     return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
   } finally {
     releaseLaneLock(lock)
+    releaseLaneLock(projectLock)
   }
 }
 
@@ -505,22 +543,32 @@ async function main() {
     const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')
     const logPath = join(folder, `${name}.log`)
     const usageFile = join(folder, `${name}.usage.json`)
-    const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
 
     if (options.dryRun) {
+      const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
       if (options.worktree) printWorktree(plan)
       printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: plan.path }), prompt)
       return 0
     }
 
     mkdirSync(folder, { recursive: true })
-    const lock = takeLaneLock(folder, options.lane)
+    const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
+    const projectLock = takeProjectLock(folder, lockTarget)
+    let lock
     try {
+      lock = takeLaneLock(folder, options.lane)
+    } catch (error) {
+      releaseLaneLock(projectLock)
+      throw error
+    }
+    try {
+      const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
       const target = options.worktree ? prepareWorktree(project, options.lane) : plan
       const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project: target.path, task })
       return run.code
     } finally {
       releaseLaneLock(lock)
+      releaseLaneLock(projectLock)
     }
   }
 
