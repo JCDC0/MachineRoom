@@ -198,6 +198,13 @@ export function createClient({
       return Array.isArray(data?.runs) ? data.runs : []
     },
 
+    orchestrator: () => request('GET', '/api/orchestrator'),
+
+    sendToOrchestrator: (text, { confirmed } = {}) =>
+      request('POST', '/api/orchestrator/messages', { text, confirmed }),
+
+    stopOrchestrator: ({ confirmed } = {}) => request('POST', '/api/orchestrator/stop', { confirmed }),
+
     startRun: (lane, run) => {
       const body = Array.isArray(run) ? { briefs: run } : { ...(run ?? {}) }
       return request('POST', '/api/control/runs', { lane, ...body, confirmed: true })

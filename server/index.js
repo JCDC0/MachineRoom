@@ -11,7 +11,8 @@ import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
-import { createLanesSource } from './lanes-source.js'
+import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
+import { createOrchestrator } from './orchestrator.js'
 import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
 import { createReviewsApi } from './reviews.js'
@@ -332,11 +333,17 @@ export function createBridge(options = {}) {
   const lanesSourceOption = options.lanesSource
   const lanesSourceOn =
     lanesSourceOption === true || (lanesSourceOption !== null && typeof lanesSourceOption === 'object') || env.MACHINEROOM_LANES === '1'
+  const lanesSourceObject = lanesSourceOption !== null && typeof lanesSourceOption === 'object' ? lanesSourceOption : {}
+  const lanesConfig = lanesSourceOn ? lanesSourceObject.lanes ?? readLanes() : {}
+  let orchestrator = null
   const lanesSource = lanesSourceOn
     ? createLanesSource({
-        ...(lanesSourceOption !== null && typeof lanesSourceOption === 'object' ? lanesSourceOption : {}),
+        ...lanesSourceObject,
         projectRoot,
-        onFrame: (frame) => accept(frame),
+        onFrame: (frame) => {
+          if (orchestrator) orchestrator.onFrame(frame)
+          accept(frame)
+        },
       })
     : null
   const sessionsSourceOption = options.sessionsSource
@@ -351,6 +358,20 @@ export function createBridge(options = {}) {
     : null
 
   const clients = new Set()
+  if (lanesSourceOn) {
+    orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: resolve(options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
+      lanes: lanesConfig,
+      spawn: options.orchestratorSpawn,
+      now: options.now,
+      promptFile: options.orchestratorPrompt,
+      bridgeUrl: () => (servingPort ? `http://127.0.0.1:${servingPort}` : ''),
+      onNotice: (event) => {
+        for (const client of clients) writeSseChange(client, event)
+      },
+    })
+  }
   const treeSent = new WeakMap()
   const folderClients = new WeakSet()
   const treeClients = new WeakSet()
@@ -642,11 +663,33 @@ export function createBridge(options = {}) {
     if (await assistant.handle(req, res, url)) return
     if (await decideApi.handle(req, res, url)) return
 
+    if (orchestrator && req.method === 'GET' && url.pathname === '/api/orchestrator') {
+      sendJson(req, res, 200, orchestrator.answer())
+      return
+    }
+
+    if (orchestrator && req.method === 'POST' && url.pathname === '/api/orchestrator/messages') {
+      const body = await readJsonBody(req, res)
+      if (body === null) return
+      const out = orchestrator.send(body)
+      sendJson(req, res, out.status, out.body)
+      return
+    }
+
+    if (orchestrator && req.method === 'POST' && url.pathname === '/api/orchestrator/stop') {
+      const body = await readJsonBody(req, res)
+      if (body === null) return
+      const out = orchestrator.stop(body)
+      sendJson(req, res, out.status, out.body)
+      return
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {
         ok: true,
         lanes: lanesSource !== null,
         sessions: sessionsSource !== null,
+        ...(orchestrator ? { orchestrator: true } : {}),
         unparsed: { ...unreadable.counts(), since: unparsedSince },
         masked: { total: maskedTotal, since: maskedSince },
       })
@@ -781,6 +824,7 @@ export function createBridge(options = {}) {
       maskTimer = null
     }
     runs.stopAll()
+    orchestrator?.close()
     lanesSource?.stop()
     sessionsSource?.stop()
     clearInterval(heartbeatTimer)

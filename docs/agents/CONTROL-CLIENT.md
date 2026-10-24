@@ -28,6 +28,9 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | `runStats({ since? })` | `RunStats`, runs, minutes and cost per lane and model over every run record, or from `since` (a `YYYY-MM-DD` day, UTC) on; a bad day is refused with `--since needs a date like 2026-10-19.` (T13b; the mock sums its own finished fake runs) |
 | `outcomes()` | `OutcomeRow[]`, one row per lane and model with its merged, rejected and pending runs, merge rate, average review fixes and cost per merge from the decided runs (C6a, C6b; the newest outcome for a branch wins, and the mock serves rows built from sample runs) |
 | `liveRuns()` | `LiveRun[]`, the queued and running Paperclip runs, newest first, at most 50 (W6a; a `liveRuns` change notice goes out on each `heartbeat.run.queued` and `heartbeat.run.status` frame; the mock serves one running run and adds one for the lane's agent while its own sample run from `startRun` lasts) |
+| `orchestrator()` | `OrchestratorChat`: the state `idle`, `working` or `paused`, the model, the project folder and the last 200 messages (K1; the bridge mounts it only when the lane source is on) |
+| `sendToOrchestrator(text, { confirmed })` | `{ id }`, the owner message it queued. The bridge refuses anything but `confirmed: true` with `Confirm the message first.`; the text is trimmed and must be 1 to 8000 characters. A turn starts at once, or the message waits for the running turn and goes with the rest of the wait. An `orchestrator` notice goes out (K1) |
+| `stopOrchestrator({ confirmed })` | `{ ok: true }`, after it kills the running turn and sets the state `paused`. It refuses anything but `true` with `Confirm the stop first.`, and the next owner message clears the pause (K1) |
 | `startRun(lane, { briefs } \| { task, allowDirty })` | `RunInfo`, the new running entry. `briefs` starts a brief run; `task` starts a run on the bridge's project folder and `allowDirty` lets a git project with uncommitted changes run. It sends `confirmed: true`, so call it only after the user confirmed (U5a); a `runs` change notice goes out when the run starts and when it ends (T5; the mock runs a fake run that ends after `runMs` and adds a record). A task outside 1 to 4000 characters, this checkout or a lane worktree, and a dirty project without `allowDirty` are refused (L3) |
 | `reviews()` | `Review[]`, one entry per lane with a worktree (W3a; the mock serves samples) |
 | `reviewDiff(lane)` | `ReviewDiff`, what that lane did at its head on its branch compared with `main` (W3a) |
@@ -101,7 +104,10 @@ BackupStatus { enabled: boolean, status: ok | warning | null, latestAt: string|n
 BackupResult { ok: true, name (the file name, never its folder), sizeBytes: number|null, prunedCount: number|null, finishedAt: string|null }
 LiveRun      { runId, agentId, agentName, adapterType, status: queued | running, issueId: string|null, startedAt: string|null,
                lastOutputAt: string|null }   a field Paperclip leaves out is null; a queued run has no startedAt yet
-ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs | liveRuns, id?: string }   (id is the issue id for comments)
+OrchestratorChat { state: idle | working | paused, model, project, messages: OrchestratorMessage[] }
+OrchestratorMessage { id, from: owner | orchestrator | room, text, at }
+               project is the absolute project folder, or an empty string when the bridge has none.
+ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs | liveRuns | orchestrator, id?: string }   (id is the issue id for comments)
 ```
 
 Times are ISO strings. Money is whole cents. A budget of `0` means no budget is set. A quota window with `usedPercent: null` has no number (show its `detail`). A quota provider with `ok: false` could not be read (show `error`).
@@ -109,6 +115,10 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 When the lane source is on and Paperclip does not answer, `costs()` comes from the lane run records: one row per lane with this calendar month's spend, no budget, null tokens and no quota, and the Backups section says Paperclip is not running.
 
 Lane mode: with the lane source on and Paperclip not answering, `issues()` and `liveRuns()` read the lane runs, `comments()` and `approvals()` are empty, `createIssue` and `postComment` reject with `Lane runs start from Dispatch, not from a task.`, and the real client's `health()` reads `/api/health` (`lanes: true`, `paperclip: false`). When `health()` says `lanes: true`, the Dispatch panel lists the lane agents with a command line and starts a task on the room's project folder with `startRun(lane, { task, allowDirty })` (L3).
+
+## The orchestrator (K1)
+
+The orchestrator is a lane in `docs/agents/lanes.json` (Claude Code on `opus`) that `run-lane` refuses, because it runs from the room. With the lane source on, `GET /api/orchestrator` answers the chat, `POST /api/orchestrator/messages` queues an owner message and starts a turn, and `POST /api/orchestrator/stop` kills the running turn and pauses. A turn spawns `claude -p` in the project with `docs/agents/ORCHESTRATOR-AGENT.md` appended as the system prompt, writes `orchestrator-chat-<stamp>.log` and its meta beside the run records, keeps a 60 minute limit, and appends a run record when it ends. Every lane run that ends wakes the orchestrator with a `room` message and the record, at most 30 times in a rolling hour. The bridge keeps the chat in `<runs>/orchestrator-<hash>.json` and resumes the same Claude session after a restart. Every new message and state change sends an `orchestrator` notice. The mock serves a short canned chat.
 
 ## Hiring and updating an agent (C3c)
 

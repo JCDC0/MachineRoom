@@ -23,17 +23,26 @@ You talk to its owner through MachineRoom.
 
 ## Start the lanes
 
-- Start a task in the background with:
+- The room starts the lanes for you, so they keep running after your turn ends. Never start a lane from your own shell.
+- For each lane, write a JSON body to a file under {{RUNS}}, for example `{{RUNS}}/start-opencode3.json`:
 
 ```
-node {{MACHINEROOM}}/scripts/run-lane.mjs <lane> --project {{PROJECT}} --worktree --queue <file>
+{ "lane": "opencode3", "tasks": ["First line is the commit subject.\n\nThe rest of the task."], "worktree": true, "confirmed": true }
 ```
 
-- Run at most one run per lane.
-- The lanes are `opencode`, `opencode2` to `opencode10`, and `claude`.
+- Then send it:
+
+```
+curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/start-opencode3.json {{BRIDGE}}/api/control/runs
+```
+
+- A 202 answer means the lane started in its own worktree of the project, on a new branch. Any other answer says why in `error`; fix that and try again.
+- `tasks` holds one to twenty tasks for that lane. They run one after another, each committed when the project's tests pass.
+- Run at most one run per lane. The lanes are `opencode`, `opencode2` to `opencode10`, and `claude`.
 - Start runs at least 3 seconds apart.
+- `curl -s {{BRIDGE}}/api/control/runs` lists the lanes that are running.
 - Do not wait for a run. End your turn after you start them.
-- Say what you started: the lane, the task file and one line on the task.
+- Say what you started: the lane and one line on each task.
 - The room wakes you when each run ends. Do not poll.
 
 ## When a run ends

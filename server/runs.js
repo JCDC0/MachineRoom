@@ -214,7 +214,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const item = { entry, tail: '' }
     const args = projectRun
       ? projectRun.queue
-        ? [...command.args, lane, '--project', projectRun.project, '--queue', projectRun.queue]
+        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue]
         : [
             ...command.args,
             lane,
@@ -222,6 +222,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             projectRun.project,
             '--task',
             projectRun.task,
+            ...(projectRun.worktree ? ['--worktree'] : []),
             ...(projectRun.allowDirty ? ['--allow-dirty'] : []),
           ]
       : [...command.args, lane, ...briefs]
@@ -348,9 +349,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
+    if (lane === 'orchestrator') {
+      sendJson(req, res, 400, { error: 'The orchestrator lane runs from the room, not as a lane run.' })
+      return true
+    }
+
     let briefs = []
     let task = ''
     let allowDirty = false
+    const worktree = projectRun && body.worktree === true
     let queueFile = ''
     let taskCount = 0
     if (projectRun) {
@@ -428,7 +435,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         lane,
         briefs,
         projectRun
-          ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount }
+          ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount, worktree }
           : null
       )
     } catch {

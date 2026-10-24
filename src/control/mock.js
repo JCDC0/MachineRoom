@@ -25,6 +25,9 @@ export const CLIENT_METHODS = [
   'runStats',
   'outcomes',
   'liveRuns',
+  'orchestrator',
+  'sendToOrchestrator',
+  'stopOrchestrator',
   'startRun',
   'reviews',
   'reviewDiff',
@@ -264,6 +267,16 @@ function seed(at) {
     liveRuns: [
       { runId: 'run-live-1', agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', status: 'running', issueId: 'issue-19', startedAt: iso(3), lastOutputAt: iso(1) },
     ],
+    orchestratorChat: {
+      state: 'idle',
+      model: 'opus',
+      project: 'MachineRoom',
+      messages: [
+        { id: 'orchestrator-message-1', from: 'owner', text: 'What is running?', at: iso(40) },
+        { id: 'orchestrator-message-2', from: 'orchestrator', text: 'OpenCode has one run on JC-19. I will report when it ends.', at: iso(38) },
+        { id: 'orchestrator-message-3', from: 'room', text: 'Run opencode-JC-19-20261024-120000 on lane opencode ended: succeeded.', at: iso(30) },
+      ],
+    },
     costs: {
       summary: { spendCents: 299, budgetCents: 1000, utilizationPercent: 29 },
       byAgent: [
@@ -306,6 +319,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const failures = new Map()
   let issueCounter = 22
   let commentCounter = 3
+  let orchestratorMessageCounter = 3
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
@@ -535,6 +549,38 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     outcomes: () => call('outcomes', () => outcomeTable(SAMPLE_OUTCOME_RUNS, SAMPLE_OUTCOMES)),
 
     liveRuns: () => call('liveRuns', () => state.liveRuns),
+
+    orchestrator: () => call('orchestrator', () => state.orchestratorChat),
+
+    sendToOrchestrator: (text, { confirmed } = {}) =>
+      call('sendToOrchestrator', () => {
+        if (confirmed !== true) throw new Error('Confirm the message first.')
+        const value = typeof text === 'string' ? text.trim() : ''
+        if (value.length < 1 || value.length > 8000) throw new Error('Write a message from 1 to 8000 characters.')
+        state.orchestratorChat.state = 'idle'
+        orchestratorMessageCounter += 1
+        const at = new Date(now()).toISOString()
+        const message = { id: `orchestrator-message-${orchestratorMessageCounter}`, from: 'owner', text: value, at }
+        state.orchestratorChat.messages.push(message)
+        orchestratorMessageCounter += 1
+        state.orchestratorChat.messages.push({
+          id: `orchestrator-message-${orchestratorMessageCounter}`,
+          from: 'orchestrator',
+          text: 'I have the message. I will start with the lanes that are free and report back.',
+          at,
+        })
+        while (state.orchestratorChat.messages.length > 200) state.orchestratorChat.messages.shift()
+        emit({ topic: 'orchestrator' })
+        return { id: message.id }
+      }),
+
+    stopOrchestrator: ({ confirmed } = {}) =>
+      call('stopOrchestrator', () => {
+        if (confirmed !== true) throw new Error('Confirm the stop first.')
+        state.orchestratorChat.state = 'paused'
+        emit({ topic: 'orchestrator' })
+        return { ok: true }
+      }),
 
     startRun: (lane, run, options = {}) =>
       call('startRun', () => {

@@ -115,6 +115,21 @@ describe('the runs route with a task', () => {
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
   })
 
+  it('passes --worktree when the body asks for the project run in a worktree, and refuses the orchestrator lane', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out) })
+
+    const refused = await postJson(`${url}/api/control/runs`, { lane: 'orchestrator', task: 'Fix it.', confirmed: true })
+    expect(refused.status).toBe(400)
+    const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', worktree: true, confirmed: true })
+    expect(res.status).toBe(202)
+    const args = await waitFor(() => readArgs(out), { what: 'the runner arguments' })
+    expect(args).toEqual(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'])
+    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+  })
+
   it('passes --allow-dirty only when the body allows it', async () => {
     const project = tempDir('mr-project-dispatch-')
     const runnerDir = tempDir('mr-project-runner-')

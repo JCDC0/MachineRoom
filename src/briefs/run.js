@@ -70,6 +70,7 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sess
 
 export const DEFAULT_MINUTES = 100
 export const SINCE_PROBLEM = '--since needs a date like 2026-10-19.'
+export const ORCHESTRATOR_LANE_PROBLEM = 'The orchestrator lane runs from the room, not from run-lane.'
 const MODEL_UNKNOWN = 'model unknown'
 const ALL = 'all'
 
@@ -223,6 +224,7 @@ export function formatOutcomes(rows) {
 export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}) {
   const list = Array.isArray(briefs) ? briefs : []
   const lane = String(laneKey ?? '').trim().toLowerCase().replace(/\d+$/, '')
+  if (lane === 'orchestrator') return [ORCHESTRATOR_LANE_PROBLEM]
   const exists = typeof branchExists === 'function' ? branchExists : () => false
   const asked = []
   const seen = new Set()
@@ -762,7 +764,7 @@ function claudeSummary(log, worktree) {
   return summaryOf('claude', activities, claudeReport(log), claudeUsage(log))
 }
 
-function claudeReport(log) {
+export function claudeReport(log) {
   let words = null
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
