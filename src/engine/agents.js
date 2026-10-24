@@ -12,6 +12,9 @@ const STYLE = {
   error: { color: RED, opacity: 1, spin: 0.3 },
   done: { color: GREEN, opacity: 1, spin: 0.25 },
 }
+export const UNSEEN_OPACITY = 0.35
+export const UNSEEN_SCALE = 0.7
+export const PRESENCE_GROW_MS = 600
 const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
 export const CHILD_HOLD_MS = 6000
@@ -27,6 +30,16 @@ const PACKET_SIZE = 3
 export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
+
+export function agentPresence(agent, everRan = false) {
+  const active = agent?.status === 'working' || agent?.status === 'queued'
+  const dim = !(active || everRan || isOrchestrator(agent))
+  return {
+    dim,
+    opacity: dim ? UNSEEN_OPACITY : 1,
+    scale: dim ? UNSEEN_SCALE : 1,
+  }
+}
 
 export function childFade(sinceEnd, reduced = false) {
   const elapsed = Number.isFinite(sinceEnd) ? Math.max(0, sinceEnd) : 0
@@ -293,6 +306,9 @@ export function createAgents(scene, roster, cssScene = null) {
       chipSide: 1,
       doneAt: 0,
       style: 'idle',
+      presence: orchestrator ? 1 : 0,
+      presenceReady: false,
+      presenceOpacity: 1,
     }
     views.set(agent.key, view)
     return view
@@ -415,6 +431,20 @@ export function createAgents(scene, roster, cssScene = null) {
       setStatus(view, status, now)
       const style = STYLE[status] ?? STYLE.idle
       const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
+      const ran = Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
+      const presence = agentPresence({ status, orchestrator: view.orchestrator }, ran)
+      if (!view.presenceReady) {
+        view.presence = presence.dim ? 0 : 1
+        view.presenceReady = true
+      } else if (presence.dim) {
+        view.presence = 0
+      } else if (view.presence < 1) {
+        view.presence = isStill ? 1 : Math.min(1, view.presence + (delta * 1000) / PRESENCE_GROW_MS)
+      }
+      const opacityFactor = UNSEEN_OPACITY + (1 - UNSEEN_OPACITY) * view.presence
+      const scaleFactor = UNSEEN_SCALE + (1 - UNSEEN_SCALE) * view.presence
+      view.presenceOpacity = opacityFactor
+      view.group.scale.setScalar(view.scale * scaleFactor)
 
       if (view.parentKey) {
         const parentName = state.agents.get(view.parentKey)?.name ?? view.parentKey
@@ -422,6 +452,8 @@ export function createAgents(scene, roster, cssScene = null) {
         terminals.setVisible?.(view.key, true)
         terminals.setFade?.(view.key, fade)
         if (fade <= 0) ended.push({ view, entry })
+      } else {
+        terminals.setVisible?.(view.key, !presence.dim)
       }
 
       const working = (status === 'working' || status === 'queued') && Boolean(entry?.label)
@@ -435,12 +467,12 @@ export function createAgents(scene, roster, cssScene = null) {
       const fresh = status === 'done' && now - view.doneAt < DONE_GLOW_MS
       const opacity = status === 'done' ? (fresh ? 1 : 0.6) : style.opacity
       view.shape.material.color.setHex(style.color)
-      view.shape.material.opacity = opacity * fade
-      view.label.material.opacity = fade
+      view.shape.material.opacity = opacity * fade * opacityFactor
+      view.label.material.opacity = fade * opacityFactor
       const ringColor = status === 'working' || status === 'queued' ? YELLOW : style.color
       view.rings.forEach((ring, index) => {
         ring.material.color.setHex(ringColor)
-        ring.material.opacity = opacity * fade * (index === 0 ? 0.55 : 0.4)
+        ring.material.opacity = opacity * fade * opacityFactor * (index === 0 ? 0.55 : 0.4)
       })
       if (!isStill) {
         view.shape.rotation.y += delta * style.spin
@@ -500,7 +532,8 @@ export function createAgents(scene, roster, cssScene = null) {
       terminals.edgePoint(view.key, -view.chipSide, chipNear)
       setEnds(view.link, view.group.position, chipNear)
       view.link.material.color.setHex(style.color)
-      view.link.material.opacity = (working ? 0.6 : status === 'idle' ? 0.18 : 0.4) * fade
+      view.link.material.opacity = (working ? 0.6 : status === 'idle' ? 0.18 : 0.4) * fade * opacityFactor
+      view.link.visible = !presence.dim
       if (view.parentLink) {
         const parentView = views.get(view.parentKey)
         if (parentView) {
@@ -570,6 +603,10 @@ export function createAgents(scene, roster, cssScene = null) {
       view.style = 'idle'
       view.fadeStart = 0
       view.doneAt = 0
+      view.presence = 0
+      view.presenceReady = false
+      view.presenceOpacity = 1
+      view.group.scale.setScalar(view.scale)
     }
   }
 
