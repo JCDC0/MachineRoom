@@ -293,6 +293,43 @@ describe('the orchestrator registry', () => {
     expect(rig.calls()[1].args[1]).toContain('Run opencode-K1-20261025-120000 on lane opencode ended: succeeded.')
   })
 
+  it('reads and sets autocompact per orchestrator', async () => {
+    const rig = await makeBridge(makeBase())
+    const chat = await getJson(`${rig.url}/api/orchestrator`)
+    expect(chat.status).toBe(200)
+    expect(chat.body).toMatchObject({ contextTokens: null, contextWindow: 200000, autocompact: true })
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body[0]).toMatchObject({
+      contextTokens: null,
+      contextWindow: 200000,
+      autocompact: true,
+    })
+
+    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false })).body).toEqual({
+      error: 'Confirm the autocompact change first.',
+    })
+    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: 'yes', confirmed: true })).status).toBe(400)
+
+    const off = await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false, confirmed: true })
+    expect(off.status).toBe(200)
+    expect(off.body).toEqual({ id: 'orchestrator', autocompact: false })
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.autocompact).toBe(false)
+    expect(rig.chat().autocompact).toBe(false)
+
+    const page = await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: true, confirmed: true })
+    expect(page.status).toBe(200)
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.autocompact).toBe(true)
+    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'missing', on: true, confirmed: true })).status).toBe(404)
+
+    await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body[1]).toMatchObject({
+      contextTokens: null,
+      contextWindow: 200000,
+      autocompact: true,
+    })
+    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'frontend', on: false, confirmed: true })).status).toBe(200)
+    expect(rig.chat('frontend').autocompact).toBe(false)
+  })
+
   it('attaches a sub from the owner ladder, answers its chat by id and removes it', async () => {
     const rig = await makeBridge(makeBase())
     expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)

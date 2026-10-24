@@ -96,6 +96,7 @@ export default function Hud({
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
   const [idleOpen, setIdleOpen] = useState(false)
+  const [orchestratorInfo, setOrchestratorInfo] = useState(null)
   const [guideOpen, setGuideOpen] = useState(
     () => typeof window !== 'undefined' && shouldShowGuide() && guideCanOpen(document)
   )
@@ -145,6 +146,51 @@ export default function Hud({
   useEffect(() => {
     if (!chatAvailable) setChatOpen(false)
   }, [chatAvailable])
+
+  useEffect(() => {
+    if (!chatAvailable || !client || typeof client.orchestrators !== 'function') {
+      setOrchestratorInfo(null)
+      return undefined
+    }
+    let active = true
+    async function read() {
+      try {
+        const answer = await client.orchestrators()
+        if (!active) return
+        const items = Array.isArray(answer) ? answer : Array.isArray(answer?.orchestrators) ? answer.orchestrators : []
+        const main = items.find((entry) => entry && entry.id === 'orchestrator') ?? null
+        setOrchestratorInfo(main)
+      } catch {
+        if (active) setOrchestratorInfo(null)
+      }
+    }
+    read()
+    const timer = setInterval(read, 60000)
+    const unsubscribe =
+      typeof client.subscribe === 'function'
+        ? client.subscribe((notice) => {
+            if (notice && notice.topic === 'orchestrator') read()
+          })
+        : null
+    return () => {
+      active = false
+      clearInterval(timer)
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [chatAvailable, client])
+
+  async function changeAutocompact(id, on) {
+    if (!client || typeof client.setAutocompact !== 'function') return
+    try {
+      const answer = await client.setAutocompact(id, on)
+      setOrchestratorInfo((current) => ({
+        ...(current ?? {}),
+        ...(answer && typeof answer === 'object' ? answer : {}),
+        id: current?.id ?? id,
+        autocompact: on,
+      }))
+    } catch {}
+  }
 
   useEffect(() => {
     function onKey(event) {
@@ -480,9 +526,11 @@ export default function Hud({
             liveRuns={liveRuns}
             tasks={tasks}
             log={log}
+            orchestrator={orchestratorInfo}
             onFocus={onFocus}
             onToggleTerminal={onToggleTerminal}
             onOpenChat={() => chatAvailable && setChatOpen(true)}
+            onAutocompact={changeAutocompact}
           />
         </div>
         <div className="hud-dock-side">

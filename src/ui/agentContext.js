@@ -186,15 +186,27 @@ function readContext(selected, run) {
   return null
 }
 
-export function agentContext({ agent = null, lanes = null, costs = null, liveRuns = null, tasks = null, log = null } = {}) {
+function withOrchestratorData(selected, orchestrator) {
+  if (!isObject(orchestrator)) return selected
+  const next = { ...selected }
+  for (const key of ['contextTokens', 'contextWindow']) {
+    const value = numberOrNull(orchestrator[key])
+    if (value !== null) next[key] = value
+  }
+  if (typeof orchestrator.autocompact === 'boolean') next.autocompact = orchestrator.autocompact
+  return next
+}
+
+export function agentContext({ agent = null, lanes = null, costs = null, liveRuns = null, tasks = null, log = null, orchestrator = null } = {}) {
   const roster = Array.isArray(lanes) ? lanes.filter(isObject) : []
   const selected = resolveAgent(agent, roster)
   const isOrchestrator = agent === null || agent === undefined || isOrchestratorAgent(selected)
-  const key = clean(selected?.key) || clean(selected?.id)
-  const name = clean(selected?.name) || key || 'Agent'
-  const harness = clean(selected?.harness) || clean(selected?.adapterType) || NOT_REPORTED
-  const model = clean(selected?.model) || NOT_REPORTED
-  const run = currentRun(liveRuns, selected)
+  const source = isOrchestrator ? withOrchestratorData(selected, orchestrator) : selected
+  const key = clean(source?.key) || clean(source?.id)
+  const name = clean(source?.name) || key || 'Agent'
+  const harness = clean(source?.harness) || clean(source?.adapterType) || NOT_REPORTED
+  const model = clean(source?.model) || NOT_REPORTED
+  const run = currentRun(liveRuns, source)
 
   const taskRoster = taskRosterFor(roster, selected, controlAgentId(selected, costs, liveRuns))
   const taskMap = agentTasks(Array.isArray(liveRuns) ? liveRuns : [], Array.isArray(tasks) ? tasks : [], taskRoster)
@@ -205,10 +217,10 @@ export function agentContext({ agent = null, lanes = null, costs = null, liveRun
     ? 'working'
     : run && run.status === 'queued'
       ? 'queued'
-      : statusWord(selected?.status)
-  const liveCommand = status === 'working' || status === 'queued' ? clean(selected?.label) : ''
+      : statusWord(source?.status)
+  const liveCommand = status === 'working' || status === 'queued' ? clean(source?.label) : ''
   const command =
-    clean(selected?.command) ||
+    clean(source?.command) ||
     liveCommand ||
     clean(run?.command) ||
     clean(run?.label) ||
@@ -241,6 +253,7 @@ export function agentContext({ agent = null, lanes = null, costs = null, liveRun
     inputTokens,
     outputTokens,
     log: entries.slice(-DOCK_LOG_LIMIT),
-    context: isOrchestrator ? readContext(selected, run) : null,
+    context: isOrchestrator ? readContext(source, run) : null,
+    autocompact: isOrchestrator && typeof source?.autocompact === 'boolean' ? source.autocompact : null,
   }
 }

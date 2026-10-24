@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
-import { createOrchestrator, RESTART_MESSAGE } from '../server/orchestrator.js'
+import { createOrchestrator, contextTokensFromLog, COMPACTED_MESSAGE, COMPACT_PROMPT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -42,7 +42,10 @@ const FAKE_CLAUDE = [
   '  }',
   '}',
   "const reply = mode === 'empty' ? '' : mode === 'fail' ? 'You have hit your session limit.' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
-  "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: 12, output_tokens: 3 } }))",
+  "const input = Number(process.env.MR_INPUT ?? 12)",
+  "const cacheRead = Number(process.env.MR_CACHE_READ ?? 0)",
+  "const cacheWrite = Number(process.env.MR_CACHE_WRITE ?? 0)",
+  "console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: input, cache_creation_input_tokens: cacheWrite, cache_read_input_tokens: cacheRead, output_tokens: 3 } }))",
   "if (mode === 'fail') process.exitCode = 3",
 ].join('\n')
 
@@ -65,7 +68,10 @@ const FAKE_OPENCODE = [
   "console.log(JSON.stringify({ type: 'text', timestamp: 3, sessionID: sessionId, part: { type: 'text', text: 'Working.' } }))",
   "const reply = mode === 'fail' ? '' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "console.log(JSON.stringify({ type: 'text', timestamp: 4, sessionID: sessionId, part: { type: 'text', text: reply } }))",
-  "console.log(JSON.stringify({ type: 'step_finish', timestamp: 5, sessionID: sessionId, part: { type: 'step-finish', cost: 0.25, tokens: { input: 12, output: 3 } } }))",
+  "const input = Number(process.env.MR_INPUT ?? 12)",
+  "const cacheRead = Number(process.env.MR_CACHE_READ ?? 0)",
+  "const cacheWrite = Number(process.env.MR_CACHE_WRITE ?? 0)",
+  "console.log(JSON.stringify({ type: 'step_finish', timestamp: 5, sessionID: sessionId, part: { type: 'step-finish', cost: 0.25, tokens: { input, output: 3, cache: { read: cacheRead, write: cacheWrite } } } }))",
   "if (mode === 'fail') process.exitCode = 3",
 ].join('\n')
 
@@ -128,6 +134,9 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
       MR_CALLS: callsFile,
       MR_MODE: behaviour.mode,
       MR_RELEASE: releaseFile,
+      MR_INPUT: String(behaviour.input ?? 12),
+      MR_CACHE_READ: String(behaviour.cacheRead ?? 0),
+      MR_CACHE_WRITE: String(behaviour.cacheWrite ?? 0),
     }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
@@ -227,7 +236,7 @@ describe('the orchestrator lane', () => {
     expect(lanes.orchestrator).toEqual({
       name: 'Orchestrator',
       harness: 'Claude Code',
-      cli: { harness: 'claude', bin: 'claude', model: 'opus' },
+      cli: { harness: 'claude', bin: 'claude', model: 'opus', contextWindow: 200000 },
     })
     expect(briefProblems({ briefs: [], ids: ['K1'], laneKey: 'orchestrator', branchExists: () => false })).toEqual([
       'The orchestrator lane runs from the room, not from run-lane.',
@@ -376,6 +385,91 @@ describe('one orchestrator turn', () => {
     expect(instruction).toContain(rig.projectRoot)
     expect(instruction).toContain('Never push')
     expect(instruction.split(/\.\s+/)).toHaveLength(3)
+  })
+})
+
+describe('the context use', () => {
+  it('reads the last top-level Claude result usage with both cache counts', () => {
+    const log = [
+      JSON.stringify({ type: 'result', usage: { input_tokens: 1, cache_creation_input_tokens: 2, cache_read_input_tokens: 3 } }),
+      JSON.stringify({ type: 'result', parent_tool_use_id: 'tool-1', usage: { input_tokens: 900 } }),
+      JSON.stringify({ type: 'result', usage: { input_tokens: 100, cache_creation_input_tokens: 20, cache_read_input_tokens: 30 } }),
+    ].join('\n')
+    expect(contextTokensFromLog('claude', log)).toBe(150)
+  })
+
+  it('reads the last OpenCode step tokens with both cache counts', () => {
+    const log = [
+      JSON.stringify({ type: 'step_finish', part: { tokens: { input: 1, output: 2, cache: { read: 3, write: 4 } } } }),
+      JSON.stringify({ type: 'step_finish', part: { tokens: { input: 100, output: 2, cache: { read: 20, write: 30 } } } }),
+    ].join('\n')
+    expect(contextTokensFromLog('opencode', log)).toBe(150)
+  })
+
+  it('reports no context use when the log has no usage', () => {
+    expect(contextTokensFromLog('claude', 'not json\n')).toBeNull()
+    expect(contextTokensFromLog('opencode', JSON.stringify({ type: 'text', part: { text: 'Hello' } }))).toBeNull()
+  })
+
+  it('takes the window from the lane cli block or the 200000 default', () => {
+    const configured = makeRig({
+      lanes: {
+        orchestrator: {
+          ...ORCHESTRATOR_LANE,
+          cli: { ...ORCHESTRATOR_LANE.cli, contextWindow: 120000 },
+        },
+      },
+    })
+    expect(configured.answer()).toMatchObject({ contextTokens: null, contextWindow: 120000, autocompact: true })
+    const plain = makeRig()
+    expect(plain.answer()).toMatchObject({ contextTokens: null, contextWindow: 200000, autocompact: true })
+  })
+})
+
+describe('autocompact', () => {
+  it('compacts a session at 80 percent and starts the next turn from the summary', async () => {
+    const rig = makeRig()
+    rig.behaviour.input = 160000
+    rig.send('Build the room.')
+    await waitFor(() => rig.calls().length === 2 && rig.answer().state === 'idle', 15000, 'the compacted session')
+
+    const calls = rig.calls()
+    const sessionId = valueAfter(calls[0].args, '--session-id')
+    expect(calls[1].args).toContain('--resume')
+    expect(valueAfter(calls[1].args, '--resume')).toBe(sessionId)
+    expect(calls[1].args[1]).toBe(COMPACT_PROMPT)
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(rig.answer()).toMatchObject({ contextTokens: null, contextWindow: 200000, autocompact: true })
+    const saved = stateFile(rig)
+    expect(saved.sessionId).toBeNull()
+    expect(saved.summary).toContain('Reply: Write a summary')
+
+    rig.behaviour.input = 12
+    rig.behaviour.cacheRead = 0
+    rig.behaviour.cacheWrite = 0
+    rig.send('And then run the tests.')
+    await waitFor(() => rig.calls().length === 3 && rig.answer().state === 'idle', 15000, 'the turn after compaction')
+    const next = rig.calls()[2].args
+    expect(next).not.toContain('--resume')
+    const nextSession = valueAfter(next, '--session-id')
+    expect(nextSession).not.toBe(sessionId)
+    expect(next[1].startsWith('Reply: Write a summary')).toBe(true)
+    expect(next[1]).toContain('And then run the tests.')
+  })
+
+  it('keeps the same session when autocompact is off', async () => {
+    const rig = makeRig()
+    expect(rig.orchestrator.setAutocompact({ on: false, confirmed: true })).toEqual({
+      status: 200,
+      body: { id: 'orchestrator', autocompact: false },
+    })
+    rig.behaviour.input = 180000
+    rig.send('Build the room.')
+    await waitFor(() => rig.calls().length === 1 && rig.answer().state === 'idle', 15000, 'the turn to end')
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer()).toMatchObject({ contextTokens: 180000, autocompact: false })
+    expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
+    expect(stateFile(rig).sessionId).toBe(valueAfter(rig.calls()[0].args, '--session-id'))
   })
 })
 
