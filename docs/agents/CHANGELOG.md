@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Briefs L3 (start a project run from the drawer), L4 (costs and tokens for Claude Code and AGY, and the Meters check) and Q5 (read what changed on 2026-10-24).
+
 - Review note on L2: no fixes. With the lane source on and Paperclip down, issues, live runs, comments and approvals come from the lane runs; writes to a lane task answer 409. Run queued and status frames now also send an `issues` notice (not log frames, so a few per run). The control client gained `health()` so the Approvals tab can tell lane mode apart. Full suite on the merge: 124 files, 2324 tests.
 - Review note on L1: no fixes. With the lane source on and Paperclip down, `/api/control/costs` and the agents' spend come from `runs.jsonl` (this UTC month, per lane). The Meters tab tells lane mode apart by a failed backup read whose error is `Paperclip did not answer.` while costs loaded; a health flag passed down would be more direct, outside the brief's files. A lane with spend and no tokens shows `? in / ? out` on the board. `tests/candidate.test.js` failed once in the full run while L2 ran its own suite and passed alone. Full suite on the merge: 123 files, 2313 tests.
 - The drawer and the cost board read the lanes' spend from the run records when Paperclip does not answer: `/api/control/costs` and the spend of `/api/control/agents` fall back to `server/lane-costs.js`, the board shows this month's spend with no budget and null tokens, and the Meters tab says backups belong to Paperclip (task L1).
