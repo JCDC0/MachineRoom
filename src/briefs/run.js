@@ -268,6 +268,23 @@ export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}
   return [...missing, ...repeated, ...done, ...owner, ...branch]
 }
 
+export function worktreeFor(project, lane) {
+  const folder = String(project ?? '').trim().replace(/[\\/]+$/, '')
+  const key = String(lane ?? '').trim()
+  if (!folder || !key || /^[a-zA-Z]:$/.test(folder)) return ''
+  const cut = Math.max(folder.lastIndexOf('/'), folder.lastIndexOf('\\'))
+  const name = cut === -1 ? folder : folder.slice(cut + 1)
+  if (!name) return ''
+  const parent = cut === -1 ? '' : folder.slice(0, cut + 1)
+  return `${parent}${name}-mr-${key}`
+}
+
+export function worktreeProblems({ worktree, project } = {}) {
+  if (worktree !== true) return []
+  if (!String(project ?? '').trim()) return ['--worktree needs --project <folder>.']
+  return []
+}
+
 export function parseRunArgs(argv) {
   const args = (Array.isArray(argv) ? argv : []).map((value) => String(value))
   const briefs = []
@@ -283,6 +300,7 @@ export function parseRunArgs(argv) {
   let task = ''
   let taskFile = ''
   let allowDirty = false
+  let worktree = false
   const overrides = {}
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
@@ -304,6 +322,10 @@ export function parseRunArgs(argv) {
     }
     if (arg === '--allow-dirty') {
       allowDirty = true
+      continue
+    }
+    if (arg === '--worktree') {
+      worktree = true
       continue
     }
     if (arg === '--list') {
@@ -362,7 +384,9 @@ export function parseRunArgs(argv) {
   if (stats) return { lane, briefs, dryRun, minutes, list, stats, ...(since ? { since } : {}) }
   if (outcomes) return { lane, briefs, dryRun, minutes, list, outcomes, ...(since ? { since } : {}) }
   if (!lane) throw new Error('Name a lane to run, for example hermes.')
-  if (project || task || taskFile) {
+  if (project || task || taskFile || worktree) {
+    const problems = worktreeProblems({ worktree, project })
+    if (problems.length > 0) throw new Error(problems[0])
     if (!project) throw new Error('--project needs a folder.')
     if (briefs.length > 0) throw new Error('Name a brief id or a --project folder, not both.')
     if (task && taskFile) throw new Error('Use --task or --task-file, not both.')
@@ -370,6 +394,7 @@ export function parseRunArgs(argv) {
     return {
       lane, briefs: [], dryRun, minutes, list,
       ...(force ? { force: true } : {}),
+      ...(worktree ? { worktree: true } : {}),
       ...overrides,
       project,
       ...(task ? { task } : {}),

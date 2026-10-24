@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
+import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, childEnvironment, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, childEnvironment, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock, takeLaneLock } from './lane-lock.mjs'
 import { writeRecording } from './recording-files.mjs'
 
-const root = resolve(fileURLToPath(import.meta.url), '..', '..')
+const entry = fileURLToPath(import.meta.url)
+const root = resolve(entry, '..', '..')
 const docs = join(root, 'docs', 'agents')
 const read = (name) => readFileSync(join(docs, name), 'utf8')
 
@@ -69,6 +70,80 @@ function projectFolder(value) {
   }
   if (!stat.isDirectory()) throw new Error(`The project folder ${folder} is not a folder.`)
   return folder
+}
+
+function worktreeChanges(worktree) {
+  return gitStatus(worktree).split(/\r?\n/).filter((line) => {
+    if (!line.trim()) return false
+    const name = line.slice(3).trim().replace(/^"|"$/g, '')
+    return !(name === 'node_modules' || name.startsWith('node_modules/') || name.startsWith('node_modules\\'))
+  })
+}
+
+export function worktreePlan(project, lane) {
+  const path = worktreeFor(project, lane)
+  if (!path) throw new Error('--worktree needs a project folder and a lane.')
+  if (!gitCheckout(project)) throw new Error(`The project folder ${project} is not a git folder. --worktree needs one.`)
+  if (!existsSync(path)) return { path, made: true }
+  const stat = statSync(path)
+  if (!stat.isDirectory()) throw new Error(`The worktree ${path} is not a folder.`)
+  if (!gitCheckout(path)) throw new Error(`The worktree ${path} is not a git worktree of the project.`)
+  if (gitCommonDir(path) !== gitCommonDir(project)) throw new Error(`The worktree ${path} belongs to another project.`)
+  if (worktreeChanges(path).length > 0) throw new Error(`The worktree ${path} has uncommitted changes. Commit or discard them first.`)
+  return { path, made: false }
+}
+
+function linkNodeModules(project, worktree) {
+  const source = join(project, 'node_modules')
+  if (!existsSync(source)) return
+  const target = join(worktree, 'node_modules')
+  let present = false
+  try {
+    present = lstatSync(target) !== null
+  } catch {
+    present = false
+  }
+  if (present) return
+  try {
+    symlinkSync(source, target, process.platform === 'win32' ? 'junction' : 'dir')
+  } catch (error) {
+    throw new Error(`The node_modules link in ${worktree} could not be made: ${String(error?.message ?? error)}`)
+  }
+}
+
+export function prepareWorktree(project, lane) {
+  const plan = worktreePlan(project, lane)
+  if (plan.made) {
+    const result = spawnSync(gitPath(), ['worktree', 'add', '--detach', plan.path, 'HEAD'], {
+      cwd: project,
+      encoding: 'utf8',
+      windowsHide: true,
+      maxBuffer: 8 * 1024 * 1024,
+    })
+    if (result.error) throw new Error(`git worktree add did not run in ${project}.`)
+    if (result.status !== 0) throw new Error(`git worktree add failed in ${project}: ${String(result.stderr ?? '').trim()}`)
+  } else {
+    const head = spawnSync(gitPath(), ['rev-parse', 'HEAD'], { cwd: project, encoding: 'utf8', windowsHide: true })
+    const sha = String(head.stdout ?? '').trim()
+    if (head.status !== 0 || !sha) throw new Error(`Could not read the project's HEAD in ${project}.`)
+    const moved = spawnSync(gitPath(), ['switch', '--detach', sha], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
+    if (moved.status !== 0) throw new Error(`Could not move the worktree ${plan.path} to the project's HEAD: ${String(moved.stderr ?? '').trim()}`)
+  }
+  linkNodeModules(project, plan.path)
+  return plan
+}
+
+function printWorktree(plan) {
+  console.log(`worktree: ${plan.path}`)
+  console.log(`worktree: ${plan.made ? 'would be made' : 'would be reused'}`)
+}
+
+function runOptions(argv) {
+  const queued = argv.some((arg) => arg === '--queue' || arg.startsWith('--queue='))
+  if (!queued) return parseRunArgs(argv)
+  const worktree = argv.includes('--worktree')
+  const options = parseQueueArgs(argv.filter((arg) => arg !== '--worktree'))
+  return worktree ? { ...options, worktree: true } : options
 }
 
 function resolvedLanes(lanes) {
@@ -357,12 +432,14 @@ async function runQueueProject({ options, lane, lanes }) {
   }
   const tasks = parseQueue(text)
   if (tasks.length === 0) throw new Error('The queue file has no tasks.')
-  const test = projectTestCommand(project, options.test)
+  const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
+  const test = projectTestCommand(plan.made ? project : plan.path, options.test)
   const queueStamp = stamp()
   const branch = `machineroom/queue-${queueStamp}`
   if (options.dryRun) {
     console.log(`lane: ${options.lane}`)
     console.log(`project: ${project}`)
+    if (options.worktree) printWorktree(plan)
     console.log(`branch: ${branch}`)
     console.log(`tests: ${test || 'none, the project has no tests'}`)
     tasks.forEach((task, index) => console.log(`${index + 1}. ${task}`))
@@ -372,9 +449,10 @@ async function runQueueProject({ options, lane, lanes }) {
   mkdirSync(folder, { recursive: true })
   const lock = takeLaneLock(folder, options.lane)
   try {
+    const target = options.worktree ? prepareWorktree(project, options.lane) : plan
     const result = await runQueue({
       tasks,
-      git: queueGit(project, branch, options.lane),
+      git: queueGit(target.path, branch, options.lane),
       runTask: async (task, number) => {
         console.log(`task ${number} of ${tasks.length}`)
         const prompt = unattendedPrompt(task)
@@ -383,11 +461,11 @@ async function runQueueProject({ options, lane, lanes }) {
         const usageFile = join(folder, `${name}.usage.json`)
         const run = await startLane({
           options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
-          project, task, queue: { branch, index: number },
+          project: target.path, task, queue: { branch, index: number },
         })
         return { code: run.code, killed: run.killed }
       },
-      runTests: test ? async () => runTestCommand(test, project, options.minutes) : null,
+      runTests: test ? async () => runTestCommand(test, target.path, options.minutes) : null,
     })
     formatQueueSummary({ branch: result.branch, results: result.results, tests: test }).forEach((line) => console.log(line))
     return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
@@ -397,7 +475,7 @@ async function runQueueProject({ options, lane, lanes }) {
 }
 
 async function main() {
-  const options = parseQueueArgs(process.argv.slice(2)) ?? parseRunArgs(process.argv.slice(2))
+  const options = runOptions(process.argv.slice(2))
   if (options.list) return listRuns()
   if (options.stats) return statsRuns(options)
   if (options.outcomes) return outcomeRuns(options)
@@ -423,16 +501,19 @@ async function main() {
     const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')
     const logPath = join(folder, `${name}.log`)
     const usageFile = join(folder, `${name}.usage.json`)
+    const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
 
     if (options.dryRun) {
-      printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project }), prompt)
+      if (options.worktree) printWorktree(plan)
+      printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: plan.path }), prompt)
       return 0
     }
 
     mkdirSync(folder, { recursive: true })
     const lock = takeLaneLock(folder, options.lane)
     try {
-      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task })
+      const target = options.worktree ? prepareWorktree(project, options.lane) : plan
+      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project: target.path, task })
       return run.code
     } finally {
       releaseLaneLock(lock)
@@ -566,9 +647,12 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   return { code: result.code ?? 1, killed }
 }
 
-main().then((code) => {
-  process.exitCode = code
-}).catch((error) => {
-  console.error(String(error?.message ?? error))
-  process.exitCode = 1
-})
+const sameFile = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)
+if (process.argv[1] && sameFile(resolve(process.argv[1]), resolve(entry))) {
+  main().then((code) => {
+    process.exitCode = code
+  }).catch((error) => {
+    console.error(String(error?.message ?? error))
+    process.exitCode = 1
+  })
+}
