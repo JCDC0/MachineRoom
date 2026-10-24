@@ -258,6 +258,40 @@ describe('health and agents', () => {
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual([])
   })
+
+  it('maps lane agents to viewer keys and parsers', async () => {
+    const { url } = await laneBridge({
+      lanes: {
+        agy: { name: 'agy', cli: { harness: 'agy' } },
+        claude: { name: 'Claude Code', cli: { harness: 'claude' } },
+        hermes: { name: 'Hermes', cli: { harness: 'hermes' } },
+        opencode: { name: 'OpenCode Go', cli: { harness: 'opencode' } },
+      },
+    })
+    const answer = await getJson(`${url}/api/agents`)
+
+    expect(answer.body).toEqual([
+      { id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy', role: null },
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude', role: null },
+      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes', role: null },
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode Go', adapterType: 'opencode_local', parser: 'opencode', role: null },
+    ])
+  })
+
+  it('keeps two claude_local agents apart in list order and carries each role', async () => {
+    const { url } = await laneBridge({
+      lanes: {
+        'twin-a': { name: 'Twin', cli: { harness: 'claude' } },
+        'twin-b': { name: 'Twin', cli: { harness: 'claude' } },
+      },
+    })
+    const answer = await getJson(`${url}/api/agents`)
+
+    expect(answer.body).toEqual([
+      { id: 'agent-twin-a', key: 'twin-a', name: 'Twin', adapterType: 'claude_local', parser: 'claude', role: null },
+      { id: 'agent-twin-b', key: 'twin-b', name: 'Twin', adapterType: 'claude_local', parser: 'claude', role: null },
+    ])
+  })
 })
 
 describe('the file tree', () => {
