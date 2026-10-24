@@ -12,9 +12,9 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 
 ## Where things stand
 
-- `main` is 0.1.307 (2026-10-25); GitHub has 0.1.293 with CI green. The ulolTris and LowBeam milestones passed. Paperclip is gone from the app (Y1 to Y3). The room's orchestrator runs in the app (K1 to K3, R3 and R4: Claude Code or OpenCode), and the page is a lens over the room with a dock below (I1, I2).
+- `main` is 0.1.323 (2026-10-25); GitHub has 0.1.293 with CI green. The ulolTris and LowBeam milestones passed. Paperclip is gone from the app (Y1 to Y3). The room's orchestrator runs in the app (K1 to K3, R3 and R4: Claude Code or OpenCode), and the page is a lens over the room with a dock below (I1, I2).
 - Ten OpenCode lanes (`opencode`, `opencode2` to `opencode10`) and `claude` are live, each with its own worktree. Hermes and AGY are retired.
-- In flight when the owner's machine shut down at 2:30 on 2026-10-25: H8, D9, V24, R11, Q8, Q6b, O5, V23, Q7 and Q9, each on the lane its brief names. Check each worktree's `git status` and its run log before you rerun or merge it; a run cut off by the shutdown has no record in `runs.jsonl`.
+- In flight when the owner's machine shut down at 2:30 on 2026-10-25: Q12a to Q12h and D9, each on the lane its brief names. Check each worktree's `git status` and its run log before you rerun or merge it; a run cut off by the shutdown has no record in `runs.jsonl`.
 - Next: Q6b and O5 after O2 (`HIERARCHY.md`), then the room checked by eye in the lens at 1280 by 800. Lanes run only related tests while they work and merges do the same; the full suite runs in CI.
 
 ## Standing rules from the owner
