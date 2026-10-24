@@ -666,6 +666,24 @@ describe('the orchestrator conversation file', () => {
     expect(restored.calls()).toHaveLength(0)
   })
 
+  it('writes the killed turn record on close but adds no message, notice or turn', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('A long job')
+    await waitFor(() => rig.calls().length === 1)
+    const messagesBefore = rig.answer().messages.length
+    const noticesBefore = rig.notices.length
+    rig.orchestrator.close()
+    expect(rig.notices.length).toBe(noticesBefore + 1)
+    await waitFor(() => recordsOf(rig).length === 1, 15000, 'the killed turn record')
+    await sleep(150)
+    expect(rig.answer().messages).toHaveLength(messagesBefore)
+    expect(rig.notices.length).toBe(noticesBefore + 1)
+    expect(rig.calls()).toHaveLength(1)
+    expect(recordsOf(rig)[0]).toMatchObject({ lane: 'orchestrator', killed: true })
+    expect(stateFile(rig).messages).toHaveLength(messagesBefore)
+  })
+
   it('keeps an owner message that waited for the next turn and runs it after a restart', async () => {
     const rig = makeRig()
     rig.behaviour.mode = 'hold'
