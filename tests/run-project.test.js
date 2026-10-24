@@ -295,7 +295,7 @@ describe('scripts/run-lane.mjs on another project', () => {
 
     const atHome = await runLane(['opencode', '--project', home, '--task', 'Fix it.', '--dry-run'])
     expect(atHome.code).toBe(1)
-    expect(atHome.stdout).toMatch(/is the user profile|holds the user profile/)
+    expect(atHome.stdout).toMatch(/is the user profile|holds the user profile|holds this checkout/)
     expect(atHome.stdout).not.toContain('cwd:')
 
     const atTemp = await runLane(['opencode', '--project', temp, '--task', 'Fix it.', '--dry-run'])
