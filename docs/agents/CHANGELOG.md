@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Meters panel reads this month's spend and tokens per lane from the run records only: it has no budget editor, confirm card or save, and says budgets are not set there (task Q10).
 - The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - Dispatch's project section can give each of several tasks its own idle lane and worktree, pairing them in picker order with `planLaneTasks`, refusing when there are too few idle lanes, and starting one run per task three seconds apart with each start's answer shown (task R11).
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
