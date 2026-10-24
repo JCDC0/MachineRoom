@@ -17,6 +17,15 @@ export const ORCH_MAX_LINES = 200
 export const ORCH_START_CONFIRM =
   'The orchestrator runs Claude Code (Opus) on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.'
 
+export function projectBaseName(path) {
+  const parts = String(path ?? '')
+    .split(/[\\/]+/)
+    .filter(Boolean)
+  if (parts.length === 0) return ''
+  const last = parts[parts.length - 1]
+  return /^[A-Za-z]:$/.test(last) ? '' : last
+}
+
 export const ORCH_STOP_CONFIRM =
   'Stop the orchestrator? The turn that is running stops now. The chat is kept.'
 

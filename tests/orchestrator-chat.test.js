@@ -17,6 +17,7 @@ import {
   needsStartConfirm,
   normalizeChat,
   orchestratorDoing,
+  projectBaseName,
   statusDetail,
   statusText,
   statusTone,
@@ -202,6 +203,29 @@ describe('orchestratorChat helpers', () => {
   })
 })
 
+describe('projectBaseName', () => {
+  it('reads the last folder of a Windows or POSIX path', () => {
+    expect(projectBaseName('C:\\work\\projects\\app')).toBe('app')
+    expect(projectBaseName('C:/work/projects/app')).toBe('app')
+    expect(projectBaseName('/home/<name>/work/app')).toBe('app')
+    expect(projectBaseName('app')).toBe('app')
+  })
+
+  it('ignores a trailing separator', () => {
+    expect(projectBaseName('C:\\work\\projects\\app\\')).toBe('app')
+    expect(projectBaseName('/home/<name>/work/app/')).toBe('app')
+    expect(projectBaseName('C:\\work\\projects\\app///')).toBe('app')
+  })
+
+  it('gives an empty name for an empty path or a drive root', () => {
+    expect(projectBaseName('')).toBe('')
+    expect(projectBaseName(null)).toBe('')
+    expect(projectBaseName(undefined)).toBe('')
+    expect(projectBaseName('/')).toBe('')
+    expect(projectBaseName('C:\\')).toBe('')
+  })
+})
+
 describe('chatBlocks', () => {
   it('turns paragraphs into blocks and keeps their lines', () => {
     expect(chatBlocks('One line\ntwo lines\n\nSecond para')).toEqual([
@@ -377,6 +401,53 @@ describe('OrchestratorChat panel', () => {
     )
     expect(html).toContain('>Start</button>')
     expect(html).toContain('>Cancel</button>')
+  })
+
+  it('names the project folder in the header and its full path in the start card', () => {
+    const chat = {
+      state: 'idle',
+      model: 'opus',
+      project: 'C:\\work\\projects\\app',
+      messages: [],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        initialDraft: 'Build the settings page.',
+        initialConfirm: 'start',
+      })
+    )
+    expect(html).toContain('class="mr-orch-project mr-orch-model mono"')
+    expect(html).toContain('title="C:\\work\\projects\\app"')
+    expect(html).toContain('>app</span>')
+    expect(html).toContain('>opus</span>')
+    expect(html).toContain(
+      'The orchestrator works in C:\\work\\projects\\app with full permissions.'
+    )
+    expect(html).not.toContain('on this project with full permissions')
+  })
+
+  it('shows the full path in the start card while the header holds a path with a trailing separator', () => {
+    const chat = {
+      state: 'idle',
+      model: 'opus',
+      project: 'C:\\work\\projects\\app\\',
+      messages: [],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        initialConfirm: 'start',
+      })
+    )
+    expect(html).toContain('>app</span>')
+    expect(html).toContain(
+      'The orchestrator works in C:\\work\\projects\\app\\ with full permissions.'
+    )
   })
 
   it('asks before a stop and shows the stop sentence', () => {
