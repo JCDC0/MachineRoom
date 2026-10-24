@@ -1,6 +1,6 @@
 # MachineRoom architecture
 
-Version 0.1.312. A browser viewer that shows coding agents working on one project as a 3D machine room. It follows the room's own sources live: runs started with `run-lane` (`--lanes`), task queues on a project (S8, S8b) and the owner's Claude Code and OpenCode sessions (`--sessions`, S7a and S7b). It replays a recorded run too.
+Version 0.1.313. A browser viewer that shows coding agents working on one project as a 3D machine room. It follows the room's own sources live: runs started with `run-lane` (`--lanes`), task queues on a project (S8, S8b) and the owner's Claude Code and OpenCode sessions (`--sessions`, S7a and S7b). It replays a recorded run too.
 
 MachineRoom grew out of Paperclip: it began as its viewer and took its idea of a company of agents with tasks, budgets and approvals. Paperclip was removed on 2026-10-24, and the room now reads its own sources. S6a (0.1.233) shows lane runs live from the run-lane logs. The drawer reads tasks, live runs and costs from the lane records (`server/control.js`, `server/lane-costs.js`; L1 and L2); approvals and comments are empty, and a task, comment or agent write is refused.
 
@@ -40,6 +40,7 @@ node scripts/agy-prompt.mjs V7a   write AGY's prompt for a brief to agy-V7a-prom
 npm run run-recording -- 1      turn run 1 of that list into a recording in public/recordings/ again (run-lane already writes one after each run and prints its /?recording=<name>)
 npm test           vitest through scripts/test.mjs, node environment, threads pool, no browser needed; a test file that only reads a git repository copies one made once, and the static viewer tests share one bridge, so a full run is shorter; it runs the tests again (3 tries in all) only when Node itself crashes with 0xC0000409
 npm run build
+CI runs npm test, npm run build, npm run pack-check and npm run history-audit on Ubuntu and Windows; the history step passes --from with the base of the change, so it reads the new commits and leaves the older records to the full command
 npm run fixtures -- <frames-or-raw-events.jsonl> <sandbox-folder> <ids.json> [out-name]
 ```
 

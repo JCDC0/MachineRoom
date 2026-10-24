@@ -22,6 +22,8 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -29,3 +31,17 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: npm run pack-check
+      - name: History audit
+        shell: bash
+        run: |
+          base='${{ github.event.pull_request.base.sha }}'
+          if [ -z "$base" ]; then base='${{ github.event.before }}'; fi
+          if [ -z "$base" ] || [ "$base" = '0000000000000000000000000000000000000000' ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            base="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [ -z "$base" ]; then
+            npm run history-audit
+          else
+            npm run history-audit -- --from "$base"
+          fi

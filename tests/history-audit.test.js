@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { countLeaks, findLeaks, LEAK_KINDS, maskKeys } from '../src/briefs/audit.js'
+import { historyArgsFrom, parseAuditArgs } from '../scripts/history-audit.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/history-audit.mjs', import.meta.url))
@@ -66,6 +67,7 @@ describe('findLeaks keys', () => {
   })
 
   it('leaves placeholders and empty values alone', () => {
+    expect(findLeaks('OPENROUTER_API_KEY=[key]')).toEqual([])
     expect(findLeaks('OPENROUTER_API_KEY=your-key')).toEqual([])
     expect(findLeaks('ANTHROPIC_API_KEY=xxx')).toEqual([])
     expect(findLeaks('OPENAI_API_KEY=<your key>')).toEqual([])
@@ -89,8 +91,9 @@ describe('findLeaks addresses and paths', () => {
     expect(findLeaks(`write to ${fakeMail}`)).toEqual([{ kind: 'email', line: 1, sample: `write to ${fakeMail}` }])
   })
 
-  it('allows the two addresses that may leave', () => {
+  it('allows the addresses that may leave', () => {
     expect(findLeaks('noreply@anthropic.com')).toEqual([])
+    expect(findLeaks('noreply@github.com')).toEqual([])
     expect(findLeaks('1234+someone@users.noreply.github.com')).toEqual([])
     expect(findLeaks('NoReply@Anthropic.COM')).toEqual([])
   })
@@ -149,6 +152,17 @@ describe('findLeaks placeholders', () => {
     expect(kindsOf('write to someone@site.com')).toEqual(['email'])
   })
 
+  it('does not read an npm version as an address', () => {
+    expect(findLeaks('npm install -g paperclipai@2026.1012.0')).toEqual([])
+    expect(findLeaks('see paperclipai@2026.1012.0 --ignore-scripts')).toEqual([])
+  })
+
+  it('leaves out the house rule name and a template folder', () => {
+    expect(findLeaks('C:\\Users\\<name>\\notes.md')).toEqual([])
+    expect(findLeaks('C:/Users/${ACCOUNT}/AppData/Local/Temp')).toEqual([])
+    expect(findLeaks('C:/Users/${ACCOUNT.slice(0, cut)}/notes.md')).toEqual([])
+  })
+
   it('leaves out both placeholders on one line', () => {
     expect(findLeaks('C:\\Users\\user\\notes.md and test@example.com')).toEqual([])
   })
@@ -181,6 +195,29 @@ describe('findLeaks output', () => {
   })
 })
 
+describe('audit arguments', () => {
+  it('reads --json and --from', () => {
+    expect(parseAuditArgs([])).toEqual({ json: false, from: '' })
+    expect(parseAuditArgs(['--json'])).toEqual({ json: true, from: '' })
+    expect(parseAuditArgs(['--json', '--from', 'main'])).toEqual({ json: true, from: 'main' })
+    expect(parseAuditArgs(['--from=abc123'])).toEqual({ json: false, from: 'abc123' })
+  })
+
+  it('refuses a missing or unknown option', () => {
+    expect(() => parseAuditArgs(['--from'])).toThrow('--from needs a commit.')
+    expect(() => parseAuditArgs(['--from='])).toThrow('--from needs a commit.')
+    expect(() => parseAuditArgs(['--since', 'main'])).toThrow('Unknown option: --since')
+  })
+
+  it('builds the full range or the range after a commit', () => {
+    expect(historyArgsFrom('')).toContain('refs/heads/main')
+    expect(historyArgsFrom('')).toContain('--tags')
+    const range = historyArgsFrom('abc123')
+    expect(range.at(-1)).toBe('abc123..HEAD')
+    expect(range).not.toContain('--tags')
+  })
+})
+
 describe('history-audit script', () => {
   it('finds a key that was added and then removed', () => {
     const dir = makeTempDir('history-audit-')
@@ -208,6 +245,92 @@ describe('history-audit script', () => {
       expect(hits[0].commit).toMatch(/^[0-9a-f]{7,}$/)
       expect(hits[0].sample).toBe('sk-a… (43 characters)')
       expect(hits[0].sample).not.toContain(fakeSk)
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  }, 30000)
+})
+
+describe('history-audit script from a commit', () => {
+  function startRepo(dir) {
+    git(['init', '-b', 'main'], dir)
+    git(['config', 'user.email', 'tester@users.noreply.github.com'], dir)
+    git(['config', 'user.name', 'Tester'], dir)
+    writeFileSync(join(dir, 'notes.md'), `contact ${fakeMail}\n`)
+    git(['add', 'notes.md'], dir)
+    git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Start'], dir)
+    git(['checkout', '-b', 'feat'], dir)
+  }
+
+  it('reads the commits after the start and leaves the old lines alone', () => {
+    const dir = makeTempDir('history-audit-')
+    try {
+      startRepo(dir)
+      writeFileSync(join(dir, 'notes.md'), `contact ${fakeMail}\nfirst change\n`)
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Add a line'], dir)
+      const clean = spawnSync(process.execPath, [SCRIPT, '--json', '--from', 'main'], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+      })
+      expect(clean.status).toBe(0)
+      expect(JSON.parse(clean.stdout).counts.email).toBe(0)
+      writeFileSync(join(dir, 'key.md'), `const key = '${fakeSk}'\n`)
+      git(['add', 'key.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Add a key'], dir)
+      const result = spawnSync(process.execPath, [SCRIPT, '--json', '--from', 'main'], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+      })
+      expect(result.status).toBe(1)
+      const report = JSON.parse(result.stdout)
+      expect(report.counts.key).toBeGreaterThanOrEqual(1)
+      expect(report.counts.email).toBe(0)
+      const [hit] = report.findings.filter((finding) => finding.kind === 'key')
+      expect(hit.file).toBe('key.md')
+      expect(hit.commit).toMatch(/^[0-9a-f]{7,}$/)
+      expect(hit.sample).toBe('sk-a… (43 characters)')
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  }, 30000)
+
+  it('finds a key that was added and removed after the start', () => {
+    const dir = makeTempDir('history-audit-')
+    try {
+      startRepo(dir)
+      writeFileSync(join(dir, 'notes.md'), `const key = '${fakeSk}'\n`)
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Add a key'], dir)
+      writeFileSync(join(dir, 'notes.md'), 'const key = null\n')
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Remove the key'], dir)
+      const result = spawnSync(process.execPath, [SCRIPT, '--json', '--from', 'main'], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+      })
+      expect(result.status).toBe(1)
+      expect(JSON.parse(result.stdout).counts.key).toBeGreaterThanOrEqual(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  }, 30000)
+
+  it('refuses a start that is not a commit', () => {
+    const dir = makeTempDir('history-audit-')
+    try {
+      startRepo(dir)
+      const result = spawnSync(process.execPath, [SCRIPT, '--json', '--from', 'no-such-ref'], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+      })
+      expect(result.status).toBe(1)
+      expect(result.stderr).toContain('The audit could not read the commit no-such-ref.')
+      expect(result.stdout).toBe('')
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

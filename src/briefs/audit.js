@@ -13,7 +13,7 @@ const GRADED_PATH = /(?<![A-Za-z0-9])coursework(?![A-Za-z0-9])/gi
 
 const PLACEHOLDER = /^(?:your[-_ ]?(?:key|token|api[-_ ]?key).*|your[-_ ]?api.*|x{3,}|changeme|change[-_ ]?me|placeholder|redacted|example.*|todo|none|null|secret|key|\*+|\$\{.*\}|\$[A-Za-z_][A-Za-z0-9_]*)$/i
 
-const ALLOWED_EMAILS = new Set(['noreply@anthropic.com'])
+const ALLOWED_EMAILS = new Set(['noreply@anthropic.com', 'noreply@github.com'])
 const ALLOWED_EMAIL_DOMAIN = '@users.noreply.github.com'
 
 const PLACEHOLDER_USER_FOLDERS = new Set([
@@ -27,17 +27,23 @@ const PLACEHOLDER_USER_FOLDERS = new Set([
   '%username%',
   '$env:username',
   '<user>',
+  '<name>',
 ])
 const EXAMPLE_EMAIL_DOMAINS = new Set(['example.com', 'example.org', 'example.net'])
 const EXAMPLE_EMAIL_SUFFIXES = ['.example', '.invalid', '.test', '.localhost']
 
 function isPlaceholderUserFolder(folder) {
+  if (folder.startsWith('${')) return true
   return PLACEHOLDER_USER_FOLDERS.has(folder.toLowerCase())
 }
 
 function isExampleDomain(domain) {
   if (EXAMPLE_EMAIL_DOMAINS.has(domain)) return true
   return EXAMPLE_EMAIL_SUFFIXES.some((suffix) => domain.endsWith(suffix))
+}
+
+function isVersionDomain(domain) {
+  return /^\d+(?:\.\d+)*$/.test(domain)
 }
 
 function isPlaceholder(value) {
@@ -87,7 +93,7 @@ function scanLine(line, profileName) {
   const values = []
   eachMatch(KEY_SETTING, line, (match) => {
     const value = match[3] ?? ''
-    if (value === '') return
+    if (value === '' || value === KEY_MASK) return
     const start = match.index + match[0].lastIndexOf(value)
     values.push([start, start + value.length])
     if (isPlaceholder(value)) return
@@ -114,7 +120,8 @@ function scanLine(line, profileName) {
     const address = match[0].toLowerCase()
     if (ALLOWED_EMAILS.has(address)) return
     if (address.endsWith(ALLOWED_EMAIL_DOMAIN)) return
-    if (isExampleDomain(address.slice(address.lastIndexOf('@') + 1))) return
+    const domain = address.slice(address.lastIndexOf('@') + 1)
+    if (isExampleDomain(domain) || isVersionDomain(domain)) return
     found.push({ kind: 'email', index: match.index, sample: windowAround(line, match.index, match[0].length) })
   })
   eachMatch(USER_PATH, line, (match) => {
