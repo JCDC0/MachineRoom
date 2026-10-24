@@ -436,7 +436,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'
       const color = status === 'error' ? RED : status === 'done' ? GREEN : WHITE
-      hub.setSlot(view.index, color, status === 'idle' ? 0.25 : status === 'working' || status === 'queued' ? 0.12 : 0.6)
+      const opacity = status === 'idle' ? 0.25 : status === 'working' || status === 'queued' ? 0.12 : 0.6
+      hub.setSlot(view.index, color, opacity * (view.presenceOpacity ?? 1))
     }
 
     const isStill = still()
