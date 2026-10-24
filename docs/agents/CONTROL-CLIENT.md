@@ -105,6 +105,8 @@ ChangeEvent  { topic: agents | issues | comments | approvals | costs | runs | li
 
 Times are ISO strings. Money is whole cents. A budget of `0` means no budget is set. A quota window with `usedPercent: null` has no number (show its `detail`). A quota provider with `ok: false` could not be read (show `error`).
 
+When the lane source is on and Paperclip does not answer, `costs()` comes from the lane run records: one row per lane with this calendar month's spend, no budget, null tokens and no quota, and the Backups section says Paperclip is not running.
+
 ## Hiring and updating an agent (C3c)
 
 `src/control/agents.js` holds the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). The mock and the bridge both use them, so a bad request is refused the same way in both.

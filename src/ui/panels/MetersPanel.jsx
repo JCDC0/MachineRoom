@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
 import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf, timeUntil } from './format.js'
 import { subscribeToNotices } from './notices.js'
-import { backupAgePercent, backupNotice, formatBytes } from './backup.js'
+import { backupAgePercent, backupNotice, backupsNotRunning, formatBytes } from './backup.js'
 
 export function budgetConfirmText(name, cents) {
   return `Set ${visibleText(name)}'s monthly budget to ${formatCents(cents)} in Paperclip?`
@@ -33,6 +33,7 @@ export default function MetersPanel({
     () => initialBackupStatus == null && typeof client?.backupStatus === 'function'
   )
   const [backupError, setBackupError] = useState(null)
+  const [backupDown, setBackupDown] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
   const [backupActionError, setBackupActionError] = useState(null)
@@ -68,8 +69,10 @@ export default function MetersPanel({
     try {
       const status = await client.backupStatus()
       setBackupStatus(status)
-    } catch {
+      setBackupDown(false)
+    } catch (err) {
       setBackupError('Could not read the backup status.')
+      setBackupDown(err?.message === 'Paperclip did not answer.')
     } finally {
       setBackupLoading(false)
     }
@@ -148,6 +151,7 @@ export default function MetersPanel({
   }
 
   const notice = backupNotice(backupStatus)
+  const backupsLine = backupsNotRunning({ laneMode: Boolean(costs), paperclipDown: backupDown })
   const backupPct = backupAgePercent(backupStatus)
   const summary = costs?.summary ?? null
   const quota = listOf(costs?.quota)
@@ -411,7 +415,9 @@ export default function MetersPanel({
       <section className="meters-section backup-section" aria-label="Backups">
         <h4 className="meters-section-title">Backups</h4>
         <div className="backup-card">
-          {backupError ? (
+          {backupsLine ? (
+            <div className="backup-line mono">{backupsLine}</div>
+          ) : backupError ? (
             <div className="backup-error mono" role="alert">
               {backupError}
             </div>

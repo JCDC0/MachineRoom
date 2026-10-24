@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Review note on L1: no fixes. With the lane source on and Paperclip down, `/api/control/costs` and the agents' spend come from `runs.jsonl` (this UTC month, per lane). The Meters tab tells lane mode apart by a failed backup read whose error is `Paperclip did not answer.` while costs loaded; a health flag passed down would be more direct, outside the brief's files. A lane with spend and no tokens shows `? in / ? out` on the board. `tests/candidate.test.js` failed once in the full run while L2 ran its own suite and passed alone. Full suite on the merge: 123 files, 2313 tests.
+- The drawer and the cost board read the lanes' spend from the run records when Paperclip does not answer: `/api/control/costs` and the spend of `/api/control/agents` fall back to `server/lane-costs.js`, the board shows this month's spend with no budget and null tokens, and the Meters tab says backups belong to Paperclip (task L1).
 - Briefs L1 (costs and meters from the lane records) and L2 (tasks, approvals and the callout from the lane runs).
 
 - CI on 0.1.240 failed on Linux in two of S6f's tests: their dry runs read the real `lanes.json`, whose OpenCode binary sits under `%APPDATA%`, which Linux does not set. The test helper now falls back to the file's fake `APPDATA` and `LOCALAPPDATA` beneath the real environment; the tests pass with both unset.

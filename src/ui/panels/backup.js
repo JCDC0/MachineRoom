@@ -120,6 +120,12 @@ export function backupNotice(status, { now = Date.now() } = {}) {
   }
 }
 
+export const BACKUPS_NOT_RUNNING = 'Backups belong to Paperclip, which is not running.'
+
+export function backupsNotRunning({ laneMode = false, paperclipDown = false } = {}) {
+  return laneMode && paperclipDown ? BACKUPS_NOT_RUNNING : null
+}
+
 export function backupAgePercent(status, { now = Date.now(), limitHours = 24 } = {}) {
   if (!status || typeof status !== 'object' || Array.isArray(status)) {
     return null
