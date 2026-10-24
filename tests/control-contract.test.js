@@ -1239,9 +1239,9 @@ describe('real control client and bridge extras', () => {
 
     await waitUntil(() => Boolean(instances[0].connected))
     fake.broadcast('heartbeat.run.status', { runId: 'r1', agentId: 'agent-opencode', status: 'succeeded' })
-    await waitUntil(() => first.length >= 3 && second.length >= 3)
-    expect(first).toEqual([{ topic: 'agents' }, { topic: 'costs' }, { topic: 'liveRuns' }])
-    expect(second).toEqual([{ topic: 'agents' }, { topic: 'costs' }, { topic: 'liveRuns' }])
+    await waitUntil(() => first.length >= 4 && second.length >= 4)
+    expect(first).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'costs' }, { topic: 'liveRuns' }])
+    expect(second).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'costs' }, { topic: 'liveRuns' }])
 
     stop1()
     expect(instances[0].closed).toBe(false)

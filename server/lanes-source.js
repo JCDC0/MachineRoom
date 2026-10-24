@@ -107,13 +107,14 @@ export function createLanesSource(options = {}) {
     } catch {}
   }
 
-  function beginRun(name, path, agent, keepPaths = false) {
+  function beginRun(name, path, agent, keepPaths = false, project = '') {
     const startedAt = now()
     const run = {
       name,
       path,
       key: pathKey(path),
       agent,
+      project,
       base: { runId: `run-${name}`, agentId: agent.id, issueId: `issue-${name}` },
       companyId: `company-${name}`,
       seq: 0,
@@ -163,7 +164,7 @@ export function createLanesSource(options = {}) {
       const meta = metaFor(path)
       if (meta && pathKey(meta.project) !== pathKey(roomRoot)) continue
       if (!meta && !worktreeRunsShown) continue
-      beginRun(entry.name.slice(0, -4), path, agent, Boolean(meta))
+      beginRun(entry.name.slice(0, -4), path, agent, Boolean(meta), meta?.project ?? '')
     }
   }
 
@@ -332,5 +333,14 @@ export function createLanesSource(options = {}) {
     }
   }
 
-  return { agents, start, stop, tick }
+  function openRuns() {
+    return [...active.values()].map((run) => ({
+      name: run.name,
+      lane: run.agent.key,
+      startedAt: iso(run.startedAt),
+      project: run.project || null,
+    }))
+  }
+
+  return { agents, openRuns, start, stop, tick }
 }

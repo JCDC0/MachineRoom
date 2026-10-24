@@ -1,6 +1,8 @@
 import { CANNOT_TAKE_TASKS, EFFORTS, cleanAgentDraft, cleanAgentPatch, fieldProblem, taskDraftProblem } from '../src/control/agents.js'
 import { readLaneCosts } from './lane-costs.js'
+import { LANE_TASK_REFUSAL, laneTaskState, readLaneBriefs, readRecentLaneRecords } from './lane-tasks.js'
 import { MODELS } from './models.js'
+import { runsFile } from './runs.js'
 
 const AGENT_STATUS = {
   active: 'idle',
@@ -98,7 +100,7 @@ export function changeEvents(frame) {
   if (type === 'agent.status') return [{ topic: 'agents' }]
   if (RUN_NOTICES.has(type)) {
     const costs = type === 'heartbeat.run.status' && TERMINAL_RUN.has(payload.status) ? [{ topic: 'costs' }] : []
-    return [{ topic: 'agents' }, ...costs, { topic: 'liveRuns' }]
+    return [{ topic: 'agents' }, { topic: 'issues' }, ...costs, { topic: 'liveRuns' }]
   }
   if (type !== 'activity.logged') return []
   const action = String(payload.action ?? '')
@@ -348,6 +350,15 @@ export function createControlApi(options) {
   const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : UPSTREAM_TIMEOUT_MS
   const lanes = typeof options.lanes === 'function' ? options.lanes : () => null
 
+  function laneNow() {
+    try {
+      const source = lanes()
+      return source && typeof source.openRuns === 'function' ? source : null
+    } catch {
+      return null
+    }
+  }
+
   function laneFallback() {
     const source = lanes()
     if (!source || !Array.isArray(source.agents)) return null
@@ -356,6 +367,30 @@ export function createControlApi(options) {
     } catch {
       return null
     }
+  }
+
+  function laneState() {
+    const source = laneNow()
+    if (!source) return null
+    let openRuns = []
+    try {
+      openRuns = source.openRuns()
+    } catch {
+      openRuns = []
+    }
+    const agents = Array.isArray(source.agents) ? source.agents : []
+    return laneTaskState({
+      openRuns,
+      agents,
+      records: readRecentLaneRecords(runsFile()),
+      briefs: readLaneBriefs(),
+    })
+  }
+
+  function laneAgentIds() {
+    const source = laneNow()
+    if (!source) return new Set()
+    return new Set((Array.isArray(source.agents) ? source.agents : []).map((agent) => agent?.id).filter(Boolean))
   }
 
   function laneAgentList(fallback) {
@@ -608,6 +643,12 @@ export function createControlApi(options) {
       const query = status ? `?status=${encodeURIComponent(status)}` : ''
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/issues${query}`)
       if (answer.status !== 200) {
+        const lane = laneState()
+        if (lane) {
+          const list = status ? lane.issues.filter((issue) => issue.status === status) : lane.issues
+          sendJson(req, res, 200, list)
+          return true
+        }
         const [code, message] = upstreamFailure(answer, 'That task no longer exists.', 'Paperclip could not read the tasks.')
         sendJson(req, res, code, { error: message })
         return true
@@ -622,6 +663,11 @@ export function createControlApi(options) {
       if (featureOff(req, res, 'tasks')) return true
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/live-runs?limit=${LIVE_RUN_LIMIT}`)
       if (answer.status !== 200) {
+        const lane = laneState()
+        if (lane) {
+          sendJson(req, res, 200, { runs: lane.liveRuns })
+          return true
+        }
         const [code, message] = upstreamFailure(answer, 'Paperclip has no live runs route.', 'Paperclip could not read the live runs.')
         sendJson(req, res, code, { error: message })
         return true
@@ -641,9 +687,17 @@ export function createControlApi(options) {
         return true
       }
       const assigneeAgentId = plainId(draft?.assigneeAgentId)
-      const known = assigneeAgentId
-        ? await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
-        : { status: 0, json: null }
+      const laneIds = laneNow() ? laneAgentIds() : null
+      let known = { status: 0, json: null }
+      if (laneIds) {
+        known = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
+        if (known.status !== 200 || (assigneeAgentId && laneIds.has(assigneeAgentId))) {
+          sendJson(req, res, 409, { error: LANE_TASK_REFUSAL })
+          return true
+        }
+      } else if (assigneeAgentId) {
+        known = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`)
+      }
       const list = Array.isArray(known.json) ? known.json : []
       const assignee = known.status === 200 ? list.find((agent) => agent?.id === assigneeAgentId) : null
       if (!assignee) {
@@ -677,6 +731,11 @@ export function createControlApi(options) {
     if (method === 'GET' && path === '/api/control/comments') {
       if (featureOff(req, res, 'tasks')) return true
       const issueId = plainId(url.searchParams.get('issueId'))
+      const lane = laneNow() ? laneState() : null
+      if (lane && lane.issues.some((issue) => issue.id === issueId)) {
+        sendJson(req, res, 200, [])
+        return true
+      }
       const [comments, agents] = await Promise.all([
         upstream('GET', `/api/issues/${encodeURIComponent(issueId)}/comments`),
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/agents`),
@@ -686,6 +745,10 @@ export function createControlApi(options) {
         return true
       }
       if (comments.status !== 200) {
+        if (lane) {
+          sendJson(req, res, 200, [])
+          return true
+        }
         const [code, message] = upstreamFailure(comments, 'That task no longer exists.', 'Paperclip could not read the thread.')
         sendJson(req, res, code, { error: message })
         return true
@@ -710,12 +773,21 @@ export function createControlApi(options) {
         sendJson(req, res, 400, { error: 'Write a comment first.' })
         return true
       }
+      const lane = laneNow() ? laneState() : null
+      if (lane && lane.issues.some((issue) => issue.id === issueId)) {
+        sendJson(req, res, 409, { error: LANE_TASK_REFUSAL })
+        return true
+      }
       const posted = await upstream('POST', `/api/issues/${encodeURIComponent(issueId)}/comments`, { body: text })
       if (posted.status === 404) {
         sendJson(req, res, 404, { error: 'That task no longer exists.' })
         return true
       }
       if (posted.status >= 300 || !posted.json) {
+        if (lane && posted.status === 0) {
+          sendJson(req, res, 409, { error: LANE_TASK_REFUSAL })
+          return true
+        }
         const [code, message] = upstreamFailure(posted, 'That task no longer exists.', 'Paperclip did not accept that comment.')
         sendJson(req, res, code, { error: message })
         return true
@@ -734,6 +806,10 @@ export function createControlApi(options) {
       if (featureOff(req, res, 'approvals')) return true
       const answer = await upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/approvals`)
       if (answer.status !== 200) {
+        if (laneNow()) {
+          sendJson(req, res, 200, [])
+          return true
+        }
         const [code, message] = upstreamFailure(answer, 'That approval no longer exists.', 'Paperclip could not read the approvals.')
         sendJson(req, res, code, { error: message })
         return true
