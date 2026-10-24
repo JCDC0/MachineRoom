@@ -736,7 +736,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   }
 
   function visibleLinks() {
-    const links = [{ from: null, to: '' }]
+    const links = []
     for (const card of cards.values()) {
       if (card.path === '' || card.leaving) continue
       if (!card.path.includes('/')) {

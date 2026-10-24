@@ -17,11 +17,7 @@ const DONE_GLOW_MS = 5000
 export const CHILD_HOLD_MS = 6000
 const CHILD_FADE_MS = 1500
 const CHILD_LIFE_MS = CHILD_HOLD_MS + CHILD_FADE_MS
-const STRIP_OPACITY = 0.9
-const STRIP_BASE = 0.2
-const STRIP_DASH = 0.7
-const STRIP_DASH_SIZE = 26
-const STRIP_GAP_SIZE = 22
+const STRIP_OPACITY = 0.75
 export const PACKET_POOL = 24
 export const PACKET_DURATION = 450
 export const PACKET_INTERVAL = 90
@@ -247,20 +243,17 @@ export function createAgents(scene, roster, cssScene = null) {
     group.scale.setScalar(scale)
 
     const link = lineBetween(lineMaterial(WHITE, 0.4))
-    const stripMaterialA = lineMaterial(WHITE, 0)
-    const stripMaterialB = new THREE.LineDashedMaterial({ color: YELLOW, transparent: true, opacity: 0, depthWrite: false, dashSize: STRIP_DASH_SIZE, gapSize: STRIP_GAP_SIZE })
-    const stripA = lineBetween(stripMaterialA)
-    const stripB = lineBetween(stripMaterialB)
-    stripA.visible = false
-    stripB.visible = false
+    const stripMaterial = lineMaterial(YELLOW, 0)
+    const strip = lineBetween(stripMaterial)
+    strip.visible = false
     const packets = packetPoints()
     const parentLink = parentKey ? lineBetween(lineMaterial(WHITE, 0.3)) : null
 
     const callout = makeCallout(agent.name)
-    const calloutLine = lineBetween(lineMaterial(YELLOW, 0.6))
+    const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
     calloutLine.visible = false
 
-    scene.add(group, link, stripA, stripB, packets, calloutLine)
+    scene.add(group, link, strip, packets, calloutLine)
     if (parentLink) scene.add(parentLink)
     cssScene?.add(callout.object)
     pickables.push(picker)
@@ -282,11 +275,9 @@ export function createAgents(scene, roster, cssScene = null) {
       parentLink,
       scale,
       fadeStart: 0,
-      stripA,
-      stripB,
+      strip,
       stripEnds: [{}, {}],
-      stripMaterialA,
-      stripMaterialB,
+      stripMaterial,
       packets,
       packetSends: [],
       packetFractions: [],
@@ -312,9 +303,9 @@ export function createAgents(scene, roster, cssScene = null) {
     else pendingChipRemovals.add(view.key)
     view.callout.object.removeFromParent()
     view.callout.element.remove()
-    scene.remove(view.group, view.link, view.stripA, view.stripB, view.packets, view.calloutLine)
+    scene.remove(view.group, view.link, view.strip, view.packets, view.calloutLine)
     if (view.parentLink) scene.remove(view.parentLink)
-    for (const root of [view.group, view.link, view.stripA, view.stripB, view.packets, view.calloutLine, view.parentLink]) {
+    for (const root of [view.group, view.link, view.strip, view.packets, view.calloutLine, view.parentLink]) {
       if (!root) continue
       root.traverse((object) => {
         object.geometry?.dispose()
@@ -499,8 +490,7 @@ export function createAgents(scene, roster, cssScene = null) {
         view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
 
         setEnds(view.calloutLine, view.group.position, calloutPos)
-        const lineColor = calloutTone === 'error' ? RED : calloutTone === 'done' ? GREEN : YELLOW
-        view.calloutLine.material.color.setHex(lineColor)
+        view.calloutLine.material.color.setHex(WHITE)
         view.calloutLine.visible = true
       } else {
         view.callout.object.visible = false
@@ -535,8 +525,7 @@ export function createAgents(scene, roster, cssScene = null) {
       if (color !== null) view.stripColor = color
       view.stripOpacity += ((stripOn ? STRIP_OPACITY : 0) - view.stripOpacity) * easeRate(delta, 6, isStill)
       const stripVisible = view.stripOpacity > 0.02 && fade > 0.01
-      view.stripA.visible = stripVisible
-      view.stripB.visible = stripVisible
+      view.strip.visible = stripVisible
       if (pointer) {
         view.side = world.side(pointer.dir)
         world.edge(pointer.dir, pointer.file, view.side, traceEnd)
@@ -545,14 +534,11 @@ export function createAgents(scene, roster, cssScene = null) {
         view.touch.copy(view.home)
       }
       if (stripVisible) {
-        stripStart.copy(view.group.position).addScaledVector(camUp, 105)
+        stripStart.copy(view.group.position)
         const [a, b] = stripPoints(stripStart, view.touch, view.stripEnds)
-        const movedA = setEnds(view.stripA, a, b)
-        const movedB = setEnds(view.stripB, a, b)
-        if (movedA || movedB) view.stripB.computeLineDistances()
-        view.stripMaterialB.color.setHex(view.stripColor)
-        view.stripMaterialA.opacity = view.stripOpacity * fade * STRIP_BASE
-        view.stripMaterialB.opacity = view.stripOpacity * fade * STRIP_DASH
+        setEnds(view.strip, a, b)
+        view.stripMaterial.color.setHex(view.stripColor)
+        view.stripMaterial.opacity = view.stripOpacity * fade
       }
       if (stripVisible && !isStill) {
         updatePackets(view, now, fade, status === 'working' && stripOn)
@@ -576,8 +562,7 @@ export function createAgents(scene, roster, cssScene = null) {
       view.pointer = null
       view.side = -1
       view.stripOpacity = 0
-      view.stripA.visible = false
-      view.stripB.visible = false
+      view.strip.visible = false
       hidePackets(view)
       view.packetBurstAt = -Infinity
       view.group.position.copy(view.home)

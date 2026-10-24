@@ -181,24 +181,25 @@ describe('packets after a run ends', () => {
 })
 
 describe('a strip with still ends', () => {
-  it('keeps the same line distance attribute on the next frame', () => {
+  it('leaves the tunnel geometry alone while its ends stay put, and moves it when the file moves', () => {
     const { agents, state, terminals, world, edge } = harness()
     startWrite(state, 1000)
     agents.aimAt('a', 'src', 'src/a.js', 1000)
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
-    const distance = view.stripB.geometry.attributes.lineDistance
-    const positionVersion = view.stripB.geometry.attributes.position.version
-    expect(distance).toBeTruthy()
+    const positionVersion = view.strip.geometry.attributes.position.version
+    expect(view.strip.visible).toBe(true)
 
     agents.update(state, 0.016, 1016, world, terminals)
-    expect(view.stripB.geometry.attributes.lineDistance).toBe(distance)
-    expect(view.stripB.geometry.attributes.position.version).toBe(positionVersion)
+    expect(view.strip.geometry.attributes.position.version).toBe(positionVersion)
 
     edge.x += 60
     agents.update(state, 0.016, 1032, world, terminals)
-    expect(view.stripB.geometry.attributes.lineDistance).not.toBe(distance)
-    expect(view.stripB.geometry.attributes.position.version).toBeGreaterThan(positionVersion)
+    expect(view.strip.geometry.attributes.position.version).toBeGreaterThan(positionVersion)
+    const array = view.strip.geometry.attributes.position.array
+    expect(array[0]).toBeCloseTo(view.group.position.x, 3)
+    expect(array[1]).toBeCloseTo(view.group.position.y, 3)
+    expect(array[2]).toBeCloseTo(view.group.position.z, 3)
     agents.dispose()
   })
 })

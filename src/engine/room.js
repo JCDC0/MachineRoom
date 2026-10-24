@@ -7,7 +7,7 @@ import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createLabels } from './labels.js'
-import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
+import { GREEN, RED, WHITE, disposeStill, glowTexture, still, textSprite } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, createTerminals } from './terminals.js'
 import { createVoid } from './void.js'
@@ -157,6 +157,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   const space = createVoid(scene, texture)
   const hub = createHub(scene, agents)
+  const rootLabel = textSprite(String(rootName || 'project').toUpperCase(), { scale: 1.4, color: 'rgba(255,255,255,.6)' })
+  rootLabel.position.copy(HUB_CENTER).add(new THREE.Vector3(0, -260, 0))
+  scene.add(rootLabel)
   const roster = agents.map((agent) => ({ key: agent.key, name: agent.name, shape: agent.parser ?? agent.key, role: agent.role ?? null }))
   const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster, { onPick })
@@ -552,6 +555,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       timers.clear()
       observer.disconnect()
       rig.dispose()
+      scene.remove(rootLabel)
+      rootLabel.material.map?.dispose()
+      rootLabel.material.dispose()
       agentSet.dispose()
       terminals.dispose()
       board.dispose()
