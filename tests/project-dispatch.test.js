@@ -431,12 +431,25 @@ describe('the project run helpers', () => {
 
   it('lists the lanes that have a command line and no Paperclip role', () => {
     expect(projectRunLanes(AGENTS)).toEqual([
-      { key: 'opencode', name: 'OpenCode' },
-      { key: 'agy', name: 'agy' },
-      { key: 'claude', name: 'Claude Code' },
+      { key: 'opencode', name: 'OpenCode', running: false },
+      { key: 'agy', name: 'agy', running: false },
+      { key: 'claude', name: 'Claude Code', running: false },
     ])
     expect(projectRunLanes(null)).toEqual([])
     expect(projectRunLanes([null, 7, 'opencode'])).toEqual([])
+  })
+
+  it('marks a lane that is running', () => {
+    expect(projectRunLanes(AGENTS, [{ lane: 'opencode' }, { lane: ' hermes ' }, null, 7])).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: true },
+      { key: 'agy', name: 'agy', running: false },
+      { key: 'claude', name: 'Claude Code', running: false },
+    ])
+    expect(projectRunLanes(AGENTS, [])).toEqual([
+      { key: 'opencode', name: 'OpenCode', running: false },
+      { key: 'agy', name: 'agy', running: false },
+      { key: 'claude', name: 'Claude Code', running: false },
+    ])
   })
 
   it('names the lane, the project folder and the first 120 characters of the task', () => {

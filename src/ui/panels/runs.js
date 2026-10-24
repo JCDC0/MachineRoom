@@ -72,8 +72,14 @@ export const PROJECT_TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only
 
 const PROJECT_RUN_ADAPTERS = new Set(['opencode_local', 'claude_local', 'process'])
 
-export function projectRunLanes(agents) {
+export function projectRunLanes(agents, running) {
   const list = Array.isArray(agents) ? agents : []
+  const active = new Set(
+    (Array.isArray(running) ? running : [])
+      .map((entry) => (entry && typeof entry === 'object' ? entry.lane : ''))
+      .filter((lane) => typeof lane === 'string' && lane.trim() !== '')
+      .map((lane) => lane.trim())
+  )
   const seen = new Set()
   const lanes = []
   for (const agent of list) {
@@ -84,7 +90,7 @@ export function projectRunLanes(agents) {
     if (!key || seen.has(key)) continue
     seen.add(key)
     const name = typeof agent.name === 'string' && agent.name.trim() ? agent.name.trim() : key
-    lanes.push({ key, name })
+    lanes.push({ key, name, running: active.has(key) })
   }
   return lanes
 }
@@ -123,6 +129,27 @@ export function projectTaskProblem(task) {
 
 export function projectRunLabel(count) {
   return Number.isInteger(count) && count > 1 ? `Run ${count} tasks in order` : 'Run'
+}
+
+export function projectWorktreeName(project, lane) {
+  const folder = typeof project === 'string' ? project.trim().replace(/[\\/]+$/, '') : ''
+  const key = typeof lane === 'string' ? lane.trim() : ''
+  if (!folder || !key) return ''
+  const cut = Math.max(folder.lastIndexOf('/'), folder.lastIndexOf('\\'))
+  const name = (cut === -1 ? folder : folder.slice(cut + 1)).trim()
+  if (!name || name === '.' || name === '..' || /^[a-zA-Z]:$/.test(name)) return ''
+  return `${name}-mr-${key}`
+}
+
+export function projectRunBody({ task, tasks, allowDirty, worktree } = {}) {
+  const list = Array.isArray(tasks) ? tasks : []
+  if (list.length > 1) {
+    return { tasks: list, ...(worktree === true ? { worktree: true } : {}) }
+  }
+  const text = typeof task === 'string' ? task : ''
+  // A single task in its own worktree runs as a queue of one, so it ends committed on a branch.
+  if (worktree === true) return { tasks: [text], worktree: true }
+  return { task: text, allowDirty: allowDirty === true }
 }
 
 export function projectRunConfirm({ lane, project, task, tasks } = {}) {
