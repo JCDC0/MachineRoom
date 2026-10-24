@@ -303,8 +303,8 @@ describe('summarizeRun', () => {
         'Stopping here as instructed.',
       ],
       costUsd: 0,
-      inputTokens: null,
-      outputTokens: null,
+      inputTokens: 8427,
+      outputTokens: 107,
     })
     expect(formatSummary(summary)).toEqual([
       'summary: 2 tool calls, 0 failed',
