@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { PROXY_BASE, chooseRoute, connectionFrom, foreignLinkNotice, linkAddressAllowed, recordingName, treeAddress } from '../src/startup.js'
+import { chooseRoute, connectionFrom, foreignLinkNotice, linkAddressAllowed, recordingName } from '../src/startup.js'
 import { replayFiles } from '../src/model/replay.js'
 
-const saved = { source: 'bridge', bridge: 'http://127.0.0.1:5174', paperclip: '/paperclip', company: '', speed: 2 }
+const saved = { source: 'bridge', bridge: 'http://127.0.0.1:5174', speed: 2 }
 const at = (query) => new URLSearchParams(query)
 
 describe('chooseRoute', () => {
@@ -24,14 +24,17 @@ describe('chooseRoute', () => {
     expect(chooseRoute(at('connect'), saved, true).mode).toBe('connect')
   })
 
-  it('lets an explicit live address skip the connect screen', () => {
-    for (const query of ['live', 'bridge=http://127.0.0.1:9', 'simulate']) {
-      expect(chooseRoute(at(query), saved, false).mode, query).toBe('live')
-    }
+  it('lets an explicit bridge address skip the connect screen', () => {
+    expect(chooseRoute(at('bridge=http://127.0.0.1:9'), saved, false).mode).toBe('live')
+    expect(chooseRoute(at('simulate'), saved, false).mode).toBe('live')
+  })
+
+  it('does not go live for a bare live address on a first visit', () => {
+    expect(chooseRoute(at('live'), saved, false).mode).toBe('connect')
   })
 
   it('prefers replay over a live address when both are present', () => {
-    expect(chooseRoute(at('live&replay'), saved, true).mode).toBe('replay')
+    expect(chooseRoute(at('bridge=http://127.0.0.1:9&replay'), saved, true).mode).toBe('replay')
   })
 
   it('opens the replay for a recording address', () => {
@@ -68,13 +71,9 @@ describe('connectionFrom', () => {
     expect(connection).toMatchObject({ source: 'bridge', bridge: 'http://127.0.0.1:9000' })
   })
 
-  it('goes straight to Paperclip through the proxy for a bare live address', () => {
-    expect(connectionFrom(at('live'), saved)).toMatchObject({ source: 'paperclip', paperclip: PROXY_BASE, company: '' })
-  })
-
-  it('reads the company and Paperclip address from a live address', () => {
+  it('ignores the Paperclip and company parameters of an older link', () => {
     const connection = connectionFrom(at('live&company=abc&paperclip=http://localhost:3100'), saved)
-    expect(connection).toMatchObject({ source: 'paperclip', paperclip: 'http://localhost:3100', company: 'abc' })
+    expect(connection).toEqual(saved)
   })
 
   it('plays the demo for a simulate address', () => {
@@ -89,8 +88,8 @@ describe('connectionFrom', () => {
 describe('addresses in a link', () => {
   const page = 'http://127.0.0.1:5173'
 
-  it('allows a bridge, Paperclip or tree on this computer or on the page origin', () => {
-    for (const value of ['http://127.0.0.1:5174', 'http://localhost:3100', 'http://[::1]:5174', 'https://localhost', '/paperclip', page]) {
+  it('allows a bridge on this computer or on the page origin', () => {
+    for (const value of ['http://127.0.0.1:5174', 'http://localhost:5174', 'http://[::1]:5174', 'https://localhost', '/api', page]) {
       expect(linkAddressAllowed(value, page), value).toBe(true)
     }
   })
@@ -122,27 +121,14 @@ describe('addresses in a link', () => {
     expect(route.notice).toBe('The link names http://example.test:5174, which is not on this computer. Check the address, then connect.')
   })
 
-  it('opens the connect screen for a Paperclip or tree on another host', () => {
-    expect(chooseRoute(at('live&paperclip=http://example.test'), saved, true, page).mode).toBe('connect')
-    expect(chooseRoute(at('live&paperclip=//example.test'), saved, true, page).mode).toBe('connect')
-    expect(chooseRoute(at('live&tree=http://example.test'), saved, true, page).notice).toBe(foreignLinkNotice('http://example.test'))
-  })
-
   it('keeps the saved connection in a replay whose link names another host', () => {
     const route = chooseRoute(at('replay&bridge=http://example.test:5174'), saved, true, page)
     expect(route.mode).toBe('replay')
     expect(route.connection).toEqual(saved)
   })
 
-  it('still goes live for addresses on this computer', () => {
+  it('still goes live for a bridge on this computer', () => {
     expect(chooseRoute(at('bridge=http://127.0.0.1:9'), saved, false, page)).toMatchObject({ mode: 'live', connection: { bridge: 'http://127.0.0.1:9' } })
-    expect(chooseRoute(at('live&paperclip=/paperclip&tree=http://127.0.0.1:5174'), saved, false, page).mode).toBe('live')
     expect(chooseRoute(at(''), saved, true, page).notice).toBeUndefined()
-  })
-
-  it('drops a tree address on another host', () => {
-    expect(treeAddress(at('tree=http://example.test'), page)).toBeNull()
-    expect(treeAddress(at('tree=http://127.0.0.1:5174'), page)).toBe('http://127.0.0.1:5174')
-    expect(treeAddress(at(''), page)).toBeNull()
   })
 })

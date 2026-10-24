@@ -5,7 +5,6 @@ import { createBridge } from '../server/index.js'
 import { laneCosts, readLaneCosts } from '../server/lane-costs.js'
 import { boardLines } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
-import { backupsNotRunning, laneModeFromHealth } from '../src/ui/panels/backup.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
@@ -213,25 +212,5 @@ describe('the board and the backup line in lane mode', () => {
       reported: false,
     })
     expect(JSON.stringify(lines)).not.toContain('NaN')
-  })
-
-  it('gives the Backups sentence only when Paperclip is down in lane mode', () => {
-    expect(backupsNotRunning({ laneMode: true, paperclipDown: true })).toBe(
-      'Backups belong to Paperclip, which is not running.'
-    )
-    expect(backupsNotRunning({ laneMode: true, paperclipDown: false })).toBeNull()
-    expect(backupsNotRunning({ laneMode: false, paperclipDown: true })).toBeNull()
-    expect(backupsNotRunning()).toBeNull()
-  })
-
-  it('tells lane mode apart from a health answer', () => {
-    expect(laneModeFromHealth({ lanes: true, paperclip: false })).toBe(true)
-    expect(laneModeFromHealth({ lanes: true, paperclip: false, paperclipVersion: null })).toBe(true)
-    expect(laneModeFromHealth({ lanes: true, paperclip: true })).toBe(false)
-    expect(laneModeFromHealth({ lanes: true })).toBe(true)
-    expect(laneModeFromHealth({ lanes: false, paperclip: false })).toBe(false)
-    expect(laneModeFromHealth({ paperclip: false })).toBe(false)
-    expect(laneModeFromHealth(null)).toBe(false)
-    expect(laneModeFromHealth('lanes')).toBe(false)
   })
 })

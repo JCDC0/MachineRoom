@@ -17,32 +17,30 @@ describe('costBoard rows', () => {
     expect(board.rows.map((row) => row.key)).toEqual(roster.map((agent) => agent.key))
     expect(board.rows.map((row) => row.agentId)).toEqual(roster.map((agent) => agent.id))
     expect(board.rows[0]).toEqual({
-      key: 'claude-code',
+      key: 'claude',
       agentId: 'agent-claude',
       name: 'Claude Code',
-      costCents: 0,
-      inputTokens: 41892,
-      outputTokens: 4126,
+      costCents: 218,
+      inputTokens: 310000,
+      outputTokens: 26000,
       reported: true,
-      share: 0,
+      share: 0.445,
     })
   })
 
   it('marks a roster agent with no byAgent row as not reported', async () => {
     const { board } = await mockBoard()
-    const hermes = board.rows.find((row) => row.key === 'hermes')
-    expect(hermes).toEqual({
-      key: 'hermes',
-      agentId: 'agent-hermes',
-      name: 'Hermes',
+    const lane = board.rows.find((row) => row.key === 'opencode4')
+    expect(lane).toEqual({
+      key: 'opencode4',
+      agentId: 'agent-opencode4',
+      name: 'OpenCode 4',
       costCents: null,
       inputTokens: null,
       outputTokens: null,
       reported: false,
       share: null,
     })
-    const agy = board.rows.find((row) => row.key === 'agy')
-    expect(agy.reported).toBe(false)
   })
 
   it('marks a row that reports nothing as not reported', () => {
@@ -81,7 +79,7 @@ describe('costBoard rows', () => {
   it('gives shares of the reported cost that add up to about one', async () => {
     const { board } = await mockBoard()
     const shares = board.rows.filter((row) => row.reported).map((row) => row.share)
-    expect(shares).toEqual([0, 0.027, 0.973])
+    expect(shares).toEqual([0.445, 0.292, 0.178, 0.086])
     expect(shares.reduce((total, share) => total + share, 0)).toBeCloseTo(1, 2)
   })
 
@@ -129,9 +127,9 @@ describe('costBoard rows', () => {
 })
 
 describe('costBoard summary', () => {
-  it('reads the mock summary', async () => {
+  it('reads the mock summary as lane spend with no budget', async () => {
     const { board } = await mockBoard()
-    expect(board.summary).toEqual({ spendCents: 299, budgetCents: 1000, percent: 29, over: false })
+    expect(board.summary).toEqual({ spendCents: 490, budgetCents: 0, percent: 0, over: false })
   })
 
   it('works out the percent from spend over budget when utilization is missing', () => {
@@ -156,31 +154,9 @@ describe('costBoard summary', () => {
 })
 
 describe('costBoard quota', () => {
-  it('gives one row per window in the given order and one error row per failed provider', async () => {
-    const { costs, board } = await mockBoard()
-    expect(board.quota).toHaveLength(4)
-    expect(board.quota.map((row) => row.provider)).toEqual(['anthropic', 'anthropic', 'anthropic', 'openai'])
-    expect(board.quota[0]).toEqual({
-      provider: 'anthropic',
-      label: 'Current session',
-      usedPercent: 5,
-      resetsAt: costs.quota[0].windows[0].resetsAt,
-      error: null,
-    })
-    expect(board.quota[2]).toEqual({
-      provider: 'anthropic',
-      label: 'Extra usage',
-      usedPercent: null,
-      resetsAt: null,
-      error: null,
-    })
-    expect(board.quota[3]).toEqual({
-      provider: 'openai',
-      label: null,
-      usedPercent: null,
-      resetsAt: null,
-      error: 'Codex app-server: spawn codex ENOENT',
-    })
+  it('gives no rows for lane records, which carry no quota windows', async () => {
+    const { board } = await mockBoard()
+    expect(board.quota).toEqual([])
   })
 
   it('says Not available. when a failed provider has no error', () => {

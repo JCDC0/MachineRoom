@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { PACKET_POOL, childPlace, packetSpots, stripPoints } from '../src/engine/agents.js'
 import { cardSize, openChain, stackOverflow, viewInput } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
@@ -8,27 +8,7 @@ import { planFolderView } from '../src/model/folderView.js'
 import { dirname } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
-import { getJson, postJson, readFrames, roomInputs, startLoop, waitForPaperclip } from './helpers/loop.js'
-
-const loops = []
-
-const TOP_AGENTS = [
-  ['claude', 'Claude Code'],
-  ['hermes', 'Hermes'],
-  ['opencode', 'OpenCode Go'],
-  ['agy', 'agy'],
-  ['orchestrator', 'Orchestrator'],
-]
-
-async function loop(options) {
-  const started = await startLoop(options)
-  loops.push(started)
-  return started
-}
-
-afterEach(async () => {
-  while (loops.length > 0) await loops.pop().stop()
-})
+import { loadScenario } from './helpers.js'
 
 function distance(point) {
   return Math.hypot(point.x - SPHERE_CENTER.x, point.y - SPHERE_CENTER.y, point.z - SPHERE_CENTER.z)
@@ -164,65 +144,30 @@ function runRoom(frames, agents, tree) {
   return { state, activities, layouts, largest }
 }
 
-function everyRunEnded(agents) {
-  return (frames) =>
-    agents.every((agent) =>
-      frames.some(
-        (frame) =>
-          frame.type === 'heartbeat.run.status' &&
-          frame.payload?.agentId === agent.id &&
-          ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(frame.payload?.status)
-      )
-    )
-}
-
-describe('the room, played against the fake Paperclip', () => {
-  it('lays out every activity from all five agents and plays the same frames twice', async () => {
-    const { url } = await loop()
-    await waitForPaperclip(url)
-    const { agents, tree } = await roomInputs(url)
-    expect(agents.map((agent) => agent.key)).toEqual(['claude', 'hermes', 'opencode', 'agy', 'orchestrator'])
-    expect(tree.files).toContain('src/math.js')
-
-    let opened
-    const open = new Promise((resolve) => {
-      opened = resolve
-    })
-    const reading = readFrames(url, everyRunEnded(agents), { onOpen: opened })
-    await open
-    const created = await Promise.all(
-      TOP_AGENTS.map(([key, name]) => {
-        const agent = agents.find((entry) => entry.key === key)
-        return postJson(`${url}/api/control/issues`, {
-          title: `Room run for ${name}`,
-          assigneeAgentId: agent.id,
-          confirmed: true,
-        })
-      })
-    )
-    expect(created.map((answer) => answer.status)).toEqual([201, 201, 201, 201, 201])
-    const frames = await reading
-    expect(frames.length).toBeGreaterThan(0)
+describe('the room, played from a recorded lane run', () => {
+  it('lays out every activity and plays the same frames twice', () => {
+    const { frames, agents, tree } = loadScenario('scenario-e')
+    expect(agents.map((agent) => agent.key)).toEqual(['claude', 'hermes', 'opencode', 'orchestrator'])
+    expect(tree.files.length).toBeGreaterThan(0)
 
     const first = runRoom(frames, agents, tree)
     const second = runRoom(frames, agents, tree)
     expect(second.layouts).toEqual(first.layouts)
     expect(second.largest).toBe(first.largest)
+    expect(first.activities.length).toBeGreaterThan(0)
 
-    for (const [key] of TOP_AGENTS) {
+    for (const key of ['claude', 'hermes', 'opencode', 'orchestrator']) {
       const agent = first.state.agents.get(key)
       expect(agent, `${key} ends in the state`).toBeTruthy()
-      expect(agent.status, `${key} status`).toBe('done')
       expect(agent.runs, `${key} runs`).toBe(1)
       const mine = first.activities.filter((activity) => activity.agent === key)
       expect(mine[0]?.type, `${key} starts queued`).toBe('run.queued')
       expect(mine.some((activity) => activity.type === 'run.start'), `${key} starts`).toBe(true)
-      expect(mine.at(-1), `${key} ends`).toMatchObject({ type: 'run.end', ok: true })
+      expect(mine.at(-1), `${key} ends`).toMatchObject({ type: 'run.end' })
     }
 
-    const orchestrator = first.activities.filter((activity) => activity.agent === 'orchestrator')
-    expect(orchestrator.filter((activity) => activity.type === 'run.start')).toHaveLength(1)
-    expect(orchestrator.filter((activity) => activity.type === 'run.end')).toHaveLength(1)
+    expect(first.state.agents.get('claude').status).toBe('error')
+    expect(first.state.agents.get('opencode').status).toBe('done')
 
     const spawns = first.activities.filter((activity) => activity.type === 'agent.spawn' && activity.agent === 'opencode')
     expect(spawns.map((activity) => activity.child)).toEqual(['opencode~1', 'opencode~2'])
@@ -232,11 +177,6 @@ describe('the room, played against the fake Paperclip', () => {
       expect(child, `${key} is in the state`).toBeTruthy()
       expect(child).toMatchObject({ parent: 'opencode', status: 'done' })
     }
-    const ends = first.activities.filter((activity) => activity.type === 'agent.end' && activity.agent.startsWith('opencode~'))
-    expect(ends.map((activity) => activity.agent)).toEqual(['opencode~1', 'opencode~2'])
-
-    const answers = (await getJson(`${url}/api/control/issues`)).body
-    expect(answers.filter((issue) => issue.status === 'done')).toHaveLength(TOP_AGENTS.length)
 
     const flood = Array.from({ length: PACKET_POOL * 3 }, (_, index) => first.state.latest - index * 4)
     expect(packetSpots(first.state.latest, flood)).toHaveLength(PACKET_POOL)

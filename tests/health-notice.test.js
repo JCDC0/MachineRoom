@@ -15,27 +15,12 @@ describe('healthNotice', () => {
     expect(healthNotice([])).toBeNull()
     expect(healthNotice({})).toBeNull()
     expect(healthNotice({ foo: 'bar' })).toBeNull()
-    expect(healthNotice({ ok: false })).toBeNull()
+    expect(healthNotice({ ok: true })).toBeNull()
   })
 
-  it('returns null for healthy answers', () => {
-    expect(
-      healthNotice({
-        ok: true,
-        paperclip: true,
-        surface: { ok: true, checkedAt: '2026-10-20T12:00:00.000Z' },
-      })
-    ).toBeNull()
-  })
-
-  it('returns null before the first check when checkedAt is null', () => {
-    expect(
-      healthNotice({
-        ok: true,
-        paperclip: true,
-        surface: { ok: null, checkedAt: null, error: 'not checked yet' },
-      })
-    ).toBeNull()
+  it('returns null for a healthy bridge', () => {
+    expect(healthNotice({ ok: true, lanes: true, sessions: true })).toBeNull()
+    expect(healthNotice({ ok: true, lanes: true, unparsed: { total: 0 }, masked: { total: 0 } })).toBeNull()
   })
 
   it('reports when the bridge is not answering', () => {
@@ -46,146 +31,24 @@ describe('healthNotice', () => {
     })
   })
 
-  it('reports when Paperclip is not connected', () => {
-    expect(healthNotice({ ok: true, paperclip: false })).toEqual({
+  it('reports a failed source', () => {
+    expect(healthNotice({ ok: false, lanes: false, sessions: true })).toEqual({
       tone: 'red',
-      title: 'Paperclip is not connected',
+      title: 'A source failed',
       lines: [],
     })
-  })
-
-  it('stays quiet about Paperclip when the lane source is on', () => {
-    expect(healthNotice({ ok: true, lanes: true, paperclip: false, surface: { ok: null, error: 'down' } })).toBe(null)
-    expect(healthNotice({ error: true, lanes: true })).toMatchObject({ title: 'The bridge is not answering' })
-    expect(healthNotice({ ok: true, lanes: true, paperclip: true, surface: { ok: false, missing: [{ method: 'GET', path: '/x' }] } })).toMatchObject({ tone: 'red' })
-  })
-
-  it('stays quiet about Paperclip when the session source is on', () => {
-    expect(healthNotice({ ok: true, sessions: true, paperclip: false, surface: { ok: null, error: 'down' } })).toBe(null)
-    expect(healthNotice({ error: true, sessions: true })).toMatchObject({ title: 'The bridge is not answering' })
-    expect(healthNotice({ ok: true, sessions: true, paperclip: true, surface: { ok: false, missing: [{ method: 'GET', path: '/x' }] } })).toMatchObject({ tone: 'red' })
-  })
-
-  it('reports changed routes with singular route', () => {
-    const notice = healthNotice({
-      ok: true,
-      paperclip: true,
-      surface: {
-        ok: false,
-        missing: [{ method: 'GET', path: '/api/companies/{companyId}/issues' }],
-        changed: [],
-      },
-    })
-    expect(notice).toEqual({
+    expect(healthNotice({ ok: false, error: 'The lane source stopped.' })).toEqual({
       tone: 'red',
-      title: 'Paperclip changed: 1 route',
-      lines: ['GET /api/companies/{companyId}/issues is gone'],
+      title: 'A source failed',
+      lines: ['The lane source stopped.'],
     })
   })
 
-  it('reports changed routes with plural routes and combines fields', () => {
-    const notice = healthNotice({
-      ok: true,
-      paperclip: true,
-      surface: {
-        ok: false,
-        missing: [{ method: 'GET', path: '/api/companies/{companyId}/issues' }],
-        changed: [
-          {
-            method: 'PATCH',
-            path: '/api/agents/{agentId}',
-            bodyFields: ['budgetMonthlyCents'],
-            answerFields: ['status'],
-          },
-        ],
-      },
-    })
-    expect(notice).toEqual({
-      tone: 'red',
-      title: 'Paperclip changed: 2 routes',
-      lines: [
-        'GET /api/companies/{companyId}/issues is gone',
-        'PATCH /api/agents/{agentId}: no budgetMonthlyCents, status',
-      ],
-    })
-  })
-
-  it('reports unchecked routes with yellow tone and the error line', () => {
-    const notice = healthNotice({
-      ok: true,
-      paperclip: true,
-      surface: {
-        ok: null,
-        checkedAt: '2026-10-20T12:00:00.000Z',
-        error: 'Could not read the Paperclip spec: Paperclip is not reachable.',
-      },
-    })
-    expect(notice).toEqual({
-      tone: 'yellow',
-      title: 'Paperclip routes not checked',
-      lines: ['Could not read the Paperclip spec: Paperclip is not reachable.'],
-    })
-  })
-
-  it('appends non-empty paperclipVersion to red and yellow titles', () => {
-    expect(
-      healthNotice({
-        error: true,
-        paperclipVersion: '0.2.0',
-      })?.title
-    ).toBe('The bridge is not answering (Paperclip 0.2.0)')
-
-    expect(
-      healthNotice({
-        paperclip: false,
-        paperclipVersion: '0.2.0',
-      })?.title
-    ).toBe('Paperclip is not connected (Paperclip 0.2.0)')
-
-    expect(
-      healthNotice({
-        surface: {
-          ok: false,
-          missing: [{ method: 'GET', path: '/api/issues' }],
-          changed: [],
-        },
-        paperclipVersion: '0.2.0',
-      })?.title
-    ).toBe('Paperclip changed: 1 route (Paperclip 0.2.0)')
-
-    expect(
-      healthNotice({
-        surface: {
-          ok: null,
-          checkedAt: '2026-10-20T12:00:00.000Z',
-          error: 'spec down',
-        },
-        paperclipVersion: '0.2.0',
-      })?.title
-    ).toBe('Paperclip routes not checked (Paperclip 0.2.0)')
-  })
-
-  it('ignores empty, whitespace or non-string version values', () => {
-    expect(
-      healthNotice({
-        paperclip: false,
-        paperclipVersion: '',
-      })?.title
-    ).toBe('Paperclip is not connected')
-
-    expect(
-      healthNotice({
-        paperclip: false,
-        paperclipVersion: '   ',
-      })?.title
-    ).toBe('Paperclip is not connected')
-
-    expect(
-      healthNotice({
-        paperclip: false,
-        paperclipVersion: null,
-      })?.title
-    ).toBe('Paperclip is not connected')
+  it('does not name Paperclip in any notice', () => {
+    for (const health of [{ error: true }, { ok: false }, { ok: false, error: 'x' }]) {
+      const text = JSON.stringify(healthNotice(health))
+      expect(text.toLowerCase()).not.toContain('paperclip')
+    }
   })
 })
 
@@ -198,11 +61,11 @@ describe('fetchBridgeHealth', () => {
   it('returns parsed answer on good fetch', async () => {
     const fakeFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ ok: true, paperclip: true }),
+      json: () => Promise.resolve({ ok: true, lanes: true }),
     })
     const res = await fetchBridgeHealth('http://127.0.0.1:5174', fakeFetch)
     expect(fakeFetch).toHaveBeenCalledWith('http://127.0.0.1:5174/api/health')
-    expect(res).toEqual({ ok: true, paperclip: true })
+    expect(res).toEqual({ ok: true, lanes: true })
   })
 
   it('returns error true on failed fetch', async () => {
@@ -263,15 +126,10 @@ describe('Hud health chip rendering', () => {
         focused: null,
         speeds: [1],
         rootName: 'MachineRoom',
-        health: {
-          ok: true,
-          paperclip: true,
-          surface: { ok: true, checkedAt: '2026-10-20T12:00:00.000Z' },
-        },
+        health: { ok: true, lanes: true, sessions: true },
       })
     )
     expect(html).not.toContain('hud-health')
-    expect(html).not.toContain('Paperclip changed')
   })
 
   it('renders no chip when health is default null', () => {
@@ -286,47 +144,33 @@ describe('Hud health chip rendering', () => {
     expect(html).not.toContain('hud-health')
   })
 
-  it('renders the chip for a changed surface', () => {
+  it('renders the chip when the bridge is not answering', () => {
     const html = renderToString(
       React.createElement(Hud, {
         snapshot,
         focused: null,
         speeds: [1],
         rootName: 'MachineRoom',
-        health: {
-          ok: true,
-          paperclip: true,
-          surface: {
-            ok: false,
-            missing: [{ method: 'GET', path: '/api/companies/{companyId}/issues' }],
-            changed: [],
-          },
-        },
+        health: { error: true },
       })
     )
     expect(html).toContain('class="hud-health is-red"')
-    expect(html).toContain('Paperclip changed: 1 route')
+    expect(html).toContain('The bridge is not answering')
+    expect(html).not.toContain('Paperclip')
   })
 
-  it('renders the chip with yellow tone for unchecked routes', () => {
+  it('renders the chip when a source failed', () => {
     const html = renderToString(
       React.createElement(Hud, {
         snapshot,
         focused: null,
         speeds: [1],
         rootName: 'MachineRoom',
-        health: {
-          ok: true,
-          paperclip: true,
-          surface: {
-            ok: null,
-            checkedAt: '2026-10-20T12:00:00.000Z',
-            error: 'Paperclip unreachable',
-          },
-        },
+        health: { ok: false, lanes: false },
       })
     )
-    expect(html).toContain('class="hud-health is-yellow"')
-    expect(html).toContain('Paperclip routes not checked')
+    expect(html).toContain('class="hud-health is-red"')
+    expect(html).toContain('A source failed')
+    expect(html).not.toContain('Paperclip')
   })
 })

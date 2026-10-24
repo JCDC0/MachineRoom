@@ -7,13 +7,12 @@ import PanelBoundary, { panelStoppedText } from '../src/ui/panels/PanelBoundary.
 
 const TAIL = 'Pick another tab, then come back.'
 
-const TAB_IDS = ['dispatch', 'tasks', 'approvals', 'meters', 'agents', 'reviews']
+const TAB_IDS = ['dispatch', 'tasks', 'meters', 'agents', 'reviews']
 const LOADING_TEXT = {
   dispatch: 'Loading dispatch options...',
   tasks: 'Loading tasks...',
-  approvals: 'Loading approvals...',
   meters: 'Loading meters...',
-  agents: 'Loading agents...',
+  agents: 'Loading lanes...',
   reviews: 'Loading reviews...',
 }
 

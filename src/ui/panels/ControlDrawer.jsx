@@ -1,18 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import DispatchPanel from './DispatchPanel.jsx'
 import PlanPanel from './PlanPanel.jsx'
 import TasksPanel from './TasksPanel.jsx'
-import ApprovalsPanel from './ApprovalsPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
 import AgentBuilder from './AgentBuilder.jsx'
 import ReviewsPanel from './ReviewsPanel.jsx'
 import PanelBoundary from './PanelBoundary.jsx'
-import { subscribeToNotices } from './notices.js'
 
 const BASE_TABS = [
   { id: 'dispatch', label: 'Dispatch' },
   { id: 'tasks', label: 'Tasks' },
-  { id: 'approvals', label: 'Approvals' },
   { id: 'meters', label: 'Meters' },
 ]
 
@@ -23,16 +20,16 @@ export default function ControlDrawer({
   controlTarget = null,
   activeTab: initialTab = null,
 }) {
-  const hasAgentsTab = typeof client?.hireAgent === 'function'
+  const hasTeamTab = typeof client?.agents === 'function'
   const hasReviewsTab = typeof client?.reviews === 'function'
   const hasPlanTab = typeof client?.askPlanner === 'function' && typeof client?.plan === 'function'
   const tabs = useMemo(() => {
     const next = [...BASE_TABS]
     if (hasPlanTab) next.push({ id: 'plan', label: 'Plan' })
-    if (hasAgentsTab) next.push({ id: 'agents', label: 'Agents' })
+    if (hasTeamTab) next.push({ id: 'agents', label: 'Team' })
     if (hasReviewsTab) next.push({ id: 'reviews', label: 'Reviews' })
     return next
-  }, [hasAgentsTab, hasReviewsTab, hasPlanTab])
+  }, [hasTeamTab, hasReviewsTab, hasPlanTab])
 
   const [internalTarget, setInternalTarget] = useState(null)
   const internalNonceRef = useRef(0)
@@ -47,29 +44,10 @@ export default function ControlDrawer({
     if (initialTab && tabs.some((t) => t.id === initialTab)) return initialTab
     return 'dispatch'
   })
-  const [pendingApprovalsCount, setPendingApprovalsCount] = useState(0)
   const tabRefs = useRef({})
   const triggerRef = useRef(null)
   const lastTargetNonceRef = useRef(controlTarget?.nonce ?? null)
   const lastInternalNonceRef = useRef(null)
-
-  const loadPendingCount = useCallback(async () => {
-    if (!client) return
-    try {
-      const list = await client.approvals()
-      const pending = list.filter((a) => a.status === 'pending').length
-      setPendingApprovalsCount(pending)
-    } catch {
-      setPendingApprovalsCount(0)
-    }
-  }, [client])
-
-  useEffect(() => {
-    loadPendingCount()
-    return subscribeToNotices(client, 'approvals', () => {
-      loadPendingCount()
-    })
-  }, [client, loadPendingCount])
 
   useEffect(() => {
     if (!tabs.some((t) => t.id === activeTab)) {
@@ -117,7 +95,6 @@ export default function ControlDrawer({
         active?.getAttribute?.('aria-controls') === 'hud-control-drawer'
           ? active
           : document.querySelector('[aria-controls="hud-control-drawer"]') || active
-      loadPendingCount()
       const currentTabEl = tabRefs.current[activeTab]
       currentTabEl?.focus()
     } else if (triggerRef.current) {
@@ -126,7 +103,7 @@ export default function ControlDrawer({
       }
       triggerRef.current = null
     }
-  }, [open, loadPendingCount])
+  }, [open])
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -192,7 +169,6 @@ export default function ControlDrawer({
       >
         {tabs.map((tab, index) => {
           const isSelected = activeTab === tab.id
-          const count = tab.id === 'approvals' ? pendingApprovalsCount : 0
 
           return (
             <button
@@ -211,7 +187,6 @@ export default function ControlDrawer({
               onKeyDown={(e) => handleTabKeyDown(e, index)}
             >
               <span>{tab.label}</span>
-              {count > 0 && <span className="tab-badge mono">{count}</span>}
             </button>
           )
         })}
@@ -229,27 +204,15 @@ export default function ControlDrawer({
             <DispatchPanel
               client={client}
               targetBriefId={dispatchBriefId}
-              onCreated={() => {
-                loadPendingCount()
-              }}
             />
           )}
           {activeTab === 'plan' && hasPlanTab && (
             <PlanPanel client={client} onSelectControlTarget={handleSelectControlTarget} />
           )}
           {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={effectiveTarget} />}
-          {activeTab === 'approvals' && (
-            <ApprovalsPanel
-              client={client}
-              onPendingCountChange={setPendingApprovalsCount}
-            />
-          )}
           {activeTab === 'meters' && <MetersPanel client={client} />}
-          {activeTab === 'agents' && hasAgentsTab && (
-            <AgentBuilder
-              client={client}
-              onSelectControlTarget={handleSelectControlTarget}
-            />
+          {activeTab === 'agents' && hasTeamTab && (
+            <AgentBuilder client={client} />
           )}
           {activeTab === 'reviews' && hasReviewsTab && (
             <ReviewsPanel client={client} />

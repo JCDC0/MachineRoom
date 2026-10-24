@@ -1,8 +1,6 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
-import { createElement } from 'react'
-import { renderToString } from 'react-dom/server'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createControlApi } from '../server/control.js'
 import { createBridge } from '../server/index.js'
@@ -17,7 +15,6 @@ import {
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import { agentTasks } from '../src/model/liveTasks.js'
-import ApprovalsPanel, { emptyApprovalsText } from '../src/ui/panels/ApprovalsPanel.jsx'
 import { getJson, postJson, waitFor } from './helpers/loop.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -454,25 +451,10 @@ describe('the lane fallbacks and the Paperclip probe', () => {
   })
 })
 
-describe('the Approvals tab in lane mode', () => {
-  it('says lanes need no approvals when the health says lanes and no Paperclip', () => {
+describe('the lane records in the drawer', () => {
+  it('reads lane tasks through the mock client', async () => {
     const client = createMockClient({ latencyMs: 0 })
-    const html = renderToString(
-      createElement(ApprovalsPanel, {
-        client,
-        initialApprovals: [],
-        initialAgents: [],
-        initialHealth: { lanes: true, paperclip: false },
-      })
-    )
-    expect(html).toContain('Lane runs need no approvals.')
-    expect(html).not.toContain('No approvals found.')
-  })
-
-  it('keeps the old empty line for a Paperclip room', () => {
-    expect(emptyApprovalsText({ lanes: true, paperclip: true })).toBe('No approvals found.')
-    expect(emptyApprovalsText({ lanes: false })).toBe('No approvals found.')
-    expect(emptyApprovalsText(null)).toBe('No approvals found.')
-    expect(emptyApprovalsText({ lanes: true, paperclip: false })).toBe('Lane runs need no approvals.')
+    const issues = await client.issues()
+    expect(agentTasks(await client.liveRuns(), issues, await client.agents()).size).toBeGreaterThan(0)
   })
 })

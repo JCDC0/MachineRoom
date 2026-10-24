@@ -1,5 +1,4 @@
-export const PROXY_BASE = '/paperclip'
-export const LIVE_PARAMS = ['live', 'bridge', 'simulate']
+export const LIVE_PARAMS = ['bridge', 'simulate']
 
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -23,10 +22,8 @@ export function foreignLinkNotice(address) {
 
 export function connectionFrom(params, saved) {
   if (params.has('simulate')) return { ...saved, source: 'demo' }
-  if (params.get('bridge')) return { ...saved, source: 'bridge', bridge: params.get('bridge') }
-  if (params.has('live')) {
-    return { ...saved, source: 'paperclip', paperclip: params.get('paperclip') ?? PROXY_BASE, company: params.get('company') ?? '' }
-  }
+  const bridge = params.get('bridge')
+  if (bridge) return { ...saved, source: 'bridge', bridge }
   return saved
 }
 
@@ -34,14 +31,7 @@ export function linkAddresses(params) {
   const out = []
   if (params.has('simulate')) return out
   if (params.get('bridge')) out.push(params.get('bridge'))
-  else if (params.has('live') && params.get('paperclip') !== null) out.push(params.get('paperclip'))
-  if (params.get('tree')) out.push(params.get('tree'))
   return out
-}
-
-export function treeAddress(params, origin = '') {
-  const value = params.get('tree')
-  return value && linkAddressAllowed(value, origin) ? value : null
 }
 
 export const RECORDING_NAME = /^[A-Za-z0-9][\w-]*(\.[\w-]+)*$/

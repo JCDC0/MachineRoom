@@ -69,18 +69,18 @@ const TINY_RUNNER = [
 function seedPaperclipState() {
   return {
     agents: [
-      { id: 'agent-claude', urlKey: 'claude-code', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer', status: 'idle', adapterConfig: { model: 'claude-haiku-5-5' }, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-hermes', urlKey: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: 'engineer', status: 'idle', adapterConfig: {}, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-opencode', urlKey: 'opencode-go', name: 'OpenCode Go', adapterType: 'opencode_local', role: 'engineer', status: 'running', adapterConfig: { model: 'opencode-go/qwen3.8-flash' }, budgetMonthlyCents: 500, spentMonthlyCents: 8 },
-      { id: 'agent-agy', urlKey: 'agy', name: 'agy', adapterType: 'process', role: 'designer', status: 'idle', adapterConfig: {}, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-orchestrator', urlKey: 'orchestrator', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo', status: 'paused', adapterConfig: {}, budgetMonthlyCents: 300, spentMonthlyCents: 291 },
+      { id: 'agent-claude', urlKey: 'claude', name: 'Claude Code', adapterType: 'claude_local', role: null, status: 'idle', adapterConfig: { model: 'sonnet' }, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode', urlKey: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null, status: 'running', adapterConfig: { model: 'opencode-go/deepseek-v4.1-flash' }, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode2', urlKey: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local', role: null, status: 'idle', adapterConfig: { model: 'opencode-go/deepseek-v4.1-flash' }, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode3', urlKey: 'opencode3', name: 'OpenCode 3', adapterType: 'opencode_local', role: null, status: 'idle', adapterConfig: { model: 'opencode-go/deepseek-v4.1-flash' }, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode4', urlKey: 'opencode4', name: 'OpenCode 4', adapterType: 'opencode_local', role: null, status: 'idle', adapterConfig: { model: 'opencode-go/deepseek-v4.1-flash' }, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
     ],
     issues: [
       { id: 'issue-18', identifier: 'JC-18', title: 'Fix the typo in README.md', description: 'Change Teh to The and commit.', status: 'done', priority: 'medium', assigneeAgentId: 'agent-opencode', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(90), updatedAt: iso(88) },
       { id: 'issue-19', identifier: 'JC-19', title: 'Record a failing test scenario', description: 'Add a test that fails, then fix it.', status: 'in_progress', priority: 'high', assigneeAgentId: 'agent-opencode', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(40), updatedAt: iso(3) },
-      { id: 'issue-20', identifier: 'JC-20', title: 'Summarise the source files', description: 'Write docs/summary.md.', status: 'todo', priority: 'low', assigneeAgentId: 'agent-hermes', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(20), updatedAt: iso(20) },
+      { id: 'issue-20', identifier: 'JC-20', title: 'Summarise the source files', description: 'Write docs/summary.md.', status: 'todo', priority: 'low', assigneeAgentId: 'agent-opencode2', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(20), updatedAt: iso(20) },
       { id: 'issue-21', identifier: 'JC-21', title: 'Review the layout change', description: 'Read the diff and report problems.', status: 'in_review', priority: 'medium', assigneeAgentId: 'agent-claude', parentId: 'issue-19', assigneeAdapterOverrides: null, createdAt: iso(15), updatedAt: iso(6) },
-      { id: 'issue-22', identifier: 'JC-22', title: 'Plan the control panels', description: 'Break the work into small tasks.', status: 'blocked', priority: 'critical', assigneeAgentId: 'agent-orchestrator', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(10), updatedAt: iso(9) },
+      { id: 'issue-22', identifier: 'JC-22', title: 'Plan the control panels', description: 'Break the work into small tasks.', status: 'blocked', priority: 'critical', assigneeAgentId: 'agent-opencode3', parentId: null, assigneeAdapterOverrides: null, createdAt: iso(10), updatedAt: iso(9) },
     ],
     comments: {
       'issue-18': [
@@ -88,36 +88,26 @@ function seedPaperclipState() {
       ],
       'issue-22': [
         { id: 'comment-2', issueId: 'issue-22', authorAgentId: null, body: 'Keep each task under 20 minutes.', createdAt: iso(10) },
-        { id: 'comment-3', issueId: 'issue-22', authorAgentId: 'agent-orchestrator', body: 'Blocked: my monthly budget is almost spent. I need an override to continue.', createdAt: iso(9) },
+        { id: 'comment-3', issueId: 'issue-22', authorAgentId: 'agent-opencode3', body: 'Blocked: the diff touches files another lane is editing.', createdAt: iso(9) },
       ],
     },
     approvals: [
-      { id: 'approval-1', type: 'budget_override_required', status: 'pending', payload: { summary: 'Orchestrator asks to raise its monthly budget from 300 to 600 cents.' }, requestedByAgentId: 'agent-orchestrator', createdAt: iso(9), decisionNote: null },
-      { id: 'approval-2', type: 'hire_agent', status: 'pending', payload: { summary: 'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).' }, requestedByAgentId: 'agent-orchestrator', createdAt: iso(7), decisionNote: null },
+      { id: 'approval-1', type: 'budget_override_required', status: 'pending', payload: { summary: 'OpenCode 2 asks for a longer time limit on its next run.' }, requestedByAgentId: 'agent-opencode2', createdAt: iso(9), decisionNote: null },
+      { id: 'approval-2', type: 'hire_agent', status: 'pending', payload: { summary: 'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).' }, requestedByAgentId: 'agent-opencode', createdAt: iso(7), decisionNote: null },
       { id: 'approval-3', type: 'request_board_approval', status: 'approved', payload: { summary: 'Run the recording scenarios on the free model.' }, requestedByAgentId: 'agent-claude', createdAt: iso(300), decisionNote: null },
     ],
     liveRuns: [
-      { id: 'run-live-1', companyId: 'comp-1', status: 'running', invocationSource: 'assignment', startedAt: iso(3), finishedAt: null, createdAt: iso(3), agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', issueId: 'issue-19', lastOutputAt: iso(1), logBytes: 2048 },
-      { id: 'run-old-1', companyId: 'comp-1', status: 'succeeded', invocationSource: 'assignment', startedAt: iso(90), finishedAt: iso(88), createdAt: iso(90), agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', issueId: 'issue-18', lastOutputAt: iso(88), logBytes: 512 },
+      { id: 'run-live-1', companyId: 'comp-1', status: 'running', invocationSource: 'assignment', startedAt: iso(3), finishedAt: null, createdAt: iso(3), agentId: 'agent-opencode', agentName: 'OpenCode', adapterType: 'opencode_local', issueId: 'issue-19', lastOutputAt: iso(1), logBytes: 2048 },
+      { id: 'run-old-1', companyId: 'comp-1', status: 'succeeded', invocationSource: 'assignment', startedAt: iso(90), finishedAt: iso(88), createdAt: iso(90), agentId: 'agent-opencode', agentName: 'OpenCode', adapterType: 'opencode_local', issueId: 'issue-18', lastOutputAt: iso(88), logBytes: 512 },
     ],
-    costsSummary: { companyId: 'comp-1', spendCents: 299, budgetCents: 1000, utilizationPercent: 29 },
+    costsSummary: { companyId: 'comp-1', spendCents: 490, budgetCents: 0, utilizationPercent: 0 },
     costsByAgent: [
-      { agentId: 'agent-orchestrator', agentName: 'Orchestrator', costCents: 291, inputTokens: 412000, outputTokens: 38000 },
-      { agentId: 'agent-opencode', agentName: 'OpenCode Go', costCents: 8, inputTokens: 20400, outputTokens: 30600 },
-      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 0, inputTokens: 41892, outputTokens: 4126 },
+      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 218, inputTokens: 310000, outputTokens: 26000 },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 143, inputTokens: 214000, outputTokens: 31000 },
+      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 87, inputTokens: 96000, outputTokens: 14000 },
+      { agentId: 'agent-opencode3', agentName: 'OpenCode 3', costCents: 42, inputTokens: 51000, outputTokens: 7200 },
     ],
-    quotaWindows: [
-      {
-        provider: 'anthropic',
-        ok: true,
-        windows: [
-          { label: 'Current session', usedPercent: 5, resetsAt: new Date(BASE_TIME + 4 * 3600000).toISOString(), detail: null },
-          { label: 'Current week (all models)', usedPercent: 42, resetsAt: new Date(BASE_TIME + 3 * 86400000).toISOString(), detail: null },
-          { label: 'Extra usage', usedPercent: null, resetsAt: null, detail: 'Not enabled' },
-        ],
-      },
-      { provider: 'openai', ok: false, error: 'Codex app-server: spawn codex ENOENT', windows: [] },
-    ],
+    quotaWindows: [],
   }
 }
 
@@ -618,8 +608,9 @@ function runContractSuite(label, makeHarness) {
           expect(agent, `${agent.name} ${key}`).toHaveProperty(key)
         }
       }
-      expect(agents.find((a) => a.id === 'agent-opencode').spentMonthlyCents).toBe(8)
-      expect(agents.find((a) => a.id === 'agent-orchestrator').spentMonthlyCents).toBe(291)
+      expect(agents.map((a) => a.id)).toEqual(['agent-claude', 'agent-opencode', 'agent-opencode2', 'agent-opencode3', 'agent-opencode4'])
+      expect(agents.find((a) => a.id === 'agent-opencode').adapterType).toBe('opencode_local')
+      expect(agents.find((a) => a.id === 'agent-claude').model).toBe('sonnet')
     })
 
     it('filters issues by status', async () => {
@@ -687,7 +678,7 @@ function runContractSuite(label, makeHarness) {
       const initial = await client.comments('issue-22')
       expect(initial.map((c) => c.id)).toEqual(['comment-2', 'comment-3'])
       expect(initial[0].authorName).toBe('You')
-      expect(initial[1].authorName).toBe('Orchestrator')
+      expect(initial[1].authorName).toBe('OpenCode 3')
       const comment = await client.postComment('issue-18', 'Looks good.')
       expect(comment.authorName).toBe('You')
       const thread = await client.comments('issue-18')
@@ -712,7 +703,7 @@ function runContractSuite(label, makeHarness) {
         {
           runId: 'run-live-1',
           agentId: 'agent-opencode',
-          agentName: 'OpenCode Go',
+          agentName: 'OpenCode',
           adapterType: 'opencode_local',
           status: 'running',
           issueId: 'issue-19',
@@ -744,13 +735,12 @@ function runContractSuite(label, makeHarness) {
       expect(list.find((item) => item.id === 'approval-1').status).toBe('pending')
     })
 
-    it('reports costs and quota windows, including one that could not be read', async () => {
+    it('reports lane costs and no quota windows', async () => {
       const { client } = await makeHarness()
       const { quota, summary, byAgent } = await client.costs()
-      expect(summary).toEqual({ spendCents: 299, budgetCents: 1000, utilizationPercent: 29 })
-      expect(byAgent).toHaveLength(3)
-      expect(quota.find((item) => item.ok).windows.some((window) => window.usedPercent === null)).toBe(true)
-      expect(quota.find((item) => !item.ok).error).toBeTruthy()
+      expect(summary).toEqual({ spendCents: 490, budgetCents: 0, utilizationPercent: 0 })
+      expect(byAgent).toHaveLength(4)
+      expect(quota).toEqual([])
     })
 
     it('sets a budget and refuses a bad one', async () => {
@@ -776,7 +766,7 @@ function runContractSuite(label, makeHarness) {
         budgetMonthlyCents: 250,
         subagentsAllowed: true,
         subagentDepth: 2,
-        reportsToAgentId: 'agent-hermes',
+        reportsToAgentId: 'agent-opencode2',
         instructions: 'Be brief.',
       })
       expect(agent).toMatchObject({
@@ -791,7 +781,7 @@ function runContractSuite(label, makeHarness) {
         budgetMonthlyCents: 250,
         subagentsAllowed: true,
         subagentDepth: 2,
-        reportsToAgentId: 'agent-hermes',
+        reportsToAgentId: 'agent-opencode2',
       })
       expect(approval).toMatchObject({ type: 'hire_agent', status: 'pending', agentId: agent.id })
       const list = await client.agents()
@@ -802,29 +792,29 @@ function runContractSuite(label, makeHarness) {
       const { client } = await makeHarness()
       await expect(client.hireAgent({ adapterType: 'claude_local' })).rejects.toThrow('A name is required.')
       await expect(client.hireAgent({ name: 'Planner' })).rejects.toThrow('Choose a harness.')
-      await expect(client.hireAgent({ name: 'Hermes', adapterType: 'hermes_local' })).rejects.toThrow('An agent with that name already exists.')
+      await expect(client.hireAgent({ name: 'OpenCode', adapterType: 'opencode_local' })).rejects.toThrow('An agent with that name already exists.')
       await expect(client.hireAgent({ name: '!!!', adapterType: 'process' })).rejects.toThrow('The name needs letters or numbers.')
       await expect(client.hireAgent({ name: 'Planner', adapterType: 'claude_local', reportsToAgentId: 'agent-ghost' })).rejects.toThrow('The agent it reports to no longer exists.')
       await expect(client.hireAgent({ name: 'Planner', adapterType: 'claude_local', maxTurnsPerRun: 0 })).rejects.toThrow(/1 to 200/)
       await expect(client.updateAgent('agent-ghost', { model: 'm' })).rejects.toThrow('That agent no longer exists.')
-      await expect(client.updateAgent('agent-hermes', {})).rejects.toThrow('Change at least one setting.')
-      await expect(client.updateAgent('agent-hermes', { adapterType: 'process' })).rejects.toThrow('The harness cannot be changed. Hire a new agent.')
-      await expect(client.updateAgent('agent-hermes', { reportsToAgentId: 'agent-hermes' })).rejects.toThrow('An agent cannot report to itself.')
-      await expect(client.updateAgent('agent-hermes', { name: 'agy' })).rejects.toThrow('An agent with that name already exists.')
-      await expect(client.updateAgent('agent-hermes', { subagentDepth: 2 })).rejects.toThrow('Turn subagents on to set a depth.')
+      await expect(client.updateAgent('agent-opencode2', {})).rejects.toThrow('Change at least one setting.')
+      await expect(client.updateAgent('agent-opencode2', { adapterType: 'process' })).rejects.toThrow('The harness cannot be changed. Hire a new agent.')
+      await expect(client.updateAgent('agent-opencode2', { reportsToAgentId: 'agent-opencode2' })).rejects.toThrow('An agent cannot report to itself.')
+      await expect(client.updateAgent('agent-opencode2', { name: 'OpenCode' })).rejects.toThrow('An agent with that name already exists.')
+      await expect(client.updateAgent('agent-opencode2', { subagentDepth: 2 })).rejects.toThrow('Turn subagents on to set a depth.')
     })
 
     it('updates an agent, its subagent settings and its budget', async () => {
       const { client } = await makeHarness()
-      const updated = await client.updateAgent('agent-hermes', { model: 'm2', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600 })
+      const updated = await client.updateAgent('agent-opencode2', { model: 'm2', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600 })
       expect(updated).toMatchObject({ model: 'm2', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600 })
-      expect(await client.updateAgent('agent-agy', { subagentsAllowed: true })).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
-      expect(await client.updateAgent('agent-agy', { subagentDepth: 3 })).toMatchObject({ subagentsAllowed: true, subagentDepth: 3 })
-      expect(await client.updateAgent('agent-agy', { subagentsAllowed: false })).toMatchObject({ subagentsAllowed: false, subagentDepth: 0 })
-      expect((await client.updateAgent('agent-hermes', { model: '' })).model).toBeNull()
-      expect((await client.updateAgent('agent-hermes', { budgetMonthlyCents: 250 })).budgetMonthlyCents).toBe(250)
-      expect((await client.updateAgent('agent-hermes', { status: 'paused' })).status).toBe('paused')
-      expect((await client.updateAgent('agent-hermes', { status: 'active' })).status).toBe('idle')
+      expect(await client.updateAgent('agent-opencode3', { subagentsAllowed: true })).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
+      expect(await client.updateAgent('agent-opencode3', { subagentDepth: 3 })).toMatchObject({ subagentsAllowed: true, subagentDepth: 3 })
+      expect(await client.updateAgent('agent-opencode3', { subagentsAllowed: false })).toMatchObject({ subagentsAllowed: false, subagentDepth: 0 })
+      expect((await client.updateAgent('agent-opencode2', { model: '' })).model).toBeNull()
+      expect((await client.updateAgent('agent-opencode2', { budgetMonthlyCents: 250 })).budgetMonthlyCents).toBe(250)
+      expect((await client.updateAgent('agent-opencode2', { status: 'paused' })).status).toBe('paused')
+      expect((await client.updateAgent('agent-opencode2', { status: 'active' })).status).toBe('idle')
     })
 
     it('refuses to change a waiting or a terminated agent and turns a hire ready on approval', async () => {
@@ -846,7 +836,7 @@ function runContractSuite(label, makeHarness) {
       const stop = client.subscribe((event) => seen.push(event))
       await new Promise((r) => setTimeout(r, 30))
       await client.hireAgent({ name: 'Planner', adapterType: 'claude_local' })
-      await client.updateAgent('agent-hermes', { model: 'm4' })
+      await client.updateAgent('agent-opencode2', { model: 'm4' })
       await waitUntil(() => seen.filter((event) => event.topic === 'agents').length >= 2 && seen.some((event) => event.topic === 'approvals'))
       stop()
     })
@@ -1009,7 +999,7 @@ function runContractSuite(label, makeHarness) {
       const { client } = await makeHarness()
       const seen = []
       const stop = client.subscribe((event) => seen.push(event))
-      await client.createIssue({ title: 'C', assigneeAgentId: 'agent-agy' })
+      await client.createIssue({ title: 'C', assigneeAgentId: 'agent-opencode3' })
       await client.postComment('issue-18', 'Thanks.')
       await client.decideApproval('approval-1', 'approve')
       await client.setAgentBudget('agent-claude', 100)
@@ -1022,7 +1012,7 @@ function runContractSuite(label, makeHarness) {
         { topic: 'costs' },
       ])
       stop()
-      await client.createIssue({ title: 'D', assigneeAgentId: 'agent-agy' })
+      await client.createIssue({ title: 'D', assigneeAgentId: 'agent-opencode3' })
       await new Promise((r) => setTimeout(r, 40))
       expect(seen).toHaveLength(5)
     })
@@ -1356,9 +1346,9 @@ describe('mock live runs', () => {
     const notices = []
     client.subscribe((event) => notices.push(event.topic))
     expect((await client.liveRuns()).map((run) => run.runId)).toEqual(['run-live-1'])
-    await client.startRun('hermes', ['C3e'])
+    await client.startRun('opencode2', ['C3e'])
     const during = await client.liveRuns()
-    expect(during[0]).toMatchObject({ agentId: 'agent-hermes', agentName: 'Hermes', adapterType: 'hermes_local', status: 'running', issueId: 'issue-20', startedAt: iso(0), lastOutputAt: null })
+    expect(during[0]).toMatchObject({ agentId: 'agent-opencode2', agentName: 'OpenCode 2', adapterType: 'opencode_local', status: 'running', issueId: 'issue-20', startedAt: iso(0), lastOutputAt: null })
     expect(during).toHaveLength(2)
     expect(notices).toEqual(['runs', 'liveRuns'])
     await waitUntil(() => notices.length >= 4)
@@ -1375,8 +1365,8 @@ describe('mock live runs', () => {
 
   it('rejects once when told to fail', async () => {
     const client = createMockClient({ latencyMs: 0 })
-    client.failNext('liveRuns', 'Paperclip could not read the live runs.')
-    await expect(client.liveRuns()).rejects.toThrow('Paperclip could not read the live runs.')
+    client.failNext('liveRuns', 'The bridge is not answering.')
+    await expect(client.liveRuns()).rejects.toThrow('The bridge is not answering.')
     expect(await client.liveRuns()).toHaveLength(1)
   })
 })

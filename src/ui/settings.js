@@ -2,13 +2,11 @@ import { readStorage, store, writeStorage } from '../storage.js'
 
 export const SETTINGS_KEY = 'machineroom.settings'
 
-const VALID_SOURCES = new Set(['bridge', 'paperclip', 'demo'])
+const VALID_SOURCES = new Set(['bridge', 'demo'])
 
 export const DEFAULT_SETTINGS = Object.freeze({
   source: 'bridge',
   bridge: 'http://127.0.0.1:5174',
-  paperclip: '/paperclip',
-  company: '',
   logOpen: false,
   speed: 1,
   helpSeen: false,
@@ -83,14 +81,10 @@ function normalizeSettings(raw) {
   const conn = raw.connection && typeof raw.connection === 'object' ? raw.connection : {}
   const source = raw.source ?? conn.source
   const bridge = raw.bridge ?? conn.bridge
-  const paperclip = raw.paperclip ?? conn.paperclip
-  const company = raw.company ?? conn.company
 
   const out = {
     source: VALID_SOURCES.has(source) ? source : DEFAULT_SETTINGS.source,
     bridge: typeof bridge === 'string' ? bridge : DEFAULT_SETTINGS.bridge,
-    paperclip: typeof paperclip === 'string' ? paperclip : DEFAULT_SETTINGS.paperclip,
-    company: typeof company === 'string' ? company : DEFAULT_SETTINGS.company,
     logOpen: typeof raw.logOpen === 'boolean' ? raw.logOpen : DEFAULT_SETTINGS.logOpen,
     speed: typeof raw.speed === 'number' && Number.isFinite(raw.speed) && raw.speed > 0 ? raw.speed : DEFAULT_SETTINGS.speed,
     helpSeen: typeof raw.helpSeen === 'boolean' ? raw.helpSeen : DEFAULT_SETTINGS.helpSeen,
@@ -133,6 +127,22 @@ export function loadSettings(storage = store()) {
     return normalizeSettings(JSON.parse(raw))
   } catch {
     return { ...DEFAULT_SETTINGS }
+  }
+}
+
+export function savedSource(storage = store()) {
+  try {
+    const raw = readStorage(SETTINGS_KEY, storage)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+    const connection = parsed.connection && typeof parsed.connection === 'object' && !Array.isArray(parsed.connection)
+      ? parsed.connection
+      : {}
+    const source = parsed.source ?? connection.source
+    return VALID_SOURCES.has(source) ? source : null
+  } catch {
+    return null
   }
 }
 

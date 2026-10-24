@@ -3,7 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { cleanAgentDraft } from '../src/control/agents.js'
 import { createMockClient } from '../src/control/mock.js'
-import AgentBuilder, { hireConfirmText, saveConfirmText } from '../src/ui/panels/AgentBuilder.jsx'
+import AgentBuilder, { NEW_LANES_TEXT } from '../src/ui/panels/AgentBuilder.jsx'
 import {
   ADAPTER_TYPES,
   AGENT_ROLES,
@@ -225,78 +225,27 @@ describe('patchFromChange', () => {
   })
 })
 
-describe('hireConfirmText and saveConfirmText', () => {
-  it('names the agent, harness and model and says when Paperclip can start it', () => {
-    expect(
-      hireConfirmText({
-        name: 'Planner',
-        adapterType: 'hermes_local',
-        model: 'deepseek/deepseek-v4.1-flash-1017',
-      })
-    ).toBe(
-      'Hire Planner on hermes_local with deepseek/deepseek-v4.1-flash-1017? Paperclip can start it on the next task it gets.'
-    )
-    expect(hireConfirmText({ name: 'Planner', adapterType: 'claude_local', model: '' })).toBe(
-      'Hire Planner on claude_local with the default model? Paperclip can start it on the next task it gets.'
-    )
-  })
-
-  it('shows a control character in the name through visibleText', () => {
-    expect(
-      hireConfirmText({ name: 'Plan\u202Ener', adapterType: 'claude_local', model: 'claude-haiku-5-5' })
-    ).toBe(
-      'Hire Plan[U+202E]ner on claude_local with claude-haiku-5-5? Paperclip can start it on the next task it gets.'
-    )
-    expect(saveConfirmText('Plan\u202Ener')).toBe('Save the changes to Plan[U+202E]ner in Paperclip?')
-  })
-
-  it('names the agent in the save text', () => {
-    expect(saveConfirmText('Claude Code')).toBe('Save the changes to Claude Code in Paperclip?')
-  })
-})
-
-describe('AgentBuilder confirm cards', () => {
-  it('renders the hire card with the text and both buttons', () => {
-    const client = createMockClient({ latencyMs: 0 })
-    const html = renderToString(
-      createElement(AgentBuilder, {
-        client,
-        initialAgents: [],
-        initialModels: [],
-        initialForm: {
-          ...newAgentForm(),
-          name: 'Planner',
-          adapterType: 'hermes_local',
-          model: 'deepseek/deepseek-v4.1-flash-1017',
-        },
-        initialConfirmOpen: true,
-      })
-    )
-    expect(html).toContain('role="region"')
-    expect(html).toContain('aria-label="Confirm hire agent"')
-    expect(html).toContain(
-      'Hire Planner on hermes_local with deepseek/deepseek-v4.1-flash-1017? Paperclip can start it on the next task it gets.'
-    )
-    expect(html).toContain('>Hire agent</button>')
-    expect(html).toContain('>Cancel</button>')
-  })
-
-  it('renders the save card for an edited agent', () => {
+describe('AgentBuilder Team panel', () => {
+  it('lists the lanes and says where a new lane is added', () => {
     const client = createMockClient({ latencyMs: 0 })
     const html = renderToString(
       createElement(AgentBuilder, {
         client,
         initialAgents: [SAMPLE_AGENT],
-        initialModels: [],
-        initialEditingAgentId: SAMPLE_AGENT.id,
-        initialConfirmOpen: true,
       })
     )
-    expect(html).toContain('role="region"')
-    expect(html).toContain('aria-label="Confirm agent changes"')
-    expect(html).toContain('Save the changes to Claude Code in Paperclip?')
-    expect(html).toContain('>Save</button>')
-    expect(html).toContain('>Cancel</button>')
+    expect(html).toContain('Lanes (')
+    expect(html).toContain('Claude Code')
+    expect(html).toContain(NEW_LANES_TEXT)
+    expect(html).toContain('New lanes are added in docs/agents/lanes.json.')
+    expect(html).not.toContain('Hire agent')
+    expect(html).not.toContain('Monthly budget')
+  })
+
+  it('says when there are no lanes', () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const html = renderToString(createElement(AgentBuilder, { client, initialAgents: [] }))
+    expect(html).toContain('No lanes found.')
   })
 })
 

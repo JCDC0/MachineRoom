@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { validateConnectUrl } from '../src/ui/Connect.jsx'
+import { validateBridgeUrl } from '../src/ui/Connect.jsx'
 import { readStorage, writeStorage } from '../src/storage.js'
 import { barrelPixels } from '../src/ui/barrel.js'
-import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, saveAssistantPosition, saveEffectSettings, saveSettings, SETTINGS_KEY } from '../src/ui/settings.js'
+import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, saveAssistantPosition, saveEffectSettings, saveSettings, savedSource, SETTINGS_KEY } from '../src/ui/settings.js'
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -26,25 +26,49 @@ describe('settings', () => {
   it('saves partial settings under machineroom.settings and loads them back', () => {
     const storage = makeStorage()
     const updated = saveSettings(storage, {
-      source: 'paperclip',
-      paperclip: 'http://127.0.0.1:3100',
-      company: 'acme',
+      source: 'bridge',
+      bridge: 'http://127.0.0.1:9999',
       logOpen: true,
       speed: 4,
       helpSeen: true,
     })
 
     expect(updated).toEqual({
-      source: 'paperclip',
-      bridge: 'http://127.0.0.1:5174',
-      paperclip: 'http://127.0.0.1:3100',
-      company: 'acme',
+      source: 'bridge',
+      bridge: 'http://127.0.0.1:9999',
       logOpen: true,
       speed: 4,
       helpSeen: true,
     })
     expect(JSON.parse(storage.getItem(SETTINGS_KEY))).toEqual(updated)
     expect(loadSettings(storage)).toEqual(updated)
+  })
+
+  it('drops the Paperclip and company fields of an older setting', () => {
+    const old = makeStorage({
+      [SETTINGS_KEY]: JSON.stringify({
+        source: 'paperclip',
+        bridge: 'http://127.0.0.1:5174',
+        paperclip: 'http://127.0.0.1:3100',
+        company: 'acme',
+        speed: 2,
+      }),
+    })
+    expect(loadSettings(old)).toEqual({
+      ...DEFAULT_SETTINGS,
+      source: 'bridge',
+      speed: 2,
+    })
+    expect(savedSource(old)).toBeNull()
+  })
+
+  it('reads only a bridge or demo choice as a saved choice', () => {
+    expect(savedSource(makeStorage())).toBeNull()
+    expect(savedSource(makeStorage({ [SETTINGS_KEY]: JSON.stringify({ source: 'bridge' }) }))).toBe('bridge')
+    expect(savedSource(makeStorage({ [SETTINGS_KEY]: JSON.stringify({ source: 'demo' }) }))).toBe('demo')
+    expect(savedSource(makeStorage({ [SETTINGS_KEY]: JSON.stringify({ source: 'paperclip' }) }))).toBeNull()
+    expect(savedSource(makeStorage({ [SETTINGS_KEY]: JSON.stringify({ connection: { source: 'bridge' } }) }))).toBe('bridge')
+    expect(savedSource(makeStorage({ [SETTINGS_KEY]: '{not valid json' }))).toBeNull()
   })
 
   it('falls back to defaults when the stored string is broken or invalid', () => {
@@ -101,19 +125,13 @@ describe('settings', () => {
   })
 })
 
-describe('validateConnectUrl', () => {
+describe('validateBridgeUrl', () => {
   it('accepts valid bridge URLs and rejects empty or malformed ones', () => {
-    expect(validateConnectUrl('bridge', 'http://127.0.0.1:5174')).toBeNull()
-    expect(validateConnectUrl('bridge', 'https://localhost:5174')).toBeNull()
-    expect(validateConnectUrl('bridge', '')).toBe('Enter the bridge URL.')
-    expect(validateConnectUrl('bridge', '127.0.0.1:5174')).toBe('Enter a full http:// or https:// URL.')
-  })
-
-  it('accepts proxy paths or full URLs for Paperclip directly', () => {
-    expect(validateConnectUrl('paperclip', '/paperclip')).toBeNull()
-    expect(validateConnectUrl('paperclip', 'http://127.0.0.1:3100')).toBeNull()
-    expect(validateConnectUrl('paperclip', '')).toBe('Enter the Paperclip URL or proxy path.')
-    expect(validateConnectUrl('paperclip', '/')).toBe('Enter a proxy path such as /paperclip.')
+    expect(validateBridgeUrl('http://127.0.0.1:5174')).toBeNull()
+    expect(validateBridgeUrl('https://localhost:5174')).toBeNull()
+    expect(validateBridgeUrl('')).toBe('Enter the bridge URL.')
+    expect(validateBridgeUrl('127.0.0.1:5174')).toBe('Enter a full http:// or https:// URL.')
+    expect(validateBridgeUrl('ftp://127.0.0.1')).toBe('Bridge URL must start with http:// or https://.')
   })
 })
 

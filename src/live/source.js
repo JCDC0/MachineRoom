@@ -1,5 +1,4 @@
 import { createSplitMasker } from '../briefs/audit.js'
-import { basename } from '../model/paths.js'
 import { AGENT_ORDER } from '../model/pipeline.js'
 import { FOLDER_SHAPE_ACCEPT, readFileList, readTreeVersion, rememberTreeVersion } from './tree.js'
 
@@ -42,27 +41,10 @@ export function toAgents(rawAgents) {
   return agents.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
 }
 
-export function rootNameOf(rawAgents, override) {
-  if (override) return override
-  const folders = rawAgents.map((raw) => raw.adapterConfig?.cwd).filter(Boolean)
-  return folders.length > 0 ? basename(folders[0]) : 'project'
-}
-
 async function getJson(fetchImpl, url, init) {
   const response = await fetchImpl(url, init)
   if (!response.ok) throw new Error(`${url} answered ${response.status}`)
   return response.json()
-}
-
-export async function discover({ base, companyId, root, fetchImpl = fetch }) {
-  let id = companyId
-  if (!id) {
-    const companies = await getJson(fetchImpl, `${base}/api/companies`)
-    if (companies.length === 0) throw new Error('Paperclip has no company yet')
-    id = companies[0].id
-  }
-  const raw = await getJson(fetchImpl, `${base}/api/companies/${encodeURIComponent(id)}/agents`)
-  return { companyId: id, agents: toAgents(raw), rootName: rootNameOf(raw, root) }
 }
 
 export async function loadTree(url, fetchImpl = fetch) {

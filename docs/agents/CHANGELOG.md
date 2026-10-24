@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The page connects only through the bridge: the connect screen has one address and no Paperclip or company choice, the proxy route and its saved choice are gone, the health chip names sources rather than Paperclip, the drawer has no Approvals tab, no Backups section and no hire form, and a replay's cost board reads the machine's lanes (task Y2).
 - Four more OpenCode lanes, `opencode7` to `opencode10`, with their worktrees (the owner gave ten lanes for the push to Monday), and the briefs for an orchestrator inside the room (K1 to K3) and for taking Paperclip out of the app (Y1, Y1b, Y2, Y3).
 - The owner found the room confusing (a beginner could not tell what points where): each working agent now has one solid tunnel from its own centre to the file it touches, with the packets running along it, instead of a faint line with dashes that started above the agent; the callout line is white, so the tunnel is the only coloured line; the root card no longer has a line through the middle of the hub, and the hub centre carries the project name below the agent ring, so the folder lines read as the project branching out.
 - A room started on a project now shows the project runs and queues working in its other git worktrees, on the root's paths, so six lanes in six worktrees of LowBeam show in one room (S9, `server/lanes-source.js`, tested). A run in an unrelated folder is still skipped.

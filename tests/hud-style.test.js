@@ -78,8 +78,7 @@ describe('HUD concept style structure', () => {
     expect(html).toContain('type="submit" class="mr-assistant-exec mono">EXEC</button>')
   })
 
-  it('renders outlined meter bars with percentages for budgets and backup age', () => {
-    const sixHoursAgo = new Date(Date.now() - 6 * 3600 * 1000).toISOString()
+  it('renders outlined meter bars with percentages for budgets', () => {
     const html = renderToString(
       createElement(MetersPanel, {
         initialCosts: {
@@ -100,12 +99,6 @@ describe('HUD concept style structure', () => {
             spentMonthlyCents: 500,
           },
         ],
-        initialBackupStatus: {
-          enabled: true,
-          latestAt: sixHoursAgo,
-          ageHours: 6,
-          warnings: [],
-        },
       })
     )
 
@@ -113,8 +106,7 @@ describe('HUD concept style structure', () => {
     expect(html).toContain('class="meter-track"')
     expect(html).toContain('class="meter-fill')
     expect(html).toContain('<span class="meter-percent mono">45%</span>')
-    expect(html).toContain('class="meter-bar backup-age-bar"')
-    expect(html).toContain('<span class="meter-percent mono">25%</span>')
+    expect(html).not.toContain('backup-age-bar')
   })
 
   it('renders the control drawer header strip and the waiting cursor underscore', () => {
