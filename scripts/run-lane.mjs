@@ -313,7 +313,8 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   if (project) writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify({ lane: options.lane, project })}\n`)
   const log = createWriteStream(logPath)
   const startedAt = Date.now()
-  const child = spawn(command.file, command.args, { cwd: command.cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
+  const child = spawn(command.file, command.args, { cwd: command.cwd, env: { ...process.env, PWD: command.cwd }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
   child.stdout?.pipe(log, { end: false })
   child.stderr?.pipe(log, { end: false })
 
