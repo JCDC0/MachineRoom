@@ -2,6 +2,7 @@ import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { briefMarkdown, planPrompt } from '../briefs/plan.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
+import { readLadder } from '../model/hierarchy.js'
 import { chooseRoute } from '../policy/route.js'
 import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
 
@@ -25,9 +26,12 @@ export const CLIENT_METHODS = [
   'runStats',
   'outcomes',
   'liveRuns',
+  'orchestrators',
   'orchestrator',
+  'sendOrchestrator',
   'sendToOrchestrator',
   'stopOrchestrator',
+  'setLadder',
   'startRun',
   'reviews',
   'reviewDiff',
@@ -38,6 +42,23 @@ export const CLIENT_METHODS = [
   'decide',
   'subscribe',
 ]
+
+export const MOCK_LANE_KEYS = ['claude', 'hermes', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'agy']
+
+const SAMPLE_LADDER = {
+  subs: [
+    {
+      id: 'frontend',
+      name: 'Frontend',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      lanes: ['opencode2', 'opencode3'],
+      scope: ['src/ui/**', 'src/styles.css'],
+      restricted: true,
+      setBy: 'owner',
+    },
+  ],
+}
 
 const DECISIONS = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
 const RUN_ID = /^[A-Z]\d+[a-z]?$/
@@ -309,6 +330,101 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
+  let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
+  const subChats = new Map()
+
+  function ensureSubChat(sub) {
+    if (subChats.has(sub.id)) return subChats.get(sub.id)
+    const chat = { state: 'idle', model: sub.model, project: 'MachineRoom', messages: [] }
+    subChats.set(sub.id, chat)
+    return chat
+  }
+
+  for (const sub of ladder.subs) ensureSubChat(sub)
+
+  function chatStore(id) {
+    if (id === undefined || id === null || id === '' || id === 'orchestrator') return state.orchestratorChat
+    const sub = ladder.subs.find((entry) => entry.id === id)
+    if (!sub) throw new Error('That orchestrator does not exist.')
+    const chat = ensureSubChat(sub)
+    chat.model = sub.model
+    chat.id = sub.id
+    chat.name = sub.name
+    return chat
+  }
+
+  function orchestratorList() {
+    const claimed = new Set()
+    for (const sub of ladder.subs) {
+      for (const lane of sub.lanes) claimed.add(lane)
+    }
+    return [
+      {
+        id: 'orchestrator',
+        name: 'Orchestrator',
+        harness: 'claude',
+        model: state.orchestratorChat.model,
+        state: state.orchestratorChat.state,
+        lanes: MOCK_LANE_KEYS.filter((lane) => !claimed.has(lane)),
+        scope: [],
+        restricted: false,
+        setBy: 'owner',
+      },
+      ...ladder.subs.map((sub) => ({
+        id: sub.id,
+        name: sub.name,
+        harness: sub.harness,
+        model: sub.model,
+        state: ensureSubChat(sub).state,
+        lanes: [...sub.lanes],
+        scope: [...sub.scope],
+        restricted: sub.restricted !== false,
+        setBy: sub.setBy,
+      })),
+    ]
+  }
+
+  function sendMessage(id, text, confirmed) {
+    if (confirmed !== true) throw new Error('Confirm the message first.')
+    const value = typeof text === 'string' ? text.trim() : ''
+    if (value.length < 1 || value.length > 8000) throw new Error('Write a message from 1 to 8000 characters.')
+    const chat = chatStore(id)
+    chat.state = 'idle'
+    orchestratorMessageCounter += 1
+    const at = new Date(now()).toISOString()
+    const message = { id: `orchestrator-message-${orchestratorMessageCounter}`, from: 'owner', text: value, at }
+    chat.messages.push(message)
+    orchestratorMessageCounter += 1
+    const sub = chat.id && chat.id !== 'orchestrator'
+    chat.messages.push({
+      id: `orchestrator-message-${orchestratorMessageCounter}`,
+      from: 'orchestrator',
+      text: sub
+        ? 'I have the message. I will plan for my lanes and report to the main orchestrator.'
+        : 'I have the message. I will start with the lanes that are free and report back.',
+      at,
+    })
+    while (chat.messages.length > 200) chat.messages.shift()
+    emit({ topic: 'orchestrator' })
+    return { id: message.id }
+  }
+
+  function replaceLadder(next) {
+    const result = readLadder(next, { lanes: MOCK_LANE_KEYS })
+    if (result.problems.length > 0) {
+      const error = new Error(result.problems.join(' '))
+      error.problems = [...result.problems]
+      throw error
+    }
+    const ids = new Set(result.ladder.subs.map((sub) => sub.id))
+    for (const id of [...subChats.keys()]) {
+      if (!ids.has(id)) subChats.delete(id)
+    }
+    for (const sub of result.ladder.subs) ensureSubChat(sub)
+    ladder = result.ladder
+    emit({ topic: 'orchestrator' })
+    return { ladder: clone(ladder) }
+  }
 
   function emit(event) {
     for (const listener of [...listeners]) listener({ ...event })
@@ -535,37 +651,24 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     liveRuns: () => call('liveRuns', () => state.liveRuns),
 
-    orchestrator: () => call('orchestrator', () => state.orchestratorChat),
+    orchestrators: () => call('orchestrators', () => orchestratorList()),
 
-    sendToOrchestrator: (text, { confirmed } = {}) =>
-      call('sendToOrchestrator', () => {
-        if (confirmed !== true) throw new Error('Confirm the message first.')
-        const value = typeof text === 'string' ? text.trim() : ''
-        if (value.length < 1 || value.length > 8000) throw new Error('Write a message from 1 to 8000 characters.')
-        state.orchestratorChat.state = 'idle'
-        orchestratorMessageCounter += 1
-        const at = new Date(now()).toISOString()
-        const message = { id: `orchestrator-message-${orchestratorMessageCounter}`, from: 'owner', text: value, at }
-        state.orchestratorChat.messages.push(message)
-        orchestratorMessageCounter += 1
-        state.orchestratorChat.messages.push({
-          id: `orchestrator-message-${orchestratorMessageCounter}`,
-          from: 'orchestrator',
-          text: 'I have the message. I will start with the lanes that are free and report back.',
-          at,
-        })
-        while (state.orchestratorChat.messages.length > 200) state.orchestratorChat.messages.shift()
-        emit({ topic: 'orchestrator' })
-        return { id: message.id }
-      }),
+    orchestrator: (id) => call('orchestrator', () => chatStore(id)),
 
-    stopOrchestrator: ({ confirmed } = {}) =>
+    sendOrchestrator: (text, { id } = {}) => call('sendOrchestrator', () => sendMessage(id, text, true)),
+
+    sendToOrchestrator: (text, { confirmed } = {}) => call('sendToOrchestrator', () => sendMessage(undefined, text, confirmed)),
+
+    stopOrchestrator: ({ confirmed, id } = {}) =>
       call('stopOrchestrator', () => {
         if (confirmed !== true) throw new Error('Confirm the stop first.')
-        state.orchestratorChat.state = 'paused'
+        const chat = chatStore(id)
+        chat.state = 'paused'
         emit({ topic: 'orchestrator' })
         return { ok: true }
       }),
+
+    setLadder: (next) => call('setLadder', () => replaceLadder(next)),
 
     startRun: (lane, run, options = {}) =>
       call('startRun', () => {

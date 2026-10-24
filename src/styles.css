@@ -4861,3 +4861,218 @@ summary:focus-visible,
   font-size: 11px;
   color: rgb(255 255 255 / 0.6);
 }
+
+.mr-orch-attach-open {
+  flex: none;
+  padding: 3px 8px;
+  border-color: rgb(255 255 255 / 0.4);
+  background: transparent;
+  color: rgb(255 255 255 / 0.8);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.mr-orch-attach-open:hover:not(:disabled) {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+  color: var(--yellow);
+}
+
+.mr-orch-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: var(--space);
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.mr-orch-tab-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.02);
+}
+
+.mr-orch-tab-wrap.is-active {
+  border-color: rgb(255 255 255 / 0.55);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.mr-orch-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 0.72);
+  font-family: var(--sans);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+.mr-orch-tab:hover:not(:disabled) {
+  border: none;
+  background: transparent;
+  color: var(--white);
+}
+
+.mr-orch-tab.is-active {
+  color: var(--white);
+}
+
+.mr-orch-tab-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.4);
+}
+
+.mr-orch-tab-dot.is-working {
+  background: var(--yellow);
+}
+
+.mr-orch-tab-dot.is-waiting {
+  background: var(--green);
+}
+
+.mr-orch-tab-dot.is-paused {
+  background: var(--red);
+}
+
+.mr-orch-tab-detach {
+  padding: 0 6px;
+  border: none;
+  border-left: 1px solid rgb(255 255 255 / 0.18);
+  border-radius: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 0.45);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+}
+
+.mr-orch-tab-detach:hover:not(:disabled) {
+  border: none;
+  border-left: 1px solid var(--red);
+  background: rgb(255 42 42 / 0.12);
+  color: var(--red);
+}
+
+.mr-orch-attach {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: var(--space);
+  border: 1px solid rgb(255 255 255 / 0.24);
+  background: rgb(255 255 255 / 0.02);
+}
+
+.mr-orch-attach-title {
+  padding-bottom: 2px;
+  color: rgb(255 255 255 / 0.65);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mr-orch-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mr-orch-field-label {
+  color: rgb(255 255 255 / 0.55);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mr-orch-field-input {
+  width: 100%;
+  padding: 5px 6px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.04);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+.mr-orch-field-input.is-scope {
+  min-height: 54px;
+  resize: vertical;
+}
+
+.mr-orch-field-input::placeholder {
+  color: rgb(255 255 255 / 0.35);
+}
+
+.mr-orch-lanes {
+  margin: 0;
+  padding: 6px;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+}
+
+.mr-orch-lanes .mr-orch-field-label {
+  padding: 0 4px;
+}
+
+.mr-orch-lane {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: rgb(255 255 255 / 0.8);
+  font-size: 11px;
+}
+
+.mr-orch-lane input[type='checkbox'],
+.mr-orch-switch input[type='checkbox'] {
+  width: 12px;
+  height: 12px;
+  accent-color: var(--yellow);
+}
+
+.mr-orch-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgb(255 255 255 / 0.8);
+  font-size: 11px;
+}
+
+.mr-orch-confirm.is-detach {
+  border-color: var(--red);
+  background: rgb(255 42 42 / 0.07);
+}
+
+.mr-orch-confirm-detail {
+  color: rgb(255 255 255 / 0.7);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.mr-orch-error p + p {
+  margin-top: 4px;
+}
+
+.mr-orch-problems {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+}

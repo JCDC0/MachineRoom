@@ -65,6 +65,7 @@ export function createClient({
         const message = typeof json?.error === 'string' && json.error.trim() ? json.error : 'The request failed.'
         const error = new Error(message)
         if (Array.isArray(json?.files)) error.files = json.files.filter((file) => typeof file === 'string')
+        if (Array.isArray(json?.problems)) error.problems = json.problems.filter((item) => typeof item === 'string')
         throw error
       }
       return json
@@ -198,12 +199,25 @@ export function createClient({
       return Array.isArray(data?.runs) ? data.runs : []
     },
 
-    orchestrator: () => request('GET', '/api/orchestrator'),
+    orchestrators: () => request('GET', '/api/orchestrators'),
+
+    orchestrator: (id) =>
+      request('GET', id === undefined || id === null || id === '' ? '/api/orchestrator' : `/api/orchestrator?id=${encodeURIComponent(id)}`),
+
+    sendOrchestrator: (text, { id } = {}) => {
+      const body = id === undefined || id === null || id === '' ? { text, confirmed: true } : { text, id, confirmed: true }
+      return request('POST', '/api/orchestrator/messages', body)
+    },
 
     sendToOrchestrator: (text, { confirmed } = {}) =>
       request('POST', '/api/orchestrator/messages', { text, confirmed }),
 
-    stopOrchestrator: ({ confirmed } = {}) => request('POST', '/api/orchestrator/stop', { confirmed }),
+    stopOrchestrator: ({ confirmed = true, id } = {}) => {
+      const body = id === undefined || id === null || id === '' ? { confirmed } : { confirmed, id }
+      return request('POST', '/api/orchestrator/stop', body)
+    },
+
+    setLadder: (ladder) => request('POST', '/api/orchestrator/ladder', { ladder, by: 'owner', confirmed: true }),
 
     startRun: (lane, run) => {
       const body = Array.isArray(run) ? { briefs: run } : { ...(run ?? {}) }

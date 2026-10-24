@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The orchestrator chat has a tab per orchestrator, an Attach form that saves the whole ladder and lists the bridge's problems, and Detach behind a confirm card, with the ladder form helpers and the client and mock routes behind them (task O4).
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).
