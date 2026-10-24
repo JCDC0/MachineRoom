@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The HUD no longer shows "Paperclip is not connected" while the lane source is on: `/api/health` carries `lanes`, and Paperclip is optional then. Claude found it in the first browser check of a live lane room (three OpenCode lanes working at once, strips and active rows right).
+
 - Review note on F8, P18 and S6e: no fixes. They were cherry-picked onto main, since their branches grew from the first version of the brief commit, which held profile-name fragments. F8 masks each run's joined text and also joins AGY's `text_delta` steps, where `scenario-g`'s split was; rebuilt from the raw run, the fixture matches the committed one byte for byte. P18 shares the room's card chain with the probe as `cardPlan`; 4 of 8 fixture layout digests changed (the others never fill a stack), and the seeded rows moved (tallest 5,601 at 40,000 files and 11,743 at 200,000). S6e found that `opencode acp` takes its model through `session/set_config_option`, sends a file call's path only in its first `tool_call_update`, asked for no permission, and shows a subagent inside the parent session rather than as its own. Full suite on the merge: 120 files, 2252 tests.
 - Briefs S6f (a lane run on another project), S6b (AGY as a lane) and S6g (Claude Code as a lane), for the Sunday target.
 

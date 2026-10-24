@@ -23,6 +23,10 @@ export function healthNotice(health) {
     }
   }
 
+  if (health.lanes === true && health.paperclip !== true) {
+    return null
+  }
+
   if (health.paperclip === false) {
     return {
       tone: 'red',

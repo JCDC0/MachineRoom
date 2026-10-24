@@ -971,6 +971,7 @@ export function createBridge(options = {}) {
       sendJson(req, res, 200, {
         ok: true,
         paperclip: paperclipOpen,
+        lanes: lanesSource !== null,
         paperclipVersion,
         surface,
         features: surfaceFeatures(surface),
