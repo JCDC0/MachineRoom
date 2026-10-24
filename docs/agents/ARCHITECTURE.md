@@ -40,6 +40,7 @@ node scripts/agy-prompt.mjs V7a   write AGY's prompt for a brief to agy-V7a-prom
 npm run run-recording -- 1      turn run 1 of that list into a recording in public/recordings/ again (run-lane already writes one after each run and prints its /?recording=<name>)
 npm test           vitest through scripts/test.mjs, node environment, threads pool, no browser needed; it runs the tests again (3 tries in all) only when Node itself crashes with 0xC0000409
 npm run build
+CI runs npm test, npm run build, npm run pack-check and npm run history-audit on Ubuntu and Windows; the history step passes --from with the base of the change, so it reads the new commits and leaves the older records to the full command
 npm run fixtures -- <frames-or-raw-events.jsonl> <sandbox-folder> <ids.json> [out-name]
 ```
 
