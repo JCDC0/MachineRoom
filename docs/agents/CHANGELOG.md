@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `machine-room up` with `--lanes` or `--sessions` and no Paperclip no longer prints `FAIL Paperclip does not answer` and the start-Paperclip advice: it prints `Paperclip is not running, and the lane and session sources do not need it.` and opens the room. Claude found the alarming line when starting the room from the ulolTris folder as a user would.
 - Review note on D6: one fix. ARCHITECTURE and ORCHESTRATOR said OpenCode orchestrated up to 0.1.259; Claude took the role back earlier, so both now say OpenCode held it from 0.1.163 until Claude took it back. The README's opening, quick start, harness table and colour key were checked against the code and the live ulolTris run.
 - README: the opening names the room's sources, a quick start on a project comes first, the harness table and a separate Paperclip section are new, and the stale lane, recording and hand-run lines are gone (task D6).
 - ARCHITECTURE: the first paragraphs and Open work name the lane runner, queues, sessions and the optional Paperclip source, and Claude in Claude Code as the orchestrator; stale lines about the task label, recordings, hand-run and the child fade are fixed (task D6).

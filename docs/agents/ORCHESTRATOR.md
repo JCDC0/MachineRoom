@@ -12,7 +12,7 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 
 ## Where things stand
 
-- `main` is 0.1.260 (D6 merged: OpenCode 3, A-, one fix). The room follows lane runs (`--lanes`), task queues (`run-lane --queue` and several tasks in Dispatch) and the owner's Claude Code and OpenCode sessions (`--sessions`). Paperclip is optional. It was uninstalled on 2026-10-24 at the owner's word (`npm uninstall -g paperclipai`; `~\.paperclip` kept), and the lane runner is the room's source (`SOURCES.md`).
+- `main` is 0.1.261. The room follows lane runs (`--lanes`), task queues (`run-lane --queue` and several tasks in Dispatch) and the owner's Claude Code and OpenCode sessions (`--sessions`). Paperclip is optional. It was uninstalled on 2026-10-24 at the owner's word (`npm uninstall -g paperclipai`; `~\.paperclip` kept), and the lane runner is the room's source (`SOURCES.md`).
 - When Paperclip does not answer, the drawer reads tasks, live runs and costs from the lane records. Approvals are empty then, and backups belong to Paperclip.
 - The five OpenCode lanes and the `claude` lane are live, each with its own worktree. The OpenCode lanes each have their own `npm ci` and run the same model. Hermes and AGY are retired. Only the first OpenCode lane may start the real Paperclip, and only to check the shape of GET routes; everyone else uses `npm run fake-paperclip` on a free port.
 - The room, version 3 (the owner's redesign, see `PLAN.md`), is merged. The planner loop runs in the drawer. The cost board is a screen panel at the bottom right (V19).

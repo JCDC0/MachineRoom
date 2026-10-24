@@ -47,7 +47,7 @@ Or start it from the MachineRoom folder and name the project:
 npm run serve -- up --lanes --sessions --root <project folder>
 ```
 
-`up` runs the Paperclip checks first. With no Paperclip running they print FAIL, and the room opens anyway: the lane and session sources do not need it. Open the address it prints.
+`up` checks for Paperclip first. With `--lanes` or `--sessions` and no Paperclip running, it says Paperclip is not needed and opens the room. Open the address it prints.
 
 - `--lanes` shows the runs started by `run-lane`, including the tasks you start in Dispatch.
 - `--sessions` shows your own Claude Code and OpenCode sessions on that project, read only.

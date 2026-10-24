@@ -241,6 +241,28 @@ describe('machine-room up', () => {
     await kill(run)
   }, 30000)
 
+  it('says Paperclip is not needed when the lane source is on, with no FAIL line', async () => {
+    const project = makeProject()
+    const { dist } = makeDist()
+    const run = startBin([
+      'up',
+      '--lanes',
+      '--paperclip', 'http://127.0.0.1:1',
+      '--root', project,
+      '--dist', dist,
+      '--port', '0',
+    ])
+
+    await waitForAddress(run)
+    const lines = outputLines(run)
+    const addressAt = lines.findIndex((line) => line.startsWith('machine-room: open '))
+    expect(lines[addressAt - 1]).toBe('Paperclip is not running, and the lane and session sources do not need it.')
+    expect(lines.some((line) => line.startsWith('FAIL'))).toBe(false)
+    expect(lines).not.toContain(PAPERCLIP_NOT_RUNNING)
+
+    await kill(run)
+  }, 30000)
+
   it('says Paperclip is not running and serves the room without it', async () => {
     const project = makeProject()
     const { dist } = makeDist()

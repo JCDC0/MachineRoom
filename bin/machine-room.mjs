@@ -43,6 +43,7 @@ const FLAGS = new Set(['--lanes', '--sessions'])
 
 const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway; features whose routes changed stay off.'
 const PAPERCLIP_NOT_RUNNING = 'Paperclip is not running. Start it yourself with paperclipai run; machine-room never starts it.'
+const PAPERCLIP_NOT_NEEDED = 'Paperclip is not running, and the lane and session sources do not need it.'
 
 function parseArgs(argv, names = OPTION_NAMES) {
   const options = { help: false }
@@ -149,6 +150,13 @@ async function serve(options) {
 async function up(options) {
   const dist = prepare(options)
   const result = await runDoctor(options)
+  const ownSources = options.lanes === true || options.sessions === true
+  if (result.paperclipDown && ownSources) {
+    for (const line of result.lines) if (!line.startsWith('FAIL Paperclip')) console.log(line)
+    console.log(PAPERCLIP_NOT_NEEDED)
+    await startRoom(options, dist)
+    return
+  }
   for (const line of result.lines) console.log(line)
   if (result.paperclipDown) {
     console.log(PAPERCLIP_NOT_RUNNING)
