@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Briefs L1 (costs and meters from the lane records) and L2 (tasks, approvals and the callout from the lane runs).
+
 - CI on 0.1.240 failed on Linux in two of S6f's tests: their dry runs read the real `lanes.json`, whose OpenCode binary sits under `%APPDATA%`, which Linux does not set. The test helper now falls back to the file's fake `APPDATA` and `LOCALAPPDATA` beneath the real environment; the tests pass with both unset.
 
 - `run-lane` sets `PWD` to the run's folder when it starts a harness. OpenCode takes its folder from `PWD`, so a project run started from a shell in this checkout worked in this checkout instead of the project (found on a scratch project: OpenCode read this repository's files, found no target and stopped without a change). `--standalone` did not change it. With the fix, OpenCode, AGY and Claude Code each made their change in the scratch project and nowhere else.
