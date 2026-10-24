@@ -48,7 +48,8 @@ const FAKE_AGENT = [
   "  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }))",
   "  console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Working.' }] } }))",
   "  if (mode === 'hold') await hold()",
-  "  const reply = mode === 'empty' ? '' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "  const keyReply = 'I read OPENROUTER_API_KEY=' + 'sk-or-v1-' + 'q'.repeat(24) + ' in the file.'",
+  "  const reply = mode === 'empty' ? '' : mode === 'key' ? keyReply : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "  console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: 12, output_tokens: 3 } }))",
   '} else {',
   "  const at = args.indexOf('--session')",
@@ -193,17 +194,21 @@ function makeRig(files) {
   return { ...files, registry }
 }
 
-async function makeBridge(files, { runnerCommand } = {}) {
-  const bridge = createBridge({
+function bridgeOptions(files, extra = {}) {
+  return {
     projectRoot: files.projectRoot,
     port: 0,
     env: {},
     briefsDir: join(REPO_ROOT, 'docs', 'agents'),
-    ...(runnerCommand ? { runnerCommand } : {}),
     orchestratorPrompt: files.promptFile,
     lanesSource: { folder: files.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
     orchestratorSpawn: files.spawnFake,
-  })
+    ...extra,
+  }
+}
+
+async function makeBridge(files, extra = {}) {
+  const bridge = createBridge(bridgeOptions(files, extra))
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
   return { ...files, bridge, url }
@@ -379,6 +384,16 @@ describe('the orchestrator registry', () => {
     expect(removed.status).toBe(200)
     expect((await getJson(`${rig.url}/api/orchestrator?id=frontend`)).status).toBe(404)
     expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
+  })
+
+  it('refuses a second room on the same project', async () => {
+    const files = makeBase()
+    const first = await makeBridge(files)
+    expect((await getJson(`${first.url}/api/orchestrator`)).status).toBe(200)
+    expect(() => createBridge(bridgeOptions(files))).toThrow(/Another room is already running on this project/)
+    await first.bridge.stop()
+    const second = await makeBridge(files)
+    expect((await getJson(`${second.url}/api/orchestrator`)).status).toBe(200)
   })
 
   it('refuses a ladder that does not read and a write without a confirmation', async () => {
@@ -602,6 +617,27 @@ describe('a sub orchestrator report', () => {
     expect(report.text).toContain('Write the header')
     const prompt = rig.calls()[rig.calls().length - 1].args[1]
     expect(prompt.startsWith('Sub frontend:')).toBe(true)
+  })
+
+  it('masks a key in a sub reply before it is stored or sent to the parent', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    files.behaviour.mode = 'key'
+    const rig = makeRig(files)
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Read the file', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+    await waitIdle(rig.registry, 'orchestrator', 2)
+
+    const subReply = messagesOf(rig.registry, 'frontend').find((message) => message.from === 'orchestrator')
+    expect(subReply.text).toContain('[key]')
+    expect(subReply.text).not.toContain(secret)
+    const report = messagesOf(rig.registry, 'orchestrator').find((message) => message.from === 'sub:frontend')
+    expect(report.text).toContain('[key]')
+    expect(report.text).not.toContain(secret)
+    expect(rig.chat('frontend').messages.some((message) => message.text.includes(secret))).toBe(false)
+    expect(rig.chat('orchestrator').messages.some((message) => message.text.includes(secret))).toBe(false)
   })
 })
 

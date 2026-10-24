@@ -6,6 +6,9 @@
 
 - The Meters panel reads this month's spend and tokens per lane from the run records only: it has no budget editor, confirm card or save, and says budgets are not set there (task Q10).
 - `?replay&fixture=scenario-i` plays a two minute replay where the main orchestrator, the two demo sub orchestrators and their lanes work, the fixture sets the demo ladder by itself, and one lane run fails its test (task S10).
+- The orchestrator's chat masks a key in every message it stores, sends or restores, and the count joins the health `masked` total (task Q6b).
+- The orchestrator writes its chat file through `<file>.tmp`, keeps a file that fails to parse as `<file>.bad`, refuses a second room on the same project with a lock, writes a failed record for a turn the room ended, and saves the room-started turn times (task Q6b).
+- `docs/agents/ORCHESTRATOR-AGENT.md` says to always send `tasks`, and to run without `worktree` on a project with no `.git` (task Q6b).
 - The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - Dispatch's project section can give each of several tasks its own idle lane and worktree, pairing them in picker order with `planLaneTasks`, refusing when there are too few idle lanes, and starting one run per task three seconds apart with each start's answer shown (task R11).
 - The hub's sector arcs are brighter and wider with a clear gap, their labels stay at 12 pixels or more on screen, and subs float further from the main orchestrator so their chips and callouts stay apart (task V23).

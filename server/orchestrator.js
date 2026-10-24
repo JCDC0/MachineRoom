@@ -1,9 +1,21 @@
 import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, createWriteStream, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  appendFileSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
@@ -80,6 +92,84 @@ export function chatFileFor(projectRoot, runsFolder, id = ORCHESTRATOR_KEY) {
   const key = id === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
   const name = key === ORCHESTRATOR_KEY ? `orchestrator-${projectHash(root)}.json` : `orchestrator-${projectHash(root)}-${key}.json`
   return join(folder, name)
+}
+
+export function chatLockFileFor(projectRoot, runsFolder) {
+  return chatFileFor(projectRoot, runsFolder).replace(/\.json$/, '.lock')
+}
+
+function readHolder(path) {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+function roomLockProblem(holder, path) {
+  return `Another room is already running on this project (process ${holder}). Wait for it to end, or delete ${path} if no room is going.`
+}
+
+function takeRoomLock(path) {
+  const takeover = `${path}.takeover`
+  const take = (file) => {
+    try {
+      writeFileSync(file, String(process.pid), { flag: 'wx' })
+      return true
+    } catch (error) {
+      if (error?.code === 'EEXIST') return false
+      throw error
+    }
+  }
+  const clearTakeover = () => {
+    const holder = Number.parseInt(readHolder(takeover), 10)
+    if (processAlive(holder)) throw new Error(roomLockProblem(holder, path))
+    rmSync(takeover, { force: true })
+  }
+  if (existsSync(takeover)) clearTakeover()
+  if (take(path)) return path
+  const holderText = readHolder(path)
+  const holder = Number.parseInt(holderText, 10)
+  if (processAlive(holder)) throw new Error(roomLockProblem(holder, path))
+  let mine = take(takeover)
+  if (!mine) {
+    clearTakeover()
+    mine = take(takeover)
+    if (!mine) throw new Error(roomLockProblem(Number.parseInt(readHolder(path), 10), path))
+  }
+  try {
+    const current = readHolder(path)
+    if (current !== holderText) throw new Error(roomLockProblem(Number.parseInt(current, 10) || holder, path))
+    if (processAlive(holder)) throw new Error(roomLockProblem(holder, path))
+    rmSync(path, { force: true })
+    if (!take(path)) throw new Error(roomLockProblem(Number.parseInt(readHolder(path), 10), path))
+    return path
+  } finally {
+    rmSync(takeover, { force: true })
+  }
+}
+
+function releaseRoomLock(path) {
+  if (!path) return
+  if (Number.parseInt(readHolder(path), 10) === process.pid) rmSync(path, { force: true })
+}
+
+function turnStartedAt(name) {
+  const match = /-chat-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-(\d{3})\.log$/.exec(name)
+  if (!match) return null
+  const parts = match.slice(1).map((part) => Number.parseInt(part, 10))
+  const at = new Date(parts[0], parts[1] - 1, parts[2], parts[3], parts[4], parts[5], parts[6]).getTime()
+  return Number.isFinite(at) ? at : null
 }
 
 function fallbackPrompt(projectRoot, runsFolder) {
@@ -218,6 +308,7 @@ export function createOrchestrator({
   bridgeUrl = () => '',
   extraInstructions = '',
   onReply = null,
+  onMasked = () => {},
   outsideFiles = null,
   onOutsideScope = null,
   contextWindow: contextWindowOption = 0,
@@ -226,6 +317,7 @@ export function createOrchestrator({
   const folder = resolve(runsFolder)
   const key = String(id) === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
   const logPrefix = key === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub-${key}`
+  const lockFile = key === ORCHESTRATOR_KEY ? chatLockFileFor(root, folder) : null
   const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
   const harness =
@@ -262,25 +354,79 @@ export function createOrchestrator({
     } catch {}
   }
 
+  function maskText(text) {
+    const safe = maskKeys(text)
+    if (safe.count > 0) {
+      try {
+        onMasked(safe.count)
+      } catch {}
+    }
+    return safe.text
+  }
+
   function persist() {
     try {
       mkdirSync(folder, { recursive: true })
       const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
-      writeFileSync(
-        conversationFile,
-        `${JSON.stringify({ project: root, sessionId, state, messages, pending: waiting, contextTokens, contextWindow, autocompact, summary, ...(ladder ? { ladder } : {}) }, null, 2)}\n`
-      )
+      const saved = { project: root, sessionId, state, messages, pending: waiting, roomTurns, contextTokens, contextWindow, autocompact, summary, ...(ladder ? { ladder } : {}) }
+      const temporary = `${conversationFile}.tmp`
+      writeFileSync(temporary, `${JSON.stringify(saved, null, 2)}\n`)
+      renameSync(temporary, conversationFile)
+    } catch {}
+  }
+
+  function quarantine() {
+    try {
+      renameSync(conversationFile, `${conversationFile}.bad`)
+    } catch {}
+  }
+
+  function newestTurnLog() {
+    let names
+    try {
+      names = readdirSync(folder).filter((name) => name.startsWith(`${logPrefix}-chat-`) && TURN_LOG.test(name))
+    } catch {
+      return null
+    }
+    if (names.length === 0) return null
+    names.sort()
+    return join(folder, names[names.length - 1])
+  }
+
+  function recordStoppedTurn() {
+    const log = newestTurnLog()
+    if (!log) return
+    if (recordFor(basename(log).replace(/\.log$/i, ''))) return
+    let endedAt = now()
+    try {
+      endedAt = statSync(log).mtimeMs
+    } catch {}
+    const startedAt = turnStartedAt(basename(log)) ?? endedAt
+    const minutes = Math.max(0, Math.round(((endedAt - startedAt) / 60000) * 10) / 10)
+    const record = runRecord({ lane: logPrefix, model, startedAt, minutes, exitCode: null, killed: true, log })
+    try {
+      appendFileSync(join(folder, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
     } catch {}
   }
 
   function restore() {
-    let saved
+    let text
     try {
-      saved = JSON.parse(readFileSync(conversationFile, 'utf8'))
+      text = readFileSync(conversationFile, 'utf8')
     } catch {
       return
     }
-    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return
+    let saved
+    try {
+      saved = JSON.parse(text)
+    } catch {
+      quarantine()
+      return
+    }
+    if (!saved || typeof saved !== 'object' || Array.isArray(saved)) {
+      quarantine()
+      return
+    }
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
     if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
@@ -302,14 +448,21 @@ export function createOrchestrator({
       messages.push({
         id: typeof item.id === 'string' && item.id ? item.id : randomUUID(),
         from,
-        text: item.text,
+        text: maskText(item.text),
         at: typeof item.at === 'string' && item.at ? item.at : iso(now()),
       })
     }
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+    const cutoff = now() - ORCHESTRATOR_ROOM_WINDOW_MS
+    const times = Array.isArray(saved.roomTurns) ? saved.roomTurns : []
+    for (const at of times) {
+      if (typeof at === 'number' && Number.isFinite(at) && at > cutoff) roomTurns.push(at)
+    }
+    roomTurns.sort((left, right) => left - right)
     if (saved.state === 'working') {
-      messages.push({ id: randomUUID(), from: 'room', text: RESTART_MESSAGE, at: iso(now()) })
+      messages.push({ id: randomUUID(), from: 'room', text: maskText(RESTART_MESSAGE), at: iso(now()) })
       while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
+      recordStoppedTurn()
     }
     const waitingIds = Array.isArray(saved.pending) ? saved.pending : []
     for (const id of waitingIds) {
@@ -326,7 +479,7 @@ export function createOrchestrator({
   }
 
   function addMessage(from, text) {
-    const message = { id: randomUUID(), from, text, at: iso(now()) }
+    const message = { id: randomUUID(), from, text: maskText(text), at: iso(now()) }
     messages.push(message)
     while (messages.length > ORCHESTRATOR_CHAT_LIMIT) messages.shift()
     persist()
@@ -642,13 +795,15 @@ export function createOrchestrator({
       killTree(turn.child)
     }
     persist()
+    releaseRoomLock(lockFile)
     notify()
   }
 
-  restore()
   try {
     mkdirSync(folder, { recursive: true })
   } catch {}
+  if (lockFile) takeRoomLock(lockFile)
+  restore()
   persist()
   maybeStartTurn()
 

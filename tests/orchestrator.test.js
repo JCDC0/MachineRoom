@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
-import { createOrchestrator, contextTokensFromLog, COMPACTED_MESSAGE, COMPACT_PROMPT, RESTART_MESSAGE } from '../server/orchestrator.js'
+import { chatFileFor, chatLockFileFor, createOrchestrator, contextTokensFromLog, COMPACTED_MESSAGE, COMPACT_PROMPT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -41,7 +41,8 @@ const FAKE_CLAUDE = [
   '    await new Promise((done) => setTimeout(done, 20))',
   '  }',
   '}',
-  "const reply = mode === 'empty' ? '' : mode === 'fail' ? 'You have hit your session limit.' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "const keyReply = 'I read OPENROUTER_API_KEY=' + 'sk-or-v1-' + 'q'.repeat(24) + ' in the file.'",
+  "const reply = mode === 'empty' ? '' : mode === 'fail' ? 'You have hit your session limit.' : mode === 'key' ? keyReply : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "const input = Number(process.env.MR_INPUT ?? 12)",
   "const cacheRead = Number(process.env.MR_CACHE_READ ?? 0)",
   "const cacheWrite = Number(process.env.MR_CACHE_WRITE ?? 0)",
@@ -141,6 +142,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
   const notices = []
+  const masked = { total: 0 }
   const orchestrator = createOrchestrator({
     projectRoot,
     runsFolder: runs,
@@ -149,6 +151,9 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     promptFile,
     bridgeUrl: () => 'http://127.0.0.1:5999',
     onNotice: (event) => notices.push(event),
+    onMasked: (count) => {
+      masked.total += count
+    },
   })
   const rig = {
     base,
@@ -162,6 +167,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     harness,
     behaviour,
     notices,
+    masked,
     orchestrator,
     spawned,
     calls: () => readLines(callsFile),
@@ -193,6 +199,7 @@ function restoreRig(rig, { mode = 'reply', file = 'calls-restored.jsonl' } = {})
     }
     return spawn(process.execPath, [rig.script, ...args], { ...options, env })
   }
+  const masked = { total: 0 }
   const orchestrator = createOrchestrator({
     projectRoot: rig.projectRoot,
     runsFolder: rig.runs,
@@ -200,6 +207,9 @@ function restoreRig(rig, { mode = 'reply', file = 'calls-restored.jsonl' } = {})
     spawn: spawnFake,
     promptFile: rig.promptFile,
     bridgeUrl: () => 'http://127.0.0.1:5999',
+    onMasked: (count) => {
+      masked.total += count
+    },
   })
   cleanups.push(async () => orchestrator.close())
   return {
@@ -207,6 +217,7 @@ function restoreRig(rig, { mode = 'reply', file = 'calls-restored.jsonl' } = {})
     callsFile,
     calls: () => readLines(callsFile),
     answer: () => orchestrator.answer(),
+    masked,
   }
 }
 
@@ -692,9 +703,169 @@ describe('the orchestrator conversation file', () => {
   })
 })
 
+describe('the orchestrator chat file', () => {
+  it('masks a key in the owner message and the reply, and counts each mask', async () => {
+    const rig = makeRig()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    rig.behaviour.mode = 'key'
+    const sent = rig.send(`Read this: ${setting}${secret}`)
+    expect(sent.status).toBe(202)
+    await waitIdle(rig, 1)
+    const texts = rig.answer().messages.map((message) => message.text).join('\n')
+    expect(texts).toContain('[key]')
+    expect(texts).not.toContain(secret)
+    const saved = readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8')
+    expect(saved).toContain('[key]')
+    expect(saved).not.toContain(secret)
+    expect(rig.masked.total).toBe(2)
+  })
+
+  it('masks a key in a chat file it restores', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: null,
+        state: 'idle',
+        messages: [{ id: 'm1', from: 'room', text: `The file holds ${setting}${secret}`, at: '2026-10-25T12:00:00.000Z' }],
+        pending: [],
+      })}\n`
+    )
+    const restored = restoreRig(rig)
+    expect(restored.answer().messages[0].text).toContain('[key]')
+    expect(restored.answer().messages[0].text).not.toContain(secret)
+    expect(restored.masked.total).toBe(1)
+    expect(readFileSync(file, 'utf8')).not.toContain(secret)
+  })
+
+  it('keeps a chat file that fails to parse as .bad', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const broken = '{"state":"wor'
+    writeFileSync(file, broken)
+    const restored = restoreRig(rig)
+    expect(readFileSync(`${file}.bad`, 'utf8')).toBe(broken)
+    expect(restored.answer().messages).toEqual([])
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    expect(saved.messages).toEqual([])
+    expect(saved.roomTurns).toEqual([])
+  })
+
+  it('keeps the last good chat file when the write fails', async () => {
+    const rig = makeRig()
+    rig.send('Keep me')
+    await waitIdle(rig, 1)
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const before = readFileSync(file, 'utf8')
+    mkdirSync(`${file}.tmp`)
+    const restored = restoreRig(rig)
+    expect(readFileSync(file, 'utf8')).toBe(before)
+    expect(restored.answer().messages.some((message) => message.text === 'Keep me')).toBe(true)
+  })
+
+  it('refuses a second orchestrator on the same project and takes a stale lock', () => {
+    const rig = makeRig()
+    const options = { projectRoot: rig.projectRoot, runsFolder: rig.runs, lanes: rig.lanes, promptFile: rig.promptFile }
+    const lock = chatLockFileFor(rig.projectRoot, rig.runs)
+    expect(readFileSync(lock, 'utf8')).toBe(String(process.pid))
+    expect(() => createOrchestrator(options)).toThrow(/Another room is already running on this project/)
+    rig.orchestrator.close()
+    writeFileSync(lock, '99999999')
+    const restored = createOrchestrator(options)
+    cleanups.push(async () => restored.close())
+    expect(readFileSync(lock, 'utf8')).toBe(String(process.pid))
+    expect(restored.answer().state).toBe('idle')
+  })
+
+  it('writes a failed record for the turn that was running when the room ended', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: 'session-1',
+        state: 'working',
+        messages: [{ id: 'm1', from: 'owner', text: 'Build it', at: '2026-10-25T12:00:00.000Z' }],
+        pending: [],
+      })}\n`
+    )
+    const log = join(rig.runs, 'orchestrator-chat-20261025-120000-000.log')
+    writeFileSync(log, 'a log\n')
+    const restored = restoreRig(rig)
+    expect(restored.answer().state).toBe('idle')
+    expect(restored.answer().messages.at(-1)).toMatchObject({ from: 'room', text: RESTART_MESSAGE })
+    const records = recordsOf(rig)
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ lane: 'orchestrator', log, exitCode: null, killed: true })
+    expect(records[0].startedAt).toBe(new Date(2026, 9, 25, 12, 0, 0, 0).toISOString())
+  })
+
+  it('saves the room turn times and drops the ones older than the hour', async () => {
+    const nowMs = Date.parse('2026-10-25T12:00:00.000Z')
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const recent = Array.from({ length: 30 }, (_, index) => nowMs - (index + 1) * 60000)
+    const old = nowMs - 2 * 60 * 60 * 1000
+    writeFileSync(
+      file,
+      `${JSON.stringify({
+        project: rig.projectRoot,
+        sessionId: 'session-1',
+        state: 'idle',
+        messages: [{ id: 'm1', from: 'owner', text: 'Hello', at: '2026-10-25T12:00:00.000Z' }],
+        pending: [],
+        roomTurns: [...recent, old],
+      })}\n`
+    )
+    const orchestrator = createOrchestrator({
+      projectRoot: rig.projectRoot,
+      runsFolder: rig.runs,
+      lanes: rig.lanes,
+      promptFile: rig.promptFile,
+      now: () => nowMs,
+      spawn: () => {
+        throw new Error('No turn should start while the cap is full.')
+      },
+    })
+    cleanups.push(async () => orchestrator.close())
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    expect(saved.roomTurns).toHaveLength(30)
+    expect(saved.roomTurns).not.toContain(old)
+    expect(Math.min(...saved.roomTurns)).toBeGreaterThan(nowMs - 60 * 60 * 1000)
+
+    orchestrator.onFrame(frame('run-opencode7-cap-saved', 'succeeded'))
+    await sleep(150)
+    expect(orchestrator.answer().messages.filter((message) => message.from === 'orchestrator')).toEqual([])
+    expect(orchestrator.answer().messages.some((message) => message.text.includes('cap-saved'))).toBe(true)
+  })
+
+  it('writes each room turn time beside the messages', async () => {
+    const rig = makeRig()
+    rig.send('Start')
+    await waitIdle(rig, 1)
+    rig.orchestrator.onFrame(frame('run-opencode7-saved-time', 'succeeded'))
+    await waitIdle(rig, 2)
+    const saved = stateFile(rig)
+    expect(saved.roomTurns).toHaveLength(1)
+    expect(typeof saved.roomTurns[0]).toBe('number')
+  })
+})
+
 describe('the orchestrator routes', () => {
   it('refuses a message without a confirmation, a bad text and a stop without a confirmation', async () => {
     const rig = makeRig()
+    rig.orchestrator.close()
     const bridge = createBridge({
       paperclipUrl: DEAD_PAPERCLIP,
       companyId: 'comp-orchestrator',
@@ -735,8 +906,41 @@ describe('the orchestrator routes', () => {
     expect((await getJson(`${url}/api/orchestrator`)).body.state).toBe('paused')
   })
 
+  it('adds the orchestrator mask count to the health masked total', async () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const bridge = createBridge({
+      paperclipUrl: DEAD_PAPERCLIP,
+      companyId: 'comp-orchestrator-mask',
+      projectRoot: rig.projectRoot,
+      port: 0,
+      env: {},
+      surfaceEveryMs: 0,
+      reconnectMinMs: 60000,
+      reconnectMaxMs: 60000,
+      lanesSource: { folder: rig.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
+      orchestratorSpawn: () => {
+        throw new Error('No turn should start in this test.')
+      },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+    const secret = 'sk-or-v1-' + 'q'.repeat(24)
+    const setting = 'OPENROUTER_API_KEY='
+    expect((await getJson(`${url}/api/health`)).body.masked.total).toBe(0)
+    const sent = await postJson(`${url}/api/orchestrator/messages`, { text: `Use ${setting}${secret}`, confirmed: true })
+    expect(sent.status).toBe(202)
+    await waitFor(async () => (await getJson(`${url}/api/health`)).body.masked.total === 1, 15000, 'the masked total')
+    const chat = await getJson(`${url}/api/orchestrator`)
+    expect(JSON.stringify(chat.body)).not.toContain(secret)
+    expect(chat.body.messages.some((message) => message.text.includes('[key]'))).toBe(true)
+    const file = readdirSync(rig.runs).find((name) => /^orchestrator-[0-9a-f]{8}\.json$/.test(name))
+    expect(readFileSync(join(rig.runs, file), 'utf8')).not.toContain(secret)
+  })
+
   it('answers 409 with no project folder and is absent when the lane source is off', async () => {
     const rig = makeRig({ project: false })
+    rig.orchestrator.close()
     const bridge = createBridge({
       paperclipUrl: DEAD_PAPERCLIP,
       companyId: 'comp-orchestrator',

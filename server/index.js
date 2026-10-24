@@ -340,6 +340,8 @@ export function createBridge(options = {}) {
     : null
 
   const clients = new Set()
+  const maskedSince = new Date().toISOString()
+  let maskedTotal = 0
   if (lanesSourceOn) {
     orchestrators = createOrchestrators({
       projectRoot,
@@ -351,6 +353,9 @@ export function createBridge(options = {}) {
       bridgeUrl: () => (servingPort ? `http://127.0.0.1:${servingPort}` : ''),
       onNotice: (event) => {
         for (const client of clients) writeSseChange(client, event)
+      },
+      onMasked: (count) => {
+        maskedTotal += count
       },
       sendJson,
       readJsonBody,
@@ -376,8 +381,6 @@ export function createBridge(options = {}) {
   let treeDirty = false
   const unreadable = createUnreadableCounter()
   const unparsedSince = new Date().toISOString()
-  const maskedSince = new Date().toISOString()
-  let maskedTotal = 0
   const masker = createSplitMasker()
   let maskTimer = null
   let parserByAgentId = new Map()
