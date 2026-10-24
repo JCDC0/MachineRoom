@@ -32,18 +32,19 @@ const agyLine = JSON.stringify({
 
 describe('harness registry', () => {
   it('lists one descriptor per harness, in agent order', () => {
-    expect(HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'hermes', 'opencode', 'agy'])
-    expect(AGENT_ORDER).toEqual(['claude', 'hermes', 'opencode', 'agy'])
+    expect(HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp'])
+    expect(AGENT_ORDER).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp'])
     expect(Object.keys(harnessByKey)).toEqual(AGENT_ORDER)
     for (const harness of HARNESSES) expect(harnessByKey[harness.key]).toBe(harness)
   })
 
   it('maps each adapter type to its harness', () => {
-    expect(Object.keys(harnessByAdapter).sort()).toEqual(['claude_local', 'hermes_local', 'opencode_local', 'process'])
+    expect(Object.keys(harnessByAdapter).sort()).toEqual(['acp_local', 'claude_local', 'hermes_local', 'opencode_local', 'process'])
     expect(harnessByAdapter.claude_local).toBe(harnessByKey.claude)
     expect(harnessByAdapter.hermes_local).toBe(harnessByKey.hermes)
     expect(harnessByAdapter.opencode_local).toBe(harnessByKey.opencode)
     expect(harnessByAdapter.process).toBe(harnessByKey.agy)
+    expect(harnessByAdapter.acp_local).toBe(harnessByKey.acp)
   })
 
   it('keeps the brief owner order the room has always used', () => {
@@ -66,7 +67,7 @@ describe('harness registry', () => {
   it('builds a command from the lane cli block and the folder', () => {
     for (const harness of HARNESSES) {
       const command = harness.command({
-        cli: { bin: harness.key, model: 'model', provider: 'provider' },
+        cli: { bin: harness.key, model: 'model', provider: 'provider', args: ['serve'] },
         prompt: 'Do it.',
         env: {},
         folder: 'C:\\work',
@@ -74,7 +75,8 @@ describe('harness registry', () => {
       })
       expect(command.file, harness.key).toBe(harness.key)
       expect(command.cwd, harness.key).toBe('C:\\work')
-      expect(command.args, harness.key).toContain('Do it.')
+      if (harness.key === 'acp') expect(command.args, harness.key).toEqual(['serve'])
+      else expect(command.args, harness.key).toContain('Do it.')
     }
   })
 

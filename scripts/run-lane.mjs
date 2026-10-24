@@ -7,10 +7,11 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, childEnvironment, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor } from '../src/briefs/run.js'
+import { briefProblems, childEnvironment, commandFor, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
+import { acpRunCommand } from './acp-run.mjs'
 import { releaseLaneLock, takeLaneLock } from './lane-lock.mjs'
 import { writeRecording } from './recording-files.mjs'
 
@@ -277,11 +278,17 @@ function readTask(options) {
   return text
 }
 
+export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effort = '' } = {}) {
+  if (command?.transport !== 'acp') return { file: command?.file, args: command?.args ?? [], input: false }
+  return { ...acpRunCommand({ command, minutes, model, effort }), input: true }
+}
+
 function printCommand(command, prompt) {
   const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : arg))
   console.log(`file: ${command.file}`)
   console.log(`args: ${JSON.stringify(shown)}`)
   console.log(`cwd: ${command.cwd}`)
+  if (!command.args.includes(prompt)) console.log(`prompt: <prompt: ${prompt.length} characters>`)
 }
 
 function gitRead(cwd, args) {
@@ -627,7 +634,12 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   const log = createWriteStream(logPath)
   const startedAt = Date.now()
   // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
-  const child = spawn(command.file, command.args, { cwd: command.cwd, env: childEnvironment(process.env, command.cwd), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
+  const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnvironment(process.env, command.cwd), stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  if (spawnSpec.input && child.stdin) {
+    child.stdin.on('error', () => {})
+    child.stdin.end(prompt)
+  }
   child.stdout?.pipe(log, { end: false })
   child.stderr?.pipe(log, { end: false })
 
@@ -674,7 +686,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     minutes,
     exitCode: result.code,
     killed,
-    costUsd: harness === 'opencode' || harness === 'claude' ? summary.costUsd : totalCost(report),
+    costUsd: harness === 'opencode' || harness === 'claude' || harness === 'acp' ? summary.costUsd : totalCost(report),
     inputTokens: summary.inputTokens,
     outputTokens: summary.outputTokens,
     log: logPath,
