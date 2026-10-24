@@ -1,14 +1,18 @@
+import { execFileSync } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, watch } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
+import { gitPath } from './programPath.js'
 
 const DEFAULT_QUIET_MS = 10 * 60 * 1000
 const DEFAULT_POLL_MS = 200
 const DEFAULT_PRIME_MS = 60 * 1000
 const READ_CHUNK = 64 * 1024
+const MAX_PARTIAL = 1024 * 1024
+const QUIET_KEPT = 50
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
 export function runsFolder() {
@@ -44,6 +48,122 @@ function pathKey(path) {
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved
   } catch {
     return ''
+  }
+}
+
+export function mainCheckoutOf(folder) {
+  try {
+    const common = execFileSync(gitPath(), ['rev-parse', '--git-common-dir'], {
+      cwd: folder,
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    if (!common) return ''
+    return dirname(resolve(folder, common))
+  } catch {
+    return ''
+  }
+}
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+function laneLockAlive(folder, lane) {
+  try {
+    return processAlive(Number.parseInt(readFileSync(join(folder, `${lane}.lock`), 'utf8'), 10))
+  } catch {
+    return false
+  }
+}
+
+export function createRecordsCache(file) {
+  let size = -1
+  let mtimeMs = -1
+  let tail = ''
+  let decoder = new StringDecoder('utf8')
+  let records = new Map()
+  let reads = 0
+
+  function restart() {
+    records = new Map()
+    tail = ''
+    decoder = new StringDecoder('utf8')
+  }
+
+  function apply(text) {
+    const parts = (tail + text).split(/\r?\n/)
+    tail = parts.pop() ?? ''
+    for (const line of parts) {
+      if (!line.trim()) continue
+      let record
+      try {
+        record = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (record && typeof record.log === 'string') records.set(pathKey(record.log), record)
+    }
+  }
+
+  function read() {
+    let stat
+    try {
+      stat = statSync(file)
+    } catch {
+      restart()
+      size = -1
+      mtimeMs = -1
+      return records
+    }
+    if (stat.size === size && stat.mtimeMs === mtimeMs) return records
+    reads += 1
+    if (size < 0 || stat.size <= size) {
+      restart()
+      try {
+        apply(readFileSync(file, 'utf8'))
+      } catch {
+        return records
+      }
+      size = stat.size
+      mtimeMs = stat.mtimeMs
+      return records
+    }
+    let fd
+    try {
+      fd = openSync(file, 'r')
+    } catch {
+      return records
+    }
+    let got = 0
+    try {
+      const length = stat.size - size
+      const buffer = Buffer.alloc(length)
+      got = readSync(fd, buffer, 0, length, size)
+      apply(decoder.write(buffer.subarray(0, got)))
+    } catch {
+      return records
+    } finally {
+      closeSync(fd)
+    }
+    size += got
+    mtimeMs = stat.mtimeMs
+    return records
+  }
+
+  return {
+    read,
+    get reads() {
+      return reads
+    },
   }
 }
 
@@ -87,14 +207,21 @@ export function createLanesSource(options = {}) {
   const agents = laneAgents(lanes)
   const byLane = new Map(agents.map((agent) => [agent.key, agent]))
   const roomRoot = options.projectRoot ? resolve(options.projectRoot) : ''
-  const worktreeRunsShown = !roomRoot || pathKey(roomRoot) === pathKey(options.repoRoot ?? REPO_ROOT)
+  const repoRoot = resolve(options.repoRoot ?? REPO_ROOT)
+  const worktreeRoots = new Set([pathKey(repoRoot)])
+  const mainCheckout = mainCheckoutOf(repoRoot)
+  if (mainCheckout) worktreeRoots.add(pathKey(mainCheckout))
+  const worktreeRunsShown = !roomRoot || worktreeRoots.has(pathKey(roomRoot))
   const quietMs = Number(options.quietMs ?? DEFAULT_QUIET_MS)
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
   const primeMs = Number(options.primeMs ?? DEFAULT_PRIME_MS)
   const now = options.now ?? Date.now
   const onFrame = options.onFrame ?? (() => {})
   const active = new Map()
+  const quiet = new Map()
   const seen = new Set()
+  const lagging = new Map()
+  const recordsCache = createRecordsCache(recordsFile)
   let watcher = null
   let timer = null
   let stopped = false
@@ -121,6 +248,7 @@ export function createLanesSource(options = {}) {
       offset: 0,
       buffer: '',
       decoder: new StringDecoder('utf8'),
+      skipLine: false,
       feed: createRunLineReader(agent.parser),
       rewrite: keepPaths ? (line) => line : rewriter(lanes[agent.key]?.worktree, roomRoot),
       startedAt,
@@ -148,22 +276,50 @@ export function createLanesSource(options = {}) {
       if (!entry.isFile() || !entry.name.endsWith('.log')) continue
       const path = join(folder, entry.name)
       const key = pathKey(path)
-      if (seen.has(key)) continue
-      seen.add(key)
-      if (!primed) {
+      if (lagging.has(key)) {
+        let size
         try {
-          if (now() - statSync(path).mtimeMs > primeMs) continue
+          size = statSync(path).size
         } catch {
+          lagging.delete(key)
           continue
+        }
+        if (size <= lagging.get(key)) continue
+        lagging.delete(key)
+      } else {
+        if (seen.has(key)) continue
+        if (!primed) {
+          try {
+            const stat = statSync(path)
+            if (now() - stat.mtimeMs > primeMs) {
+              lagging.set(key, stat.size)
+              continue
+            }
+          } catch {
+            continue
+          }
         }
       }
       const lane = laneOf(entry.name, lanes)
-      if (!lane) continue
+      if (!lane) {
+        seen.add(key)
+        continue
+      }
       const agent = byLane.get(lane)
-      if (!agent) continue
+      if (!agent) {
+        seen.add(key)
+        continue
+      }
       const meta = metaFor(path)
-      if (meta && pathKey(meta.project) !== pathKey(roomRoot)) continue
-      if (!meta && !worktreeRunsShown) continue
+      if (meta && pathKey(meta.project) !== pathKey(roomRoot)) {
+        seen.add(key)
+        continue
+      }
+      if (!meta && !worktreeRunsShown) {
+        seen.add(key)
+        continue
+      }
+      seen.add(key)
       beginRun(entry.name.slice(0, -4), path, agent, Boolean(meta), meta?.project ?? '')
     }
   }
@@ -171,6 +327,7 @@ export function createLanesSource(options = {}) {
   function reset(run) {
     run.offset = 0
     run.buffer = ''
+    run.skipLine = false
     run.decoder = new StringDecoder('utf8')
     run.feed = createRunLineReader(run.agent.parser)
   }
@@ -198,6 +355,7 @@ export function createLanesSource(options = {}) {
         if (read <= 0) break
         run.offset += read
         run.buffer += run.decoder.write(buffer.subarray(0, read))
+        if (run.buffer.length > MAX_PARTIAL) emitLines(run)
       }
     } finally {
       closeSync(fd)
@@ -206,13 +364,22 @@ export function createLanesSource(options = {}) {
     emitLines(run)
   }
 
-  function emitLines(run) {
+  function emitLines(run, final = false) {
+    if (run.skipLine) {
+      const cut = run.buffer.indexOf('\n')
+      if (cut === -1) {
+        run.buffer = ''
+        return
+      }
+      run.buffer = run.buffer.slice(cut + 1)
+      run.skipLine = false
+    }
     const parts = run.buffer.split(/\r?\n/)
-    run.buffer = parts.pop() ?? ''
+    run.buffer = final ? '' : parts.pop() ?? ''
     for (const line of parts) {
       if (!line.trim()) continue
       const entry = run.feed(run.rewrite(line))
-      if (!entry) continue
+      if (!entry || entry.read !== true) continue
       run.seq += 1
       const at = Number.isFinite(entry.at) ? entry.at : now()
       emit({
@@ -229,10 +396,21 @@ export function createLanesSource(options = {}) {
         },
       })
     }
+    if (run.buffer.length > MAX_PARTIAL) {
+      run.buffer = ''
+      run.skipLine = true
+    }
   }
 
-  function finish(run, status, error) {
+  function flushRun(run) {
+    run.buffer += run.decoder.end()
+    emitLines(run, true)
+    run.decoder = new StringDecoder('utf8')
+  }
+
+  function finish(run, status, error, { reopen = false } = {}) {
     if (!active.has(run.key)) return
+    flushRun(run)
     active.delete(run.key)
     const at = now()
     emit({
@@ -248,6 +426,30 @@ export function createLanesSource(options = {}) {
         finishedAt: iso(at),
       },
     })
+    if (reopen) {
+      quiet.set(run.key, run)
+      while (quiet.size > QUIET_KEPT) quiet.delete(quiet.keys().next().value)
+    }
+  }
+
+  function reopenRun(run) {
+    quiet.delete(run.key)
+    active.set(run.key, run)
+    run.lastGrowth = now()
+    emit({
+      type: 'heartbeat.run.status',
+      companyId: run.companyId,
+      createdAt: iso(run.lastGrowth),
+      payload: {
+        ...run.base,
+        status: 'running',
+        error: null,
+        errorCode: null,
+        startedAt: iso(run.startedAt),
+        finishedAt: null,
+      },
+    })
+    readNew(run)
   }
 
   function finishRecord(run, record) {
@@ -255,34 +457,22 @@ export function createLanesSource(options = {}) {
     finish(run, ok ? 'succeeded' : 'failed', ok ? null : failureText(record))
   }
 
-  function recordsByLog() {
-    const records = new Map()
-    let text
-    try {
-      text = readFileSync(recordsFile, 'utf8')
-    } catch {
-      return records
-    }
-    for (const line of text.split(/\r?\n/)) {
-      if (!line.trim()) continue
-      let record
-      try {
-        record = JSON.parse(line)
-      } catch {
-        continue
-      }
-      if (record && typeof record.log === 'string') records.set(pathKey(record.log), record)
-    }
-    return records
-  }
-
   function tick() {
     if (stopped || ticking) return
     ticking = true
     try {
       scan()
+      for (const run of [...quiet.values()]) {
+        let size
+        try {
+          size = statSync(run.path).size
+        } catch {
+          continue
+        }
+        if (size > run.offset) reopenRun(run)
+      }
       if (active.size === 0) return
-      const records = recordsByLog()
+      const records = recordsCache.read()
       for (const run of [...active.values()]) {
         readNew(run)
         const record = records.get(run.key)
@@ -290,7 +480,9 @@ export function createLanesSource(options = {}) {
           finishRecord(run, record)
           continue
         }
-        if (now() - run.lastGrowth >= quietMs) finish(run, 'failed', 'no record')
+        if (now() - run.lastGrowth >= quietMs && !laneLockAlive(folder, run.agent.key)) {
+          finish(run, 'failed', 'no record', { reopen: true })
+        }
       }
     } finally {
       ticking = false
@@ -321,6 +513,7 @@ export function createLanesSource(options = {}) {
   function stop() {
     stopped = true
     active.clear()
+    quiet.clear()
     if (timer) {
       clearInterval(timer)
       timer = null

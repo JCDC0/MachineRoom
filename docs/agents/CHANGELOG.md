@@ -8,6 +8,7 @@
 - The lane fallbacks answer the agents, tasks, live runs, approvals, comments and costs reads from the lane runs at once when the bridge's last Paperclip probe is down. They fall back only when the source has a lane agent, and a Paperclip error goes through when it has none (X8).
 - The Claude parser hears a child from any line that carries its call, not only a tool line, and keeps an `Agent` or `Task` with `run_in_background: true` open at its result (X9).
 - A `Glob`, `Grep` or `LS` label for a folder outside the project shows its base name, and a stream-json `Bash` label shortens an absolute path under the user profile folder to its base name (X10).
+- The lane source marks a log seen only when it adopts it, reopens a run ended for quiet when its log grows, waits for the lane lock, sends the held last line and only lines the reader marks read, keeps a run's start in the bridge history, reads `runs.jsonl` only when it changed, caps the held line at 1 MB, shows worktree runs from the repository's main checkout, and registers the lane parsers at bridge start (task Q5b).
 
 - Briefs Q5a, Q5b and Q5c: the V5 audit's findings X1 to X17, in three parts that touch separate files.
 
