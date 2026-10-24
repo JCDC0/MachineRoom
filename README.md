@@ -28,6 +28,7 @@ npm run serve -- up --root <your project folder>
 ## What you see
 
 - The hub: a flat ring in the middle. Each agent parks at its own slot, working or not. The orchestrator floats above the centre.
+- Sectors: when sub orchestrators are set, the ring splits into one named arc for each sub and one for the main orchestrator. Each lane parks inside its arc. A sub orchestrator floats above its arc, smaller than the main one and joined to it by a thin line. `?replay&fixture=scenario-i` plays a two minute demo where two sub orchestrators and their lanes work. With no ladder the ring is as above.
 - Folder cards: flat cards in a packed sphere around the hub, always facing you. The root sits below the hub and has no line. Lines join each top-level folder to the hub centre. The centre stands for the root and carries the project name. Every other folder joins its parent. Folders down to depth 2 are always drawn, up to 300 cards. Deeper folders appear while an agent works on them. They also appear if they were touched in the last 90 seconds, or if you pin them.
 - The tunnel: while an agent works, one straight solid line runs from it to the row of the file it touches. It is yellow, with yellow stripes and small packets running toward the file. Four yellow corner brackets sit around that card.
 - Colours:
@@ -36,8 +37,8 @@ npm run serve -- up --root <your project folder>
   - Green is finished work. A run that ends well turns the agent, its chip and the files it wrote green.
   - Red is failure. A failed tool call, test or run flashes red and leaves the file red until it is written again. A failed run turns the agent, its chip and the tunnel red.
 - Terminal chips: a chip beside each agent, joined by a thin line. It shows the name and a status word: yellow working, red error, green done. Click it, or the Log button in the agent list, to read its log. `T` opens the focused agent's chip, or every chip when no agent is focused.
-- The page: a menu across the top, the room in a wide lens below it, and a dock under the lens that scrolls. The dock holds the agent list on the left, the selected agent's context in the middle (status, model, task, command, cost, its last log lines), and the settings and the cost board on the right. The orchestrator chat stays fixed at the bottom right.
-- The agent list, in the dock: one row for each agent, with its lane key, status and a Log button. The orchestrator is first, then the lanes that are working, queued, failed or recently finished. The rest sit under one collapsible idle row.
+- The page: a menu across the top, the room in a wide lens below it, and a dock under the lens that scrolls. The dock holds the agent list on the left, the selected agent's context in the middle, and the settings and the cost board on the right. The context shows status, model, task, command, cost and the last log lines. An orchestrator also shows its context share and an Autocompact switch. Below 1280 pixels the columns stack in that order. Below 900 pixels the menu folds into one button. On a phone the lens keeps 300 pixels, the transport stacks, and the orchestrator chat is a full-width panel over the dock. The orchestrator chat stays fixed at the bottom right.
+- The agent list, in the dock: one row for each agent, with its lane key, status and a Log button. With a ladder, the list groups under the main orchestrator, then a header for each sub with its name, state and lane count, then a `Main` header for the lanes in no sub. Working, queued, failed and recently finished lanes come first in each group. The rest sit under one collapsible idle row.
 - A subagent appears beside its parent as a smaller shape with its own chip.
 - Follow mode: `F` cycles wide, close up and off. It follows the card an agent is touching. A click in the room, `0` or `1` to `9` ends it.
 - CONTROL at the top right, or `C`: opens the drawer with Dispatch, Tasks, Meters, Plan, Team and Reviews.
@@ -61,6 +62,12 @@ The orchestrator reads your project's own guide (`AGENTS.md`, `CLAUDE.md` or `do
 
 It starts at most one run per lane. It never pushes. It ends its turn after it starts the runs, so the runs do not stop when the turn does.
 
+When a session passes 80 percent of its context window, the orchestrator writes a short summary of the work and starts a new session from it. The Autocompact switch in the dock turns this off.
+
+### Sub orchestrators
+
+With the chat open, Attach adds a sub orchestrator. Give it a name, an id, a harness and model, the lanes it owns, one scope glob per line, and Restricted, which is on by default. A restricted sub is expected to change only the files in its scope. The bridge warns its parent when a lane branch goes outside it. Each sub gets its own sector of the ring and its own tab in the chat. Detach stops it behind a confirm card and returns its lanes to the main orchestrator. Lanes in no sub stay with the main orchestrator.
+
 ## Start one lane by hand
 
 A lane is one agent on one harness. Press `C` or click CONTROL, then open Dispatch. The `Run on this project` section appears when the room runs with `--lanes`.
@@ -71,13 +78,15 @@ A lane is one agent on one harness. Press `C` or click CONTROL, then open Dispat
 - Own worktree is on by default: the lane works in `<project folder>-mr-<lane>` beside your project, on its own queue branch, so several lanes can work at once and your folder is never touched. Each task is committed there when your project's tests pass.
 - With Own worktree off, one task runs in your project folder itself. The runner then makes no branch, writes no recording, and does not run your tests.
 - For several tasks, put a line with only `---` between them. The button reads `Run N tasks in order`. A queue needs a clean git folder: commit or stash first.
-- A queue makes the branch `machineroom/queue-<stamp>`. It runs your project's tests after each task, using `npm test` when `package.json` has a test script. It commits each task that passes and stops at the first failed task or test. It never touches your current branch and never pushes. It leaves the folder on the queue branch. `git switch -` goes back.
+- To give several tasks to different lanes, turn on `One lane per task`. The button reads `Run N tasks on N lanes`. The confirm card lists each task with the idle lane it goes to, and each run starts in its own worktree. The button refuses when there are fewer idle lanes than tasks.
+- A queue makes the branch `machineroom/queue-<lane>-<stamp>`. It runs your project's tests after each task, using `npm test` when `package.json` has a test script. It commits each task that passes and stops at the first failed task or test. It never touches your current branch and never pushes. It leaves the folder on the queue branch. `git switch -` goes back.
 
 The Runs list in the panel shows the running and recent runs with their last lines.
 
 ## Replay a recorded run
 
 - `/?replay` plays the recorded run that ships with the room. It needs no lane and no project.
+- `/?replay&fixture=scenario-i` plays the demo ladder: two sub orchestrators and their lanes work, so the sectors and the chat tabs have something to show.
 - A lane run on a brief writes a recording under `public/recordings/` in the MachineRoom folder and prints `room: /?recording=<name>`. Run `npm run build` again so the built room serves it, then open that link on the room's address.
 - A run on a project and a queue write no recording. They are live only.
 - `?replay&scale=200000` plays a seeded room of 200000 files in a tenth as many folders. `&fps` adds a frame time line. `?live&simulate` plays the recording through the live path with no lane and the badge reads `Demo`.
@@ -168,12 +177,13 @@ A seeded room at 40000 files.
 | Claude Code | In use: lane `claude` and the orchestrator | stream-json `tool_use` and `tool_result` lines, and a `Task` or `Agent` child while it works |
 | Hermes | Supported, retired | plain `read` and `delegate` lines |
 | AGY | Supported, retired | `step_update` lines, and `invoke_subagent` for a subagent |
+| ACP | Supported: no lane yet | `tool_call` updates, with each kind and location mapped to a touch |
 
-Hermes and AGY are retired for now in `docs/agents/lanes.json`. Remove `"retired": true` from one entry to bring it back, then check its `cli` block and model. New harnesses are planned in `docs/agents/HARNESSES.md`.
+Hermes and AGY are retired for now in `docs/agents/lanes.json`. Remove `"retired": true` from one entry to bring it back, then check its `cli` block and model. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`. The harness plan is in `docs/agents/HARNESSES.md`.
 
 ## Develop it
 
-`npm run dev` serves the viewer on port 5173, with no build. It needs a bridge for live data: run `npm run build` once, start `npm run serve` in another terminal, then open `http://localhost:5173/?live&bridge=http://127.0.0.1:5174`. `npm run build` then `npm run serve` serves the built viewer and the bridge on one port.
+`npm run dev` serves the viewer on port 5173, with no build. It needs a bridge for live data: run `npm run build` once, start `npm run serve` in another terminal, then open `http://localhost:5173/?live&bridge=http://127.0.0.1:5174`. `npm run build` then `npm run serve` serves the built viewer and the bridge on one port. `npm run preview` serves the built viewer through Vite, with no bridge.
 
 The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it.
 
@@ -215,6 +225,7 @@ A lane is one agent. On this repository, each lane has its own worktree and bran
 - Record an outcome. `npm run outcome -- <branch> merged --grade A-` records how a lane run ended. `npm run run-lane -- --outcomes [--since YYYY-MM-DD]` prints the merge table.
 - See it in the room. With `--lanes`, the room draws a run live as its log grows, with its reads and writes on the project's cards, and turns the lane green or red when the run ends. A run on a brief also writes a recording under `public/recordings/` and prints `room: /?recording=<name>`.
 - Try a lane's build beside the stable room. `npm run candidate -- <lane>` builds that worktree and serves it on port 5175, with its own bridge. Leave the stable room running and compare the two. It refuses a lane with no worktree, a worktree with uncommitted changes, and a port in use. See `docs/agents/CANDIDATE.md`.
+- Clean up the worktrees a project leaves. `npm run worktrees -- --project <folder>` lists each `<project folder>-mr-<lane>` with its branch, commits ahead of the project's branch, uncommitted changes and whether it is merged. Add `--clean` to remove only the clean merged ones. It never deletes a branch and never forces a removal. It leaves a lane whose lock file names a live process.
 - Review and merge. Press `C`, open Reviews. Each lane shows its branch, commits ahead, files and last run; click it for the diff. Merge is offered on a lane with commits ahead and no uncommitted changes, after a confirm card with a one-line message. The bridge merges one lane at a time, needs the main checkout on main with no uncommitted changes, a clean lane and the lane's exact head, stops on a conflict and leaves main as it was. It never pushes.
 
 ## Run a lane from a terminal
@@ -236,7 +247,7 @@ To run a queue of tasks on that folder, write them in a plain text file with a l
 npm run run-lane -- opencode --project <folder> --queue queue.txt --test "npm test"
 ```
 
-A queue needs a clean git folder, so keep the queue file outside it or commit it first. Before the first task the runner makes the branch `machineroom/queue-<stamp>` from the folder's current HEAD. Each task runs as its own run, then the test command runs. A task that ends well and passes its tests is committed on that branch with its first line as the subject; a task with no change is noted and the queue goes on. The first failed task or failed test stops the queue and leaves that task's changes uncommitted for you to look at. `--test` defaults to `npm test` when the folder's `package.json` has a test script, and to none otherwise, so a task then passes on the exit code alone. `--minutes` limits each task. The queue never pushes and never touches the main branch. It leaves the folder on the queue branch and prints the branch and one line per task; `git switch -` goes back.
+A queue needs a clean git folder, so keep the queue file outside it or commit it first. Before the first task the runner makes the branch `machineroom/queue-<lane>-<stamp>` from the folder's current HEAD. Each task runs as its own run, then the test command runs. A task that ends well and passes its tests is committed on that branch with its first line as the subject; a task with no change is noted and the queue goes on. The first failed task or failed test stops the queue and leaves that task's changes uncommitted for you to look at. `--test` defaults to `npm test` when the folder's `package.json` has a test script, and to none otherwise, so a task then passes on the exit code alone. `--minutes` limits each task. The queue never pushes and never touches the main branch. It leaves the folder on the queue branch and prints the branch and one line per task; `git switch -` goes back.
 
 With `--lanes`, the Dispatch panel can start the same kind of run on the room's own folder: pick a lane, write one task or several separated by a line of `---`, and turn on `Allow uncommitted changes` when the folder has them and you run a single task. A queue needs a clean folder, so that switch is off then.
 
