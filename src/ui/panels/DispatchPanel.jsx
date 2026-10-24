@@ -11,7 +11,7 @@ import {
 import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
 import { agentForLane, routeFields } from './route.js'
-import { PROJECT_QUEUE_TEXT_LIMIT, projectRunConfirm, projectRunLabel, projectRunLanes, projectTaskProblem, recordLine, resultWord, splitTasks, timeSinceStart } from './runs.js'
+import { PROJECT_QUEUE_TEXT_LIMIT, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitTasks, timeSinceStart } from './runs.js'
 import { profileFromBrief } from '../../policy/profile.js'
 
 export default function DispatchPanel({
@@ -66,6 +66,7 @@ export default function DispatchPanel({
   const [lanesMode, setLanesMode] = useState(false)
   const [projectLane, setProjectLane] = useState('')
   const [projectTask, setProjectTask] = useState('')
+  const [projectOwnWorktree, setProjectOwnWorktree] = useState(true)
   const [projectAllowDirty, setProjectAllowDirty] = useState(false)
   const [projectShowConfirm, setProjectShowConfirm] = useState(false)
   const [projectStarting, setProjectStarting] = useState(false)
@@ -95,6 +96,8 @@ export default function DispatchPanel({
   const selectedBrief = briefs.find((item) => item.id === selectedBriefId)
   const runLane = selectedBrief ? runLaneFor(selectedBrief, runsState.running, VALID_LANES) : null
   const canRunBrief = typeof client?.startRun === 'function' && Boolean(runLane)
+  const projectLanes = projectRunLanes(agents, runsState.running)
+  const projectLaneRunning = projectLanes.some((lane) => lane.key === projectLane && lane.running)
 
   async function loadData() {
     if (!client || (Array.isArray(initialAgents) && Array.isArray(initialModels))) return
@@ -382,7 +385,7 @@ export default function DispatchPanel({
 
   function openProjectConfirm() {
     const tasks = splitTasks(projectTask)
-    if (!projectLane || projectTaskProblem(tasks)) return
+    if (!projectLane || projectLaneRunning || projectTaskProblem(tasks)) return
     setProjectShowConfirm(true)
     setProjectError(null)
   }
@@ -390,6 +393,10 @@ export default function DispatchPanel({
   async function handleConfirmProjectRun() {
     const tasks = splitTasks(projectTask)
     const problem = projectTaskProblem(tasks)
+    if (projectLaneRunning) {
+      setProjectError('That lane is already running.')
+      return
+    }
     if (!projectLane || problem || typeof client?.startRun !== 'function') {
       if (problem) setProjectError(problem)
       return
@@ -397,11 +404,13 @@ export default function DispatchPanel({
     setProjectStarting(true)
     setProjectError(null)
     try {
-      if (tasks.length > 1) {
-        await client.startRun(projectLane, { tasks })
-      } else {
-        await client.startRun(projectLane, { task: projectTask, allowDirty: projectAllowDirty })
-      }
+      const run = projectRunBody({
+        task: projectTask,
+        tasks,
+        allowDirty: projectAllowDirty,
+        worktree: projectOwnWorktree,
+      })
+      await client.startRun(projectLane, run)
       setProjectShowConfirm(false)
       setProjectTask('')
       setProjectAllowDirty(false)
@@ -547,7 +556,6 @@ export default function DispatchPanel({
   const otherModels = availableModels.filter(
     (item) => !item.tier || !['small', 'medium', 'large'].includes(item.tier)
   )
-  const projectLanes = projectRunLanes(agents)
   const projectTasks = splitTasks(projectTask)
   const projectQueue = projectTasks.length > 1
   const projectConfirm = projectRunConfirm({
@@ -556,8 +564,13 @@ export default function DispatchPanel({
     task: projectTask,
     tasks: projectTasks,
   })
+  const ownWorktreeName = projectOwnWorktree ? projectWorktreeName(projectName, projectLane) : ''
   const projectProblem = projectTaskProblem(projectTasks)
-  const canStartProject = typeof client?.startRun === 'function' && Boolean(projectLane) && !projectProblem
+  const canStartProject =
+    typeof client?.startRun === 'function' &&
+    Boolean(projectLane) &&
+    !projectLaneRunning &&
+    !projectProblem
 
   return (
     <form className="dispatch-form" onSubmit={handleSubmit} noValidate>
@@ -592,11 +605,14 @@ export default function DispatchPanel({
             >
               <option value="">Select a lane</option>
               {projectLanes.map((lane) => (
-                <option key={lane.key} value={lane.key}>
-                  {lane.name}
+                <option key={lane.key} value={lane.key} disabled={lane.running}>
+                  {lane.running ? `${lane.name} running` : lane.name}
                 </option>
               ))}
             </select>
+            {projectLaneRunning && (
+              <div className="brief-state is-dim mono">That lane is already running.</div>
+            )}
           </div>
 
           <div className="panel-field">
@@ -619,20 +635,39 @@ export default function DispatchPanel({
             <label>
               <input
                 type="checkbox"
-                checked={projectQueue ? false : projectAllowDirty}
-                disabled={projectQueue}
+                checked={projectOwnWorktree}
                 onChange={(event) => {
-                  setProjectAllowDirty(event.target.checked)
+                  const on = event.target.checked
+                  setProjectOwnWorktree(on)
+                  if (on) setProjectAllowDirty(false)
                   setProjectShowConfirm(false)
                   setProjectError(null)
                 }}
               />
-              <span>Allow uncommitted changes</span>
+              <span>Own worktree</span>
             </label>
-            {projectQueue && (
-              <div className="brief-state is-dim mono">A queue needs a clean project</div>
-            )}
           </div>
+
+          {!projectOwnWorktree && (
+            <div className="panel-checkbox-field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={projectQueue ? false : projectAllowDirty}
+                  disabled={projectQueue}
+                  onChange={(event) => {
+                    setProjectAllowDirty(event.target.checked)
+                    setProjectShowConfirm(false)
+                    setProjectError(null)
+                  }}
+                />
+                <span>Allow uncommitted changes</span>
+              </label>
+              {projectQueue && (
+                <div className="brief-state is-dim mono">A queue needs a clean project</div>
+              )}
+            </div>
+          )}
 
           <div className="panel-actions">
             <button
@@ -656,9 +691,17 @@ export default function DispatchPanel({
                   <span className="brief-confirm-task">Task: {projectConfirm.task}</span>
                 )}
               </div>
+              {projectOwnWorktree && (
+                <div className="brief-confirm-warning">
+                  {ownWorktreeName
+                    ? `The lane works in ${ownWorktreeName} beside the project, on its own branch, never on main.`
+                    : 'The lane works in its own worktree beside the project, on its own branch, never on main.'}
+                </div>
+              )}
               {projectQueue && (
                 <div className="brief-confirm-warning">
-                  The tasks run one after another on a new branch in the project, each committed when the
+                  The tasks run one after another on a new branch
+                  {projectOwnWorktree ? ' in its own worktree' : ' in the project'}, each committed when the
                   project's tests pass, stopping at the first failure, never on main and never pushed.
                 </div>
               )}

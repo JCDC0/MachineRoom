@@ -9,8 +9,10 @@ import {
   PROJECT_TASK_SEPARATOR_PROBLEM,
   PROJECT_TASKS_PROBLEM,
   projectRunConfirm,
+  projectRunBody,
   projectRunLabel,
   projectTaskProblem,
+  projectWorktreeName,
   recordLine,
   resultWord,
   runResultWord,
@@ -235,6 +237,50 @@ describe('projectRunLabel', () => {
   })
 })
 
+describe('projectWorktreeName', () => {
+  it('names the worktree folder beside the project', () => {
+    expect(projectWorktreeName('Other', 'opencode')).toBe('Other-mr-opencode')
+    expect(projectWorktreeName('C:\\GitHub\\Other', 'claude')).toBe('Other-mr-claude')
+    expect(projectWorktreeName('work/Other/', 'opencode10')).toBe('Other-mr-opencode10')
+  })
+
+  it('returns an empty name when the project or lane is missing', () => {
+    expect(projectWorktreeName('', 'opencode')).toBe('')
+    expect(projectWorktreeName('Other', '')).toBe('')
+    expect(projectWorktreeName(null, 'opencode')).toBe('')
+    expect(projectWorktreeName('C:', 'opencode')).toBe('')
+  })
+})
+
+describe('projectRunBody', () => {
+  it('sends a single task with the worktree switch', () => {
+    expect(projectRunBody({ task: 'Fix it.', allowDirty: true, worktree: true })).toEqual({
+      task: 'Fix it.',
+      allowDirty: false,
+      worktree: true,
+    })
+    expect(projectRunBody({ task: 'Fix it.', worktree: false })).toEqual({
+      task: 'Fix it.',
+      allowDirty: false,
+    })
+  })
+
+  it('sends a queue with the worktree switch', () => {
+    expect(projectRunBody({ tasks: ['One.', 'Two.'], allowDirty: true, worktree: true })).toEqual({
+      tasks: ['One.', 'Two.'],
+      worktree: true,
+    })
+    expect(projectRunBody({ tasks: ['One.', 'Two.'], worktree: false })).toEqual({
+      tasks: ['One.', 'Two.'],
+    })
+  })
+
+  it('falls back to an empty task for junk input', () => {
+    expect(projectRunBody()).toEqual({ task: '', allowDirty: false })
+    expect(projectRunBody({ task: 7, worktree: 'yes' })).toEqual({ task: '', allowDirty: false })
+  })
+})
+
 describe('projectRunConfirm with a task list', () => {
   it('keeps the single task shape and names a queue', () => {
     expect(projectRunConfirm({ lane: 'opencode', project: 'Other', tasks: ['One.'] })).toEqual({
@@ -273,6 +319,20 @@ describe('the control client startRun', () => {
     expect(bodies).toEqual([{ lane: 'opencode', tasks: ['One.', 'Two.'], confirmed: true }])
     expect(answer).toMatchObject({ lane: 'opencode', queue: true, tasks: 2 })
   })
+
+  it('passes the worktree switch through to the bridge', async () => {
+    const bodies = []
+    const client = createClient({
+      baseUrl: 'http://127.0.0.1:5174',
+      fetchImpl: async (url, options) => {
+        bodies.push(JSON.parse(options.body))
+        return { ok: true, json: async () => ({ lane: 'opencode', briefs: [], worktree: true }) }
+      },
+    })
+    const answer = await client.startRun('opencode', { task: 'Fix it.', worktree: true })
+    expect(bodies).toEqual([{ lane: 'opencode', task: 'Fix it.', worktree: true, confirmed: true }])
+    expect(answer).toMatchObject({ lane: 'opencode', worktree: true })
+  })
 })
 
 describe('mock client runs lifecycle', () => {
@@ -298,5 +358,22 @@ describe('mock client runs lifecycle', () => {
     expect(runsAfterDone.recent).toHaveLength(1)
     expect(resultWord(runsAfterDone.recent[0])).toBe('finished')
     expect(recordLine(runsAfterDone.recent[0])).toContain('hermes | P5 | finished')
+  })
+
+  it('keeps the worktree switch on the running entry and the record', async () => {
+    const client = createMockClient({ latencyMs: 0, runMs: 60 })
+    const entry = await client.startRun('opencode', { task: 'Fix it.', worktree: true })
+    expect(entry.worktree).toBe(true)
+
+    const active = await client.runs()
+    expect(active.running[0].worktree).toBe(true)
+
+    const deadline = Date.now() + 3000
+    let runs = active
+    while (runs.running.length > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      runs = await client.runs()
+    }
+    expect(runs.recent[0].worktree).toBe(true)
   })
 })

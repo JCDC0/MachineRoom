@@ -582,6 +582,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
         const projectRun = body.briefs === undefined
         const queue = body.tasks !== undefined
+        const worktree = projectRun && body.worktree === true
         if (queue && (body.task !== undefined || body.briefs !== undefined)) throw new Error(RUN_KIND_PROBLEM)
         const briefs = projectRun ? [] : body.briefs
         let task = ''
@@ -605,6 +606,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
         if (runsState.running.some((item) => item.lane === lane)) throw new Error('That lane is already running.')
         const entry = { lane, briefs: [...briefs], startedAt: new Date(now()).toISOString(), lastLines: [] }
+        if (worktree) entry.worktree = true
         if (queue) {
           entry.queue = true
           entry.tasks = tasks.length
@@ -633,6 +635,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           }
           if (projectRun) {
             record.project = 'MachineRoom'
+            if (worktree) record.worktree = true
             if (queue) {
               record.queue = true
               record.tasks = tasks.length
