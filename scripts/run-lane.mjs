@@ -24,12 +24,17 @@ function stamp(date = new Date()) {
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
 }
 
+function runsFolder() {
+  const given = process.env.MACHINEROOM_RUNS
+  return given ? resolve(given) : join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+}
+
 function runsFile() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl')
+  return join(runsFolder(), 'runs.jsonl')
 }
 
 function outcomesFile() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'outcomes.jsonl')
+  return join(runsFolder(), 'outcomes.jsonl')
 }
 
 function gitStatus(cwd) {
@@ -227,10 +232,6 @@ function queueGit(project, branch, lane) {
       return String(run(['rev-parse', '--short', 'HEAD']).stdout ?? '').trim()
     },
   }
-}
-
-function runsFolder() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
 function readTask(options) {
@@ -479,7 +480,10 @@ async function main() {
   if (options.list) return listRuns()
   if (options.stats) return statsRuns(options)
   if (options.outcomes) return outcomeRuns(options)
-  const lanes = JSON.parse(read('lanes.json'))
+  const lanesPath = process.env.MACHINEROOM_LANES_FILE
+    ? resolve(process.env.MACHINEROOM_LANES_FILE)
+    : join(docs, 'lanes.json')
+  const lanes = JSON.parse(readFileSync(lanesPath, 'utf8'))
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
@@ -502,7 +506,7 @@ async function main() {
     const task = readTask(options)
     const prompt = unattendedPrompt(task)
     const name = `${options.lane}-project-${stamp()}`
-    const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+    const folder = runsFolder()
     const logPath = join(folder, `${name}.log`)
     const usageFile = join(folder, `${name}.usage.json`)
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
@@ -541,7 +545,7 @@ async function main() {
   const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
   const prompt = unattendedPrompt(buildPrompt({ briefs: wanted, laneKey: options.lane, lanes, rules, version }))
   const name = `${options.lane}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
-  const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+  const folder = runsFolder()
   const logPath = join(folder, `${name}.log`)
   const usageFile = join(folder, `${name}.usage.json`)
 

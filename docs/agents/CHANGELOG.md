@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The orchestrator loop is tested end to end through real processes: a fake Claude turn starts a fake lane through `POST /api/control/runs`, the lane commits once on its queue branch in `<project>-mr-<lane>`, the run end wakes a second turn with a room message that names the branch, and its reply reaches the chat; the runs route and the runner take a test lane file and runs folder (task Q7).
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
 - The orchestrator chat names the project folder: the header shows its base name beside the model and the first-message card gives the full path (task Q6c).

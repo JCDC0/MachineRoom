@@ -82,8 +82,8 @@ export function tasksProblem(tasks) {
   return null
 }
 
-function queuePath(lane) {
-  return join(dirname(runsFile()), `${lane}-queue-${stamp()}.queue.txt`)
+function queuePath(lane, folder = dirname(runsFile())) {
+  return join(folder, `${lane}-queue-${stamp()}.queue.txt`)
 }
 
 function writeQueue(file, tasks) {
@@ -162,9 +162,13 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {} }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, lanesFile = '', runsFolder = '' }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
+  const laneFile = lanesFile ? resolve(lanesFile) : REPO_LANES
+  const recordsDir = () => (runsFolder ? resolve(runsFolder) : dirname(runsFile()))
+  const recordsPath = () => join(recordsDir(), 'runs.jsonl')
+  const outcomesPath = () => join(recordsDir(), 'outcomes.jsonl')
   const command = runnerCommand ?? { file: process.execPath, args: ['scripts/run-lane.mjs'] }
   const running = new Map()
   let stopped = false
@@ -231,6 +235,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       shell: false,
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        MACHINEROOM_RUNS: recordsDir(),
+        ...(lanesFile && projectRun ? { MACHINEROOM_LANES_FILE: laneFile } : {}),
+      },
       ...treeSpawnOptions(),
     })
     item.child = child
@@ -267,8 +276,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         sendJson(req, res, 405, { error: 'Method not allowed.' })
         return true
       }
-      const records = readAllRunRecords(runsFile())
-      const outcomes = readOutcomeRecords(outcomesFile())
+      const records = readAllRunRecords(recordsPath())
+      const outcomes = readOutcomeRecords(outcomesPath())
       sendJson(req, res, 200, { rows: outcomeTable(records, outcomes) })
       return true
     }
@@ -282,7 +291,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         sendJson(req, res, 400, { error: SINCE_PROBLEM })
         return true
       }
-      const records = readAllRunRecords(runsFile())
+      const records = readAllRunRecords(recordsPath())
       sendJson(req, res, 200, laneStats(records, since === null ? {} : { since }))
       return true
     }
@@ -292,7 +301,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
         running: [...running.values()].map(snapshot),
-        recent: readRunRecords(runsFile()),
+        recent: readRunRecords(recordsPath()),
       })
       return true
     }
@@ -317,7 +326,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     const projectRun = body.briefs === undefined
-    const lanesText = projectRun ? readPath(REPO_LANES) : readText('lanes.json')
+    const lanesText = projectRun ? readPath(laneFile) : readText('lanes.json')
     const tasksText = projectRun ? null : readText('TASKS.md')
     if (lanesText === null || (!projectRun && tasksText === null)) {
       sendJson(req, res, 404, { error: 'The brief files are missing.' })
@@ -420,7 +429,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     if (hasTasks) {
-      queueFile = queuePath(lane)
+      queueFile = queuePath(lane, recordsDir())
       try {
         writeQueue(queueFile, body.tasks)
       } catch {
