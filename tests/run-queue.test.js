@@ -1,19 +1,43 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { takeProjectLock } from '../scripts/run-lane.mjs'
-import { makeTempDir } from './helpers/tempRoot.js'
+import { killTree } from '../server/processTree.js'
+import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
 const QUEUE_BRANCH = 'machineroom/queue-opencode-20261024-120000'
+const NO_GIT_CONFIG = join(processTempRoot(), 'no-git-config')
+let templateCleanup = null
+const GIT_ENV = {
+  GIT_CONFIG_SYSTEM: NO_GIT_CONFIG,
+  GIT_CONFIG_GLOBAL: NO_GIT_CONFIG,
+  GIT_CONFIG_NOSYSTEM: '1',
+  GIT_CONFIG_COUNT: '2',
+  GIT_CONFIG_KEY_0: 'commit.gpgsign',
+  GIT_CONFIG_VALUE_0: 'false',
+  GIT_CONFIG_KEY_1: 'core.autocrlf',
+  GIT_CONFIG_VALUE_1: 'false',
+  GIT_OPTIONAL_LOCKS: '0',
+  GIT_TERMINAL_PROMPT: '0',
+  GIT_AUTHOR_NAME: 'MachineRoom Queue',
+  GIT_AUTHOR_EMAIL: 'queue@example.com',
+  GIT_COMMITTER_NAME: 'MachineRoom Queue',
+  GIT_COMMITTER_EMAIL: 'queue@example.com',
+}
 
 function git(folder, args) {
-  const result = spawnSync(gitPath(), args, { cwd: folder, encoding: 'utf8', windowsHide: true })
+  const result = spawnSync(gitPath(), args, {
+    cwd: folder,
+    encoding: 'utf8',
+    windowsHide: true,
+    env: { ...process.env, ...GIT_ENV },
+  })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(String(result.stderr ?? '').trim() || `git ${args[0]} failed.`)
   return String(result.stdout ?? '')
@@ -21,17 +45,28 @@ function git(folder, args) {
 
 function initRepo(parent) {
   const folder = join(parent, 'project')
+  cpSync(TEMPLATE_REPO, folder, { recursive: true })
+  return folder
+}
+
+function queueTemplate() {
+  const base = makeTempDir('machine-room-queue-template-')
+  templateCleanup = () => removeTempDir(base)
+  const folder = join(base, 'project')
   mkdirSync(folder)
-  git(folder, ['init'])
-  git(folder, ['config', 'user.email', 'queue@example.com'])
-  git(folder, ['config', 'user.name', 'MachineRoom Queue'])
-  git(folder, ['config', 'commit.gpgsign', 'false'])
+  git(folder, ['init', '-b', 'main'])
   writeFileSync(join(folder, 'readme.txt'), 'start\n')
   git(folder, ['add', '-A'])
   git(folder, ['commit', '-m', 'start'])
-  git(folder, ['branch', '-M', 'main'])
   return folder
 }
+
+const TEMPLATE_REPO = queueTemplate()
+
+afterAll(() => {
+  templateCleanup?.()
+  templateCleanup = null
+})
 
 function adapter(folder, branch = QUEUE_BRANCH, lane = 'opencode') {
   return {
@@ -42,6 +77,7 @@ function adapter(folder, branch = QUEUE_BRANCH, lane = 'opencode') {
         cwd: folder,
         encoding: 'utf8',
         windowsHide: true,
+        env: { ...process.env, ...GIT_ENV },
       })
       return result.status === 0
     },
@@ -60,21 +96,23 @@ function adapter(folder, branch = QUEUE_BRANCH, lane = 'opencode') {
 }
 
 function remove(folder) {
-  rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  removeTempDir(folder)
 }
 
 function runLane(args, extra = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, ...extra },
+      windowsHide: true,
+      env: { ...process.env, ...GIT_ENV, ...extra },
     })
     let stdout = ''
     let stderr = ''
+    let timedOut = false
     const timer = setTimeout(() => {
-      child.kill()
-      rejectRun(new Error(`run-lane did not exit. stderr: ${stderr}`))
-    }, 30000)
+      timedOut = true
+      killTree(child)
+    }, 25000)
     child.stdout.on('data', (chunk) => {
       stdout += chunk
     })
@@ -85,8 +123,12 @@ function runLane(args, extra = {}) {
       clearTimeout(timer)
       rejectRun(error)
     })
-    child.once('exit', (code) => {
+    child.once('close', (code) => {
       clearTimeout(timer)
+      if (timedOut) {
+        rejectRun(new Error(`run-lane did not exit. stderr: ${stderr}`))
+        return
+      }
       resolveRun({ code, stdout, stderr })
     })
   })
@@ -162,7 +204,7 @@ describe('parseQueueArgs', () => {
   })
 })
 
-describe('runQueue', () => {
+describe('runQueue', { timeout: 30000 }, () => {
   it('commits three tasks on a new branch and leaves main untouched', async () => {
     const parent = makeTempDir('machine-room-queue-')
     try {
@@ -347,7 +389,7 @@ describe('formatQueueSummary', () => {
   })
 })
 
-describe('scripts/run-lane.mjs with --queue', () => {
+describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
   it('prints the tasks, the branch and the test command with --dry-run and changes nothing', async () => {
     const parent = makeTempDir('machine-room-queue-')
     try {
