@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The dock's agent list follows the ladder: the main orchestrator first, a header per sub with its name, its state word and its lane count, its lanes indented 16 pixels, then the lanes in no sub under a `Main` header, with the active order, the `N idle lanes` row and the number keys inside each group, and the flat list when there is no ladder (task V25).
 - The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - Dispatch's project section can give each of several tasks its own idle lane and worktree, pairing them in picker order with `planLaneTasks`, refusing when there are too few idle lanes, and starting one run per task three seconds apart with each start's answer shown (task R11).
 - The hub's sector arcs are brighter and wider with a clear gap, their labels stay at 12 pixels or more on screen, and subs float further from the main orchestrator so their chips and callouts stay apart (task V23).

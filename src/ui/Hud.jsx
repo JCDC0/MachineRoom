@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
@@ -10,6 +10,7 @@ import Settings from './Settings.jsx'
 import { agentForNumber, agentList } from './agentList.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
+import { ladderGroups } from './ladderGroups.js'
 import { orchestratorOn } from './orchestratorChat.js'
 import {
   areAllTerminalsOpen,
@@ -84,6 +85,7 @@ export default function Hud({
   onToggleTerminal = () => {},
   onShowTerminals = () => {},
   health = null,
+  ladder = null,
   helpOpen: controlledHelpOpen,
   initialHelpOpen = false,
   assistantOpen = false,
@@ -116,13 +118,14 @@ export default function Hud({
 
   const agents = (snapshot?.agents ?? []).map(({ key, name }) => ({ key, name }))
   const list = agentList(snapshot?.agents ?? [], idleOpen)
+  const grouped = ladderGroups(list.rows, ladder)
+  const nav = grouped ?? list
   const activeRows = list.rows.filter((row) => row.group !== 'idle')
   const idleRows = list.rows.filter((row) => row.group === 'idle')
-  const listRef = useRef(list)
+  const listRef = useRef(nav)
   const focusRef = useRef(onFocus)
-  listRef.current = list
+  listRef.current = nav
   focusRef.current = onFocus
-  const idleLabel = `${list.idleCount} idle ${list.idleCount === 1 ? 'lane' : 'lanes'}`
   const context = { agents, paths: assistantPaths }
 
   function closeGuide() {
@@ -215,7 +218,8 @@ export default function Hud({
     }
   }, [logOpen, visibleLog.length])
 
-  function renderAgentRow({ agent, depth, number, group, visible }) {
+  function renderAgentRow(row, indent = 0) {
+    const { agent, depth, number, group, visible } = row
     const isOpen = isTerminalOpen(openTerminals, agent.key)
     const classes = [
       'hud-agent-row',
@@ -224,12 +228,13 @@ export default function Hud({
     ]
       .filter(Boolean)
       .join(' ')
+    const left = indent + (depth > 0 ? depth * 16 : 0)
     return (
       <div
         key={agent.key}
         className={classes}
         aria-hidden={visible ? undefined : true}
-        style={depth > 0 ? { paddingLeft: `${depth * 16}px` } : undefined}
+        style={left > 0 ? { paddingLeft: `${left}px` } : undefined}
       >
         <button
           type="button"
@@ -256,6 +261,36 @@ export default function Hud({
           onClick={() => onToggleTerminal(agent.key)}
         >
           Log
+        </button>
+      </div>
+    )
+  }
+
+  function renderGroupHeader(group) {
+    if (!group.header) return null
+    const state = group.header.state
+    const stateText = state ? STATUS_TEXT[state] ?? state : ''
+    const count = group.header.laneCount
+    return (
+      <div className="hud-agent-row hud-agent-group">
+        <span className="agent-name">{group.header.name}</span>
+        {stateText ? <span className="agent-subtag agent-status mono">{stateText}</span> : null}
+        <span className="agent-subtag agent-lane mono">{`${count} ${count === 1 ? 'lane' : 'lanes'}`}</span>
+      </div>
+    )
+  }
+
+  function renderIdleRow(count) {
+    return (
+      <div className="hud-agent-row">
+        <button
+          type="button"
+          className="idle-toggle"
+          aria-expanded={idleOpen}
+          onClick={() => setIdleOpen((open) => !open)}
+        >
+          <span className="idle-toggle-label">{`${count} idle ${count === 1 ? 'lane' : 'lanes'}`}</span>
+          <span className="agent-key mono">{idleOpen ? '-' : '+'}</span>
         </button>
       </div>
     )
@@ -411,21 +446,22 @@ export default function Hud({
           ) : null}
           <div className="hud-agents-box">
             <nav className="hud-agents" aria-label="Agents">
-              {activeRows.map(renderAgentRow)}
-              {list.idleCount > 0 && (
-                <div className="hud-agent-row">
-                  <button
-                    type="button"
-                    className="idle-toggle"
-                    aria-expanded={idleOpen}
-                    onClick={() => setIdleOpen((open) => !open)}
-                  >
-                    <span className="idle-toggle-label">{idleLabel}</span>
-                    <span className="agent-key mono">{idleOpen ? '-' : '+'}</span>
-                  </button>
-                </div>
-              )}
-              {idleRows.map(renderAgentRow)}
+              {grouped
+                ? grouped.groups.map((group) => (
+                    <Fragment key={group.key}>
+                      {renderGroupHeader(group)}
+                      {group.rows.map((row) => renderAgentRow(row, group.indent))}
+                      {group.idleCount > 0 && renderIdleRow(group.idleCount)}
+                      {group.idleRows.map((row) => renderAgentRow(row, group.indent))}
+                    </Fragment>
+                  ))
+                : (
+                    <>
+                      {activeRows.map((row) => renderAgentRow(row))}
+                      {list.idleCount > 0 && renderIdleRow(list.idleCount)}
+                      {idleRows.map((row) => renderAgentRow(row))}
+                    </>
+                  )}
               <div className="hud-agent-row">
                 <button
                   type="button"
