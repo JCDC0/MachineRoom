@@ -40,7 +40,16 @@ export function toAgents(rawAgents) {
       for (let n = 2; taken.has(key); n += 1) key = `${slug(raw.name)}-${n}`
     }
     taken.add(key)
-    return { id: raw.id, key, name: raw.name, adapterType: raw.adapterType, role, parser }
+    return {
+      id: raw.id,
+      key,
+      name: raw.name,
+      adapterType: raw.adapterType,
+      role,
+      parser,
+      harness: typeof raw.harness === 'string' ? raw.harness : null,
+      model: typeof raw.model === 'string' ? raw.model : null,
+    }
   })
   const rank = (agent) => {
     const index = AGENT_ORDER.indexOf(agent.parser)

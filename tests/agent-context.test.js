@@ -10,6 +10,7 @@ const lane = {
   key: 'opencode',
   name: 'OpenCode',
   adapterType: 'opencode_local',
+  harness: 'opencode',
   model: 'opencode-go/deepseek-v4.1-flash',
   status: 'idle',
 }
@@ -19,6 +20,7 @@ const orchestrator = {
   key: 'orchestrator',
   name: 'Orchestrator',
   adapterType: 'claude_local',
+  harness: 'claude',
   model: 'opus',
   status: 'idle',
 }
@@ -56,7 +58,7 @@ describe('agentContext', () => {
     expect(result.isOrchestrator).toBe(false)
     expect(result.key).toBe('opencode')
     expect(result.name).toBe('OpenCode')
-    expect(result.harness).toBe('opencode_local')
+    expect(result.harness).toBe('opencode')
     expect(result.model).toBe('opencode-go/deepseek-v4.1-flash')
     expect(result.status).toBe('idle')
     expect(result.task).toBe('none')
@@ -151,7 +153,7 @@ describe('agentContext', () => {
     expect(result.isOrchestrator).toBe(true)
     expect(result.key).toBe('orchestrator')
     expect(result.name).toBe('Orchestrator')
-    expect(result.harness).toBe('claude_local')
+    expect(result.harness).toBe('claude')
     expect(result.model).toBe('opus')
     expect(result.status).toBe('working')
     expect(result.context).toEqual({

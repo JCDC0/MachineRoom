@@ -36,7 +36,17 @@ export function laneAgents(lanes) {
     try {
       const file = agentsFile(lane, lanes)
       const agent = file.agents[0]
-      if (agent) agents.push({ ...agent, key: lane, role: null })
+      if (agent) {
+        const harness = entry.cli.harness
+        const model = entry.cli.model
+        agents.push({
+          ...agent,
+          key: lane,
+          role: null,
+          harness: typeof harness === 'string' && harness ? harness : agent.parser,
+          model: typeof model === 'string' && model ? model : null,
+        })
+      }
     } catch {}
   }
   return agents

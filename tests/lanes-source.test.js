@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf } from '../server/lanes-source.js'
+import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readLanes } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
@@ -89,7 +89,30 @@ describe('lane agents', () => {
     expect(agents.filter((agent) => agent.key !== 'agy' && agent.key !== 'claude' && agent.key !== 'orchestrator').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
     expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
+    expect(agents.find((agent) => agent.key === 'orchestrator')).toMatchObject({ harness: 'claude', model: 'opus' })
+    expect(agents.find((agent) => agent.key === 'opencode')).toMatchObject({
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+    })
     expect(agents.some((agent) => agent.key === 'hermes' || agent.key === 'agy')).toBe(false)
+  })
+
+  it('names each agent its harness and model from a lane file', () => {
+    const folder = tempDir('mr-lane-file-')
+    mkdirSync(join(folder, 'docs', 'agents'), { recursive: true })
+    writeFileSync(
+      join(folder, 'docs', 'agents', 'lanes.json'),
+      JSON.stringify({
+        orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
+        opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+      })
+    )
+
+    const agents = laneAgents(readLanes(folder))
+    expect(agents).toEqual([
+      expect.objectContaining({ key: 'orchestrator', harness: 'claude', model: 'opus' }),
+      expect.objectContaining({ key: 'opencode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }),
+    ])
   })
 
   it('lists AGY once its lane has a command line, with the process adapter', () => {

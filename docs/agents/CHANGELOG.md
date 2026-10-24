@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
 - The first visit guide names the lens, the dock and its three columns, the tunnel and the colours, the chat with its tabs, and the keys, and the waiting card points at the chat at the bottom right (task N3).

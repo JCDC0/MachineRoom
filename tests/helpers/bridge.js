@@ -10,9 +10,9 @@ import { makeTempDir } from './tempRoot.js'
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'public', 'fixtures')
 
 export const TEST_LANES = {
-  claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude' }, worktree: 'C:\\work\\claude' },
-  hermes: { name: 'Hermes', harness: 'Hermes', cli: { harness: 'hermes' }, worktree: 'C:\\work\\hermes' },
-  opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode' }, worktree: 'C:\\work\\opencode' },
+  claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', model: 'sonnet' }, worktree: 'C:\\work\\claude' },
+  hermes: { name: 'Hermes', harness: 'Hermes', cli: { harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' }, worktree: 'C:\\work\\hermes' },
+  opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' }, worktree: 'C:\\work\\opencode' },
 }
 
 export function makeSandbox() {

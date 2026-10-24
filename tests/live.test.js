@@ -53,6 +53,19 @@ describe('agent discovery', () => {
       3: null,
     })
   })
+
+  it('keeps the harness and model the bridge reports', () => {
+    const [agent] = toAgents([
+      {
+        id: 'a',
+        name: 'OpenCode',
+        adapterType: 'opencode_local',
+        harness: 'opencode',
+        model: 'opencode-go/deepseek-v4.1-flash',
+      },
+    ])
+    expect(agent).toMatchObject({ harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' })
+  })
 })
 
 describe('socket url', () => {
