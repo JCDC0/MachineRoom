@@ -155,6 +155,24 @@ function costRowFor(costs, selected) {
   )
 }
 
+function controlAgentId(selected, costs, liveRuns) {
+  const own = clean(selected?.id)
+  if (own) return own
+  const rowId = clean(costRowFor(costs, selected)?.agentId)
+  if (rowId) return rowId
+  const run = matchingRuns(liveRuns, selected).find((item) => clean(item.agentId))
+  return clean(run?.agentId)
+}
+
+function taskRosterFor(roster, selected, id) {
+  if (!id) return roster
+  const key = clean(selected?.key)
+  if (!key) return roster
+  const found = roster.some((item) => sameAgent(item, key, ''))
+  if (found) return roster.map((item) => (sameAgent(item, key, '') ? { ...item, id } : item))
+  return [...roster, { ...selected, id }]
+}
+
 function readContext(selected, run) {
   for (const source of [selected, run]) {
     if (!isObject(source)) continue
@@ -178,9 +196,7 @@ export function agentContext({ agent = null, lanes = null, costs = null, liveRun
   const model = clean(selected?.model) || NOT_REPORTED
   const run = currentRun(liveRuns, selected)
 
-  const taskRoster = selected && !roster.some((item) => sameAgent(item, key, clean(selected?.id)))
-    ? [...roster, selected]
-    : roster
+  const taskRoster = taskRosterFor(roster, selected, controlAgentId(selected, costs, liveRuns))
   const taskMap = agentTasks(Array.isArray(liveRuns) ? liveRuns : [], Array.isArray(tasks) ? tasks : [], taskRoster)
   const task = clean(taskMap.get(key)) || NONE
 
