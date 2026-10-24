@@ -23,7 +23,7 @@ export function healthNotice(health) {
     }
   }
 
-  if (health.lanes === true && health.paperclip !== true) {
+  if ((health.lanes === true || health.sessions === true) && health.paperclip !== true) {
     return null
   }
 

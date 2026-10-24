@@ -16,6 +16,7 @@ import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
+import { createSessionsSource } from './sessions-source.js'
 import { gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
 import { compareSurface, surfaceFeatures } from './surface.js'
@@ -422,6 +423,16 @@ export function createBridge(options = {}) {
         onFrame: (frame) => accept(frame),
       })
     : null
+  const sessionsSourceOption = options.sessionsSource
+  const sessionsSourceOn =
+    sessionsSourceOption === true || (sessionsSourceOption !== null && typeof sessionsSourceOption === 'object') || env.MACHINEROOM_SESSIONS === '1'
+  const sessionsSource = sessionsSourceOn
+    ? createSessionsSource({
+        ...(sessionsSourceOption !== null && typeof sessionsSourceOption === 'object' ? sessionsSourceOption : {}),
+        projectRoot,
+        onFrame: (frame) => accept(frame),
+      })
+    : null
 
   const clients = new Set()
   const treeSent = new WeakMap()
@@ -614,8 +625,18 @@ export function createBridge(options = {}) {
     }
   }
 
+  function rememberSessionsParsers() {
+    if (!sessionsSource) return
+    for (const agent of sessionsSource.agents) {
+      if (agent.id !== '') parserByAgentId.set(String(agent.id), agent.parser)
+    }
+  }
+
   function rememberAgents(list) {
-    const taken = new Set(lanesSource ? lanesSource.agents.map((agent) => agent.key) : [])
+    const taken = new Set([
+      ...(lanesSource ? lanesSource.agents.map((agent) => agent.key) : []),
+      ...(sessionsSource ? sessionsSource.agents.map((agent) => agent.key) : []),
+    ])
     const agents = list.map((entry) => mapAgent(entry, taken))
     const parsers = new Map()
     for (const agent of agents) {
@@ -623,6 +644,7 @@ export function createBridge(options = {}) {
     }
     parserByAgentId = parsers
     rememberLaneParsers()
+    rememberSessionsParsers()
     return agents
   }
 
@@ -996,6 +1018,7 @@ export function createBridge(options = {}) {
         ok: true,
         paperclip: paperclipOpen,
         lanes: lanesSource !== null,
+        sessions: sessionsSource !== null,
         paperclipVersion,
         surface,
         features: surfaceFeatures(surface),
@@ -1088,25 +1111,29 @@ export function createBridge(options = {}) {
 
     if (req.method === 'GET' && url.pathname === '/api/agents') {
       const laneAgents = lanesSource ? [...lanesSource.agents] : []
+      const sessionAgents = sessionsSource ? [...sessionsSource.agents] : []
+      const extraAgents = [...laneAgents, ...sessionAgents]
       try {
         const upstream = await fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, {
           signal: AbortSignal.timeout(upstreamTimeoutMs),
         })
         if (!upstream.ok) {
-          if (lanesSource) {
+          if (extraAgents.length > 0) {
             rememberLaneParsers()
-            sendJson(req, res, 200, laneAgents)
+            rememberSessionsParsers()
+            sendJson(req, res, 200, extraAgents)
             return
           }
           sendJson(req, res, 502, { error: `upstream answered ${upstream.status}` })
           return
         }
         const raw = await upstream.json()
-        sendJson(req, res, 200, [...rememberAgents(agentListOf(raw)), ...laneAgents])
+        sendJson(req, res, 200, [...rememberAgents(agentListOf(raw)), ...extraAgents])
       } catch {
-        if (lanesSource) {
+        if (extraAgents.length > 0) {
           rememberLaneParsers()
-          sendJson(req, res, 200, laneAgents)
+          rememberSessionsParsers()
+          sendJson(req, res, 200, extraAgents)
           return
         }
         sendJson(req, res, 502, { error: 'upstream unreachable' })
@@ -1206,7 +1233,9 @@ export function createBridge(options = {}) {
 
   async function start() {
     rememberLaneParsers()
+    rememberSessionsParsers()
     lanesSource?.start()
+    sessionsSource?.start()
     await startWatcher()
     if (stopped) throw new Error('The bridge stopped before it started.')
     startSurfaceTimer()
@@ -1237,6 +1266,7 @@ export function createBridge(options = {}) {
     }
     runs.stopAll()
     lanesSource?.stop()
+    sessionsSource?.stop()
     clearInterval(heartbeatTimer)
     if (surfaceTimer) {
       clearInterval(surfaceTimer)

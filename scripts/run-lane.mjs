@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -340,8 +341,9 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
   }
 
-  const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, ...(project ? { cwd: project } : {}) })
-  if (project) writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify({ lane: options.lane, project })}\n`)
+  const sessionId = randomUUID()
+  const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, sessionId, ...(project ? { cwd: project } : {}) })
+  if (project) writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify({ lane: options.lane, project, sessionId })}\n`)
   const log = createWriteStream(logPath)
   const startedAt = Date.now()
   // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.

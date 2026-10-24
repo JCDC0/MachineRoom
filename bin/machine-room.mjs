@@ -21,6 +21,7 @@ const USAGE = [
   '  --port <n>          port to listen on (PORT)',
   '  --dist <folder>     built viewer folder (default: dist beside bin)',
   '  --lanes             show lane runs live from the run-lane logs (MACHINEROOM_LANES=1)',
+  '  --sessions          show Claude Code sessions on the project live (MACHINEROOM_SESSIONS=1)',
   '  --help              show this help',
 ].join('\n')
 
@@ -38,7 +39,7 @@ const DOCTOR_OPTION_NAMES = {
   '--root': 'projectRoot',
 }
 
-const FLAGS = new Set(['--lanes'])
+const FLAGS = new Set(['--lanes', '--sessions'])
 
 const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway; features whose routes changed stay off.'
 const PAPERCLIP_NOT_RUNNING = 'Paperclip is not running. Start it yourself with paperclipai run; machine-room never starts it.'
@@ -108,6 +109,7 @@ async function startRoom(options, dist) {
     port: options.port,
     staticDir: dist,
     lanesSource: options.lanes === true,
+    sessionsSource: options.sessions === true,
   })
 
   let info

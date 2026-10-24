@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room follows your own Claude Code sessions on its project with `--sessions` (or `MACHINEROOM_SESSIONS=1`): it reads each session file from where it starts, shows prompts and tool calls as runs, follows a subagent through its own file, skips the sessions `run-lane` starts (`--session-id`), and lists a `claude-session` agent beside the lane agents (task S7a).
 - AGY is retired in `docs/agents/lanes.json` for now, by the owner's choice (too slow): the room leaves it out and `run-lane` refuses it. The lane source tests that check AGY's lane shape use a copy with it brought back. TASKS.md has S7a and S7b: the room follows the owner's own Claude Code and OpenCode sessions on its project, read-only, with the owner's yes to reading their files under the home folder.
 - `tests/temp-root.test.js` compares the folder `makeTempDir` returns with the resolved process folder, the one test 0.1.251 missed on the Windows runner. The full suite passes on this machine with TEMP set to an 8.3 short path.
 - CI failed on 0.1.248 to 0.1.250 in tests from Q5a and Q5b. On the Windows runner TEMP is an 8.3 short path (`RUNNER~1`) and the project checks resolve the long one, so `makeTempDir` in `tests/helpers/tempRoot.js` now returns the folder through `realpathSync.native`; the 7 failures came back on this machine with TEMP set to a short path and pass with the fix. On the Ubuntu runner the checkout sits under the home folder, so `--project` on home is refused as holding this checkout before the profile rule, and the test now accepts either.
