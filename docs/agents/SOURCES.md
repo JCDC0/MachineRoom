@@ -1,10 +1,10 @@
 # Where the room gets its events
 
-Written 2026-10-24 by Claude, after the real AGY subagent run (run `ffd660e6`). A design note for after Saturday, not a brief. It answers two questions from the owner: what Paperclip costs us, and whether a direct source would remove those costs quickly.
+Written 2026-10-24 by Claude, after the real AGY subagent run (run `ffd660e6`). Updated at 0.1.260: S6a, S6b and S7 are built, and Paperclip is optional. The rest is still a plan. It answers two questions from the owner: what Paperclip costs us, and whether a direct source would remove those costs quickly.
 
 ## The goal
 
-The room is a control panel for the owner's subscriptions, efficiency first and looks second: watch every harness and its subagents work, find the bug, and run them the way Claude runs the lanes today (five OpenCode lanes and AGY), with the room growing on top of itself. Browser use, file exploration and document viewing belong in it.
+The room is a control panel for the owner's subscriptions, efficiency first and looks second: watch every harness and its subagents work, find the bug, and run them the way Claude runs the lanes today (five OpenCode lanes and the Claude Code lane), with the room growing on top of itself. Browser use, file exploration and document viewing belong in it.
 
 ## What Paperclip costs us
 
@@ -30,18 +30,22 @@ One cost a source change does not touch: each harness reports what it reports. O
 Most of it exists already.
 
 - `npm run run-lane` starts a lane, writes its JSON log to `%TEMP%\machineroom-runs\<lane>-<brief>-<stamp>.log`, records the run in `runs.jsonl`, the outcome in `outcomes.jsonl`, and costs per lane and model (`--stats`).
-- `framesFromRun` in `src/briefs/recording.js` already turns a finished OpenCode or Hermes lane log into Paperclip-shaped frames (`heartbeat.run.queued`, `status`, `log`), which is how `/?recording=` replays a lane run.
+- `framesFromRun` in `src/briefs/recording.js` already turns a finished OpenCode, Hermes or Claude Code lane log into Paperclip-shaped frames (`heartbeat.run.queued`, `status`, `log`), which is how `/?recording=` replays a lane run.
 - The pipeline, the parsers, the state and the engine read those frames as they are.
 
 So a live lane source is the bridge watching the runs folder and feeding the same frames as each log grows, instead of after the run. The page does not change.
 
 ## The order of work
 
-1. S6a, the live lane source. A bridge module that watches the runs folder, tails each new lane log from its first byte, and sends frames built the way `framesFromRun` builds them, with the lane as the agent (`opencode` to `opencode5` from `lanes.json`). Paperclip stays a second source on the same stream. Tests on a fake log that grows. One OpenCode brief.
-2. S6b, AGY as a run-lane lane. A `cli` block for `agy` in `lanes.json` (`agy --print <prompt> --output-format stream-json --dangerously-skip-permissions`, in the lane's worktree), so `run-lane` passes the brief as the prompt and AGY stops being a lane run by hand. Needs the owner's yes, since AGY then runs unattended like the OpenCode lanes. Small.
+1. S6a, the live lane source. A bridge module that watches the runs folder, tails each new lane log from its first byte, and sends frames built the way `framesFromRun` builds them, with the lane as the agent (`opencode` to `opencode5` and `claude` from `lanes.json`). Paperclip stays a second source on the same stream. Tests on a fake log that grows. One OpenCode brief. Built as 0.1.233.
+2. S6b, AGY as a run-lane lane. A `cli` block for `agy` in `lanes.json` (`agy --print <prompt> --output-format stream-json --dangerously-skip-permissions`, in the lane's worktree), so `run-lane` passes the brief as the prompt and AGY stops being a lane run by hand. Needs the owner's yes, since AGY then runs unattended like the OpenCode lanes. Small. Built as 0.1.236; AGY is retired now.
 3. S6c, AGY's children from their transcripts. When `invoke_subagent` names a child's `conversation_id`, the runner reads that child's transcript file as it grows and sends its steps under the child's key, so the child gets its own strip. Needs the owner's yes to read under the home folder. One brief after S5.
 4. S6d, Claude Code as a source. Claude Code hooks around each tool call and around subagents, written as JSON lines to a file the bridge tails, give the most exact live subagent events of any harness we use. Only for Claude Code runs. One brief, and a check of which hook events this Claude Code version offers.
 5. ACP for the harnesses that speak it. See the next section.
+
+## The owner's own sessions (S7, built)
+
+`--sessions` follows the owner's own sessions on the room's project, read only. Claude Code sessions come from `.claude/projects/<slug>/<sessionId>.jsonl` under the home folder, plus a subagent's file under `<sessionId>/subagents`. OpenCode sessions come from `opencode.db` in OpenCode's data folder, opened read-only; the reader queries only `session_v2` and `session_message`, never the tables that hold accounts and keys. A session that `run-lane` started is skipped, so the room does not show a run twice. Only tool calls and their results reach the room, never the prompts or the replies. S7a and S7b are merged as 0.1.255 and 0.1.256.
 
 ## ACP, checked 2026-10-24
 
@@ -68,7 +72,7 @@ S6a and S6b remove the first and third costs for lane runs at once, and leave Pa
 
 ## What stays with Paperclip, or moves
 
-Paperclip still gives tasks, threads, approvals, budgets and backups. For the lanes, `run-lane`, `runs.jsonl`, `outcomes.jsonl`, `--stats` and the routing policy (`src/policy/`) already do the same jobs on our side. Whether the drawer's Tasks, Approvals and Meters tabs should read the lane records instead of Paperclip is the owner's call after S6a; nothing in this note removes Paperclip.
+Paperclip still gives tasks, threads, approvals, budgets and backups. For the lanes, `run-lane`, `runs.jsonl`, `outcomes.jsonl`, `--stats` and the routing policy (`src/policy/`) do the same jobs on our side. The drawer now reads tasks, live runs and costs from the lane records when Paperclip does not answer (L1, L2); approvals are empty in that mode, and backups stay with Paperclip. Nothing in this note removes the optional Paperclip source.
 
 ## The bigger room
 
