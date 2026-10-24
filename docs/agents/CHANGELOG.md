@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A live page keeps the agent key the bridge sends and the sub orchestrator flag, so a sub is drawn above its sector instead of as a lane (task Q12g).
+
 - History audit: a range audit (`--from`) leaves out removed lines, which were in the history before the range, so CI does not fail when a commit deletes a test that held a fake key.
 
 - The agent dock shows a sub orchestrator's lanes, scope, restriction and who set them, and a lane in a sector shows the sector's name and rules, in the order the brief asks (task O7).

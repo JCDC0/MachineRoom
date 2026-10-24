@@ -66,6 +66,21 @@ describe('agent discovery', () => {
     ])
     expect(agent).toMatchObject({ harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' })
   })
+
+  it('keeps the key and the sub orchestrator flag the bridge sends', () => {
+    const agents = toAgents([
+      { id: 'lane', name: 'Claude Code', adapterType: 'claude_local', key: 'claude' },
+      { id: 'sub', name: 'Frontend', adapterType: 'claude_local', key: 'sub-frontend', subOrchestrator: true },
+    ])
+    expect(Object.fromEntries(agents.map((agent) => [agent.id, agent.key]))).toEqual({
+      lane: 'claude',
+      sub: 'sub-frontend',
+    })
+    expect(Object.fromEntries(agents.map((agent) => [agent.id, agent.subOrchestrator]))).toEqual({
+      lane: false,
+      sub: true,
+    })
+  })
 })
 
 describe('socket url', () => {

@@ -111,7 +111,7 @@ describe('boardLines', () => {
     })
 
     expect(lines.rows).toHaveLength(5)
-    expect(lines.rows.map((row) => row.key)).toEqual(['claude', 'opencode', 'opencode-2', 'opencode-3', 'opencode-4'])
+    expect(lines.rows.map((row) => row.key)).toEqual(['claude', 'opencode', 'opencode2', 'opencode3', 'opencode4'])
 
     expect(lines.rows[0]).toEqual({
       key: 'claude',
@@ -130,7 +130,7 @@ describe('boardLines', () => {
       reported: true,
     })
     expect(lines.rows[2]).toEqual({
-      key: 'opencode-2',
+      key: 'opencode2',
       name: 'OpenCode 2',
       cost: '$0.87',
       tokens: '96.0k in / 14.0k out',
@@ -138,7 +138,7 @@ describe('boardLines', () => {
       reported: true,
     })
     expect(lines.rows[3]).toEqual({
-      key: 'opencode-3',
+      key: 'opencode3',
       name: 'OpenCode 3',
       cost: '$0.42',
       tokens: '51.0k in / 7.2k out',
@@ -146,7 +146,7 @@ describe('boardLines', () => {
       reported: true,
     })
     expect(lines.rows[4]).toEqual({
-      key: 'opencode-4',
+      key: 'opencode4',
       name: 'OpenCode 4',
       cost: 'not reported',
       tokens: null,
@@ -290,7 +290,7 @@ describe('createCostBoard', () => {
     expect(onPick).toHaveBeenCalledWith('opencode')
 
     rows[3].click()
-    expect(onPick).toHaveBeenCalledWith('opencode-3')
+    expect(onPick).toHaveBeenCalledWith('opencode3')
 
     board.dispose()
     expect(board.element.removed).toBe(true)

@@ -34,7 +34,8 @@ export function toAgents(rawAgents) {
   const agents = rawAgents.map((raw) => {
     const parser = parserFor(raw)
     const role = typeof raw?.role === 'string' && raw.role !== '' ? raw.role : null
-    let key = adapterParser(raw.adapterType) ?? slug(raw.name)
+    const sent = typeof raw?.key === 'string' && raw.key !== '' ? raw.key : null
+    let key = sent ?? adapterParser(raw.adapterType) ?? slug(raw.name)
     if (taken.has(key)) {
       key = slug(raw.name)
       for (let n = 2; taken.has(key); n += 1) key = `${slug(raw.name)}-${n}`
@@ -49,6 +50,7 @@ export function toAgents(rawAgents) {
       parser,
       harness: typeof raw.harness === 'string' ? raw.harness : null,
       model: typeof raw.model === 'string' ? raw.model : null,
+      subOrchestrator: raw.subOrchestrator === true,
     }
   })
   const rank = (agent) => {
