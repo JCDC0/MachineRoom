@@ -383,12 +383,13 @@ describe('sessions source', () => {
     return { id: `agent-${key}`, key, name: key, adapterType: 'claude_local', parser: 'claude', role: null }
   }
 
-  it('builds the Claude reader by default and exposes its agent', () => {
+  it('builds the Claude and OpenCode readers by default and exposes their agents', () => {
     const { projectRoot, runs } = setup()
     const source = createSessionsSource({ projectRoot, runsFolder: runs })
     cleanups.push(() => source.stop())
-    expect(source.agents).toEqual([AGENT])
-    expect(source.readers).toHaveLength(1)
+    expect(source.agents.map((agent) => agent.key)).toEqual(['claude-session', 'opencode-session'])
+    expect(source.agents[0]).toEqual(AGENT)
+    expect(source.readers).toHaveLength(2)
   })
 
   it('ticks one reader at a time, in order, and keeps going after an error', () => {

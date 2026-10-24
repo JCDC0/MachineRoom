@@ -21,7 +21,7 @@ const USAGE = [
   '  --port <n>          port to listen on (PORT)',
   '  --dist <folder>     built viewer folder (default: dist beside bin)',
   '  --lanes             show lane runs live from the run-lane logs (MACHINEROOM_LANES=1)',
-  '  --sessions          show Claude Code sessions on the project live (MACHINEROOM_SESSIONS=1)',
+  '  --sessions          show Claude Code and OpenCode sessions on the project live (MACHINEROOM_SESSIONS=1)',
   '  --help              show this help',
 ].join('\n')
 
