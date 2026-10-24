@@ -2,6 +2,7 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import AgentDock from '../src/ui/AgentDock.jsx'
+import Hud from '../src/ui/Hud.jsx'
 import { agentContext } from '../src/ui/agentContext.js'
 
 const lane = {
@@ -87,6 +88,31 @@ describe('agentContext', () => {
     expect(result.task).toBe('I2')
     expect(result.command).toBe('npm test')
     expect(result.log.map((line) => line.text)).toEqual(['read src/ui/Hud.jsx', 'npm test'])
+  })
+
+  it('a room lane without an id takes its task from its run', () => {
+    const roomLane = { key: 'opencode', name: 'OpenCode', status: 'working', runs: 1 }
+    const result = agentContext({
+      agent: roomLane,
+      lanes: [roomLane],
+      costs: board([costRow]),
+      liveRuns: [
+        {
+          runId: 'run-JC-19',
+          agentId: 'agent-opencode',
+          agentName: 'OpenCode',
+          status: 'running',
+          issueId: 'issue-19',
+        },
+      ],
+      tasks: [{ id: 'issue-19', identifier: 'JC-19' }],
+      log: [],
+    })
+
+    expect(result.status).toBe('working')
+    expect(result.cost).toBe('$12.34')
+    expect(result.tokens).toBe('1.2k in / 300 out')
+    expect(result.task).toBe('JC-19')
   })
 
   it('a lane with no cost row', () => {
@@ -212,5 +238,42 @@ describe('AgentDock', () => {
     expect(html).toContain('$12.34')
     expect(html).toContain('Focus')
     expect(html).not.toContain('Open chat')
+  })
+})
+
+describe('Hud dock', () => {
+  it('gives the selected lane its cost, tokens and task', () => {
+    const roomLane = { key: 'opencode', name: 'OpenCode', status: 'working', runs: 1 }
+    const html = renderToString(
+      createElement(Hud, {
+        mode: 'replay',
+        snapshot: {
+          position: 0,
+          duration: 60,
+          playing: false,
+          speed: 1,
+          agents: [roomLane],
+          log: [],
+        },
+        speeds: [1, 2, 4],
+        focused: 'opencode',
+        costs: board([costRow]),
+        liveRuns: [
+          {
+            runId: 'run-JC-19',
+            agentId: 'agent-opencode',
+            agentName: 'OpenCode',
+            status: 'running',
+            issueId: 'issue-19',
+          },
+        ],
+        tasks: [{ id: 'issue-19', identifier: 'JC-19' }],
+        log: [],
+      })
+    )
+
+    expect(html).toContain('$12.34')
+    expect(html).toContain('1.2k in / 300 out')
+    expect(html).toContain('JC-19')
   })
 })

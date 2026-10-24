@@ -69,6 +69,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [effects, setEffects] = useState(() => loadEffectSettings(store()))
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
+  const [dockCosts, setDockCosts] = useState(null)
+  const [dockRuns, setDockRuns] = useState(NONE)
+  const [dockTasks, setDockTasks] = useState(NONE)
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
@@ -175,6 +178,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!client) {
       latestBoardRef.current = null
       roomRef.current?.setCosts(null)
+      setDockCosts(null)
       return undefined
     }
     let active = true
@@ -189,10 +193,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const board = costBoard(costsRaw, roster)
         latestBoardRef.current = board
         roomRef.current?.setCosts(board)
+        setDockCosts(board)
       } catch {
         if (!active || !isLatest()) return
         latestBoardRef.current = null
         roomRef.current?.setCosts(null)
+        setDockCosts(null)
       }
     }
 
@@ -211,6 +217,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!client) {
       latestTasksRef.current = null
       roomRef.current?.setTasks(null)
+      setDockRuns(NONE)
+      setDockTasks(NONE)
       return undefined
     }
     let active = true
@@ -229,10 +237,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const tasks = agentTasks(liveRunsRaw, issuesRaw, roster)
         latestTasksRef.current = tasks
         roomRef.current?.setTasks(tasks)
+        setDockRuns(Array.isArray(liveRunsRaw) ? liveRunsRaw : NONE)
+        setDockTasks(Array.isArray(issuesRaw) ? issuesRaw : NONE)
       } catch {
         if (!active || !isLatest()) return
         latestTasksRef.current = null
         roomRef.current?.setTasks(null)
+        setDockRuns(NONE)
+        setDockTasks(NONE)
       }
     }
 
@@ -561,6 +573,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           controlTarget={controlTarget}
           markers={timeline?.markers ?? NONE}
           log={log}
+          costs={dockCosts}
+          liveRuns={dockRuns}
+          tasks={dockTasks}
           liveAvailable={liveAvailable}
           onMode={onMode}
           onToggle={() => player.toggle()}

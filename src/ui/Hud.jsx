@@ -64,6 +64,9 @@ export default function Hud({
   fpsStats = null,
   markers = [],
   log = [],
+  costs = null,
+  liveRuns = null,
+  tasks = null,
   mode = 'replay',
   onMode = () => {},
   liveAvailable = false,
@@ -468,6 +471,9 @@ export default function Hud({
           <AgentDock
             agent={focused}
             lanes={snapshot?.agents ?? []}
+            costs={costs}
+            liveRuns={liveRuns}
+            tasks={tasks}
             log={log}
             onFocus={onFocus}
             onToggleTerminal={onToggleTerminal}
