@@ -246,9 +246,9 @@ describe('health and agents', () => {
     const answer = await getJson(`${url}/api/agents`, { headers: { Origin: 'http://localhost:5173' } })
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual([
-      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude', role: null },
-      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes', role: null },
-      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', parser: 'opencode', role: null },
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude', role: null, harness: 'claude', model: 'sonnet' },
+      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes', role: null, harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' },
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', parser: 'opencode', role: null, harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
     ])
   })
 
@@ -262,34 +262,34 @@ describe('health and agents', () => {
   it('maps lane agents to viewer keys and parsers', async () => {
     const { url } = await laneBridge({
       lanes: {
-        agy: { name: 'agy', cli: { harness: 'agy' } },
-        claude: { name: 'Claude Code', cli: { harness: 'claude' } },
-        hermes: { name: 'Hermes', cli: { harness: 'hermes' } },
-        opencode: { name: 'OpenCode Go', cli: { harness: 'opencode' } },
+        agy: { name: 'agy', cli: { harness: 'agy', model: 'gemini-3.8-flash-high' } },
+        claude: { name: 'Claude Code', cli: { harness: 'claude', model: 'sonnet' } },
+        hermes: { name: 'Hermes', cli: { harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' } },
+        opencode: { name: 'OpenCode Go', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
       },
     })
     const answer = await getJson(`${url}/api/agents`)
 
     expect(answer.body).toEqual([
-      { id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy', role: null },
-      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude', role: null },
-      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes', role: null },
-      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode Go', adapterType: 'opencode_local', parser: 'opencode', role: null },
+      { id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy', role: null, harness: 'agy', model: 'gemini-3.8-flash-high' },
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude', role: null, harness: 'claude', model: 'sonnet' },
+      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', parser: 'hermes', role: null, harness: 'hermes', model: 'deepseek/deepseek-v4.1-flash-1017' },
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode Go', adapterType: 'opencode_local', parser: 'opencode', role: null, harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
     ])
   })
 
   it('keeps two claude_local agents apart in list order and carries each role', async () => {
     const { url } = await laneBridge({
       lanes: {
-        'twin-a': { name: 'Twin', cli: { harness: 'claude' } },
-        'twin-b': { name: 'Twin', cli: { harness: 'claude' } },
+        'twin-a': { name: 'Twin', cli: { harness: 'claude', model: 'sonnet' } },
+        'twin-b': { name: 'Twin', cli: { harness: 'claude', model: 'sonnet' } },
       },
     })
     const answer = await getJson(`${url}/api/agents`)
 
     expect(answer.body).toEqual([
-      { id: 'agent-twin-a', key: 'twin-a', name: 'Twin', adapterType: 'claude_local', parser: 'claude', role: null },
-      { id: 'agent-twin-b', key: 'twin-b', name: 'Twin', adapterType: 'claude_local', parser: 'claude', role: null },
+      { id: 'agent-twin-a', key: 'twin-a', name: 'Twin', adapterType: 'claude_local', parser: 'claude', role: null, harness: 'claude', model: 'sonnet' },
+      { id: 'agent-twin-b', key: 'twin-b', name: 'Twin', adapterType: 'claude_local', parser: 'claude', role: null, harness: 'claude', model: 'sonnet' },
     ])
   })
 })
