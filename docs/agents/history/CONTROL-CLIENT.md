@@ -1,3 +1,5 @@
+This note describes Paperclip, which was removed on 2026-10-24.
+
 # Control client contract
 
 The panels that start and steer work (dispatch, task thread, approvals, meters) talk to one object, the control client. A mock implements it (`src/control/mock.js`), and the real one (`src/control/client.js`) calls the bridge, which calls Paperclip. Panels must use only this object. They never call `fetch` themselves.

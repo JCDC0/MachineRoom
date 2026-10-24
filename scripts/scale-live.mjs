@@ -358,8 +358,6 @@ async function runBridgeChild(dir) {
   let reads = 0
   process.on('disconnect', () => process.exit(0))
   const bridge = createBridge({
-    paperclipUrl: 'http://127.0.0.1:3999',
-    companyId: 'scale-company',
     projectRoot: dir,
     port: 0,
     readTree: (root) => {

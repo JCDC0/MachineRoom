@@ -234,9 +234,6 @@ function createReadJsonBody(sendJson) {
 }
 
 export function createBridge(options = {}) {
-  const companyId = options.companyId ?? process.env.PAPERCLIP_COMPANY_ID ?? ''
-  const projectId = options.projectId ?? process.env.PAPERCLIP_PROJECT_ID ?? ''
-  const projectWorkspaceId = options.projectWorkspaceId ?? process.env.PAPERCLIP_WORKSPACE_ID ?? ''
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const treeReader = options.readTree ?? readTree
   const port = Number(options.port ?? process.env.PORT ?? 5174)

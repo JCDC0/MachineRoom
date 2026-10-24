@@ -80,9 +80,8 @@ describe('profileFromBrief', () => {
     expect(read('Files: `src/a.js`. Run the tests by hand.').clarity).toBe('unclear')
   })
 
-  it('reads the three phrases that make a brief hard to undo', () => {
+  it('reads the two phrases that make a brief hard to undo', () => {
     expect(read("Files: `src/a.js`. This needs the owner's yes.").reversible).toBe(false)
-    expect(read('Files: `src/a.js`. It writes to Paperclip.').reversible).toBe(false)
     expect(read('Files: `src/a.js`. This spends money.').reversible).toBe(false)
   })
 

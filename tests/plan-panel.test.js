@@ -137,7 +137,7 @@ describe('PlanPanel and ControlDrawer', () => {
         initialConfirmOpen: true,
       })
     )
-    expect(html).toContain('Ask PLANNER to split this goal into briefs? It creates a task in Paperclip and spends from PLANNER&#x27;s budget.')
+    expect(html).toContain('Ask PLANNER to split this goal into briefs? The bridge refuses plan requests now: plans come from lane runs.')
     expect(html).toContain('>Ask</button>')
     expect(html).toContain('>Cancel</button>')
   })

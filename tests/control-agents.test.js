@@ -4,10 +4,10 @@ import { ADAPTER_TYPES, AGENT_ROLES, CANNOT_TAKE_TASKS, LIMITS, TEXT_LIMITS, cle
 const base = { name: 'Planner', adapterType: 'claude_local' }
 
 describe('constants', () => {
-  it('follow the Paperclip lists', () => {
+  it('follow the harness lists', () => {
     expect(AGENT_ROLES).toHaveLength(12)
     expect(AGENT_ROLES).toContain('engineer')
-    expect(ADAPTER_TYPES).toHaveLength(15)
+    expect(ADAPTER_TYPES).toHaveLength(14)
     for (const adapter of ['claude_local', 'hermes_local', 'opencode_local', 'process']) expect(ADAPTER_TYPES).toContain(adapter)
     expect(CANNOT_TAKE_TASKS).toEqual(['pending_approval', 'terminated'])
   })
