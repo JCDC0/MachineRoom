@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync 
 import { join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { prepareWorktree, worktreePlan } from '../scripts/run-lane.mjs'
+import { prepareWorktree, takeProjectLock, worktreePlan } from '../scripts/run-lane.mjs'
+import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, worktreeFor, worktreeProblems } from '../src/briefs/run.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
@@ -48,11 +49,11 @@ function initRepo(parent, name = 'Other') {
   return folder
 }
 
-function runLane(args) {
+function runLane(args, extra = {}) {
   return new Promise((done, fail) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: withLanePrograms(process.env, tempDir('mr-lane-programs-')),
+      env: { ...withLanePrograms(process.env, tempDir('mr-lane-programs-')), ...extra },
     })
     let stdout = ''
     let stderr = ''
@@ -204,7 +205,7 @@ describe('run-lane --worktree --dry-run', () => {
     expect(result.code).toBe(0)
     expect(result.stdout).toContain(`worktree: ${path}`)
     expect(result.stdout).toContain('worktree: would be made')
-    expect(result.stdout).toContain('branch: machineroom/queue-')
+    expect(result.stdout).toContain('branch: machineroom/queue-opencode-')
     expect(result.stdout).toContain('1. First task.')
     expect(result.stdout).toContain('2. Second task.')
     expect(existsSync(path)).toBe(false)
@@ -247,5 +248,42 @@ describe('run-lane --worktree --dry-run', () => {
     expect(result.code).toBe(1)
     expect(result.stderr).toContain(path)
     expect(result.stderr).toContain('has uncommitted changes')
+  })
+})
+
+describe('the worktree project lock', () => {
+  it('locks the worktree folder, so a project lock does not stop it', async () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    const path = prepareWorktree(project, 'opencode').path
+    writeFileSync(join(path, 'readme.txt'), 'changed\n')
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs)
+    const lock = takeProjectLock(runs, project)
+    try {
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'], { TEMP: base })
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain(`The worktree ${path} has uncommitted changes.`)
+      expect(result.stderr).not.toContain('Another run is already going on')
+    } finally {
+      releaseLaneLock(lock)
+    }
+  })
+
+  it('refuses a worktree run while its own worktree lock is held', async () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    const path = prepareWorktree(project, 'opencode').path
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs)
+    const lock = takeProjectLock(runs, path)
+    try {
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'], { TEMP: base })
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain(`Another run is already going on ${path};`)
+      expect(result.stdout).not.toContain('exit code:')
+    } finally {
+      releaseLaneLock(lock)
+    }
   })
 })

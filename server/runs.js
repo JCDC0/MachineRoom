@@ -4,7 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { SINCE_PROBLEM, dayStart, laneStats, projectProblems } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems } from '../src/briefs/run.js'
 import { outcomeTable } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
@@ -19,6 +19,10 @@ export const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characte
 export const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 export const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
 export const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
+export const BRIEF_PROJECT_PROBLEM = 'Briefs run in this repository. Use a task or a queue on another project.'
+export function notGitProblem(project, { queue = false } = {}) {
+  return `The project folder ${project} is not a git folder. ${queue ? 'A queue needs one.' : '--worktree needs one.'}`
+}
 const NO_PROJECT = 'The bridge has no project folder.'
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const REPO_LANES = join(REPO_ROOT, 'docs', 'agents', 'lanes.json')
@@ -55,11 +59,19 @@ function git(folder, args) {
   })
 }
 
-async function projectDirty(folder) {
+async function gitCheckout(folder) {
   const inside = await git(folder, ['rev-parse', '--is-inside-work-tree'])
-  if (inside === null || inside.trim() !== 'true') return false
+  return inside !== null && inside.trim() === 'true'
+}
+
+async function projectDirty(folder) {
+  if (!(await gitCheckout(folder))) return false
   const status = await git(folder, ['status', '--porcelain'])
   return status !== null && status.trim() !== ''
+}
+
+function samePath(one, two) {
+  return pathInside(one, two) && pathInside(two, one)
 }
 
 function stamp(date = new Date()) {
@@ -168,6 +180,14 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
   const command = runnerCommand ?? { file: process.execPath, args: ['scripts/run-lane.mjs'] }
   const running = new Map()
   let stopped = false
+  let rootCommonDirPromise = null
+
+  function rootCommonDir() {
+    if (!rootCommonDirPromise) {
+      rootCommonDirPromise = resolvedRoot ? gitCommonDir(resolvedRoot) : Promise.resolve('')
+    }
+    return rootCommonDirPromise
+  }
 
   function readPath(path) {
     if (!path) return null
@@ -317,6 +337,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     const projectRun = body.briefs === undefined
+    if (!projectRun && (!resolvedRoot || !samePath(await rootCommonDir(), await repoCommonDir()))) {
+      sendJson(req, res, 400, { error: BRIEF_PROJECT_PROBLEM })
+      return true
+    }
     const lanesText = projectRun ? readPath(REPO_LANES) : readText('lanes.json')
     const tasksText = projectRun ? null : readText('TASKS.md')
     if (lanesText === null || (!projectRun && tasksText === null)) {
@@ -383,6 +407,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         sendJson(req, res, 400, { error: NO_PROJECT })
         return true
       }
+      if ((hasTasks || worktree) && !(await gitCheckout(resolvedRoot))) {
+        sendJson(req, res, 400, { error: notGitProblem(resolvedRoot, { queue: hasTasks }) })
+        return true
+      }
       const dirty = await projectDirty(resolvedRoot)
       const problems = projectProblems({
         project: resolvedRoot,
@@ -392,7 +420,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         home: realPath(homedir()),
         temp: realPath(process.env.TEMP || tmpdir()),
         runs: realPath(join(process.env.TEMP || tmpdir(), 'machineroom-runs')),
-        commonDir: await gitCommonDir(resolvedRoot),
+        commonDir: await rootCommonDir(),
         repoCommonDir: await repoCommonDir(),
         dirty,
         allowDirty,

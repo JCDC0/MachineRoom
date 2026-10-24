@@ -247,10 +247,11 @@ export function createBridge(options = {}) {
     console.log(`MACHINEROOM_ORIGINS: skipped ${entry}.`)
   }
   let servingPort = port
+  const viteOrigin = !options.staticDir
   const isAllowed = (origin) => {
     const parsed = localOrigin(origin)
     if (!parsed) return false
-    return parsed.port === servingPort || parsed.port === VITE_PORT || origins.origins.has(parsed.text)
+    return parsed.port === servingPort || (viteOrigin && parsed.port === VITE_PORT) || origins.origins.has(parsed.text)
   }
   const sendJson = createSendJson(isAllowed)
   const readJsonBody = createReadJsonBody(sendJson)

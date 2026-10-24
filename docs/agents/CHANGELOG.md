@@ -6,6 +6,10 @@
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
 - The orchestrator chat names the project folder: the header shows its base name beside the model and the first-message card gives the full path (task Q6c).
 - Folder card names stay at 11 pixels or more on screen in the lens overview, the dock legend has its own row, and the lens bow and its black bars are clear (task I3).
+- `run-lane` holds `<runs>/project-<hash>.lock` with its pid for every `--project` run, or the worktree folder with `--worktree`, so a second run on one project stops with one sentence and lanes in their own worktrees still run side by side; the queue branch is `machineroom/queue-<lane>-<stamp>` (task Q6a).
+- The bridge refuses a brief run on a room rooted in another repository with `Briefs run in this repository. Use a task or a queue on another project.` (task Q6a).
+- The bridge refuses a queue or a `worktree: true` run on a folder that is not a git checkout with the sentence `run-lane` prints, before it writes the queue file or starts the runner (task Q6a).
+- The bridge allows the Vite origin `http://localhost:5173` and its 127.0.0.1 form only when it has no `staticDir`, so a served room accepts its own port and the named origins only (task Q6a).
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator chat has a tab per orchestrator, an Attach form that saves the whole ladder and lists the bridge's problems, and Detach behind a confirm card, with the ladder form helpers and the client and mock routes behind them (task O4).
 - A new `src/harnesses/` holds one browser-safe descriptor per harness for its command line, parser, line reader, report, reply and usage, and the runner, the recording builder, the parser picker, the agent order and the brief owners read the registry instead of naming harnesses (task H5).

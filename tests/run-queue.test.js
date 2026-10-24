@@ -5,10 +5,12 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { gitPath } from '../server/programPath.js'
+import { releaseLaneLock } from '../scripts/lane-lock.mjs'
+import { takeProjectLock } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
-const QUEUE_BRANCH = 'machineroom/queue-20261024-120000'
+const QUEUE_BRANCH = 'machineroom/queue-opencode-20261024-120000'
 
 function git(folder, args) {
   const result = spawnSync(gitPath(), args, { cwd: folder, encoding: 'utf8', windowsHide: true })
@@ -61,9 +63,12 @@ function remove(folder) {
   rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 }
 
-function runLane(args) {
+function runLane(args, extra = {}) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, ...extra },
+    })
     let stdout = ''
     let stderr = ''
     const timer = setTimeout(() => {
@@ -351,7 +356,7 @@ describe('scripts/run-lane.mjs with --queue', () => {
       writeFileSync(file, 'First task.\n---\nSecond task.\n')
       const result = await runLane(['opencode', '--project', repo, '--queue', file, '--dry-run'])
       expect(result.code).toBe(0)
-      expect(result.stdout).toContain('branch: machineroom/queue-')
+      expect(result.stdout).toContain('branch: machineroom/queue-opencode-')
       expect(result.stdout).toContain('tests: none, the project has no tests')
       expect(result.stdout).toContain('1. First task.')
       expect(result.stdout).toContain('2. Second task.')
@@ -400,6 +405,45 @@ describe('scripts/run-lane.mjs with --queue', () => {
       expect(brief.code).toBe(1)
       expect(brief.stderr).toContain('A queue takes no brief id.')
       expect(git(repo, ['branch', '--show-current']).trim()).toBe('main')
+    } finally {
+      remove(parent)
+    }
+  })
+
+  it('refuses a queue on a folder that is not a git checkout', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const folder = join(parent, 'Plain')
+      mkdirSync(folder)
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'One task.\n')
+      const result = await runLane(['opencode', '--project', folder, '--queue', file, '--dry-run'])
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain(`The project folder ${folder} is not a git folder. A queue needs one.`)
+      expect(result.stdout).not.toContain('branch:')
+    } finally {
+      remove(parent)
+    }
+  })
+
+  it('refuses a queue while another run holds the project', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      mkdirSync(runs)
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'One task.\n')
+      const lock = takeProjectLock(runs, repo)
+      try {
+        const result = await runLane(['opencode', '--project', repo, '--queue', file], { TEMP: parent })
+        expect(result.code).toBe(1)
+        expect(result.stderr).toContain(`Another run is already going on ${repo};`)
+        expect(git(repo, ['branch', '--show-current']).trim()).toBe('main')
+        expect(git(repo, ['status', '--porcelain']).trim()).toBe('')
+      } finally {
+        releaseLaneLock(lock)
+      }
     } finally {
       remove(parent)
     }

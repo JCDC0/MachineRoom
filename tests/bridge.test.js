@@ -199,6 +199,17 @@ describe('local pages only', () => {
     expect(bridge.server.listening).toBe(true)
   })
 
+  it('refuses the Vite origin when the bridge serves the built viewer', async () => {
+    const { url } = await laneBridge({ bridge: { staticDir: tempDir() } })
+    for (const origin of ['http://localhost:5173', 'http://127.0.0.1:5173']) {
+      const res = await fetch(`${url}/api/health`, { headers: { Origin: origin } })
+      expect(res.status, origin).toBe(403)
+    }
+    const port = new URL(url).port
+    const own = await fetch(`${url}/api/health`, { headers: { Origin: `http://localhost:${port}` } })
+    expect(own.status).toBe(200)
+  })
+
   it('allows localhost, 127.0.0.1 and [::1] Host headers and rejects foreign hosts', async () => {
     const { url } = await laneBridge()
     for (const host of ['localhost', 'localhost:5174', '127.0.0.1', '127.0.0.1:5174', '[::1]', '[::1]:5174']) {

@@ -1,11 +1,14 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
+import { releaseLaneLock } from '../scripts/lane-lock.mjs'
+import { projectLockName, takeProjectLock } from '../scripts/run-lane.mjs'
 import {
   childEnvironment,
   commandFor,
@@ -347,6 +350,40 @@ describe('scripts/run-lane.mjs on another project', () => {
     expect(result.code).toBe(1)
     expect(result.stderr).toContain('not both')
     expect(result.stdout).not.toContain('cwd:')
+  })
+})
+
+describe('the project lock', () => {
+  it('names the lock from a hash of the resolved folder and holds the pid', () => {
+    const base = tempDir()
+    const project = folderIn(base, 'Other')
+    const runs = folderIn(base, 'machineroom-runs')
+    const key = process.platform === 'win32' ? resolve(project).toLowerCase() : resolve(project)
+    const hash = createHash('sha256').update(key).digest('hex').slice(0, 8)
+    const lock = takeProjectLock(runs, project)
+    try {
+      expect(projectLockName(project)).toBe(`project-${hash}`)
+      expect(lock).toBe(join(runs, `project-${hash}.lock`))
+      expect(readFileSync(lock, 'utf8')).toBe(String(process.pid))
+    } finally {
+      releaseLaneLock(lock)
+    }
+    expect(existsSync(lock)).toBe(false)
+  })
+
+  it('refuses a second run on the same project before it starts', async () => {
+    const base = tempDir()
+    const project = folderIn(base, 'Other')
+    const runs = folderIn(base, 'machineroom-runs')
+    const lock = takeProjectLock(runs, project)
+    try {
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.'], { TEMP: base })
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain(`Another run is already going on ${project};`)
+      expect(result.stdout).not.toContain('exit code:')
+    } finally {
+      releaseLaneLock(lock)
+    }
   })
 })
 
