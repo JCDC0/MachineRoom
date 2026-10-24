@@ -40,6 +40,11 @@ function fakeClient(chat = { state: 'idle', messages: [] }) {
   return {
     calls,
     orchestrator: async () => chat,
+    orchestrators: async () => [],
+    setLadder: async (ladder) => {
+      calls.push({ name: 'ladder', ladder })
+      return { ladder }
+    },
     sendToOrchestrator: async (text, options) => {
       calls.push({ name: 'send', text, options })
       return { id: 'message-1' }
@@ -399,6 +404,115 @@ describe('OrchestratorChat panel', () => {
     )
     expect(html).toContain('7001 / 8000')
     expect(html).toContain('Orchestrator is waiting for you')
+  })
+
+  it('draws a tab per orchestrator with Main first and a state dot', () => {
+    const list = [
+      {
+        id: 'orchestrator',
+        name: 'Orchestrator',
+        harness: 'claude',
+        model: 'opus',
+        state: 'working',
+        lanes: ['opencode', 'opencode4'],
+        scope: [],
+        restricted: false,
+        setBy: 'owner',
+      },
+      {
+        id: 'frontend',
+        name: 'Frontend',
+        harness: 'opencode',
+        model: 'opencode-go/deepseek-v4.1-flash',
+        state: 'working',
+        lanes: ['opencode2'],
+        scope: ['src/ui/**'],
+        restricted: true,
+        setBy: 'owner',
+      },
+      {
+        id: 'bridge',
+        name: 'Bridge',
+        harness: 'claude',
+        model: 'sonnet',
+        state: 'paused',
+        lanes: ['opencode3'],
+        scope: ['server/**'],
+        restricted: true,
+        setBy: 'owner',
+      },
+    ]
+    const chat = { state: 'working', model: 'opus', messages: [{ id: 'm1', from: 'owner', text: 'Build it.' }] }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        initialOrchestrators: list,
+        initialSelected: 'frontend',
+      })
+    )
+    expect(html).toContain('class="mr-orch-tabs"')
+    expect(html).toContain('>Main</span>')
+    expect(html).toContain('>Frontend</span>')
+    expect(html).toContain('>Bridge</span>')
+    expect(html.indexOf('>Main<')).toBeLessThan(html.indexOf('>Frontend<'))
+    expect(html).toContain('class="mr-orch-tab-dot is-working"')
+    expect(html).toContain('class="mr-orch-tab-dot is-paused"')
+    expect(html).toContain('aria-label="Detach Frontend"')
+    expect(html).toContain('aria-label="Detach Bridge"')
+    expect(html).toContain('aria-pressed="true"')
+    expect(html).toContain('>Attach</button>')
+    expect(html).toContain('Orchestrator is working')
+  })
+
+  it('draws the attach form with free lanes, scope and Restricted on', () => {
+    const list = [
+      {
+        id: 'orchestrator',
+        name: 'Orchestrator',
+        harness: 'claude',
+        model: 'opus',
+        state: 'idle',
+        lanes: ['opencode', 'opencode4'],
+        scope: [],
+        restricted: false,
+        setBy: 'owner',
+      },
+      {
+        id: 'frontend',
+        name: 'Frontend',
+        harness: 'opencode',
+        model: 'opencode-go/deepseek-v4.1-flash',
+        state: 'idle',
+        lanes: ['opencode2'],
+        scope: ['src/ui/**'],
+        restricted: true,
+        setBy: 'owner',
+      },
+    ]
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(),
+        initialOrchestrators: list,
+        initialForm: { name: 'Bridge', id: 'bridge', harness: 'claude', model: 'sonnet', lanes: ['opencode'], scope: 'server/**', restricted: true },
+      })
+    )
+    expect(html).toContain('aria-label="Attach a sub orchestrator"')
+    expect(html).toContain('>Name</span>')
+    expect(html).toContain('>Id</span>')
+    expect(html).toContain('>Harness</span>')
+    expect(html).toContain('>Model</span>')
+    expect(html).toContain('>Lanes</legend>')
+    expect(html).toContain('>opencode</span>')
+    expect(html).toContain('>opencode4</span>')
+    expect(html).not.toContain('>opencode2</span>')
+    expect(html).toContain('>Scope, one glob per line</span>')
+    expect(html).toContain('>Restricted</span>')
+    expect(html).toContain('>Review</button>')
+    expect(html).toContain('>Cancel</button>')
+    expect(html).toContain('checked=""')
   })
 
   it('renders nothing when closed', () => {

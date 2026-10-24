@@ -149,3 +149,119 @@ describe('mock control client', () => {
     expect((await client.agents())[0].name).toBe('Claude Code')
   })
 })
+
+describe('mock orchestrators and the ladder', () => {
+  it('lists the main orchestrator first and each sub with its sector', async () => {
+    const list = await fast().orchestrators()
+    expect(list.map((entry) => entry.id)).toEqual(['orchestrator', 'frontend'])
+    expect(list[0]).toMatchObject({
+      name: 'Orchestrator',
+      harness: 'claude',
+      state: 'idle',
+      scope: [],
+      restricted: false,
+      setBy: 'owner',
+    })
+    expect(list[0].lanes).toEqual(['claude', 'hermes', 'opencode', 'opencode4', 'agy'])
+    expect(list[1]).toMatchObject({
+      id: 'frontend',
+      name: 'Frontend',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      lanes: ['opencode2', 'opencode3'],
+      scope: ['src/ui/**', 'src/styles.css'],
+      restricted: true,
+      setBy: 'owner',
+    })
+  })
+
+  it('keeps one chat per orchestrator', async () => {
+    const client = fast()
+    const main = await client.orchestrator()
+    const sub = await client.orchestrator('frontend')
+    expect(main.messages.map((message) => message.text)).toContain('What is running?')
+    expect(sub).toMatchObject({ id: 'frontend', name: 'Frontend', state: 'idle', messages: [] })
+
+    await client.sendOrchestrator('Plan the UI.', { id: 'frontend' })
+    const after = await client.orchestrator('frontend')
+    expect(after.messages).toHaveLength(2)
+    expect(after.messages[0]).toMatchObject({ from: 'owner', text: 'Plan the UI.' })
+    expect(after.messages[1].text).toContain('main orchestrator')
+    expect((await client.orchestrator()).messages).toHaveLength(3)
+
+    await client.stopOrchestrator({ confirmed: true, id: 'frontend' })
+    expect(await client.orchestrators()).toContainEqual(expect.objectContaining({ id: 'frontend', state: 'paused' }))
+    expect(await client.orchestrator()).toMatchObject({ state: 'idle' })
+  })
+
+  it('refuses a bad sub message and an unknown orchestrator', async () => {
+    const client = fast()
+    await expect(client.sendOrchestrator('   ', { id: 'frontend' })).rejects.toThrow(/message/i)
+    await expect(client.orchestrator('nobody')).rejects.toThrow(/exist/i)
+    await expect(client.stopOrchestrator({ confirmed: true, id: 'nobody' })).rejects.toThrow(/exist/i)
+  })
+
+  it('adds a sub through setLadder and starts its chat', async () => {
+    const client = fast()
+    const before = await client.orchestrators()
+    const saved = await client.setLadder({
+      subs: [
+        ...before.filter((entry) => entry.id !== 'orchestrator').map(({ state, ...sub }) => sub),
+        {
+          id: 'bridge',
+          name: 'Bridge',
+          harness: 'claude',
+          model: 'sonnet',
+          lanes: ['opencode4'],
+          scope: ['server/**'],
+          restricted: false,
+          setBy: 'owner',
+        },
+      ],
+    })
+    expect(saved.ladder.subs.map((sub) => sub.id)).toEqual(['frontend', 'bridge'])
+    const after = await client.orchestrators()
+    expect(after.map((entry) => entry.id)).toEqual(['orchestrator', 'frontend', 'bridge'])
+    expect(after[0].lanes).not.toContain('opencode4')
+    expect(await client.orchestrator('bridge')).toMatchObject({ id: 'bridge', state: 'idle', messages: [] })
+  })
+
+  it('shows the problems readLadder finds', async () => {
+    const client = fast()
+    const before = await client.orchestrators()
+    const frontend = before.find((entry) => entry.id === 'frontend')
+    const { state, ...frontendSub } = frontend
+    const failure = await client
+      .setLadder({
+        subs: [
+          frontendSub,
+          {
+            id: 'bridge',
+            name: 'Bridge',
+            harness: 'claude',
+            model: 'sonnet',
+            lanes: ['opencode2'],
+            scope: ['server/**'],
+            restricted: true,
+            setBy: 'owner',
+          },
+        ],
+      })
+      .catch((error) => error)
+    expect(failure.problems).toContain('The lane "opencode2" already belongs to sub "frontend".')
+    expect(failure.message).toContain('already belongs')
+
+    const empty = await client.setLadder({ subs: [{ id: 'plain', name: 'Plain', lanes: [], scope: [] }] }).catch((error) => error)
+    expect(empty.problems).toContain('Sub "plain" has no scope.')
+  })
+
+  it('removes a sub, its chat and its lane claims through setLadder', async () => {
+    const client = fast()
+    const saved = await client.setLadder({ subs: [] })
+    expect(saved.ladder.subs).toEqual([])
+    const list = await client.orchestrators()
+    expect(list.map((entry) => entry.id)).toEqual(['orchestrator'])
+    expect(list[0].lanes).toContain('opencode2')
+    await expect(client.orchestrator('frontend')).rejects.toThrow(/exist/i)
+  })
+})

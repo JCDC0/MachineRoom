@@ -393,3 +393,64 @@ describe('the mock client still answers the contract', () => {
     expect(new Set(models.map((model) => model.tier))).toEqual(new Set(['small', 'medium', 'large']))
   })
 })
+
+describe('the control client orchestrator routes', () => {
+  function recorder(answer = {}) {
+    const calls = []
+    const fetchImpl = async (url, options = {}) => {
+      calls.push({ url, method: options.method, body: options.body })
+      return { ok: true, json: async () => answer }
+    }
+    return { calls, client: createClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl }) }
+  }
+
+  it('reads the list and one chat by id', async () => {
+    const { calls, client } = recorder({ subs: [] })
+    await client.orchestrators()
+    await client.orchestrator()
+    await client.orchestrator('frontend')
+    expect(calls).toEqual([
+      { url: 'http://127.0.0.1:9/api/orchestrators', method: 'GET', body: undefined },
+      { url: 'http://127.0.0.1:9/api/orchestrator', method: 'GET', body: undefined },
+      { url: 'http://127.0.0.1:9/api/orchestrator?id=frontend', method: 'GET', body: undefined },
+    ])
+  })
+
+  it('sends and stops at the named orchestrator', async () => {
+    const { calls, client } = recorder()
+    await client.sendOrchestrator('Hello')
+    await client.sendOrchestrator('Go', { id: 'frontend' })
+    await client.stopOrchestrator()
+    await client.stopOrchestrator({ id: 'frontend' })
+    expect(calls.map((call) => [call.method, call.url, JSON.parse(call.body ?? 'null')])).toEqual([
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/messages', { text: 'Hello', confirmed: true }],
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/messages', { text: 'Go', id: 'frontend', confirmed: true }],
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true }],
+      ['POST', 'http://127.0.0.1:9/api/orchestrator/stop', { confirmed: true, id: 'frontend' }],
+    ])
+  })
+
+  it('writes the whole ladder as the owner', async () => {
+    const { calls, client } = recorder({ ladder: { subs: [] } })
+    await client.setLadder({ subs: [] })
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/ladder',
+        method: 'POST',
+        body: JSON.stringify({ ladder: { subs: [] }, by: 'owner', confirmed: true }),
+      },
+    ])
+  })
+
+  it('keeps the problems the bridge answers on the error', async () => {
+    const client = createClient({
+      fetchImpl: async () => ({
+        ok: false,
+        json: async () => ({ error: 'The ladder has problems.', problems: ['Sub "x" has no scope.', 4] }),
+      }),
+    })
+    const failure = await client.setLadder({ subs: [] }).catch((error) => error)
+    expect(failure.message).toBe('The ladder has problems.')
+    expect(failure.problems).toEqual(['Sub "x" has no scope.'])
+  })
+})
