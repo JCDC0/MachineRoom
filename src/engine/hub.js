@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { sectorArcs } from '../model/hierarchy.js'
+import { minTextScale } from './camera.js'
 import { isOrchestrator, isSubOrchestrator } from './shapes.js'
 import { WHITE, lineMaterial, still, textSprite } from './sprites.js'
 
@@ -10,14 +11,22 @@ export const ORCHESTRATOR_LIFT = 360
 export const HUB_CENTER = new THREE.Vector3(0, HUB_Y, 0)
 export const ORCHESTRATOR_HOME = new THREE.Vector3(HUB_CENTER.x, HUB_Y + ORCHESTRATOR_LIFT, HUB_CENTER.z)
 
+export const RING_OPACITY = 0.32
+export const SECTOR_ARC_HALF_WIDTH = 9
+export const SECTOR_ARC_GAP = 0.055
+export const SECTOR_ARC_OPACITY = Object.freeze({ main: 0.52, sub: 0.88 })
+export const SECTOR_LABEL_BASE = 0.9
+export const SECTOR_LABEL_FONT = 28
+export const SECTOR_LABEL_MIN = 12
+
 const TICKS = 120
 const DASHES = 72
 const SLOT_RADIUS = 46
-const REST_OPACITY = 0.32
 const SECTOR_LABEL_RADIUS = HUB_RADIUS + 120
-const SECTOR_LABEL_Y = 30
+const SECTOR_LABEL_Y = 90
 const ARC_STEPS = 96
 const SECTOR_EPSILON = 0.0001
+const labelWorld = new THREE.Vector3()
 
 export function slotAngle(index, count) {
   return Math.PI / 2 + (index / Math.max(1, count)) * Math.PI * 2
@@ -30,6 +39,31 @@ export function slotPoint(index, count, out = new THREE.Vector3()) {
 
 export function hasSubs(ladder) {
   return Boolean(ladder && Array.isArray(ladder.subs) && ladder.subs.length > 0)
+}
+
+export function arcDrawSpan(start, end, gap = SECTOR_ARC_GAP) {
+  const from = Number(start)
+  const to = Number(end)
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return { start: 0, end: 0 }
+  const span = to - from
+  const pad = Math.min(Math.max(0, Number(gap) || 0), span * 0.2)
+  return { start: from + pad, end: to - pad }
+}
+
+export function sectorLabelScale(depth, focal, base = SECTOR_LABEL_BASE) {
+  const distance = Number(depth)
+  const focus = Number(focal)
+  if (!(distance > 0) || !(focus > 0)) return 1
+  return minTextScale((focus / distance) * base, SECTOR_LABEL_FONT, SECTOR_LABEL_MIN)
+}
+
+export function sectorArcTone(main) {
+  const center = main ? SECTOR_ARC_OPACITY.main : SECTOR_ARC_OPACITY.sub
+  return { center, edge: center * 0.6 }
+}
+
+export function sectorArcRadii(radius = HUB_RADIUS) {
+  return [radius - SECTOR_ARC_HALF_WIDTH, radius, radius + SECTOR_ARC_HALF_WIDTH]
 }
 
 function laneKeys(roster) {
@@ -110,24 +144,38 @@ function buildSlots(angles) {
 
 function buildSectors(ladder, parkedKeys, group) {
   const lines = []
-  if (!ladder) return lines
+  const labels = []
+  if (!ladder) return { lines, labels }
   for (const arc of sectorArcs(ladder, parkedKeys)) {
     const span = arc.end - arc.start
     if (!(span > SECTOR_EPSILON)) continue
-    const points = []
-    for (let i = 0; i <= ARC_STEPS; i++) {
-      const angle = arc.start + (span * i) / ARC_STEPS
-      points.push(new THREE.Vector3(Math.cos(angle) * HUB_RADIUS, 0, Math.sin(angle) * HUB_RADIUS))
-    }
-    const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMaterial(WHITE, REST_OPACITY))
-    group.add(line)
-    lines.push(line)
+    const draw = arcDrawSpan(arc.start, arc.end)
+    const main = arc.id === 'orchestrator'
+    const tone = sectorArcTone(main)
+    const sector = new THREE.Group()
+    sector.name = `sector:${arc.id}`
+    sectorArcRadii().forEach((radius, index) => {
+      const points = []
+      for (let i = 0; i <= ARC_STEPS; i++) {
+        const angle = draw.start + ((draw.end - draw.start) * i) / ARC_STEPS
+        points.push(new THREE.Vector3(Math.cos(angle) * radius, 0, Math.sin(angle) * radius))
+      }
+      const opacity = index === 1 ? tone.center : tone.edge
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMaterial(WHITE, opacity))
+      line.userData.baseOpacity = opacity
+      sector.add(line)
+      lines.push(line)
+    })
     const mid = (arc.start + arc.end) / 2
-    const label = textSprite(String(arc.name).toUpperCase(), { scale: 0.9, color: 'rgba(255,255,255,.55)' })
+    const label = textSprite(String(arc.name).toUpperCase(), { scale: SECTOR_LABEL_BASE, color: 'rgba(255,255,255,.8)' })
     label.position.set(Math.cos(mid) * SECTOR_LABEL_RADIUS, SECTOR_LABEL_Y, Math.sin(mid) * SECTOR_LABEL_RADIUS)
-    group.add(label)
+    label.userData.base = { x: label.scale.x, y: label.scale.y }
+    label.userData.factor = 1
+    sector.add(label)
+    labels.push(label)
+    group.add(sector)
   }
-  return lines
+  return { lines, labels }
 }
 
 export function createHub(scene, agentsOrCount, ladder = null) {
@@ -139,8 +187,9 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   const group = new THREE.Group()
   group.position.y = HUB_Y
 
-  const main = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(HUB_RADIUS, 192)), lineMaterial(WHITE, REST_OPACITY))
+  const main = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(HUB_RADIUS, 192)), lineMaterial(WHITE, RING_OPACITY))
   main.name = 'ring'
+  main.userData.baseOpacity = RING_OPACITY
   const inner = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(HUB_RADIUS * 0.86, 160)), lineMaterial(WHITE, 0.1))
 
   const dashValues = []
@@ -160,6 +209,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let slotAngles = []
   let slots = []
   let sectorLines = []
+  let sectorLabels = []
   let ringLines = [main]
   let boost = 0
 
@@ -198,12 +248,14 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     slots = buildSlots(slotAngles)
     for (const marker of slots) group.add(marker)
     clearGroup(sectorGroup)
-    sectorLines = buildSectors(currentLadder, parkedKeys, sectorGroup)
+    const built = buildSectors(currentLadder, parkedKeys, sectorGroup)
+    sectorLines = built.lines
+    sectorLabels = built.labels
     main.visible = !currentLadder
     ringLines = currentLadder ? sectorLines : [main]
     for (const line of ringLines) {
       line.material.color.setHex(WHITE)
-      line.material.opacity = REST_OPACITY
+      line.material.opacity = line.userData.baseOpacity ?? RING_OPACITY
     }
     boost = 0
   }
@@ -225,12 +277,24 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     marker.material.opacity = opacity
   }
 
-  function update(time, delta) {
+  function update(time, delta, camera = null, viewportHeight = 0) {
     const isStill = still()
     boost = Math.max(0, boost - delta * 1.2)
     for (const line of ringLines) {
-      line.material.opacity = REST_OPACITY + boost * 0.5
+      const base = line.userData.baseOpacity ?? RING_OPACITY
+      line.material.opacity = Math.min(1, base + boost * 0.5)
       if (boost <= 0.01) line.material.color.setHex(WHITE)
+    }
+    if (camera && viewportHeight > 0) {
+      const focal = viewportHeight / 2 / Math.tan(((camera.fov || 50) * Math.PI) / 360)
+      for (const label of sectorLabels) {
+        label.getWorldPosition(labelWorld)
+        const factor = sectorLabelScale(camera.position.distanceTo(labelWorld), focal)
+        if (Math.abs(factor - label.userData.factor) > 0.01) {
+          label.userData.factor = factor
+          label.scale.set(label.userData.base.x * factor, label.userData.base.y * factor, 1)
+        }
+      }
     }
     if (!isStill) {
       dashes.rotation.y += delta * 0.04

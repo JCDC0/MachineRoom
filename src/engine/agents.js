@@ -32,16 +32,17 @@ export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
 export const SUB_ORCHESTRATOR_SCALE = 0.7
-export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.7
+export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.5
+export const SUB_ORCHESTRATOR_RADIUS = HUB_RADIUS * 2.4
 
 export function subOrchestratorPlace(arc, out = null) {
   const start = Number(arc?.start)
   const end = Number(arc?.end)
   const mid = Number.isFinite(start) && Number.isFinite(end) ? (start + end) / 2 : 0
   const point = out ?? { x: 0, y: 0, z: 0 }
-  point.x = Math.cos(mid) * HUB_RADIUS
+  point.x = Math.cos(mid) * SUB_ORCHESTRATOR_RADIUS
   point.y = HUB_Y + SUB_ORCHESTRATOR_LIFT
-  point.z = Math.sin(mid) * HUB_RADIUS
+  point.z = Math.sin(mid) * SUB_ORCHESTRATOR_RADIUS
   return point
 }
 

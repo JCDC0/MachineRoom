@@ -1,13 +1,31 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { SUB_ORCHESTRATOR_SCALE, agentPresence, createAgents, subOrchestratorPlace } from '../src/engine/agents.js'
+import {
+  SUB_ORCHESTRATOR_LIFT,
+  SUB_ORCHESTRATOR_RADIUS,
+  SUB_ORCHESTRATOR_SCALE,
+  agentPresence,
+  createAgents,
+  subOrchestratorPlace,
+} from '../src/engine/agents.js'
+import { viewBasis } from '../src/engine/camera.js'
 import {
   HUB_RADIUS,
   HUB_Y,
   ORCHESTRATOR_HOME,
   ORCHESTRATOR_LIFT,
   PARK_LIFT,
+  RING_OPACITY,
+  SECTOR_ARC_HALF_WIDTH,
+  SECTOR_ARC_OPACITY,
+  SECTOR_LABEL_BASE,
+  SECTOR_LABEL_FONT,
+  SECTOR_LABEL_MIN,
+  arcDrawSpan,
   createHub,
+  sectorArcRadii,
+  sectorArcTone,
+  sectorLabelScale,
   sectorSlotAngles,
   slotAngle,
 } from '../src/engine/hub.js'
@@ -120,14 +138,67 @@ describe('sector slot angles', () => {
   })
 })
 
+describe('sector arcs a beginner can see', () => {
+  const FOCAL = 464 / 2 / Math.tan((50 * Math.PI) / 360)
+  const OVERVIEW_DEPTH = 2854
+
+  it('leaves a gap at each end of an arc', () => {
+    const arc = { start: 0.04, end: 2.054 }
+    const draw = arcDrawSpan(arc.start, arc.end)
+    expect(draw.start).toBeGreaterThan(arc.start)
+    expect(draw.end).toBeLessThan(arc.end)
+    expect(draw.end - draw.start).toBeCloseTo(arc.end - arc.start - 0.11)
+  })
+
+  it('never inverts a short arc and gives nothing for an empty one', () => {
+    const small = arcDrawSpan(0, 0.2)
+    expect(small.end).toBeGreaterThanOrEqual(small.start)
+    expect(arcDrawSpan(1, 1)).toEqual({ start: 0, end: 0 })
+    expect(arcDrawSpan(2, 1)).toEqual({ start: 0, end: 0 })
+    expect(arcDrawSpan(Number.NaN, 1)).toEqual({ start: 0, end: 0 })
+  })
+
+  it('keeps the label text at 11 pixels or more in the overview', () => {
+    const factor = sectorLabelScale(OVERVIEW_DEPTH, FOCAL)
+    const pixels = SECTOR_LABEL_FONT * SECTOR_LABEL_BASE * factor * (FOCAL / OVERVIEW_DEPTH)
+    expect(pixels).toBeGreaterThanOrEqual(11)
+    expect(SECTOR_LABEL_MIN).toBeGreaterThanOrEqual(11)
+    expect(factor).toBeGreaterThan(1)
+    expect(sectorLabelScale(OVERVIEW_DEPTH / 4, FOCAL)).toBe(1)
+    expect(sectorLabelScale(0, FOCAL)).toBe(1)
+    expect(sectorLabelScale(OVERVIEW_DEPTH, 0)).toBe(1)
+  })
+
+  it('makes each arc brighter than the ring and the main arc dimmer than a sub arc', () => {
+    const main = sectorArcTone(true)
+    const sub = sectorArcTone(false)
+    expect(main.center).toBe(SECTOR_ARC_OPACITY.main)
+    expect(sub.center).toBe(SECTOR_ARC_OPACITY.sub)
+    expect(sub.center).toBeGreaterThan(main.center)
+    expect(main.center).toBeGreaterThan(RING_OPACITY)
+    expect(main.edge).toBeLessThan(main.center)
+    expect(sub.edge).toBeLessThan(sub.center)
+  })
+
+  it('draws a band a little wider than the ring line', () => {
+    const radii = sectorArcRadii()
+    expect(radii).toHaveLength(3)
+    expect(radii[1]).toBe(HUB_RADIUS)
+    expect(radii[2] - radii[0]).toBe(SECTOR_ARC_HALF_WIDTH * 2)
+    expect(SECTOR_ARC_HALF_WIDTH).toBeGreaterThan(1)
+  })
+})
+
 describe('the place of a sub orchestrator', () => {
   it('floats above the middle of its arc at 0.7 of the main orchestrator', () => {
     const arc = { start: 0, end: Math.PI }
     const place = subOrchestratorPlace(arc)
     expect(place.x).toBeCloseTo(0)
-    expect(place.z).toBeCloseTo(HUB_RADIUS)
-    expect(place.y).toBeCloseTo(HUB_Y + ORCHESTRATOR_LIFT * 0.7)
+    expect(place.z).toBeCloseTo(SUB_ORCHESTRATOR_RADIUS)
+    expect(place.y).toBeCloseTo(HUB_Y + SUB_ORCHESTRATOR_LIFT)
     expect(SUB_ORCHESTRATOR_SCALE).toBe(0.7)
+    expect(SUB_ORCHESTRATOR_LIFT).toBeLessThan(ORCHESTRATOR_LIFT)
+    expect(SUB_ORCHESTRATOR_RADIUS).toBeGreaterThan(HUB_RADIUS * 2)
   })
 
   it('fills the vector it is given and leaves the arc alone', () => {
@@ -136,8 +207,26 @@ describe('the place of a sub orchestrator', () => {
     const out = new THREE.Vector3()
     expect(subOrchestratorPlace(arc, out)).toBe(out)
     expect(out.x).toBeCloseTo(0)
-    expect(out.z).toBeCloseTo(HUB_RADIUS)
+    expect(out.z).toBeCloseTo(SUB_ORCHESTRATOR_RADIUS)
     expect(arc).toEqual(before)
+  })
+
+  it('keeps the demo subs clear of the main orchestrator on screen', () => {
+    const keys = ['opencode', 'claude', 'hermes']
+    const basis = viewBasis(0.42, 0.3)
+    const chipBox = { width: 384, height: 240 }
+    for (const arc of sectorArcs(LADDER, keys)) {
+      if (arc.id === 'orchestrator') continue
+      const place = subOrchestratorPlace(arc)
+      const delta = {
+        x: place.x - ORCHESTRATOR_HOME.x,
+        y: place.y - ORCHESTRATOR_HOME.y,
+        z: place.z - ORCHESTRATOR_HOME.z,
+      }
+      const right = Math.abs(delta.x * basis.right.x + delta.y * basis.right.y + delta.z * basis.right.z)
+      const up = Math.abs(delta.x * basis.up.x + delta.y * basis.up.y + delta.z * basis.up.z)
+      expect(up > chipBox.height || right > chipBox.width).toBe(true)
+    }
   })
 })
 
@@ -177,14 +266,36 @@ describe('the hub with a ladder', () => {
 
     hub.setLadder(LADDER)
     const arcs = sectorArcs(LADDER, ['opencode', 'claude', 'hermes'])
-    const lines = sectors.children.filter((child) => child.isLine)
-    const labels = sectors.children.filter((child) => child.isSprite)
+    const sectorsOf = () => sectors.children
     expect(ring.visible).toBe(false)
-    expect(lines).toHaveLength(arcs.length)
-    expect(labels).toHaveLength(arcs.length)
-    for (const label of labels) {
-      expect(Math.hypot(label.position.x, label.position.z)).toBeGreaterThan(HUB_RADIUS)
+    expect(sectorsOf()).toHaveLength(arcs.length)
+    for (const group of sectorsOf()) {
+      const lines = group.children.filter((child) => child.isLine)
+      const labels = group.children.filter((child) => child.isSprite)
+      expect(lines).toHaveLength(3)
+      expect(labels).toHaveLength(1)
+      expect(Math.hypot(labels[0].position.x, labels[0].position.z)).toBeGreaterThan(HUB_RADIUS)
+      expect(labels[0].position.y).toBeGreaterThan(0)
     }
+    const mainGroup = sectorsOf().find((group) => group.name === 'sector:orchestrator')
+    const subGroup = sectorsOf().find((group) => group.name === 'sector:frontend')
+    const brightest = (group) => Math.max(...group.children.filter((child) => child.isLine).map((line) => line.userData.baseOpacity))
+    expect(brightest(mainGroup)).toBe(SECTOR_ARC_OPACITY.main)
+    expect(brightest(subGroup)).toBe(SECTOR_ARC_OPACITY.sub)
+    expect(brightest(subGroup)).toBeGreaterThan(brightest(mainGroup))
+    expect(brightest(mainGroup)).toBeGreaterThan(RING_OPACITY)
+
+    const label = subGroup.children.find((child) => child.isSprite)
+    const at = new THREE.Vector3()
+    label.getWorldPosition(at)
+    const camera = new THREE.PerspectiveCamera(50, 1280 / 464, 1, 60000)
+    camera.position.copy(at).add(new THREE.Vector3(0, 0, 2854))
+    hub.update(0, 0.016, camera, 464)
+    const focal = 464 / 2 / Math.tan((50 * Math.PI) / 360)
+    const pixels = SECTOR_LABEL_FONT * SECTOR_LABEL_BASE * label.userData.factor * (focal / 2854)
+    expect(pixels).toBeGreaterThanOrEqual(11)
+    expect(label.scale.x).toBeCloseTo(label.userData.base.x * label.userData.factor)
+    expect(label.scale.y).toBeCloseTo(label.userData.base.y * label.userData.factor)
 
     const angles = sectorSlotAngles(LADDER, ['opencode', 'claude', 'hermes'])
     const keys = ['opencode', 'claude', 'hermes']
@@ -198,6 +309,8 @@ describe('the hub with a ladder', () => {
     expect(ring.visible).toBe(true)
     expect(sectors.children).toHaveLength(0)
     expect(slots()).toHaveLength(3)
+    hub.update(0, 0.016)
+    expect(ring.material.opacity).toBeCloseTo(RING_OPACITY)
     slots().forEach((marker, index) => {
       const angle = slotAngle(index, 3)
       expect(marker.position.x).toBeCloseTo(Math.cos(angle) * HUB_RADIUS)
