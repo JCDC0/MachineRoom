@@ -1,4 +1,5 @@
 import { CANNOT_TAKE_TASKS, EFFORTS, cleanAgentDraft, cleanAgentPatch, fieldProblem, taskDraftProblem } from '../src/control/agents.js'
+import { readLaneCosts } from './lane-costs.js'
 import { MODELS } from './models.js'
 
 const AGENT_STATUS = {
@@ -53,7 +54,7 @@ function slugKey(name) {
 }
 
 function keyOf(raw) {
-  return String(raw?.urlKey ?? '').trim() || slugKey(raw?.name ?? raw?.id) || 'agent'
+  return String(raw?.urlKey ?? raw?.key ?? '').trim() || slugKey(raw?.name ?? raw?.id) || 'agent'
 }
 
 function setting(raw, name) {
@@ -345,6 +346,22 @@ export function createControlApi(options) {
   const { paperclipUrl, companyId, projectId, projectWorkspaceId, sendJson, readJsonBody, featureOn } = options
   const base = String(paperclipUrl).replace(/\/+$/, '')
   const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? options.timeoutMs : UPSTREAM_TIMEOUT_MS
+  const lanes = typeof options.lanes === 'function' ? options.lanes : () => null
+
+  function laneFallback() {
+    const source = lanes()
+    if (!source || !Array.isArray(source.agents)) return null
+    try {
+      return { agents: source.agents, costs: readLaneCosts({ agents: source.agents }) }
+    } catch {
+      return null
+    }
+  }
+
+  function laneAgentList(fallback) {
+    const cents = new Map(fallback.costs.byAgent.map((row) => [row.agentId, row.costCents]))
+    return fallback.agents.map((agent) => mapAgent(agent, cents.get(agent.id)))
+  }
 
   async function upstream(method, path, body) {
     const signal = AbortSignal.timeout(timeoutMs)
@@ -443,6 +460,11 @@ export function createControlApi(options) {
         upstream('GET', `/api/companies/${encodeURIComponent(companyId)}/costs/by-agent`),
       ])
       if (agents.status !== 200 || spend.status !== 200) {
+        const fallback = laneFallback()
+        if (fallback) {
+          sendJson(req, res, 200, laneAgentList(fallback))
+          return true
+        }
         const [status, message] = upstreamFailure(agents.status !== 200 ? agents : spend, 'That agent no longer exists.', 'Paperclip could not read the agents.')
         sendJson(req, res, status, { error: message })
         return true
@@ -788,6 +810,11 @@ export function createControlApi(options) {
       ])
       for (const answer of [summary, rows, quota]) {
         if (answer.status !== 200) {
+          const fallback = laneFallback()
+          if (fallback) {
+            sendJson(req, res, 200, fallback.costs)
+            return true
+          }
           const [code, message] = upstreamFailure(answer, 'That company no longer exists.', 'Paperclip could not read the costs.')
           sendJson(req, res, code, { error: message })
           return true
