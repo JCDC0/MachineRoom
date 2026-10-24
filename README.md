@@ -158,6 +158,14 @@ npm run run-lane -- opencode --project C:\GitHub\Other --task-file task.md
 
 The runner refuses this checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. It runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
 
+To run a queue of tasks on that folder, write them in a plain text file with a line that holds only `---` between them, then:
+
+```
+npm run run-lane -- opencode --project C:\GitHub\Other --queue queue.txt --test "npm test"
+```
+
+A queue needs a clean git folder, so keep the queue file outside it or commit it first. Before the first task the runner makes the branch `machineroom/queue-<stamp>` from the folder's current HEAD. Each task runs as its own run, then the test command runs. A task that ends well and passes its tests is committed on that branch with its first line as the subject; a task with no change is noted and the queue goes on. The first failed task or failed test stops the queue and leaves that task's changes uncommitted for you to look at. `--test` defaults to `npm test` when the folder's `package.json` has a test script, and to none otherwise, so a task then passes on the exit code alone. `--minutes` limits each task. The queue never pushes and never touches the main branch. It leaves the folder on the queue branch and prints the branch and one line per task; `git switch -` goes back.
+
 With `--lanes`, the Dispatch panel can start the same kind of run on the room's own folder: pick a lane, write the task, and turn on `Allow uncommitted changes` when the folder has them.
 
 With `--sessions`, the room follows your own Claude Code and OpenCode sessions on that folder too, and needs no Paperclip. Start it with `npm run serve -- up --sessions --root C:\GitHub\Other`. It reads the session files Claude Code keeps in `.claude/projects` under your profile for that folder, keeps only the lines whose `cwd` is the folder or inside it, shows each prompt as a run and each tool call on the room's cards, and follows a subagent through its own file. A run that `run-lane` starts on the same folder is skipped, because the runner names its session and the bridge leaves that session out, so the room does not show it twice. OpenCode sessions come from OpenCode's own database (`.local/share/opencode/opencode.db` under your profile), opened read-only; the bridge reads only its two session tables, never the ones that hold your accounts and keys. Only tool calls and their results reach the room, never your prompts or the replies.
