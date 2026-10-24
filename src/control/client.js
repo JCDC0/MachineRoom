@@ -166,6 +166,8 @@ export function createClient({
 
     models: () => request('GET', '/api/control/models'),
 
+    health: () => request('GET', '/api/health'),
+
     suggestRoute: (profile, { failures } = {}) =>
       request('POST', '/api/control/route', failures === undefined ? { profile } : { profile, failures }),
 

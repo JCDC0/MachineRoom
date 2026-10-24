@@ -107,6 +107,8 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 
 When the lane source is on and Paperclip does not answer, `costs()` comes from the lane run records: one row per lane with this calendar month's spend, no budget, null tokens and no quota, and the Backups section says Paperclip is not running.
 
+Lane mode: with the lane source on and Paperclip not answering, `issues()` and `liveRuns()` read the lane runs, `comments()` and `approvals()` are empty, `createIssue` and `postComment` reject with `Lane runs start from Dispatch, not from a task.`, and the real client's `health()` reads `/api/health` (`lanes: true`, `paperclip: false`).
+
 ## Hiring and updating an agent (C3c)
 
 `src/control/agents.js` holds the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). The mock and the bridge both use them, so a bad request is refused the same way in both.

@@ -33,15 +33,24 @@ function startingDecision(initialConfirmOpen, approvals) {
   return pending ? { id: pending.id, decision: 'approve' } : null
 }
 
+export function emptyApprovalsText(health) {
+  if (health && typeof health === 'object' && health.lanes === true && health.paperclip !== true) {
+    return 'Lane runs need no approvals.'
+  }
+  return 'No approvals found.'
+}
+
 export default function ApprovalsPanel({
   client,
   onPendingCountChange,
   initialApprovals = null,
   initialAgents = null,
+  initialHealth = null,
   initialConfirmOpen = null,
 }) {
   const [approvals, setApprovals] = useState(() => (Array.isArray(initialApprovals) ? initialApprovals : []))
   const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
+  const [health, setHealth] = useState(() => (initialHealth && typeof initialHealth === 'object' ? initialHealth : null))
   const [loading, setLoading] = useState(() => initialApprovals == null)
   const [loadError, setLoadError] = useState(null)
 
@@ -56,9 +65,10 @@ export default function ApprovalsPanel({
       setLoadError(null)
     }
     try {
-      const [approvalList, agentList] = await Promise.all([
+      const [approvalList, agentList, healthAnswer] = await Promise.all([
         client.approvals(),
-        client.agents(),
+        typeof client.agents === 'function' ? client.agents().catch(() => []) : [],
+        typeof client.health === 'function' ? client.health().catch(() => null) : null,
       ])
       if (preserveDecided) {
         setApprovals((prev) => {
@@ -77,6 +87,7 @@ export default function ApprovalsPanel({
         setApprovals(approvalList)
       }
       setAgents(agentList)
+      if (healthAnswer && typeof healthAnswer === 'object') setHealth(healthAnswer)
     } catch (err) {
       if (isInitial) {
         setLoadError(err.message || 'Could not load approvals.')
@@ -168,7 +179,7 @@ export default function ApprovalsPanel({
       </div>
 
       {approvals.length === 0 ? (
-        <div className="panel-state is-dim mono">No approvals found.</div>
+        <div className="panel-state is-dim mono">{emptyApprovalsText(health)}</div>
       ) : (
         <div className="approvals-content">
           <div className="approvals-pending" aria-label="Pending approvals">
