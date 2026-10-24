@@ -6,6 +6,7 @@ import {
   SUB_ORCHESTRATOR_SCALE,
   agentPresence,
   createAgents,
+  showsNameLabel,
   subOrchestratorPlace,
 } from '../src/engine/agents.js'
 import { viewBasis } from '../src/engine/camera.js'
@@ -227,6 +228,36 @@ describe('the place of a sub orchestrator', () => {
       const up = Math.abs(delta.x * basis.up.x + delta.y * basis.up.y + delta.z * basis.up.z)
       expect(up > chipBox.height || right > chipBox.width).toBe(true)
     }
+  })
+})
+
+describe('a sector names a sub once', () => {
+  const sub = { key: 'sub-frontend', name: 'Frontend', subOrchestrator: true }
+
+  it('drops the shape label when it matches the sector name, ignoring case', () => {
+    expect(showsNameLabel(sub, { id: 'frontend', name: 'Frontend' })).toBe(false)
+    expect(showsNameLabel(sub, { id: 'frontend', name: 'FRONTEND' })).toBe(false)
+    expect(showsNameLabel({ ...sub, name: ' frontend ' }, { id: 'frontend', name: 'Frontend' })).toBe(false)
+  })
+
+  it('keeps the shape label when the names differ, the sector is missing or the agent is not a sub', () => {
+    expect(showsNameLabel({ ...sub, name: 'Platform' }, { id: 'frontend', name: 'Frontend' })).toBe(true)
+    expect(showsNameLabel(sub, null)).toBe(true)
+    expect(showsNameLabel(sub, { id: 'frontend' })).toBe(true)
+    expect(showsNameLabel({ key: 'opencode', name: 'Frontend' }, { id: 'frontend', name: 'Frontend' })).toBe(true)
+    expect(showsNameLabel({ ...sub, name: '' }, { id: 'frontend', name: 'Frontend' })).toBe(true)
+  })
+
+  it('hides the sub shape label on the demo ladder and shows it again with no ladder', () => {
+    const agents = createAgents(new THREE.Scene(), ROSTER, new THREE.Scene())
+    agents.setLadder(LADDER)
+    expect(agents.views.get('sub-frontend').label.visible).toBe(false)
+    expect(agents.views.get('opencode').label.visible).toBe(true)
+    expect(agents.views.get('orchestrator').label.visible).toBe(true)
+
+    agents.setLadder(null)
+    expect(agents.views.get('sub-frontend').label.visible).toBe(true)
+    agents.dispose()
   })
 })
 
