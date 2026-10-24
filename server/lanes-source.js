@@ -2,20 +2,22 @@ import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, st
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
+import { fileURLToPath } from 'node:url'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
 
 const DEFAULT_QUIET_MS = 10 * 60 * 1000
 const DEFAULT_POLL_MS = 200
 const DEFAULT_PRIME_MS = 60 * 1000
 const READ_CHUNK = 64 * 1024
+const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
 export function runsFolder() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
-export function readLanes(projectRoot) {
+export function readLanes(folder = REPO_ROOT) {
   try {
-    return JSON.parse(readFileSync(join(projectRoot, 'docs', 'agents', 'lanes.json'), 'utf8'))
+    return JSON.parse(readFileSync(join(folder, 'docs', 'agents', 'lanes.json'), 'utf8'))
   } catch {
     return {}
   }
@@ -38,9 +40,21 @@ export function laneAgents(lanes) {
 
 function pathKey(path) {
   try {
-    return resolve(String(path ?? '')).toLowerCase()
+    const resolved = resolve(String(path ?? ''))
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved
   } catch {
     return ''
+  }
+}
+
+function metaFor(logPath) {
+  try {
+    const meta = JSON.parse(readFileSync(String(logPath).replace(/\.log$/i, '.meta.json'), 'utf8'))
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) return null
+    if (typeof meta.project !== 'string' || meta.project.trim() === '') return null
+    return meta
+  } catch {
+    return null
   }
 }
 
@@ -69,7 +83,7 @@ function laneOf(name, lanes) {
 export function createLanesSource(options = {}) {
   const folder = resolve(options.folder ?? runsFolder())
   const recordsFile = resolve(options.recordsFile ?? join(folder, 'runs.jsonl'))
-  const lanes = options.lanes ?? readLanes(options.projectRoot ?? '')
+  const lanes = options.lanes ?? readLanes()
   const agents = laneAgents(lanes)
   const byLane = new Map(agents.map((agent) => [agent.key, agent]))
   const roomRoot = options.projectRoot ? resolve(options.projectRoot) : ''
@@ -92,7 +106,7 @@ export function createLanesSource(options = {}) {
     } catch {}
   }
 
-  function beginRun(name, path, agent) {
+  function beginRun(name, path, agent, keepPaths = false) {
     const startedAt = now()
     const run = {
       name,
@@ -106,7 +120,7 @@ export function createLanesSource(options = {}) {
       buffer: '',
       decoder: new StringDecoder('utf8'),
       feed: createRunLineReader(agent.parser),
-      rewrite: rewriter(lanes[agent.key]?.worktree, roomRoot),
+      rewrite: keepPaths ? (line) => line : rewriter(lanes[agent.key]?.worktree, roomRoot),
       startedAt,
       lastGrowth: startedAt,
     }
@@ -145,7 +159,9 @@ export function createLanesSource(options = {}) {
       if (!lane) continue
       const agent = byLane.get(lane)
       if (!agent) continue
-      beginRun(entry.name.slice(0, -4), path, agent)
+      const meta = metaFor(path)
+      if (meta && pathKey(meta.project) !== pathKey(roomRoot)) continue
+      beginRun(entry.name.slice(0, -4), path, agent, Boolean(meta))
     }
   }
 

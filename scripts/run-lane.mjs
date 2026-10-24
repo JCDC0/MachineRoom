@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { appendFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
-import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -34,6 +34,54 @@ function gitStatus(cwd) {
   if (result.error) throw new Error(`git status did not run in ${cwd}.`)
   if (result.status !== 0) throw new Error(`git status failed in ${cwd}: ${String(result.stderr ?? '').trim()}`)
   return result.stdout ?? ''
+}
+
+function gitCheckout(cwd) {
+  let git
+  try {
+    git = gitPath()
+  } catch {
+    return false
+  }
+  const result = spawnSync(git, ['rev-parse', '--is-inside-work-tree'], { cwd, encoding: 'utf8', windowsHide: true })
+  if (result.error || result.status !== 0) return false
+  return String(result.stdout ?? '').trim() === 'true'
+}
+
+function projectFolder(value) {
+  const folder = resolve(String(value ?? ''))
+  let stat
+  try {
+    stat = statSync(folder)
+  } catch {
+    throw new Error(`The project folder ${folder} does not exist.`)
+  }
+  if (!stat.isDirectory()) throw new Error(`The project folder ${folder} is not a folder.`)
+  return folder
+}
+
+function readTask(options) {
+  if (options.taskFile) {
+    const path = resolve(options.taskFile)
+    let text
+    try {
+      text = readFileSync(path, 'utf8')
+    } catch {
+      throw new Error(`The task file ${path} could not be read.`)
+    }
+    if (!text.trim()) throw new Error('The task file is empty.')
+    return text
+  }
+  const text = String(options.task ?? '')
+  if (!text.trim()) throw new Error('The task is empty.')
+  return text
+}
+
+function printCommand(command, prompt) {
+  const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : arg))
+  console.log(`file: ${command.file}`)
+  console.log(`args: ${JSON.stringify(shown)}`)
+  console.log(`cwd: ${command.cwd}`)
 }
 
 function gitRead(cwd, args) {
@@ -184,6 +232,42 @@ async function main() {
     console.log(`The ${options.lane} lane is retired.`)
     return 1
   }
+  if (options.project) {
+    const project = projectFolder(options.project)
+    const dirty = gitCheckout(project) ? gitStatus(project).trim() !== '' : false
+    const problems = projectProblems({
+      project,
+      root,
+      mainCheckout: mainCheckout(),
+      lanes,
+      dirty,
+      allowDirty: options.allowDirty === true,
+    })
+    if (problems.length > 0) {
+      problems.forEach((sentence) => console.log(sentence))
+      return 1
+    }
+    const task = readTask(options)
+    const prompt = unattendedPrompt(task)
+    const name = `${options.lane}-project-${stamp()}`
+    const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+    const logPath = join(folder, `${name}.log`)
+    const usageFile = join(folder, `${name}.usage.json`)
+
+    if (options.dryRun) {
+      printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project }), prompt)
+      return 0
+    }
+
+    mkdirSync(folder, { recursive: true })
+    const lock = takeLaneLock(folder, options.lane)
+    try {
+      return await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task })
+    } finally {
+      releaseLaneLock(lock)
+    }
+  }
+
   const briefs = parseBriefs(read('TASKS.md'))
   const problems = briefProblems({
     briefs,
@@ -206,11 +290,7 @@ async function main() {
   const usageFile = join(folder, `${name}.usage.json`)
 
   if (options.dryRun) {
-    const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name })
-    const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : arg))
-    console.log(`file: ${command.file}`)
-    console.log(`args: ${JSON.stringify(shown)}`)
-    console.log(`cwd: ${command.cwd}`)
+    printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name }), prompt)
     return 0
   }
 
@@ -223,11 +303,14 @@ async function main() {
   }
 }
 
-async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name }) {
-  const status = gitStatus(lane.worktree)
-  if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
+async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '' }) {
+  if (!project) {
+    const status = gitStatus(lane.worktree)
+    if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
+  }
 
-  const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name })
+  const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, ...(project ? { cwd: project } : {}) })
+  if (project) writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify({ lane: options.lane, project })}\n`)
   const log = createWriteStream(logPath)
   const startedAt = Date.now()
   const child = spawn(command.file, command.args, { cwd: command.cwd, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
@@ -262,14 +345,15 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     console.log(`tool lines: ${toolLines.count}`)
   }
 
-  const summary = summarizeRun({ harness, log: readLog(logPath), worktree: lane.worktree })
+  const worktree = project || lane.worktree
+  const summary = summarizeRun({ harness, log: readLog(logPath), worktree })
   formatSummary(summary).forEach((line) => console.log(line))
 
-  const branch = gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
-  const commitsText = gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
+  const branch = project ? '' : gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
+  const commitsText = project ? '' : gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
   const record = runRecord({
     lane: options.lane,
-    briefs: wanted.map((brief) => brief.id),
+    briefs: project ? [] : wanted.map((brief) => brief.id),
     model: lane.cli.model,
     reasoning: lane.reasoning ?? null,
     startedAt,
@@ -280,9 +364,11 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     log: logPath,
     branch,
     commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
+    ...(project ? { project, task } : {}),
   })
   appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
   console.log(`record: ${runsFile()}`)
+  if (project) return result.code ?? 1
   try {
     const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
     console.log(`room: /?recording=${written.name}`)

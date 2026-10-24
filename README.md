@@ -141,6 +141,25 @@ A lane is one agent with its own worktree and branch, listed in `docs/agents/lan
 - Try a lane's build beside the stable room. `npm run candidate -- <lane>` builds that worktree and serves it on port 5175, with its own bridge. Leave the stable room running and compare the two. It refuses a lane with no worktree, a worktree with uncommitted changes, and a port in use. See `docs/agents/CANDIDATE.md`.
 - Review and merge. Press `C`, open Reviews. Each lane shows its branch, commits ahead, files and last run; click it for the diff. Merge is offered on a lane with commits ahead and no uncommitted changes, after a confirm card with a one-line message. The bridge merges one lane at a time, needs the main checkout on main with no uncommitted changes, a clean lane and the lane's exact head, stops on a conflict and leaves main as it was. It never pushes.
 
+## Use it on another project
+
+The room can show a lane run on a folder outside this repository. Serve the room on that folder and turn the lane source on:
+
+```
+npm run serve -- up --lanes --root C:\GitHub\Other
+```
+
+Then start a lane on the same folder, with the task text or a UTF-8 file that holds it:
+
+```
+npm run run-lane -- opencode --project C:\GitHub\Other --task "Fix the failing test."
+npm run run-lane -- opencode --project C:\GitHub\Other --task-file task.md
+```
+
+The runner refuses this checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. It runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
+
+A lane's `cli.model` can name a `provider/model` from any OpenAI-compatible provider in OpenCode's own config. The key stays in that config or an environment variable, never in `docs/agents/lanes.json` or this repository. MachineRoom does not set up a provider and does not read the key.
+
 ## What it never does
 
 - It never starts or stops Paperclip. Start it yourself with `paperclipai run`.
