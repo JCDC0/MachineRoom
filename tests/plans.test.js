@@ -631,20 +631,4 @@ describe('plans routes', () => {
     expect(after).toContain('## Briefs from the planner\r\n\r\n**C7a.')
   })
 
-  it('turns the plan routes off when Paperclip no longer has the tasks routes', async () => {
-    const { url } = await setup({ openapi: { openapi: '3.0.0', info: { version: 'test' }, paths: {} } })
-    await waitUntil(async () => {
-      const health = await fetch(`${url}/api/health`).then((response) => response.json())
-      return Boolean(health.surface?.checkedAt)
-    })
-    const post = await postPlan(url, { goal: 'Do the work', confirmed: true })
-    expect(post.status).toBe(503)
-    expect(post.body.error).toContain('tasks is off')
-    const get = await getPlan(url, 'issue-1')
-    expect(get.status).toBe(503)
-    expect(get.body.error).toContain('tasks is off')
-    const accept = await acceptPlan(url, 'issue-1', { ids: ['C7a'], confirmed: true })
-    expect(accept.status).toBe(503)
-    expect(accept.body.error).toContain('tasks is off')
-  })
 })

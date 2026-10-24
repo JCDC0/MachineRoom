@@ -1,14 +1,19 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createBridge } from '../../server/index.js'
-import { startFakePaperclip } from '../../scripts/fake-paperclip.mjs'
 import { makeTree } from '../../src/model/paths.js'
 import { createPipeline } from '../../src/model/pipeline.js'
 import { apply, createState } from '../../src/model/state.js'
 import { makeTempDir } from './tempRoot.js'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'public', 'fixtures')
+
+export const TEST_LANES = {
+  claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude' }, worktree: 'C:\\work\\claude' },
+  hermes: { name: 'Hermes', harness: 'Hermes', cli: { harness: 'hermes' }, worktree: 'C:\\work\\hermes' },
+  opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode' }, worktree: 'C:\\work\\opencode' },
+}
 
 export function makeSandbox() {
   const tree = JSON.parse(readFileSync(join(FIXTURES, 'sandbox-tree.json'), 'utf8'))
@@ -22,25 +27,35 @@ export function makeSandbox() {
   return root
 }
 
-export async function startLoop({ fake: fakeOptions = {}, bridge: bridgeOptions = {} } = {}) {
-  const fake = await startFakePaperclip({ speed: 1000, ...fakeOptions, port: 0 })
-  const bridge = createBridge({
-    paperclipUrl: fake.url,
-    companyId: fake.companyId,
+export async function startLaneBridge({
+  projectRoot = makeTempDir('mr-project-'),
+  runsDir = makeTempDir('mr-runs-'),
+  lanes = TEST_LANES,
+  bridge = {},
+  lanesSource = {},
+} = {}) {
+  mkdirSync(runsDir, { recursive: true })
+  const started = createBridge({
+    projectRoot,
     port: 0,
-    projectRoot: bridgeOptions.projectRoot ?? makeSandbox(),
     env: {},
-    surfaceEveryMs: 0,
-    ...bridgeOptions,
+    ...bridge,
+    lanesSource: { folder: runsDir, lanes, repoRoot: projectRoot, pollMs: 20, quietMs: 60000, primeMs: 600000, ...lanesSource },
   })
-  const { url } = await bridge.start()
+  const { url } = await started.start()
   return {
-    fake,
-    bridge,
+    bridge: started,
     url,
+    runsDir,
+    projectRoot,
+    writeLog(name, text, { append = false } = {}) {
+      const path = join(runsDir, `${name}.log`)
+      if (append) appendFileSync(path, text)
+      else writeFileSync(path, text)
+      return path
+    },
     async stop() {
-      await bridge.stop()
-      await fake.stop()
+      await started.stop()
     },
   }
 }
@@ -65,13 +80,13 @@ export async function waitFor(check, { timeoutMs = 10000, everyMs = 25, what = '
   }
 }
 
-export async function waitForPaperclip(url) {
+export async function waitForBridge(url) {
   return waitFor(
     async () => {
       const { body } = await getJson(`${url}/api/health`)
-      return body?.paperclip === true && body?.surface?.ok !== null ? body : null
+      return body?.ok === true ? body : null
     },
-    { what: 'the bridge to connect to the fake Paperclip' }
+    { what: 'the bridge health answer' }
   )
 }
 

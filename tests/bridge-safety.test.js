@@ -24,7 +24,16 @@ async function startBridge(lanes) {
   writeFileSync(join(briefsDir, 'TASKS.md'), '## Open\n\n**X1. Do the thing (AGY).** Text here.\n')
   writeFileSync(join(briefsDir, 'HOUSE-RULES.md'), read('HOUSE-RULES.md'))
   writeFileSync(join(briefsDir, 'lanes.json'), JSON.stringify(lanes))
-  const bridge = createBridge({ port: 0, projectRoot: dir, paperclipUrl: 'http://127.0.0.1:1', companyId: 'company-1', reconnectMinMs: 60000, reconnectMaxMs: 60000 })
+  const runs = join(dir, 'runs')
+  mkdirSync(runs, { recursive: true })
+  const bridge = createBridge({
+    port: 0,
+    projectRoot: dir,
+    paperclipUrl: 'http://127.0.0.1:1',
+    companyId: 'company-1',
+    env: {},
+    lanesSource: { folder: runs, lanes, repoRoot: dir, pollMs: 20 },
+  })
   const info = await bridge.start()
   cleanups.push(() => bridge.stop())
   return `http://127.0.0.1:${info.port}`
@@ -80,7 +89,7 @@ describe('prompt builders with hostile lane names', () => {
   })
 })
 
-describe('a Paperclip that takes the request and never answers', () => {
+describe('a drawer route that takes the request and never answers', () => {
   async function startSilentPaperclip() {
     const server = createServer(() => {})
     await new Promise((settle) => server.listen(0, '127.0.0.1', settle))
@@ -101,9 +110,7 @@ describe('a Paperclip that takes the request and never answers', () => {
       projectRoot: '',
       paperclipUrl,
       companyId: 'company-1',
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
-      surfaceEveryMs: 0,
+      env: {},
       upstreamTimeoutMs: 200,
     })
     const info = await bridge.start()
@@ -118,7 +125,8 @@ describe('a Paperclip that takes the request and never answers', () => {
     expect(task.status).toBe(504)
 
     const list = await fetch(`${url}/api/agents`, { signal: AbortSignal.timeout(3000) })
-    expect(list.status).toBe(502)
+    expect(list.status).toBe(200)
+    expect(await list.json()).toEqual([])
   })
 })
 

@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { readTree, treeEvent } from '../server/index.js'
 import { planFolderView } from '../src/model/folderView.js'
 import { BUDGET, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
-import { startLoop, waitForPaperclip } from './helpers/loop.js'
+import { startLaneBridge, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const MEASURED_MS = {
@@ -175,9 +175,9 @@ describe('the bridge tree event', () => {
   it('sends the whole list in the first tree event and only the new file after it', async () => {
     const root = makeTempDir('mr-scale-tree-')
     writeFileSync(join(root, 'a.js'), '1\n')
-    const loop = await startLoop({ bridge: { projectRoot: root, debounceMs: 50 } })
+    const loop = await startLaneBridge({ projectRoot: root, bridge: { debounceMs: 50 } })
     loops.push(loop)
-    await waitForPaperclip(loop.url)
+    await waitForBridge(loop.url)
     const trees = await readTrees(loop.url, 2, (seen) => {
       if (!seen) writeFileSync(join(root, 'b.js'), '2\n')
       else setTimeout(() => writeFileSync(join(root, 'c.js'), '3\n'), 200)

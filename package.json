@@ -1,7 +1,7 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.267",
+  "version": "0.1.268",
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -48,15 +48,12 @@
     "policy-propose": "node scripts/policy-propose.mjs",
     "hand-run": "node scripts/hand-run.mjs",
     "candidate": "node scripts/candidate.mjs",
-    "doctor": "node scripts/doctor.mjs",
     "pack-check": "node scripts/pack-check.mjs",
     "history-audit": "node scripts/history-audit.mjs",
     "review-lane": "node scripts/review-lane.mjs",
     "bump": "node scripts/bump.mjs",
-    "fake-paperclip": "node scripts/fake-paperclip.mjs",
     "scale-probe": "node scripts/scale-probe.mjs",
     "scale-live": "node scripts/scale-live.mjs",
-    "bridge": "node server/index.js",
     "serve": "node bin/machine-room.mjs"
   },
   "dependencies": {

@@ -99,7 +99,7 @@ describe('a pack starts the room', () => {
 
         const health = await fetch(`${base}/api/health`)
         expect(health.status).toBe(200)
-        expect((await health.json()).paperclip).toBe(false)
+        expect(await health.json()).toMatchObject({ ok: true, lanes: false, sessions: false })
 
         expect(existsSync(join(packageDir, 'node_modules'))).toBe(false)
       } finally {

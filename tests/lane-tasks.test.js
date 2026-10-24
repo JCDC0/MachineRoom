@@ -18,7 +18,7 @@ import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import { agentTasks } from '../src/model/liveTasks.js'
 import ApprovalsPanel, { emptyApprovalsText } from '../src/ui/panels/ApprovalsPanel.jsx'
-import { getJson, postJson, waitFor } from './helpers/loop.js'
+import { getJson, postJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const BASE_TIME = Date.parse('2026-10-24T10:00:00Z')
@@ -362,7 +362,7 @@ describe('the lane routes with no Paperclip', () => {
     expect(await getJson(`${url}/api/control/comments?issueId=${encodeURIComponent(openName)}`)).toEqual({ status: 200, body: [] })
     expect(await getJson(`${url}/api/control/approvals`)).toEqual({ status: 200, body: [] })
     const health = await createClient({ baseUrl: url }).health()
-    expect(health).toMatchObject({ lanes: true, paperclip: false })
+    expect(health).toMatchObject({ lanes: true })
 
     const created = await postJson(`${url}/api/control/issues`, { title: 'Make a task', assigneeAgentId: 'agent-opencode' })
     expect(created).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })

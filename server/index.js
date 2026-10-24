@@ -19,17 +19,11 @@ import { createRunsApi } from './runs.js'
 import { createSessionsSource } from './sessions-source.js'
 import { gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
-import { compareSurface, surfaceFeatures } from './surface.js'
 
 const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1):(\d+)$/
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/i
 const VITE_PORT = 5173
 const BODY_LIMIT = 64 * 1024
-const SURFACE_TIMEOUT_MS = 10000
-const SURFACE_EVERY_MS = 15 * 60 * 1000
-const SURFACE_PAIR_TRIES = 3
-const BACKUP_READ_TIMEOUT_MS = 10000
-const BACKUP_RUN_TIMEOUT_MS = 120000
 const AGENTS_TIMEOUT_MS = 15000
 
 function localOrigin(origin) {
@@ -62,45 +56,12 @@ const TREE_VERSIONS_KEPT = 4
 const TREE_REUSE_MS = 1000
 const WATCH_QUIET_MS = 2000
 const POLL_READ_GAP = 3
-const LIVE_CHUNK_LIMIT = 8192
-const LOG_RUNS_KEPT = 8
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
 const TREE_MAX_BUFFER = 64 * 1024 * 1024
 const TREE_TIMEOUT_MS = 20000
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules)([/\\]|$)/
-const PARSER_BY_ADAPTER = {
-  claude_local: 'claude',
-  hermes_local: 'hermes',
-  opencode_local: 'opencode',
-}
 const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
-const AGENT_FETCH_EVERY_MS = 30000
 const gzipAsync = promisify(gzipCallback)
-
-export function slugify(value) {
-  return (
-    String(value ?? '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || 'agent'
-  )
-}
-
-export function mapAgent(raw, taken = new Set()) {
-  const id = raw?.id ?? ''
-  const name = raw?.name ?? raw?.key ?? id
-  const adapterType = raw?.adapterType ?? raw?.adapter_type ?? ''
-  const role = typeof raw?.role === 'string' && raw.role !== '' ? raw.role : null
-  const adapterParser = PARSER_BY_ADAPTER[adapterType]
-  const parser = adapterParser ?? (adapterType === 'process' && slugify(name) === 'agy' ? 'agy' : null)
-  let key = adapterParser ?? slugify(name)
-  if (taken.has(key)) {
-    key = slugify(name)
-    for (let n = 2; taken.has(key); n += 1) key = `${slugify(name)}-${n}`
-  }
-  taken.add(key)
-  return { id, key, name, adapterType, role, parser }
-}
 
 function walkFiles(listDir, currentDir, prefix = '', out = []) {
   let entries
@@ -200,11 +161,6 @@ export function treeEvent(tree, sent = null, shape = null) {
   return `event: tree\ndata: ${JSON.stringify({ root: tree.root, files })}\n\n`
 }
 
-function toWsUrl(paperclipUrl, companyId) {
-  const base = String(paperclipUrl).replace(/\/+$/, '').replace(/^http/i, 'ws')
-  return `${base}/api/companies/${encodeURIComponent(companyId)}/events/ws`
-}
-
 function corsHeaders(req, isAllowed) {
   const origin = req.headers.origin
   if (origin && !isAllowed(origin)) return {}
@@ -277,35 +233,6 @@ function createReadJsonBody(sendJson) {
   }
 }
 
-function backupWarningCodes(block) {
-  const warnings = Array.isArray(block?.warnings) ? block.warnings : []
-  return warnings
-    .map((warning) => warning?.code)
-    .filter((code) => typeof code === 'string' && code !== '')
-}
-
-function backupStatusAnswer(block) {
-  const checkedAt = new Date().toISOString()
-  if (!block || typeof block !== 'object') {
-    return { enabled: false, status: null, latestAt: null, ageHours: null, warnings: [], checkedAt }
-  }
-  const latest = block.latestBackup && typeof block.latestBackup === 'object' ? block.latestBackup : null
-  return {
-    enabled: block.enabled === true,
-    status: typeof block.status === 'string' && block.status ? block.status : null,
-    latestAt: typeof latest?.mtime === 'string' && latest.mtime ? latest.mtime : null,
-    ageHours: Number.isFinite(latest?.ageHours) ? latest.ageHours : null,
-    warnings: backupWarningCodes(block),
-    checkedAt,
-  }
-}
-
-function backupFileName(path) {
-  const text = typeof path === 'string' ? path.replace(/\\/g, '/') : ''
-  const name = basename(text)
-  return name && name !== '.' ? name : null
-}
-
 export function createBridge(options = {}) {
   const paperclipUrl = (options.paperclipUrl ?? process.env.PAPERCLIP_URL ?? 'http://127.0.0.1:3100').replace(/\/+$/, '')
   const companyId = options.companyId ?? process.env.PAPERCLIP_COMPANY_ID ?? ''
@@ -314,16 +241,10 @@ export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const treeReader = options.readTree ?? readTree
   const port = Number(options.port ?? process.env.PORT ?? 5174)
-  const reconnectMinMs = Number(options.reconnectMinMs ?? 1000)
-  const reconnectMaxMs = Number(options.reconnectMaxMs ?? 15000)
   const heartbeatMs = Number(options.heartbeatMs ?? 15000)
   const debounceMs = Number(options.debounceMs ?? 300)
   const pollMs = Number(options.pollMs ?? Math.min(debounceMs, 200))
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
-  const logRetries = Number(options.logRetries ?? 3)
-  const logRetryMs = Number(options.logRetryMs ?? 150)
-  const logTimeoutMs = Number(options.logTimeoutMs ?? 1500)
-  const surfaceEveryMs = Number(options.surfaceEveryMs ?? SURFACE_EVERY_MS)
   const upstreamTimeoutMs = Number(options.upstreamTimeoutMs ?? AGENTS_TIMEOUT_MS)
   const env = options.env ?? process.env
   const origins = namedOrigins(env.MACHINEROOM_ORIGINS)
@@ -361,8 +282,6 @@ export function createBridge(options = {}) {
     sendJson,
     readJsonBody,
   })
-  let surface = { ok: null, checkedAt: null, error: 'not checked yet' }
-  const featureIsOff = (feature) => surfaceFeatures(surface)[feature] === false
   const control = createControlApi({
     paperclipUrl,
     companyId,
@@ -370,10 +289,9 @@ export function createBridge(options = {}) {
     projectWorkspaceId,
     sendJson,
     readJsonBody,
-    featureOn: (feature) => !featureIsOff(feature),
     timeoutMs: upstreamTimeoutMs,
     lanes: () => lanesSource,
-    paperclipUp: () => paperclipOpen,
+    paperclipUp: () => false,
   })
   const policy = createPolicyApi({
     paperclipUrl,
@@ -382,7 +300,6 @@ export function createBridge(options = {}) {
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
     readJsonBody,
-    featureOn: (feature) => !featureIsOff(feature),
     timeoutMs: upstreamTimeoutMs,
   })
   const plans = createPlansApi({
@@ -394,7 +311,6 @@ export function createBridge(options = {}) {
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     sendJson,
     readJsonBody,
-    featureOn: (feature) => !featureIsOff(feature),
     timeoutMs: upstreamTimeoutMs,
   })
   const assistant = createAssistantApi({
@@ -440,11 +356,7 @@ export function createBridge(options = {}) {
   const treeClients = new WeakSet()
   const history = []
   let nextId = 0
-  let socket = null
-  let paperclipOpen = false
   let stopped = false
-  let reconnectTimer = null
-  let reconnectDelay = reconnectMinMs
   let watcher = null
   let pollTimer = null
   let lastFiles = []
@@ -457,22 +369,13 @@ export function createBridge(options = {}) {
   const treeVersions = new Map()
   let treeReading = null
   let treeDirty = false
-  let surfaceTimer = null
-  let surfaceChecking = false
-  let surfacePending = false
-  let paperclipVersion = null
-  const logs = new Map()
-  const waiting = []
-  let resolving = false
   const unreadable = createUnreadableCounter()
   const unparsedSince = new Date().toISOString()
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
   const masker = createSplitMasker()
-  const maskReset = {}
   let maskTimer = null
   let parserByAgentId = new Map()
-  let agentFetchAt = 0
 
   function writeSseFrame(res, entry) {
     res.write(`id: ${entry.id}\nevent: frame\ndata: ${entry.data}\n\n`)
@@ -614,10 +517,6 @@ export function createBridge(options = {}) {
     }, pollMs)
   }
 
-  function agentListOf(raw) {
-    return Array.isArray(raw) ? raw : Array.isArray(raw?.agents) ? raw.agents : Array.isArray(raw?.data) ? raw.data : []
-  }
-
   function rememberLaneParsers() {
     if (!lanesSource) return
     for (const agent of lanesSource.agents) {
@@ -632,43 +531,11 @@ export function createBridge(options = {}) {
     }
   }
 
-  function rememberAgents(list) {
-    const taken = new Set([
-      ...(lanesSource ? lanesSource.agents.map((agent) => agent.key) : []),
-      ...(sessionsSource ? sessionsSource.agents.map((agent) => agent.key) : []),
-    ])
-    const agents = list.map((entry) => mapAgent(entry, taken))
-    const parsers = new Map()
-    for (const agent of agents) {
-      if (agent.id !== '') parsers.set(String(agent.id), agent.parser)
-    }
-    parserByAgentId = parsers
-    rememberLaneParsers()
-    rememberSessionsParsers()
-    return agents
-  }
-
-  function loadAgents() {
-    fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, { signal: AbortSignal.timeout(upstreamTimeoutMs) })
-      .then(async (upstream) => {
-        if (!upstream.ok) return
-        rememberAgents(agentListOf(await upstream.json()))
-      })
-      .catch(() => {})
-  }
-
   function countUnreadable(parsed) {
     const payload = parsed.payload
     if (parsed.type === 'heartbeat.run.log' && payload?.stream === 'stdout') {
       const agentId = String(payload.agentId ?? '')
-      if (!parserByAgentId.has(agentId)) {
-        const now = Date.now()
-        if (now - agentFetchAt >= AGENT_FETCH_EVERY_MS) {
-          agentFetchAt = now
-          loadAgents()
-        }
-        return
-      }
+      if (!parserByAgentId.has(agentId)) return
       unreadable.push(parserByAgentId.get(agentId), payload.runId, payload.chunk)
       return
     }
@@ -737,244 +604,6 @@ export function createBridge(options = {}) {
     release(masker.push(parsed, Date.now()))
   }
 
-  async function pullLog(state, runId) {
-    const response = await fetch(`${paperclipUrl}/api/heartbeat-runs/${encodeURIComponent(runId)}/log?offset=${state.offset}`, {
-      signal: AbortSignal.timeout(logTimeoutMs),
-    })
-    if (!response.ok) return response.status
-    const body = await response.json()
-    const end = typeof body?.content === 'string' ? body.content.lastIndexOf('\n') : -1
-    if (end === -1) return response.status
-    const complete = body.content.slice(0, end + 1)
-    for (const line of complete.split('\n')) {
-      if (!line) continue
-      try {
-        const entry = JSON.parse(line)
-        if (typeof entry.seq === 'number' && typeof entry.chunk === 'string' && entry.chunk.length > LIVE_CHUNK_LIMIT) {
-          state.chunks.set(entry.seq, entry.chunk)
-        }
-      } catch {}
-    }
-    state.offset += Buffer.byteLength(complete, 'utf8')
-    return response.status
-  }
-
-  async function fullChunk(payload) {
-    let state = logs.get(payload.runId)
-    if (!state) {
-      state = { offset: 0, chunks: new Map() }
-      logs.set(payload.runId, state)
-      if (logs.size > LOG_RUNS_KEPT) logs.delete(logs.keys().next().value)
-    }
-    for (let attempt = 0; attempt < logRetries && !stopped; attempt += 1) {
-      if (state.chunks.has(payload.seq)) break
-      let status = 0
-      try {
-        status = await pullLog(state, payload.runId)
-      } catch {}
-      if (state.chunks.has(payload.seq) || status === 404) break
-      await new Promise((resolveWait) => setTimeout(resolveWait, logRetryMs))
-    }
-    return state.chunks.get(payload.seq) ?? null
-  }
-
-  async function restore(parsed) {
-    let frame = parsed
-    try {
-      const chunk = await fullChunk(parsed.payload)
-      if (chunk) frame = { ...parsed, payload: { ...parsed.payload, chunk, truncated: false } }
-    } catch {}
-    if (!stopped) accept(frame)
-  }
-
-  function drain() {
-    resolving = false
-    while (waiting.length > 0 && !resolving && !stopped) dispatch(waiting.shift())
-  }
-
-  function resetMasker() {
-    if (resolving) {
-      waiting.push(maskReset)
-      return
-    }
-    release(masker.reset())
-  }
-
-  function dispatch(parsed) {
-    if (parsed === maskReset) {
-      release(masker.reset())
-      return
-    }
-    const payload = parsed.payload
-    const cut =
-      parsed.type === 'heartbeat.run.log' &&
-      payload?.truncated === true &&
-      typeof payload.runId === 'string' &&
-      typeof payload.seq === 'number'
-    if (!cut) {
-      accept(parsed)
-      return
-    }
-    resolving = true
-    restore(parsed).finally(drain)
-  }
-
-  function recordFrame(rawData) {
-    const text = typeof rawData === 'string' ? rawData : Buffer.from(rawData).toString('utf8')
-    let parsed
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      return
-    }
-    if (!parsed || typeof parsed !== 'object') return
-    if (companyId && parsed.companyId && parsed.companyId !== companyId) return
-    if (resolving) {
-      waiting.push(parsed)
-      return
-    }
-    dispatch(parsed)
-  }
-
-  function scheduleReconnect() {
-    if (stopped || reconnectTimer) return
-    const wait = reconnectDelay
-    reconnectDelay = Math.min(reconnectDelay * 2, reconnectMaxMs)
-    reconnectTimer = setTimeout(() => {
-      reconnectTimer = null
-      connectUpstream()
-    }, wait)
-  }
-
-  function surfaceError(message) {
-    paperclipVersion = null
-    surface = { ok: null, checkedAt: new Date().toISOString(), error: message }
-  }
-
-  async function readPaperclipVersion() {
-    try {
-      const response = await fetch(`${paperclipUrl}/api/health`, { signal: AbortSignal.timeout(SURFACE_TIMEOUT_MS) })
-      const body = await response.json()
-      return typeof body?.version === 'string' && body.version ? body.version : null
-    } catch {
-      return null
-    }
-  }
-
-  async function readSurfaceSpec() {
-    let response
-    try {
-      response = await fetch(`${paperclipUrl}/api/openapi.json`, { signal: AbortSignal.timeout(SURFACE_TIMEOUT_MS) })
-    } catch {
-      return { error: 'Could not read the Paperclip spec: Paperclip is not reachable.' }
-    }
-    if (!response.ok) return { error: `Paperclip answered ${response.status} when asked for its spec.` }
-    let spec
-    try {
-      spec = await response.json()
-    } catch {
-      return { error: 'Paperclip answered something that is not a spec.' }
-    }
-    if (!spec || typeof spec !== 'object' || !spec.paths || typeof spec.paths !== 'object') {
-      return { error: 'Paperclip answered a document with no routes. That is not a spec.' }
-    }
-    return { spec }
-  }
-
-  async function readSurfacePair() {
-    for (let attempt = 0; attempt < SURFACE_PAIR_TRIES; attempt += 1) {
-      const before = await readPaperclipVersion()
-      const read = await readSurfaceSpec()
-      if (read.error) return read
-      const after = await readPaperclipVersion()
-      if (before === after) return { spec: read.spec, version: after }
-    }
-    return { error: 'Paperclip changed while the bridge read its spec. The bridge checks again when its socket opens.' }
-  }
-
-  async function checkSurface() {
-    if (stopped) return
-    if (surfaceChecking) {
-      surfacePending = true
-      return
-    }
-    surfaceChecking = true
-    try {
-      const pair = await readSurfacePair()
-      if (pair.error) {
-        surfaceError(pair.error)
-        return
-      }
-      const result = compareSurface(pair.spec)
-      paperclipVersion = pair.version
-      const checkedAt = new Date().toISOString()
-      surface = result.ok
-        ? { ok: true, checkedAt }
-        : {
-            ok: false,
-            checkedAt,
-            missing: result.missing.map(({ method, path }) => ({ method, path })),
-            changed: result.changed.map(({ method, path, answerFields, bodyFields }) => ({
-              method,
-              path,
-              answerFields,
-              bodyFields,
-            })),
-          }
-    } catch {
-      surfaceError('The Paperclip spec could not be read.')
-    } finally {
-      surfaceChecking = false
-      if (surfacePending && !stopped) {
-        surfacePending = false
-        checkSurface().catch(() => {})
-      }
-    }
-  }
-
-  function startSurfaceTimer() {
-    if (!(surfaceEveryMs > 0)) return
-    surfaceTimer = setInterval(() => {
-      checkSurface().catch(() => {})
-    }, surfaceEveryMs)
-    surfaceTimer.unref?.()
-  }
-
-  function connectUpstream() {
-    if (stopped) return
-    let ws
-    try {
-      ws = new WebSocket(toWsUrl(paperclipUrl, companyId))
-    } catch {
-      paperclipOpen = false
-      scheduleReconnect()
-      return
-    }
-    socket = ws
-    ws.addEventListener('open', () => {
-      if (socket !== ws) return
-      paperclipOpen = true
-      reconnectDelay = reconnectMinMs
-      resetMasker()
-      checkSurface().catch(() => {})
-      loadAgents()
-    })
-    ws.addEventListener('message', (event) => {
-      if (socket !== ws) return
-      recordFrame(event.data)
-    })
-    ws.addEventListener('error', () => {
-      if (socket !== ws) return
-      paperclipOpen = false
-    })
-    ws.addEventListener('close', () => {
-      if (socket !== ws) return
-      paperclipOpen = false
-      socket = null
-      scheduleReconnect()
-    })
-  }
-
   const heartbeatTimer = setInterval(() => {
     for (const client of clients) {
       client.write(': keepalive\n\n')
@@ -1016,128 +645,20 @@ export function createBridge(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {
         ok: true,
-        paperclip: paperclipOpen,
         lanes: lanesSource !== null,
         sessions: sessionsSource !== null,
-        paperclipVersion,
-        surface,
-        features: surfaceFeatures(surface),
         unparsed: { ...unreadable.counts(), since: unparsedSince },
         masked: { total: maskedTotal, since: maskedSince },
       })
       return
     }
 
-    if (req.method === 'GET' && url.pathname === '/api/backup') {
-      if (featureIsOff('backup')) {
-        sendJson(req, res, 503, { error: 'Paperclip changed: backup is off. Run npm run doctor to see which routes.' })
-        return
-      }
-      let upstream
-      try {
-        upstream = await fetch(`${paperclipUrl}/api/health`, { signal: AbortSignal.timeout(BACKUP_READ_TIMEOUT_MS) })
-      } catch {
-        sendJson(req, res, 502, { error: 'Paperclip did not answer.' })
-        return
-      }
-      if (!upstream.ok) {
-        sendJson(req, res, 502, { error: 'Paperclip did not answer.' })
-        return
-      }
-      let health
-      try {
-        health = await upstream.json()
-      } catch {
-        sendJson(req, res, 502, { error: 'Paperclip did not answer.' })
-        return
-      }
-      sendJson(req, res, 200, backupStatusAnswer(health?.databaseBackup))
-      return
-    }
-
-    if (req.method === 'POST' && url.pathname === '/api/backup') {
-      if (featureIsOff('backup')) {
-        sendJson(req, res, 503, { error: 'Paperclip changed: backup is off. Run npm run doctor to see which routes.' })
-        return
-      }
-      const body = await readJsonBody(req, res)
-      if (body === null) return
-      if (body.confirmed !== true) {
-        sendJson(req, res, 400, { error: 'Confirm the backup first.' })
-        return
-      }
-      let upstream
-      try {
-        upstream = await fetch(`${paperclipUrl}/api/instance/database-backups`, {
-          method: 'POST',
-          signal: AbortSignal.timeout(BACKUP_RUN_TIMEOUT_MS),
-        })
-      } catch {
-        sendJson(req, res, 502, { error: 'Paperclip could not make a backup.' })
-        return
-      }
-      if (upstream.status === 409) {
-        sendJson(req, res, 409, { error: 'A backup is already running.' })
-        return
-      }
-      if (upstream.status === 403) {
-        sendJson(req, res, 403, { error: 'Paperclip refused the backup.' })
-        return
-      }
-      if (!upstream.ok) {
-        sendJson(req, res, 502, { error: 'Paperclip could not make a backup.' })
-        return
-      }
-      let answer
-      try {
-        answer = await upstream.json()
-      } catch {
-        answer = null
-      }
-      const name = backupFileName(answer?.backupFile)
-      if (!name) {
-        sendJson(req, res, 502, { error: 'Paperclip could not make a backup.' })
-        return
-      }
-      sendJson(req, res, 200, {
-        ok: true,
-        name,
-        sizeBytes: Number.isFinite(answer?.sizeBytes) ? answer.sizeBytes : null,
-        prunedCount: Number.isFinite(answer?.prunedCount) ? answer.prunedCount : null,
-        finishedAt: typeof answer?.finishedAt === 'string' && answer.finishedAt ? answer.finishedAt : null,
-      })
-      return
-    }
-
     if (req.method === 'GET' && url.pathname === '/api/agents') {
+      rememberLaneParsers()
+      rememberSessionsParsers()
       const laneAgents = lanesSource ? [...lanesSource.agents] : []
       const sessionAgents = sessionsSource ? [...sessionsSource.agents] : []
-      const extraAgents = [...laneAgents, ...sessionAgents]
-      try {
-        const upstream = await fetch(`${paperclipUrl}/api/companies/${encodeURIComponent(companyId)}/agents`, {
-          signal: AbortSignal.timeout(upstreamTimeoutMs),
-        })
-        if (!upstream.ok) {
-          if (extraAgents.length > 0) {
-            rememberLaneParsers()
-            rememberSessionsParsers()
-            sendJson(req, res, 200, extraAgents)
-            return
-          }
-          sendJson(req, res, 502, { error: `upstream answered ${upstream.status}` })
-          return
-        }
-        const raw = await upstream.json()
-        sendJson(req, res, 200, [...rememberAgents(agentListOf(raw)), ...extraAgents])
-      } catch {
-        if (extraAgents.length > 0) {
-          rememberLaneParsers()
-          rememberSessionsParsers()
-          sendJson(req, res, 200, extraAgents)
-          return
-        }
-        sendJson(req, res, 502, { error: 'upstream unreachable' })
-      }
+      sendJson(req, res, 200, [...laneAgents, ...sessionAgents])
       return
     }
 
@@ -1238,10 +759,6 @@ export function createBridge(options = {}) {
     sessionsSource?.start()
     await startWatcher()
     if (stopped) throw new Error('The bridge stopped before it started.')
-    startSurfaceTimer()
-    checkSurface().catch(() => {})
-    loadAgents()
-    connectUpstream()
     return new Promise((resolveStart, rejectStart) => {
       server.once('error', rejectStart)
       server.listen(port, '127.0.0.1', () => {
@@ -1259,7 +776,6 @@ export function createBridge(options = {}) {
 
   function stop() {
     stopped = true
-    waiting.length = 0
     if (maskTimer) {
       clearTimeout(maskTimer)
       maskTimer = null
@@ -1268,11 +784,6 @@ export function createBridge(options = {}) {
     lanesSource?.stop()
     sessionsSource?.stop()
     clearInterval(heartbeatTimer)
-    if (surfaceTimer) {
-      clearInterval(surfaceTimer)
-      surfaceTimer = null
-    }
-    surfacePending = false
     if (pollTimer) {
       clearInterval(pollTimer)
       pollTimer = null
@@ -1282,18 +793,6 @@ export function createBridge(options = {}) {
         watcher.close()
       } catch {}
       watcher = null
-    }
-    if (reconnectTimer) {
-      clearTimeout(reconnectTimer)
-      reconnectTimer = null
-    }
-    if (socket) {
-      const current = socket
-      socket = null
-      paperclipOpen = false
-      try {
-        current.close()
-      } catch {}
     }
     for (const client of clients) {
       try {

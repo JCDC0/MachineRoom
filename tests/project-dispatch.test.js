@@ -13,7 +13,7 @@ import {
   projectRunLanes,
   projectTaskProblem,
 } from '../src/ui/panels/runs.js'
-import { getJson, postJson, waitFor } from './helpers/loop.js'
+import { getJson, postJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
