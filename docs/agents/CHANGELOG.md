@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `docs/agents/HARNESSES.md` plans pluggable harnesses at the owner's request: where a harness is named today, one descriptor per harness in a browser-safe half and a Node half, a registry the pipeline, runner, recorder, bridge and panels read, `retired` in `lanes.json` as the on and off switch, and a generic ACP harness. Planned only; TASKS.md lists H1 to H4 as not dispatched.
 - AGY is retired in `docs/agents/lanes.json` for now, by the owner's choice (too slow): the room leaves it out and `run-lane` refuses it. The lane source tests that check AGY's lane shape use a copy with it brought back. TASKS.md has S7a and S7b: the room follows the owner's own Claude Code and OpenCode sessions on its project, read-only, with the owner's yes to reading their files under the home folder.
 - `tests/temp-root.test.js` compares the folder `makeTempDir` returns with the resolved process folder, the one test 0.1.251 missed on the Windows runner. The full suite passes on this machine with TEMP set to an 8.3 short path.
 - CI failed on 0.1.248 to 0.1.250 in tests from Q5a and Q5b. On the Windows runner TEMP is an 8.3 short path (`RUNNER~1`) and the project checks resolve the long one, so `makeTempDir` in `tests/helpers/tempRoot.js` now returns the folder through `realpathSync.native`; the 7 failures came back on this machine with TEMP set to a short path and pass with the fix. On the Ubuntu runner the checkout sits under the home folder, so `--project` on home is refused as holding this checkout before the profile rule, and the test now accepts either.
