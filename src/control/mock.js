@@ -78,7 +78,7 @@ const SAMPLE_BRIEFS = [
   '',
   '**P5. Recover cut and redacted tool lines (Hermes).** Recover the tool name and path from a broken OpenCode log line. Files: `src/model/parsers/opencode.js`, `tests/parsers.test.js`. Tests in `tests/parsers.test.js`.',
   '',
-  '**M1. Exit test with a real Paperclip (Claude and the owner).** Create a task for Hermes from the drawer and read its comment in the thread. Files: `src/ui/panels/DispatchPanel.jsx`, `src/ui/panels/IssueThread.jsx`, `src/control/client.js`, `tests/dispatch.test.js`. Tests in `tests/dispatch.test.js`.',
+  '**M1. Exit test on a lane run (Claude and the owner).** Start one lane on a brief and read its report in the thread. Files: `src/ui/panels/DispatchPanel.jsx`, `src/ui/panels/IssueThread.jsx`, `src/control/client.js`, `tests/dispatch.test.js`. Tests in `tests/dispatch.test.js`.',
   '',
   '**C2. Control client (OpenCode, merged as 0.1.34).** Make the contract real. Files: `src/control/client.js`, `tests/control-contract.test.js`. Tests in `tests/control-contract.test.js`.',
 ].join('\n')
@@ -237,35 +237,35 @@ function seed(at) {
   const iso = (minutesAgo) => new Date(at - minutesAgo * 60000).toISOString()
   return {
     agents: [
-      { id: 'agent-claude', key: 'claude-code', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer', status: 'idle', model: 'claude-haiku-5-5', maxTurnsPerRun: 14, timeoutSec: 420, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-hermes', key: 'hermes', name: 'Hermes', adapterType: 'hermes_local', role: 'engineer', status: 'idle', model: null, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-opencode', key: 'opencode-go', name: 'OpenCode Go', adapterType: 'opencode_local', role: 'engineer', status: 'running', model: 'opencode-go/qwen3.8-flash', budgetMonthlyCents: 500, spentMonthlyCents: 8 },
-      { id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', role: 'designer', status: 'idle', model: null, budgetMonthlyCents: 0, spentMonthlyCents: 0 },
-      { id: 'agent-orchestrator', key: 'orchestrator', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo', status: 'paused', model: null, budgetMonthlyCents: 300, spentMonthlyCents: 291 },
+      { id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', role: null, status: 'idle', model: 'sonnet', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local', role: null, status: 'running', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode2', key: 'opencode2', name: 'OpenCode 2', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode3', key: 'opencode3', name: 'OpenCode 3', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
+      { id: 'agent-opencode4', key: 'opencode4', name: 'OpenCode 4', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
     ],
     issues: [
       { id: 'issue-18', identifier: 'JC-18', title: 'Fix the typo in README.md', description: 'Change Teh to The and commit.', status: 'done', priority: 'medium', assigneeAgentId: 'agent-opencode', parentId: null, createdAt: iso(90), updatedAt: iso(88) },
       { id: 'issue-19', identifier: 'JC-19', title: 'Record a failing test scenario', description: 'Add a test that fails, then fix it.', status: 'in_progress', priority: 'high', assigneeAgentId: 'agent-opencode', parentId: null, createdAt: iso(40), updatedAt: iso(3) },
-      { id: 'issue-20', identifier: 'JC-20', title: 'Summarise the source files', description: 'Write docs/summary.md.', status: 'todo', priority: 'low', assigneeAgentId: 'agent-hermes', parentId: null, createdAt: iso(20), updatedAt: iso(20) },
+      { id: 'issue-20', identifier: 'JC-20', title: 'Summarise the source files', description: 'Write docs/summary.md.', status: 'todo', priority: 'low', assigneeAgentId: 'agent-opencode2', parentId: null, createdAt: iso(20), updatedAt: iso(20) },
       { id: 'issue-21', identifier: 'JC-21', title: 'Review the layout change', description: 'Read the diff and report problems.', status: 'in_review', priority: 'medium', assigneeAgentId: 'agent-claude', parentId: 'issue-19', createdAt: iso(15), updatedAt: iso(6) },
-      { id: 'issue-22', identifier: 'JC-22', title: 'Plan the control panels', description: 'Break the work into small tasks.', status: 'blocked', priority: 'critical', assigneeAgentId: 'agent-orchestrator', parentId: null, createdAt: iso(10), updatedAt: iso(9) },
+      { id: 'issue-22', identifier: 'JC-22', title: 'Plan the control panels', description: 'Break the work into small tasks.', status: 'blocked', priority: 'critical', assigneeAgentId: 'agent-opencode3', parentId: null, createdAt: iso(10), updatedAt: iso(9) },
     ],
     comments: {
       'issue-18': [
-        { id: 'comment-1', issueId: 'issue-18', authorAgentId: 'agent-opencode', authorName: 'OpenCode Go', body: 'Fixed the typo in README.md.\n\n- Changed "Teh quick" to "The quick".\n- Committed as f12c3db.', createdAt: iso(88) },
+        { id: 'comment-1', issueId: 'issue-18', authorAgentId: 'agent-opencode', authorName: 'OpenCode', body: 'Fixed the typo in README.md.\n\n- Changed "Teh quick" to "The quick".\n- Committed as f12c3db.', createdAt: iso(88) },
       ],
       'issue-22': [
         { id: 'comment-2', issueId: 'issue-22', authorAgentId: null, authorName: 'You', body: 'Keep each task under 20 minutes.', createdAt: iso(10) },
-        { id: 'comment-3', issueId: 'issue-22', authorAgentId: 'agent-orchestrator', authorName: 'Orchestrator', body: 'Blocked: my monthly budget is almost spent. I need an override to continue.', createdAt: iso(9) },
+        { id: 'comment-3', issueId: 'issue-22', authorAgentId: 'agent-opencode3', authorName: 'OpenCode 3', body: 'Blocked: the diff touches files another lane is editing.', createdAt: iso(9) },
       ],
     },
     approvals: [
-      { id: 'approval-1', type: 'budget_override_required', status: 'pending', summary: 'Orchestrator asks to raise its monthly budget from 300 to 600 cents.', requestedByAgentId: 'agent-orchestrator', createdAt: iso(9) },
-      { id: 'approval-2', type: 'hire_agent', status: 'pending', summary: 'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).', requestedByAgentId: 'agent-orchestrator', createdAt: iso(7) },
+      { id: 'approval-1', type: 'budget_override_required', status: 'pending', summary: 'OpenCode 2 asks for a longer time limit on its next run.', requestedByAgentId: 'agent-opencode2', createdAt: iso(9) },
+      { id: 'approval-2', type: 'hire_agent', status: 'pending', summary: 'Hire "Planner" (claude_local, claude-sonnet-5-5, 14 turns, subagents off).', requestedByAgentId: 'agent-opencode', createdAt: iso(7) },
       { id: 'approval-3', type: 'request_board_approval', status: 'approved', summary: 'Run the recording scenarios on the free model.', requestedByAgentId: 'agent-claude', createdAt: iso(300) },
     ],
     liveRuns: [
-      { runId: 'run-live-1', agentId: 'agent-opencode', agentName: 'OpenCode Go', adapterType: 'opencode_local', status: 'running', issueId: 'issue-19', startedAt: iso(3), lastOutputAt: iso(1) },
+      { runId: 'run-live-1', agentId: 'agent-opencode', agentName: 'OpenCode', adapterType: 'opencode_local', status: 'running', issueId: 'issue-19', startedAt: iso(3), lastOutputAt: iso(1) },
     ],
     orchestratorChat: {
       state: 'idle',
@@ -278,24 +278,14 @@ function seed(at) {
       ],
     },
     costs: {
-      summary: { spendCents: 299, budgetCents: 1000, utilizationPercent: 29 },
+      summary: { spendCents: 490, budgetCents: 0, utilizationPercent: 0 },
       byAgent: [
-        { agentId: 'agent-orchestrator', agentName: 'Orchestrator', costCents: 291, inputTokens: 412000, outputTokens: 38000 },
-        { agentId: 'agent-opencode', agentName: 'OpenCode Go', costCents: 8, inputTokens: 20400, outputTokens: 30600 },
-        { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 0, inputTokens: 41892, outputTokens: 4126 },
+        { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 218, inputTokens: 310000, outputTokens: 26000 },
+        { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 143, inputTokens: 214000, outputTokens: 31000 },
+        { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 87, inputTokens: 96000, outputTokens: 14000 },
+        { agentId: 'agent-opencode3', agentName: 'OpenCode 3', costCents: 42, inputTokens: 51000, outputTokens: 7200 },
       ],
-      quota: [
-        {
-          provider: 'anthropic',
-          ok: true,
-          windows: [
-            { label: 'Current session', usedPercent: 5, resetsAt: new Date(at + 4 * 3600000).toISOString(), detail: null },
-            { label: 'Current week (all models)', usedPercent: 42, resetsAt: new Date(at + 3 * 86400000).toISOString(), detail: null },
-            { label: 'Extra usage', usedPercent: null, resetsAt: null, detail: 'Not enabled' },
-          ],
-        },
-        { provider: 'openai', ok: false, error: 'Codex app-server: spawn codex ENOENT', windows: [] },
-      ],
+      quota: [],
     },
     models: [
       { id: 'opencode/deepseek-v4.1-flash-free', label: 'DeepSeek v4.1 Flash (free)', harness: 'opencode', tier: 'small', free: true },

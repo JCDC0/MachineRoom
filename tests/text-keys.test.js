@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { shapesFor } from '../src/engine/shapes.js'
 import { parserFor, toAgents } from '../src/live/source.js'
-import { backupNotice } from '../src/ui/panels/backup.js'
 import { groupBriefsByOwner } from '../src/ui/panels/briefs.js'
 import { approvalTypeLabel, statusLabel } from '../src/ui/panels/format.js'
 import { openRank } from '../src/ui/panels/TasksPanel.jsx'
 
 const NAMES = ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']
 
-describe('lookups keyed by text from Paperclip or a brief', () => {
+describe('lookups keyed by text from a run or a brief', () => {
   it('label a status or approval type named like an object key as plain text', () => {
     for (const name of NAMES) {
       expect(statusLabel(name), name).toBe(name.replace(/_/g, ' '))
@@ -20,14 +19,6 @@ describe('lookups keyed by text from Paperclip or a brief', () => {
   it('rank such a task status last', () => {
     for (const name of NAMES) expect(openRank(name), name).toBe(99)
     expect(openRank('in_progress')).toBe(1)
-  })
-
-  it('show such a backup warning as its own text', () => {
-    const notice = backupNotice({ enabled: true, latestAt: new Date().toISOString(), ageHours: 1, warnings: ['constructor', { code: 'toString' }] }, { now: Date.now() })
-    const lines = notice?.lines ?? []
-    expect(lines).toContain('constructor')
-    expect(lines).toContain('toString')
-    expect(lines.every((line) => typeof line === 'string')).toBe(true)
   })
 
   it('label such a brief owner with its own name', () => {

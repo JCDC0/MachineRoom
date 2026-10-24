@@ -106,59 +106,55 @@ describe('boardLines', () => {
 
     expect(lines.empty).toBeNull()
     expect(lines.summary).toEqual({
-      text: 'SPENT $2.99 OF $10.00 (29.0%)',
+      text: 'SPENT $4.90, NO BUDGET',
       over: false,
     })
 
     expect(lines.rows).toHaveLength(5)
-    expect(lines.rows.map((row) => row.key)).toEqual(['claude', 'orchestrator', 'hermes', 'opencode', 'agy'])
+    expect(lines.rows.map((row) => row.key)).toEqual(['claude', 'opencode', 'opencode-2', 'opencode-3', 'opencode-4'])
 
     expect(lines.rows[0]).toEqual({
       key: 'claude',
       name: 'Claude Code',
-      cost: '$0.00',
-      tokens: '41.9k in / 4.1k out',
-      share: 0,
+      cost: '$2.18',
+      tokens: '310.0k in / 26.0k out',
+      share: 0.445,
       reported: true,
     })
     expect(lines.rows[1]).toEqual({
-      key: 'orchestrator',
-      name: 'Orchestrator',
-      cost: '$2.91',
-      tokens: '412.0k in / 38.0k out',
-      share: 0.973,
+      key: 'opencode',
+      name: 'OpenCode',
+      cost: '$1.43',
+      tokens: '214.0k in / 31.0k out',
+      share: 0.292,
       reported: true,
     })
     expect(lines.rows[2]).toEqual({
-      key: 'hermes',
-      name: 'Hermes',
-      cost: 'not reported',
-      tokens: null,
-      share: null,
-      reported: false,
+      key: 'opencode-2',
+      name: 'OpenCode 2',
+      cost: '$0.87',
+      tokens: '96.0k in / 14.0k out',
+      share: 0.178,
+      reported: true,
     })
     expect(lines.rows[3]).toEqual({
-      key: 'opencode',
-      name: 'OpenCode Go',
-      cost: '$0.08',
-      tokens: '20.4k in / 30.6k out',
-      share: 0.027,
+      key: 'opencode-3',
+      name: 'OpenCode 3',
+      cost: '$0.42',
+      tokens: '51.0k in / 7.2k out',
+      share: 0.086,
       reported: true,
     })
     expect(lines.rows[4]).toEqual({
-      key: 'agy',
-      name: 'agy',
+      key: 'opencode-4',
+      name: 'OpenCode 4',
       cost: 'not reported',
       tokens: null,
       share: null,
       reported: false,
     })
 
-    expect(lines.quota).toHaveLength(4)
-    expect(lines.quota[0]).toEqual({ text: 'ANTHROPIC CURRENT SESSION 5%', error: false })
-    expect(lines.quota[1]).toEqual({ text: 'ANTHROPIC CURRENT WEEK (ALL MODELS) 42%', error: false })
-    expect(lines.quota[2]).toEqual({ text: 'ANTHROPIC EXTRA USAGE', error: false })
-    expect(lines.quota[3]).toEqual({ text: 'OPENAI Codex app-server: spawn codex ENOENT', error: true })
+    expect(lines.quota).toEqual([])
   })
 
   it('formats a row that is not reported', () => {
@@ -288,13 +284,13 @@ describe('createCostBoard', () => {
     expect(rows).toHaveLength(5)
 
     const quotas = board.element.querySelectorAll('.mr-board-quota')
-    expect(quotas).toHaveLength(4)
+    expect(quotas).toHaveLength(0)
 
     rows[1].click()
-    expect(onPick).toHaveBeenCalledWith('orchestrator')
+    expect(onPick).toHaveBeenCalledWith('opencode')
 
     rows[3].click()
-    expect(onPick).toHaveBeenCalledWith('opencode')
+    expect(onPick).toHaveBeenCalledWith('opencode-3')
 
     board.dispose()
     expect(board.element.removed).toBe(true)

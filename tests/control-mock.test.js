@@ -70,12 +70,12 @@ describe('mock control client', () => {
     expect((await client.decideApproval('approval-2', 'request-revision')).status).toBe('revision_requested')
   })
 
-  it('reports quota windows, including one that could not be read', async () => {
+  it('reports lane costs in dollars with no quota windows', async () => {
     const { quota, summary, byAgent } = await fast().costs()
-    expect(summary.budgetCents).toBeGreaterThan(0)
+    expect(summary).toEqual({ spendCents: 490, budgetCents: 0, utilizationPercent: 0 })
     expect(byAgent.length).toBeGreaterThan(0)
-    expect(quota.find((item) => item.ok).windows.some((window) => window.usedPercent === null)).toBe(true)
-    expect(quota.find((item) => !item.ok).error).toBeTruthy()
+    expect(quota).toEqual([])
+    expect(byAgent.map((item) => item.agentName)).toEqual(['Claude Code', 'OpenCode', 'OpenCode 2', 'OpenCode 3'])
   })
 
   it('sets a budget and refuses a bad one', async () => {
@@ -93,8 +93,8 @@ describe('mock control client', () => {
 
   it('fails the next call once when told to', async () => {
     const client = fast()
-    client.failNext('agents', 'Paperclip is not reachable.')
-    await expect(client.agents()).rejects.toThrow('Paperclip is not reachable.')
+    client.failNext('agents', 'The bridge is not answering.')
+    await expect(client.agents()).rejects.toThrow('The bridge is not answering.')
     await expect(client.agents()).resolves.toBeTruthy()
   })
 
@@ -110,7 +110,7 @@ describe('mock control client', () => {
     const client = fast()
     const seen = []
     const stop = client.subscribe((event) => seen.push(event))
-    await client.createIssue({ title: 'C', assigneeAgentId: 'agent-agy' })
+    await client.createIssue({ title: 'C', assigneeAgentId: 'agent-opencode4' })
     await client.postComment('issue-18', 'Thanks.')
     await client.decideApproval('approval-1', 'approve')
     await client.setAgentBudget('agent-claude', 100)
@@ -122,7 +122,7 @@ describe('mock control client', () => {
       { topic: 'costs' },
     ])
     stop()
-    await client.createIssue({ title: 'D', assigneeAgentId: 'agent-agy' })
+    await client.createIssue({ title: 'D', assigneeAgentId: 'agent-opencode4' })
     expect(seen).toHaveLength(5)
   })
 
@@ -130,7 +130,7 @@ describe('mock control client', () => {
     const client = fast()
     const seen = []
     client.subscribe((event) => seen.push(event))
-    await expect(client.createIssue({ title: ' ', assigneeAgentId: 'agent-agy' })).rejects.toThrow()
+    await expect(client.createIssue({ title: ' ', assigneeAgentId: 'agent-opencode4' })).rejects.toThrow()
     expect(seen).toEqual([])
   })
 

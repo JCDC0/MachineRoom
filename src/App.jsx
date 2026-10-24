@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useState } from 'react'
 import { discoverBridge, probeLive } from './live/bridge.js'
 import { loadDemo, simulatedSpeed } from './live/simulated.js'
-import { discover, loadTree } from './live/source.js'
 import { makeTree } from './model/paths.js'
 import { loadReplay } from './model/replay.js'
 import { createScaleReplay } from './model/scaleTree.js'
-import { PROXY_BASE, chooseRoute, fpsEnabled, recordingName, scaleSize, treeAddress } from './startup.js'
+import { chooseRoute, fpsEnabled, recordingName, scaleSize } from './startup.js'
 import { store } from './storage.js'
 import Stage from './Stage.jsx'
 import Connect from './ui/Connect.jsx'
 import Notice from './ui/Notice.jsx'
-import { SETTINGS_KEY, loadSettings, saveSettings } from './ui/settings.js'
+import { loadSettings, saveSettings, savedSource } from './ui/settings.js'
 
 
 async function loadSimulated(params) {
@@ -28,18 +27,13 @@ async function loadBridge(params, url) {
 
 async function loadLive(connection, params) {
   if (connection.source === 'demo') return loadSimulated(params)
-  if (connection.source === 'bridge') return loadBridge(params, connection.bridge)
-  const base = connection.paperclip || PROXY_BASE
-  const found = await discover({ base, companyId: connection.company || params.get('company'), root: params.get('root') })
-  const treeUrl = treeAddress(params, window.location.origin)
-  const listed = treeUrl ? await loadTree(treeUrl) : { files: [] }
-  const tree = makeTree({ root: found.rootName, files: listed.files, created: [] })
-  return { agents: found.agents, tree, activities: [], live: { base, companyId: found.companyId } }
+  if (!connection.bridge) throw new Error('No bridge address is saved.')
+  return loadBridge(params, connection.bridge)
 }
 
 function hasSaved() {
   try {
-    return store()?.getItem(SETTINGS_KEY) != null
+    return savedSource(store()) !== null
   } catch {
     return false
   }
@@ -51,7 +45,7 @@ function startRoute() {
 }
 
 function describeFailure(error, connection) {
-  const where = connection.source === 'bridge' ? connection.bridge : connection.paperclip || PROXY_BASE
+  const where = connection.bridge || 'the bridge'
   if (error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(error.message)) {
     return `Could not reach ${where}. Check that it is running, then try again.`
   }
@@ -73,6 +67,19 @@ export default function App() {
   const [connectError, setConnectError] = useState(() => route.notice ?? null)
   const [attempt, setAttempt] = useState(0)
   const [liveAvailable, setLiveAvailable] = useState(false)
+  const [pageBridge, setPageBridge] = useState(null)
+
+  useEffect(() => {
+    if (route.mode !== 'connect') return undefined
+    let current = true
+    const origin = window.location.origin
+    probeLive({ bridge: origin }).then((ok) => {
+      if (current && ok) setPageBridge(origin)
+    })
+    return () => {
+      current = false
+    }
+  }, [route.mode])
 
   useEffect(() => {
     if (route.mode === 'connect') return undefined
@@ -110,12 +117,13 @@ export default function App() {
       setLiveAvailable(true)
       return undefined
     }
+    if (!connection.bridge) {
+      setLiveAvailable(false)
+      return undefined
+    }
     let current = true
-    Promise.all([
-      probeLive({ bridge: connection.bridge }),
-      probeLive({ base: connection.paperclip || PROXY_BASE }),
-    ]).then(([viaBridge, viaProxy]) => {
-      if (current) setLiveAvailable(viaBridge || viaProxy)
+    probeLive({ bridge: connection.bridge }).then((viaBridge) => {
+      if (current) setLiveAvailable(viaBridge)
     })
     return () => {
       current = false
@@ -123,9 +131,9 @@ export default function App() {
   }, [route.connection, route.notice])
 
   const connect = useCallback((settings) => {
-    saveSettings(store(), { source: settings.source, bridge: settings.bridge, paperclip: settings.paperclip, company: settings.company })
+    saveSettings(store(), { source: 'bridge', bridge: settings.bridge })
     setConnectError(null)
-    setRoute((previous) => ({ mode: 'live', connection: { ...previous.connection, ...settings } }))
+    setRoute((previous) => ({ mode: 'live', connection: { ...previous.connection, source: 'bridge', bridge: settings.bridge } }))
   }, [])
 
   const demo = useCallback(() => {
@@ -146,10 +154,10 @@ export default function App() {
   }, [])
 
   if (route.mode === 'connect') {
-    const { source: choice, bridge, paperclip, company } = route.connection
+    const { source: choice, bridge } = route.connection
     return (
       <Connect
-        initial={{ source: choice, bridge, paperclip, company }}
+        initial={{ source: choice, bridge: pageBridge ?? bridge }}
         error={connectError}
         onSubmit={connect}
         onDemo={demo}

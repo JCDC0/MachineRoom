@@ -2,15 +2,13 @@ import { useEffect, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
 import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf, timeUntil } from './format.js'
 import { subscribeToNotices } from './notices.js'
-import { backupAgePercent, backupNotice, backupsNotRunning, formatBytes, laneModeFromHealth } from './backup.js'
 
 export function budgetConfirmText(name, cents) {
-  return `Set ${visibleText(name)}'s monthly budget to ${formatCents(cents)} in Paperclip?`
+  return `Set ${visibleText(name)}'s monthly budget to ${formatCents(cents)}?`
 }
 
 export default function MetersPanel({
   client,
-  initialBackupStatus = null,
   initialCosts = null,
   initialAgents = [],
   initialEditingAgentId = null,
@@ -27,17 +25,6 @@ export default function MetersPanel({
   const [savingBudget, setSavingBudget] = useState(false)
   const [budgetError, setBudgetError] = useState(null)
   const [budgetConfirmOpen, setBudgetConfirmOpen] = useState(Boolean(initialConfirmOpen))
-
-  const [backupStatus, setBackupStatus] = useState(initialBackupStatus)
-  const [backupLoading, setBackupLoading] = useState(
-    () => initialBackupStatus == null && typeof client?.backupStatus === 'function'
-  )
-  const [backupError, setBackupError] = useState(null)
-  const [health, setHealth] = useState(null)
-  const [showConfirm, setShowConfirm] = useState(false)
-  const [backingUp, setBackingUp] = useState(false)
-  const [backupActionError, setBackupActionError] = useState(null)
-  const [backupSuccess, setBackupSuccess] = useState(null)
 
   async function loadData({ isInitial = false } = {}) {
     if (isInitial) {
@@ -62,50 +49,8 @@ export default function MetersPanel({
     }
   }
 
-  async function loadBackup() {
-    if (typeof client?.backupStatus !== 'function') return
-    setBackupLoading(true)
-    setBackupError(null)
-    try {
-      const status = await client.backupStatus()
-      setBackupStatus(status)
-    } catch {
-      setBackupError('Could not read the backup status.')
-    } finally {
-      setBackupLoading(false)
-    }
-  }
-
-  async function loadHealth() {
-    if (typeof client?.health !== 'function') return
-    try {
-      const answer = await client.health()
-      setHealth(answer && typeof answer === 'object' && !Array.isArray(answer) ? answer : null)
-    } catch {
-      setHealth(null)
-    }
-  }
-
-  async function handleBackupNow() {
-    if (typeof client?.backupNow !== 'function') return
-    setBackingUp(true)
-    setBackupActionError(null)
-    try {
-      const result = await client.backupNow()
-      setBackupSuccess(`Backed up as ${result?.name ?? 'backup'}, ${formatBytes(result?.sizeBytes)}.`)
-      setShowConfirm(false)
-      await loadBackup()
-    } catch (err) {
-      setBackupActionError(err?.message || 'The backup request failed.')
-    } finally {
-      setBackingUp(false)
-    }
-  }
-
   useEffect(() => {
     loadData({ isInitial: true })
-    loadBackup()
-    loadHealth()
   }, [client])
 
   useEffect(() => {
@@ -159,10 +104,6 @@ export default function MetersPanel({
     }
   }
 
-  const notice = backupNotice(backupStatus)
-  const laneMode = laneModeFromHealth(health)
-  const backupsLine = backupsNotRunning({ laneMode, paperclipDown: laneMode })
-  const backupPct = backupAgePercent(backupStatus)
   const summary = costs?.summary ?? null
   const quota = listOf(costs?.quota)
   const byAgent = listOf(costs?.byAgent)
@@ -173,13 +114,11 @@ export default function MetersPanel({
   return (
     <div className="meters-panel">
       <div className="panel-toolbar">
-        <span className="panel-count mono">Spend & Quota</span>
+        <span className="panel-count mono">Spend</span>
         <button
           type="button"
           onClick={() => {
             loadData({ isInitial: false })
-            loadBackup()
-            loadHealth()
           }}
         >
           Refresh
@@ -365,165 +304,65 @@ export default function MetersPanel({
         </div>
       </section>
 
-      <section className="meters-section" aria-label="Provider quotas">
-        <h4 className="meters-section-title">Quota</h4>
-        <div className="meters-quota-list">
-          {quota.map((item) => {
-            if (!item.ok) {
+      {quota.length > 0 && (
+        <section className="meters-section" aria-label="Provider quotas">
+          <h4 className="meters-section-title">Quota</h4>
+          <div className="meters-quota-list">
+            {quota.map((item) => {
+              if (!item.ok) {
+                return (
+                  <div key={textOf(item.provider)} className="quota-provider-card is-error">
+                    <div className="quota-provider-name">{textOf(item.provider)}</div>
+                    <div className="quota-error-label">Could not read quota</div>
+                    <div className="quota-error-text mono">{textOf(item.error)}</div>
+                  </div>
+                )
+              }
+
               return (
-                <div key={textOf(item.provider)} className="quota-provider-card is-error">
+                <div key={textOf(item.provider)} className="quota-provider-card">
                   <div className="quota-provider-name">{textOf(item.provider)}</div>
-                  <div className="quota-error-label">Could not read quota</div>
-                  <div className="quota-error-text mono">{textOf(item.error)}</div>
-                </div>
-              )
-            }
+                  <div className="quota-windows-list">
+                    {listOf(item.windows).map((w, index) => {
+                      const usedPercent = clampPercent(w?.usedPercent)
+                      const hasPct = usedPercent !== null
 
-            return (
-              <div key={textOf(item.provider)} className="quota-provider-card">
-                <div className="quota-provider-name">{textOf(item.provider)}</div>
-                <div className="quota-windows-list">
-                  {listOf(item.windows).map((w, index) => {
-                    const usedPercent = clampPercent(w?.usedPercent)
-                    const hasPct = usedPercent !== null
+                      return (
+                        <div key={`${textOf(w.label)}-${index}`} className="quota-window-row">
+                          <div className="quota-window-head">
+                            <span className="quota-window-label">{textOf(w.label)}</span>
+                            {hasPct && w.resetsAt && (
+                              <span className="quota-window-reset mono">
+                                resets in {timeUntil(w.resetsAt)}
+                              </span>
+                            )}
+                          </div>
 
-                    return (
-                      <div key={`${textOf(w.label)}-${index}`} className="quota-window-row">
-                        <div className="quota-window-head">
-                          <span className="quota-window-label">{textOf(w.label)}</span>
-                          {hasPct && w.resetsAt && (
-                            <span className="quota-window-reset mono">
-                              resets in {timeUntil(w.resetsAt)}
-                            </span>
+                          {hasPct ? (
+                            <div className="meter-bar">
+                              <div className="meter-track" aria-hidden="true">
+                                <div
+                                  className={`meter-fill ${meterTone(usedPercent) === 'full' ? 'is-full' : ''}`}
+                                  style={{ width: `${usedPercent}%` }}
+                                />
+                              </div>
+                              <span className="quota-percent-label meter-percent mono">{`${usedPercent}%`}</span>
+                            </div>
+                          ) : (
+                            <div className="quota-detail-text mono">{textOf(w.detail)}</div>
                           )}
                         </div>
-
-                        {hasPct ? (
-                          <div className="meter-bar">
-                            <div className="meter-track" aria-hidden="true">
-                              <div
-                                className={`meter-fill ${meterTone(usedPercent) === 'full' ? 'is-full' : ''}`}
-                                style={{ width: `${usedPercent}%` }}
-                              />
-                            </div>
-                            <span className="quota-percent-label meter-percent mono">{`${usedPercent}%`}</span>
-                          </div>
-                        ) : (
-                          <div className="quota-detail-text mono">{textOf(w.detail)}</div>
-                        )}
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
-      </section>
+              )
+            })}
+          </div>
+        </section>
+      )}
         </>
       )}
-
-      <section className="meters-section backup-section" aria-label="Backups">
-        <h4 className="meters-section-title">Backups</h4>
-        <div className="backup-card">
-          {backupsLine ? (
-            <div className="backup-line mono">{backupsLine}</div>
-          ) : backupError ? (
-            <div className="backup-error mono" role="alert">
-              {backupError}
-            </div>
-          ) : notice ? (
-            <>
-              <div
-                className={`backup-title mono ${
-                  notice.tone === 'red' ? 'is-red' : notice.tone === 'yellow' ? 'is-yellow' : ''
-                }`}
-              >
-                {notice.title}
-              </div>
-              {backupPct != null && (
-                <div className="meter-bar backup-age-bar">
-                  <div className="meter-track" aria-hidden="true">
-                    <div
-                      className={`meter-fill ${notice.tone === 'red' || meterTone(backupPct) === 'full' ? 'is-full' : ''}`}
-                      style={{ width: `${backupPct}%` }}
-                    />
-                  </div>
-                  <span className="meter-percent mono">{`${backupPct}%`}</span>
-                </div>
-              )}
-              {notice.lines.length > 0 && (
-                <div className="backup-lines">
-                  {notice.lines.map((line, idx) => (
-                    <div key={idx} className="backup-line mono">
-                      {line}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : backupLoading ? (
-            <div className="meter-label-dim mono">Loading backup status...</div>
-          ) : null}
-
-            {backupSuccess && (
-              <div className="backup-success mono" role="status">
-                {backupSuccess}
-              </div>
-            )}
-
-            {!showConfirm && (
-              <div className="backup-actions">
-                <button
-                  type="button"
-                  className="backup-now-btn"
-                  onClick={() => {
-                    setShowConfirm(true)
-                    setBackupActionError(null)
-                    setBackupSuccess(null)
-                  }}
-                  disabled={backingUp}
-                >
-                  Back up now
-                </button>
-              </div>
-            )}
-
-            {showConfirm && (
-              <div className="backup-confirm-card" role="region" aria-label="Confirm backup">
-                <div className="backup-confirm-warning">
-                  Back up Paperclip's database now? Paperclip writes a file to its backup folder; agents keep working.
-                </div>
-                <div className="backup-confirm-actions">
-                  <button
-                    type="button"
-                    className="backup-confirm-btn"
-                    disabled={backingUp}
-                    onClick={handleBackupNow}
-                  >
-                    {backingUp ? 'Backing up' : 'Back up'}
-                  </button>
-                  <button
-                    type="button"
-                    className="backup-cancel-btn"
-                    disabled={backingUp}
-                    onClick={() => {
-                      setShowConfirm(false)
-                      setBackupActionError(null)
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-                {backupActionError && (
-                  <div className="backup-confirm-error mono" role="alert">
-                    {backupActionError}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-      </section>
     </div>
   )
 }

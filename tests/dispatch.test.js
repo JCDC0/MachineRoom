@@ -3,16 +3,27 @@ import { createMockClient } from '../src/control/mock.js'
 import { createAssistantRunner, createDispatcher } from '../src/assistant/dispatch.js'
 import { context } from './probes/context.js'
 
+const LANE_AGENTS = [
+  { key: 'claude', name: 'Claude Code' },
+  { key: 'opencode', name: 'OpenCode' },
+  { key: 'opencode2', name: 'OpenCode 2' },
+  { key: 'opencode3', name: 'OpenCode 3' },
+  { key: 'opencode4', name: 'OpenCode 4' },
+]
+
+const MOCK_CONTEXT = { ...context, agents: LANE_AGENTS }
+
 function makeHost(overrides = {}) {
   const calls = []
+  const fallback = overrides.client ? MOCK_CONTEXT : context
   const record = (name) => (...args) => {
     calls.push([name, ...args])
   }
   const host = {
     calls,
     client: null,
-    context: () => context,
-    agentName: (key) => context.agents.find((agent) => agent.key === key)?.name ?? key,
+    context: () => fallback,
+    agentName: (key) => fallback.agents.find((agent) => agent.key === key)?.name ?? key,
     focusAgent: record('focusAgent'),
     focusTerminal: (key) => {
       calls.push(['focusTerminal', key])
@@ -96,9 +107,9 @@ describe('settings requests', () => {
     expect((await dispatcher.run({ type: 'open_config', agent: 'agy', section: 'model' })).message).toMatch(/does not offer/)
     host.calls.length = 0
     const withBuilder = makeHost({ client: fast() })
-    const opened = await createDispatcher(withBuilder).run({ type: 'open_config', agent: 'agy', section: 'subagents' })
-    expect(opened.message).toBe('Opened the Agents tab. Pick agy in the list to change its subagents settings.')
-    expect(withBuilder.calls).toEqual([['focusAgent', 'agy', 'close'], ['openPanel', 'agents']])
+    const opened = await createDispatcher(withBuilder).run({ type: 'open_config', agent: 'opencode3', section: 'subagents' })
+    expect(opened.message).toBe('Opened the Agents tab. Pick OpenCode 3 in the list to change its subagents settings.')
+    expect(withBuilder.calls).toEqual([['focusAgent', 'opencode3', 'close'], ['openPanel', 'agents']])
   })
 
   it('opens the agents tab by name', async () => {
@@ -133,16 +144,16 @@ describe('guards', () => {
     const host = makeHost({ client })
     const dispatcher = createDispatcher(host)
     const writes = [
-      { type: 'propose_dispatch', assignee: 'opencode-go', title: 'Fix the typo' },
-      { type: 'propose_budget', agent: 'hermes', cents: 500 },
-      { type: 'propose_subagents', agent: 'agy', allowed: true },
+      { type: 'propose_dispatch', assignee: 'opencode', title: 'Fix the typo' },
+      { type: 'propose_budget', agent: 'opencode2', cents: 500 },
+      { type: 'propose_subagents', agent: 'opencode3', allowed: true },
     ]
     for (const action of writes) {
       const result = await dispatcher.run(action)
       expect(result).toEqual({ ok: false, message: 'That needs your confirmation first.' })
     }
     expect((await client.issues()).length).toBe(5)
-    expect((await client.agents()).find((agent) => agent.key === 'hermes').budgetMonthlyCents).toBe(0)
+    expect((await client.agents()).find((agent) => agent.key === 'opencode2').budgetMonthlyCents).toBe(0)
   })
 })
 
@@ -150,8 +161,8 @@ describe('confirmed writes', () => {
   it('creates a task for the named agent and opens its thread', async () => {
     const client = fast()
     const host = makeHost({ client })
-    const result = await createDispatcher(host).run({ type: 'propose_dispatch', assignee: 'opencode-go', title: 'Fix the typo in README' }, { confirmed: true })
-    expect(result).toEqual({ ok: true, message: 'Created JC-23 for OpenCode Go.' })
+    const result = await createDispatcher(host).run({ type: 'propose_dispatch', assignee: 'opencode', title: 'Fix the typo in README' }, { confirmed: true })
+    expect(result).toEqual({ ok: true, message: 'Created JC-23 for OpenCode.' })
     const issues = await client.issues()
     expect(issues[0]).toMatchObject({ title: 'Fix the typo in README', assigneeAgentId: 'agent-opencode' })
     expect(host.calls).toEqual([['openPanel', 'tasks', 'JC-23']])
@@ -159,23 +170,23 @@ describe('confirmed writes', () => {
 
   it('sets a budget in cents and says it in dollars', async () => {
     const client = fast()
-    const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_budget', agent: 'hermes', cents: 250 }, { confirmed: true })
-    expect(result).toEqual({ ok: true, message: 'The budget of Hermes is now $2.50 a month.' })
-    expect((await client.agents()).find((agent) => agent.key === 'hermes').budgetMonthlyCents).toBe(250)
+    const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_budget', agent: 'opencode2', cents: 250 }, { confirmed: true })
+    expect(result).toEqual({ ok: true, message: 'The budget of OpenCode 2 is now $2.50 a month.' })
+    expect((await client.agents()).find((agent) => agent.key === 'opencode2').budgetMonthlyCents).toBe(250)
   })
 
   it('says plainly that subagent settings are not available when the client has no update call', async () => {
-    const result = await createDispatcher(makeHost({ client: { ...fast(), updateAgent: undefined } })).run({ type: 'propose_subagents', agent: 'agy', allowed: true }, { confirmed: true })
+    const result = await createDispatcher(makeHost({ client: { ...fast(), updateAgent: undefined } })).run({ type: 'propose_subagents', agent: 'opencode3', allowed: true }, { confirmed: true })
     expect(result.ok).toBe(false)
     expect(result.message).toMatch(/C3c/)
   })
 
   it('changes the subagent setting through the mock update call', async () => {
     const client = fast()
-    const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_subagents', agent: 'agy', allowed: true }, { confirmed: true })
-    expect(result).toEqual({ ok: true, message: 'agy may start subagents.' })
-    const agy = (await client.agents()).find((agent) => agent.key === 'agy')
-    expect(agy).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
+    const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_subagents', agent: 'opencode3', allowed: true }, { confirmed: true })
+    expect(result).toEqual({ ok: true, message: 'OpenCode 3 may start subagents.' })
+    const lane = (await client.agents()).find((agent) => agent.key === 'opencode3')
+    expect(lane).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
   })
 
   it('uses the update call when the client has one', async () => {
@@ -185,11 +196,11 @@ describe('confirmed writes', () => {
       seen.push([id, patch])
       return {}
     }
-    const allow = await createDispatcher(makeHost({ client })).run({ type: 'propose_subagents', agent: 'agy', allowed: true }, { confirmed: true })
-    const forbid = await createDispatcher(makeHost({ client })).run({ type: 'propose_subagents', agent: 'hermes', allowed: false }, { confirmed: true })
-    expect(allow.message).toBe('agy may start subagents.')
-    expect(forbid.message).toBe('Hermes may not start subagents.')
-    expect(seen).toEqual([['agent-agy', { subagentsAllowed: true }], ['agent-hermes', { subagentsAllowed: false }]])
+    const allow = await createDispatcher(makeHost({ client })).run({ type: 'propose_subagents', agent: 'opencode3', allowed: true }, { confirmed: true })
+    const forbid = await createDispatcher(makeHost({ client })).run({ type: 'propose_subagents', agent: 'opencode2', allowed: false }, { confirmed: true })
+    expect(allow.message).toBe('OpenCode 3 may start subagents.')
+    expect(forbid.message).toBe('OpenCode 2 may not start subagents.')
+    expect(seen).toEqual([['agent-opencode3', { subagentsAllowed: true }], ['agent-opencode2', { subagentsAllowed: false }]])
   })
 
   it('explains that there is no control connection when the client is missing', async () => {
@@ -201,11 +212,11 @@ describe('confirmed writes', () => {
   it('finds the agent by the id the room holds, then by key, then by name', async () => {
     const client = fast()
     const byId = makeHost({ client, agentId: (key) => (key === 'opencode' ? 'agent-opencode' : undefined), context: () => ({ agents: [{ key: 'opencode', name: 'Some other label' }], paths: [] }), agentName: () => 'Some other label' })
-    expect((await createDispatcher(byId).run({ type: 'propose_budget', agent: 'opencode', cents: 100 }, { confirmed: true })).message).toMatch(/OpenCode Go is now \$1.00/)
-    const byKey = makeHost({ client, context: () => ({ agents: [{ key: 'hermes', name: 'x' }], paths: [] }), agentName: () => 'x' })
-    expect((await createDispatcher(byKey).run({ type: 'propose_budget', agent: 'hermes', cents: 200 }, { confirmed: true })).message).toMatch(/Hermes is now \$2.00/)
-    const byName = makeHost({ client, context: () => ({ agents: [{ key: 'opencode', name: 'OpenCode Go' }], paths: [] }), agentName: () => 'OpenCode Go' })
-    expect((await createDispatcher(byName).run({ type: 'propose_budget', agent: 'opencode', cents: 300 }, { confirmed: true })).message).toMatch(/OpenCode Go is now \$3.00/)
+    expect((await createDispatcher(byId).run({ type: 'propose_budget', agent: 'opencode', cents: 100 }, { confirmed: true })).message).toMatch(/OpenCode is now \$1.00/)
+    const byKey = makeHost({ client, context: () => ({ agents: [{ key: 'opencode2', name: 'x' }], paths: [] }), agentName: () => 'x' })
+    expect((await createDispatcher(byKey).run({ type: 'propose_budget', agent: 'opencode2', cents: 200 }, { confirmed: true })).message).toMatch(/OpenCode 2 is now \$2.00/)
+    const byName = makeHost({ client, context: () => ({ agents: [{ key: 'opencode', name: 'OpenCode' }], paths: [] }), agentName: () => 'OpenCode' })
+    expect((await createDispatcher(byName).run({ type: 'propose_budget', agent: 'opencode', cents: 300 }, { confirmed: true })).message).toMatch(/OpenCode is now \$3.00/)
   })
 
   it('names an agent the control plane does not know', async () => {
@@ -216,9 +227,9 @@ describe('confirmed writes', () => {
 
   it('shows the error message of a failed call in plain words', async () => {
     const client = fast()
-    client.failNext('createIssue', 'Paperclip is not reachable.')
-    const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_dispatch', assignee: 'agy', title: 'Anything' }, { confirmed: true })
-    expect(result).toEqual({ ok: false, message: 'Paperclip is not reachable.' })
+    client.failNext('createIssue', 'The bridge is not answering.')
+    const result = await createDispatcher(makeHost({ client })).run({ type: 'propose_dispatch', assignee: 'opencode3', title: 'Anything' }, { confirmed: true })
+    expect(result).toEqual({ ok: false, message: 'The bridge is not answering.' })
   })
 })
 
@@ -226,13 +237,13 @@ describe('the assistant runner', () => {
   it('passes a write on only with confirmed true from the card', async () => {
     const client = fast()
     const run = createAssistantRunner(createDispatcher(makeHost({ client })))
-    const action = { type: 'propose_budget', agent: 'hermes', cents: 500 }
+    const action = { type: 'propose_budget', agent: 'opencode2', cents: 500 }
     for (const options of [undefined, {}, { confirmed: 'yes' }, { confirmed: 1 }]) {
       expect(await run(action, options)).toEqual({ ok: false, message: 'That needs your confirmation first.' })
     }
-    expect((await client.agents()).find((agent) => agent.key === 'hermes').budgetMonthlyCents).toBe(0)
+    expect((await client.agents()).find((agent) => agent.key === 'opencode2').budgetMonthlyCents).toBe(0)
     expect((await run(action, { confirmed: true })).ok).toBe(true)
-    expect((await client.agents()).find((agent) => agent.key === 'hermes').budgetMonthlyCents).toBe(500)
+    expect((await client.agents()).find((agent) => agent.key === 'opencode2').budgetMonthlyCents).toBe(500)
   })
 
   it('runs a read with no options', async () => {

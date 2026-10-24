@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createLivePlayer } from '../src/live/livePlayer.js'
-import { discover, openStream, parserFor, rootNameOf, socketUrl, toAgents } from '../src/live/source.js'
+import { openStream, parserFor, socketUrl, toAgents } from '../src/live/source.js'
 import { makeTree } from '../src/model/paths.js'
 import { SEEN_LIMIT, buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
@@ -41,7 +41,7 @@ describe('agent discovery', () => {
     expect(agents.every((agent) => agent.parser === 'claude')).toBe(true)
   })
 
-  it('carries the Paperclip role or null', () => {
+  it('carries the role or null', () => {
     const withRoles = [
       { id: '1', name: 'Claude Code', adapterType: 'claude_local', role: 'engineer' },
       { id: '2', name: 'Orchestrator', adapterType: 'claude_local', role: 'ceo' },
@@ -52,41 +52,6 @@ describe('agent discovery', () => {
       2: 'ceo',
       3: null,
     })
-  })
-
-  it('takes the project name from the first agent folder', () => {
-    expect(rootNameOf(raw)).toBe('agent-sandbox')
-    expect(rootNameOf(raw, 'other')).toBe('other')
-    expect(rootNameOf([])).toBe('project')
-  })
-
-  it('finds the first company when none is given', async () => {
-    const calls = []
-    const fetchImpl = async (url) => {
-      calls.push(url)
-      const body = url.endsWith('/api/companies') ? [{ id: 'c1' }] : raw
-      return { ok: true, json: async () => body }
-    }
-    const found = await discover({ base: '/paperclip', fetchImpl })
-    expect(found.companyId).toBe('c1')
-    expect(found.rootName).toBe('agent-sandbox')
-    expect(calls).toEqual(['/paperclip/api/companies', '/paperclip/api/companies/c1/agents'])
-  })
-
-  it('keeps a company id from the link inside its own path segment', async () => {
-    const calls = []
-    const fetchImpl = async (url) => {
-      calls.push(url)
-      return { ok: true, json: async () => raw }
-    }
-    await discover({ base: '/paperclip', companyId: '../../api/health?x=', fetchImpl })
-    expect(calls).toEqual(['/paperclip/api/companies/..%2F..%2Fapi%2Fhealth%3Fx%3D/agents'])
-    expect(socketUrl('http://127.0.0.1:3100', 'a/../b#c')).toBe('ws://127.0.0.1:3100/api/companies/a%2F..%2Fb%23c/events/ws')
-  })
-
-  it('fails with a clear message when a request fails', async () => {
-    const fetchImpl = async () => ({ ok: false, status: 502 })
-    await expect(discover({ base: '/p', companyId: 'x', fetchImpl })).rejects.toThrow('answered 502')
   })
 })
 

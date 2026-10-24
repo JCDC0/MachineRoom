@@ -10,7 +10,7 @@ describe('agents carry the builder settings', () => {
     for (const agent of await fast().agents()) {
       for (const key of ['reasoningEffort', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed', 'subagentDepth', 'instructions', 'reportsToAgentId']) expect(agent, `${agent.name} ${key}`).toHaveProperty(key)
     }
-    expect(await byKey(fast(), 'claude-code')).toMatchObject({ maxTurnsPerRun: 14, timeoutSec: 420, subagentsAllowed: false })
+    expect(await byKey(fast(), 'claude')).toMatchObject({ model: 'sonnet', subagentsAllowed: false })
   })
 })
 
@@ -76,8 +76,8 @@ describe('hireAgent refusals', () => {
   it('refuses a bad draft in plain words and a name that is taken', async () => {
     const client = fast()
     await expect(client.hireAgent({ name: '', adapterType: 'claude_local' })).rejects.toThrow(/name/i)
-    await expect(client.hireAgent({ name: 'Planner' })).rejects.toThrow('Choose a harness.')
-    await expect(client.hireAgent({ name: 'Hermes', adapterType: 'hermes_local' })).rejects.toThrow('An agent with that name already exists.')
+    await expect(client.hireAgent({ name: 'OpenCode' })).rejects.toThrow('Choose a harness.')
+    await expect(client.hireAgent({ name: 'OpenCode', adapterType: 'opencode_local' })).rejects.toThrow('An agent with that name already exists.')
     await expect(client.hireAgent({ name: '!!!', adapterType: 'process' })).rejects.toThrow('The name needs letters or numbers.')
     await expect(client.hireAgent({ ...planner, reportsToAgentId: 'agent-ghost' })).rejects.toThrow('The agent it reports to no longer exists.')
     expect((await client.agents()).length).toBe(5)
@@ -94,30 +94,30 @@ describe('hireAgent refusals', () => {
 describe('updateAgent', () => {
   it('changes the settings that were given and returns the agent', async () => {
     const client = fast()
-    const agent = await client.updateAgent('agent-hermes', { model: 'deepseek/deepseek-v4.1-flash-1017', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600, instructions: 'Be brief.' })
+    const agent = await client.updateAgent('agent-opencode2', { model: 'deepseek/deepseek-v4.1-flash-1017', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600, instructions: 'Be brief.' })
     expect(agent).toMatchObject({ model: 'deepseek/deepseek-v4.1-flash-1017', reasoningEffort: 'high', maxTurnsPerRun: 20, timeoutSec: 600, instructions: 'Be brief.' })
-    expect(await byKey(client, 'hermes')).toMatchObject({ maxTurnsPerRun: 20 })
+    expect(await byKey(client, 'opencode2')).toMatchObject({ maxTurnsPerRun: 20 })
   })
 
   it('turns subagents on with a depth of one, sets a depth, and resets it when they are turned off', async () => {
     const client = fast()
-    expect(await client.updateAgent('agent-agy', { subagentsAllowed: true })).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
-    expect(await client.updateAgent('agent-agy', { subagentDepth: 3 })).toMatchObject({ subagentDepth: 3 })
-    expect(await client.updateAgent('agent-agy', { subagentsAllowed: false })).toMatchObject({ subagentsAllowed: false, subagentDepth: 0 })
-    await expect(client.updateAgent('agent-agy', { subagentDepth: 2 })).rejects.toThrow('Turn subagents on to set a depth.')
+    expect(await client.updateAgent('agent-opencode3', { subagentsAllowed: true })).toMatchObject({ subagentsAllowed: true, subagentDepth: 1 })
+    expect(await client.updateAgent('agent-opencode3', { subagentDepth: 3 })).toMatchObject({ subagentDepth: 3 })
+    expect(await client.updateAgent('agent-opencode3', { subagentsAllowed: false })).toMatchObject({ subagentsAllowed: false, subagentDepth: 0 })
+    await expect(client.updateAgent('agent-opencode3', { subagentDepth: 2 })).rejects.toThrow('Turn subagents on to set a depth.')
   })
 
   it('pauses and resumes', async () => {
     const client = fast()
-    expect((await client.updateAgent('agent-hermes', { status: 'paused' })).status).toBe('paused')
-    expect((await client.updateAgent('agent-hermes', { status: 'active' })).status).toBe('idle')
+    expect((await client.updateAgent('agent-opencode2', { status: 'paused' })).status).toBe('paused')
+    expect((await client.updateAgent('agent-opencode2', { status: 'active' })).status).toBe('idle')
   })
 
   it('changes the budget and tells panels that costs changed too', async () => {
     const client = fast()
     const seen = []
     client.subscribe((event) => seen.push(event.topic))
-    expect((await client.updateAgent('agent-hermes', { budgetMonthlyCents: 250 })).budgetMonthlyCents).toBe(250)
+    expect((await client.updateAgent('agent-opencode2', { budgetMonthlyCents: 250 })).budgetMonthlyCents).toBe(250)
     expect(seen).toEqual(['agents', 'costs'])
   })
 
@@ -125,7 +125,7 @@ describe('updateAgent', () => {
     const client = fast()
     const seen = []
     client.subscribe((event) => seen.push(event.topic))
-    await client.updateAgent('agent-hermes', { model: 'm' })
+    await client.updateAgent('agent-opencode2', { model: 'm' })
     expect(seen).toEqual(['agents'])
   })
 
@@ -144,31 +144,31 @@ describe('updateAgent', () => {
     await expect(client.updateAgent(agent.id, { model: 'm' })).rejects.toThrow('Approve the hire first.')
     await client.decideApproval(approval.id, 'reject')
     await expect(client.updateAgent(agent.id, { model: 'm' })).rejects.toThrow('That agent was terminated.')
-    await expect(client.updateAgent('agent-hermes', {})).rejects.toThrow('Change at least one setting.')
-    await expect(client.updateAgent('agent-hermes', { adapterType: 'process' })).rejects.toThrow('The harness cannot be changed. Hire a new agent.')
-    await expect(client.updateAgent('agent-hermes', { reportsToAgentId: 'agent-hermes' })).rejects.toThrow('An agent cannot report to itself.')
-    await expect(client.updateAgent('agent-hermes', { reportsToAgentId: 'agent-ghost' })).rejects.toThrow('The agent it reports to no longer exists.')
-    await expect(client.updateAgent('agent-hermes', { name: 'agy' })).rejects.toThrow('An agent with that name already exists.')
+    await expect(client.updateAgent('agent-opencode2', {})).rejects.toThrow('Change at least one setting.')
+    await expect(client.updateAgent('agent-opencode2', { adapterType: 'process' })).rejects.toThrow('The harness cannot be changed. Hire a new agent.')
+    await expect(client.updateAgent('agent-opencode2', { reportsToAgentId: 'agent-opencode2' })).rejects.toThrow('An agent cannot report to itself.')
+    await expect(client.updateAgent('agent-opencode2', { reportsToAgentId: 'agent-ghost' })).rejects.toThrow('The agent it reports to no longer exists.')
+    await expect(client.updateAgent('agent-opencode2', { name: 'OpenCode' })).rejects.toThrow('An agent with that name already exists.')
   })
 
   it('does not change anything when part of a patch is refused', async () => {
     const client = fast()
-    await expect(client.updateAgent('agent-hermes', { model: 'm', timeoutSec: 1 })).rejects.toThrow(/10 to 7200/)
-    expect((await byKey(client, 'hermes')).model).toBeNull()
+    await expect(client.updateAgent('agent-opencode2', { model: 'm', timeoutSec: 1 })).rejects.toThrow(/10 to 7200/)
+    expect((await byKey(client, 'opencode2')).model).toBe('opencode-go/deepseek-v4.1-flash')
   })
 
   it('can rename an agent without changing its key', async () => {
     const client = fast()
-    const agent = await client.updateAgent('agent-hermes', { name: 'Hermes Prime' })
-    expect(agent).toMatchObject({ key: 'hermes', name: 'Hermes Prime' })
+    const agent = await client.updateAgent('agent-opencode2', { name: 'OpenCode Prime' })
+    expect(agent).toMatchObject({ key: 'opencode2', name: 'OpenCode Prime' })
   })
 
   it('can be told to fail once like every other method', async () => {
     const client = fast()
-    client.failNext('hireAgent', 'Paperclip is not reachable.')
-    await expect(client.hireAgent(planner)).rejects.toThrow('Paperclip is not reachable.')
+    client.failNext('hireAgent', 'The bridge is not answering.')
+    await expect(client.hireAgent(planner)).rejects.toThrow('The bridge is not answering.')
     await expect(client.hireAgent(planner)).resolves.toBeTruthy()
-    client.failNext('updateAgent', 'Paperclip is not reachable.')
-    await expect(client.updateAgent('agent-hermes', { model: 'm' })).rejects.toThrow('Paperclip is not reachable.')
+    client.failNext('updateAgent', 'The bridge is not answering.')
+    await expect(client.updateAgent('agent-opencode2', { model: 'm' })).rejects.toThrow('The bridge is not answering.')
   })
 })

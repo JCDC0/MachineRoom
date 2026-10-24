@@ -2102,28 +2102,12 @@ summary:focus-visible,
   padding: 6px calc(var(--space) * 2);
 }
 
-.connect-card-head h2,
-.connect-radio-label {
+.connect-card-head h2 {
   font-size: 14px;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--black);
-}
-
-.connect-radio-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space);
-  cursor: pointer;
-}
-
-.connect-radio-label input[type='radio'] {
-  margin: 0;
-  width: calc(var(--space) * 2);
-  height: calc(var(--space) * 2);
-  accent-color: var(--black);
-  cursor: pointer;
 }
 
 .connect-tag {
@@ -2151,12 +2135,6 @@ summary:focus-visible,
 .connect-hint code {
   font-size: 12px;
   color: var(--yellow);
-}
-
-.connect-fields-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: calc(var(--space) * 1.5);
 }
 
 .connect-field {
@@ -2235,8 +2213,7 @@ summary:focus-visible,
 }
 
 @media (max-width: 768px) {
-  .connect-grid,
-  .connect-fields-pair {
+  .connect-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3309,151 +3286,6 @@ summary:focus-visible,
   border-top: 1px solid var(--line);
 }
 
-.approvals-panel {
-  display: flex;
-  flex-direction: column;
-}
-
-.approvals-content {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--space) * 2);
-}
-
-.approvals-pending {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--space) * 1.5);
-}
-
-.approval-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space);
-  padding: calc(var(--space) * 1.5);
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--corner-ticks), rgb(0 0 0 / 0.6);
-}
-
-.approval-card.is-decided {
-  opacity: 0.8;
-}
-
-.approval-card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space);
-}
-
-.approval-type {
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 500;
-  color: var(--yellow);
-}
-
-.approval-time,
-.approval-status {
-  font-size: 11px;
-  color: rgb(255 255 255 / 0.7);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.approval-summary {
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--white);
-}
-
-.approval-requester {
-  font-size: 12px;
-  color: rgb(255 255 255 / 0.75);
-}
-
-.approval-requester-name {
-  font-weight: 500;
-  color: var(--white);
-}
-
-.approval-result-in-place {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--space) * 0.5);
-  padding: var(--space);
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: rgb(255 255 255 / 0.04);
-  margin-top: calc(var(--space) * 0.5);
-}
-
-.approval-result-badge {
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--yellow);
-}
-
-.approval-result-note {
-  font-size: 12px;
-  color: rgb(255 255 255 / 0.8);
-}
-
-.approval-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space);
-  margin-top: calc(var(--space) * 0.5);
-}
-
-.approval-btn {
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  padding: var(--space) calc(var(--space) * 1.25);
-}
-
-.approval-btn.is-approve {
-  border-color: var(--white);
-}
-
-.approval-btn.is-reject {
-  color: var(--red);
-  border-color: var(--red);
-}
-
-.approval-btn.is-reject:hover:not(:disabled) {
-  background: rgb(255 42 42 / 0.12);
-}
-
-.approvals-decided {
-  border-top: 1px solid var(--line);
-  padding-top: var(--space);
-}
-
-.approvals-decided-summary {
-  cursor: pointer;
-  font-size: 12px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: rgb(255 255 255 / 0.7);
-  margin-bottom: var(--space);
-}
-
-.approvals-decided-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space);
-}
-
-.approval-note-text {
-  font-size: 12px;
-  color: rgb(255 255 255 / 0.7);
-}
-
 .meters-panel {
   display: flex;
   flex-direction: column;
@@ -3710,143 +3542,6 @@ summary:focus-visible,
 .quota-detail-text {
   font-size: 11px;
   color: rgb(255 255 255 / 0.6);
-}
-
-.backup-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space);
-  border-top: 1px solid var(--line);
-  padding-top: calc(var(--space) * 1.5);
-}
-
-.backup-card {
-  padding: calc(var(--space) * 1.5);
-  border: 1px solid var(--line);
-  border-radius: 2px;
-  background: var(--corner-ticks), rgb(0 0 0 / 0.6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space);
-}
-
-.backup-title {
-  font-size: 13px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--white);
-}
-
-.backup-title.is-red {
-  padding: 4px var(--space);
-  background: var(--red);
-  color: var(--white);
-  border-radius: 2px;
-}
-
-.backup-title.is-yellow {
-  color: var(--yellow);
-}
-
-.backup-lines {
-  display: flex;
-  flex-direction: column;
-  gap: calc(var(--space) * 0.5);
-}
-
-.backup-line {
-  font-size: 11px;
-  color: rgb(255 255 255 / 0.7);
-}
-
-.backup-error {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--white);
-  padding: 6px var(--space);
-  border: 1px solid var(--red);
-  border-radius: 2px;
-  background: var(--red);
-}
-
-.backup-success {
-  font-size: 12px;
-  color: var(--green, #2aff80);
-}
-
-.backup-actions {
-  display: flex;
-  margin-top: calc(var(--space) * 0.5);
-}
-
-.backup-now-btn {
-  padding: var(--space) calc(var(--space) * 1.5);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-.backup-confirm-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space);
-  padding: calc(var(--space) * 1.5);
-  background: var(--corner-ticks), rgb(255 255 255 / 0.03);
-  border: 1px solid var(--yellow);
-  border-radius: 2px;
-  margin-top: calc(var(--space) * 0.5);
-}
-
-.backup-confirm-warning {
-  font-size: 12px;
-  line-height: 1.45;
-  color: var(--white);
-}
-
-.backup-confirm-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space);
-}
-
-.backup-confirm-btn {
-  border-color: var(--yellow);
-  color: var(--yellow);
-  background: rgb(229 255 0 / 0.08);
-  padding: var(--space) calc(var(--space) * 1.25);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-.backup-confirm-btn:hover:not(:disabled) {
-  border-color: var(--yellow);
-  background: rgb(229 255 0 / 0.18);
-}
-
-.backup-cancel-btn {
-  padding: var(--space) calc(var(--space) * 1.25);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  font-weight: 500;
-}
-
-.backup-confirm-error {
-  padding: 4px var(--space);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.4;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  background: var(--red);
-  color: var(--white);
-  border-radius: 2px;
 }
 
 .mr-assistant {
@@ -4172,23 +3867,6 @@ summary:focus-visible,
   text-transform: uppercase;
 }
 
-.panel-inline-link {
-  display: inline;
-  padding: 2px var(--space);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  border: 1px solid var(--yellow);
-  border-radius: 2px;
-  color: var(--yellow);
-  background: transparent;
-}
-
-.panel-inline-link:hover:not(:disabled) {
-  background: rgb(229 255 0 / 0.16);
-  border-color: var(--yellow);
-}
-
 .panel-field input[readonly] {
   opacity: 0.7;
   cursor: default;
@@ -4207,11 +3885,6 @@ summary:focus-visible,
   display: flex;
   flex-direction: column;
   gap: var(--space);
-}
-
-.agent-builder-row.is-selected {
-  border-color: var(--yellow);
-  background: var(--corner-ticks), rgb(229 255 0 / 0.08);
 }
 
 .agent-row-name {

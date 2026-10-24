@@ -113,8 +113,8 @@ describe('the live run mark in the Tasks panel', () => {
       { runId: 'b', agentId: 'agent-opencode', agentName: null, status: 'running', issueId: 'issue-20' },
       { runId: 'c', agentId: 'agent-claude', agentName: 'Claude Code', status: 'succeeded', issueId: 'issue-21' },
     ]
-    const agents = [{ id: 'agent-opencode', name: 'OpenCode Go' }]
-    expect(liveRunMark('issue-20', runs, agents)).toEqual({ status: 'running', text: 'running OpenCode Go' })
+    const agents = [{ id: 'agent-opencode', name: 'OpenCode' }]
+    expect(liveRunMark('issue-20', runs, agents)).toEqual({ status: 'running', text: 'running OpenCode' })
     expect(liveRunMark('issue-20', runs.slice(0, 1))).toEqual({ status: 'queued', text: 'queued Hermes' })
     expect(liveRunMark('issue-21', runs)).toBeNull()
     expect(liveRunMark('issue-19', null)).toBeNull()
@@ -131,9 +131,9 @@ describe('the live run mark in the Tasks panel', () => {
         initialLiveRuns: await client.liveRuns(),
       })
     )
-    expect(html).toContain('<span class="task-live mono is-running">running OpenCode Go</span>')
+    expect(html).toContain('<span class="task-live mono is-running">running OpenCode</span>')
     expect(html.match(/task-live/g)).toHaveLength(1)
-    expect(html.indexOf('JC-19')).toBeLessThan(html.indexOf('running OpenCode Go'))
+    expect(html.indexOf('JC-19')).toBeLessThan(html.indexOf('running OpenCode'))
   })
 
   it('shows queued AGENT and keeps the list when the read gave nothing', async () => {
