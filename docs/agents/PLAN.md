@@ -1,20 +1,57 @@
-# Next plan, from 0.1.37
-
-Written 2026-10-18. The task briefs are in `TASKS.md`, the design is in `CONTROL-PLANE.md`. This file puts them in order and says what comes first.
+# Plan
 
 ## Where we are
+
+Version 0.1.259. This docs branch is 0.1.260. The room is no longer a Paperclip viewer: it follows its own sources, and Paperclip is optional.
+
+What works:
+
+- Live lane runs with `--lanes`: OpenCode and Claude Code, on a brief or on another project (`run-lane --project`).
+- Task queues with `run-lane --queue`, and several tasks in Dispatch, one commit per task on a `machineroom/queue-<stamp>` branch, tests after each task, a stop at the first failure.
+- The owner's own Claude Code and OpenCode sessions with `--sessions`, read only, tool calls and results only.
+- The control drawer on `C`: Dispatch, Tasks, Approvals, Meters, Plan, Agents and Reviews. In lane mode, tasks, live runs and costs come from the run records; approvals are empty and backups belong to Paperclip.
+- Replays and recordings: every run on a brief writes a recording, and `/?recording=<name>` plays it.
+- Paperclip as an optional source: tasks, approvals, budgets, quotas and backups when an instance runs.
+
+What was checked live:
+
+- OpenCode, Claude Code and AGY each ran for real through `run-lane --project` on a scratch git project and showed in the room.
+- A task typed in Dispatch ran on OpenCode 2 on a scratch project and made the change there.
+- Three OpenCode lanes worked at once with `--lanes`, with their strips and active rows right.
+- A real Claude Code run showed its `Explore` subagent in the room.
+- AGY ran end to end through `run-lane -- agy --project`, and the room showed it working, then finished in green.
+- A dry run parsed the four tasks of a queue on ulolTris and found `npm test`.
+
+Not checked live yet:
+
+- A whole queue on ulolTris or LowBeam. The owner's milestone is the first real run.
+- The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
+
+## Next
+
+The owner's milestone, in order:
+
+1. A queue on ulolTris. Start the room on that folder with `--lanes`, press `C`, open Dispatch, and give the tasks in the Run on this project box, separated by a line of `---`. Check the branch and the commits. The queue has only been dry-run there.
+2. Then LowBeam, the same way.
+3. Then H1 to H4, when the owner says. `docs/agents/HARNESSES.md` holds the plan: the registry and one descriptor per harness, the UI lists from the registry, the session readers through the registry, and a generic ACP harness.
+
+## History: the plan from 0.1.37
+
+Written 2026-10-18. The task briefs are in `TASKS.md`, the design is in `CONTROL-PLANE.md`. This was the plan from 0.1.37.
+
+### Where we were
 
 Built and merged: the 3D room with strings, travelling agents and follow modes; the bridge to Paperclip with truncation restore; four recorded scenarios (failing test then fix, edit across three files, rename on three agents, tool error); first-run screens; the control client contract and a mock; the control drawer (dispatch, tasks, approvals, meters) running on the mock; the assistant core (rules, action list, key guard). 306 tests pass.
 
 Not built: nothing writes to the real Paperclip yet (C2), the assistant has no terminal (A2), no review and merge, no worktrees, no subagent recordings, no cost board in the room, no licence, a 20 line README, and the repository has no remote, so the whole project lives on one disk.
 
-## The aim: stop being the messenger
+### The aim: stop being the messenger
 
 Today you ask Claude, Claude writes a brief, you paste it into OpenCode or AGY, they report, and you paste the report back. The aim is that you type a goal in MachineRoom, a planner splits it, cheap workers do it in their own worktrees, you read the reports and the diffs in the room, and you merge with one click. Claude stays for design work and for long chats about many files at once. Once M3 below is reached, MachineRoom builds MachineRoom this way.
 
 One rule until worktrees are on: no agent works inside `C:\GitHub\MachineRoom` itself. Without isolation an agent edits your checkout directly. Agents keep working in their own worktrees (as OpenCode and AGY do now) or in the sandbox.
 
-## Milestones
+### Milestones
 
 | | Name | Exit test |
 | --- | --- | --- |
@@ -25,7 +62,7 @@ One rule until worktrees are on: no agent works inside `C:\GitHub\MachineRoom` i
 
 The repository goes to GitHub as a private backup before M4 (G6 below). It goes public only at M4.
 
-## Order of work
+### Order of work
 
 Each line is one brief in `TASKS.md`. Lines that start together can run at the same time, because they touch different files.
 
@@ -58,17 +95,17 @@ Each line is one brief in `TASKS.md`. Lines that start together can run at the s
 
 - **P1** (npx install), **P3** (scale), **P4** and **G2** (your decisions), **G4** (fresh screenshots), **G5** (CI), **G6** (publish).
 
-## The decision model
+### The decision model
 
 A decision model returns typed answers (a choice, a yes probability, a score) instead of text. It is cheap and fast enough to sit between our rules and the big models: it can tell the orchestrator which tier a task needs, whether subagents are worth it, how risky a wrong result would be, and whether a typed request should become a queued routine. The thresholds and the floors stay in our code, and it is off by default. Which one to use is decided by measuring on our own cases (D1), not by the published rankings, which disagree. The provisional choice is `typesafe/jev-1.14`, with Perplexity Decider and Strands Decider as challenger and offline option. Full design in `CONTROL-PLANE.md`.
 
-## Hermes on DeepSeek V4.1 Flash (H1, you)
+### Hermes on DeepSeek V4.1 Flash (H1, you)
 
 You are setting Hermes to DeepSeek V4.1 Flash. Pick the model id from what Hermes itself lists, because the id differs between OpenRouter and the DeepSeek API, and a wrong id fails the run. Paperclip reports no usage for Hermes, so the cost board will say "not reported" for it. Watch the provider's own dashboard for its spend. Known limits of its output, for the parsers: a read shows only a file name, a bundle of commands shows only the first command and one exit code (a failure inside the bundle reads as ok), and long lines are wrapped at about 79 columns.
 
 Use Hermes for cheap work with clear files: docs, small refactors, README text. The first goal worth giving it once worktrees are on is "draft the README from the docs", because a doc change is easy to review and the README is on the list anyway.
 
-## Staying current while Paperclip moves on its own
+### Staying current while Paperclip moves on its own
 
 Paperclip will change its API and its event stream without asking us. The rules that keep MachineRoom working:
 
@@ -79,7 +116,7 @@ Paperclip will change its API and its event stream without asking us. The rules 
 5. **Say so when it breaks.** U2 counts frames the parsers could not read and exposes the count, the Paperclip version and the route check at `/api/health`. The HUD shows a chip, for example "Paperclip changed: dispatch is off". Only the failing feature switches off. The room keeps drawing as long as frames parse, and unknown frame types are skipped already.
 6. **Upgrade in this order.** Back up the database (W2). Install the new Paperclip into a separate folder on another port. Run `doctor` and the recorded scenarios against it with the free model. Switch only if both pass. Keep the old install for rollback.
 
-## Building on itself safely
+### Building on itself safely
 
 - Agents change MachineRoom only on a branch in a worktree. `main` moves only when you merge in the review panel (W3). Nothing is ever pushed by an agent.
 - The merge button appears only when the worktree's `npm test` and `npm run build` have passed. The bridge runs them and stores the result on the issue.
@@ -87,7 +124,7 @@ Paperclip will change its API and its event stream without asking us. The rules 
 - The stable copy keeps running while a candidate runs. U3 starts the candidate from a worktree on another port (stable on 5174, candidate on 5175). Promote means merge, rebuild and restart through the supervisor (W1). A bad candidate costs nothing.
 - Releases are tags on `main`. After G6 the app shows a "new version" chip from the GitHub tags and never updates itself without a click.
 
-## Publishing to GitHub
+### Publishing to GitHub
 
 You said: publish it with a clean README. Pushing leaves your machine, so nothing here happens without your yes, and Claude never pushes.
 
@@ -98,7 +135,7 @@ You said: publish it with a clean README. Pushing leaves your machine, so nothin
 - **G5 (OpenCode).** GitHub Actions: Node 24, `npm ci`, `npm test`, `npm run build`. Keep `package-lock.json` in sync.
 - **G6 (you, with Claude's commands).** Create the repository as private first, push `main` and tags only (not the `feat/*` branches), check that the README renders and CI is green, then switch it to public. Claude gives the exact commands and runs nothing that pushes.
 
-## Open questions for you
+### Open questions for you
 
 1. Worktrees (`enableIsolatedWorkspaces`): say yes when C2 is merged, and Claude will list the exact setting changes first.
 2. Private GitHub repository now, as a backup? Recommended.

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- README: the opening names the room's sources, a quick start on a project comes first, the harness table and a separate Paperclip section are new, and the stale lane, recording and hand-run lines are gone (task D6).
+- ARCHITECTURE: the first paragraphs and Open work name the lane runner, queues, sessions and the optional Paperclip source, and Claude in Claude Code as the orchestrator; stale lines about the task label, recordings, hand-run and the child fade are fixed (task D6).
+- HOUSE-RULES: the About paragraph says the room follows the lane runner, queues and sessions, and that Claude in Claude Code orchestrates (task D6).
+- PLAN: a new Where we are and Next section, with the old plan from 0.1.37 kept below as history (task D6).
+- ORCHESTRATOR: Claude in Claude Code orchestrates, the live lanes are `opencode` to `opencode5` and `claude`, `hermes` and `agy` are retired, and the state, loop and owner list are current (task D6).
+- SOURCES: the owner's own Claude Code and OpenCode sessions are a built source (S7a and S7b), and the lane and queue status is current (task D6).
+- README-DRAFT.md is deleted after its WebGL note, the contributor rules and the licence line move into README.md (task D6).
+- AGENTS.md and GEMINI.md add the one-port serve command (task D6).
+
 - Review note on S8b: no fixes in the branch. Claude renamed its own docs brief from D1 to D6, since D1 was taken and the brief parser test caught the repeat. Its tests also pass with TEMP set to an 8.3 short path. The `--replay` digests did not change. Full suite on the merge: 129 files, 2466 tests.
 - Review note on S8: no fixes. The queue holds the lane lock for the whole queue and each task runs through `startLane`, which takes no lock of its own; queue logs start with `<lane>-`, so the lane source shows each task live. A dry run on ulolTris parsed its four tasks and found `npm test`. Its tests also pass with TEMP set to an 8.3 short path and with no APPDATA. The `--replay` digests did not change. Full suite on the merge: 129 files, 2451 tests.
 - The Dispatch panel starts a queue on the room's project: several tasks in the box, separated by a line of `---`, run as `run-lane --project --queue`, which writes the queue file, refuses an uncommitted project or an allow-dirty switch, and carries `queue` and the task count in the runs list (task S8b).

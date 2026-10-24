@@ -7,6 +7,7 @@ npm install
 npm run dev       http://localhost:5173
 npm test
 npm run build     also the check for broken imports
+npm run serve -- up --lanes --sessions   one port, no Vite (npm run build first)
 ```
 
 There is no separate lint or analyze step yet.
