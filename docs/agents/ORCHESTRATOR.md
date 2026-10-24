@@ -6,7 +6,7 @@ Start a session with `claude` in `C:\GitHub\MachineRoom`. First message: "You ar
 
 The worker lanes are separate. `npm run run-lane -- opencode ID` starts an OpenCode run in its own worktree, and the same command takes `opencode2` to `opencode5` and `claude`. One run per lane at a time. Your own session never works in those worktrees. The `claude` lane runs Claude Code headless; the orchestrator is the interactive Claude Code session in the main checkout.
 
-The live lanes are `opencode`, `opencode2`, `opencode3`, `opencode4`, `opencode5`, `opencode6` and `claude`. `hermes` and `agy` are retired in `docs/agents/lanes.json`: give them no brief and do not start them. To bring one back, remove `"retired": true` from its entry and check its `cli` block and model.
+The live lanes are `opencode`, `opencode2`, `opencode3`, `opencode4`, `opencode5`, `opencode6` to `opencode10` and `claude`. `hermes` and `agy` are retired in `docs/agents/lanes.json`: give them no brief and do not start them. To bring one back, remove `"retired": true` from its entry and check its `cli` block and model.
 
 You cannot see the screen. A branch that changes what the room or the drawer looks like is checked by eye before it merges: run `npm run dev` in the branch's worktree, or `npm run build` and `npm run serve`, look at the named things at 1280 by 800 and 1024 by 768, report what you saw, change nothing, and stop the server. A branch that adds a route that writes (a merge, a backup, any write to Paperclip) gets a second read of the diff before the merge, and the owner is asked when in doubt.
 
@@ -69,7 +69,7 @@ A PASS is not a review.
 | --- | --- | --- |
 | Orchestrator (main checkout, Claude Code) | Claude Code | `docs/agents/**`, merges, versions |
 | OpenCode (`C:\GitHub\MachineRoom-opencode`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/control/**`, `src/assistant/**`, `src/decider/**`; from 0.1.126 also the UI briefs moved from AGY (U6a, U7, U9, U10a), which the orchestrator checks by eye |
-| OpenCode 2 to 6 (`C:\GitHub\MachineRoom-opencode2` to `-opencode6`) | `opencode-go/deepseek-v4.1-flash`, max | the same as OpenCode; small briefs by the routing policy |
+| OpenCode 2 to 10 (`C:\GitHub\MachineRoom-opencode2` to `-opencode10`) | `opencode-go/deepseek-v4.1-flash`, max | the same as OpenCode; small briefs by the routing policy |
 | Claude (`C:\GitHub\MachineRoom-claude`) | Claude Sonnet | works on the brief in its own worktree and reports back |
 | Hermes (retired) | `deepseek/deepseek-v4.1-flash-1017`, xhigh | its old work goes to OpenCode 2 |
 | AGY (retired) | `gemini-3.8-flash-high` | `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx`, `src/App.jsx` when it works |

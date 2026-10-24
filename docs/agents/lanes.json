@@ -180,6 +180,106 @@
       "Your shell may start in C:\\GitHub\\MachineRoom, the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-opencode6 && (forward slashes; bash drops backslashes), never write or run anything in C:\\GitHub\\MachineRoom, and send unwanted output to /dev/null, never nul."
     ]
   },
+  "opencode7": {
+    "name": "OpenCode 7",
+    "harness": "OpenCode",
+    "model": "DeepSeek V4.1 Flash 1017",
+    "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
+    "reasoning": "max",
+    "cli": {
+      "harness": "opencode",
+      "bin": "%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
+      "model": "opencode-go/deepseek-v4.1-flash"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom-opencode7",
+    "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
+      "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
+      "You cannot see the screen. When a brief asks for a check by eye, do not start a dev server for it; say in your report that it is left to the orchestrator, who checks it in a browser.",
+      "Up to nine other OpenCode lanes run at the same time, each in its own C:GitHubMachineRoom-opencodeN worktree. Touch only the files your brief names.",
+      "Your shell may start in C:\\GitHub\\MachineRoom, the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-opencode7 && (forward slashes; bash drops backslashes), never write or run anything in C:\\GitHub\\MachineRoom, and send unwanted output to /dev/null, never nul."
+    ]
+  },
+  "opencode8": {
+    "name": "OpenCode 8",
+    "harness": "OpenCode",
+    "model": "DeepSeek V4.1 Flash 1017",
+    "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
+    "reasoning": "max",
+    "cli": {
+      "harness": "opencode",
+      "bin": "%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
+      "model": "opencode-go/deepseek-v4.1-flash"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom-opencode8",
+    "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
+      "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
+      "You cannot see the screen. When a brief asks for a check by eye, do not start a dev server for it; say in your report that it is left to the orchestrator, who checks it in a browser.",
+      "Up to nine other OpenCode lanes run at the same time, each in its own C:GitHubMachineRoom-opencodeN worktree. Touch only the files your brief names.",
+      "Your shell may start in C:\\GitHub\\MachineRoom, the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-opencode8 && (forward slashes; bash drops backslashes), never write or run anything in C:\\GitHub\\MachineRoom, and send unwanted output to /dev/null, never nul."
+    ]
+  },
+  "opencode9": {
+    "name": "OpenCode 9",
+    "harness": "OpenCode",
+    "model": "DeepSeek V4.1 Flash 1017",
+    "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
+    "reasoning": "max",
+    "cli": {
+      "harness": "opencode",
+      "bin": "%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
+      "model": "opencode-go/deepseek-v4.1-flash"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom-opencode9",
+    "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
+      "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
+      "You cannot see the screen. When a brief asks for a check by eye, do not start a dev server for it; say in your report that it is left to the orchestrator, who checks it in a browser.",
+      "Up to nine other OpenCode lanes run at the same time, each in its own C:GitHubMachineRoom-opencodeN worktree. Touch only the files your brief names.",
+      "Your shell may start in C:\\GitHub\\MachineRoom, the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-opencode9 && (forward slashes; bash drops backslashes), never write or run anything in C:\\GitHub\\MachineRoom, and send unwanted output to /dev/null, never nul."
+    ]
+  },
+  "opencode10": {
+    "name": "OpenCode 10",
+    "harness": "OpenCode",
+    "model": "DeepSeek V4.1 Flash 1017",
+    "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
+    "reasoning": "max",
+    "cli": {
+      "harness": "opencode",
+      "bin": "%APPDATA%\\npm\\node_modules\\@opencode\\cli\\bin\\opencode.exe",
+      "model": "opencode-go/deepseek-v4.1-flash"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom-opencode10",
+    "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
+    "forbidden": [
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
+      "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
+      "You cannot see the screen. When a brief asks for a check by eye, do not start a dev server for it; say in your report that it is left to the orchestrator, who checks it in a browser.",
+      "Up to nine other OpenCode lanes run at the same time, each in its own C:GitHubMachineRoom-opencodeN worktree. Touch only the files your brief names.",
+      "Your shell may start in C:\\GitHub\\MachineRoom, the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-opencode10 && (forward slashes; bash drops backslashes), never write or run anything in C:\\GitHub\\MachineRoom, and send unwanted output to /dev/null, never nul."
+    ]
+  },
   "agy": {
     "name": "agy",
     "harness": "agy",
