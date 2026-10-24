@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readLanes } from '../server/lanes-source.js'
+import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readLanes, subOrchestratorAgent } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
@@ -124,9 +124,54 @@ describe('lane agents', () => {
       parser: 'agy',
     })
   })
+
+  it('gives a sub orchestrator agent its harness and the model of its harness', () => {
+    const lanes = {
+      orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+    }
+    expect(subOrchestratorAgent({ id: 'frontend', name: 'Frontend', harness: 'claude' }, lanes)).toMatchObject({
+      id: 'agent-sub-frontend',
+      key: 'sub-frontend',
+      harness: 'claude',
+      model: 'opus',
+      subOrchestrator: true,
+    })
+    expect(subOrchestratorAgent({ id: 'backend', name: 'Backend', harness: 'opencode' }, lanes)).toMatchObject({
+      key: 'sub-backend',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+    })
+    expect(subOrchestratorAgent({ id: 'ui', name: 'UI', harness: 'opencode', model: 'opencode-go/other' }, lanes)).toMatchObject({
+      key: 'sub-ui',
+      harness: 'opencode',
+      model: 'opencode-go/other',
+    })
+  })
 })
 
 describe('the live lane source', () => {
+  it('lists a sub orchestrator agent with its harness and model', () => {
+    const runs = tempDir()
+    const lanes = {
+      orchestrator: { name: 'Orchestrator', cli: { harness: 'claude', model: 'opus' } },
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+    }
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      subOrchestrators: () => [{ id: 'frontend', name: 'Frontend', harness: 'claude' }],
+      quietMs: 60000,
+      pollMs: 20,
+    })
+    cleanups.push(() => source.stop())
+    expect(source.agents.find((agent) => agent.key === 'sub-frontend')).toMatchObject({
+      harness: 'claude',
+      model: 'opus',
+      subOrchestrator: true,
+    })
+  })
+
   it('sends a growing log to /events in order, under the lane key, and ends on its record', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')

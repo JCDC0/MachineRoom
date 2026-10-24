@@ -11,6 +11,8 @@
 - The scope check diffs a lane against the project's current branch instead of `main`, lists paths relative to the project folder, ignores case on Windows, and tells the parent when git cannot be read (task Q12a).
 
 - `npm run worktrees -- --clean` removes a lane worktree's `node_modules` link before `git worktree remove`, so a worktree the runner made is removed without `--force` and the project's modules stay (task Q12f).
+- A sub orchestrator agent from `GET /api/agents` carries its harness and model, taken from the sub or from the first lane with that harness, so its dock no longer shows `claude_local` or `not reported` (task Q12d).
+
 - History audit: a range audit (`--from`) leaves out removed lines, which were in the history before the range, so CI does not fail when a commit deletes a test that held a fake key.
 
 - The agent dock shows a sub orchestrator's lanes, scope, restriction and who set them, and a lane in a sector shows the sector's name and rules, in the order the brief asks (task O7).
