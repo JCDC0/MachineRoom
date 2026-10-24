@@ -1,9 +1,5 @@
 import { harnessByAdapter } from '../../harnesses/index.js'
 
-export const ADAPTER_TO_HARNESS = Object.freeze(
-  Object.fromEntries(Object.entries(harnessByAdapter).map(([adapterType, harness]) => [adapterType, harness.key]))
-)
-
 function normalizeAgent(agent) {
   if (!agent) return null
   if (typeof agent === 'string') {

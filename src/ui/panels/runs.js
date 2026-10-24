@@ -6,19 +6,12 @@ export function resultWord(record) {
   return 'failed'
 }
 
-export const runResultWord = resultWord
-
 export function formatCost(costUsd) {
   if (costUsd == null || typeof costUsd !== 'number' || !Number.isFinite(costUsd)) {
     return 'cost unknown'
   }
   if (costUsd === 0) return '$0.00'
   return `$${costUsd.toFixed(4)}`
-}
-
-export function formatMinutes(minutes) {
-  if (!Number.isFinite(minutes)) return 'minutes unknown'
-  return `${minutes} min`
 }
 
 export function timeSinceStart(startedAt, now) {
@@ -37,8 +30,6 @@ export function timeSinceStart(startedAt, now) {
   return `${days} d ago`
 }
 
-export const timeSince = timeSinceStart
-
 export function recordLine(record) {
   if (!record || typeof record !== 'object') return ''
   const lane = record.lane || 'unknown'
@@ -52,8 +43,6 @@ export function recordLine(record) {
   return `${lane} | ${briefs} | ${result} | ${cost} | ${minutes} | ${start}`
 }
 
-export const formatRecordLine = recordLine
-
 export function runStartLine(answer) {
   if (!answer || typeof answer !== 'object') return 'The bridge sent no answer.'
   const lane = typeof answer.lane === 'string' && answer.lane.trim() ? answer.lane.trim() : 'The run'
@@ -61,16 +50,6 @@ export function runStartLine(answer) {
     return `${lane} started ${answer.tasks} task${answer.tasks === 1 ? '' : 's'} in order.`
   }
   return `${lane} started.`
-}
-
-export function runningLine(entry, now) {
-  if (!entry || typeof entry !== 'object') return ''
-  const lane = entry.lane || 'unknown'
-  const briefs = Array.isArray(entry.briefs) && entry.briefs.length > 0
-    ? entry.briefs.join(' ')
-    : 'none'
-  const ago = timeSinceStart(entry.startedAt, now)
-  return `${lane} | ${briefs} | ${ago}`
 }
 
 export const PROJECT_TASK_LIMIT = 4000

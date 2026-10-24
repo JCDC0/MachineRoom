@@ -78,8 +78,6 @@ export function ownerToLane(briefOrOwner, lanes) {
   return names.some((name) => String(name).toLowerCase() === first) ? first : null
 }
 
-export const laneForBrief = ownerToLane
-
 function runningLaneNames(running) {
   const list = Array.isArray(running) ? running : []
   const names = []
@@ -149,8 +147,6 @@ export function chooseAssignee(briefOrOwner, agents) {
   return ''
 }
 
-export const pickAssignee = chooseAssignee
-
 export function groupBriefsByOwner(briefs) {
   if (!Array.isArray(briefs) || briefs.length === 0) return []
   const groups = []
@@ -172,8 +168,6 @@ export function groupBriefsByOwner(briefs) {
 
   return groups
 }
-
-export const groupBriefs = groupBriefsByOwner
 
 export function briefTarget(briefs, id) {
   const wanted = typeof id === 'string' ? id.trim() : ''
