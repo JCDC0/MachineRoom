@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { findPackProblems, isForbidden, readPackReport, runPack, walkImports } from '../scripts/pack-check.mjs'
+import { findPackProblems, isForbidden, readPackReport, runPack, RUNTIME_READS, walkImports } from '../scripts/pack-check.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -88,6 +88,21 @@ describe('findPackProblems', () => {
   })
 })
 
+describe('runtime reads', () => {
+  it('names a run-time read the pack leaves out', () => {
+    const problems = findPackProblems({
+      packed: ['docs/agents/lanes.json'],
+      runtimeReads: ['docs/agents/lanes.json', 'docs/agents/TASKS.md'],
+    })
+    expect(problems).toEqual(['The pack list leaves out docs/agents/TASKS.md, which the room reads at run time.'])
+  })
+
+  it('lists the files the bridge reads at run time', () => {
+    expect(RUNTIME_READS).toContain('docs/agents/lanes.json')
+    expect(RUNTIME_READS).toContain('docs/agents/ORCHESTRATOR-AGENT.md')
+  })
+})
+
 describe('the real pack', () => {
   it('holds every imported file and nothing forbidden', (context) => {
     const run = runPack(root, PACK_BUDGET_MS)
@@ -98,7 +113,15 @@ describe('the real pack', () => {
     expect(run.status).toBe(0)
     const report = readPackReport(run.stdout)
     const walked = walkImports('bin/machine-room.mjs', root)
-    expect(findPackProblems({ packed: report.files, imports: walked.files, missing: walked.missing })).toEqual([])
+    expect(
+      findPackProblems({
+        packed: report.files,
+        imports: walked.files,
+        missing: walked.missing,
+        runtimeReads: RUNTIME_READS,
+      })
+    ).toEqual([])
+    for (const path of RUNTIME_READS) expect(report.files).toContain(path)
     expect(report.files).toContain('README.md')
     expect(report.files).toContain('bin/machine-room.mjs')
     const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))

@@ -35,6 +35,14 @@ function resolveImport(fromFolder, specifier) {
   return null
 }
 
+export const RUNTIME_READS = [
+  'docs/agents/HOUSE-RULES.md',
+  'docs/agents/ORCHESTRATOR-AGENT.md',
+  'docs/agents/TASKS.md',
+  'docs/agents/lanes.json',
+  'docs/agents/policy.json',
+]
+
 export function walkImports(entry = ENTRY, root = process.cwd()) {
   const files = new Set()
   const missing = new Set()
@@ -82,7 +90,7 @@ export function isForbidden(path) {
   return false
 }
 
-export function findPackProblems({ packed = [], imports = [], missing = [] } = {}) {
+export function findPackProblems({ packed = [], imports = [], missing = [], runtimeReads = [] } = {}) {
   const packedSet = new Set(packed.map((path) => toPosix(path)))
   const missingSet = new Set(missing)
   const problems = []
@@ -92,6 +100,11 @@ export function findPackProblems({ packed = [], imports = [], missing = [] } = {
   for (const path of [...imports].sort()) {
     if (!packedSet.has(path) && !missingSet.has(path)) {
       problems.push(`The pack list leaves out ${path}, which bin/machine-room.mjs imports.`)
+    }
+  }
+  for (const path of [...new Set(runtimeReads)].sort()) {
+    if (!packedSet.has(path)) {
+      problems.push(`The pack list leaves out ${path}, which the room reads at run time.`)
     }
   }
   for (const path of [...packedSet].sort()) {
@@ -187,6 +200,7 @@ export function packCheck(root = ROOT) {
     packed: report.files,
     imports: walked.files,
     missing: walked.missing,
+    runtimeReads: RUNTIME_READS,
   })
   if (problems.length > 0) return { code: 1, lines: problems }
   return {
