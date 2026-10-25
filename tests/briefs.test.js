@@ -70,8 +70,10 @@ describe('helpers', () => {
   })
 
   it('picks the model of a task, with a default per lane', () => {
-    expect(modelFor(lanes.agy, 'C3e')).toBe('Gemini 4 Argon (Medium)')
-    expect(modelFor(lanes.agy, 'C3b')).toBe('Gemini 3.8 Flash (High)')
+    const mapped = { ...lanes.agy, models: { C3e: 'Gemini 4 Argon (Medium)' } }
+    expect(modelFor(mapped, 'C3e')).toBe('Gemini 4 Argon (Medium)')
+    expect(modelFor(mapped, 'C3b')).toBe('Gemini 3.8 Flash (High)')
+    expect(modelFor(lanes.agy, 'C3e')).toBe('Gemini 3.8 Flash (High)')
     expect(modelFor(lanes.hermes, 'P5')).toBe('deepseek/deepseek-v4.1-flash-1017')
   })
 })
@@ -81,7 +83,7 @@ describe('lanes', () => {
     const promptLanes = Object.entries(lanes).filter(([key]) => key !== 'orchestrator')
     for (const [key, lane] of promptLanes) {
       for (const field of ['name', 'harness', 'model', 'worktree', 'role']) expect(typeof lane[field], `${key} ${field}`).toBe('string')
-      expect(lane.forbidden.length, key).toBeGreaterThan(1)
+      expect(Array.isArray(lane.forbidden), key).toBe(true)
       expect(lane.worktree, key).toMatch(/^C:\\GitHub\\MachineRoom-/)
     }
     expect(new Set(promptLanes.map(([, lane]) => lane.worktree)).size).toBe(promptLanes.length)
@@ -97,15 +99,19 @@ describe('lanes', () => {
   it('keep each agent out of the files another agent owns', () => {
     expect(lanes.hermes.forbidden).toContain('server/**')
     expect(lanes.opencode.forbidden).not.toContain('src/ui/**')
-    expect(lanes.agy.forbidden).toContain('src/control/**')
-    expect(lanes.agy.forbidden).not.toContain('src/Stage.jsx')
-    expect(lanes.agy.forbidden).not.toContain('src/engine/**')
-    for (const key of ['hermes', 'opencode']) expect(lanes[key].forbidden).toContain('src/Stage.jsx')
+    expect(lanes.opencode.forbidden).not.toContain('src/Stage.jsx')
+    for (const key of ['agy', 'agy2', 'agy3']) {
+      expect(lanes[key].forbidden, key).toContain('src/styles.css')
+      expect(lanes[key].forbidden, key).toContain('src/engine/**')
+      expect(lanes[key].forbidden, key).toContain('src/Stage.jsx')
+    }
+    for (const key of ['hermes', 'claude']) expect(lanes[key].forbidden).toContain('src/Stage.jsx')
   })
 })
 
 describe('buildPrompt', () => {
   const make = (ids, laneKey) => buildPrompt({ briefs: ids.map(byId), laneKey, lanes, rules, version: '0.1.35' })
+  const argonLanes = { ...lanes, agy: { ...lanes.agy, models: { C3e: 'Gemini 4 Argon (Medium)' } } }
 
   it('builds a prompt for one task', () => {
     const prompt = make(['U4'], 'opencode')
@@ -115,7 +121,8 @@ describe('buildPrompt', () => {
     expect(prompt).toContain(byId('U4').text)
     expect(prompt).toContain('Commit with the prefix 0.1.36 and one plain sentence. Do not push.')
     expect(prompt).toContain('Never push.')
-    expect(prompt).toContain('Do not touch these paths: src/Stage.jsx')
+    expect(prompt).not.toContain('Do not touch these paths')
+    expect(make(['U4'], 'agy')).toContain('Do not touch these paths: src/styles.css')
     expect(prompt).toContain('Test anything that starts a process')
     expect(prompt).toMatch(/Report: Give the report in your reply/)
     expect(prompt).not.toContain('undefined')
@@ -142,14 +149,13 @@ describe('buildPrompt', () => {
   })
 
   it('names the stronger model for a task that needs it and leaves out the hint', () => {
-    const prompt = make(['C3e'], 'agy')
+    const prompt = buildPrompt({ briefs: [byId('C3e')], laneKey: 'agy', lanes: argonLanes, rules, version: '0.1.35' })
     expect(prompt.startsWith('Model to select in agy: Gemini 4 Argon (Medium).')).toBe(true)
     expect(prompt.split('\n')[0]).not.toContain('reasoning')
-    expect(prompt).toContain('Check every visual change by eye')
   })
 
   it('marks a task whose model differs from the first one', () => {
-    const prompt = make(['T1b', 'C3b'], 'agy')
+    const prompt = buildPrompt({ briefs: [byId('C3e'), byId('C3b')], laneKey: 'agy', lanes: argonLanes, rules, version: '0.1.35' })
     expect(prompt).toContain('Task C3b: Change notices in the panels (select Gemini 3.8 Flash (High) for this task).')
   })
 

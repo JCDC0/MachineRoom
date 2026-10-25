@@ -73,11 +73,11 @@ describe('pathAllowed', () => {
   })
 
   it('reads each lane of the real lanes.json', () => {
-    expect(pathAllowed('src/Stage.jsx', lanes.opencode.forbidden)).toBe(false)
+    expect(pathAllowed('src/Stage.jsx', lanes.claude.forbidden)).toBe(false)
     expect(pathAllowed('server/index.js', lanes.opencode.forbidden)).toBe(true)
-    expect(pathAllowed('src/engine/room.js', lanes.agy.forbidden)).toBe(true)
-    expect(pathAllowed('server/plans.js', lanes.agy.forbidden)).toBe(false)
-    expect(pathAllowed('src/control/client.js', lanes.agy.forbidden)).toBe(false)
+    expect(pathAllowed('src/engine/room.js', lanes.agy.forbidden)).toBe(false)
+    expect(pathAllowed('server/plans.js', lanes.agy.forbidden)).toBe(true)
+    expect(pathAllowed('src/Stage.jsx', lanes.opencode.forbidden)).toBe(true)
   })
 
   it('refuses a path that climbs, a path outside the project and a forbidden path in other case', () => {
@@ -97,8 +97,8 @@ describe('pathAllowed', () => {
   })
 
   it('reads a Windows path and a leading ./', () => {
-    expect(pathAllowed('src\\Stage.jsx', lanes.opencode.forbidden)).toBe(false)
-    expect(pathAllowed('./src/Stage.jsx', lanes.opencode.forbidden)).toBe(false)
+    expect(pathAllowed('src\\Stage.jsx', lanes.claude.forbidden)).toBe(false)
+    expect(pathAllowed('./src/Stage.jsx', lanes.claude.forbidden)).toBe(false)
     expect(pathAllowed('src/briefs/plan.js', [])).toBe(true)
     expect(pathAllowed('src/briefs/plan.js', undefined)).toBe(true)
   })
