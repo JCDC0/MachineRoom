@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The lens's top and bottom edges curve inward, as in the owner's sketch, with a thin edge line drawn on the same curve.
+
 - The waiting card hides while the orchestrator chat is open, the chat has a solid background and at least 320 pixels below 1024 wide, and the waiting card counts the agents instead of naming more than four.
 
 - The control drawer has a solid background, so the dock no longer shows through it, and the Team tab leaves out a lane's role when it has none instead of printing `NULL`.

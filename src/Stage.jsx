@@ -524,11 +524,15 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       >
         <defs>
           <clipPath id="mr-lens-clip" clipPathUnits="objectBoundingBox">
-            <path d="M 0,0.03 Q 0.5,-0.03 1,0.03 L 1,0.97 Q 0.5,1.03 0,0.97 Z" />
+            <path d="M 0,0 Q 0.5,0.12 1,0 L 1,1 Q 0.5,0.88 0,1 Z" />
           </clipPath>
         </defs>
       </svg>
       <div className="lens">
+        <svg className="lens-edge" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <path d="M 0,0 Q 50,12 100,0" />
+          <path d="M 0,100 Q 50,88 100,100" />
+        </svg>
         <div className="lens-frame" ref={surfaceRef}>
           <div
             className="surface-layers"
