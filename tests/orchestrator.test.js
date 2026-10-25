@@ -10,6 +10,14 @@ import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
+function pagePostJson(url, body) {
+  return getJson(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
+    body: JSON.stringify(body),
+  })
+}
+
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const ORCHESTRATOR_LANE = {
   name: 'Orchestrator',
@@ -908,15 +916,15 @@ describe('the orchestrator routes', () => {
     expect(chat.body).toMatchObject({ state: 'idle', model: 'opus', project: rig.projectRoot })
     expect(Array.isArray(chat.body.messages)).toBe(true)
 
-    expect((await postJson(`${url}/api/orchestrator/messages`, { text: 'Build it' })).body).toEqual({
+    expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'Build it' })).body).toEqual({
       error: 'Confirm the message first.',
     })
-    expect((await postJson(`${url}/api/orchestrator/messages`, { text: 'Build it', confirmed: false })).status).toBe(400)
-    expect((await postJson(`${url}/api/orchestrator/messages`, { text: '   ', confirmed: true })).body).toEqual({
+    expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'Build it', confirmed: false })).status).toBe(400)
+    expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: '   ', confirmed: true })).body).toEqual({
       error: 'Write a message from 1 to 8000 characters.',
     })
-    expect((await postJson(`${url}/api/orchestrator/messages`, { text: 'x'.repeat(8001), confirmed: true })).status).toBe(400)
-    expect((await postJson(`${url}/api/orchestrator/messages`, { text: 42, confirmed: true })).status).toBe(400)
+    expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'x'.repeat(8001), confirmed: true })).status).toBe(400)
+    expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 42, confirmed: true })).status).toBe(400)
     expect((await postJson(`${url}/api/orchestrator/stop`, {})).body).toEqual({
       error: 'Confirm the stop first.',
     })
@@ -946,7 +954,7 @@ describe('the orchestrator routes', () => {
     const secret = 'sk-or-v1-' + 'q'.repeat(24)
     const setting = 'OPENROUTER_API_KEY='
     expect((await getJson(`${url}/api/health`)).body.masked.total).toBe(0)
-    const sent = await postJson(`${url}/api/orchestrator/messages`, { text: `Use ${setting}${secret}`, confirmed: true })
+    const sent = await pagePostJson(`${url}/api/orchestrator/messages`, { text: `Use ${setting}${secret}`, confirmed: true })
     expect(sent.status).toBe(202)
     await waitFor(async () => (await getJson(`${url}/api/health`)).body.masked.total === 1, 15000, 'the masked total')
     const chat = await getJson(`${url}/api/orchestrator`)
@@ -975,7 +983,7 @@ describe('the orchestrator routes', () => {
     })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
-    expect((await postJson(`${url}/api/orchestrator/messages`, { text: 'Build it', confirmed: true })).status).toBe(409)
+    expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'Build it', confirmed: true })).status).toBe(409)
     expect((await getJson(`${url}/api/orchestrator`)).body.project).toBe('')
 
     const off = createBridge({ paperclipUrl: DEAD_PAPERCLIP, companyId: 'comp-off', projectRoot: rig.projectRoot, port: 0, env: {}, surfaceEveryMs: 0, reconnectMinMs: 60000, reconnectMaxMs: 60000 })
