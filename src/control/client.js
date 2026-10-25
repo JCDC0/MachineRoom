@@ -281,6 +281,27 @@ export function createClient({
       return request('POST', '/api/orchestrator/model', body)
     },
 
+    setOrchestratorHarness: (idOrOptions, harnessArg, modelArg, options = {}) => {
+      let id
+      let harness
+      let model
+      let confirmed = true
+      if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+        id = idOrOptions.id
+        harness = idOrOptions.harness
+        model = idOrOptions.model
+        if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+      } else {
+        id = idOrOptions
+        harness = harnessArg
+        model = modelArg
+        if (options.confirmed !== undefined) confirmed = options.confirmed
+      }
+      const body = { harness, model, confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      return request('POST', '/api/orchestrator/harness', body)
+    },
+
     setOrchestratorEffort: (idOrOptions, effortArg, options = {}) => {
       let id
       let effort

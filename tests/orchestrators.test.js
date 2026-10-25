@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { createLanesSource } from '../server/lanes-source.js'
-import { chatFileFor } from '../server/orchestrator.js'
-import { branchChanges, createOrchestrators, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
+import { chatFileFor, CONFIRM_HARNESS_PROBLEM } from '../server/orchestrator.js'
+import { branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
@@ -561,6 +561,92 @@ describe('the orchestrator registry', () => {
     expect(modelSet.body).toEqual({ id: 'orchestrator', model: 'claude-haiku-5-5' })
     expect((await getJson(`${rig.url}/api/orchestrator`)).body.model).toBe('claude-haiku-5-5')
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[0].model).toBe('claude-haiku-5-5')
+  })
+
+  it('sets the harness and model for an orchestrator over the bridge route', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const lanes = {
+      ...LANES,
+      claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', bin: process.execPath, model: 'sonnet' } },
+      opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/deepseek-v4.1-flash' } },
+      acp: { name: 'ACP', harness: 'ACP', cli: { harness: 'acp', bin: join(files.base, 'does-not-exist.exe'), model: 'm' } },
+    }
+    const rig = await makeBridge(files, { lanesSource: { folder: files.runs, lanes, pollMs: 20, quietMs: 60000 } })
+
+    const noOriginHarness = await postJson(`${rig.url}/api/orchestrator/harness`, { harness: 'claude', model: 'claude-haiku-5-5', confirmed: true })
+    expect(noOriginHarness.status).toBe(403)
+    expect(noOriginHarness.body).toEqual({ error: OWNER_HARNESS_PROBLEM })
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/harness`, { harness: 'claude', model: 'claude-haiku-5-5' })).body).toEqual({
+      error: CONFIRM_HARNESS_PROBLEM,
+    })
+
+    const unavailableHarness = await pagePost(`${rig.url}/api/orchestrator/harness`, { harness: 'acp', model: 'some-model', confirmed: true })
+    expect(unavailableHarness.status).toBe(400)
+    expect(unavailableHarness.body).toEqual({ error: 'The harness acp is not available on this computer.' })
+
+    const unavailableModel = await pagePost(`${rig.url}/api/orchestrator/harness`, { harness: 'claude', model: 'opencode/deepseek-v4.1-flash-free', confirmed: true })
+    expect(unavailableModel.status).toBe(400)
+    expect(unavailableModel.body).toEqual({ error: 'The model opencode/deepseek-v4.1-flash-free is not available for claude.' })
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/harness`, { id: 'missing', harness: 'claude', model: 'claude-haiku-5-5', confirmed: true })).status).toBe(404)
+
+    const mainChanged = await pagePost(`${rig.url}/api/orchestrator/harness`, { harness: 'claude', model: 'claude-sonnet-5-5', confirmed: true })
+    expect(mainChanged.status).toBe(200)
+    expect(mainChanged.body).toMatchObject({
+      id: 'orchestrator',
+      harness: 'claude',
+      model: 'claude-sonnet-5-5',
+      contextWindow: 1000000,
+    })
+    expect(rig.chat('orchestrator')).toMatchObject({
+      harness: 'claude',
+      model: 'claude-sonnet-5-5',
+      contextWindow: 1000000,
+      sessionId: null,
+    })
+
+    const subChanged = await pagePost(`${rig.url}/api/orchestrator/harness`, { id: 'frontend', harness: 'opencode', model: 'opencode/deepseek-v4.1-flash-free', confirmed: true })
+    expect(subChanged.status).toBe(200)
+    expect(subChanged.body).toMatchObject({
+      id: 'frontend',
+      harness: 'opencode',
+      model: 'opencode/deepseek-v4.1-flash-free',
+      contextWindow: 200000,
+    })
+    expect(rig.chat('frontend')).toMatchObject({
+      harness: 'opencode',
+      model: 'opencode/deepseek-v4.1-flash-free',
+      sessionId: null,
+    })
+    expect(rig.chat('orchestrator').ladder.subs[0]).toMatchObject({
+      id: 'frontend',
+      harness: 'opencode',
+      model: 'opencode/deepseek-v4.1-flash-free',
+    })
+
+    const list = (await getJson(`${rig.url}/api/orchestrators`)).body
+    expect(list[0].harnesses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ harness: 'claude' }),
+        expect.objectContaining({ harness: 'opencode' }),
+      ])
+    )
+    const claudeEntry = list[0].harnesses.find((item) => item.harness === 'claude')
+    expect(claudeEntry.models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'claude-sonnet-5-5', contextWindow: 1000000 }),
+      ])
+    )
+
+    files.behaviour.mode = 'hold'
+    await pagePost(`${rig.url}/api/orchestrator/messages`, { id: 'orchestrator', text: 'Work on something', confirmed: true })
+    await waitFor(() => rig.chat('orchestrator')?.state === 'working')
+    const runningConflict = await pagePost(`${rig.url}/api/orchestrator/harness`, { harness: 'claude', model: 'claude-haiku-5-5', confirmed: true })
+    expect(runningConflict.status).toBe(409)
+    expect(runningConflict.body).toEqual({ error: 'A turn is already running.' })
+    writeFileSync(files.releaseFile, 'go')
+    await waitFor(() => rig.chat('orchestrator')?.state === 'idle')
   })
 
   it('sets reasoning effort and manages sessions over the bridge routes', async () => {

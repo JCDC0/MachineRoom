@@ -567,6 +567,7 @@ describe('the control client orchestrator routes', () => {
     await client.compactOrchestrator()
     await client.compactOrchestrator({ id: 'frontend', keep: 'Keep all tests' })
     await client.setOrchestratorModel({ id: 'frontend', model: 'claude-haiku-5-5' })
+    await client.setOrchestratorHarness({ id: 'frontend', harness: 'opencode', model: 'opencode-go/qwen3.8-flash' })
     expect(calls).toEqual([
       {
         url: 'http://127.0.0.1:9/api/orchestrator/compact',
@@ -582,6 +583,11 @@ describe('the control client orchestrator routes', () => {
         url: 'http://127.0.0.1:9/api/orchestrator/model',
         method: 'POST',
         body: JSON.stringify({ model: 'claude-haiku-5-5', confirmed: true, id: 'frontend' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/harness',
+        method: 'POST',
+        body: JSON.stringify({ harness: 'opencode', model: 'opencode-go/qwen3.8-flash', confirmed: true, id: 'frontend' }),
       },
     ])
   })

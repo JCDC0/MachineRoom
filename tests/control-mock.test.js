@@ -287,4 +287,33 @@ describe('mock orchestrators and the ladder', () => {
       'The lane opencode2 is not active. Add it in Agents first.'
     )
   })
+
+  it('sets orchestrator harness and lists harnesses on orchestrators in mock', async () => {
+    const client = fast()
+    const list = await client.orchestrators()
+    expect(list[0].harnesses.length).toBeGreaterThan(0)
+    expect(list[0].harnesses.some((h) => h.key === 'claude')).toBe(true)
+
+    await expect(client.setOrchestratorHarness({ harness: 'opencode', model: 'opencode-go/qwen3.8-flash', confirmed: false })).rejects.toThrow(
+      'Confirm the harness change first.'
+    )
+    await expect(client.setOrchestratorHarness({ harness: 'missing-harness', model: 'opencode-go/qwen3.8-flash', confirmed: true })).rejects.toThrow(
+      'The harness missing-harness is not available on this computer.'
+    )
+    await expect(client.setOrchestratorHarness({ harness: 'opencode', model: 'claude-opus-5-5', confirmed: true })).rejects.toThrow(
+      'The model claude-opus-5-5 is not available for opencode.'
+    )
+
+    const updated = await client.setOrchestratorHarness({ harness: 'opencode', model: 'opencode-go/qwen3.8-flash', confirmed: true })
+    expect(updated).toMatchObject({
+      id: 'orchestrator',
+      harness: 'opencode',
+      model: 'opencode-go/qwen3.8-flash',
+      contextWindow: 200000,
+    })
+
+    const updatedList = await client.orchestrators()
+    expect(updatedList[0].harness).toBe('opencode')
+    expect(updatedList[0].model).toBe('opencode-go/qwen3.8-flash')
+  })
 })

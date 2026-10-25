@@ -1,7 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
+import { isHarnessAvailable } from './agents-config.js'
+import { MODELS } from './models.js'
 import {
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
@@ -34,6 +37,7 @@ export const OWNER_AUTOCOMPACT_PROBLEM = 'A request with no Origin cannot set au
 export const OWNER_MODEL_PROBLEM = 'A request with no Origin cannot set the model.'
 export const OWNER_EFFORT_PROBLEM = 'A request with no Origin cannot set effort.'
 export const OWNER_SESSION_PROBLEM = 'A request with no Origin cannot change sessions.'
+export const OWNER_HARNESS_PROBLEM = 'A request with no Origin cannot set the harness.'
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -113,8 +117,32 @@ export function branchChanges(record, lanes = {}, options = {}) {
   }
 }
 
+export function availableHarnesses(lanes = {}, env = process.env, platform = process.platform) {
+  const keys = [...new Set([...HARNESSES.map((h) => h.key), ...MODELS.map((m) => m.harness)])]
+  const list = []
+  for (const key of keys) {
+    if (isHarnessAvailable(key, { lanes, env, platform })) {
+      const descriptor = HARNESSES.find((h) => h.key === key)
+      const name = descriptor?.name ?? key
+      const models = MODELS.filter((m) => m.harness === key).map(({ id, label, contextWindow }) => ({
+        id,
+        label,
+        ...(contextWindow ? { contextWindow } : {}),
+      }))
+      list.push({
+        key,
+        name,
+        harness: key,
+        models,
+      })
+    }
+  }
+  return list
+}
+
 function harnessFor(sub) {
-  return String(sub?.harness ?? '').trim() === 'opencode' ? 'opencode' : 'claude'
+  const h = String(sub?.harness ?? '').trim()
+  return h || 'claude'
 }
 
 function sameConfig(left, right) {
@@ -193,12 +221,13 @@ export function createOrchestrators({
   function subConfig(sub) {
     const harness = harnessFor(sub)
     const defaults = laneDefaults(harness)
+    const fallbackModel = MODELS.find((m) => m.harness === harness)?.id ?? (harness === 'opencode' ? 'opencode/deepseek-v4.1-flash-free' : 'opus')
     return {
       id: sub.id,
       name: sub.name,
       harness,
-      model: sub.model || String(defaults?.model ?? (harness === 'opencode' ? 'opencode/deepseek-v4.1-flash-free' : 'opus')),
-      bin: String(defaults?.bin ?? (harness === 'opencode' ? 'opencode' : 'claude')),
+      model: sub.model || String(defaults?.model ?? fallbackModel),
+      bin: String(defaults?.bin ?? harness),
       contextWindow: Number.isFinite(defaults?.contextWindow) && defaults.contextWindow > 0 ? Math.round(defaults.contextWindow) : 0,
       lanes: [...sub.lanes],
       scope: [...sub.scope],
@@ -224,7 +253,7 @@ export function createOrchestrators({
       now,
       promptFile,
       bridgeUrl,
-      contextWindow: config.contextWindow > 0 ? config.contextWindow : DEFAULT_CONTEXT_WINDOW,
+      contextWindow: config.contextWindow,
       onNotice,
       onMasked,
       extraInstructions: subPrompt(sub, ORCHESTRATOR_KEY),
@@ -278,6 +307,7 @@ export function createOrchestrators({
     const { ladder } = readSaved()
     const claimed = new Set(ladder.subs.flatMap((sub) => sub.lanes))
     const answer = main.answer()
+    const activeHarnesses = availableHarnesses(lanes)
     const entries = [
       {
         id: ORCHESTRATOR_KEY,
@@ -298,6 +328,7 @@ export function createOrchestrators({
         scope: [],
         restricted: false,
         setBy: 'owner',
+        harnesses: activeHarnesses,
       },
     ]
     for (const sub of ladder.subs) {
@@ -306,7 +337,7 @@ export function createOrchestrators({
       entries.push({
         id: sub.id,
         name: sub.name,
-        harness: harnessFor(sub),
+        harness: state?.harness ?? harnessFor(sub),
         model: state?.model ?? subConfig(sub).model,
         state: state?.state ?? 'idle',
         contextTokens: state?.contextTokens ?? null,
@@ -322,13 +353,18 @@ export function createOrchestrators({
         scope: [...sub.scope],
         restricted: sub.restricted,
         setBy: sub.setBy,
+        harnesses: activeHarnesses,
       })
     }
     return entries
   }
 
   function subs() {
-    return readSaved().ladder.subs.map((sub) => ({ id: sub.id, name: sub.name, harness: harnessFor(sub) }))
+    return readSaved().ladder.subs.map((sub) => {
+      const instance = instances.get(sub.id)
+      const answer = instance ? instance.answer() : null
+      return { id: sub.id, name: sub.name, harness: answer?.harness ?? harnessFor(sub) }
+    })
   }
 
   function sector(id) {
@@ -529,6 +565,32 @@ export function createOrchestrators({
         return true
       }
       const out = instance.setModel(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/harness') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_HARNESS_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.setHarness(body)
+      if (out.status === 200 && body.id && body.id !== ORCHESTRATOR_KEY) {
+        const { ladder } = readSaved()
+        const targetSub = ladder.subs.find((s) => s.id === body.id)
+        if (targetSub) {
+          targetSub.harness = typeof body.harness === 'string' ? body.harness.trim() : targetSub.harness
+          targetSub.model = typeof body.model === 'string' ? body.model.trim() : targetSub.model
+          main.setLadder(ladder)
+        }
+      }
       sendJson(req, res, out.status, out.body)
       return true
     }

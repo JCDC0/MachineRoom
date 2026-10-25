@@ -17,7 +17,9 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
-import { MODELS } from './models.js'
+import { harnessByKey } from '../src/harnesses/index.js'
+import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
+import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
 
@@ -27,12 +29,13 @@ export const ORCHESTRATOR_TURN_LIMIT_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_ROOM_TURNS = 30
 export const ORCHESTRATOR_ROOM_WINDOW_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
-export const DEFAULT_CONTEXT_WINDOW = 200000
+export { DEFAULT_CONTEXT_WINDOW } from './models.js'
 export const AUTOCOMPACT_SHARE = 0.8
 export const DEFAULT_AUTOCOMPACT_MODE = 'percent'
 export const DEFAULT_AUTOCOMPACT_VALUE = 80
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
 export const COMPACT_RULES_LIMIT = 2000
+export const CONFIRM_HARNESS_PROBLEM = 'Confirm the harness change first.'
 export const DEFAULT_COMPACT_RULES =
   "keep the owner's goals and standing rules in the owner's words, the decisions made and why, each lane run started with its branch and result, the files changed, what is unfinished or blocked, and the next steps; leave out tool output, logs and work already merged and checked."
 export const COMPACT_PROMPT =
@@ -388,6 +391,7 @@ export function createOrchestrator({
   onOutsideScope = null,
   contextWindow: contextWindowOption = 0,
   token: tokenOption = '',
+  harnesses = harnessByKey,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -397,12 +401,7 @@ export function createOrchestrator({
   const lockFile = key === ORCHESTRATOR_KEY ? chatLockFileFor(root, folder) : null
   const laneEntry = lanes && Object.hasOwn(lanes, ORCHESTRATOR_KEY) ? lanes[ORCHESTRATOR_KEY] : null
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
-  const harness =
-    harnessOption === 'opencode' || harnessOption === 'claude'
-      ? harnessOption
-      : String(lane.cli.harness ?? 'claude') === 'opencode'
-        ? 'opencode'
-        : 'claude'
+  let harness = harnessOption || String(lane.cli.harness ?? 'claude')
   let model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
   const bin = binOption ? String(binOption) : String(lane.cli.bin ?? (harness === 'opencode' ? 'opencode' : 'claude'))
   const windowOption = Number.isFinite(contextWindowOption) && contextWindowOption > 0
@@ -420,7 +419,7 @@ export function createOrchestrator({
   let running = null
   let stopped = false
   let contextTokens = null
-  let contextWindow = windowOption || DEFAULT_CONTEXT_WINDOW
+  let contextWindow = resolveContextWindow(model, harness, windowOption)
   let autocompact = true
   let autocompactMode = DEFAULT_AUTOCOMPACT_MODE
   let autocompactValue = DEFAULT_AUTOCOMPACT_VALUE
@@ -454,6 +453,7 @@ export function createOrchestrator({
       const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
       const saved = {
         project: root,
+        harness,
         sessionId,
         state,
         model,
@@ -544,6 +544,7 @@ export function createOrchestrator({
       return
     }
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
+    if (typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
     if (typeof saved.model === 'string' && saved.model.trim() !== '') model = saved.model.trim()
     if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
@@ -578,7 +579,8 @@ export function createOrchestrator({
     if (typeof saved.contextTokens === 'number' && Number.isFinite(saved.contextTokens) && saved.contextTokens >= 0) {
       contextTokens = Math.round(saved.contextTokens)
     }
-    if (!windowOption && typeof saved.contextWindow === 'number' && Number.isFinite(saved.contextWindow) && saved.contextWindow > 0) {
+    contextWindow = resolveContextWindow(model, harness, windowOption)
+    if (!MODELS.some((m) => m.id === model) && typeof saved.contextWindow === 'number' && Number.isFinite(saved.contextWindow) && saved.contextWindow > 0) {
       contextWindow = Math.round(saved.contextWindow)
     }
     if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
@@ -734,7 +736,7 @@ export function createOrchestrator({
     const first = !sessionId
     if (first && harness === 'claude') sessionId = randomUUID()
     const carried = first && summary ? summary : ''
-    if (carried) summary = ''
+    if (carried && (harness === 'claude' || harness === 'opencode')) summary = ''
     const startedAt = now()
     const logName = `${logPrefix}-chat-${stamp(startedAt)}`
     const logPath = join(folder, `${logName}.log`)
@@ -760,6 +762,7 @@ export function createOrchestrator({
       token
     )
     const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
+    let program = bin
     let args
     if (harness === 'opencode') {
       const modelArg = effort ? `${model}#${effort}` : model
@@ -767,7 +770,7 @@ export function createOrchestrator({
       if (!first) args.push('--session', sessionId)
       const body = first ? `${instruction}\n\n${message}` : message
       args.push(carried ? `${carried}\n\n${body}` : body)
-    } else {
+    } else if (harness === 'claude') {
       args = [
         '-p',
         carried ? `${carried}\n\n${message}` : message,
@@ -783,6 +786,45 @@ export function createOrchestrator({
         instruction,
       ]
       if (effort) args.push('--effort', effort)
+    } else {
+      const descriptor = (harnesses && harnesses[harness]) || harnessByKey[harness]
+      if (!descriptor || typeof descriptor.command !== 'function') {
+        running = null
+        addMessage('orchestrator', STOPPED_REPLY)
+        setState('idle')
+        return
+      }
+      let harnessCli = null
+      for (const entry of Object.values(lanes ?? {})) {
+        if (entry?.cli?.harness === harness) {
+          harnessCli = entry.cli
+          break
+        }
+      }
+      const cli = {
+        ...harnessCli,
+        harness,
+        model,
+        bin: binOption || harnessCli?.bin || bin || harness,
+      }
+      const firstNewIndex = turnMessages.length > 0 ? messages.findIndex((m) => m.id === turnMessages[0].id) : messages.length
+      const prior = messages.slice(0, firstNewIndex === -1 ? messages.length : firstNewIndex).slice(-20)
+      const history = prior.map(blockFor).join('\n\n')
+      const promptParts = [instruction]
+      if (summary) promptParts.push(summary)
+      if (history) promptParts.push(history)
+      promptParts.push(message)
+      const freshPrompt = promptParts.join('\n\n')
+      const cmd = descriptor.command({
+        cli,
+        prompt: freshPrompt,
+        env: process.env,
+        folder: root,
+        cwd: root,
+        title: logName,
+      })
+      program = cmd.file
+      args = cmd.args
     }
     const stream = createWriteStream(logPath)
     stream.on('error', () => {})
@@ -799,7 +841,7 @@ export function createOrchestrator({
     }
     let child
     try {
-      child = spawnChild(spawnChild === spawn ? programFor(bin) : bin, args, {
+      child = spawnChild(spawnChild === spawn ? programFor(program) : program, args, {
         cwd: root,
         shell: false,
         env: childEnvironment(process.env, root),
@@ -822,19 +864,48 @@ export function createOrchestrator({
     turn.done = true
     if (turn.timer) clearTimeout(turn.timer)
     const logText = readText(turn.logPath)
-    const runStats = summarizeRun({ harness, log: logText })
-    const report = replyText(harness, logText)
-    if (harness === 'opencode') {
-      const savedSessionId = opencodeSessionId(logText)
-      if (savedSessionId) {
-        sessionId = savedSessionId
+    let runStats
+    let report
+    if (harness === 'opencode' || harness === 'claude') {
+      runStats = summarizeRun({ harness, log: logText, worktree: root })
+      report = replyText(harness, logText)
+      if (harness === 'opencode') {
+        const savedSessionId = opencodeSessionId(logText)
+        if (savedSessionId) {
+          sessionId = savedSessionId
+          try {
+            writeFileSync(turn.metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
+          } catch {}
+        }
+      }
+    } else {
+      const descriptor = (harnesses && harnesses[harness]) || harnessByKey[harness]
+      if (descriptor) {
         try {
-          writeFileSync(turn.metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
-        } catch {}
+          runStats = summarizeRun({ harness, log: logText, worktree: root })
+        } catch {
+          const parser = descriptor.createParser?.({ rootName: basename(String(root ?? '')), files: [], dirs: [] })
+          const activities = parser ? [...parser.push(String(logText ?? ''), 0), ...parser.flush(0)] : []
+          const rep = descriptor.report ? descriptor.report(logText) : []
+          const use = descriptor.usage ? descriptor.usage(logText) : {}
+          runStats = {
+            costUsd: use?.costUsd ?? null,
+            inputTokens: use?.inputTokens ?? null,
+            outputTokens: use?.outputTokens ?? null,
+          }
+        }
+        report = descriptor.reply ? descriptor.reply(logText).trim() : (descriptor.report ? descriptor.report(logText).join('\n') : '')
+      } else {
+        runStats = summarizeRun({ harness, log: logText, worktree: root })
+        report = replyText(harness, logText)
       }
     }
     const seen = contextTokensFromLog(harness, logText)
-    if (seen !== null) contextTokens = seen
+    if (seen !== null) {
+      contextTokens = seen
+    } else if (typeof runStats?.inputTokens === 'number' && runStats.inputTokens > 0) {
+      contextTokens = runStats.inputTokens
+    }
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const text = failed
       ? Number.isInteger(code)
@@ -1048,9 +1119,35 @@ export function createOrchestrator({
     const allowed = MODELS.some((item) => item.id === nextModel && item.harness === harness)
     if (!allowed) return { status: 400, body: { error: MODEL_PROBLEM } }
     model = nextModel
+    contextWindow = resolveContextWindow(model, harness, windowOption)
     persist()
     notify()
     return { status: 200, body: { id: key, model } }
+  }
+
+  function setHarness(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_HARNESS_PROBLEM } }
+    const nextHarness = typeof body?.harness === 'string' ? body.harness.trim() : ''
+    if (!nextHarness || !isHarnessAvailable(nextHarness, { lanes })) {
+      return { status: 400, body: { error: harnessUnavailableProblem(nextHarness || 'unknown') } }
+    }
+    const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
+    const allowed = MODELS.some((item) => item.harness === nextHarness && item.id === nextModel)
+    if (!nextModel || !allowed) {
+      return { status: 400, body: { error: modelUnavailableProblem(nextModel, nextHarness) } }
+    }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    harness = nextHarness
+    model = nextModel
+    sessionId = null
+    for (const s of sessions) {
+      s.sessionId = null
+      s.opencodeSessionId = null
+    }
+    contextWindow = resolveContextWindow(model, harness, windowOption)
+    persist()
+    notify()
+    return { status: 200, body: answer() }
   }
 
   function setEffort(body) {
@@ -1298,6 +1395,7 @@ export function createOrchestrator({
     compact,
     setModel,
     setEffort,
+    setHarness,
     listSessions,
     currentSessionInfo,
     getSession,
