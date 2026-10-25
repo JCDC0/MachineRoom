@@ -1,10 +1,11 @@
 import { spawnSync } from 'node:child_process'
 import { rmSync, writeFileSync } from 'node:fs'
+import { userInfo } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { countLeaks, findLeaks, LEAK_KINDS, maskKeys } from '../src/briefs/audit.js'
-import { historyArgsFrom, parseAuditArgs } from '../scripts/history-audit.mjs'
+import { historyArgsFrom, parseAuditArgs, readHistory } from '../scripts/history-audit.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const SCRIPT = fileURLToPath(new URL('../scripts/history-audit.mjs', import.meta.url))
@@ -357,6 +358,130 @@ describe('history-audit script and a tag named main', () => {
       const result = spawnSync(process.execPath, [SCRIPT, '--json'], { cwd: dir, encoding: 'utf8', windowsHide: true })
       expect(result.status).toBe(1)
       expect(JSON.parse(result.stdout).counts.key).toBeGreaterThanOrEqual(1)
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  }, 30000)
+})
+
+describe('history audit range audit and removed lines', () => {
+  it('leaves out removed lines in a range audit from the commit before deletion', () => {
+    const dir = makeTempDir('history-audit-')
+    try {
+      git(['init', '-b', 'main'], dir)
+      git(['config', 'user.email', 'tester@users.noreply.github.com'], dir)
+      git(['config', 'user.name', 'Tester'], dir)
+      writeFileSync(join(dir, 'notes.md'), 'initial line\n')
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Initial commit'], dir)
+      const base = git(['rev-parse', 'HEAD'], dir).trim()
+
+      const fakeKey = 'sk-' + 'x'.repeat(40)
+      writeFileSync(join(dir, 'secret.md'), `const token = '${fakeKey}'\n`)
+      git(['add', 'secret.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Add fake key'], dir)
+      const commitWithKey = git(['rev-parse', 'HEAD'], dir).trim()
+
+      const fullResult = spawnSync(process.execPath, [SCRIPT, '--json'], { cwd: dir, encoding: 'utf8', windowsHide: true })
+      expect(fullResult.status).toBe(1)
+      const fullReport = JSON.parse(fullResult.stdout)
+      expect(fullReport.counts.key).toBeGreaterThanOrEqual(1)
+
+      const rangeResult = spawnSync(process.execPath, [SCRIPT, '--json', '--from', base], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+      })
+      expect(rangeResult.status).toBe(1)
+      const rangeReport = JSON.parse(rangeResult.stdout)
+      expect(rangeReport.counts.key).toBeGreaterThanOrEqual(1)
+
+      writeFileSync(join(dir, 'secret.md'), 'const token = null\n')
+      git(['add', 'secret.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Delete the key line'], dir)
+
+      const fullAfterDelete = spawnSync(process.execPath, [SCRIPT, '--json'], { cwd: dir, encoding: 'utf8', windowsHide: true })
+      expect(fullAfterDelete.status).toBe(1)
+      const fullAfterReport = JSON.parse(fullAfterDelete.stdout)
+      expect(fullAfterReport.counts.key).toBeGreaterThanOrEqual(1)
+
+      const rangeAfterDelete = spawnSync(process.execPath, [SCRIPT, '--json', '--from', commitWithKey], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+      })
+      expect(rangeAfterDelete.status).toBe(0)
+      const rangeAfterReport = JSON.parse(rangeAfterDelete.stdout)
+      expect(rangeAfterReport.counts.key).toBe(0)
+      expect(rangeAfterReport.findings).toHaveLength(0)
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  }, 30000)
+
+  it('readHistory leaves out removed lines when removed is false', async () => {
+    const dir = makeTempDir('history-audit-')
+    try {
+      git(['init', '-b', 'main'], dir)
+      git(['config', 'user.email', 'tester@users.noreply.github.com'], dir)
+      git(['config', 'user.name', 'Tester'], dir)
+      const fakeKey = 'sk-' + 'y'.repeat(40)
+      writeFileSync(join(dir, 'notes.md'), `const key = '${fakeKey}'\n`)
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Add key'], dir)
+      const beforeDelete = git(['rev-parse', 'HEAD'], dir).trim()
+      writeFileSync(join(dir, 'notes.md'), 'const key = null\n')
+      git(['add', 'notes.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Remove key'], dir)
+
+      const findingsWithRemoved = []
+      await readHistory(dir, historyArgsFrom(beforeDelete), '', findingsWithRemoved, { removed: true })
+      expect(findingsWithRemoved.some((item) => item.kind === 'key')).toBe(true)
+
+      const findingsWithoutRemoved = []
+      await readHistory(dir, historyArgsFrom(beforeDelete), '', findingsWithoutRemoved, { removed: false })
+      expect(findingsWithoutRemoved).toHaveLength(0)
+    } finally {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  }, 30000)
+})
+
+describe('history audit profile check on GitHub Actions', () => {
+  it('finds the current user name when GITHUB_ACTIONS is unset and skips it when GITHUB_ACTIONS is true', () => {
+    const dir = makeTempDir('history-audit-')
+    try {
+      git(['init', '-b', 'main'], dir)
+      git(['config', 'user.email', 'tester@users.noreply.github.com'], dir)
+      git(['config', 'user.name', 'Tester'], dir)
+      const currentName = userInfo().username
+      writeFileSync(join(dir, 'author.md'), `maintainer is ${currentName}\n`)
+      git(['add', 'author.md'], dir)
+      git(['-c', 'commit.gpgsign=false', 'commit', '-m', 'Add author'], dir)
+
+      const envUnset = { ...process.env }
+      delete envUnset.GITHUB_ACTIONS
+      const unsetResult = spawnSync(process.execPath, [SCRIPT, '--json'], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+        env: envUnset,
+      })
+      expect(unsetResult.status).toBe(1)
+      const unsetReport = JSON.parse(unsetResult.stdout)
+      expect(unsetReport.counts.profile).toBeGreaterThanOrEqual(1)
+
+      const envSet = { ...process.env, GITHUB_ACTIONS: 'true' }
+      const setResult = spawnSync(process.execPath, [SCRIPT, '--json'], {
+        cwd: dir,
+        encoding: 'utf8',
+        windowsHide: true,
+        env: envSet,
+      })
+      expect(setResult.status).toBe(0)
+      const setReport = JSON.parse(setResult.stdout)
+      expect(setReport.counts.profile).toBe(0)
+      expect(setReport.findings).toHaveLength(0)
     } finally {
       rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

@@ -3,6 +3,7 @@
 ## Unreleased
 
 - AGY, AGY 2 and AGY 3 are backend lanes on Flash, the OpenCode lanes may change App and Stage, and a lane prompt leaves out the forbidden paths line when the lane has none.
+- Tests cover the history audit range audit with removed lines and the profile check when GITHUB_ACTIONS is true (task T23).
 
 - `package-lock.json` carries the root `bin` entry, so `npm install` in a fresh clone leaves the tree clean (found by D11).
 
