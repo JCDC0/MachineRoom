@@ -3,7 +3,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
-import { ROOT_DROP, SPHERE_CENTER, STACK_LIMIT, layoutSphere } from './sphere.js'
+import { ROOT_PLACE, layoutRing } from './ring.js'
 import { CARD_NAME_FONT, CARD_NAME_MIN, minTextScale } from './camera.js'
 import { easeRate, still } from './sprites.js'
 
@@ -79,14 +79,6 @@ export function openChain(state, extra = []) {
   return chain
 }
 
-export function planOpenSet(views, chain = new Set()) {
-  const open = new Set(chain)
-  for (const view of views) {
-    if (view?.state === 'open' || view?.state === 'files') open.add(view.path)
-  }
-  return open
-}
-
 export function createRowFrameKey() {
   let latest = null
   let mask = null
@@ -116,71 +108,6 @@ export function createRowFrameKey() {
     },
     builds: () => builds,
   }
-}
-
-export function stackOverflow(views, open = new Set()) {
-  const paths = new Set(views.map((view) => view.path))
-  const parentOf = new Map()
-  for (const view of views) {
-    if (view.path === '') continue
-    let at = dirname(view.path)
-    while (at !== '' && !paths.has(at)) at = dirname(at)
-    if (at === '' && paths.has('')) parentOf.set(view.path, '')
-    else if (paths.has(at)) parentOf.set(view.path, at)
-  }
-  const groups = new Map()
-  for (const view of views) {
-    const parent = parentOf.get(view.path)
-    if (parent === undefined) continue
-    const list = groups.get(parent)
-    if (list) list.push(view)
-    else groups.set(parent, [view])
-  }
-  const hidden = new Set()
-  const extra = new Map()
-  for (const [parent, kids] of groups) {
-    if (parent === '') continue
-    if (open.has(parent)) continue
-    if (kids.some((view) => open.has(view.path))) continue
-    const stack = kids.filter((view) => !open.has(view.path)).sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
-    for (const view of stack.slice(STACK_LIMIT)) hidden.add(view.path)
-    const over = Math.max(0, stack.length - STACK_LIMIT)
-    if (over > 0) extra.set(parent, over)
-  }
-  let grew = hidden.size > 0
-  while (grew) {
-    grew = false
-    for (const view of views) {
-      if (hidden.has(view.path)) continue
-      const parent = parentOf.get(view.path)
-      if (parent !== undefined && hidden.has(parent)) {
-        hidden.add(view.path)
-        grew = true
-      }
-    }
-  }
-  return { hidden, extra }
-}
-
-export function stackNamesHidden(views, open = new Set()) {
-  const paths = new Set()
-  for (const view of views ?? []) if (typeof view?.path === 'string') paths.add(view.path)
-  const kids = new Map()
-  for (const path of paths) {
-    if (path === '') continue
-    const parent = dirname(path)
-    if (!paths.has(parent)) continue
-    const list = kids.get(parent)
-    if (list) list.push(path)
-    else kids.set(parent, [path])
-  }
-  const hidden = new Set()
-  for (const [parent, list] of kids) {
-    if (parent === '' || open.has(parent)) continue
-    if (list.some((path) => open.has(path))) continue
-    for (const path of list) hidden.add(path)
-  }
-  return hidden
 }
 
 export function cardHeight(rows) {
@@ -286,30 +213,28 @@ export function cardRadius(view) {
   return Math.hypot(width, height) / 2
 }
 
-export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new Map(), obstacles = [], rootName = 'root' } = {}) {
+export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new Map(), sprayed = new Set(), rootName = 'root' } = {}) {
   const pins = [...pinned]
-  const input = viewInput(state, pins)
-  const plan = planFolderView({ ...input, alwaysDepth })
-  const open = planOpenSet(plan, openChain(state, pins))
-  const views = [...plan].sort((a, b) => a.path.length - b.path.length)
-  const overflow = stackOverflow(views, open)
+  const sprays = [...sprayed]
+  const input = viewInput(state, [...pins, ...sprays])
+  const plan = planFolderView({ ...input, alwaysDepth, expanded: sprays })
   const drawn = new Map()
-  for (const view of views) {
-    if (overflow.hidden.has(view.path)) continue
-    drawn.set(view.path, { ...view, back: view.path === '' ? 0 : Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
+  for (const view of plan) {
+    if (view.path === '') drawn.set(view.path, { ...view, back: 0 })
+    else drawn.set(view.path, view)
   }
   const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view, rootName) }))
-  const openKey = [...open].sort().join('\n')
-  const layoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${obstacleKeyOf(obstacles)}|${openKey}`
-  const placed = layoutSphere(entries, { previous, obstacles, open })
-  return { input, plan, open, views, hidden: overflow.hidden, drawn, entries, placed, layoutKey }
+  const layoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${sprays.sort().join(',')}`
+  const placed = layoutRing(entries, { previous, sprayed })
+  return { input, plan, views: plan, drawn, entries, placed, layoutKey }
 }
 
 export function overviewSpheres(cards) {
   const out = []
   for (const card of cards ?? []) {
     const root = card?.path === ''
-    if (!root && card?.view?.pinned !== true) continue
+    const top = !root && typeof card?.path === 'string' && !card.path.includes('/')
+    if (!root && !top) continue
     const at = card?.home
     if (!at || ![at.x, at.y, at.z].every(Number.isFinite)) continue
     const size = card.view ? cardSize(card.view, card.rootName) : null
@@ -323,17 +248,6 @@ export function overviewSpheres(cards) {
     })
   }
   return out
-}
-
-function obstacleKeyOf(list) {
-  if (!Array.isArray(list)) return ''
-  return list
-    .map((item) =>
-      [item?.x, item?.y, item?.z, item?.radius]
-        .map((value) => (Number.isFinite(Number(value)) ? Number(value).toFixed(2) : '?'))
-        .join(',')
-    )
-    .join(';')
 }
 
 function el(tag, className, text) {
@@ -378,23 +292,22 @@ function rowNote(file) {
   return parts.join(' · ') || 'not touched'
 }
 
-export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2, obstacles = [] } = {}) {
+export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2 } = {}) {
   const cards = new Map()
   const hider = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })
   const homes = new Map()
   const pinned = new Set()
+  const sprayed = new Set()
   const flashes = new Map()
   let flashVersion = 0
   const rowFrame = createRowFrameKey()
-  let boardObstacles = Array.isArray(obstacles) ? [...obstacles] : []
-  let obstacleKey = obstacleKeyOf(boardObstacles)
   const initialDepth = Number(alwaysDepth)
   let alwaysLevel = Number.isFinite(initialDepth) ? Math.min(3, Math.max(0, Math.floor(initialDepth))) : 2
   const right = new THREE.Vector3(1, 0, 0)
   const up = new THREE.Vector3(0, 1, 0)
   const back = new THREE.Vector3(0, 0, 1)
   const nameView = new THREE.Vector3()
-  const rootHome = new THREE.Vector3(SPHERE_CENTER.x, SPHERE_CENTER.y - ROOT_DROP, SPHERE_CENTER.z)
+  const rootHome = new THREE.Vector3(ROOT_PLACE.x, ROOT_PLACE.y, ROOT_PLACE.z)
   const projection = new THREE.Vector3()
   let planKey = ''
   let layoutKey = ''
@@ -410,6 +323,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   let lastLatest = -1
   let lastPinnedVersion = 0
   let pinnedVersion = 1
+  let lastSprayVersion = 0
+  let sprayVersion = 1
   let lastAgentFocus = []
 
   function focusChanged(state) {
@@ -457,9 +372,9 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     for (const corner of BRACKETS) element.append(el('div', `mr-card-bracket is-${corner}`))
     head.addEventListener('click', (event) => {
       event.stopPropagation()
-      if (pinned.has(path)) pinned.delete(path)
-      else pinned.add(path)
-      pinnedVersion += 1
+      if (sprayed.has(path)) sprayed.delete(path)
+      else sprayed.add(path)
+      sprayVersion += 1
       planKey = ''
     })
     const object = new CSS3DObject(element)
@@ -485,7 +400,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       home: object.position.clone(),
       scale,
       rootName,
-      nameHidden: false,
       rows: [],
       rowPaths: [],
       view: null,
@@ -649,22 +563,23 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const unchanged =
       planKey !== '' &&
       pinnedVersion === lastPinnedVersion &&
+      sprayVersion === lastSprayVersion &&
       state.existingFiles === lastExistingFiles &&
       state.latest === lastLatest &&
       !focusChanged(state)
     if (unchanged) return false
 
     lastPinnedVersion = pinnedVersion
+    lastSprayVersion = sprayVersion
     lastExistingFiles = state.existingFiles
     lastLatest = state.latest
     saveAgentFocus(state)
 
-    const planKeyNext = viewKey(state, [...pinned])
+    const planKeyNext = viewKey(state, [...pinned, ...sprayed])
     if (planKeyNext === planKey) return false
     planKey = planKeyNext
-    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, previous: homes, obstacles: boardObstacles, rootName })
+    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, previous: homes, sprayed, rootName })
     const drawn = layout.drawn
-    const hiddenNames = stackNamesHidden([...drawn.values()], layout.open)
     const focusPaths = new Set()
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
     const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
@@ -726,11 +641,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       if (card.occluderKey !== `${card.height}|${backLayers(view)}`) paintOccluder(card, view)
       paintRows(card, view)
       card.meta.textContent = metaText(view)
-      const hideName = hiddenNames.has(view.path)
-      if (card.nameHidden !== hideName) {
-        card.nameHidden = hideName
-        card.name.style.display = hideName ? 'none' : ''
-      }
     }
     const entries = layout.entries
     const layoutChanged = layout.layoutKey !== layoutKey
@@ -739,13 +649,13 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       const sizes = new Map(entries.map((entry) => [entry.path, entry]))
       for (const [path, spot] of layout.placed) {
         const size = sizes.get(path)
-        homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
+        homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height, slot: spot.slot })
         const card = cards.get(path)
         if (card) card.home.set(spot.x, spot.y, spot.z)
       }
     }
     const nextOverviewKey = entries
-      .filter((entry) => entry.path === '' || drawn.get(entry.path)?.pinned === true)
+      .filter((entry) => entry.path === '' || !entry.path.includes('/'))
       .map((entry) => `${entry.path}:${entry.width}:${entry.height}`)
       .join(';')
     const overviewChanged = nextOverviewKey !== overviewLayoutKey
@@ -800,6 +710,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     flashes.clear()
     flashVersion += 1
     pinnedVersion += 1
+    sprayed.clear()
+    sprayVersion += 1
     planKey = ''
     recompute(state)
     for (const card of cards.values()) {
@@ -837,17 +749,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
 
   function overview() {
     return overviewSpheres(cards.values())
-  }
-
-  function setObstacles(list) {
-    const next = Array.isArray(list) ? [...list] : []
-    const key = obstacleKeyOf(next)
-    if (key === obstacleKey) return false
-    boardObstacles = next
-    obstacleKey = key
-    planKey = ''
-    layoutKey = ''
-    return true
   }
 
   function cardSphere(path) {
@@ -1018,7 +919,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       let className = card.baseClass ?? `mr-card is-${view.state}`
       if (active.dirs.has(card.path)) className += ' is-active'
       else if (active.path.has(card.path)) className += ' is-path'
-      if (pinned.has(card.path)) className += ' is-pinned'
+      if (pinned.has(card.path) || sprayed.has(card.path)) className += ' is-pinned'
       if (tone) className += ` is-flash-${tone}`
       const lit = dimmed && Boolean(dimLit?.has(card.path))
       if (dimmed) className += lit ? ' is-lit' : ' is-dim'
@@ -1146,7 +1047,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
     sync,
     setOptions,
-    setObstacles,
     update,
     visibleLinks,
     overviewSpheres: overview,

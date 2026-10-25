@@ -14,10 +14,7 @@ import {
   createRowFrameKey,
   fadeProgress,
   openChain,
-  planOpenSet,
   rowOffset,
-  stackNamesHidden,
-  stackOverflow,
   viewInput,
   viewKey,
 } from '../src/engine/cards.js'
@@ -200,13 +197,6 @@ describe('card names', () => {
     expect(cardTitle('', 'demo')).toBe('demo')
   })
 
-  it('hides the names behind the front card of a stack', () => {
-    const views = [{ path: '' }, { path: 'lib' }, { path: 'lib/a' }, { path: 'lib/b' }, { path: 'src' }, { path: 'src/a' }]
-    expect([...stackNamesHidden(views)].sort()).toEqual(['lib/a', 'lib/b', 'src/a'])
-    expect([...stackNamesHidden(views, new Set(['lib']))]).toEqual(['src/a'])
-    expect([...stackNamesHidden(views, new Set(['lib/a']))]).toEqual(['src/a'])
-  })
-
   it('puts the full path on the card and keeps a long name inside its width', () => {
     const rootName = LONG
     const tree = makeTree({ root: rootName, files: [`${rootName}/a.js`] })
@@ -240,16 +230,14 @@ describe('card names', () => {
     cards.dispose()
   })
 
-  it('hides the name of a card that sits behind its parent in a stack', () => {
+  it('shows every card name on the ring', () => {
     const state = recentState()
     const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
     cards.sync(state)
     cards.update(state, 0.016, camera())
-    const front = cards.cards.get('lib')
-    const behind = cards.cards.get('lib/a')
-    expect(front.name.style.display).not.toBe('none')
-    expect(behind.name.style.display).toBe('none')
-    expect(behind.element.title).toBe('lib/a')
+    for (const card of cards.cards.values()) {
+      expect(card.name.style.display, card.path || 'root').not.toBe('none')
+    }
     cards.dispose()
   })
 })
@@ -432,85 +420,47 @@ describe('openChain', () => {
   })
 })
 
-describe('the open set the plan draws', () => {
-  it('adds every view the plan draws open or with files to the focus chain', () => {
-    const views = [
-      { path: '', state: 'open' },
-      { path: 'src', state: 'closed' },
-      { path: 'src/mine', state: 'files' },
-    ]
-    expect([...planOpenSet(views, new Set(['docs']))].sort()).toEqual(['', 'docs', 'src/mine'])
-  })
-
-  it('draws a fresh recent folder and its row when another agent works elsewhere', () => {
+describe('the folders on the ring', () => {
+  it('draws a fresh recent folder and its file row when another agent works elsewhere', () => {
     const state = recentState()
     const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
     cards.sync(state)
     cards.update(state, 0.016, camera())
     const src = cards.cards.get('src')
-    expect(src.view.state).toBe('open')
-    expect(src.view.folders).toContain('src/mine')
+    expect(src.view.state).toBe('files')
+    expect(src.view.items).toEqual([])
     const mine = cards.cards.get('src/mine')
     expect(mine.view.state).toBe('files')
+    expect(mine.view.items).toEqual([{ path: 'src/mine/m.js', kind: 'file' }])
     expect(cards.center('src/mine').equals(cards.cards.get('src/mine').object.position)).toBe(true)
     expect(cards.center('src/mine').equals(cards.center(''))).toBe(false)
     cards.dispose()
   })
+
+  it('sprays every child of a folder passed as clicked', () => {
+    const state = recentState()
+    const flat = cardPlan(state, { alwaysDepth: 0 })
+    const sprayed = cardPlan(state, { alwaysDepth: 0, sprayed: new Set(['lib']) })
+    expect(flat.drawn.has('lib/a')).toBe(false)
+    for (const name of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) expect(sprayed.drawn.has(`lib/${name}`)).toBe(true)
+    expect(sprayed.placed.get('lib').y).toBeGreaterThan(flat.placed.get('lib').y)
+    expect(sprayed.placed.get('lib').y).toBe(flat.placed.get('lib').y + 140)
+    expect(sprayed.placed.get('lib/a').y).toBe(flat.placed.get('lib').y)
+  })
 })
 
 describe('cardPlan', () => {
-  it('hides the same views the cards hide on the Q4a case', () => {
+  it('draws the whole plan and gives the cards the same keys', () => {
     const state = recentState()
     const layout = cardPlan(state, { alwaysDepth: 2 })
     expect(layout.drawn.has('src/mine')).toBe(true)
-    expect(layout.hidden.size).toBeGreaterThan(0)
+    expect(layout.drawn.size).toBe(layout.plan.length)
     const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
     cards.sync(state)
     cards.update(state, 0.016, camera())
     expect([...cards.cards.keys()].sort()).toEqual([...layout.drawn.keys()].sort())
-    for (const path of layout.hidden) expect(cards.cards.has(path)).toBe(false)
-    expect(layout.drawn.get('lib').back).toBe(3)
+    expect(layout.drawn.get('lib').back).toBe(0)
     cards.dispose()
-  })
-})
-
-describe('stackOverflow', () => {
-  const views = (children) => [
-    { path: '', back: 0 },
-    { path: 'src', back: 0 },
-    ...Array.from({ length: children }, (_, index) => ({ path: `src/c${index}`, back: 0 })),
-  ]
-
-  it('shows four stacked children and counts the rest on the parent', () => {
-    const result = stackOverflow(views(6))
-    expect([...result.hidden].sort()).toEqual(['src/c4', 'src/c5'])
-    expect(result.extra.get('src')).toBe(2)
-  })
-
-  it('does not count a child on the path in the stack', () => {
-    const result = stackOverflow(views(6), new Set(['src/c0']))
-    expect(result.hidden.has('src/c0')).toBe(false)
-    expect(result.hidden.size).toBe(0)
-    expect(result.extra.size).toBe(0)
-  })
-
-  it('hides nothing under a folder that is open', () => {
-    const result = stackOverflow(views(6), new Set(['src']))
-    expect(result.hidden.size).toBe(0)
-    expect(result.extra.size).toBe(0)
-  })
-
-  it('keeps every top-level card on the first shell', () => {
-    const list = [{ path: '', back: 0 }, ...Array.from({ length: 8 }, (_, index) => ({ path: `top-${index}`, back: 0 }))]
-    const result = stackOverflow(list)
-    expect(result.hidden.size).toBe(0)
-    expect(result.extra.size).toBe(0)
-  })
-
-  it('hides the children of a hidden card too', () => {
-    const list = [...views(6), { path: 'src/c4/deep', back: 0 }]
-    const result = stackOverflow(list)
-    expect(result.hidden.has('src/c4/deep')).toBe(true)
   })
 })
 

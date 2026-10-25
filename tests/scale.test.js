@@ -11,8 +11,8 @@ const MEASURED_MS = {
   'planFolderView, first call': 49,
   'planFolderView, 3 agents, same files': 3.2,
   'planFolderView, one new file': 10.6,
-  'layoutSphere (cold)': 5,
-  'layoutSphere (warm)': 5,
+  'layoutRing (cold)': 5,
+  'layoutRing (warm)': 5,
   'pipeline, Hermes read or shell line (mean)': 2.7,
   'pipeline, Hermes read or shell line (worst)': 9,
   packTree: 48,
@@ -83,7 +83,7 @@ describe('each fixed stage at 40000 files', () => {
   }
 
   it('reports no covered top-level cards', () => {
-    expect(rows.get('layoutSphere, covered top cards').ms).toBe(0)
+    expect(rows.get('layoutRing, covered top cards').ms).toBe(0)
   })
 
   it('sends the first tree event and the file list route in under 1 MB', () => {

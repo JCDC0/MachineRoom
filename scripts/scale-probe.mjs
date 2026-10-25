@@ -15,7 +15,7 @@ import { apply, createState } from '../src/model/state.js'
 import { cardPlan, cardSize, overviewSpheres, viewInput, viewKey } from '../src/engine/cards.js'
 import { OVERVIEW, fitView, viewBasis } from '../src/engine/camera.js'
 import { HUB_CENTER, HUB_RADIUS } from '../src/engine/hub.js'
-import { layoutSphere } from '../src/engine/sphere.js'
+import { layoutRing } from '../src/engine/ring.js'
 import {
   AGENTS,
   DEFAULTS,
@@ -153,7 +153,7 @@ export function topCovered(entries, placed, fit) {
   return false
 }
 
-export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2 } = {}) {
+export function ringChain(activities, tree, agents = AGENTS, { alwaysDepth = 2 } = {}) {
   const state = createState(tree, agents)
   let homes = new Map()
   let key = ''
@@ -173,7 +173,7 @@ export function sphereChain(activities, tree, agents = AGENTS, { alwaysDepth = 2
     const sizes = new Map(entries.map((entry) => [entry.path, entry]))
     for (const [path, spot] of placed) {
       const size = sizes.get(path)
-      homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
+      homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height, slot: spot.slot })
     }
     layouts += 1
     const fitCards = entries.map((entry) => ({
@@ -279,24 +279,24 @@ export async function runProbe(options = {}) {
   })
   row('planFolderView, one new file with alwaysDepth 2', 'activity', addedAlways.worst, `${alwaysViews.length} cards, ${alwaysViews.filter((view) => view.pinned).length} pinned`)
 
-  const folderSize = cardSize({ state: 'closed' })
-  const sphereFolders = tree.dirs.filter((path) => path === '' || path.split('/').length <= 2)
-  const sphereEntries = sphereFolders.map((path) => ({ path, ...folderSize }))
-  const sphereCold = timeIt(() => layoutSphere(sphereEntries), 5)
-  row('layoutSphere (cold)', 'activity', sphereCold.ms, `${sphereEntries.length} cards`)
-  const sphereWarm = timeIt(() => layoutSphere(sphereEntries, { previous: sphereCold.result }), 5)
-  row('layoutSphere (warm)', 'activity', sphereWarm.ms)
+  const folderSize = cardSize({ state: 'files', items: [], hiddenItems: 0 })
+  const ringFolders = tree.dirs.filter((path) => path === '' || path.split('/').length <= 2)
+  const ringEntries = ringFolders.map((path) => ({ path, ...folderSize }))
+  const ringCold = timeIt(() => layoutRing(ringEntries), 5)
+  row('layoutRing (cold)', 'activity', ringCold.ms, `${ringEntries.length} cards`)
+  const ringWarm = timeIt(() => layoutRing(ringEntries, { previous: ringCold.result }), 5)
+  row('layoutRing (warm)', 'activity', ringWarm.ms)
 
-  const chain = sphereChain(activities.slice(0, 800), tree)
+  const chain = ringChain(activities.slice(0, 800), tree)
   rows.push({
-    stage: 'layoutSphere, covered top cards',
+    stage: 'layoutRing, covered top cards',
     runsAt: 'chain',
     ms: chain.covered,
     budget: 0,
     size: `${chain.covered} of ${chain.layouts} layouts`,
   })
   rows.push({
-    stage: 'layoutSphere, tallest layout',
+    stage: 'layoutRing, tallest layout',
     runsAt: 'chain',
     ms: chain.tallest,
     budget: null,
@@ -362,7 +362,7 @@ export function replayDigest(source) {
     const sizes = new Map(layout.entries.map((entry) => [entry.path, entry]))
     for (const [path, spot] of layout.placed) {
       const size = sizes.get(path)
-      homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
+      homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height, slot: spot.slot })
     }
     layouts.push([...layout.placed])
   }

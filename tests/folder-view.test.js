@@ -6,11 +6,11 @@ import { apply, createState } from '../src/model/state.js'
 import { loadRecording, loadScenario } from './helpers.js'
 
 const PLAN_DIGESTS = {
-  sandbox: 'ae5d30b00ecdf96d',
-  'scenario-a': '4b3e72323954daeb',
-  'scenario-b': 'f1ab1b3c433a6af9',
-  'scenario-c': 'ecb910f0c9df6809',
-  'scenario-d': '176cd9d806d2e88a',
+  sandbox: 'c2b708087298eb0c',
+  'scenario-a': '73dd68c909528680',
+  'scenario-b': 'f773c6e02d64c9dd',
+  'scenario-c': 'a7524ec50b89129f',
+  'scenario-d': '1abaa12fe0269330',
 }
 
 function digest(value) {
@@ -26,26 +26,25 @@ function paths(plan) {
 }
 
 describe('planFolderView', () => {
-  it('opens every folder on the way to a deep focus file', () => {
+  it('lists its files on every folder on the way to a deep focus file', () => {
     const files = ['README.md', 'src/model/parsers/common.js', 'src/model/state.js', 'src/model/paths.js']
 
     const plan = planFolderView({ files, focus: ['src/model/parsers/common.js'] })
     const folders = byPath(plan)
 
     expect(paths(plan)).toEqual(['', 'src', 'src/model', 'src/model/parsers'])
-    expect(folders.get('').state).toBe('open')
-    expect(folders.get('src').state).toBe('open')
-    expect(folders.get('src/model').state).toBe('open')
-    expect(folders.get('src/model').folders).toEqual(['src/model/parsers'])
-    expect(folders.get('src/model').hiddenFolders).toBe(0)
-    expect(folders.get('src/model/parsers').state).toBe('files')
-    expect(folders.get('src/model/parsers').items).toEqual([
-      { path: 'src/model/parsers/common.js', kind: 'file' },
+    for (const view of plan) expect(view.state).toBe('files')
+    expect(folders.get('').items).toEqual([{ path: 'README.md', kind: 'file' }])
+    expect(folders.get('src').items).toEqual([])
+    expect(folders.get('src/model').items).toEqual([
+      { path: 'src/model/paths.js', kind: 'file' },
+      { path: 'src/model/state.js', kind: 'file' },
     ])
+    expect(folders.get('src/model/parsers').items).toEqual([{ path: 'src/model/parsers/common.js', kind: 'file' }])
     expect(folders.get('src/model/parsers').hiddenItems).toBe(0)
   })
 
-  it('shows three of a hundred child folders and stacks three back', () => {
+  it('shows three of a hundred child folders as cards and lists the rest in rows', () => {
     const files = []
     for (let i = 0; i < 100; i += 1) files.push(`big/f${String(i).padStart(2, '0')}/a.js`)
 
@@ -53,13 +52,32 @@ describe('planFolderView', () => {
     const folders = byPath(plan)
     const big = folders.get('big')
 
-    expect(big.state).toBe('open')
-    expect(big.folders).toEqual(['big/f00', 'big/f01', 'big/f02'])
-    expect(big.back).toBe(3)
+    expect(big.state).toBe('files')
+    expect(big.items).toEqual([
+      { path: 'big/f03', kind: 'dir' },
+      { path: 'big/f04', kind: 'dir' },
+      { path: 'big/f05', kind: 'dir' },
+    ])
     expect(big.hiddenFolders).toBe(97)
-    expect(folders.get('big/f00').state).toBe('files')
-    expect(folders.get('big/f01').state).toBe('closed')
+    expect(big.hiddenItems).toBe(94)
     expect(paths(plan)).toEqual(['', 'big', 'big/f00', 'big/f01', 'big/f02'])
+    for (const path of ['big/f00', 'big/f01', 'big/f02']) {
+      expect(folders.get(path).state).toBe('files')
+      expect(folders.get(path).items).toEqual([{ path: `${path}/a.js`, kind: 'file' }])
+    }
+  })
+
+  it('draws every child of a clicked folder and the first three of the others', () => {
+    const files = ['lib/a/x.js', 'lib/b/x.js', 'lib/c/x.js', 'lib/d/x.js', 'lib/e/x.js']
+    const plain = planFolderView({ files, focus: ['lib'] })
+    expect(paths(plain)).toEqual(['', 'lib', 'lib/a', 'lib/b', 'lib/c'])
+    const expanded = planFolderView({ files, focus: ['lib'], expanded: ['lib'] })
+    expect(paths(expanded)).toEqual(['', 'lib', 'lib/a', 'lib/b', 'lib/c', 'lib/d', 'lib/e'])
+    for (const view of expanded) {
+      expect(view.state).toBe('files')
+      expect(view.back).toBe(0)
+    }
+    expect(byPath(expanded).get('lib').items).toEqual([])
   })
 
   it('lists the focused file, then touched files, then names, with at most three folders', () => {
@@ -74,17 +92,19 @@ describe('planFolderView', () => {
     expect(docs.items).toEqual([
       { path: 'docs/doc07.md', kind: 'file' },
       { path: 'docs/doc39.md', kind: 'file' },
-      { path: 'docs/a', kind: 'dir' },
-      { path: 'docs/b', kind: 'dir' },
-      { path: 'docs/c', kind: 'dir' },
+      { path: 'docs/d', kind: 'dir' },
       { path: 'docs/doc01.md', kind: 'file' },
       { path: 'docs/doc02.md', kind: 'file' },
       { path: 'docs/doc03.md', kind: 'file' },
       { path: 'docs/doc04.md', kind: 'file' },
       { path: 'docs/doc05.md', kind: 'file' },
+      { path: 'docs/doc06.md', kind: 'file' },
+      { path: 'docs/doc08.md', kind: 'file' },
     ])
-    expect(docs.items.filter((item) => item.kind === 'dir')).toHaveLength(3)
-    expect(docs.hiddenItems).toBe(35)
+    expect(docs.folders).toEqual([])
+    expect(docs.back).toBe(0)
+    expect(docs.hiddenFolders).toBe(2)
+    expect(docs.hiddenItems).toBe(32)
   })
 
   it('opens both branches when two agents work on two files', () => {
@@ -100,50 +120,59 @@ describe('planFolderView', () => {
     const folders = byPath(plan)
 
     expect(paths(plan)).toEqual(['', 'docs', 'src', 'src/engine', 'src/model'])
-    expect(folders.get('').folders).toEqual(['src', 'docs'])
-    expect(folders.get('src').state).toBe('open')
-    expect(folders.get('src').folders).toEqual(['src/engine', 'src/model'])
-    expect(folders.get('src/engine').state).toBe('files')
+    for (const view of plan) expect(view.state).toBe('files')
+    expect(folders.get('docs').items).toEqual([{ path: 'docs/notes.md', kind: 'file' }])
+    expect(folders.get('src').items).toEqual([])
     expect(folders.get('src/engine').items).toEqual([
       { path: 'src/engine/room.js', kind: 'file' },
       { path: 'src/engine/layout.js', kind: 'file' },
     ])
-    expect(folders.get('src/model').state).toBe('files')
     expect(folders.get('src/model').items).toEqual([
       { path: 'src/model/state.js', kind: 'file' },
       { path: 'src/model/player.js', kind: 'file' },
     ])
-    expect(folders.get('docs').state).toBe('closed')
   })
 
-  it('opens a folder that is the focus, with no files state', () => {
+  it('opens a folder that is the focus and lists its files', () => {
     const files = ['src/model/state.js', 'src/ui/Hud.jsx', 'tests/a.test.js']
 
     const plan = planFolderView({ files, focus: ['src/ui'] })
     const folders = byPath(plan)
 
     expect(paths(plan)).toEqual(['', 'src', 'src/model', 'src/ui', 'tests'])
-    expect(folders.get('src/ui').state).toBe('open')
-    expect(folders.get('src/ui').folders).toEqual([])
-    expect(folders.get('src/ui').items).toEqual([])
-    expect(folders.get('src').folders).toEqual(['src/ui', 'src/model'])
-    expect(plan.some((entry) => entry.state === 'files')).toBe(false)
+    expect(folders.get('src/ui').state).toBe('files')
+    expect(folders.get('src/ui').items).toEqual([{ path: 'src/ui/Hud.jsx', kind: 'file' }])
+    expect(folders.get('src/model').items).toEqual([{ path: 'src/model/state.js', kind: 'file' }])
+    expect(folders.get('tests').items).toEqual([{ path: 'tests/a.test.js', kind: 'file' }])
   })
 
-  it('draws the root alone when nothing is focused or touched', () => {
+  it('draws the root alone with its files and folders when nothing is focused or touched', () => {
     const plan = planFolderView({ files: ['src/model/state.js', 'README.md'] })
 
     expect(plan).toEqual([
-      { path: '', state: 'closed', folders: [], back: 0, hiddenFolders: 0, items: [], hiddenItems: 0 },
+      {
+        path: '',
+        state: 'files',
+        folders: [],
+        back: 0,
+        hiddenFolders: 1,
+        items: [
+          { path: 'README.md', kind: 'file' },
+          { path: 'src', kind: 'dir' },
+        ],
+        hiddenItems: 0,
+      },
     ])
   })
 
   it('opens the root when the focus is the root', () => {
     const plan = planFolderView({ files: ['src/model/state.js', 'README.md'], focus: [''] })
-    const root = byPath(plan).get('')
+    const folders = byPath(plan)
 
-    expect(root.state).toBe('open')
-    expect(root.folders).toEqual(['src'])
+    expect(paths(plan)).toEqual(['', 'src'])
+    expect(folders.get('').state).toBe('files')
+    expect(folders.get('').items).toEqual([{ path: 'README.md', kind: 'file' }])
+    expect(folders.get('src').items).toEqual([{ path: 'src/model', kind: 'dir' }])
   })
 
   it('cleans paths the way paths.js does', () => {
@@ -161,13 +190,14 @@ describe('planFolderView', () => {
     expect(folders.get('src/model').items).toEqual([{ path: 'src/model/state.js', kind: 'file' }])
   })
 
-  it('keeps a child folder on another focus path in a folder that lists its files', () => {
+  it('keeps a child folder on another focus path as a card, with the rest in rows', () => {
     const files = ['a/sub/c.js', 'a/b.js', ...Array.from({ length: 12 }, (_, i) => `a/f${String(i).padStart(2, '0')}.js`), 'a/aa/x.js', 'a/ab/x.js', 'a/ac/x.js']
     const plan = planFolderView({ files, focus: ['a/b.js', 'a/sub/c.js'] })
     const folders = new Map(plan.map((folder) => [folder.path, folder]))
     expect(folders.get('a').state).toBe('files')
-    expect(folders.get('a').items.slice(0, 2)).toEqual([{ path: 'a/b.js', kind: 'file' }, { path: 'a/sub', kind: 'dir' }])
+    expect(folders.get('a').items.slice(0, 2)).toEqual([{ path: 'a/b.js', kind: 'file' }, { path: 'a/ac', kind: 'dir' }])
     expect(folders.get('a/sub').state).toBe('files')
+    expect(folders.get('a/sub').items).toEqual([{ path: 'a/sub/c.js', kind: 'file' }])
   })
 
   it('gives the same plan whatever the input order', () => {
@@ -204,7 +234,7 @@ describe('planFolderView', () => {
     }
   })
 
-  it('draws every folder down to the depth, closed and pinned', () => {
+  it('lists the files of every folder down to the depth, pinned', () => {
     const files = [
       'README.md',
       'docs/notes.md',
@@ -218,20 +248,45 @@ describe('planFolderView', () => {
       2: ['', 'docs', 'src', 'src/engine', 'src/model', 'tests'],
       3: ['', 'docs', 'src', 'src/engine', 'src/model', 'src/model/parsers', 'tests'],
     }
+    const ownFiles = {
+      1: {
+        '': ['README.md'],
+        docs: ['docs/notes.md'],
+        src: [],
+        tests: ['tests/a.test.js'],
+      },
+      2: {
+        '': ['README.md'],
+        docs: ['docs/notes.md'],
+        src: [],
+        'src/engine': ['src/engine/room.js'],
+        'src/model': ['src/model/state.js'],
+        tests: ['tests/a.test.js'],
+      },
+      3: {
+        '': ['README.md'],
+        docs: ['docs/notes.md'],
+        src: [],
+        'src/engine': ['src/engine/room.js'],
+        'src/model': ['src/model/state.js'],
+        'src/model/parsers': ['src/model/parsers/common.js'],
+        tests: ['tests/a.test.js'],
+      },
+    }
 
     for (const depth of [1, 2, 3]) {
       const plan = planFolderView({ files, alwaysDepth: depth })
       expect(paths(plan)).toEqual(expected[depth])
       for (const view of plan) {
-        expect(view.state).toBe('closed')
+        expect(view.state).toBe('files')
         expect(view.pinned).toBe(true)
         expect(view.back).toBe(0)
-        expect(view.hiddenFolders).toBe(0)
+        expect(view.items.filter((item) => item.kind === 'file').map((item) => item.path)).toEqual(ownFiles[depth][view.path])
       }
     }
   })
 
-  it('caps the always folders at 300 and keeps the rest in back layers', () => {
+  it('caps the always folders at 300 and keeps the rest in its rows', () => {
     const files = Array.from({ length: 500 }, (_, i) => `big/f${String(i).padStart(3, '0')}/a.js`)
 
     const plan = planFolderView({ files, alwaysDepth: 2 })
@@ -239,10 +294,16 @@ describe('planFolderView', () => {
 
     expect(plan).toHaveLength(300)
     expect(paths(plan)).toEqual(['', 'big', ...Array.from({ length: 298 }, (_, i) => `big/f${String(i).padStart(3, '0')}`)])
-    expect(folders.get('big').state).toBe('closed')
+    expect(folders.get('big').state).toBe('files')
     expect(folders.get('big').pinned).toBe(true)
     expect(folders.get('big').hiddenFolders).toBe(202)
-    expect(folders.get('big').back).toBe(3)
+    expect(folders.get('big').back).toBe(0)
+    expect(folders.get('big').items).toEqual([
+      { path: 'big/f298', kind: 'dir' },
+      { path: 'big/f299', kind: 'dir' },
+      { path: 'big/f300', kind: 'dir' },
+    ])
+    expect(folders.get('big').hiddenItems).toBe(199)
     expect(folders.has('big/f297')).toBe(true)
     expect(folders.has('big/f298')).toBe(false)
   })
@@ -262,7 +323,7 @@ describe('planFolderView', () => {
 
     expect(kept).toEqual(['big/f000', 'big/f001', 'big/f100', 'big/f400', 'big/f401', 'big/f402', 'big/f403', 'big/f404'])
     expect(folders.get('big').hiddenFolders).toBe(492)
-    expect(folders.get('big').back).toBe(3)
+    expect(folders.get('big').back).toBe(0)
   })
 
   it('adds only the deep path an agent touches below the always depth', () => {
@@ -275,7 +336,7 @@ describe('planFolderView', () => {
     const folders = byPath(plan)
 
     expect(paths(plan)).toEqual(['', 'docs', 'lib', 'src', 'src/model', 'src/model/parsers'])
-    expect(folders.get('lib')).toMatchObject({ state: 'closed', pinned: true })
+    expect(folders.get('lib')).toMatchObject({ state: 'files', pinned: true, items: [{ path: 'lib/util', kind: 'dir' }] })
     expect(folders.get('src/model/parsers')).toMatchObject({
       state: 'files',
       items: [{ path: 'src/model/parsers/common.js', kind: 'file' }],
