@@ -4,6 +4,9 @@ import { parseFrames, prepare } from './source.js'
 const INDEX_LIMIT = 50
 const READ_FAILED = 'The list of recordings could not be read.'
 const FIXTURE_NAME = /^scenario-[a-z]$/
+const SANDBOX_FIXTURE = 'sandbox'
+
+export const DEFAULT_FIXTURE = 'scenario-i'
 
 async function fetchOk(url) {
   const response = await fetch(url)
@@ -11,12 +14,21 @@ async function fetchOk(url) {
   return response
 }
 
-export function replayFiles(recording = null, fixture = null) {
-  if (!recording && typeof fixture === 'string' && FIXTURE_NAME.test(fixture)) {
-    const stem = `fixtures/${fixture}`
-    return { run: `${stem}-run.jsonl`, agents: `${stem}-agents.json`, tree: `${stem}-tree.json` }
+export function fixtureName(fixture) {
+  if (fixture === SANDBOX_FIXTURE) return SANDBOX_FIXTURE
+  return typeof fixture === 'string' && FIXTURE_NAME.test(fixture) ? fixture : null
+}
+
+function fixtureFiles(name) {
+  if (name === SANDBOX_FIXTURE) {
+    return { run: 'fixtures/sandbox-run.jsonl', agents: 'fixtures/agents.json', tree: 'fixtures/sandbox-tree.json' }
   }
-  if (!recording) return { run: 'fixtures/sandbox-run.jsonl', agents: 'fixtures/agents.json', tree: 'fixtures/sandbox-tree.json' }
+  const stem = `fixtures/${name}`
+  return { run: `${stem}-run.jsonl`, agents: `${stem}-agents.json`, tree: `${stem}-tree.json` }
+}
+
+export function replayFiles(recording = null, fixture = null) {
+  if (!recording) return fixtureFiles(fixtureName(fixture) ?? DEFAULT_FIXTURE)
   const stem = `recordings/${recording}`
   return { run: `${stem}-run.jsonl`, agents: `${stem}-agents.json`, tree: `${stem}-tree.json` }
 }
@@ -29,11 +41,12 @@ export async function loadReplay({ base = import.meta.env.BASE_URL, recording = 
       fetchOk(`${base}${files.agents}`).then((response) => response.json()),
       fetchOk(`${base}${files.tree}`).then((response) => response.json()),
     ])
-    return prepare({ frames: parseFrames(run), agentsFile: agents, treeFile: tree })
-  } catch (error) {
+    const data = prepare({ frames: parseFrames(run), agentsFile: agents, treeFile: tree })
+    return recording ? data : { ...data, fixture: fixtureName(fixture) ?? DEFAULT_FIXTURE }
+  } catch {
     if (recording) throw new Error(`The recording ${recording} could not be loaded. Make it with npm run run-recording -- <position>, then open the page again.`)
-    if (typeof fixture === 'string' && FIXTURE_NAME.test(fixture)) throw new Error(`The fixture ${fixture} could not be loaded.`)
-    throw error
+    const chosen = fixtureName(fixture) ?? DEFAULT_FIXTURE
+    throw new Error(`The fixture ${chosen} could not be loaded.`)
   }
 }
 

@@ -1,4 +1,5 @@
 import { orderAgents } from '../model/pipeline.js'
+import { DEFAULT_FIXTURE } from '../model/replay.js'
 import { parseFrames } from '../model/source.js'
 
 const START_DELAY_MS = 400
@@ -49,8 +50,8 @@ export function openSimulated({ frames, onFrame, onStatus, idleCapMs = 2500, spe
 
 export async function loadDemo(base = `${import.meta.env.BASE_URL}fixtures/`) {
   const [run, agentsFile] = await Promise.all([
-    fetch(`${base}sandbox-run.jsonl`).then((response) => response.text()),
-    fetch(`${base}agents.json`).then((response) => response.json()),
+    fetch(`${base}${DEFAULT_FIXTURE}-run.jsonl`).then((response) => response.text()),
+    fetch(`${base}${DEFAULT_FIXTURE}-agents.json`).then((response) => response.json()),
   ])
   return {
     frames: parseFrames(run),

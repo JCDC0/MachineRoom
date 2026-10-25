@@ -55,9 +55,10 @@ describe('recordingName', () => {
     expect(recordingName(at(''))).toBeNull()
   })
 
-  it('maps a recording to its three files and no recording to the sandbox fixtures', () => {
+  it('maps a recording to its three files and no recording to the default fixtures', () => {
     expect(replayFiles('opencode-T5')).toEqual({ run: 'recordings/opencode-T5-run.jsonl', agents: 'recordings/opencode-T5-agents.json', tree: 'recordings/opencode-T5-tree.json' })
-    expect(replayFiles(null).run).toBe('fixtures/sandbox-run.jsonl')
+    expect(replayFiles(null).run).toBe('fixtures/scenario-i-run.jsonl')
+    expect(replayFiles(null, 'sandbox').run).toBe('fixtures/sandbox-run.jsonl')
   })
 })
 

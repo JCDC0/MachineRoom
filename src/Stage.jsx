@@ -11,6 +11,7 @@ import { appendLiveLog, buildTimeline, createLogger, entriesUpTo } from './model
 import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
 import { costBoard } from './model/costs.js'
+import { DEFAULT_FIXTURE } from './model/replay.js'
 import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
@@ -52,12 +53,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const roomRef = useRef(null)
   const live = data.live ?? null
   const demoLadder = useMemo(() => {
-    if (live || typeof window === 'undefined') return null
+    if (typeof window === 'undefined') return null
+    if (live && !live.simulated) return null
     const params = new URLSearchParams(window.location.search)
-    const demo = params.get('ladder') === 'demo' || params.get('fixture') === 'scenario-i'
+    const demo = Boolean(live?.simulated) || params.get('ladder') === 'demo' || data.fixture === DEFAULT_FIXTURE
     if (!demo) return null
     return { subs: DEMO_SUBS }
-  }, [live])
+  }, [data.fixture, live])
   const agents = useMemo(() => {
     if (!demoLadder) return data.agents
     const present = new Set(data.agents.map((agent) => agent.key))
