@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { validateBridgeUrl } from '../src/ui/Connect.jsx'
 import { readStorage, writeStorage } from '../src/storage.js'
 import { barrelPixels } from '../src/ui/barrel.js'
-import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, saveAssistantPosition, saveEffectSettings, saveSettings, savedSource, SETTINGS_KEY } from '../src/ui/settings.js'
+import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -41,6 +41,7 @@ describe('settings', () => {
       dockOpen: true,
       speed: 4,
       helpSeen: true,
+      sound: DEFAULT_SETTINGS.sound,
     })
     expect(JSON.parse(storage.getItem(SETTINGS_KEY))).toEqual(updated)
     expect(loadSettings(storage)).toEqual(updated)
@@ -273,6 +274,36 @@ describe('storage helpers', () => {
   })
 })
 
+
+describe('soundSettings', () => {
+  it('starts beeps on at a low volume, music off and dance on', () => {
+    expect(soundSettings()).toEqual({ on: true, volume: 0.3, music: false, musicVolume: 0.5, dance: true })
+    expect(soundSettings(null)).toEqual(soundSettings())
+    expect(soundSettings('invalid')).toEqual(soundSettings())
+  })
+
+  it('clamps both volumes and keeps booleans', () => {
+    expect(soundSettings({ on: false, volume: 2, music: true, musicVolume: -1, dance: false })).toEqual({
+      on: false,
+      volume: 1,
+      music: true,
+      musicVolume: 0,
+      dance: false,
+    })
+    expect(soundSettings({ on: 'yes', volume: 'loud', dance: 'no' })).toEqual(soundSettings())
+  })
+
+  it('saves the sound block under machineroom.settings and keeps the rest', () => {
+    const storage = makeStorage()
+    saveSettings(storage, { speed: 2 })
+    const updated = saveSoundSettings(storage, { on: false, volume: 0.8, music: true, dance: false })
+    expect(updated).toEqual({ on: false, volume: 0.8, music: true, musicVolume: 0.5, dance: false })
+    expect(loadSoundSettings(storage)).toEqual(updated)
+    const loaded = loadSettings(storage)
+    expect(loaded.speed).toBe(2)
+    expect(loaded.sound).toEqual(updated)
+  })
+})
 
 describe('barrelPixels', () => {
   const size = 16
