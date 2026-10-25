@@ -293,29 +293,73 @@
   "agy": {
     "name": "agy",
     "harness": "agy",
-    "retired": true,
     "model": "Gemini 3.8 Flash (High)",
-    "models": {
-      "C3d": "Gemini 4 Argon (Medium)",
-      "C3e": "Gemini 4 Argon (Medium)",
-      "T1b": "Gemini 4 Argon (Medium)"
-    },
     "cli": {
       "harness": "agy",
       "bin": "%LOCALAPPDATA%\\agy\\bin\\agy.exe",
       "model": "gemini-3.8-flash-high"
     },
     "worktree": "C:\\GitHub\\MachineRoom-agy",
-    "role": "You own the HUD and the look of the room: src/ui/**, src/styles.css, src/engine/**, src/Stage.jsx and src/App.jsx.",
+    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
     "forbidden": [
-      "server/**",
-      "src/control/**",
-      "src/assistant/**",
-      "src/decider/**"
+      "src/styles.css",
+      "src/engine/**",
+      "src/Stage.jsx",
+      "src/App.jsx"
     ],
     "notes": [
-      "Check every visual change by eye: run npm run dev -- --port 5181, open the page, look at it at 1280 by 800 and 1024 by 768, then stop the server. Say in your report what you looked at. Do not report a visual check you did not make.",
-      "Fonts: Jost and Space Mono, weights 400 and 500 only, never bold. Colours on black: white for activity, #e5ff00 for active, #ff2a2a for failure, #2aff80 for finished. Spacing on an 8px base."
+      "Run on Gemini 3.8 Flash only. Do not switch to another model.",
+      "You cannot judge a design by eye here. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
+      "Up to two other AGY lanes run at the same time, each in its own C:\\GitHub\\MachineRoom-agyN worktree. Touch only the files your brief names.",
+      "Your shell may start in the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-agy && and never write or run anything in the owner's checkout."
+    ]
+  },
+  "agy2": {
+    "name": "agy2",
+    "harness": "agy",
+    "model": "Gemini 3.8 Flash (High)",
+    "cli": {
+      "harness": "agy",
+      "bin": "%LOCALAPPDATA%\\agy\\bin\\agy.exe",
+      "model": "gemini-3.8-flash-high"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom-agy2",
+    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
+    "forbidden": [
+      "src/styles.css",
+      "src/engine/**",
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Run on Gemini 3.8 Flash only. Do not switch to another model.",
+      "You cannot judge a design by eye here. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
+      "Up to two other AGY lanes run at the same time, each in its own C:\\GitHub\\MachineRoom-agyN worktree. Touch only the files your brief names.",
+      "Your shell may start in the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-agy2 && and never write or run anything in the owner's checkout."
+    ]
+  },
+  "agy3": {
+    "name": "agy3",
+    "harness": "agy",
+    "model": "Gemini 3.8 Flash (High)",
+    "cli": {
+      "harness": "agy",
+      "bin": "%LOCALAPPDATA%\\agy\\bin\\agy.exe",
+      "model": "gemini-3.8-flash-high"
+    },
+    "worktree": "C:\\GitHub\\MachineRoom-agy3",
+    "role": "You own backend work: server/**, scripts/**, src/control/**, src/assistant/**, src/decider/**, src/briefs/**, src/harnesses/** and src/model/**, with only the small UI change a backend change needs. UI design and the look of the room belong to the OpenCode lanes.",
+    "forbidden": [
+      "src/styles.css",
+      "src/engine/**",
+      "src/Stage.jsx",
+      "src/App.jsx"
+    ],
+    "notes": [
+      "Run on Gemini 3.8 Flash only. Do not switch to another model.",
+      "You cannot judge a design by eye here. When a brief asks for a check by eye, say in your report that it is left to the orchestrator.",
+      "Up to two other AGY lanes run at the same time, each in its own C:\\GitHub\\MachineRoom-agyN worktree. Touch only the files your brief names.",
+      "Your shell may start in the owner's own checkout, not in your worktree. Begin every shell command with cd /c/GitHub/MachineRoom-agy3 && and never write or run anything in the owner's checkout."
     ]
   },
   "claude": {
