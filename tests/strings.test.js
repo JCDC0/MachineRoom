@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { createStrings, strandPoints } from '../src/engine/strings.js'
+import { createStrings, linkOnPath, strandPoints } from '../src/engine/strings.js'
 
 const context2d = {
   fillStyle: '',
@@ -61,9 +61,9 @@ describe('strands keep up with longer strings', () => {
     ])
     let centres = near
     const centreOf = (key) => centres.get(key)
-    const strings = createStrings(scene, { onPath: () => false })
+    const strings = createStrings(scene)
     try {
-      strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+      strings.build([{ from: 'a', to: 'b' }], centreOf)
       const mesh = strandMesh(scene)
       const firstGeometry = mesh.geometry
       const disposed = vi.fn()
@@ -98,9 +98,9 @@ describe('strands keep up with longer strings', () => {
     ])
     let centres = start
     const centreOf = (key) => centres.get(key)
-    const strings = createStrings(scene, { onPath: () => false })
+    const strings = createStrings(scene)
     try {
-      strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+      strings.build([{ from: 'a', to: 'b' }], centreOf)
       const mesh = strandMesh(scene)
       const firstGeometry = mesh.geometry
       const firstPosition = mesh.geometry.getAttribute('position')
@@ -125,6 +125,21 @@ describe('strands keep up with longer strings', () => {
   })
 })
 
+describe('the strings the room builds', () => {
+  it('draws only the links it is given, with no line down to the root', () => {
+    const scene = fakeScene()
+    const centres = new Map([
+      ['', new THREE.Vector3(0, -160, 0)],
+      ['src', new THREE.Vector3(1100, 200, 0)],
+    ])
+    const strings = createStrings(scene)
+    strings.build([{ from: '', to: 'src' }], (key) => centres.get(key))
+    expect(scene.children.filter((child) => child.isLineSegments)).toHaveLength(1)
+    expect(scene.children.filter((child) => child.isPoints)).toHaveLength(1)
+    strings.dispose()
+  })
+})
+
 describe('one glow texture for every strand', () => {
   it('reuses the texture over two builds and frees it once', () => {
     const scene = fakeScene()
@@ -133,17 +148,17 @@ describe('one glow texture for every strand', () => {
       ['b', new THREE.Vector3(100, 0, 0)],
     ])
     const centreOf = (key) => centres.get(key)
-    const strings = createStrings(scene, { onPath: () => false })
+    const strings = createStrings(scene)
     let freed = 0
 
-    strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+    strings.build([{ from: 'a', to: 'b' }], centreOf)
     const texture = strandMesh(scene).material.map
     expect(texture).toBeInstanceOf(THREE.CanvasTexture)
     texture.addEventListener('dispose', () => {
       freed += 1
     })
 
-    strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+    strings.build([{ from: 'a', to: 'b' }], centreOf)
     expect(strandMesh(scene).material.map).toBe(texture)
     expect(freed).toBe(0)
 
@@ -160,9 +175,8 @@ describe('strands write only when their look changes', () => {
       ['b', new THREE.Vector3(100, 0, 0)],
     ])
     const centreOf = (key) => centres.get(key)
-    let active = false
-    const strings = createStrings(scene, { onPath: () => active })
-    strings.build([{ from: 'a', to: 'b' }], centreOf, false)
+    const strings = createStrings(scene)
+    strings.build([{ from: 'a', to: 'b' }], centreOf)
     const mesh = strandMesh(scene)
     const material = mesh.material
     const colour = vi.spyOn(material.color, 'lerpColors')
@@ -185,7 +199,8 @@ describe('strands write only when their look changes', () => {
     expect(colour).toHaveBeenCalledTimes(1)
     expect(writes).toBe(1)
 
-    active = true
+    const lit = { dimmed: true, lit: new Set(['a', 'b']) }
+    strings.update(centreOf, lit, 1)
     mesh.onBeforeRender()
     expect(colour).toHaveBeenCalledTimes(2)
     expect(writes).toBe(2)
@@ -194,21 +209,28 @@ describe('strands write only when their look changes', () => {
     expect(colour).toHaveBeenCalledTimes(2)
     expect(writes).toBe(2)
 
-    const mask = { dimmed: true, lit: new Set(['a', 'b']) }
-    strings.update(centreOf, mask, 0.1)
+    const offPath = { dimmed: true, lit: new Set(['a']) }
+    strings.update(centreOf, offPath, 1)
     mesh.onBeforeRender()
     expect(colour).toHaveBeenCalledTimes(3)
     expect(writes).toBe(3)
-
-    mesh.onBeforeRender()
-    expect(colour).toHaveBeenCalledTimes(3)
-    expect(writes).toBe(3)
-
-    strings.update(centreOf, mask, 0.1)
-    mesh.onBeforeRender()
-    expect(colour).toHaveBeenCalledTimes(4)
-    expect(writes).toBe(4)
 
     strings.dispose()
+  })
+})
+
+describe('linkOnPath', () => {
+  const mask = { dimmed: true, lit: new Set(['', 'src', 'src/ui']) }
+
+  it('lights a link only when both ends are on a working path', () => {
+    expect(linkOnPath({ from: '', to: 'src' }, mask)).toBe(true)
+    expect(linkOnPath({ from: 'src', to: 'src/ui' }, mask)).toBe(true)
+    expect(linkOnPath({ from: '', to: 'docs' }, mask)).toBe(false)
+    expect(linkOnPath({ from: 'src', to: 'src/model' }, mask)).toBe(false)
+  })
+
+  it('does not light a link when no agent works, even if a path is listed', () => {
+    expect(linkOnPath({ from: '', to: 'src' }, { dimmed: false, lit: new Set(['', 'src']) })).toBe(false)
+    expect(linkOnPath({ from: '', to: 'src' }, null)).toBe(false)
   })
 })

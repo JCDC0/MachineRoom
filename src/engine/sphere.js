@@ -2,7 +2,7 @@ import { dirname } from '../model/paths.js'
 import { HUB_CENTER, HUB_Y } from './hub.js'
 
 export const SPHERE_CENTER = HUB_CENTER
-export const ROOT_DROP = 1000
+export const ROOT_DROP = 360
 export const POLE_CAP = (25 * Math.PI) / 180
 export const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5))
 export const CARD_CLEARANCE = 40

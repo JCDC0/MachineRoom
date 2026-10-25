@@ -254,6 +254,21 @@ describe('card names', () => {
   })
 })
 
+describe('the strings the room draws', () => {
+  it('starts every top-level string at the root card and gives the root no line', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const links = cards.visibleLinks()
+    expect(links).toContainEqual({ from: '', to: 'docs' })
+    expect(links).toContainEqual({ from: 'lib', to: 'lib/a' })
+    expect(links.some((link) => link.to === '')).toBe(false)
+    expect(links.some((link) => link.from === null)).toBe(false)
+    cards.dispose()
+  })
+})
+
 describe('fadeProgress', () => {
   it('finishes at once when still is true and eases over the fade otherwise', () => {
     expect(fadeProgress(0, 0, true)).toBe(1)

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { PACKET_DURATION, PACKET_POOL, createAgents, packetSpots, stripPoints } from '../src/engine/agents.js'
+import { ORCHESTRATOR_LINK_OPACITY, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, createAgents, orchestratorLineEnds, packetSpots, stripPoints } from '../src/engine/agents.js'
 import { apply, createState } from '../src/model/state.js'
 import {
   AUTOCOMPACT_MAX,
@@ -140,6 +140,32 @@ describe('stripPoints', () => {
   })
 })
 
+describe('orchestratorLineEnds', () => {
+  it('gives one straight segment from the agent to the main orchestrator', () => {
+    const orchestrator = { x: 0, y: 560, z: 0 }
+    const points = orchestratorLineEnds(orchestrator, from)
+    expect(points).toHaveLength(2)
+    expect(points[0]).toEqual(orchestrator)
+    expect(points[1]).toEqual(from)
+  })
+
+  it('returns copies, not its inputs, and writes into a pair it is given', () => {
+    const orchestrator = { x: 0, y: 560, z: 0 }
+    const out = [{}, {}]
+    const points = orchestratorLineEnds(orchestrator, from, out)
+    expect(points[0]).toBe(out[0])
+    expect(points[1]).toBe(out[1])
+    expect(points).toEqual([orchestrator, from])
+    expect(points[0]).not.toBe(orchestrator)
+    expect(points[1]).not.toBe(from)
+  })
+
+  it('keeps the two opacities apart, the lane fainter than a folder string', () => {
+    expect(ORCHESTRATOR_LINK_OPACITY).toBeLessThan(0.22)
+    expect(SUB_ORCHESTRATOR_LINK_OPACITY).toBe(0.3)
+  })
+})
+
 describe('packetSpots', () => {
   it('moves a packet from the agent to the file in 0.45 seconds', () => {
     const sends = [1000]
@@ -167,6 +193,67 @@ describe('packetSpots', () => {
   it('moves nothing under reduced motion', () => {
     expect(packetSpots(1200, [1000], PACKET_DURATION, true)).toEqual([])
     expect(packetSpots(1000, [1000], PACKET_DURATION, true)).toEqual([])
+  })
+})
+
+describe('the line to the main orchestrator', () => {
+  it('gives each lane a faint line that stays the same while the agent works', () => {
+    const { agents, state, terminals, world } = harness()
+    const view = agents.views.get('a')
+    expect(view.orchestratorLink).toBeTruthy()
+    expect(view.orchestratorLink.material.opacity).toBe(ORCHESTRATOR_LINK_OPACITY)
+    startWrite(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    expect(view.orchestratorLink.material.opacity).toBe(ORCHESTRATOR_LINK_OPACITY)
+    expect(view.orchestratorLink.material.color.getHex()).toBe(0xffffff)
+    expect(view.orchestratorLink.visible).toBe(true)
+    agents.dispose()
+  })
+
+  it('keeps a sub orchestrator line thin and white', () => {
+    const scene = new THREE.Scene()
+    const roster = [
+      { key: 'orchestrator', name: 'Orchestrator', role: 'ceo', shape: 'armillary' },
+      { key: 'sub-ui', name: 'UI', shape: 'armillary', subOrchestrator: true },
+    ]
+    const agents = createAgents(scene, roster)
+    const view = agents.views.get('sub-ui')
+    expect(view.orchestratorLink).toBeTruthy()
+    expect(view.orchestratorLink.material.opacity).toBe(SUB_ORCHESTRATOR_LINK_OPACITY)
+    expect(view.orchestratorLink.material.color.getHex()).toBe(0xffffff)
+    agents.dispose()
+  })
+})
+
+describe('packets on the tunnel', () => {
+  it('starts at the agent centre and keeps every speck on the yellow line', () => {
+    const { agents, state, terminals, world } = harness()
+    startWrite(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+    const packets = view.packets.geometry.attributes.position.array
+    expect(view.packets.geometry.drawRange.count).toBe(1)
+    expect(packets[0]).toBeCloseTo(view.group.position.x, 6)
+    expect(packets[1]).toBeCloseTo(view.group.position.y, 6)
+    expect(packets[2]).toBeCloseTo(view.group.position.z, 6)
+
+    agents.update(state, 0.016, 1225, world, terminals)
+    const strip = view.strip.geometry.attributes.position.array
+    const start = { x: strip[0], y: strip[1], z: strip[2] }
+    const end = { x: strip[3], y: strip[4], z: strip[5] }
+    const span = { x: end.x - start.x, y: end.y - start.y, z: end.z - start.z }
+    const count = view.packets.geometry.drawRange.count
+    expect(count).toBeGreaterThan(1)
+    for (let i = 0; i < count; i += 1) {
+      const offset = { x: packets[i * 3] - start.x, y: packets[i * 3 + 1] - start.y, z: packets[i * 3 + 2] - start.z }
+      const cross = {
+        x: offset.y * span.z - offset.z * span.y,
+        y: offset.z * span.x - offset.x * span.z,
+        z: offset.x * span.y - offset.y * span.x,
+      }
+      expect(Math.hypot(cross.x, cross.y, cross.z)).toBeLessThan(1e-6)
+    }
+    agents.dispose()
   })
 })
 

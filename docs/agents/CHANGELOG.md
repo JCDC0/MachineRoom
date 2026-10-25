@@ -3,6 +3,8 @@
 ## Unreleased
 
 - Log and Settings open from the menu as dropdowns under it, like Control, at every width; the Overview card keeps Agent and Costs, and the sidebar's Settings opens the same dropdown. The fine dust is soft round specks in three sizes that grow as the camera nears them, not 3 pixel points.
+- The root card sits in the park space just under the hub ring, every top-level folder's string ends there, strings brighten only on a working agent's path, each lane has a faint grey line to the main orchestrator, and packets start at the agent's centre on its tunnel (task U38).
+
 - At 900 pixels and wider the whole page scrolls: the lens keeps the height its rail sets and the lower half below it is as tall as the window under the menu (at least 520 pixels), so a taller lens pushes the lower half down instead of squeezing it. The wheel over the lens or a rail zooms or sizes without scrolling the page. Lanes may use their own harness's skills, tools and subagents (HOUSE-RULES).
 - Two rails sit on the lens: Height on the left (900 pixels and wider) makes the lens taller or shorter, from 30 to 80 percent of the window, saved as `lensShare`, and Zoom on the right moves the camera closer or further on a log scale. Each has a faint label on top and a multiplier below (the height against the default, the zoom against the overview), and both follow a drag, the wheel over them and the arrow, Page and Home and End keys.
 - A live room with no saved lane choice asks how many agents should work, starts at 2 and saves them from Start, and the live tour outlines the lens, the orchestrator chip and the strip controls one at a time, skipping any that are missing (task U33).
