@@ -9,6 +9,7 @@ import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
+import Sidebar from './Sidebar.jsx'
 import { agentForNumber, agentList } from './agentList.js'
 import { wideLayout } from './agentStrip.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
@@ -100,6 +101,7 @@ export default function Hud({
 }) {
   const [logOpen, setLogOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [sessionsOpen, setSessionsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
@@ -180,6 +182,10 @@ export default function Hud({
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
+
+  useEffect(() => {
+    if (wide) setSessionsOpen(false)
+  }, [wide])
 
   function changeDockOpen(next) {
     setDockOpen(next)
@@ -317,6 +323,7 @@ export default function Hud({
         setHealthOpen(false)
         setSettingsOpen(false)
         setMenuOpen(false)
+        setSessionsOpen(false)
         setChatListOpen(false)
         if (wide && dockOpen) changeDockOpen(false)
         return
@@ -501,6 +508,21 @@ export default function Hud({
         </div>
 
         <div className="hud-actions">
+          {!wide && (
+            <button
+              type="button"
+              className="hud-action"
+              aria-pressed={sessionsOpen}
+              aria-expanded={sessionsOpen}
+              aria-controls="mr-side-overlay"
+              onClick={() => {
+                setMenuOpen(false)
+                setSessionsOpen(true)
+              }}
+            >
+              <span>Sessions</span>
+            </button>
+          )}
           {client && (
             <button
               type="button"
@@ -733,6 +755,37 @@ export default function Hud({
           onClose={() => setControlOpen(false)}
           controlTarget={controlTarget}
         />
+      )}
+
+      {!wide && sessionsOpen && (
+        <div
+          id="mr-side-overlay"
+          className="mr-side-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Projects and conversations"
+        >
+          <header className="mr-side-overlay-head">
+            <span className="mr-side-overlay-title mono">Sessions</span>
+            <button
+              type="button"
+              className="mr-side-overlay-close"
+              onClick={() => setSessionsOpen(false)}
+            >
+              Close
+            </button>
+          </header>
+          <Sidebar
+            client={client}
+            live={mode === 'live'}
+            project={project}
+            onOpenSettings={() => {
+              setSessionsOpen(false)
+              setMenuOpen(false)
+              toggleSettings()
+            }}
+          />
+        </div>
       )}
 
       {helpOpen && (
