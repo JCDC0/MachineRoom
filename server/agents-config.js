@@ -5,13 +5,14 @@ import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
 
 export const MAX_AGENTS = 30
-export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp']
+export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom']
 
 export const HARNESS_NAMES = {
   claude: 'Claude Code',
   opencode: 'OpenCode',
   agy: 'AGY',
   acp: 'ACP',
+  machineroom: 'MachineRoom',
 }
 
 export const HARNESS_EFFORTS = {
@@ -19,6 +20,7 @@ export const HARNESS_EFFORTS = {
   opencode: ['low', 'medium', 'high', 'max'],
   agy: [],
   acp: [],
+  machineroom: [],
 }
 
 export const ORIGIN_CREATE_PROBLEM = 'A request to create a lane needs a page Origin.'
@@ -76,6 +78,12 @@ function isProgram(path) {
 }
 
 export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, platform = process.platform } = {}) {
+  if (harnessKey === 'machineroom') {
+    const key = env?.MACHINEROOM_API_KEY
+    const fallback = env?.OPENROUTER_API_KEY
+    return (typeof key === 'string' && key.trim() !== '') || (typeof fallback === 'string' && fallback.trim() !== '')
+  }
+
   let laneBin = null
   for (const lane of Object.values(lanes ?? {})) {
     if (lane?.cli?.harness === harnessKey && typeof lane?.cli?.bin === 'string') {

@@ -238,6 +238,22 @@ describe('GET /api/harnesses', () => {
 
     const acp = body.find((item) => item.key === 'acp')
     expect(acp.efforts).toEqual([])
+
+    const machineroom = body.find((item) => item.key === 'machineroom')
+    expect(machineroom.name).toBe('MachineRoom')
+    expect(machineroom.efforts).toEqual([])
+    expect(machineroom.models.map((item) => item.id)).toEqual(['xiaomi/mimo-v2.6-pro', 'deepseek/deepseek-v4.1-flash-1017'])
+    expect(machineroom.available).toBe(false)
+  })
+})
+
+describe('machineroom availability', () => {
+  it('needs one of the two key variables and never reads the value further', () => {
+    const lanes = {}
+    expect(isHarnessAvailable('machineroom', { lanes, env: {} })).toBe(false)
+    expect(isHarnessAvailable('machineroom', { lanes, env: { MACHINEROOM_API_KEY: 'test' } })).toBe(true)
+    expect(isHarnessAvailable('machineroom', { lanes, env: { OPENROUTER_API_KEY: 'placeholder' } })).toBe(true)
+    expect(isHarnessAvailable('machineroom', { lanes, env: { MACHINEROOM_API_KEY: '   ', OPENROUTER_API_KEY: '' } })).toBe(false)
   })
 })
 

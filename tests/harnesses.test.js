@@ -32,19 +32,20 @@ const agyLine = JSON.stringify({
 
 describe('harness registry', () => {
   it('lists one descriptor per harness, in agent order', () => {
-    expect(HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp'])
-    expect(AGENT_ORDER).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp'])
+    expect(HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp', 'machineroom'])
+    expect(AGENT_ORDER).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp', 'machineroom'])
     expect(Object.keys(harnessByKey)).toEqual(AGENT_ORDER)
     for (const harness of HARNESSES) expect(harnessByKey[harness.key]).toBe(harness)
   })
 
   it('maps each adapter type to its harness', () => {
-    expect(Object.keys(harnessByAdapter).sort()).toEqual(['acp_local', 'claude_local', 'hermes_local', 'opencode_local', 'process'])
+    expect(Object.keys(harnessByAdapter).sort()).toEqual(['acp_local', 'claude_local', 'hermes_local', 'machineroom_local', 'opencode_local', 'process'])
     expect(harnessByAdapter.claude_local).toBe(harnessByKey.claude)
     expect(harnessByAdapter.hermes_local).toBe(harnessByKey.hermes)
     expect(harnessByAdapter.opencode_local).toBe(harnessByKey.opencode)
     expect(harnessByAdapter.process).toBe(harnessByKey.agy)
     expect(harnessByAdapter.acp_local).toBe(harnessByKey.acp)
+    expect(harnessByAdapter.machineroom_local).toBe(harnessByKey.machineroom)
   })
 
   it('keeps the brief owner order the room has always used', () => {
@@ -73,7 +74,8 @@ describe('harness registry', () => {
         folder: 'C:\\work',
         title: 'run-1',
       })
-      expect(command.file, harness.key).toBe(harness.key)
+      if (harness.key === 'machineroom') expect(command.file).toBe(process.execPath)
+      else expect(command.file, harness.key).toBe(harness.key)
       expect(command.cwd, harness.key).toBe('C:\\work')
       if (harness.key === 'acp') expect(command.args, harness.key).toEqual(['serve'])
       else expect(command.args, harness.key).toContain('Do it.')
@@ -99,6 +101,11 @@ describe('harness line readers', () => {
 
   it('reads a Claude Code tool_use line', () => {
     const read = createRunLineReader('claude')
+    expect(read(claudeLine, 1000)).toEqual({ chunk: `${claudeLine}\n`, at: 1000, read: true })
+  })
+
+  it('reads a MachineRoom tool_use line', () => {
+    const read = createRunLineReader('machineroom')
     expect(read(claudeLine, 1000)).toEqual({ chunk: `${claudeLine}\n`, at: 1000, read: true })
   })
 
@@ -158,6 +165,16 @@ describe('harness reports and usage', () => {
     expect(harnessByKey.agy.report(log)).toEqual(['Ready.', 'Set.'])
     expect(harnessByKey.agy.reply(log)).toBe('Ready.\nSet.')
     expect(harnessByKey.agy.usage(log)).toEqual({ costUsd: null, inputTokens: 7, outputTokens: 5 })
+  })
+
+  it('reads the MachineRoom result line', () => {
+    const log = lines(
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'Working.' }] } },
+      { type: 'result', result: 'Done.\nNext.', total_cost_usd: 0.02, usage: { input_tokens: 12, output_tokens: 4 } },
+    )
+    expect(harnessByKey.machineroom.report(log)).toEqual(['Done.', 'Next.'])
+    expect(harnessByKey.machineroom.reply(log)).toBe('Done.\nNext.')
+    expect(harnessByKey.machineroom.usage(log)).toEqual({ costUsd: 0.02, inputTokens: 12, outputTokens: 4 })
   })
 
   it('takes the Hermes report from the lines before its first tool line', () => {

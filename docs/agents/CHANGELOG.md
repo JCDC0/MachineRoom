@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The MachineRoom harness runs a small agent on any OpenAI-compatible key through `scripts/mr-agent.mjs`, with read, write, edit, list, search and shell tools, stream-json lines the room and `summarizeRun` already read, the `machineroom` descriptor and two OpenRouter models (task H9).
 - The roster tests point their lanes at Node's own program, so they pass on a computer without Claude Code or OpenCode, as CI is.
 - The sidebar's Agents roster sits at the top, open: the orchestrators and every lane with their harness, model, effort and autocompact percent, inline editors behind confirm cards, and Add agent from the harnesses on this computer (task U39).
 - The Compact card and the agent dock ask for autocompact with one plain number in percent or tokens, convert between them through the context window, show where it compacts, and keep the owner's compact rules or name the default ones (task U40).
