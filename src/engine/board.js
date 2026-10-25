@@ -13,6 +13,19 @@ export function boardHost(container) {
   return host ?? container ?? null
 }
 
+export function costModeFor(mode, simulated = false) {
+  if (mode !== 'live') return 'replay'
+  return simulated ? 'demo' : 'live'
+}
+
+export function costLabels(mode) {
+  if (mode !== 'replay' && mode !== 'demo') return null
+  return {
+    title: 'Sample costs',
+    note: 'These numbers are made up for the replay.',
+  }
+}
+
 function formatMoney(cents) {
   const value = typeof cents === 'number' && Number.isFinite(cents) ? cents : 0
   return `$${(value / 100).toFixed(2)}`
@@ -120,6 +133,12 @@ export function createCostBoard(container, { onPick = () => {} } = {}) {
   title.className = 'mr-board-title'
   title.textContent = 'COSTS'
 
+  const noteEl = document.createElement('div')
+  noteEl.className = 'mr-board-note'
+  noteEl.style.fontSize = '10px'
+  noteEl.style.color = 'rgb(255 255 255 / 0.55)'
+  noteEl.style.display = 'none'
+
   const summaryEl = document.createElement('div')
   summaryEl.className = 'mr-board-summary'
 
@@ -133,11 +152,16 @@ export function createCostBoard(container, { onPick = () => {} } = {}) {
   emptyEl.className = 'mr-board-empty'
   emptyEl.textContent = 'Costs not available.'
 
-  element.append(title, summaryEl, rowsContainer, quotaContainer, emptyEl)
+  element.append(title, noteEl, summaryEl, rowsContainer, quotaContainer, emptyEl)
   const host = boardHost(container)
   host?.append?.(element)
 
   function update(board) {
+    const labels = costLabels(board?.costMode)
+    title.textContent = labels ? labels.title : 'COSTS'
+    noteEl.textContent = labels ? labels.note : ''
+    noteEl.style.display = labels ? '' : 'none'
+
     const lines = boardLines(board)
     if (lines.empty) {
       emptyEl.textContent = lines.empty

@@ -3,6 +3,7 @@ import { createAssistantRunner, createDispatcher } from './assistant/dispatch.js
 import { createClient } from './control/client.js'
 import { createMockClient } from './control/mock.js'
 import { createRoom } from './engine/room.js'
+import { costModeFor } from './engine/board.js'
 import { openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
@@ -14,6 +15,7 @@ import { costBoard } from './model/costs.js'
 import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
+import { CostsModeContext } from './ui/panels/MetersPanel.jsx'
 import { name } from './ui/brand.js'
 import { lensStatus } from './ui/lens.js'
 import { ladderFromAnswer } from './ui/liveLadder.js'
@@ -51,6 +53,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const cssRef = useRef(null)
   const roomRef = useRef(null)
   const live = data.live ?? null
+  const costMode = costModeFor(mode, Boolean(live?.simulated))
   const demoLadder = useMemo(() => {
     if (live || typeof window === 'undefined') return null
     const params = new URLSearchParams(window.location.search)
@@ -269,7 +272,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const [agentsRaw, costsRaw] = await Promise.all([client.agents(), client.costs()])
         if (!active || !isLatest()) return
         const roster = toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
-        const board = costBoard(costsRaw, roster)
+        const board = { ...costBoard(costsRaw, roster), costMode }
         latestBoardRef.current = board
         roomRef.current?.setCosts(board)
         setDockCosts(board)
@@ -290,7 +293,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       clearInterval(timer)
       unsubscribe()
     }
-  }, [client])
+  }, [client, costMode])
 
   useEffect(() => {
     if (!client) {
@@ -640,36 +643,38 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       )}
       {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
       <OrchestratorActivity.Provider value={orchestratorActivity}>
-        <Hud
-          snapshot={snapshot}
-          focused={focused}
-          speeds={SPEEDS}
-          fpsStats={fpsStats}
-          mode={mode}
-          client={client}
-          assistantPaths={assistantPaths}
-          onAssistantAction={runAssistant}
-          controlTarget={controlTarget}
-          markers={timeline?.markers ?? NONE}
-          log={log}
-          costs={dockCosts}
-          liveRuns={dockRuns}
-          tasks={dockTasks}
-          liveAvailable={liveAvailable}
-          onMode={onMode}
-          onToggle={() => player.toggle()}
-          onSeek={(value) => player.seek(value)}
-          onSpeed={changeSpeed}
-          onFocus={focus}
-          onOverview={overview}
-          openTerminals={openChips}
-          onToggleTerminal={toggleTerminal}
-          onShowTerminals={showTerminals}
-          health={health}
-          ladder={ladder}
-          effects={effects}
-          onSettingsChange={handleSettingsChange}
-        />
+        <CostsModeContext.Provider value={costMode}>
+          <Hud
+            snapshot={snapshot}
+            focused={focused}
+            speeds={SPEEDS}
+            fpsStats={fpsStats}
+            mode={mode}
+            client={client}
+            assistantPaths={assistantPaths}
+            onAssistantAction={runAssistant}
+            controlTarget={controlTarget}
+            markers={timeline?.markers ?? NONE}
+            log={log}
+            costs={dockCosts}
+            liveRuns={dockRuns}
+            tasks={dockTasks}
+            liveAvailable={liveAvailable}
+            onMode={onMode}
+            onToggle={() => player.toggle()}
+            onSeek={(value) => player.seek(value)}
+            onSpeed={changeSpeed}
+            onFocus={focus}
+            onOverview={overview}
+            openTerminals={openChips}
+            onToggleTerminal={toggleTerminal}
+            onShowTerminals={showTerminals}
+            health={health}
+            ladder={ladder}
+            effects={effects}
+            onSettingsChange={handleSettingsChange}
+          />
+        </CostsModeContext.Provider>
       </OrchestratorActivity.Provider>
     </div>
   )
