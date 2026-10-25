@@ -6,6 +6,9 @@
 - The MachineRoom harness has `web_search` and `web_fetch` tools over SearXNG, Tavily, Brave or DuckDuckGo, with the provider saved in `<runs>/search.json`, address-checked page fetches capped at 1 MB and 20 seconds, a Web search section in Settings behind a confirm card, and the provider routes on the bridge (task H12).
 - The codex and copilot harnesses add descriptors, models, efforts and parsers for OpenAI Codex CLI and GitHub Copilot CLI with fixture tests, using Codex CLI documentation from openai.com and codex-docs.com for event shapes and flags (task H11).
 
+- A web search or fetch is tool `web` in the Claude, OpenCode, AGY and Hermes parsers, with its query or URL in the label and no file touches (task N4).
+- A slowly breathing `INTERNET` wireframe sphere floats high above the orchestrator with a small label under it; a `web` call sends that agent's tunnel to it in blue with packets flying out, five fly back when the call ends, the agent keeps its last file focus and the shape glows while an agent is on the web (task N4).
+- The tunnel end for a web call and the morph offsets from a seed are pure and tested (task N4).
 - The fine dust strength sets how many specks are drawn, up to 4000, instead of only their brightness, and a Pulse switch on its settings row makes them breathe in and out (still under reduced motion).
 - A small hamburger icon (`MenuIcon.jsx`) marks each dropdown, the conversation switch in the top band and the model and effort pickers, in place of the letter V.
 - The folder lines rest dimmer (0.1 instead of 0.22) and the root project card draws no faint folders behind it, since its folders already stand in the room.

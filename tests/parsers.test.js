@@ -133,6 +133,14 @@ describe('hermes parser', () => {
     expect(out[0].label).toBe('read index.js')
   })
 
+  it('maps a web search and a web fetch line to the web kind with no touch', () => {
+    const parser = createHermesParser(ctx)
+    const searched = parser.push('  \u250a \ud83d\udd0d search    hermes web tools  1.4s\n', 3000)
+    expect(searched[0]).toMatchObject({ tool: 'web', label: 'web search hermes web tools', touches: [] })
+    const fetched = parser.push('  \u250a \ud83d\udcc4 fetch     example.com  0.8s\n', 4000)
+    expect(fetched[0]).toMatchObject({ tool: 'web', label: 'web fetch example.com', touches: [] })
+  })
+
   it('reports a delegate line as one child at the line time', () => {
     const parser = createHermesParser({ ...ctx, agentKey: 'hermes' })
     const line = '  \u250a \ud83d\udd00 delegate  1x: Count the exported functions...  14.4s\n'
@@ -170,6 +178,19 @@ describe('opencode parser', () => {
       9000
     )
     expect(out[0].touches).toEqual([{ path: 'test/strings.test.js', mode: 'write', kind: 'file' }])
+  })
+
+  it('maps the websearch and webfetch tools to the web kind with the query or url', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(
+      lines(
+        { type: 'tool_use', part: { id: 'w1', tool: 'websearch', state: { status: 'completed', input: { query: 'hermes web tools' } } } },
+        { type: 'tool_use', part: { id: 'w2', tool: 'webfetch', state: { status: 'completed', input: { url: 'https://example.com/docs' } } } }
+      ),
+      9000
+    )
+    expect(out[0]).toMatchObject({ tool: 'web', label: 'web search hermes web tools', touches: [] })
+    expect(out[2]).toMatchObject({ tool: 'web', label: 'web fetch https://example.com/docs', touches: [] })
   })
 
   it('turns an error event into an error activity', () => {
@@ -313,6 +334,23 @@ describe('agy parser', () => {
       'edit edit docs/main-notes.md',
     ])
     expect(out[2].touches).toEqual([{ path: 'docs/main-notes.md', mode: 'write', kind: 'file' }])
+  })
+
+  it('maps search_web and read_url_content to the web kind with no touch', () => {
+    const parser = createAgyParser(ctx)
+    const webStep = (index, name, parameters) => ({
+      event: 'step_update',
+      step_update: { conversation_id: 'c1', step_index: index, state: 'ACTIVE', step_type: 'tool', tool_name: name, tool_info: { parameters } },
+    })
+    const out = parser.push(
+      lines(
+        webStep(1, 'search_web', { query: 'hermes web tools' }),
+        webStep(2, 'read_url_content', { url: 'https://example.com/docs' })
+      ),
+      500
+    )
+    expect(out[0]).toMatchObject({ tool: 'web', label: 'web search hermes web tools', touches: [] })
+    expect(out[1]).toMatchObject({ tool: 'web', label: 'web fetch https://example.com/docs', touches: [] })
   })
 
   it('spawns an invoked subagent and ends it when a listing shows it idle', () => {

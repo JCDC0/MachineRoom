@@ -4,6 +4,7 @@ export const WHITE = 0xffffff
 export const YELLOW = 0xe5ff00
 export const RED = 0xff2a2a
 export const GREEN = 0x2aff80
+export const WEB = 0x2a9dff
 export const BLUE = 0x3d7bff
 
 export function seeded(seed) {

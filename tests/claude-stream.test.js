@@ -64,7 +64,8 @@ describe('claude stream-json', () => {
         assistant([use('t8', 'Grep', { path: 'docs' })]),
         assistant([use('t9', 'LS', { path: 'docs' })]),
         assistant([use('t10', 'Bash', { command: 'cat src/math.js' })]),
-        assistant([use('t11', 'WebSearch', { query: 'claude code' })])
+        assistant([use('t11', 'WebSearch', { query: 'claude code' })]),
+        assistant([use('t12', 'WebFetch', { url: 'https://example.com/docs' })])
       ),
       1000
     )
@@ -86,8 +87,10 @@ describe('claude stream-json', () => {
     expect(found.t9.touches).toEqual([{ path: 'docs', mode: 'list', kind: 'dir' }])
     expect(found.t10).toMatchObject({ tool: 'shell', label: '$ cat src/math.js' })
     expect(found.t10.touches).toEqual([{ path: 'src/math.js', mode: 'read', kind: 'file' }])
-    expect(found.t11).toMatchObject({ tool: 'other', label: 'WebSearch' })
+    expect(found.t11).toMatchObject({ tool: 'web', label: 'web search claude code' })
     expect(found.t11.touches).toEqual([])
+    expect(found.t12).toMatchObject({ tool: 'web', label: 'web fetch https://example.com/docs' })
+    expect(found.t12.touches).toEqual([])
   })
 
   it('ends a call with its result and reads a failed result', () => {
