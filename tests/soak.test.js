@@ -149,9 +149,9 @@ describe('a long live session', () => {
 
     const loop = await startLaneBridge({ runsDir: runs, lanesSource: { quietMs: 200 } })
     try {
-      const kept = await readFrames(loop.url, (seen) => seen.at(-1)?.type === 'heartbeat.run.status' && seen.at(-1).payload?.status === 'succeeded', {
-        timeoutMs: 60000,
-      })
+      const ended = (seen) => seen.at(-1)?.type === 'heartbeat.run.status' && seen.at(-1).payload?.status === 'succeeded'
+      await readFrames(loop.url, ended, { timeoutMs: 60000 })
+      const kept = await readFrames(loop.url, ended, { timeoutMs: 60000 })
       expect(kept).toHaveLength(HISTORY_LIMIT)
       expect(kept.at(-1).payload.status).toBe('succeeded')
     } finally {

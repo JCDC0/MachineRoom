@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The soak test reads the bridge history again after the run ends, since a page that joins mid-run gets the history and then live frames (CI failed on Ubuntu with 501 frames).
+
 - The Dispatch project lane list leaves out sub orchestrators, and the lens counts lanes only, not the main or sub orchestrators (task Q12b).
 
 - A closed orchestrator's killed turn writes its run record without adding a message, notice or turn, so a ladder change cannot overwrite a new sub's chat file (task Q12e).
