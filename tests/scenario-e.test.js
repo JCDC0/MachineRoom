@@ -22,7 +22,7 @@ const OTHER_FIXTURES = {
   'fixtures/scenario-c': {
     activities: 'e6dc4d8a1b46b1d2',
     plans: 'f22d812a58e58fe7',
-    layouts: 'd2086883972d26e7',
+    layouts: '66e853ab6eb96aaf',
   },
   'fixtures/scenario-d': {
     activities: '2fab820498862bc2',

@@ -296,7 +296,7 @@ export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new M
   const drawn = new Map()
   for (const view of views) {
     if (overflow.hidden.has(view.path)) continue
-    drawn.set(view.path, { ...view, back: Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
+    drawn.set(view.path, { ...view, back: view.path === '' ? 0 : Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
   }
   const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view, rootName) }))
   const openKey = [...open].sort().join('\n')

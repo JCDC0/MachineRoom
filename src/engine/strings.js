@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { WHITE, YELLOW, glowTexture, seeded, still } from './sprites.js'
 
 const SEGMENTS = 16
-const LINE_LEVEL = 0.22
+const LINE_LEVEL = 0.1
 const DIM_FACTOR = 0.25
 const STRAND_SPEED = 2000
 const STRAND_JITTER = 0.6

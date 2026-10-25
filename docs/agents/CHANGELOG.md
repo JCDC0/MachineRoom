@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The folder lines rest dimmer (0.1 instead of 0.22) and the root project card draws no faint folders behind it, since its folders already stand in the room.
 - The overview camera aims at the hub centre and only fits its distance to the cards, so the ring sits in the middle of the lens instead of the middle of all the cards. The live badge sits inside the lens's bottom left corner at 900 pixels and wider, off the chat input.
 - The roster tests point their lanes at Node's own program, so they pass on a computer without Claude Code or OpenCode, as CI is.
 - The sidebar's Agents roster sits at the top, open: the orchestrators and every lane with their harness, model, effort and autocompact percent, inline editors behind confirm cards, and Add agent from the harnesses on this computer (task U39).
