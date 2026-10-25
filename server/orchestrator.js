@@ -19,6 +19,7 @@ import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
+import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
@@ -1116,7 +1117,7 @@ export function createOrchestrator({
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_MODEL_PROBLEM } }
     const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
     if (!nextModel) return { status: 400, body: { error: MODEL_PROBLEM } }
-    const allowed = MODELS.some((item) => item.id === nextModel && item.harness === harness)
+    const allowed = modelAllowed(harness, nextModel, folder)
     if (!allowed) return { status: 400, body: { error: MODEL_PROBLEM } }
     model = nextModel
     contextWindow = resolveContextWindow(model, harness, windowOption)
@@ -1132,7 +1133,7 @@ export function createOrchestrator({
       return { status: 400, body: { error: harnessUnavailableProblem(nextHarness || 'unknown') } }
     }
     const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
-    const allowed = MODELS.some((item) => item.harness === nextHarness && item.id === nextModel)
+    const allowed = modelAllowed(nextHarness, nextModel, folder)
     if (!nextModel || !allowed) {
       return { status: 400, body: { error: modelUnavailableProblem(nextModel, nextHarness) } }
     }

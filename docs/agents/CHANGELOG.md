@@ -6,6 +6,8 @@
 - Chromatic aberration splits each colour channel from the centre of the lens with a `feDisplacementMap` per channel over a radial map drawn once on a canvas, with no shift at the centre, red pushed outward and blue inward, and the strength scaling the displacement (task U48).
 - Grain is crisp single pixel white noise on a 128 pixel tile, redrawn five times a second even under reduced motion, with its strength as the opacity (task U48).
 - The radial map values, the channel scales and the noise frame are pure and tested (task U48).
+- Live model lists per harness at GET /api/harnesses/KEY/models cached for 6 hours, with modelAllowed accepting cached models across lane and orchestrator routes (task H13).
+
 - AGY lists its 13 models (Gemini 4 Argon, Gemini 3.8 Flash, Claude Opus and Sonnet 5.5 and GPT-OSS 120B, each at its levels, from `agy models`) in the model pickers instead of none.
 - The fine dust holds up to 12000 specks between 400 and 6000 units from the hub, so the room fills at full strength, and the internet shape rests dim (0.08) and glows bright, with its label, only while an agent searches or fetches.
 - The lens has straight top and bottom edges with a tick every 40 pixels, a taller tick and a 9 pixel Space Mono coordinate label every 200, a `+` crosshair at the middle of each edge and a bracket at each corner, and its `mr-lens-clip` curve is gone (task U46).

@@ -5,6 +5,7 @@ import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
+import { modelAllowed, readHarnessModelsCache } from './harness-models.js'
 
 export const MAX_AGENTS = 30
 export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot']
@@ -40,7 +41,7 @@ export const MAX_AGENTS_PROBLEM = 'At most 30 custom agents are allowed.'
 export const LANES_JSON_DELETE_PROBLEM = 'A lane from lanes.json cannot be deleted; make it inactive instead.'
 export const LANES_JSON_UPDATE_PROBLEM = 'A lane from lanes.json cannot be updated.'
 
-export { harnessUnavailableProblem, modelUnavailableProblem }
+export { harnessUnavailableProblem, modelAllowed, modelUnavailableProblem }
 
 export function effortUnavailableProblem(effort, harness) {
   return `The effort ${effort} is not available for ${harness}.`
@@ -115,14 +116,34 @@ export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, 
 
 export function listHarnesses({ lanes = {}, env = process.env, platform = process.platform, runsFolder = null } = {}) {
   const endpoints = runsFolder ? readEndpoints(runsFolder) : []
-  const models = runsFolder ? modelsFor(runsFolder) : MODELS
-  return HARNESS_KEYS.map((key) => ({
-    key,
-    name: HARNESS_NAMES[key] ?? key,
-    available: isHarnessAvailable(key, { lanes, env, platform, endpoints }),
-    models: models.filter((m) => m.harness === key).map(({ id, label }) => ({ id, label })),
-    efforts: [...(HARNESS_EFFORTS[key] ?? [])],
-  }))
+  const staticModels = runsFolder ? modelsFor(runsFolder) : MODELS
+  const cache = runsFolder ? readHarnessModelsCache(runsFolder) : {}
+  return HARNESS_KEYS.map((key) => {
+    const seen = new Set()
+    const models = []
+    for (const m of staticModels) {
+      if (m.harness === key && !seen.has(m.id)) {
+        seen.add(m.id)
+        models.push({ id: m.id, label: m.label })
+      }
+    }
+    const cachedEntry = Object.hasOwn(cache, key) ? cache[key] : null
+    if (cachedEntry && Array.isArray(cachedEntry.models)) {
+      for (const m of cachedEntry.models) {
+        if (m?.id && !seen.has(m.id)) {
+          seen.add(m.id)
+          models.push({ id: m.id, label: m.label || m.id })
+        }
+      }
+    }
+    return {
+      key,
+      name: HARNESS_NAMES[key] ?? key,
+      available: isHarnessAvailable(key, { lanes, env, platform, endpoints }),
+      models,
+      efforts: [...(HARNESS_EFFORTS[key] ?? [])],
+    }
+  })
 }
 
 export function agentsConfigFile(runsDir) {
@@ -297,14 +318,13 @@ export function createAgentLane(body, {
     return { ok: false, status: 400, error: harnessUnavailableProblem(harness) }
   }
 
-  const allowedModels = MODELS.filter((m) => m.harness === harness).map((m) => m.id)
   let model = typeof body?.model === 'string' ? body.model.trim() : ''
   if (endpoint) {
     model = endpointModelId(endpoint, model)
     if (model === '') {
       return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
     }
-  } else if (!allowedModels.includes(model)) {
+  } else if (!modelAllowed(harness, model, runs)) {
     return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
   }
 
@@ -467,7 +487,6 @@ export function createAgentsConfigApi(options = {}) {
       }
 
       if (body.model !== undefined || endpointChanged) {
-        const allowedModels = MODELS.filter((m) => m.harness === agent.harness).map((m) => m.id)
         let model = typeof body.model === 'string' ? body.model.trim() : agent.model
         if (endpoint) {
           model = endpointModelId(endpoint, model)
@@ -475,7 +494,7 @@ export function createAgentsConfigApi(options = {}) {
             sendJson(req, res, 400, { error: modelUnavailableProblem(body.model ?? agent.model, agent.harness) })
             return true
           }
-        } else if (!allowedModels.includes(model)) {
+        } else if (!modelAllowed(agent.harness, model, runsDir)) {
           sendJson(req, res, 400, { error: modelUnavailableProblem(body.model ?? agent.model, agent.harness) })
           return true
         }

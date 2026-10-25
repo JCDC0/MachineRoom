@@ -15,6 +15,7 @@ import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createFamilyApi } from './family.js'
 import { createEndpointsApi } from './endpoints.js'
+import { createHarnessModelsApi } from './harness-models.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
 import { createMusicApi } from './music.js'
 import { createOrchestrators } from './orchestrators.js'
@@ -420,6 +421,13 @@ export function createBridge(options = {}) {
     })
   }
   const bridgeRunsFolder = resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder())
+  const harnessModelsApi = createHarnessModelsApi({
+    projectRoot,
+    runsFolder: bridgeRunsFolder,
+    lanes: () => (lanesSourceOn ? lanesConfig : readLanes()),
+    sendJson,
+    env,
+  })
   const search = createSearchApi({
     runsFolder: bridgeRunsFolder,
     sendJson,
@@ -733,6 +741,7 @@ export function createBridge(options = {}) {
 
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (await briefs.handle(req, res, url)) return
+    if (await harnessModelsApi.handle(req, res, url)) return
     if (await agentsConfig.handle(req, res, url)) return
     if (await endpoints.handle(req, res, url)) return
     if (await activeLanes.handle(req, res, url)) return

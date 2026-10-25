@@ -8,6 +8,7 @@ import {
   effortUnavailableProblem,
   harnessUnavailableProblem,
   isHarnessAvailable,
+  modelAllowed,
   modelUnavailableProblem,
   readAllLanes,
 } from './agents-config.js'
@@ -444,9 +445,8 @@ export function createFamilyApi(options = {}) {
         return true
       }
 
-      const allowedModels = MODELS.filter((m) => m.harness === harness).map((m) => m.id)
       const model = typeof body.model === 'string' ? body.model.trim() : ''
-      if (!allowedModels.includes(model)) {
+      if (!modelAllowed(harness, model, runsDir)) {
         sendJson(req, res, 400, { error: modelUnavailableProblem(body.model, harness) })
         return true
       }
