@@ -6,6 +6,11 @@
 - The Compact card and the agent dock ask for autocompact with one plain number in percent or tokens, convert between them through the context window, show where it compacts, and keep the owner's compact rules or name the default ones (task U40).
 - Compact by tokens or percent with autocompactMode, autocompactValue and default compactRules per orchestrator (task O14).
 
+- The bridge lists the audio files in MachineRoom's `music` folder at `GET /api/music`, serves one at `GET /music/NAME` with its content type and byte ranges, refuses a path separator or `..` with 400 and a missing file with 404, and lets `MACHINEROOM_MUSIC` name another folder (task U41).
+- Settings has a Sound section saved in `machineroom.settings`: beeps start on at a low volume, music starts off, and a small player with play and pause, previous and next, the track name, shuffle, repeat and a volume reads the bridge's music list (task U41).
+- While music plays and Dance is on, an analyser reads the bass and each agent shape pulses its scale by at most 8 percent and turns a little on a beat, the orchestrator less, with no motion under reduced motion (task U41).
+- Each read, write, created file and deleted file plays a short synthesized beep panned by the touched card's place in the lens, quieter with distance and capped at eight a second, after the first click or key (task U41).
+- The pan, distance gain, beat detector, delete command test, sound rate limit and dance pulse are pure and tested (task U41).
 - Log and Settings open from the menu as dropdowns under it, like Control, at every width; the Overview card keeps Agent and Costs, and the sidebar's Settings opens the same dropdown. The fine dust is soft round specks in three sizes that grow as the camera nears them, not 3 pixel points.
 - The root card sits in the park space just under the hub ring, every top-level folder's string ends there, strings brighten only on a working agent's path, each lane has a faint grey line to the main orchestrator, and packets start at the agent's centre on its tunnel (task U38).
 

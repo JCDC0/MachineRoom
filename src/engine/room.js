@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { createAgents } from './agents.js'
-import { FOV, createCameraRig, fitView, followTarget } from './camera.js'
+import { FOV, OVERVIEW, createCameraRig, fitView, followTarget } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
@@ -311,6 +311,33 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return dir ? dir.path : null
   }
 
+  const soundPoint = new THREE.Vector3()
+  const soundProjection = new THREE.Vector3()
+
+  function soundAt(path) {
+    const state = getState()
+    const isFile = state.files.has(path)
+    const dir = isFile ? dirname(path) : (path ?? '')
+    const overviewDistance = fitted?.dist ?? OVERVIEW.dist
+    const card = cards.cardSphere(dir)
+    if (!card) return { x: -1, y: -1, width, height, distance: overviewDistance * 2, overviewDistance }
+    soundPoint.copy(cards.center(dir))
+    const distance = camera.position.distanceTo(soundPoint)
+    soundProjection.copy(soundPoint).project(camera)
+    if (![soundProjection.x, soundProjection.y, soundProjection.z].every(Number.isFinite)) {
+      return { x: -1, y: -1, width, height, distance, overviewDistance }
+    }
+    const behind = soundProjection.z < -1 || soundProjection.z > 1
+    return {
+      x: behind ? -1 : ((soundProjection.x + 1) / 2) * width,
+      y: behind ? -1 : ((1 - soundProjection.y) / 2) * height,
+      width,
+      height,
+      distance,
+      overviewDistance,
+    }
+  }
+
   function followCardPath(path, style) {
     const wide = style !== 'close'
     const start = []
@@ -515,6 +542,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   return {
     onActivity,
+    soundAt,
+    setBeat: (strength) => agentSet.beat(strength),
     reset: sync,
     zoomBy: (deltaY) => rig.zoomBy(deltaY),
     zoomShare: () => rig.zoomShare(),

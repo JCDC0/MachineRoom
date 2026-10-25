@@ -13,6 +13,7 @@ import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
+import { createMusicApi } from './music.js'
 import { createOrchestrators } from './orchestrators.js'
 import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
@@ -316,6 +317,12 @@ export function createBridge(options = {}) {
     env,
     decideUrl: options.decideUrl,
     timeoutMs: options.decideTimeoutMs,
+  })
+  const music = createMusicApi({
+    folder: options.musicFolder,
+    env,
+    sendJson,
+    corsHeaders: (req) => corsHeaders(req, isAllowed),
   })
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
   const lanesSourceOption = options.lanesSource
@@ -682,6 +689,7 @@ export function createBridge(options = {}) {
     if (await control.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
     if (await decideApi.handle(req, res, url)) return
+    if (await music.handle(req, res, url)) return
 
     if (orchestrators && (await orchestrators.handle(req, res, url))) return
     if (await projects.handle(req, res, url)) return

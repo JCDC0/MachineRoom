@@ -12,6 +12,13 @@ export const DEFAULT_SETTINGS = Object.freeze({
   dockOpen: false,
   speed: 1,
   helpSeen: false,
+  sound: Object.freeze({
+    on: true,
+    volume: 0.3,
+    music: false,
+    musicVolume: 0.5,
+    dance: true,
+  }),
 })
 
 export const DEFAULT_EFFECTS = Object.freeze({
@@ -22,6 +29,23 @@ export const DEFAULT_EFFECTS = Object.freeze({
   grain: Object.freeze({ on: false, strength: 0.2 }),
   dust: Object.freeze({ on: true, strength: 0.2 }),
 })
+
+function clampVolume(value, fallback) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.min(1, Math.max(0, num))
+}
+
+export function soundSettings(raw) {
+  const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  return {
+    on: typeof source.on === 'boolean' ? source.on : DEFAULT_SETTINGS.sound.on,
+    volume: clampVolume(source.volume, DEFAULT_SETTINGS.sound.volume),
+    music: typeof source.music === 'boolean' ? source.music : DEFAULT_SETTINGS.sound.music,
+    musicVolume: clampVolume(source.musicVolume, DEFAULT_SETTINGS.sound.musicVolume),
+    dance: typeof source.dance === 'boolean' ? source.dance : DEFAULT_SETTINGS.sound.dance,
+  }
+}
 
 export function effectSettings(saved) {
   const root = saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {}
@@ -91,6 +115,7 @@ function normalizeSettings(raw) {
     dockOpen: typeof raw.dockOpen === 'boolean' ? raw.dockOpen : DEFAULT_SETTINGS.dockOpen,
     speed: typeof raw.speed === 'number' && Number.isFinite(raw.speed) && raw.speed > 0 ? raw.speed : DEFAULT_SETTINGS.speed,
     helpSeen: typeof raw.helpSeen === 'boolean' ? raw.helpSeen : DEFAULT_SETTINGS.helpSeen,
+    sound: soundSettings(raw.sound),
   }
 
   if (raw.lensShare !== undefined && Number.isFinite(Number(raw.lensShare))) {
@@ -178,6 +203,18 @@ export function loadEffectSettings(storage = store()) {
     alwaysDepth: settings.alwaysDepth,
     ...(settings.effects ?? {}),
   })
+}
+
+export function loadSoundSettings(storage = store()) {
+  return soundSettings(loadSettings(storage).sound)
+}
+
+export function saveSoundSettings(storage = store(), partial) {
+  const current = loadSoundSettings(storage)
+  const incoming = partial && typeof partial === 'object' && !Array.isArray(partial) ? partial : {}
+  const merged = soundSettings({ ...current, ...incoming })
+  saveSettings(storage, { sound: merged })
+  return merged
 }
 
 export function saveEffectSettings(storage = store(), partial) {

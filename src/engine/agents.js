@@ -36,6 +36,14 @@ export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.5
 export const SUB_ORCHESTRATOR_RADIUS = HUB_RADIUS * 2.4
 export const ORCHESTRATOR_LINK_OPACITY = 0.1
 export const SUB_ORCHESTRATOR_LINK_OPACITY = 0.3
+export const DANCE_SCALE = 0.08
+export const ORCHESTRATOR_DANCE_SCALE = 0.03
+const DANCE_DECAY = 5
+
+export function danceScale(pulse, orchestrator = false) {
+  const value = Math.min(1, Math.max(0, Number(pulse) || 0))
+  return 1 + (orchestrator ? ORCHESTRATOR_DANCE_SCALE : DANCE_SCALE) * value
+}
 
 export function subOrchestratorPlace(arc, out = null) {
   const start = Number(arc?.start)
@@ -383,6 +391,7 @@ export function createAgents(scene, roster, cssScene = null) {
       presence: orchestrator ? 1 : 0,
       presenceReady: false,
       presenceOpacity: 1,
+      dance: 0,
     }
     views.set(agent.key, view)
     return view
@@ -495,6 +504,17 @@ export function createAgents(scene, roster, cssScene = null) {
     return { dir: path, file: null }
   }
 
+  function beat(strength) {
+    const value = Math.min(1, Math.max(0, Number(strength) || 0))
+    if (!(value > 0) || still()) return
+    for (const view of views.values()) {
+      const less = view.orchestrator || view.subOrchestrator
+      view.dance = Math.max(view.dance, value)
+      view.shape.rotation.y += (less ? 0.08 : 0.2) * value
+      view.shape.rotation.x += (less ? 0.03 : 0.07) * value
+    }
+  }
+
   function update(state, delta, now, world, terminals) {
     if (world.back && world.right) {
       camUp.crossVectors(world.back, world.right).normalize()
@@ -566,11 +586,15 @@ export function createAgents(scene, roster, cssScene = null) {
         view.shape.rotation.y += delta * style.spin
         view.shape.rotation.x += delta * style.spin * 0.4
       }
+      view.dance = isStill ? 0 : Math.max(0, view.dance - delta * DANCE_DECAY)
+      let pulse = 0
       if ((status === 'working' || status === 'queued') && !isStill) {
-        view.shape.scale.setScalar(1 + 0.05 * (0.5 + 0.5 * Math.sin(now * 0.0022)))
-      } else {
-        view.shape.scale.setScalar(1)
+        pulse = 0.05 * (0.5 + 0.5 * Math.sin(now * 0.0022))
       }
+      if (!isStill) {
+        pulse = Math.max(pulse, danceScale(view.dance, view.orchestrator || view.subOrchestrator) - 1)
+      }
+      view.shape.scale.setScalar(1 + pulse)
 
       const lastLine = entry?.lines?.[entry.lines.length - 1]
       const lastFailed = lastLine?.tone === 'error'
@@ -704,6 +728,7 @@ export function createAgents(scene, roster, cssScene = null) {
       view.presence = 0
       view.presenceReady = false
       view.presenceOpacity = 1
+      view.dance = 0
       view.group.scale.setScalar(view.scale)
     }
   }
@@ -734,5 +759,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, dispose, hubCenter: HUB_CENTER }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, dispose, beat, hubCenter: HUB_CENTER }
 }

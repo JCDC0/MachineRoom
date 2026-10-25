@@ -1,4 +1,8 @@
-import { effectSettings } from './settings.js'
+import { useState } from 'react'
+import MusicPlayer from './MusicPlayer.jsx'
+import { store } from '../storage.js'
+import { effectSettings, loadSoundSettings, saveSoundSettings } from './settings.js'
+import { sound } from './sound.js'
 
 export const EFFECTS = [
   { key: 'fishEye', label: 'Fish eye', costly: false },
@@ -10,6 +14,13 @@ export const EFFECTS = [
 
 export default function Settings({ effects, onChange, onClose }) {
   const current = effectSettings(effects)
+  const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
+
+  function updateSound(patch) {
+    const next = saveSoundSettings(store(), patch)
+    setSoundState(next)
+    sound.setSettings(next)
+  }
 
   function updateDepth(depth) {
     onChange?.({ ...current, alwaysDepth: depth })
@@ -105,6 +116,56 @@ export default function Settings({ effects, onChange, onClose }) {
                 </div>
               )
             })}
+          </div>
+        </div>
+
+        <div className="hud-settings-section">
+          <h3 className="hud-settings-section-title">Sound</h3>
+          <div className="hud-settings-effects">
+            <div className="hud-settings-effect">
+              <div className="hud-settings-row">
+                <span className="hud-settings-label">Beeps</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={soundState.on}
+                  className={`hud-settings-switch ${soundState.on ? 'is-on' : ''}`}
+                  onClick={() => updateSound({ on: !soundState.on })}
+                >
+                  {soundState.on ? 'On' : 'Off'}
+                </button>
+              </div>
+              <div className="hud-settings-control">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={Math.round(soundState.volume * 100)}
+                  aria-label="Beep volume percent"
+                  onChange={(event) => {
+                    const percent = Math.min(100, Math.max(0, Number(event.target.value) || 0))
+                    updateSound({ volume: percent / 100 })
+                  }}
+                />
+                <span className="hud-settings-value mono">{Math.round(soundState.volume * 100)}%</span>
+              </div>
+            </div>
+            <div className="hud-settings-effect">
+              <div className="hud-settings-row">
+                <span className="hud-settings-label">Dance</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={soundState.dance}
+                  className={`hud-settings-switch ${soundState.dance ? 'is-on' : ''}`}
+                  onClick={() => updateSound({ dance: !soundState.dance })}
+                >
+                  {soundState.dance ? 'On' : 'Off'}
+                </button>
+              </div>
+            </div>
+            <MusicPlayer />
           </div>
         </div>
       </div>

@@ -24,7 +24,8 @@ import { version } from '../package.json'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { OrchestratorActivity, orchestratorDoing } from './ui/orchestratorChat.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
-import { loadEffectSettings, loadSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
+import { loadEffectSettings, loadSettings, loadSoundSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
+import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
 import { barrelDataUri } from './ui/barrel.js'
 import Waiting from './ui/Waiting.jsx'
@@ -83,10 +84,20 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     const handlers = {
       tree: data.tree,
       agents,
-      onActivity: (activity, state) => roomRef.current?.onActivity(activity, state),
+      onActivity: (activity, state) => {
+        roomRef.current?.onActivity(activity, state)
+        const sounds = activitySounds(activity, knownSoundRef.current)
+        for (const item of sounds) {
+          if (item.kind === 'deleted') knownSoundRef.current.delete(item.path)
+          sound.beep(item.kind, roomRef.current?.soundAt(item.path))
+        }
+      },
     }
     if (live) return createLivePlayer(handlers)
-    return createPlayer({ ...handlers, activities: data.activities, onReset: (state) => roomRef.current?.reset(state) })
+    return createPlayer({ ...handlers, activities: data.activities, onReset: (state) => {
+      roomRef.current?.reset(state)
+      resetSoundFiles()
+    } })
   }, [data, live, agents])
   const client = useMemo(() => {
     if (!live || live.simulated) return createMockClient()
@@ -110,6 +121,15 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
 
   useEffect(() => {
+    sound.setSettings(loadSoundSettings(store()))
+    sound.armOnGesture()
+  }, [])
+
+  useEffect(() => {
+    resetSoundFiles()
+  }, [data.tree])
+
+  useEffect(() => {
     const timer = setInterval(() => {
       const room = roomRef.current
       if (!room?.zoomShare) return
@@ -129,6 +149,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
   const latestLadderRef = useRef(null)
+  const knownSoundRef = useRef(null)
+  if (knownSoundRef.current === null) {
+    const missing = new Set(data.tree?.created ?? [])
+    knownSoundRef.current = new Set((data.tree?.files ?? []).filter((path) => !missing.has(path)))
+  }
   const framesRef = useRef([])
   const lastFrameRef = useRef(0)
   const [fpsStats, setFpsStats] = useState(() => (fps ? { median: 0, p95: 0 } : null))
@@ -138,6 +163,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     setEffects(normalized)
     setFineDust(normalized.dust)
     roomRef.current?.setOptions({ alwaysDepth: normalized.alwaysDepth })
+  }
+
+  function resetSoundFiles(tree = data.tree) {
+    const missing = new Set(tree?.created ?? [])
+    knownSoundRef.current = new Set((tree?.files ?? []).filter((path) => !missing.has(path)))
   }
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
@@ -178,6 +208,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           lastFrameRef.current = now
         }
         player.tick(ms)
+        const beat = sound.beat()
+        if (beat > 0) roomRef.current?.setBeat(beat)
       },
       onPick: (key) => {
         setFollow(false)
@@ -391,6 +423,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         player.addFiles(tree.files)
         pipeline.learn(tree.files)
         known = player.state.files.size
+        for (const path of tree.files) knownSoundRef.current?.add(path)
       },
     }
     let link
