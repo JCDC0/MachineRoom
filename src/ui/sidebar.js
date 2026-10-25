@@ -376,11 +376,9 @@ export function laneFormProblem(draft, { models = [], efforts = [] } = {}) {
   if (choices.length > 0 && !choices.some((row) => row.id === model)) {
     return 'Choose a model for this harness.'
   }
-  if (choices.length === 0 && model) return 'Choose a model for this harness.'
   const levels = Array.isArray(efforts) ? efforts : []
   const effort = cleanText(draft?.effort, 20).toLowerCase()
   if (levels.length > 0 && !levels.includes(effort)) return 'Choose an effort for this harness.'
-  if (levels.length === 0 && effort) return 'This harness has no effort levels.'
   return ''
 }
 

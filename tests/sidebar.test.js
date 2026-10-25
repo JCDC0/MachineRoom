@@ -261,6 +261,8 @@ describe('the add form', () => {
     expect(laneFormProblem({ ...draft, name: 'x'.repeat(41) }, lists)).toBe('Keep the name to 40 characters.')
     expect(laneFormProblem({ ...draft, model: 'other' }, lists)).toBe('Choose a model for this harness.')
     expect(laneFormProblem({ ...draft, effort: 'max' }, lists)).toBe('Choose an effort for this harness.')
+    expect(laneFormProblem(draft, { models: [], efforts: [] })).toBe('')
+    expect(laneFormProblem({ ...draft, model: 'other', effort: 'max' }, { models: [], efforts: [] })).toBe('')
   })
 })
 
