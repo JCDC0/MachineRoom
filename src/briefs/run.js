@@ -32,7 +32,14 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sess
   if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The runner does not know the ${harness} command line.`)
   const folder = typeof cwd === 'string' && cwd.trim() !== '' ? cwd : lane.worktree
   if (typeof folder !== 'string' || folder.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
-  return harnessByKey[harness].command({ cli, prompt, env, usageFile, title, folder, reasoning: lane.reasoning, sessionId })
+  const command = harnessByKey[harness].command({ cli, prompt, env, usageFile, title, folder, reasoning: lane.reasoning, sessionId })
+  const endpoint = typeof cli.endpoint === 'string' ? cli.endpoint.trim() : ''
+  if (harness !== 'machineroom' || endpoint === '') return command
+  const args = [...command.args]
+  const at = args.lastIndexOf(String(prompt))
+  if (at === -1) args.push('--endpoint', endpoint)
+  else args.splice(at, 0, '--endpoint', endpoint)
+  return { ...command, args }
 }
 
 export const DEFAULT_MINUTES = 100

@@ -76,6 +76,18 @@ describe('commandFor', () => {
     ])
   })
 
+  it('passes a saved endpoint to the MachineRoom agent', () => {
+    const lane = {
+      name: 'MachineRoom Local',
+      worktree: 'C:\\work\\mr',
+      cli: { harness: 'machineroom', model: 'Local/alpha', endpoint: 'Local' },
+    }
+    const command = commandFor({ lane, prompt, env, title })
+    expect(command.args.slice(1)).toEqual([
+      '--model', 'Local/alpha', '--cwd', 'C:\\work\\mr', '--endpoint', 'Local', prompt,
+    ])
+  })
+
   it('names the environment variable that is missing', () => {
     expect(() => commandFor({ lane: lanes.hermes, prompt, env: {}, title })).toThrow(/LOCALAPPDATA/)
     expect(() => commandFor({ lane: lanes.opencode, prompt, env: { APPDATA: '' }, title })).toThrow(/APPDATA/)

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { exec } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 const DEFAULT_URL = 'https://openrouter.ai/api/v1'
@@ -88,11 +89,11 @@ function sanitize(text, key) {
 }
 
 function parseArgs(argv) {
-  const options = { model: '', cwd: process.cwd(), prompt: '' }
+  const options = { model: '', cwd: process.cwd(), endpoint: '', prompt: '' }
   const words = []
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
-    if (arg === '--model' || arg === '--cwd') {
+    if (arg === '--model' || arg === '--cwd' || arg === '--endpoint') {
       const value = argv[index + 1]
       if (value === undefined) throw new Error(`${arg} needs a value.`)
       options[arg.slice(2)] = value
@@ -100,7 +101,7 @@ function parseArgs(argv) {
       continue
     }
     if (arg === '--help' || arg === '-h') {
-      process.stdout.write('Usage: node scripts/mr-agent.mjs --model ID [--cwd FOLDER] PROMPT\n')
+      process.stdout.write('Usage: node scripts/mr-agent.mjs --model ID [--endpoint NAME] [--cwd FOLDER] PROMPT\n')
       return null
     }
     if (arg.startsWith('--')) throw new Error(`Unknown option ${arg}.`)
@@ -109,6 +110,7 @@ function parseArgs(argv) {
   if (!String(options.model).trim()) throw new Error('--model needs a model id.')
   options.prompt = words.join(' ').trim()
   if (!options.prompt) throw new Error('The prompt is missing.')
+  options.endpoint = String(options.endpoint).trim()
   options.cwd = workingFolder(options.cwd)
   return options
 }
@@ -137,6 +139,65 @@ function baseUrl(env) {
   const value = env?.MACHINEROOM_API_URL
   const url = typeof value === 'string' && value.trim() !== '' ? value.trim() : DEFAULT_URL
   return url.replace(/\/+$/, '')
+}
+
+function runsFolderFrom(env) {
+  const given = env?.MACHINEROOM_RUNS
+  if (typeof given === 'string' && given.trim() !== '') return resolve(given.trim())
+  return join(env?.TEMP || tmpdir(), 'machineroom-runs')
+}
+
+function readEndpoint(runsFolder, name) {
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(join(runsFolder, 'endpoints.json'), 'utf8'))
+  } catch {
+    return null
+  }
+  const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.endpoints) ? parsed.endpoints : []
+  return list.find((entry) => entry && entry.name === name) ?? null
+}
+
+function keyFromFile(runsFolder, name) {
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(join(runsFolder, 'keys.json'), 'utf8'))
+  } catch {
+    return ''
+  }
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    if (Object.hasOwn(parsed, name) && typeof parsed[name] === 'string') return parsed[name]
+    const map = parsed.keys
+    if (map && typeof map === 'object' && !Array.isArray(map) && Object.hasOwn(map, name) && typeof map[name] === 'string') return map[name]
+  }
+  const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.keys) ? parsed.keys : []
+  for (const entry of list) {
+    if (entry && entry.name === name && typeof entry.value === 'string') return entry.value
+  }
+  return ''
+}
+
+async function keyForSlot(runsFolder, name) {
+  let family = null
+  try {
+    family = await import('../server/family.js')
+  } catch {
+    family = null
+  }
+  if (family && typeof family.readKey === 'function') {
+    try {
+      const value = await family.readKey(runsFolder, name)
+      return typeof value === 'string' ? value : ''
+    } catch {
+      return ''
+    }
+  }
+  return keyFromFile(runsFolder, name)
+}
+
+function modelForEndpoint(endpoint, model) {
+  const prefix = `${endpoint.name}/`
+  return model.startsWith(prefix) ? model.slice(prefix.length) : model
 }
 
 function counted(value) {
@@ -397,11 +458,13 @@ async function runTool(name, args, cwd) {
 }
 
 async function post(url, key, payload) {
+  const headers = { 'content-type': 'application/json' }
+  if (key) headers.authorization = `Bearer ${key}`
   let response
   try {
     response = await fetch(`${url}/chat/completions`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     })
@@ -426,13 +489,35 @@ async function post(url, key, payload) {
 async function main() {
   const options = parseArgs(process.argv.slice(2))
   if (!options) return
-  const key = keyFrom(process.env)
-  if (!key) {
-    process.stderr.write(`${MISSING_KEY}\n`)
-    process.exitCode = 1
-    return
+  let key = ''
+  let url = ''
+  if (options.endpoint !== '') {
+    const runsFolder = runsFolderFrom(process.env)
+    const endpoint = readEndpoint(runsFolder, options.endpoint)
+    if (!endpoint) {
+      process.stderr.write(`The endpoint ${options.endpoint} was not found.\n`)
+      process.exitCode = 1
+      return
+    }
+    url = String(endpoint.baseUrl ?? '').replace(/\/+$/, '')
+    if (typeof endpoint.keyName === 'string' && endpoint.keyName.trim() !== '') {
+      key = await keyForSlot(runsFolder, endpoint.keyName)
+      if (key.trim() === '') {
+        process.stderr.write(`The key slot ${endpoint.keyName} has no key.\n`)
+        process.exitCode = 1
+        return
+      }
+    }
+    options.model = modelForEndpoint(endpoint, options.model)
+  } else {
+    key = keyFrom(process.env)
+    if (!key) {
+      process.stderr.write(`${MISSING_KEY}\n`)
+      process.exitCode = 1
+      return
+    }
+    url = baseUrl(process.env)
   }
-  const url = baseUrl(process.env)
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: options.prompt },

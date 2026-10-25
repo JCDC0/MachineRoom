@@ -13,6 +13,7 @@ import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
+import { createEndpointsApi } from './endpoints.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
 import { createMusicApi } from './music.js'
 import { createOrchestrators } from './orchestrators.js'
@@ -387,6 +388,14 @@ export function createBridge(options = {}) {
     readJsonBody,
     env,
   })
+  const endpoints = createEndpointsApi({
+    runsFolder: resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
+    sendJson,
+    readJsonBody,
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
+  })
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
   if (lanesSourceOn) {
@@ -700,6 +709,7 @@ export function createBridge(options = {}) {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (await briefs.handle(req, res, url)) return
     if (await agentsConfig.handle(req, res, url)) return
+    if (await endpoints.handle(req, res, url)) return
     if (await activeLanes.handle(req, res, url)) return
     if (await runs.handle(req, res, url)) return
     if (await reviews.handle(req, res, url)) return

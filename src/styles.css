@@ -8323,3 +8323,100 @@ body:has(#hud-orchestrator-chat) .waiting {
     text-transform: none;
   }
 }
+
+/* H10: provider endpoints in Settings */
+.endpoints-panel {
+  gap: calc(var(--space) * 1.5);
+}
+
+.endpoints-row,
+.endpoints-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: var(--space);
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.endpoints-row-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.endpoints-name {
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.endpoints-meta,
+.endpoints-url,
+.endpoints-note,
+.endpoints-error {
+  font-size: 11px;
+  line-height: 1.45;
+  color: rgb(255 255 255 / 0.65);
+  overflow-wrap: anywhere;
+}
+
+.endpoints-url {
+  color: rgb(255 255 255 / 0.45);
+}
+
+.endpoints-error {
+  color: var(--red);
+}
+
+.endpoints-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+  padding-top: 2px;
+}
+
+.endpoints-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.endpoints-label {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.endpoints-field input,
+.endpoints-field select,
+.endpoints-field textarea {
+  width: 100%;
+  padding: 4px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--white);
+  background: rgb(0 0 0 / 0.5);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.endpoints-field textarea {
+  resize: vertical;
+  min-height: 64px;
+}
+
+.endpoints-field input:focus,
+.endpoints-field select:focus,
+.endpoints-field textarea:focus {
+  outline: 1px solid var(--yellow);
+  border-color: var(--yellow);
+}
+
+.endpoints-confirm {
+  margin-bottom: 0;
+}
