@@ -6745,17 +6745,6 @@ body:has(#hud-orchestrator-chat) .waiting {
   white-space: nowrap;
 }
 
-.mr-side-lane-model {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 8px;
-  color: rgb(255 255 255 / 0.35);
-  text-align: right;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .mr-side-lane .mr-side-action {
   flex: 0 0 auto;
 }
