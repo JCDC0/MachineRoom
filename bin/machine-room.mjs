@@ -104,15 +104,57 @@ function prepare(options) {
 async function startRoom(options, dist, { block = false } = {}) {
   let bridge
   let info
-  try {
+  let activePort = options.port
+  let currentRoot = options.projectRoot
+
+  function startOn(root) {
     bridge = createBridge({
-      projectRoot: options.projectRoot,
-      port: options.port,
+      projectRoot: root,
+      port: activePort,
       staticDir: dist,
       lanesSource: options.lanes === true,
       sessionsSource: options.sessions === true,
+      onOpenProject,
+    })
+    return bridge.start()
+  }
+
+  async function onOpenProject(newPath) {
+    if (bridge) {
+      await bridge.stop()
+    }
+    const oldRoot = currentRoot
+    activePort = info.port
+    try {
+      info = await startOn(newPath)
+      currentRoot = newPath
+      activePort = info.port
+    } catch (error) {
+      console.error(`machine-room could not open ${newPath}: ${error.message}`)
+      try {
+        info = await startOn(oldRoot)
+        console.log(`MachineRoom stayed on ${oldRoot}.`)
+      } catch (again) {
+        console.error(`machine-room could not restart: ${again.message}`)
+      }
+      return
+    }
+    const newUrl = `http://127.0.0.1:${info.port}/?live&bridge=http://127.0.0.1:${info.port}`
+    console.log(`MachineRoom moved to ${newPath}.`)
+    console.log(`machine-room: open ${newUrl}`)
+  }
+
+  try {
+    bridge = createBridge({
+      projectRoot: currentRoot,
+      port: activePort,
+      staticDir: dist,
+      lanesSource: options.lanes === true,
+      sessionsSource: options.sessions === true,
+      onOpenProject,
     })
     info = await bridge.start()
+    activePort = info.port
   } catch (error) {
     console.error(`machine-room could not start: ${error.message}`)
     process.exit(1)

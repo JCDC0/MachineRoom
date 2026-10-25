@@ -91,7 +91,7 @@ function readText(file) {
   }
 }
 
-function projectHash(projectRoot) {
+export function projectHash(projectRoot) {
   const key = projectRoot ? pathKey(projectRoot) : ''
   return createHash('sha256').update(key).digest('hex').slice(0, 8)
 }
