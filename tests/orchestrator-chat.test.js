@@ -342,6 +342,25 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('>Stop</button>')
   })
 
+  it('takes the chosen tab from outside', () => {
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(),
+        selected: 'sub-frontend',
+        initialOrchestrators: [
+          { id: 'orchestrator', name: 'Orchestrator', state: 'idle', lanes: [] },
+          { id: 'sub-frontend', name: 'Frontend', state: 'idle', lanes: ['opencode'] },
+        ],
+      })
+    )
+    const start = html.indexOf('mr-orch-tab is-active')
+    expect(start).toBeGreaterThan(-1)
+    const tab = html.slice(start, html.indexOf('</button>', start))
+    expect(tab).toContain('<span>Frontend</span>')
+    expect(html).toContain('aria-label="Orchestrators"')
+  })
+
   it('shows a sub orchestrator report under its own label', () => {
     const chat = {
       state: 'idle',

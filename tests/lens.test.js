@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest'
-import { lensStatus } from '../src/ui/lens.js'
+import { lensClock, lensProject, lensStatus } from '../src/ui/lens.js'
+
+describe('lens labels', () => {
+  it('writes the project name with one leading slash', () => {
+    expect(lensProject('agent-sandbox')).toBe('/agent-sandbox')
+    expect(lensProject('/agent-sandbox')).toBe('/agent-sandbox')
+    expect(lensProject('  ')).toBe('/')
+    expect(lensProject(null)).toBe('/')
+  })
+
+  it('shows the replay time in hours, minutes and seconds', () => {
+    expect(lensClock(false, 0)).toBe('00:00:00')
+    expect(lensClock(false, 83_000)).toBe('00:01:23')
+    expect(lensClock(false, 3_723_000)).toBe('01:02:03')
+    expect(lensClock(false, -5000)).toBe('00:00:00')
+    expect(lensClock(false, null)).toBe('00:00:00')
+  })
+
+  it('shows the feed clock in local time when live', () => {
+    const now = new Date(2026, 9, 25, 9, 5, 7).getTime()
+    expect(lensClock(true, 0, now)).toBe('09:05:07')
+  })
+})
 
 describe('lensStatus', () => {
   it('counts the working lanes out of every lane', () => {

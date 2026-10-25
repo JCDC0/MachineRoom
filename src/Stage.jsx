@@ -18,7 +18,7 @@ import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
 import { CostsModeContext } from './ui/panels/MetersPanel.jsx'
 import { name } from './ui/brand.js'
-import { lensStatus } from './ui/lens.js'
+import { lensClock, lensProject, lensStatus } from './ui/lens.js'
 import { ladderFromAnswer } from './ui/liveLadder.js'
 import { version } from '../package.json'
 import { useBridgeHealth } from './ui/useBridgeHealth.js'
@@ -515,6 +515,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const fishEyeScale = fishEyeOn ? Number((effects.fishEye.strength * 240).toFixed(2)) : 0
 
   const lens = lensStatus(snapshot.agents, log)
+  const project = lensProject(data.tree.rootName)
+  const clock = lensClock(Boolean(live), snapshot.position)
 
   return (
     <div className="stage">
@@ -559,7 +561,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                 {name} {version}
               </span>
             </p>
+            <p className="lens-corner is-center">
+              <span className="lens-project">{project}</span>
+            </p>
             <div className="lens-corner is-right">
+              <span className="lens-clock mono">{clock}</span>
               <span className="lens-lanes mono">
                 Working {lens.working} / {lens.total}
               </span>
@@ -573,6 +579,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
             <p className={`lens-corner is-bottom mono is-${lens.tone}`}>{lens.activity}</p>
           </div>
         </div>
+        <div className="lens-brackets" aria-hidden="true">
+          <span className="lens-mark is-top-left" />
+          <span className="lens-mark is-tick-one" />
+          <span className="lens-mark is-tick-two" />
+          <span className="lens-mark is-bottom-left" />
+          <span className="lens-mark is-bottom-right" />
+        </div>
+        {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
       </div>
       {hasFilter && (
         <svg
@@ -648,11 +662,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           {toast}
         </div>
       )}
-      {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
       <OrchestratorActivity.Provider value={orchestratorActivity}>
         <CostsModeContext.Provider value={costMode}>
           <Hud
             snapshot={snapshot}
+            project={project}
             focused={focused}
             speeds={SPEEDS}
             fpsStats={fpsStats}

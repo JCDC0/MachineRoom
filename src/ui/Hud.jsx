@@ -14,6 +14,7 @@ import { wideLayout } from './agentStrip.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
 import { ladderGroups } from './ladderGroups.js'
+import { lensProject } from './lens.js'
 import { orchestratorOn } from './orchestratorChat.js'
 import { loadSettings, saveSettings } from './settings.js'
 import {
@@ -64,6 +65,7 @@ function formatTime(ms) {
 
 export default function Hud({
   snapshot,
+  project = '',
   focused,
   speeds,
   fpsStats = null,
@@ -101,6 +103,9 @@ export default function Hud({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
+  const [chatTab, setChatTab] = useState('orchestrator')
+  const [chatListOpen, setChatListOpen] = useState(false)
+  const [orchestratorList, setOrchestratorList] = useState([])
   const [idleOpen, setIdleOpen] = useState(false)
   const [dockOpen, setDockOpen] = useState(() => loadSettings(store()).dockOpen === true)
   const [viewportWidth, setViewportWidth] = useState(() =>
@@ -140,6 +145,22 @@ export default function Hud({
   listRef.current = nav
   focusRef.current = onFocus
   const context = { agents, paths: assistantPaths }
+  const projectLabel = lensProject(project)
+  const conversationTabs = [
+    { id: 'orchestrator', label: 'Main' },
+    ...orchestratorList
+      .filter((entry) => entry && entry.id !== 'orchestrator')
+      .map((entry) => ({ id: entry.id, label: entry.name || entry.id })),
+  ]
+  const conversation =
+    conversationTabs.find((tab) => tab.id === chatTab) ?? conversationTabs[0]
+  const conversationTitle = conversation?.label ?? 'Main'
+
+  function chooseConversation(id) {
+    setChatTab(id)
+    setChatListOpen(false)
+    if (chatAvailable) setChatOpen(true)
+  }
 
   function closeGuide() {
     markGuideSeen()
@@ -207,10 +228,15 @@ export default function Hud({
         const answer = await client.orchestrators()
         if (!active) return
         const items = Array.isArray(answer) ? answer : Array.isArray(answer?.orchestrators) ? answer.orchestrators : []
-        const main = items.find((entry) => entry && entry.id === 'orchestrator') ?? null
+        const list = items.filter((entry) => entry && typeof entry.id === 'string' && entry.id)
+        const main = list.find((entry) => entry.id === 'orchestrator') ?? null
         setOrchestratorInfo(main)
+        setOrchestratorList(list)
       } catch {
-        if (active) setOrchestratorInfo(null)
+        if (active) {
+          setOrchestratorInfo(null)
+          setOrchestratorList([])
+        }
       }
     }
     read()
@@ -227,6 +253,12 @@ export default function Hud({
       if (typeof unsubscribe === 'function') unsubscribe()
     }
   }, [chatAvailable, client, wide, orchestratorNonce])
+
+  useEffect(() => {
+    if (chatTab === 'orchestrator') return
+    if (orchestratorList.length === 0) return
+    if (!orchestratorList.some((entry) => entry.id === chatTab)) setChatTab('orchestrator')
+  }, [chatTab, orchestratorList])
 
   async function changeAutocompact(id, on, percent) {
     if (!client || typeof client.setAutocompact !== 'function') {
@@ -285,6 +317,7 @@ export default function Hud({
         setHealthOpen(false)
         setSettingsOpen(false)
         setMenuOpen(false)
+        setChatListOpen(false)
         if (wide && dockOpen) changeDockOpen(false)
         return
       }
@@ -399,10 +432,45 @@ export default function Hud({
   return (
     <div className="hud">
       <header className={`hud-menu${menuOpen ? ' is-open' : ''}`}>
-        <div className="hud-header-strip">
-          <h1>{name}</h1>
-          <span className="hud-status-tag">{mode === 'live' ? 'LIVE' : 'REPLAY'}</span>
-        </div>
+        {wide ? (
+          <div className="hud-band" role="group" aria-label="Project and conversation">
+            <span className="hud-band-project">{projectLabel}</span>
+            <div className="hud-band-chat">
+              <button
+                type="button"
+                className="hud-band-switch"
+                aria-expanded={chatListOpen}
+                aria-haspopup="listbox"
+                aria-label={`Orchestrator conversations, showing ${conversationTitle}`}
+                onClick={() => setChatListOpen((open) => !open)}
+              >
+                <span className="hud-band-v mono" aria-hidden="true">V</span>
+                <span className="hud-band-title">{conversationTitle}</span>
+              </button>
+              {chatListOpen && (
+                <div className="hud-band-list" role="listbox" aria-label="Orchestrator conversations">
+                  {conversationTabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      role="option"
+                      aria-selected={tab.id === chatTab}
+                      className={`hud-band-choice${tab.id === chatTab ? ' is-current' : ''}`}
+                      onClick={() => chooseConversation(tab.id)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="hud-header-strip">
+            <h1>{name}</h1>
+            <span className="hud-status-tag">{mode === 'live' ? 'LIVE' : 'REPLAY'}</span>
+          </div>
+        )}
 
         <button
           type="button"
@@ -721,6 +789,8 @@ export default function Hud({
         <OrchestratorChat
           client={client}
           open={chatOpen}
+          selected={chatTab}
+          onSelect={setChatTab}
           onClose={() => setChatOpen(false)}
         />
       )}

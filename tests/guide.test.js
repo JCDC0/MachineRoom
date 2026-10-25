@@ -460,9 +460,9 @@ describe('guide steps', () => {
     expect(GUIDE_STEPS[0].text).toContain('project name is at its top left')
     expect(GUIDE_STEPS[0].text).toContain('folder cards')
 
-    expect(GUIDE_STEPS[1].text).toContain('dock below has three columns')
+    expect(GUIDE_STEPS[1].text).toContain('dock has three columns')
     expect(GUIDE_STEPS[1].text).toContain('agent list on the left')
-    expect(GUIDE_STEPS[1].text).toContain("selected agent's context in the middle")
+    expect(GUIDE_STEPS[1].text).toContain('selected agent, else the first working, else the orchestrator in the middle')
     expect(GUIDE_STEPS[1].text).toContain('settings and costs on the right')
 
     expect(GUIDE_STEPS[2].text).toContain('yellow tunnel')
@@ -472,12 +472,14 @@ describe('guide steps', () => {
     expect(GUIDE_STEPS[2].text).toContain('red is a failure')
 
     expect(GUIDE_STEPS[3].text).toContain('chat sits at the bottom right')
+    expect(GUIDE_STEPS[3].text).toContain('runs with --lanes')
     expect(GUIDE_STEPS[3].text).toContain('click ORCHESTRATOR')
     expect(GUIDE_STEPS[3].text).toContain('Attach adds a sub orchestrator')
     expect(GUIDE_STEPS[3].text).toContain('tabs switch between them')
 
     expect(GUIDE_STEPS[4].text).toContain('C opens the control drawer')
     expect(GUIDE_STEPS[4].text).toContain('L the event log')
+    expect(GUIDE_STEPS[4].text).toContain('/ opens the chat with --lanes or the assistant in a replay')
     expect(GUIDE_STEPS[4].text).toContain('? lists every key')
   })
 
@@ -740,6 +742,12 @@ describe('tour steps, selector lookup and card placement', () => {
       'The transport',
       'Control and orchestrator',
     ])
+    expect(TOUR_STEPS[1].text).toContain('outlined terminal chip')
+    expect(TOUR_STEPS[1].text).toContain('opens its log')
+    expect(TOUR_STEPS[3].text).toContain('selected agent, else the first working agent, else the orchestrator')
+    expect(TOUR_STEPS[7].text).toContain('Dispatch, Tasks, Meters, Team and Reviews')
+    expect(TOUR_STEPS[7].text).toContain('with --lanes')
+    expect(TOUR_STEPS[7].text).toContain('in a replay / opens the assistant')
     const outsideHud = new Set([
       '.lens',
       '.mr-term',
