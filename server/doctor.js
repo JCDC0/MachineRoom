@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process'
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -146,4 +147,64 @@ export function runDoctor(options = {}) {
   for (const line of laneLines(settings.lanesFile, env)) add(line)
 
   return { exitCode: ok ? 0 : 1, lines }
+}
+
+export function openProgramName(platform = process.platform) {
+  if (platform === 'win32') return 'rundll32'
+  if (platform === 'darwin') return 'open'
+  return 'xdg-open'
+}
+
+export function openCommand(url, { platform = process.platform, env = process.env, check } = {}) {
+  if (platform === 'win32') {
+    const program = programPath('rundll32', { platform, env, check })
+    if (!program) return null
+    return { command: program, args: ['url.dll,FileProtocolHandler', url] }
+  }
+  if (platform === 'darwin') {
+    const program = programPath('open', { platform, env, check })
+    if (!program) return null
+    return { command: program, args: [url] }
+  }
+  const program = programPath('xdg-open', { platform, env, check })
+  if (!program) return null
+  return { command: program, args: [url] }
+}
+
+export function openBrowser(url, options = {}) {
+  const platform = options.platform ?? process.platform
+  const env = options.env ?? process.env
+  const log = options.log ?? console.log
+  const spawnImpl = options.spawn ?? spawn
+  const target = openProgramName(platform)
+
+  const plan = openCommand(url, { platform, env, check: options.check })
+  if (!plan) {
+    log(`The ${target} program was not found.`)
+    return false
+  }
+
+  try {
+    const child = spawnImpl(plan.command, plan.args, {
+      stdio: 'ignore',
+      detached: true,
+      windowsHide: true,
+    })
+    child.on?.('error', () => {
+      log(`The ${target} program was not found.`)
+    })
+    child.unref?.()
+    return true
+  } catch {
+    log(`The ${target} program was not found.`)
+    return false
+  }
+}
+
+export function upBlock(url) {
+  return [
+    `machine-room: open ${url}`,
+    'The room fills when a lane or a session works on the project.',
+    'Press Ctrl+C in the terminal to stop the room.',
+  ]
 }
