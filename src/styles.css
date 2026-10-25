@@ -8195,3 +8195,17 @@ body:has(#hud-orchestrator-chat) .waiting {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+/* The live and follow badges sit inside the lens's bottom left corner, never over the chat */
+@media (min-width: 900px) {
+  .stage-badge {
+    top: calc(var(--menu-h) + var(--lens-h) - 64px);
+    bottom: auto !important;
+    left: 56px;
+    right: auto;
+  }
+
+  .stage-badge + .stage-badge {
+    top: calc(var(--menu-h) + var(--lens-h) - 96px);
+  }
+}
