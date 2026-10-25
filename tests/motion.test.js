@@ -262,7 +262,7 @@ describe('void under reduced motion', () => {
     globalThis.window = { matchMedia: () => mql }
     const scene = new THREE.Scene()
     const space = createVoid(scene, null)
-    const dust = space.group.children.filter((c) => c.isPoints)
+    const dust = space.group.children.filter((c) => c.isPoints || (c.isGroup && c.children.some((k) => k.isPoints)))
     expect(dust).toHaveLength(2)
     space.update(0.1)
     for (const layer of dust) {

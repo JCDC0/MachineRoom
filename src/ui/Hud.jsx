@@ -103,15 +103,6 @@ function OverviewIcon({ id }) {
     strokeLinejoin: 'round',
     'aria-hidden': true,
   }
-  if (id === 'settings') {
-    return (
-      <svg {...props}>
-        <path d="M2 4.5h7M11.5 4.5H14M2 11.5h2.5M7 11.5h7" />
-        <circle cx="10" cy="4.5" r="1.4" />
-        <circle cx="5" cy="11.5" r="1.4" />
-      </svg>
-    )
-  }
   if (id === 'agent') {
     return (
       <svg {...props}>
@@ -124,13 +115,6 @@ function OverviewIcon({ id }) {
     return (
       <svg {...props}>
         <path d="M3 12V8M8 12V4M13 12V6" />
-      </svg>
-    )
-  }
-  if (id === 'log') {
-    return (
-      <svg {...props}>
-        <path d="M3 4.5h10M3 8h10M3 11.5h7" />
       </svg>
     )
   }
@@ -266,7 +250,6 @@ export default function Hud({
   const floatingChat = !wide || mode === 'replay'
   const logBodyRef = useRef(null)
   const lowerLogRef = useRef(null)
-  const drawerLogRef = useRef(null)
   const settingsCountRef = useRef(Number(settingsRequest) || 0)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
@@ -338,28 +321,29 @@ export default function Hud({
   }
 
   function toggleLog() {
-    if (wide) {
-      setDrawer((current) => (current === 'log' ? null : 'log'))
-      return
-    }
     const next = !logOpen
     setLogOpen(next)
-    if (next) setControlOpen(false)
+    if (next) {
+      setControlOpen(false)
+      if (wide) setSettingsOpen(false)
+    }
   }
 
   function toggleSettings() {
-    if (wide) {
-      setDrawer((current) => (current === 'settings' ? null : 'settings'))
-      return
+    const next = !settingsOpen
+    setSettingsOpen(next)
+    if (next && wide) {
+      setControlOpen(false)
+      setLogOpen(false)
     }
-    setSettingsOpen(!settingsOpen)
   }
 
   useEffect(() => {
     if (controlOpen) {
       setLogOpen(false)
+      if (wide) setSettingsOpen(false)
     }
-  }, [controlOpen])
+  }, [controlOpen, wide])
 
   useEffect(() => {
     if (!chatAvailable) setChatOpen(false)
@@ -371,11 +355,10 @@ export default function Hud({
     if (next === previous) return
     settingsCountRef.current = next
     if (next < previous) return
+    setSettingsOpen(true)
     if (wide) {
-      setDrawer('settings')
       setControlOpen(false)
-    } else {
-      setSettingsOpen(true)
+      setLogOpen(false)
     }
   }, [settingsRequest, wide])
 
@@ -538,12 +521,6 @@ export default function Hud({
       logBodyRef.current.scrollTop = logBodyRef.current.scrollHeight
     }
   }, [logOpen, visibleLog.length])
-
-  useEffect(() => {
-    if (wide && drawer === 'log' && drawerLogRef.current) {
-      drawerLogRef.current.scrollTop = drawerLogRef.current.scrollHeight
-    }
-  }, [wide, drawer, visibleLog.length])
 
   useEffect(() => {
     if (wide && mode === 'replay' && lowerLogRef.current) {
@@ -754,9 +731,9 @@ export default function Hud({
           <button
             type="button"
             className="hud-action"
-            aria-pressed={wide ? drawer === 'log' : logOpen}
-            aria-expanded={wide ? drawer === 'log' : logOpen}
-            aria-controls={wide ? 'hud-drawer' : 'hud-log-drawer'}
+            aria-pressed={logOpen}
+            aria-expanded={logOpen}
+            aria-controls="hud-log-drawer"
             onClick={toggleLog}
           >
             <span>Log</span>
@@ -765,9 +742,9 @@ export default function Hud({
           <button
             type="button"
             className="hud-action"
-            aria-pressed={wide ? drawer === 'settings' : settingsOpen}
-            aria-expanded={wide ? drawer === 'settings' : settingsOpen}
-            aria-controls={wide ? 'hud-drawer' : 'hud-settings'}
+            aria-pressed={settingsOpen}
+            aria-expanded={settingsOpen}
+            aria-controls="hud-settings"
             aria-label="Settings"
             onClick={toggleSettings}
           >
@@ -932,6 +909,29 @@ export default function Hud({
         />
       )}
 
+      {wide && settingsOpen && (
+        <div className="hud-dropdown is-settings">
+          <Settings
+            effects={effects}
+            onChange={onSettingsChange}
+            onClose={() => setSettingsOpen(false)}
+          />
+        </div>
+      )}
+
+      {wide && logOpen && (
+        <aside id="hud-log-drawer" className="hud-dropdown hud-log" aria-label="Event log">
+          <header className="hud-log-header hud-header-strip">
+            <span className="hud-log-title">Event Log</span>
+            <span className="hud-log-count mono">{visibleLog.length}</span>
+            <button type="button" className="hud-dropdown-close mono" onClick={() => setLogOpen(false)}>
+              Close
+            </button>
+          </header>
+          <EventLogBody entries={visibleLog} bodyRef={logBodyRef} />
+        </aside>
+      )}
+
       {wide && (
         <div className={`hud-lower${drawer ? ' has-drawer' : ''}`}>
           <div className="hud-lower-left">
@@ -940,7 +940,11 @@ export default function Hud({
                 client={client}
                 live={mode === 'live'}
                 project={project}
-                onOpenSettings={() => openDrawer('settings')}
+                onOpenSettings={() => {
+                  setSettingsOpen(true)
+                  setControlOpen(false)
+                  setLogOpen(false)
+                }}
               />
             )}
           </div>
@@ -994,13 +998,6 @@ export default function Hud({
               hidden={!drawer}
               onBack={closeDrawer}
             >
-              <div className="hud-drawer-section" hidden={drawer !== 'settings'}>
-                <Settings
-                  effects={effects}
-                  onChange={onSettingsChange}
-                  onClose={closeDrawer}
-                />
-              </div>
               <div className="hud-drawer-section" hidden={drawer !== 'agent'}>
                 <AgentDock
                   agent={focused}
@@ -1022,9 +1019,6 @@ export default function Hud({
               </div>
               <div className="hud-drawer-section" hidden={drawer !== 'costs'}>
                 <div id="hud-dock-costs" className="hud-dock-costs" />
-              </div>
-              <div className="hud-drawer-section" hidden={drawer !== 'log'}>
-                <EventLogBody entries={visibleLog} bodyRef={drawerLogRef} />
               </div>
             </LowerDrawer>
           </div>

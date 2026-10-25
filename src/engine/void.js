@@ -8,7 +8,11 @@ const DUST = 1800
 export const MOTES = 1400
 export const MOTE_INNER = 400
 export const MOTE_OUTER = 9000
-const MOTE_SIZE = 3
+export const SPECK_BANDS = [
+  { size: 12, fade: 1 },
+  { size: 22, fade: 0.7 },
+  { size: 38, fade: 0.45 },
+]
 
 let fineDustOptions = { on: true, strength: 0.2 }
 const fineDustMaterials = new Set()
@@ -32,10 +36,16 @@ export function motePoints(count = MOTES, seed = 1337, inner = MOTE_INNER, outer
   return points
 }
 
+export function speckBands(points, bands = SPECK_BANDS.length) {
+  const out = Array.from({ length: bands }, () => [])
+  points.forEach((point, index) => out[index % bands].push(point))
+  return out
+}
+
 export function setFineDust(options = {}) {
   fineDustOptions = { ...fineDustOptions, ...options }
   for (const mat of fineDustMaterials) {
-    mat.opacity = moteOpacity(fineDustOptions)
+    mat.opacity = moteOpacity(fineDustOptions) * (mat.userData.fade ?? 1)
     mat.visible = mat.opacity > 0
   }
 }
@@ -111,17 +121,24 @@ export function createVoid(scene, texture) {
   )
   group.add(dust)
 
-  const fineMaterial = new THREE.PointsMaterial({
-    color: WHITE,
-    size: MOTE_SIZE,
-    sizeAttenuation: false,
-    transparent: true,
-    opacity: moteOpacity(fineDustOptions),
-    depthWrite: false,
+  const fineDust = new THREE.Group()
+  const fineMaterials = speckBands(motePoints()).map((points, index) => {
+    const band = SPECK_BANDS[index]
+    const material = new THREE.PointsMaterial({
+      color: WHITE,
+      size: band.size,
+      map: texture,
+      sizeAttenuation: true,
+      transparent: true,
+      opacity: moteOpacity(fineDustOptions) * band.fade,
+      depthWrite: false,
+    })
+    material.userData.fade = band.fade
+    material.visible = material.opacity > 0
+    fineDustMaterials.add(material)
+    fineDust.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(points), material))
+    return material
   })
-  fineMaterial.visible = fineMaterial.opacity > 0
-  fineDustMaterials.add(fineMaterial)
-  const fineDust = new THREE.Points(new THREE.BufferGeometry().setFromPoints(motePoints()), fineMaterial)
   group.add(fineDust)
 
   scene.add(group)
@@ -135,7 +152,7 @@ export function createVoid(scene, texture) {
   }
 
   function dispose() {
-    fineDustMaterials.delete(fineMaterial)
+    for (const material of fineMaterials) fineDustMaterials.delete(material)
     scene.remove(group)
     group.traverse((object) => {
       object.geometry?.dispose()

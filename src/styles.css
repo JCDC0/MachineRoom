@@ -7971,3 +7971,50 @@ body:has(#hud-orchestrator-chat) .waiting {
   margin-top: 4px;
   border-top: 1px solid rgb(255 255 255 / 0.06);
 }
+
+/* Log and Settings open from the menu as dropdowns, like Control */
+@media (min-width: 900px) {
+  .hud-dropdown {
+    position: fixed;
+    top: calc(var(--menu-h) + var(--space));
+    right: calc(var(--space) * 2);
+    z-index: 6;
+    width: 384px;
+    max-width: calc(100vw - var(--space) * 4);
+    max-height: calc(100vh - var(--menu-h) - var(--space) * 4);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--corner-ticks), #000;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+  }
+
+  .hud-dropdown .hud-settings {
+    min-height: 0;
+    overflow-y: auto;
+    border: 0;
+    background-color: transparent;
+  }
+
+  .hud-dropdown.hud-log {
+    width: 480px;
+  }
+
+  .hud-dropdown.hud-log .hud-log-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .hud-dropdown-close {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 10px;
+    color: var(--white);
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+}

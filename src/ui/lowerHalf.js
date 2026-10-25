@@ -2,10 +2,8 @@ export const REPLAY_LINE =
   'This is a recorded run. Connect to your project to talk to the orchestrator.'
 
 export const OVERVIEW_ENTRIES = [
-  { id: 'settings', title: 'Settings' },
   { id: 'agent', title: 'Agent' },
   { id: 'costs', title: 'Costs' },
-  { id: 'log', title: 'Log' },
 ]
 
 function cleanTitle(value) {
