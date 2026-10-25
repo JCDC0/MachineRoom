@@ -269,6 +269,73 @@ export function createClient({
       return request('POST', '/api/orchestrator/model', body)
     },
 
+    setOrchestratorEffort: (idOrOptions, effortArg, options = {}) => {
+      let id
+      let effort
+      let confirmed = true
+      if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+        id = idOrOptions.id
+        effort = idOrOptions.effort
+        if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+      } else {
+        id = idOrOptions
+        effort = effortArg
+        if (options.confirmed !== undefined) confirmed = options.confirmed
+      }
+      const body = { effort, confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      return request('POST', '/api/orchestrator/effort', body)
+    },
+
+    orchestratorSessions: ({ id } = {}) => {
+      const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''
+      return request('GET', `/api/orchestrator/sessions${query}`)
+    },
+
+    orchestratorSession: (idOrOptions, sessionArg) => {
+      let id
+      let session
+      if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+        id = idOrOptions.id
+        session = idOrOptions.session
+      } else {
+        session = idOrOptions
+        id = sessionArg?.id ?? sessionArg
+      }
+      const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''
+      return request('GET', `/api/orchestrator/sessions/${encodeURIComponent(session ?? '')}${query}`)
+    },
+
+    newOrchestratorSession: ({ id, confirmed = true } = {}) => {
+      const body = { confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      return request('POST', '/api/orchestrator/sessions/new', body)
+    },
+
+    updateOrchestratorSession: ({ id, session, pinned, starred, title, confirmed = true } = {}) => {
+      const body = { confirmed }
+      if (pinned !== undefined) body.pinned = pinned
+      if (starred !== undefined) body.starred = starred
+      if (title !== undefined) body.title = title
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''
+      return request('POST', `/api/orchestrator/sessions/${encodeURIComponent(session ?? '')}${query}`, body)
+    },
+
+    openOrchestratorSession: ({ id, session, confirmed = true } = {}) => {
+      const body = { confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''
+      return request('POST', `/api/orchestrator/sessions/${encodeURIComponent(session ?? '')}/open${query}`, body)
+    },
+
+    deleteOrchestratorSession: ({ id, session, confirmed = true } = {}) => {
+      const body = { confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''
+      return request('POST', `/api/orchestrator/sessions/${encodeURIComponent(session ?? '')}/delete${query}`, body)
+    },
+
     setLadder: (ladder) => request('POST', '/api/orchestrator/ladder', { ladder, by: 'owner', confirmed: true }),
 
     startRun: (lane, run) => {

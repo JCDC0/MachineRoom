@@ -28,6 +28,8 @@ export const MAIN_MESSAGE_PROBLEM = 'A message to a sub needs the main orchestra
 export const OWNER_COMPACT_PROBLEM = 'A request with no Origin cannot compact an orchestrator.'
 export const OWNER_AUTOCOMPACT_PROBLEM = 'A request with no Origin cannot set autocompact.'
 export const OWNER_MODEL_PROBLEM = 'A request with no Origin cannot set the model.'
+export const OWNER_EFFORT_PROBLEM = 'A request with no Origin cannot set effort.'
+export const OWNER_SESSION_PROBLEM = 'A request with no Origin cannot change sessions.'
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -279,6 +281,7 @@ export function createOrchestrators({
         contextWindow: answer.contextWindow,
         autocompact: answer.autocompact,
         autocompactPercent: answer.autocompactPercent,
+        effort: answer.effort ?? null,
         lanes: laneKeys.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -298,6 +301,7 @@ export function createOrchestrators({
         contextWindow: state?.contextWindow ?? subConfig(sub).contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         autocompact: state?.autocompact ?? true,
         autocompactPercent: state?.autocompactPercent ?? DEFAULT_AUTOCOMPACT_PERCENT,
+        effort: state?.effort ?? null,
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted,
@@ -511,6 +515,122 @@ export function createOrchestrators({
       const out = instance.setModel(body)
       sendJson(req, res, out.status, out.body)
       return true
+    }
+    if (path === '/api/orchestrator/effort') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_EFFORT_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.setEffort(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/sessions') {
+      if (method !== 'GET') return methodNotAllowed(req, res)
+      const instance = find(url.searchParams.get('id'))
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      sendJson(req, res, 200, {
+        current: instance.currentSessionInfo(),
+        sessions: instance.listSessions(),
+      })
+      return true
+    }
+    if (path === '/api/orchestrator/sessions/new') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_SESSION_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id || url.searchParams.get('id'))
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.newSession(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    const openMatch = /^\/api\/orchestrator\/sessions\/([^/?#]+)\/open$/.exec(path)
+    if (openMatch) {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_SESSION_PROBLEM })
+        return true
+      }
+      const sid = decodeURIComponent(openMatch[1])
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id || url.searchParams.get('id'))
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.openSession(sid, body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    const deleteMatch = /^\/api\/orchestrator\/sessions\/([^/?#]+)\/delete$/.exec(path)
+    if (deleteMatch) {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_SESSION_PROBLEM })
+        return true
+      }
+      const sid = decodeURIComponent(deleteMatch[1])
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id || url.searchParams.get('id'))
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.deleteSession(sid, body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    const sessionMatch = /^\/api\/orchestrator\/sessions\/([^/?#]+)$/.exec(path)
+    if (sessionMatch) {
+      const sid = decodeURIComponent(sessionMatch[1])
+      if (method === 'GET') {
+        const instance = find(url.searchParams.get('id'))
+        if (!instance) {
+          sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+          return true
+        }
+        const out = instance.getSession(sid)
+        sendJson(req, res, out.status, out.body)
+        return true
+      }
+      if (method === 'POST') {
+        if (!page) {
+          sendJson(req, res, 403, { error: OWNER_SESSION_PROBLEM })
+          return true
+        }
+        const body = await readJsonBody(req, res)
+        if (body === null) return true
+        const instance = find(body.id || url.searchParams.get('id'))
+        if (!instance) {
+          sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+          return true
+        }
+        const out = instance.updateSession(sid, body)
+        sendJson(req, res, out.status, out.body)
+        return true
+      }
+      return methodNotAllowed(req, res)
     }
     if (path === '/api/orchestrator/ladder') {
       if (method !== 'POST') return methodNotAllowed(req, res)

@@ -509,6 +509,115 @@ describe('the orchestrator registry', () => {
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[0].model).toBe('claude-haiku-5-5')
   })
 
+  it('sets reasoning effort and manages sessions over the bridge routes', async () => {
+    const rig = await makeBridge(makeBase())
+
+    const noOriginEffort = await postJson(`${rig.url}/api/orchestrator/effort`, { effort: 'high', confirmed: true })
+    expect(noOriginEffort.status).toBe(403)
+    expect(noOriginEffort.body).toEqual({ error: 'A request with no Origin cannot set effort.' })
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/effort`, { effort: 'high' })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/effort`, { effort: 'invalid', confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/effort`, { id: 'missing', effort: 'high', confirmed: true })).status).toBe(404)
+
+    const setHigh = await pagePost(`${rig.url}/api/orchestrator/effort`, { effort: 'high', confirmed: true })
+    expect(setHigh.status).toBe(200)
+    expect(setHigh.body).toEqual({ id: 'orchestrator', effort: 'high' })
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.effort).toBe('high')
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body[0].effort).toBe('high')
+
+    const clearEffort = await pagePost(`${rig.url}/api/orchestrator/effort`, { effort: null, confirmed: true })
+    expect(clearEffort.status).toBe(200)
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.effort).toBeNull()
+
+    const initialSessions = await getJson(`${rig.url}/api/orchestrator/sessions`)
+    expect(initialSessions.status).toBe(200)
+    expect(initialSessions.body).toEqual({
+      current: { title: null, startedAt: null, count: 0 },
+      sessions: [],
+    })
+
+    const noOriginNew = await postJson(`${rig.url}/api/orchestrator/sessions/new`, { confirmed: true })
+    expect(noOriginNew.status).toBe(403)
+    expect(noOriginNew.body).toEqual({ error: 'A request with no Origin cannot change sessions.' })
+
+    const unconfirmedNew = await pagePost(`${rig.url}/api/orchestrator/sessions/new`, {})
+    expect(unconfirmedNew.status).toBe(400)
+
+    const sent1 = await pagePost(`${rig.url}/api/orchestrator/messages`, { text: 'Create initial database schema', confirmed: true })
+    expect(sent1.status).toBe(202)
+    await waitFor(() => rig.chat()?.messages.some((m) => m.from === 'orchestrator'))
+
+    const currentAfterSend = await getJson(`${rig.url}/api/orchestrator/sessions`)
+    expect(currentAfterSend.body.current.title).toBe('Create initial database schema')
+    expect(currentAfterSend.body.current.count).toBe(2)
+
+    const newArchived = await pagePost(`${rig.url}/api/orchestrator/sessions/new`, { confirmed: true })
+    expect(newArchived.status).toBe(200)
+
+    const sessionsAfterNew = await getJson(`${rig.url}/api/orchestrator/sessions`)
+    expect(sessionsAfterNew.body.current.count).toBe(0)
+    expect(sessionsAfterNew.body.sessions).toHaveLength(1)
+    const session1 = sessionsAfterNew.body.sessions[0]
+    expect(session1.title).toBe('Create initial database schema')
+    expect(session1.pinned).toBe(false)
+    expect(session1.count).toBe(2)
+
+    const sent2 = await pagePost(`${rig.url}/api/orchestrator/messages`, { text: 'Add authentication routes for users', confirmed: true })
+    expect(sent2.status).toBe(202)
+    await waitFor(() => rig.chat()?.messages.some((m) => m.from === 'orchestrator') && rig.chat()?.state === 'idle')
+
+    const new2 = await pagePost(`${rig.url}/api/orchestrator/sessions/new`, { confirmed: true })
+    expect(new2.status).toBe(200)
+    const sessionsAfterSecond = await getJson(`${rig.url}/api/orchestrator/sessions`)
+    expect(sessionsAfterSecond.body.sessions).toHaveLength(2)
+
+    const singleSession = await getJson(`${rig.url}/api/orchestrator/sessions/${session1.id}`)
+    expect(singleSession.status).toBe(200)
+    expect(singleSession.body.id).toBe(session1.id)
+    expect(singleSession.body.messages).toHaveLength(2)
+
+    expect((await getJson(`${rig.url}/api/orchestrator/sessions/missing-id`)).status).toBe(404)
+
+    const noOriginUpdate = await postJson(`${rig.url}/api/orchestrator/sessions/${session1.id}`, { pinned: true, confirmed: true })
+    expect(noOriginUpdate.status).toBe(403)
+    expect((await pagePost(`${rig.url}/api/orchestrator/sessions/${session1.id}`, { pinned: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/sessions/missing-id`, { pinned: true, confirmed: true })).status).toBe(404)
+
+    const updated = await pagePost(`${rig.url}/api/orchestrator/sessions/${session1.id}`, {
+      pinned: true,
+      title: 'Database Schema v1',
+      confirmed: true,
+    })
+    expect(updated.status).toBe(200)
+    expect(updated.body).toMatchObject({ id: session1.id, pinned: true, title: 'Database Schema v1' })
+
+    const sessionsPinned = (await getJson(`${rig.url}/api/orchestrator/sessions`)).body.sessions
+    expect(sessionsPinned[0].id).toBe(session1.id)
+    expect(sessionsPinned[0].pinned).toBe(true)
+    expect(sessionsPinned[0].title).toBe('Database Schema v1')
+
+    const noOriginOpen = await postJson(`${rig.url}/api/orchestrator/sessions/${session1.id}/open`, { confirmed: true })
+    expect(noOriginOpen.status).toBe(403)
+    expect((await pagePost(`${rig.url}/api/orchestrator/sessions/${session1.id}/open`, {})).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/sessions/missing-id/open`, { confirmed: true })).status).toBe(404)
+
+    const opened = await pagePost(`${rig.url}/api/orchestrator/sessions/${session1.id}/open`, { confirmed: true })
+    expect(opened.status).toBe(200)
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.messages).toHaveLength(2)
+
+    const noOriginDelete = await postJson(`${rig.url}/api/orchestrator/sessions/${sessionsPinned[1].id}/delete`, { confirmed: true })
+    expect(noOriginDelete.status).toBe(403)
+    expect((await pagePost(`${rig.url}/api/orchestrator/sessions/missing-id/delete`, { confirmed: true })).status).toBe(404)
+
+    const deleted = await pagePost(`${rig.url}/api/orchestrator/sessions/${sessionsPinned[1].id}/delete`, { confirmed: true })
+    expect(deleted.status).toBe(200)
+
+    const remainingSessions = (await getJson(`${rig.url}/api/orchestrator/sessions`)).body.sessions
+    expect(remainingSessions).toHaveLength(1)
+    expect(remainingSessions[0].id).toBe(session1.id)
+  })
+
   it('attaches a sub from the owner ladder, answers its chat by id and removes it', async () => {
     const rig = await makeBridge(makeBase())
     expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)

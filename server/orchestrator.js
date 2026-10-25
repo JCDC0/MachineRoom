@@ -45,6 +45,18 @@ export const NO_SESSION_PROBLEM = 'The orchestrator has no session yet.'
 export const COMPACT_KEEP_LIMIT = 2000
 export const COMPACT_KEEP_PROBLEM = 'Write at most 2000 characters to keep.'
 export const MODEL_PROBLEM = 'Choose a model listed for this harness.'
+export const CONFIRM_EFFORT_PROBLEM = 'Confirm the effort change first.'
+export const CONFIRM_SESSION_PROBLEM = 'Confirm the session change first.'
+export const EFFORT_PROBLEM = 'Choose an effort level listed for this harness.'
+export const NO_SESSION_ID_PROBLEM = 'There is no session with that id.'
+export const SESSION_TITLE_PROBLEM = 'Write a title from 1 to 80 characters.'
+export const SESSION_PINNED_PROBLEM = 'Say whether pinned is true or false.'
+export const SESSION_STARRED_PROBLEM = 'Say whether starred is true or false.'
+export const SESSION_CHANGE_PROBLEM = 'Choose a field to change: pinned, starred or title.'
+export const SESSIONS_LIMIT = 50
+export const SESSION_MESSAGES_LIMIT = 200
+export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
+export const OPENCODE_EFFORT_LEVELS = ['low', 'medium', 'high', 'max']
 export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
@@ -315,6 +327,36 @@ function recordLine(record) {
 This was task ${record.queueIndex ?? '?'} of a queue. The runner commits it on ${queue} only after the project's tests pass, a few seconds to minutes after this message; check git log on that branch before you review it.`
 }
 
+function enforceSessionLimit(list) {
+  while (list.length > SESSIONS_LIMIT) {
+    let oldestUnpinnedIndex = -1
+    let oldestUnpinnedTime = Infinity
+    for (let i = 0; i < list.length; i += 1) {
+      if (!list[i].pinned) {
+        const time = list[i].startedAt ? new Date(list[i].startedAt).getTime() : 0
+        if (time < oldestUnpinnedTime) {
+          oldestUnpinnedTime = time
+          oldestUnpinnedIndex = i
+        }
+      }
+    }
+    if (oldestUnpinnedIndex !== -1) {
+      list.splice(oldestUnpinnedIndex, 1)
+    } else {
+      let oldestIndex = 0
+      let oldestTime = Infinity
+      for (let i = 0; i < list.length; i += 1) {
+        const time = list[i].startedAt ? new Date(list[i].startedAt).getTime() : 0
+        if (time < oldestTime) {
+          oldestTime = time
+          oldestIndex = i
+        }
+      }
+      list.splice(oldestIndex, 1)
+    }
+  }
+}
+
 export function createOrchestrator({
   id = ORCHESTRATOR_KEY,
   name = '',
@@ -372,6 +414,10 @@ export function createOrchestrator({
   let contextWindow = windowOption || DEFAULT_CONTEXT_WINDOW
   let autocompact = true
   let autocompactPercent = DEFAULT_AUTOCOMPACT_PERCENT
+  let effort = null
+  let currentSessionId = null
+  let currentTitle = null
+  const sessions = []
   let summary = ''
   let pendingCompaction = null
 
@@ -407,7 +453,22 @@ export function createOrchestrator({
         contextWindow,
         autocompact,
         autocompactPercent,
+        effort,
+        currentSessionId,
+        currentTitle,
         summary,
+        sessions: sessions.map((s) => ({
+          id: s.id,
+          title: s.title,
+          startedAt: s.startedAt,
+          endedAt: s.endedAt,
+          pinned: Boolean(s.pinned),
+          starred: Boolean(s.starred),
+          sessionId: s.sessionId ?? null,
+          opencodeSessionId: s.opencodeSessionId ?? null,
+          summary: s.summary ?? '',
+          messages: (Array.isArray(s.messages) ? s.messages : []).slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m })),
+        })),
         ...(ladder ? { ladder } : {}),
       }
       const temporary = `${conversationFile}.tmp`
@@ -489,6 +550,52 @@ export function createOrchestrator({
       contextWindow = Math.round(saved.contextWindow)
     }
     if (typeof saved.summary === 'string' && saved.summary.trim() !== '') summary = saved.summary.trim()
+    if (saved.effort === null || typeof saved.effort === 'string') {
+      const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
+      if (saved.effort === null || allowed.includes(saved.effort.trim())) {
+        effort = saved.effort ? saved.effort.trim() : null
+      }
+    }
+    if (typeof saved.currentSessionId === 'string' && saved.currentSessionId.trim() !== '') {
+      currentSessionId = saved.currentSessionId.trim()
+    }
+    if (typeof saved.currentTitle === 'string' && saved.currentTitle.trim() !== '') {
+      currentTitle = saved.currentTitle.trim()
+    }
+    if (Array.isArray(saved.sessions)) {
+      for (const item of saved.sessions) {
+        if (!item || typeof item !== 'object') continue
+        if (typeof item.id !== 'string' || !item.id) continue
+        const itemMessages = []
+        if (Array.isArray(item.messages)) {
+          for (const msg of item.messages) {
+            if (!msg || typeof msg !== 'object') continue
+            const from = typeof msg.from === 'string' ? msg.from : ''
+            if (!['owner', 'orchestrator', 'room'].includes(from) && !from.startsWith('sub:')) continue
+            if (typeof msg.text !== 'string' || msg.text.trim() === '') continue
+            itemMessages.push({
+              id: typeof msg.id === 'string' && msg.id ? msg.id : randomUUID(),
+              from,
+              text: maskText(msg.text),
+              at: typeof msg.at === 'string' && msg.at ? msg.at : iso(now()),
+            })
+          }
+        }
+        sessions.push({
+          id: item.id,
+          title: typeof item.title === 'string' ? item.title.slice(0, 80) : '',
+          startedAt: typeof item.startedAt === 'string' ? item.startedAt : iso(now()),
+          endedAt: typeof item.endedAt === 'string' ? item.endedAt : iso(now()),
+          pinned: Boolean(item.pinned),
+          starred: Boolean(item.starred),
+          sessionId: typeof item.sessionId === 'string' ? item.sessionId : null,
+          opencodeSessionId: typeof item.opencodeSessionId === 'string' ? item.opencodeSessionId : null,
+          summary: typeof item.summary === 'string' ? item.summary : '',
+          messages: itemMessages.slice(-SESSION_MESSAGES_LIMIT),
+        })
+      }
+      enforceSessionLimit(sessions)
+    }
     const list = Array.isArray(saved.messages) ? saved.messages : []
     for (const item of list) {
       if (!item || typeof item !== 'object') continue
@@ -623,7 +730,8 @@ export function createOrchestrator({
     const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
     let args
     if (harness === 'opencode') {
-      args = ['run', '--format', 'json', '--model', model, '--auto', '--title', logName]
+      const modelArg = effort ? `${model}#${effort}` : model
+      args = ['run', '--format', 'json', '--model', modelArg, '--auto', '--title', logName]
       if (!first) args.push('--session', sessionId)
       const body = first ? `${instruction}\n\n${message}` : message
       args.push(carried ? `${carried}\n\n${body}` : body)
@@ -642,6 +750,7 @@ export function createOrchestrator({
         '--append-system-prompt',
         instruction,
       ]
+      if (effort) args.push('--effort', effort)
     }
     const stream = createWriteStream(logPath)
     stream.on('error', () => {})
@@ -756,6 +865,7 @@ export function createOrchestrator({
       contextWindow,
       autocompact,
       autocompactPercent,
+      effort: effort ?? null,
       messages: messages.map((message) => ({ ...message })),
     }
   }
@@ -844,6 +954,179 @@ export function createOrchestrator({
     return { status: 200, body: { id: key, model } }
   }
 
+  function setEffort(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_EFFORT_PROBLEM } }
+    const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
+    if (body.effort === null) {
+      effort = null
+    } else if (typeof body.effort === 'string' && allowed.includes(body.effort.trim())) {
+      effort = body.effort.trim()
+    } else {
+      return { status: 400, body: { error: EFFORT_PROBLEM } }
+    }
+    persist()
+    notify()
+    return { status: 200, body: { id: key, effort } }
+  }
+
+  function archiveCurrentSession() {
+    const hasOwner = messages.some((m) => m.from === 'owner')
+    if (!hasOwner) return null
+    const firstOwner = messages.find((m) => m.from === 'owner')
+    const defaultTitle = firstOwner.text.trim().slice(0, 60)
+    const title = currentTitle || defaultTitle
+    if (currentSessionId) {
+      const existing = sessions.find((s) => s.id === currentSessionId)
+      if (existing) {
+        existing.title = title
+        existing.endedAt = messages.at(-1)?.at ?? iso(now())
+        existing.sessionId = harness === 'claude' ? sessionId : null
+        existing.opencodeSessionId = harness === 'opencode' ? sessionId : null
+        existing.summary = summary || ''
+        existing.messages = messages.slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m }))
+        return existing
+      }
+    }
+    const archived = {
+      id: randomUUID(),
+      title,
+      startedAt: messages[0]?.at ?? iso(now()),
+      endedAt: messages.at(-1)?.at ?? iso(now()),
+      pinned: false,
+      starred: false,
+      sessionId: harness === 'claude' ? sessionId : null,
+      opencodeSessionId: harness === 'opencode' ? sessionId : null,
+      summary: summary || '',
+      messages: messages.slice(-SESSION_MESSAGES_LIMIT).map((m) => ({ ...m })),
+    }
+    sessions.unshift(archived)
+    enforceSessionLimit(sessions)
+    return archived
+  }
+
+  function newSession(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    archiveCurrentSession()
+    currentSessionId = null
+    currentTitle = null
+    messages.length = 0
+    pending.length = 0
+    sessionId = null
+    summary = ''
+    contextTokens = null
+    persist()
+    notify()
+    return { status: 200, body: { ok: true } }
+  }
+
+  function openSession(sid, body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    const target = sessions.find((s) => s.id === sid)
+    if (!target) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
+    archiveCurrentSession()
+    currentSessionId = target.id
+    currentTitle = target.title
+    messages.length = 0
+    pending.length = 0
+    for (const m of target.messages) {
+      messages.push({ ...m })
+    }
+    sessionId = harness === 'opencode'
+      ? (target.opencodeSessionId || target.sessionId || null)
+      : (target.sessionId || target.opencodeSessionId || null)
+    summary = target.summary || ''
+    contextTokens = null
+    persist()
+    notify()
+    return { status: 200, body: { ok: true, id: target.id } }
+  }
+
+  function updateSession(sid, body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
+    const session = sessions.find((s) => s.id === sid)
+    if (!session) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
+    if (body.pinned === undefined && body.starred === undefined && body.title === undefined) {
+      return { status: 400, body: { error: SESSION_CHANGE_PROBLEM } }
+    }
+    if (body.title !== undefined) {
+      if (typeof body.title !== 'string' || body.title.trim().length < 1 || body.title.trim().length > 80) {
+        return { status: 400, body: { error: SESSION_TITLE_PROBLEM } }
+      }
+      session.title = body.title.trim()
+      if (currentSessionId === sid) currentTitle = session.title
+    }
+    if (body.pinned !== undefined) {
+      if (typeof body.pinned !== 'boolean') return { status: 400, body: { error: SESSION_PINNED_PROBLEM } }
+      session.pinned = body.pinned
+    }
+    if (body.starred !== undefined) {
+      if (typeof body.starred !== 'boolean') return { status: 400, body: { error: SESSION_STARRED_PROBLEM } }
+      session.starred = body.starred
+    }
+    persist()
+    notify()
+    return { status: 200, body: { id: session.id, title: session.title, pinned: session.pinned, starred: session.starred } }
+  }
+
+  function deleteSession(sid, body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
+    const index = sessions.findIndex((s) => s.id === sid)
+    if (index === -1) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
+    sessions.splice(index, 1)
+    if (currentSessionId === sid) {
+      currentSessionId = null
+      currentTitle = null
+    }
+    persist()
+    notify()
+    return { status: 200, body: { ok: true } }
+  }
+
+  function getSession(sid) {
+    const session = sessions.find((s) => s.id === sid)
+    if (!session) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
+    return {
+      status: 200,
+      body: {
+        id: session.id,
+        title: session.title,
+        messages: session.messages.map((m) => ({ ...m })),
+      },
+    }
+  }
+
+  function listSessions() {
+    const sorted = [...sessions].sort((a, b) => {
+      const aPinned = Boolean(a.pinned)
+      const bPinned = Boolean(b.pinned)
+      if (aPinned !== bPinned) return aPinned ? -1 : 1
+      const aTime = a.startedAt ? new Date(a.startedAt).getTime() : 0
+      const bTime = b.startedAt ? new Date(b.startedAt).getTime() : 0
+      return bTime - aTime
+    })
+    return sorted.map((s) => ({
+      id: s.id,
+      title: s.title,
+      startedAt: s.startedAt,
+      endedAt: s.endedAt,
+      pinned: Boolean(s.pinned),
+      starred: Boolean(s.starred),
+      count: Array.isArray(s.messages) ? s.messages.length : 0,
+    }))
+  }
+
+  function currentSessionInfo() {
+    const firstOwner = messages.find((m) => m.from === 'owner')
+    const title = currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : null)
+    return {
+      title,
+      startedAt: messages[0]?.at ?? null,
+      count: messages.length,
+    }
+  }
+
   function getLadder() {
     return ladder
   }
@@ -907,5 +1190,26 @@ export function createOrchestrator({
   persist()
   maybeStartTurn()
 
-  return { answer, send, deliver, stop, setAutocompact, compact, setModel, getLadder, setLadder, onFrame, close, token }
+  return {
+    answer,
+    send,
+    deliver,
+    stop,
+    setAutocompact,
+    compact,
+    setModel,
+    setEffort,
+    listSessions,
+    currentSessionInfo,
+    getSession,
+    newSession,
+    openSession,
+    updateSession,
+    deleteSession,
+    getLadder,
+    setLadder,
+    onFrame,
+    close,
+    token,
+  }
 }

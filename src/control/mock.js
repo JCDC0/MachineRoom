@@ -34,6 +34,13 @@ export const CLIENT_METHODS = [
   'compactOrchestrator',
   'setAutocompact',
   'setOrchestratorModel',
+  'setOrchestratorEffort',
+  'orchestratorSessions',
+  'orchestratorSession',
+  'newOrchestratorSession',
+  'updateOrchestratorSession',
+  'openOrchestratorSession',
+  'deleteOrchestratorSession',
   'setLadder',
   'startRun',
   'lanes',
@@ -336,6 +343,39 @@ function seed(at) {
       contextWindow: 200000,
       autocompact: true,
       autocompactPercent: 80,
+      effort: null,
+      sessions: [
+        {
+          id: 'session-sample-1',
+          title: 'Investigate test failures in lane runner',
+          startedAt: iso(600),
+          endedAt: iso(540),
+          pinned: true,
+          starred: false,
+          sessionId: 'ses_sample_1',
+          opencodeSessionId: null,
+          summary: 'Investigated test failures and found timing issues.',
+          messages: [
+            { id: 'session-1-msg-1', from: 'owner', text: 'Check the test failures', at: iso(600) },
+            { id: 'session-1-msg-2', from: 'orchestrator', text: 'I checked the logs and identified 2 timing issues.', at: iso(590) },
+          ],
+        },
+        {
+          id: 'session-sample-2',
+          title: 'Review routing policy changes',
+          startedAt: iso(1200),
+          endedAt: iso(1100),
+          pinned: false,
+          starred: true,
+          sessionId: 'ses_sample_2',
+          opencodeSessionId: null,
+          summary: 'Reviewed proposed policy diff.',
+          messages: [
+            { id: 'session-2-msg-1', from: 'owner', text: 'Review the policy patch', at: iso(1200) },
+            { id: 'session-2-msg-2', from: 'orchestrator', text: 'The patch reorders tier choices as suggested.', at: iso(1180) },
+          ],
+        },
+      ],
       messages: [
         { id: 'orchestrator-message-1', from: 'owner', text: 'What is running?', at: iso(40) },
         { id: 'orchestrator-message-2', from: 'orchestrator', text: 'OpenCode has one run on JC-19. I will report when it ends.', at: iso(38) },
@@ -391,6 +431,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       contextWindow: 200000,
       autocompact: true,
       autocompactPercent: 80,
+      effort: null,
+      sessions: [],
       messages: [],
     }
     subChats.set(sub.id, chat)
@@ -426,6 +468,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         contextWindow: state.orchestratorChat.contextWindow,
         autocompact: state.orchestratorChat.autocompact,
         autocompactPercent: state.orchestratorChat.autocompactPercent ?? 80,
+        effort: state.orchestratorChat.effort ?? null,
         lanes: MOCK_LANE_KEYS.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -441,6 +484,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         contextWindow: ensureSubChat(sub).contextWindow,
         autocompact: ensureSubChat(sub).autocompact,
         autocompactPercent: ensureSubChat(sub).autocompactPercent ?? 80,
+        effort: ensureSubChat(sub).effort ?? null,
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted !== false,
@@ -828,6 +872,192 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
         emit({ topic: 'orchestrator' })
         return { id: id ?? 'orchestrator', model }
+      }),
+
+    setOrchestratorEffort: (idOrOptions, effortArg, options = {}) =>
+      call('setOrchestratorEffort', () => {
+        let id
+        let effort
+        let confirmed = true
+        if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+          id = idOrOptions.id
+          effort = idOrOptions.effort
+          if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+        } else {
+          id = idOrOptions
+          effort = effortArg
+          if (options.confirmed !== undefined) confirmed = options.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the effort change first.')
+        const chat = chatStore(id)
+        const harness = id && id !== 'orchestrator'
+          ? (ladder.subs.find((s) => s.id === id)?.harness ?? 'opencode')
+          : 'claude'
+        const allowed = harness === 'claude'
+          ? ['low', 'medium', 'high', 'xhigh', 'max']
+          : ['low', 'medium', 'high', 'max']
+        if (effort !== null && !allowed.includes(effort)) {
+          throw new Error('Choose an effort level listed for this harness.')
+        }
+        chat.effort = effort
+        emit({ topic: 'orchestrator' })
+        return { id: id ?? 'orchestrator', effort }
+      }),
+
+    orchestratorSessions: (options = {}) =>
+      call('orchestratorSessions', () => {
+        const id = options?.id
+        const chat = chatStore(id)
+        const firstOwner = chat.messages.find((m) => m.from === 'owner')
+        const current = {
+          title: chat.currentTitle || (firstOwner ? firstOwner.text.trim().slice(0, 60) : null),
+          startedAt: chat.messages[0]?.at ?? null,
+          count: chat.messages.length,
+        }
+        const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
+        const sorted = [...sessionList].sort((a, b) => {
+          const aPinned = Boolean(a.pinned)
+          const bPinned = Boolean(b.pinned)
+          if (aPinned !== bPinned) return aPinned ? -1 : 1
+          const aTime = a.startedAt ? new Date(a.startedAt).getTime() : 0
+          const bTime = b.startedAt ? new Date(b.startedAt).getTime() : 0
+          return bTime - aTime
+        })
+        return {
+          current,
+          sessions: sorted.map((s) => ({
+            id: s.id,
+            title: s.title,
+            startedAt: s.startedAt,
+            endedAt: s.endedAt,
+            pinned: Boolean(s.pinned),
+            starred: Boolean(s.starred),
+            count: Array.isArray(s.messages) ? s.messages.length : 0,
+          })),
+        }
+      }),
+
+    orchestratorSession: (idOrOptions, sessionArg) =>
+      call('orchestratorSession', () => {
+        let id
+        let sessionId
+        if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+          id = idOrOptions.id
+          sessionId = idOrOptions.session
+        } else {
+          sessionId = idOrOptions
+          id = sessionArg?.id ?? sessionArg
+        }
+        const chat = chatStore(id)
+        const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
+        const found = sessionList.find((s) => s.id === sessionId)
+        if (!found) throw new Error('There is no session with that id.')
+        return {
+          id: found.id,
+          title: found.title,
+          messages: found.messages.map((m) => ({ ...m })),
+        }
+      }),
+
+    newOrchestratorSession: (options = {}) =>
+      call('newOrchestratorSession', () => {
+        const { id, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the session change first.')
+        const chat = chatStore(id)
+        if (chat.state === 'working') throw new Error('A turn is already running.')
+        if (!Array.isArray(chat.sessions)) chat.sessions = []
+        const firstOwner = chat.messages.find((m) => m.from === 'owner')
+        if (firstOwner) {
+          orchestratorMessageCounter += 1
+          const sid = `session-mock-${orchestratorMessageCounter}`
+          chat.sessions.unshift({
+            id: sid,
+            title: chat.currentTitle || firstOwner.text.trim().slice(0, 60),
+            startedAt: chat.messages[0]?.at ?? new Date(now()).toISOString(),
+            endedAt: chat.messages.at(-1)?.at ?? new Date(now()).toISOString(),
+            pinned: false,
+            starred: false,
+            messages: chat.messages.map((m) => ({ ...m })),
+          })
+        }
+        chat.currentSessionId = null
+        chat.currentTitle = null
+        chat.messages = []
+        emit({ topic: 'orchestrator' })
+        return { ok: true }
+      }),
+
+    updateOrchestratorSession: (options = {}) =>
+      call('updateOrchestratorSession', () => {
+        const { id, session: sessionId, pinned, starred, title, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the session change first.')
+        const chat = chatStore(id)
+        const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
+        const target = sessionList.find((s) => s.id === sessionId)
+        if (!target) throw new Error('There is no session with that id.')
+        if (title !== undefined) {
+          if (typeof title !== 'string' || title.trim().length < 1 || title.trim().length > 80) {
+            throw new Error('Write a title from 1 to 80 characters.')
+          }
+          target.title = title.trim()
+        }
+        if (pinned !== undefined) {
+          if (typeof pinned !== 'boolean') throw new Error('Say whether pinned is true or false.')
+          target.pinned = pinned
+        }
+        if (starred !== undefined) {
+          if (typeof starred !== 'boolean') throw new Error('Say whether starred is true or false.')
+          target.starred = starred
+        }
+        emit({ topic: 'orchestrator' })
+        return { id: target.id, title: target.title, pinned: target.pinned, starred: target.starred }
+      }),
+
+    openOrchestratorSession: (options = {}) =>
+      call('openOrchestratorSession', () => {
+        const { id, session: sessionId, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the session change first.')
+        const chat = chatStore(id)
+        if (chat.state === 'working') throw new Error('A turn is already running.')
+        const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
+        const target = sessionList.find((s) => s.id === sessionId)
+        if (!target) throw new Error('There is no session with that id.')
+        const firstOwner = chat.messages.find((m) => m.from === 'owner')
+        if (firstOwner) {
+          orchestratorMessageCounter += 1
+          const sid = `session-mock-${orchestratorMessageCounter}`
+          chat.sessions.unshift({
+            id: sid,
+            title: chat.currentTitle || firstOwner.text.trim().slice(0, 60),
+            startedAt: chat.messages[0]?.at ?? new Date(now()).toISOString(),
+            endedAt: chat.messages.at(-1)?.at ?? new Date(now()).toISOString(),
+            pinned: false,
+            starred: false,
+            messages: chat.messages.map((m) => ({ ...m })),
+          })
+        }
+        chat.currentSessionId = target.id
+        chat.currentTitle = target.title
+        chat.messages = target.messages.map((m) => ({ ...m }))
+        emit({ topic: 'orchestrator' })
+        return { ok: true, id: target.id }
+      }),
+
+    deleteOrchestratorSession: (options = {}) =>
+      call('deleteOrchestratorSession', () => {
+        const { id, session: sessionId, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the session change first.')
+        const chat = chatStore(id)
+        const sessionList = Array.isArray(chat.sessions) ? chat.sessions : []
+        const index = sessionList.findIndex((s) => s.id === sessionId)
+        if (index === -1) throw new Error('There is no session with that id.')
+        sessionList.splice(index, 1)
+        if (chat.currentSessionId === sessionId) {
+          chat.currentSessionId = null
+          chat.currentTitle = null
+        }
+        emit({ topic: 'orchestrator' })
+        return { ok: true }
       }),
 
     setLadder: (next) => call('setLadder', () => replaceLadder(next)),
