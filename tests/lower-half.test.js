@@ -48,32 +48,25 @@ describe('the current conversation title', () => {
 })
 
 describe('the Overview entries', () => {
-  it('holds Settings, Agent, Costs and Log in that order', () => {
+  it('holds Agent and Costs in that order, since Log and Settings open from the menu', () => {
     expect(overviewEntries()).toEqual([
-      { id: 'settings', title: 'Settings' },
       { id: 'agent', title: 'Agent' },
       { id: 'costs', title: 'Costs' },
-      { id: 'log', title: 'Log' },
     ])
-    expect(OVERVIEW_ENTRIES.map((entry) => entry.id)).toEqual([
-      'settings',
-      'agent',
-      'costs',
-      'log',
-    ])
+    expect(OVERVIEW_ENTRIES.map((entry) => entry.id)).toEqual(['agent', 'costs'])
   })
 
   it('returns a fresh list each time', () => {
     const first = overviewEntries()
     first[0].title = 'Changed'
     first.push({ id: 'extra', title: 'Extra' })
-    expect(overviewEntries()[0].title).toBe('Settings')
-    expect(overviewEntries()).toHaveLength(4)
+    expect(overviewEntries()[0].title).toBe('Agent')
+    expect(overviewEntries()).toHaveLength(2)
   })
 
   it('finds one entry by id and refuses an unknown id', () => {
     expect(drawerEntry('costs')).toEqual({ id: 'costs', title: 'Costs' })
-    expect(drawerEntry('log')).toEqual({ id: 'log', title: 'Log' })
+    expect(drawerEntry('log')).toBeNull()
     expect(drawerEntry('missing')).toBeNull()
     expect(drawerEntry(null)).toBeNull()
   })
