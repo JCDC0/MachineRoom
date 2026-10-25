@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import EndpointsPanel from './EndpointsPanel.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
+import SearchSettings from './SearchSettings.jsx'
 import { store } from '../storage.js'
 import { effectSettings, loadSoundSettings, saveSoundSettings } from './settings.js'
 import { sound } from './sound.js'
@@ -184,6 +185,7 @@ export default function Settings({ effects, onChange, onClose, client = null }) 
         </div>
 
         <EndpointsPanel client={client} />
+        <SearchSettings />
       </div>
     </section>
   )

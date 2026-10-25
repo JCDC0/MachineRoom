@@ -212,6 +212,8 @@ describe('mr-agent', () => {
       'list_dir',
       'search',
       'run_shell',
+      'web_search',
+      'web_fetch',
     ])
     expect(api.calls[1].body.messages.some((message) => message.role === 'tool' && message.tool_call_id === 'call_read')).toBe(true)
   })
