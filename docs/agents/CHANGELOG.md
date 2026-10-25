@@ -9,6 +9,7 @@
 - The owner can choose active lanes with /api/lanes and /api/lanes/active, inactive lanes are left off /api/agents, and runs for inactive lanes are refused (task O11).
 - Open another project from the page: keep recent projects and folder siblings, refuse runs while a turn runs, and restart on the new root (task O12).
 - Add sessions and reasoning effort for each orchestrator (task O10).
+- At 900 pixels and wider the strip and the dock give way to a lower half with the conversation in the middle, Overview and its drawer on the right, and the model, effort and Compact controls under the input (task U34).
 
 - The menu row and the info strip no longer draw a straight line along the lens, so only the curved edges show (the owner's sketch).
 

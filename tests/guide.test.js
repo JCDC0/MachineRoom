@@ -799,6 +799,7 @@ describe('tour steps, selector lookup and card placement', () => {
     expect(hudSteps).toHaveLength(5)
     await withDom(async ({ container, dom, root }) => {
       dom.window.localStorage.setItem(GUIDE_FLAG, '1')
+      dom.window.innerWidth = 800
       await act(async () => {
         root.render(createElement(Hud, { snapshot: SNAPSHOT, speeds: [1] }))
       })

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import AgentStrip from '../src/ui/AgentStrip.jsx'
+import CompactCard from '../src/ui/AgentStrip.jsx'
 import Assistant from '../src/ui/Assistant.jsx'
 import Hud from '../src/ui/Hud.jsx'
 import ControlDrawer from '../src/ui/panels/ControlDrawer.jsx'
@@ -135,27 +135,13 @@ describe('HUD concept style structure', () => {
     expect(waitingHtml).toContain('<span class="waiting-cursor" aria-hidden="true">_</span>')
   })
 
-  it('renders the compact strip with the identity, context and three log lines', () => {
-    const agents = [
-      { key: 'orchestrator', name: 'Orchestrator', status: 'working', harness: 'claude', model: 'opus' },
-      { key: 'opencode', name: 'OpenCode', status: 'idle', adapterType: 'opencode_local', model: 'flash' },
-    ]
-    const log = [
-      { agent: 'orchestrator', text: 'read a.js', tone: 'normal' },
-      { agent: 'orchestrator', text: 'write b.js', tone: 'normal' },
-      { agent: 'orchestrator', text: 'failed c.js', tone: 'error' },
-      { agent: 'orchestrator', text: 'read d.js', tone: 'done' },
-    ]
+  it('renders the Compact card with what to keep and the autocompact switch', () => {
     const html = renderToString(
-      createElement(AgentStrip, {
-        lanes: agents,
-        log,
+      createElement(CompactCard, {
+        name: 'Orchestrator',
+        id: 'orchestrator',
         orchestrator: {
           id: 'orchestrator',
-          model: 'opus',
-          harness: 'claude',
-          contextTokens: 96000,
-          contextWindow: 200000,
           autocompact: true,
           autocompactPercent: 70,
         },
@@ -163,54 +149,15 @@ describe('HUD concept style structure', () => {
       })
     )
 
-    expect(html).toContain('class="hud-strip is-closed"')
-    expect(html).toContain('strip-dot is-working')
-    expect(html).toContain('strip-name-text">Orchestrator')
-    expect(html).toContain('Model:')
-    expect(html).toContain('Context size 96.0k / 200.0k')
-    expect(html).toContain('Compact')
-    expect(html).toContain('Settings')
-    expect(html).toContain('&gt; write b.js')
-    expect(html).toContain('&gt; failed c.js')
-    expect(html).toContain('read d.js')
-    expect(html).not.toContain('read a.js')
-    expect((html.match(/strip-log-line/g) ?? []).length).toBe(3)
-    expect(html).toContain('Expand')
+    expect(html).toContain('class="strip-card hud-strip-compact-card"')
+    expect(html).toContain('>What to keep</label>')
+    expect(html).toContain('Autocompact')
+    expect(html).toContain('70<!-- -->%')
+    expect(html).toContain('>Compact now</button>')
+    expect(html).toContain('Compacting is not available from this bridge.')
   })
 
-  it('renders the lane tokens and cost in the strip instead of the context line', () => {
-    const html = renderToString(
-      createElement(AgentStrip, {
-        agent: 'opencode',
-        lanes: [
-          { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
-          { key: 'opencode', name: 'OpenCode', status: 'working', adapterType: 'opencode_local', model: 'flash' },
-        ],
-        costs: {
-          rows: [
-            {
-              key: 'opencode',
-              agentId: 'agent-opencode',
-              costCents: 143,
-              inputTokens: 214000,
-              outputTokens: 31000,
-              reported: true,
-            },
-          ],
-        },
-        client: {},
-        dockOpen: true,
-      })
-    )
-
-    expect(html).toContain('class="hud-strip is-open"')
-    expect(html).toContain('Tokens 214.0k in / 31.0k out, $1.43 this month')
-    expect(html).not.toContain('Context size')
-    expect(html).not.toContain('Compact')
-    expect(html).toContain('Close')
-  })
-
-  it('shows the strip and hides the dock at 900 pixels wide', () => {
+  it('shows the lower half in place of the strip and dock at 900 pixels wide', () => {
     const savedWindow = globalThis.window
     let savedSettings = null
     const storage = {
@@ -236,10 +183,23 @@ describe('HUD concept style structure', () => {
           speeds: [1, 2, 4],
         })
       )
-      expect(html).toContain('class="hud-strip is-closed"')
-      expect(html).toContain('class="hud-dock"')
-      expect(html).toMatch(/class="hud-dock"[^>]*hidden/)
-
+      expect(html).toContain('class="hud-lower"')
+      expect(html).toContain('class="hud-lower-left"')
+      expect(html).toContain('class="hud-lower-main"')
+      expect(html).toContain('class="hud-lower-crumb mono"')
+      expect(html).toContain('PROJECT / New conversation')
+      expect(html).toContain('class="hud-overview"')
+      expect(html).toContain('>Overview</h2>')
+      expect(html).toContain('>Settings</span>')
+      expect(html).toContain('>Agent</span>')
+      expect(html).toContain('>Costs</span>')
+      expect(html).toContain('>Log</span>')
+      expect(html).toContain('This is a recorded run. Connect to your project to talk to the orchestrator.')
+      expect(html).toContain('>Connect</button>')
+      expect(html).toContain('class="hud-drawer"')
+      expect(html).toContain('id="hud-dock-costs"')
+      expect(html).not.toMatch(/class="hud-strip[ "]/)
+      expect(html).not.toContain('class="hud-dock"')
       savedSettings = JSON.stringify({ dockOpen: true })
       const open = renderToString(
         createElement(Hud, {
@@ -248,8 +208,43 @@ describe('HUD concept style structure', () => {
           speeds: [1, 2, 4],
         })
       )
-      expect(open).toContain('class="hud-strip is-open"')
-      expect(open).not.toMatch(/class="hud-dock"[^>]*hidden/)
+      expect(open).toContain('class="hud-lower"')
+      expect(open).not.toMatch(/class="hud-strip[ "]/)
+      expect(open).not.toContain('class="hud-dock"')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
+  })
+
+  it('keeps the dock and leaves out the lower half below 900 pixels', () => {
+    const savedWindow = globalThis.window
+    const storage = {
+      getItem: (key) => (key === 'machineroom.guide' ? '1' : null),
+      setItem: () => {},
+    }
+    globalThis.window = {
+      innerWidth: 800,
+      location: { search: '' },
+      localStorage: storage,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }
+    try {
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot: SAMPLE_SNAPSHOT,
+          speeds: [1, 2, 4],
+        })
+      )
+      expect(html).toContain('class="hud-dock"')
+      expect(html).toContain('class="hud-dock-agents"')
+      expect(html).toContain('class="hud-dock-context"')
+      expect(html).toContain('class="hud-dock-side"')
+      expect(html).not.toContain('class="hud-lower"')
+      expect(html).not.toContain('class="hud-overview"')
+      expect(html).not.toMatch(/class="hud-strip[ "]/)
     } finally {
       if (savedWindow === undefined) delete globalThis.window
       else globalThis.window = savedWindow
@@ -309,8 +304,12 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('letter-spacing: 0.04em;')
     expect(css).toContain('.mr-item.is-failed')
     expect(css).toContain('.mr-card.is-flash-red .mr-card-face')
-    expect(css).toContain('.stage:has(.hud-strip.is-closed)')
-    expect(css).toContain('--strip-h: 72px')
+    expect(css).toContain('.hud-lower')
+    expect(css).toContain('grid-template-columns: 260px minmax(0, 1fr) 280px')
+    expect(css).toContain('.hud-lower-crumb')
+    expect(css).toContain('.hud-overview')
+    expect(css).toContain('.hud-drawer')
+    expect(css).toContain('--lens-h: max(320px, 52vh)')
     expect(css).toContain('.hud-dock[hidden]')
   })
 })

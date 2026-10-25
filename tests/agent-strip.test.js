@@ -6,18 +6,16 @@ import {
   AUTOCOMPACT_MAX,
   AUTOCOMPACT_MIN,
   DEFAULT_AUTOCOMPACT_PERCENT,
-  STRIP_LOG_LIMIT,
-  agentChoices,
   autocompactPercent,
   clampAutocompactPercent,
   contextLine,
+  effortLabel,
+  effortLevels,
   formatCount,
   harnessKey,
-  laneLine,
   modelChoices,
+  orchestratorEffort,
   orchestratorId,
-  statusTone,
-  stripLogLines,
   wideLayout,
 } from '../src/ui/agentStrip.js'
 
@@ -207,18 +205,6 @@ describe('agent strip layout', () => {
     expect(wideLayout('1200')).toBe(true)
     expect(wideLayout('wide')).toBe(false)
   })
-
-  it('maps a status to the dot tone', () => {
-    expect(statusTone('working')).toBe('working')
-    expect(statusTone('running')).toBe('working')
-    expect(statusTone('queued')).toBe('queued')
-    expect(statusTone('failed')).toBe('error')
-    expect(statusTone('error')).toBe('error')
-    expect(statusTone('finished')).toBe('done')
-    expect(statusTone('done')).toBe('done')
-    expect(statusTone('idle')).toBe('idle')
-    expect(statusTone('')).toBe('idle')
-  })
 })
 
 describe('the context line', () => {
@@ -248,48 +234,28 @@ describe('the context line', () => {
   })
 })
 
-describe('the lane line', () => {
-  it('shows this month of tokens and cost for a lane', () => {
-    expect(laneLine({ tokens: '1.2k in / 300 out', cost: '$12.34' })).toBe(
-      'Tokens 1.2k in / 300 out, $12.34 this month'
-    )
+describe('the effort levels', () => {
+  it('lists the levels each harness accepts', () => {
+    expect(effortLevels('claude')).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    expect(effortLevels('opencode_local')).toEqual(['low', 'medium', 'high', 'max'])
+    expect(effortLevels('hermes')).toEqual([])
+    expect(effortLevels('')).toEqual([])
   })
 
-  it('says when a lane reports nothing', () => {
-    expect(laneLine({ tokens: 'not reported', cost: 'not reported' })).toBe(
-      'Tokens not reported, cost not reported this month'
-    )
-    expect(laneLine(null)).toBe('')
+  it('labels an unset effort as default', () => {
+    expect(effortLabel('', 'claude')).toBe('default')
+    expect(effortLabel('xhigh', 'claude')).toBe('xhigh')
+    expect(effortLabel('xhigh', 'opencode')).toBe('default')
   })
-})
 
-describe('the three log lines', () => {
-  it('keeps the newest three and puts them last, each with a chevron', () => {
-    const log = [
-      { text: 'read a.js', tone: 'normal' },
-      { text: 'write b.js', tone: 'normal' },
-      { text: 'failed c.js', tone: 'error' },
-      { text: 'read d.js', tone: 'normal' },
+  it('reads the effort from the orchestrator answer', () => {
+    const rows = [
+      { id: 'orchestrator', effort: 'high' },
+      { id: 'sub-ui', effort: 'max' },
     ]
-    expect(STRIP_LOG_LIMIT).toBe(3)
-    expect(stripLogLines(log)).toEqual([
-      { text: '> write b.js', tone: 'normal' },
-      { text: '> failed c.js', tone: 'error' },
-      { text: '> read d.js', tone: 'normal' },
-    ])
-  })
-
-  it('takes plain strings and drops empty lines', () => {
-    expect(stripLogLines(['one', '', 'two', '  ', 'three', 'four'])).toEqual([
-      { text: '> two', tone: 'normal' },
-      { text: '> three', tone: 'normal' },
-      { text: '> four', tone: 'normal' },
-    ])
-    expect(stripLogLines(null)).toEqual([])
-  })
-
-  it('honours another limit', () => {
-    expect(stripLogLines(['one', 'two'], 1)).toEqual([{ text: '> two', tone: 'normal' }])
+    expect(orchestratorEffort(rows, 'orchestrator')).toBe('high')
+    expect(orchestratorEffort({ orchestrators: rows }, 'ui')).toBe('max')
+    expect(orchestratorEffort(rows, 'missing')).toBe('')
   })
 })
 
@@ -328,26 +294,6 @@ describe('the model choices', () => {
       { id: 'b', label: 'B' },
     ])
     expect(modelChoices(null, 'opencode')).toEqual([])
-  })
-})
-
-describe('the agent choices', () => {
-  it('lists the top-level agents, idle ones included', () => {
-    const choices = agentChoices([
-      { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
-      { key: 'opencode', name: 'OpenCode', status: 'working' },
-      { key: 'claude', name: 'Claude', status: 'idle' },
-      { key: 'child', name: 'Child', parent: 'opencode', status: 'working' },
-    ])
-    expect(choices).toEqual([
-      { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
-      { key: 'opencode', name: 'OpenCode', status: 'working' },
-      { key: 'claude', name: 'Claude', status: 'idle' },
-    ])
-  })
-
-  it('copes with a missing roster', () => {
-    expect(agentChoices(null)).toEqual([])
   })
 })
 

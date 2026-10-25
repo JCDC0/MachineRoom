@@ -1,10 +1,8 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
-import { store } from '../storage.js'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import AgentDock from './AgentDock.jsx'
-import AgentStrip from './AgentStrip.jsx'
 import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import Launcher from './Launcher.jsx'
@@ -18,8 +16,14 @@ import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
 import { ladderGroups } from './ladderGroups.js'
 import { lensProject } from './lens.js'
+import {
+  REPLAY_LINE,
+  currentSessionTitle,
+  drawerEntry,
+  lowerBreadcrumb,
+  overviewEntries,
+} from './lowerHalf.js'
 import { orchestratorOn } from './orchestratorChat.js'
-import { loadSettings, saveSettings } from './settings.js'
 import {
   areAllTerminalsOpen,
   isTerminalOpen,
@@ -66,6 +70,130 @@ function formatTime(ms) {
   return `${minutes}:${seconds}`
 }
 
+function EventLogBody({ entries, bodyRef = null }) {
+  return (
+    <div className="hud-log-body mono" ref={bodyRef}>
+      {entries.length === 0 ? (
+        <div className="log-line is-dim">No events recorded.</div>
+      ) : (
+        entries.map((entry, index) => {
+          const stamp = formatTime(entry.time)
+          return (
+            <div key={`${entry.time ?? index}-${index}`} className={`log-line is-${entry.tone ?? 'normal'}`}>
+              {stamp && <span className="log-time">{stamp}</span>}
+              {entry.agent && <span className="log-agent">{entry.agent}</span>}
+              <span className="log-text">{entry.text}</span>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
+
+function OverviewIcon({ id }) {
+  const props = {
+    viewBox: '0 0 16 16',
+    width: 16,
+    height: 16,
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  }
+  if (id === 'settings') {
+    return (
+      <svg {...props}>
+        <path d="M2 4.5h7M11.5 4.5H14M2 11.5h2.5M7 11.5h7" />
+        <circle cx="10" cy="4.5" r="1.4" />
+        <circle cx="5" cy="11.5" r="1.4" />
+      </svg>
+    )
+  }
+  if (id === 'agent') {
+    return (
+      <svg {...props}>
+        <circle cx="8" cy="5.5" r="2.5" />
+        <path d="M3 13c0-2.2 2.2-3.5 5-3.5s5 1.3 5 3.5" />
+      </svg>
+    )
+  }
+  if (id === 'costs') {
+    return (
+      <svg {...props}>
+        <path d="M3 12V8M8 12V4M13 12V6" />
+      </svg>
+    )
+  }
+  if (id === 'log') {
+    return (
+      <svg {...props}>
+        <path d="M3 4.5h10M3 8h10M3 11.5h7" />
+      </svg>
+    )
+  }
+  return (
+    <svg {...props}>
+      <circle cx="8" cy="8" r="5" />
+    </svg>
+  )
+}
+
+export function OverviewCard({ entries = overviewEntries(), onOpen = () => {}, hidden = false }) {
+  return (
+    <aside className="hud-overview" aria-label="Overview" hidden={hidden}>
+      <h2 className="hud-overview-title">Overview</h2>
+      <ul className="hud-overview-list">
+        {entries.map((entry) => (
+          <li key={entry.id}>
+            <button
+              type="button"
+              className={`hud-overview-entry is-${entry.id}`}
+              onClick={() => onOpen(entry.id)}
+            >
+              <span className="hud-overview-icon" aria-hidden="true">
+                <OverviewIcon id={entry.id} />
+              </span>
+              <span className="hud-overview-label">{entry.title}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </aside>
+  )
+}
+
+export function LowerDrawer({
+  entry = null,
+  hidden = false,
+  onBack = () => {},
+  children = null,
+}) {
+  return (
+    <aside
+      id="hud-drawer"
+      className="hud-drawer"
+      aria-label={entry ? `${entry.title} drawer` : 'Drawer'}
+      hidden={hidden}
+    >
+      <header className="hud-drawer-head">
+        <button
+          type="button"
+          className="hud-drawer-back mono"
+          onClick={onBack}
+          aria-label="Back to overview"
+        >
+          Back
+        </button>
+        <h2 className="hud-drawer-title">{entry ? entry.title : ''}</h2>
+      </header>
+      <div className="hud-drawer-body">{children}</div>
+    </aside>
+  )
+}
+
 export default function Hud({
   snapshot,
   project = '',
@@ -100,6 +228,8 @@ export default function Hud({
   assistantOpen = false,
   effects = null,
   onSettingsChange = () => {},
+  sidebar = null,
+  settingsRequest = 0,
 }) {
   const [logOpen, setLogOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -107,11 +237,13 @@ export default function Hud({
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
+  const [chatFocus, setChatFocus] = useState(0)
   const [chatTab, setChatTab] = useState('orchestrator')
   const [chatListOpen, setChatListOpen] = useState(false)
   const [orchestratorList, setOrchestratorList] = useState([])
+  const [sessionTitle, setSessionTitle] = useState('')
   const [idleOpen, setIdleOpen] = useState(false)
-  const [dockOpen, setDockOpen] = useState(() => loadSettings(store()).dockOpen === true)
+  const [drawer, setDrawer] = useState(null)
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0
   )
@@ -131,8 +263,11 @@ export default function Hud({
   const notice = healthNotice(health)
   const chatAvailable = orchestratorOn(health)
   const wide = wideLayout(viewportWidth)
-  const dockShown = !wide || dockOpen
+  const floatingChat = !wide || mode === 'replay'
   const logBodyRef = useRef(null)
+  const lowerLogRef = useRef(null)
+  const drawerLogRef = useRef(null)
+  const settingsCountRef = useRef(Number(settingsRequest) || 0)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
   const visibleShortcuts = (client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')).map(
@@ -192,16 +327,19 @@ export default function Hud({
     if (wide) setSessionsOpen(false)
   }, [wide])
 
-  function changeDockOpen(next) {
-    setDockOpen(next)
-    saveSettings(store(), { dockOpen: next })
+  function openDrawer(id) {
+    setDrawer(id)
+    setLogOpen(false)
+    setSettingsOpen(false)
+  }
+
+  function closeDrawer() {
+    setDrawer(null)
   }
 
   function toggleLog() {
-    if (wide && !dockOpen) {
-      changeDockOpen(true)
-      setLogOpen(true)
-      setControlOpen(false)
+    if (wide) {
+      setDrawer((current) => (current === 'log' ? null : 'log'))
       return
     }
     const next = !logOpen
@@ -210,9 +348,8 @@ export default function Hud({
   }
 
   function toggleSettings() {
-    if (wide && !dockOpen) {
-      changeDockOpen(true)
-      setSettingsOpen(true)
+    if (wide) {
+      setDrawer((current) => (current === 'settings' ? null : 'settings'))
       return
     }
     setSettingsOpen(!settingsOpen)
@@ -227,6 +364,44 @@ export default function Hud({
   useEffect(() => {
     if (!chatAvailable) setChatOpen(false)
   }, [chatAvailable])
+
+  useEffect(() => {
+    const next = Number(settingsRequest) || 0
+    const previous = settingsCountRef.current
+    if (next === previous) return
+    settingsCountRef.current = next
+    if (next < previous) return
+    if (wide) {
+      setDrawer('settings')
+      setControlOpen(false)
+    } else {
+      setSettingsOpen(true)
+    }
+  }, [settingsRequest, wide])
+
+  useEffect(() => {
+    if (!wide || mode === 'replay' || !client || typeof client.orchestratorSessions !== 'function') {
+      setSessionTitle('')
+      return undefined
+    }
+    let active = true
+    async function readTitle() {
+      try {
+        const answer = await client.orchestratorSessions(
+          chatTab === 'orchestrator' ? {} : { id: chatTab }
+        )
+        if (active) setSessionTitle(currentSessionTitle(answer))
+      } catch {
+        if (active) setSessionTitle('')
+      }
+    }
+    readTitle()
+    const timer = setInterval(readTitle, 60000)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [client, chatTab, mode, wide, orchestratorNonce])
 
   useEffect(() => {
     if (!client || typeof client.orchestrators !== 'function' || (!chatAvailable && !wide)) {
@@ -330,7 +505,7 @@ export default function Hud({
         setMenuOpen(false)
         setSessionsOpen(false)
         setChatListOpen(false)
-        if (wide && dockOpen) changeDockOpen(false)
+        if (wide) setDrawer(null)
         return
       }
       if (hudKeyBlocked(event.target)) return
@@ -340,7 +515,8 @@ export default function Hud({
         toggleLog()
       } else if (chatAvailable && event.key === '/') {
         event.preventDefault()
-        setChatOpen(true)
+        if (floatingChat) setChatOpen(true)
+        else setChatFocus((value) => value + 1)
       } else if (client && (event.key === 'c' || event.key === 'C')) {
         event.preventDefault()
         setControlOpen((open) => {
@@ -355,13 +531,25 @@ export default function Hud({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [client, chatAvailable, wide, dockOpen, logOpen])
+  }, [client, chatAvailable, floatingChat, wide, drawer, logOpen])
 
   useEffect(() => {
     if (logOpen && logBodyRef.current) {
       logBodyRef.current.scrollTop = logBodyRef.current.scrollHeight
     }
   }, [logOpen, visibleLog.length])
+
+  useEffect(() => {
+    if (wide && drawer === 'log' && drawerLogRef.current) {
+      drawerLogRef.current.scrollTop = drawerLogRef.current.scrollHeight
+    }
+  }, [wide, drawer, visibleLog.length])
+
+  useEffect(() => {
+    if (wide && mode === 'replay' && lowerLogRef.current) {
+      lowerLogRef.current.scrollTop = lowerLogRef.current.scrollHeight
+    }
+  }, [wide, mode, visibleLog.length])
 
   function renderAgentRow(row, indent = 0) {
     const { agent, depth, number, group, visible } = row
@@ -551,10 +739,13 @@ export default function Hud({
             <button
               type="button"
               className="hud-action"
-              aria-pressed={chatOpen}
-              aria-expanded={chatOpen}
-              aria-controls="hud-orchestrator-chat"
-              onClick={() => setChatOpen((open) => !open)}
+              aria-pressed={floatingChat ? chatOpen : undefined}
+              aria-expanded={floatingChat ? chatOpen : undefined}
+              aria-controls={floatingChat ? 'hud-orchestrator-chat' : undefined}
+              onClick={() => {
+                if (floatingChat) setChatOpen((open) => !open)
+                else setChatFocus((value) => value + 1)
+              }}
             >
               <span>Orchestrator</span>
               <span className="agent-key mono">/</span>
@@ -563,9 +754,9 @@ export default function Hud({
           <button
             type="button"
             className="hud-action"
-            aria-pressed={logOpen}
-            aria-expanded={logOpen}
-            aria-controls="hud-log-drawer"
+            aria-pressed={wide ? drawer === 'log' : logOpen}
+            aria-expanded={wide ? drawer === 'log' : logOpen}
+            aria-controls={wide ? 'hud-drawer' : 'hud-log-drawer'}
             onClick={toggleLog}
           >
             <span>Log</span>
@@ -574,9 +765,9 @@ export default function Hud({
           <button
             type="button"
             className="hud-action"
-            aria-pressed={settingsOpen}
-            aria-expanded={settingsOpen}
-            aria-controls="hud-settings"
+            aria-pressed={wide ? drawer === 'settings' : settingsOpen}
+            aria-expanded={wide ? drawer === 'settings' : settingsOpen}
+            aria-controls={wide ? 'hud-drawer' : 'hud-settings'}
             aria-label="Settings"
             onClick={toggleSettings}
           >
@@ -626,7 +817,8 @@ export default function Hud({
         )}
       </header>
 
-      <section className="hud-dock" aria-label="Dock" hidden={!dockShown}>
+      {!wide && (
+        <section className="hud-dock" aria-label="Dock">
         <div className="hud-dock-agents">
           {fpsStats ? (
             <p className="hud-fps-line mono">
@@ -678,22 +870,7 @@ export default function Hud({
                 <span className="hud-log-title">Event Log</span>
                 <span className="hud-log-count mono">{visibleLog.length}</span>
               </header>
-              <div className="hud-log-body mono" ref={logBodyRef}>
-                {visibleLog.length === 0 ? (
-                  <div className="log-line is-dim">No events recorded.</div>
-                ) : (
-                  visibleLog.map((entry, index) => {
-                    const stamp = formatTime(entry.time)
-                    return (
-                      <div key={`${entry.time ?? index}-${index}`} className={`log-line is-${entry.tone ?? 'normal'}`}>
-                        {stamp && <span className="log-time">{stamp}</span>}
-                        {entry.agent && <span className="log-agent">{entry.agent}</span>}
-                        <span className="log-text">{entry.text}</span>
-                      </div>
-                    )
-                  })
-                )}
-              </div>
+              <EventLogBody entries={visibleLog} bodyRef={logBodyRef} />
             </aside>
           )}
         </div>
@@ -730,27 +907,128 @@ export default function Hud({
           <li className="is-green">finished</li>
           <li className="is-line">Line from an agent: the file it is working on</li>
         </ul>
-      </section>
+        </section>
+      )}
+
+      {!wide && (
+        <Transport
+          snapshot={snapshot}
+          speeds={speeds}
+          markers={markers}
+          onToggle={onToggle}
+          onSeek={onSeek}
+          onSpeed={onSpeed}
+        />
+      )}
 
       {wide && (
-        <AgentStrip
-          agent={focused}
-          working={workingAgent}
-          lanes={snapshot?.agents ?? []}
-          costs={costs}
-          liveRuns={liveRuns}
-          tasks={tasks}
-          log={log}
-          orchestrator={orchestratorInfo}
-          client={client}
-          dockOpen={dockOpen}
-          onFocus={onFocus}
-          onOpenDock={() => changeDockOpen(true)}
-          onToggleDock={() => changeDockOpen(!dockOpen)}
-          onOpenSettings={toggleSettings}
-          onAutocompact={changeAutocompact}
-          onOrchestratorChange={() => setOrchestratorNonce((value) => value + 1)}
+        <Transport
+          snapshot={snapshot}
+          speeds={speeds}
+          markers={markers}
+          onToggle={onToggle}
+          onSeek={onSeek}
+          onSpeed={onSpeed}
         />
+      )}
+
+      {wide && (
+        <div className={`hud-lower${drawer ? ' has-drawer' : ''}`}>
+          <div className="hud-lower-left">
+            {sidebar ?? (
+              <Sidebar
+                client={client}
+                live={mode === 'live'}
+                project={project}
+                onOpenSettings={() => openDrawer('settings')}
+              />
+            )}
+          </div>
+          <div className="hud-lower-main">
+            <p className="hud-lower-crumb mono">{lowerBreadcrumb(project, sessionTitle)}</p>
+            {mode === 'replay' ? (
+              <div className="hud-lower-replay">
+                <div className="hud-lower-log">
+                  <EventLogBody entries={visibleLog} bodyRef={lowerLogRef} />
+                </div>
+                <div className="hud-lower-replay-foot">
+                  <p className="hud-lower-note">{REPLAY_LINE}</p>
+                  <button
+                    type="button"
+                    className="hud-lower-connect"
+                    onClick={() => onMode('live')}
+                  >
+                    Connect
+                  </button>
+                </div>
+              </div>
+            ) : client && chatAvailable ? (
+              <OrchestratorChat
+                client={client}
+                open
+                inline
+                focusRequest={chatFocus}
+                selected={chatTab}
+                onSelect={setChatTab}
+                onAutocompact={changeAutocompact}
+                onOrchestratorChange={() => setOrchestratorNonce((value) => value + 1)}
+              />
+            ) : (
+              <div className="hud-lower-replay">
+                <div className="hud-lower-log">
+                  <EventLogBody entries={visibleLog} bodyRef={lowerLogRef} />
+                </div>
+                <div className="hud-lower-replay-foot">
+                  <p className="hud-lower-note">The orchestrator is not connected.</p>
+                </div>
+              </div>
+            )}
+          </div>
+          <div className="hud-lower-right">
+            <OverviewCard
+              hidden={Boolean(drawer)}
+              onOpen={openDrawer}
+            />
+            <LowerDrawer
+              entry={drawer ? drawerEntry(drawer) : null}
+              hidden={!drawer}
+              onBack={closeDrawer}
+            >
+              <div className="hud-drawer-section" hidden={drawer !== 'settings'}>
+                <Settings
+                  effects={effects}
+                  onChange={onSettingsChange}
+                  onClose={closeDrawer}
+                />
+              </div>
+              <div className="hud-drawer-section" hidden={drawer !== 'agent'}>
+                <AgentDock
+                  agent={focused}
+                  working={workingAgent}
+                  lanes={snapshot?.agents ?? []}
+                  costs={costs}
+                  liveRuns={liveRuns}
+                  tasks={tasks}
+                  log={log}
+                  orchestrator={orchestratorInfo}
+                  onFocus={onFocus}
+                  onToggleTerminal={onToggleTerminal}
+                  onOpenChat={() => {
+                    setChatFocus((value) => value + 1)
+                    setDrawer(null)
+                  }}
+                  onAutocompact={changeAutocompact}
+                />
+              </div>
+              <div className="hud-drawer-section" hidden={drawer !== 'costs'}>
+                <div id="hud-dock-costs" className="hud-dock-costs" />
+              </div>
+              <div className="hud-drawer-section" hidden={drawer !== 'log'}>
+                <EventLogBody entries={visibleLog} bodyRef={drawerLogRef} />
+              </div>
+            </LowerDrawer>
+          </div>
+        </div>
       )}
 
       {client && (
@@ -849,7 +1127,7 @@ export default function Hud({
         />
       )}
 
-      {client && chatAvailable && (
+      {client && chatAvailable && floatingChat && (
         <OrchestratorChat
           client={client}
           open={chatOpen}
@@ -858,15 +1136,6 @@ export default function Hud({
           onClose={() => setChatOpen(false)}
         />
       )}
-
-      <Transport
-        snapshot={snapshot}
-        speeds={speeds}
-        markers={markers}
-        onToggle={onToggle}
-        onSeek={onSeek}
-        onSpeed={onSpeed}
-      />
     </div>
   )
 }

@@ -342,6 +342,53 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('>Stop</button>')
   })
 
+  it('renders the inline chat with the model, effort and Compact controls under the input', () => {
+    const chat = {
+      state: 'working',
+      model: 'opus',
+      messages: [
+        { id: 'm1', from: 'owner', text: 'Build it.' },
+        { id: 'm2', from: 'orchestrator', text: '## Plan\n\n- one' },
+      ],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        inline: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        initialOrchestrators: [
+          {
+            id: 'orchestrator',
+            name: 'Orchestrator',
+            harness: 'claude',
+            model: 'opus',
+            state: 'working',
+            effort: 'high',
+            contextTokens: 96000,
+            contextWindow: 200000,
+          },
+        ],
+      })
+    )
+    expect(html).toContain('class="mr-orch is-inline"')
+    expect(html).not.toContain('id="hud-orchestrator-chat"')
+    expect(html).toContain('Ask the orchestrator anything')
+    expect(html).toContain('class="mr-orch-form hud-lower-input"')
+    expect(html).toContain('class="hud-strip-model"')
+    expect(html).toContain('class="hud-strip-effort"')
+    expect(html).toContain('class="hud-strip-compact"')
+    expect(html).toContain('Model:')
+    expect(html).toContain('opus')
+    expect(html).toContain('Effort:')
+    expect(html).toContain('high')
+    expect(html).toContain('Context size 96.0k / 200.0k')
+    expect(html).toContain('class="mr-orch-line is-owner"')
+    expect(html).toContain('class="mr-orch-block is-heading"')
+    expect(html).toContain('>Stop</button>')
+    expect(html).toContain('aria-label="Send"')
+  })
+
   it('takes the chosen tab from outside', () => {
     const html = renderToString(
       createElement(OrchestratorChat, {
@@ -654,6 +701,45 @@ describe('Hud and Waiting with an orchestrator', () => {
     expect(html).toContain('aria-pressed="false"')
     expect(html).toContain('Talk to the orchestrator')
     expect(html).not.toContain('Open assistant terminal')
+  })
+
+  it('puts the inline chat in the lower half at 900 pixels wide', () => {
+    const savedWindow = globalThis.window
+    const storage = {
+      getItem: (key) => (key === 'machineroom.guide' ? '1' : null),
+      setItem: () => {},
+    }
+    globalThis.window = {
+      innerWidth: 1200,
+      location: { search: '' },
+      localStorage: storage,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }
+    try {
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'live',
+          snapshot: SNAPSHOT,
+          speeds: [1],
+          client: fakeClient(),
+          health: { orchestrator: true },
+        })
+      )
+      expect(html).toContain('class="hud-lower"')
+      expect(html).toContain('class="hud-lower-main"')
+      expect(html).toContain('class="hud-lower-crumb mono"')
+      expect(html).toContain('class="mr-orch is-inline"')
+      expect(html).toContain('Ask the orchestrator anything')
+      expect(html).toContain('class="hud-strip-model"')
+      expect(html).toContain('class="hud-strip-effort"')
+      expect(html).toContain('class="hud-strip-compact"')
+      expect(html).not.toContain('id="hud-orchestrator-chat"')
+      expect(html).not.toContain('class="hud-dock"')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
   })
 
   it('keeps the assistant terminal for a room with no orchestrator', () => {

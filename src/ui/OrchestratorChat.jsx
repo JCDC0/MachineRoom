@@ -1,4 +1,12 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react'
+import CompactCard from './AgentStrip.jsx'
+import {
+  contextLine,
+  effortLabel,
+  effortLevels,
+  modelChoices,
+  orchestratorEffort,
+} from './agentStrip.js'
 import { addSub, freeLanes, idFromName, ladderFromOrchestrators, removeSub, subFromForm } from './ladderForm.js'
 import {
   ORCH_MAX_CHARS,
@@ -244,6 +252,10 @@ export default function OrchestratorChat({
   client = null,
   open = true,
   onClose,
+  inline = false,
+  focusRequest = 0,
+  onAutocompact = () => ({ ok: true }),
+  onOrchestratorChange = () => {},
   selected: selectedTab = undefined,
   onSelect = null,
   initialChat = null,
@@ -283,6 +295,20 @@ export default function OrchestratorChat({
   const [idTouched, setIdTouched] = useState(Boolean(initialForm && typeof initialForm === 'object' && initialForm.id))
   const [confirmSub, setConfirmSub] = useState(null)
   const [detach, setDetach] = useState(null)
+  const [modelsOpen, setModelsOpen] = useState(false)
+  const [models, setModels] = useState(null)
+  const [modelsLoading, setModelsLoading] = useState(false)
+  const [modelsError, setModelsError] = useState('')
+  const [modelConfirm, setModelConfirm] = useState(null)
+  const [modelSaving, setModelSaving] = useState(false)
+  const [modelError, setModelError] = useState('')
+  const [modelSaved, setModelSaved] = useState('')
+  const [effortOpen, setEffortOpen] = useState(false)
+  const [effortConfirm, setEffortConfirm] = useState('')
+  const [effortSaving, setEffortSaving] = useState(false)
+  const [effortError, setEffortError] = useState('')
+  const [effortSaved, setEffortSaved] = useState('')
+  const [compactOpen, setCompactOpen] = useState(false)
 
   const inputId = useId()
   const formId = useId()
@@ -290,6 +316,7 @@ export default function OrchestratorChat({
   const inputRef = useRef(null)
   const readChatRef = useRef(null)
   const readListRef = useRef(null)
+  const focusAtRef = useRef(Number(focusRequest) || 0)
   const roomActivity = useContext(OrchestratorActivity)
 
   const subs = list.filter((entry) => entry.id !== 'orchestrator')
@@ -303,6 +330,16 @@ export default function OrchestratorChat({
   const count = charCount(draft)
   const working = state === 'working'
   const model = chat.model || (typeof current?.model === 'string' ? current.model : '')
+  const harness = typeof current?.harness === 'string' ? current.harness : ''
+  const shownModel = modelSaved || model || 'not reported'
+  const shownEffort = effortSaved || effortLabel(orchestratorEffort(list, selected), harness)
+  const modelList = modelChoices(models, harness)
+  const effortChoices = effortLevels(harness)
+  const context = contextLine({
+    context: { tokens: current?.contextTokens, window: current?.contextWindow },
+  })
+  const canSetModel = inline && typeof client?.setOrchestratorModel === 'function'
+  const canSetEffort = inline && typeof client?.setOrchestratorEffort === 'function'
   const project = chat.project
   const projectLabel = projectBaseName(project)
   const lines = chatLines(chat)
@@ -414,10 +451,38 @@ export default function OrchestratorChat({
   }, [open, client, selected])
 
   useEffect(() => {
-    if (!open) return undefined
+    if (!open || inline) return undefined
     const timer = setTimeout(() => inputRef.current?.focus(), 20)
     return () => clearTimeout(timer)
-  }, [open])
+  }, [open, inline])
+
+  useEffect(() => {
+    if (!inline) return
+    const next = Number(focusRequest) || 0
+    if (next === focusAtRef.current) return
+    focusAtRef.current = next
+    inputRef.current?.focus()
+  }, [inline, focusRequest])
+
+  useEffect(() => {
+    setModelsOpen(false)
+    setEffortOpen(false)
+    setCompactOpen(false)
+    setModelConfirm(null)
+    setEffortConfirm('')
+    setModelError('')
+    setEffortError('')
+    setModelSaved('')
+    setEffortSaved('')
+  }, [selected])
+
+  useEffect(() => {
+    setModelSaved('')
+  }, [current?.model])
+
+  useEffect(() => {
+    setEffortSaved('')
+  }, [current?.effort])
 
   useEffect(() => {
     if (open && logRef.current) {
@@ -538,6 +603,105 @@ export default function OrchestratorChat({
     requestSend()
   }
 
+  function closePickers() {
+    setModelsOpen(false)
+    setEffortOpen(false)
+    setCompactOpen(false)
+    setModelConfirm(null)
+    setEffortConfirm('')
+    setModelError('')
+    setEffortError('')
+  }
+
+  function messageOf(failure, fallback) {
+    return errorText(failure, fallback)
+  }
+
+  async function openModels() {
+    if (modelsOpen) {
+      setModelsOpen(false)
+      return
+    }
+    closePickers()
+    setModelsOpen(true)
+    if (models !== null || typeof client?.models !== 'function') return
+    setModelsLoading(true)
+    setModelsError('')
+    try {
+      setModels(await client.models())
+    } catch (failure) {
+      setModelsError(messageOf(failure, 'Models are not available.'))
+    } finally {
+      setModelsLoading(false)
+    }
+  }
+
+  async function saveModel() {
+    if (!modelConfirm || modelSaving) return
+    if (typeof client?.setOrchestratorModel !== 'function') {
+      setModelError('The bridge cannot set a model.')
+      return
+    }
+    setModelSaving(true)
+    setModelError('')
+    try {
+      await client.setOrchestratorModel({
+        id: selected,
+        model: modelConfirm.id,
+        confirmed: true,
+      })
+      setModelSaved(modelConfirm.label)
+      setModelConfirm(null)
+      onOrchestratorChange()
+    } catch (failure) {
+      setModelError(messageOf(failure, 'The bridge refused the model.'))
+    } finally {
+      setModelSaving(false)
+    }
+  }
+
+  function openEffort() {
+    if (effortOpen) {
+      setEffortOpen(false)
+      return
+    }
+    closePickers()
+    setEffortOpen(true)
+  }
+
+  async function saveEffort() {
+    if (!effortConfirm || effortSaving) return
+    if (typeof client?.setOrchestratorEffort !== 'function') {
+      setEffortError('The bridge cannot set an effort.')
+      return
+    }
+    setEffortSaving(true)
+    setEffortError('')
+    try {
+      await client.setOrchestratorEffort({
+        id: selected,
+        effort: effortConfirm,
+        confirmed: true,
+      })
+      setEffortSaved(effortConfirm)
+      setEffortConfirm('')
+      onOrchestratorChange()
+    } catch (failure) {
+      setEffortError(messageOf(failure, 'The bridge refused the effort.'))
+    } finally {
+      setEffortSaving(false)
+    }
+  }
+
+  function toggleCompact() {
+    if (compactOpen) {
+      setCompactOpen(false)
+      return
+    }
+    closePickers()
+    setCompactOpen(true)
+  }
+
   function selectTab(id) {
     if (id === selected) return
     changeSelected(id)
@@ -655,29 +819,37 @@ export default function OrchestratorChat({
   if (!open) return null
 
   return (
-    <aside id="hud-orchestrator-chat" className="mr-orch" aria-label="Orchestrator chat">
-      <header className="mr-orch-head">
-        <span className="mr-orch-title">Orchestrator</span>
-        {canAttach ? (
-          <button type="button" className="mr-orch-attach-open" onClick={openForm} disabled={saving}>
-            Attach
-          </button>
-        ) : null}
-        {model ? <span className="mr-orch-model mono">{model}</span> : null}
-        {projectLabel ? (
-          <span className="mr-orch-project mr-orch-model mono" title={project}>
-            {projectLabel}
-          </span>
-        ) : null}
-        <button
-          type="button"
-          className="mr-orch-close"
-          onClick={() => onClose?.()}
-          aria-label="Close orchestrator chat"
-        >
-          ×
-        </button>
-      </header>
+    <aside
+      id={inline ? undefined : 'hud-orchestrator-chat'}
+      className={`mr-orch${inline ? ' is-inline' : ''}`}
+      aria-label="Orchestrator chat"
+    >
+      {!inline || canAttach ? (
+        <header className="mr-orch-head">
+          <span className="mr-orch-title">Orchestrator</span>
+          {canAttach ? (
+            <button type="button" className="mr-orch-attach-open" onClick={openForm} disabled={saving}>
+              Attach
+            </button>
+          ) : null}
+          {model ? <span className="mr-orch-model mono">{model}</span> : null}
+          {projectLabel ? (
+            <span className="mr-orch-project mr-orch-model mono" title={project}>
+              {projectLabel}
+            </span>
+          ) : null}
+          {inline ? null : (
+            <button
+              type="button"
+              className="mr-orch-close"
+              onClick={() => onClose?.()}
+              aria-label="Close orchestrator chat"
+            >
+              ×
+            </button>
+          )}
+        </header>
+      ) : null}
 
       {subs.length > 0 ? (
         <div className="mr-orch-tabs" aria-label="Orchestrators">
@@ -823,43 +995,265 @@ export default function OrchestratorChat({
             </section>
           ) : null}
 
-          <form className="mr-orch-form" onSubmit={handleSubmit}>
-            <label className="mr-orch-label mono" htmlFor={inputId}>
-              Message
-            </label>
-            <textarea
-              id={inputId}
-              ref={inputRef}
-              className="mr-orch-input mono"
-              value={draft}
-              maxLength={ORCH_MAX_CHARS}
-              rows={3}
-              spellCheck="false"
-              placeholder="What should be built?"
-              aria-label="Message to the orchestrator"
-              onChange={(event) => setDraft(clampDraft(event.target.value))}
-              onKeyDown={handleKeyDown}
-            />
-            <div className="mr-orch-meta">
-              <span className="mr-orch-hint mono">Enter sends. Shift+Enter adds a line.</span>
-              {count ? <span className="mr-orch-count mono">{count}</span> : null}
-            </div>
-            <div className="mr-orch-actions">
-              <button type="submit" className="mr-orch-send" disabled={!canSend(draft) || sending || unavailable}>
-                {sending ? 'Sending' : 'Send'}
-              </button>
-              {working ? (
+          {inline ? (
+            <form className="mr-orch-form hud-lower-input" onSubmit={handleSubmit}>
+              <textarea
+                id={inputId}
+                ref={inputRef}
+                className="mr-orch-input mono"
+                value={draft}
+                maxLength={ORCH_MAX_CHARS}
+                rows={2}
+                spellCheck="false"
+                placeholder="Ask the orchestrator anything"
+                aria-label="Message to the orchestrator"
+                onChange={(event) => setDraft(clampDraft(event.target.value))}
+                onKeyDown={handleKeyDown}
+              />
+              <div className="hud-lower-tools">
                 <button
                   type="button"
-                  className="mr-orch-stop"
-                  onClick={() => setConfirm('stop')}
-                  disabled={stopping}
+                  className="hud-strip-model"
+                  aria-expanded={modelsOpen}
+                  aria-label={`Models for ${current?.name || 'the orchestrator'}`}
+                  onClick={openModels}
                 >
-                  Stop
+                  <span>Model:</span>
+                  <span className="hud-lower-picker-value mono">{shownModel}</span>
+                  <span className="hud-lower-picker-v mono" aria-hidden="true">
+                    V
+                  </span>
                 </button>
+                <button
+                  type="button"
+                  className="hud-strip-effort"
+                  aria-expanded={effortOpen}
+                  aria-label={`Effort for ${current?.name || 'the orchestrator'}`}
+                  onClick={openEffort}
+                >
+                  <span>Effort:</span>
+                  <span className="hud-lower-picker-value mono">{shownEffort}</span>
+                  <span className="hud-lower-picker-v mono" aria-hidden="true">
+                    V
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="hud-strip-compact"
+                  aria-expanded={compactOpen}
+                  onClick={toggleCompact}
+                >
+                  Compact
+                </button>
+                <span className="hud-lower-context mono">{context}</span>
+                {working ? (
+                  <button
+                    type="button"
+                    className="mr-orch-stop hud-lower-stop"
+                    onClick={() => setConfirm('stop')}
+                    disabled={stopping}
+                  >
+                    Stop
+                  </button>
+                ) : null}
+                <button
+                  type="submit"
+                  className="hud-lower-send"
+                  aria-label={sending ? 'Sending' : 'Send'}
+                  disabled={!canSend(draft) || sending || unavailable}
+                >
+                  <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+                    <path
+                      d="M2 8h11M9 4l4 4-4 4"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <div className="mr-orch-meta">
+                {count ? <span className="mr-orch-count mono">{count}</span> : null}
+              </div>
+
+              {modelsOpen ? (
+                <div className="strip-pop is-models" aria-label="Models">
+                  {typeof client?.models !== 'function' && (
+                    <p className="strip-note">Models are not available.</p>
+                  )}
+                  {typeof client?.models === 'function' && modelsLoading && (
+                    <p className="strip-note">Loading models.</p>
+                  )}
+                  {typeof client?.models === 'function' && !modelsLoading && modelsError && (
+                    <p className="strip-note is-error">{modelsError}</p>
+                  )}
+                  {typeof client?.models === 'function' &&
+                    !modelsLoading &&
+                    !modelsError &&
+                    modelList.length === 0 && (
+                      <p className="strip-note">No models for this harness.</p>
+                    )}
+                  {modelList.map((choice) => (
+                    <button
+                      type="button"
+                      className={`strip-model-choice${choice.id === model ? ' is-current' : ''}`}
+                      key={choice.id}
+                      onClick={() => {
+                        setModelsOpen(false)
+                        setModelError('')
+                        setModelConfirm(choice)
+                      }}
+                    >
+                      {choice.label}
+                    </button>
+                  ))}
+                  {!canSetModel && <p className="strip-note">Read only here.</p>}
+                </div>
               ) : null}
-            </div>
-          </form>
+
+              {modelConfirm ? (
+                <div className="strip-pop is-confirm">
+                  <section className="mr-orch-confirm" aria-label="Set the model">
+                    <p className="mr-orch-confirm-text">
+                      {`Set ${modelConfirm.label} for ${current?.name || 'the orchestrator'}?`}
+                    </p>
+                    {modelError ? <p className="strip-note is-error">{modelError}</p> : null}
+                    <div className="mr-orch-confirm-actions">
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-start"
+                        onClick={saveModel}
+                        disabled={modelSaving}
+                      >
+                        Set
+                      </button>
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-cancel"
+                        onClick={() => {
+                          setModelConfirm(null)
+                          setModelError('')
+                        }}
+                        disabled={modelSaving}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {effortOpen ? (
+                <div className="strip-pop is-effort" aria-label="Effort">
+                  {effortChoices.length === 0 ? (
+                    <p className="strip-note">No effort levels for this harness.</p>
+                  ) : (
+                    effortChoices.map((level) => (
+                      <button
+                        type="button"
+                        className={`strip-model-choice${level === shownEffort ? ' is-current' : ''}`}
+                        key={level}
+                        onClick={() => {
+                          setEffortOpen(false)
+                          setEffortError('')
+                          setEffortConfirm(level)
+                        }}
+                      >
+                        {level}
+                      </button>
+                    ))
+                  )}
+                  {!canSetEffort && <p className="strip-note">Read only here.</p>}
+                </div>
+              ) : null}
+
+              {effortConfirm ? (
+                <div className="strip-pop is-confirm">
+                  <section className="mr-orch-confirm" aria-label="Set the effort">
+                    <p className="mr-orch-confirm-text">
+                      {`Set effort ${effortConfirm} for ${current?.name || 'the orchestrator'}?`}
+                    </p>
+                    {effortError ? <p className="strip-note is-error">{effortError}</p> : null}
+                    <div className="mr-orch-confirm-actions">
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-start"
+                        onClick={saveEffort}
+                        disabled={effortSaving}
+                      >
+                        Set
+                      </button>
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-cancel"
+                        onClick={() => {
+                          setEffortConfirm('')
+                          setEffortError('')
+                        }}
+                        disabled={effortSaving}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </section>
+                </div>
+              ) : null}
+
+              {compactOpen ? (
+                <div className="strip-pop is-compact">
+                  <CompactCard
+                    name={current?.name || 'the orchestrator'}
+                    id={selected}
+                    orchestrator={current}
+                    client={client}
+                    onAutocompact={onAutocompact}
+                    onChange={onOrchestratorChange}
+                    onClose={() => setCompactOpen(false)}
+                  />
+                </div>
+              ) : null}
+            </form>
+          ) : (
+            <form className="mr-orch-form" onSubmit={handleSubmit}>
+              <label className="mr-orch-label mono" htmlFor={inputId}>
+                Message
+              </label>
+              <textarea
+                id={inputId}
+                ref={inputRef}
+                className="mr-orch-input mono"
+                value={draft}
+                maxLength={ORCH_MAX_CHARS}
+                rows={3}
+                spellCheck="false"
+                placeholder="What should be built?"
+                aria-label="Message to the orchestrator"
+                onChange={(event) => setDraft(clampDraft(event.target.value))}
+                onKeyDown={handleKeyDown}
+              />
+              <div className="mr-orch-meta">
+                <span className="mr-orch-hint mono">Enter sends. Shift+Enter adds a line.</span>
+                {count ? <span className="mr-orch-count mono">{count}</span> : null}
+              </div>
+              <div className="mr-orch-actions">
+                <button type="submit" className="mr-orch-send" disabled={!canSend(draft) || sending || unavailable}>
+                  {sending ? 'Sending' : 'Send'}
+                </button>
+                {working ? (
+                  <button
+                    type="button"
+                    className="mr-orch-stop"
+                    onClick={() => setConfirm('stop')}
+                    disabled={stopping}
+                  >
+                    Stop
+                  </button>
+                ) : null}
+              </div>
+            </form>
+          )}
         </>
       )}
 

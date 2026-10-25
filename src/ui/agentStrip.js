@@ -1,20 +1,10 @@
-import { agentList } from './agentList.js'
-
-export const STRIP_LOG_LIMIT = 3
 export const WIDE_LAYOUT_MIN = 900
 export const AUTOCOMPACT_MIN = 50
 export const AUTOCOMPACT_MAX = 95
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
-
-const TONES = new Set(['normal', 'dim', 'error', 'done'])
-const STATUS_TONES = {
-  working: 'working',
-  running: 'working',
-  queued: 'queued',
-  failed: 'error',
-  error: 'error',
-  finished: 'done',
-  done: 'done',
+export const EFFORT_LEVELS = {
+  claude: ['low', 'medium', 'high', 'xhigh', 'max'],
+  opencode: ['low', 'medium', 'high', 'max'],
 }
 
 function clean(value) {
@@ -30,11 +20,6 @@ function isObject(value) {
 export function wideLayout(width) {
   const value = Number(width)
   return Number.isFinite(value) && value >= WIDE_LAYOUT_MIN
-}
-
-export function statusTone(status) {
-  const word = clean(status).toLowerCase()
-  return Object.hasOwn(STATUS_TONES, word) ? STATUS_TONES[word] : 'idle'
 }
 
 export function formatCount(value) {
@@ -53,34 +38,6 @@ export function contextLine(context) {
     return 'Context size not reported'
   }
   return `Context size ${formatCount(tokens)} / ${formatCount(window)}`
-}
-
-export function laneLine(context) {
-  if (!context || typeof context !== 'object') return ''
-  const tokens = clean(context.tokens)
-  const cost = clean(context.cost)
-  const tokenText = tokens && tokens !== 'not reported' ? `Tokens ${tokens}` : 'Tokens not reported'
-  const costText = cost && cost !== 'not reported' ? `${cost} this month` : 'cost not reported this month'
-  return `${tokenText}, ${costText}`
-}
-
-export function stripLogLines(log, limit = STRIP_LOG_LIMIT) {
-  if (!Array.isArray(log)) return []
-  const wanted = Number.isInteger(limit) && limit > 0 ? limit : STRIP_LOG_LIMIT
-  const lines = []
-  for (const item of log) {
-    let text = ''
-    let tone = 'normal'
-    if (typeof item === 'string') {
-      text = clean(item)
-    } else if (isObject(item)) {
-      text = clean(item.text ?? item.line ?? item.message)
-      tone = TONES.has(item.tone) ? item.tone : 'normal'
-    }
-    if (!text) continue
-    lines.push({ text: `> ${text}`, tone })
-  }
-  return lines.slice(-wanted)
 }
 
 export function harnessKey(value) {
@@ -109,23 +66,6 @@ export function modelChoices(models, harness) {
   return choices
 }
 
-export function agentChoices(agents) {
-  const list = agentList(agents, true).top
-  const seen = new Set()
-  const choices = []
-  for (const agent of list) {
-    const key = clean(agent?.key)
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    choices.push({
-      key,
-      name: clean(agent?.name) || key,
-      status: clean(agent?.status) || 'idle',
-    })
-  }
-  return choices
-}
-
 export function clampAutocompactPercent(value) {
   const number = Number(value)
   if (!Number.isFinite(number)) return DEFAULT_AUTOCOMPACT_PERCENT
@@ -141,4 +81,39 @@ export function autocompactPercent(row) {
 export function orchestratorId(key) {
   const text = clean(key)
   return text.toLowerCase().startsWith('sub-') ? text.slice(4) : text
+}
+
+export function effortLevels(harness) {
+  const key = harnessKey(harness)
+  if (!Object.hasOwn(EFFORT_LEVELS, key)) return []
+  return [...EFFORT_LEVELS[key]]
+}
+
+export function effortLabel(value, harness) {
+  const text = clean(value).toLowerCase()
+  const levels = effortLevels(harness)
+  return levels.includes(text) ? text : 'default'
+}
+
+export function orchestratorRows(value) {
+  if (Array.isArray(value)) return value.filter(isObject)
+  if (isObject(value) && Array.isArray(value.orchestrators)) return value.orchestrators.filter(isObject)
+  if (isObject(value) && typeof value.id === 'string') return [value]
+  return []
+}
+
+export function orchestratorEntry(value, key) {
+  const wanted = orchestratorId(key).toLowerCase()
+  if (!wanted) return null
+  return (
+    orchestratorRows(value).find((row) => {
+      const id = clean(row.id).toLowerCase()
+      const sub = clean(row.key).toLowerCase()
+      return id === wanted || id === `sub-${wanted}` || sub === `sub-${wanted}`
+    }) ?? null
+  )
+}
+
+export function orchestratorEffort(value, key) {
+  return clean(orchestratorEntry(value, key)?.effort).toLowerCase()
 }
