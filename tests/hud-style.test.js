@@ -288,15 +288,23 @@ describe('HUD concept style structure', () => {
     }
   })
 
-  it('defines the lens brackets and the waiting card inside the lens in styles.css', () => {
+  it('defines the straight lens edges and the waiting card inside the lens in styles.css', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('.hud-band-project')
     expect(css).toContain('.lens-corner.is-center')
     expect(css).toContain('.lens-clock')
-    expect(css).toContain('.lens-brackets')
-    expect(css).toContain('.lens-mark.is-top-left')
-    expect(css).toContain('.lens-mark.is-bottom-right')
-    expect(css).toContain('border-color: rgb(255 255 255 / 0.3)')
+    expect(css).toContain('.lens-edge.is-top')
+    expect(css).toContain('.lens-edge.is-bottom')
+    expect(css).toContain('.lens-edge-rule')
+    expect(css).toContain('.lens-edge-label')
+    expect(css).toContain('.lens-edge-cross')
+    expect(css).toContain('.lens-edge-corner.is-left')
+    expect(css).toContain('.lens-edge-corner.is-right')
+    expect(css).toContain('.transport-badge.is-live')
+    expect(css).toContain('.transport-badge.is-down')
+    expect(css).toContain('rgb(255 255 255 / 0.35)')
+    expect(css).not.toContain('url(#mr-lens-clip)')
+    expect(css).not.toContain('.lens-brackets')
     expect(css).toMatch(/@media \(min-width: 900px\) \{\n  \.waiting \{/)
   })
 

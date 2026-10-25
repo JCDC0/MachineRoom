@@ -27,7 +27,7 @@ import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
 import { loadEffectSettings, loadSettings, loadSoundSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
 import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
-import { barrelDataUri } from './ui/barrel.js'
+import { LiveBadgeContext } from './ui/Transport.jsx'
 import Waiting from './ui/Waiting.jsx'
 import LensRail from './ui/LensRail.jsx'
 import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, lensShareAfterWheel, lensShareFromRail, multiplierText } from './ui/lensResize.js'
@@ -50,6 +50,89 @@ const DEMO_SUBS = [
   { id: 'frontend', name: 'Frontend', lanes: ['opencode'], scope: ['src/**'], restricted: true, setBy: 'owner' },
   { id: 'backend', name: 'Backend', lanes: ['claude'], scope: ['server/**'], restricted: true, setBy: 'owner' },
 ]
+
+export const LENS_EDGE_HEIGHT = 24
+export const LENS_TICK_STEP = 40
+export const LENS_LABEL_STEP = 200
+
+function spanOf(width) {
+  const value = Number(width)
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0
+}
+
+export function lensEdgeTicks(width) {
+  const ticks = []
+  for (let x = 0; x <= spanOf(width); x += LENS_TICK_STEP) {
+    ticks.push({ x, tall: x % LENS_LABEL_STEP === 0 })
+  }
+  return ticks
+}
+
+export function lensEdgeLabels(width) {
+  const labels = []
+  for (let x = 0; x <= spanOf(width); x += LENS_LABEL_STEP) {
+    labels.push({ x, text: String(x).padStart(3, '0') })
+  }
+  return labels
+}
+
+function LensEdge({ side }) {
+  const ref = useRef(null)
+  const [width, setWidth] = useState(0)
+  const top = side === 'top'
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return undefined
+    const read = () => {
+      const rect = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null
+      setWidth(Math.max(0, Math.round(Number(rect?.width) || 0)))
+    }
+    read()
+    if (typeof ResizeObserver !== 'function') return undefined
+    const observer = new ResizeObserver(read)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+  const lineY = top ? 0.5 : LENS_EDGE_HEIGHT - 0.5
+  return (
+    <div className={`lens-edge is-${side}`} ref={ref} aria-hidden="true">
+      <span className="lens-edge-corner is-left" />
+      <span className="lens-edge-corner is-right" />
+      <span className="lens-edge-cross">+</span>
+      <svg
+        className="lens-edge-rule"
+        width="100%"
+        height={LENS_EDGE_HEIGHT}
+        aria-hidden="true"
+      >
+        <line className="lens-edge-line" x1="0" x2="100%" y1={lineY} y2={lineY} />
+        {lensEdgeTicks(width).map((tick) => {
+          const length = tick.tall ? 11 : 5
+          return (
+            <line
+              key={`tick-${tick.x}`}
+              className={`lens-edge-tick${tick.tall ? ' is-tall' : ''}`}
+              x1={tick.x + 0.5}
+              x2={tick.x + 0.5}
+              y1={top ? 1 : LENS_EDGE_HEIGHT - 1}
+              y2={top ? length : LENS_EDGE_HEIGHT - length}
+            />
+          )
+        })}
+        {lensEdgeLabels(width).map((label) => (
+          <text
+            key={`label-${label.x}`}
+            className="lens-edge-label"
+            x={label.x + 4}
+            y={top ? 22 : 9}
+          >
+            {label.text}
+          </text>
+        ))}
+      </svg>
+    </div>
+  )
+}
 
 export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode, fps = false }) {
   const surfaceRef = useRef(null)
@@ -594,216 +677,164 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
   const orchestratorActivity = orchestratorDoing(snapshot.agents)
 
-  const fishEyeOn = Boolean(effects.fishEye?.on && effects.fishEye?.strength > 0)
-  const barrelMap = useMemo(() => (fishEyeOn ? barrelDataUri() : ''), [fishEyeOn])
   const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
-  const hasFilter = fishEyeOn || chromaOn
   const chromaDx = chromaOn ? Number((effects.aberration.strength * 6).toFixed(2)) : 0
-  const fishEyeScale = fishEyeOn ? Number((effects.fishEye.strength * 240).toFixed(2)) : 0
 
   const lens = lensStatus(snapshot.agents, log)
   const project = lensProject(data.tree.rootName)
   const clock = lensClock(Boolean(live), snapshot.position)
 
   return (
-    <div className="stage" style={lensShare === null ? undefined : { '--lens-h-user': lensHeightValue(lensShare) }}>
-      <svg
-        className="lens-clip-defs"
-        aria-hidden="true"
-        style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none', overflow: 'hidden' }}
-      >
-        <defs>
-          <clipPath id="mr-lens-clip" clipPathUnits="objectBoundingBox">
-            <path d="M 0,0 Q 0.5,0.12 1,0 L 1,1 Q 0.5,0.88 0,1 Z" />
-          </clipPath>
-        </defs>
-      </svg>
-      <div className="lens">
-        <svg className="lens-edge" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M 0,0 Q 50,12 100,0" />
-          <path d="M 0,100 Q 50,88 100,100" />
-        </svg>
-        <div className="lens-frame" ref={surfaceRef}>
-          <div
-            className="surface-layers"
-            style={hasFilter ? { filter: 'url(#mr-screen-filter)' } : undefined}
-          >
-            <div className="layer" ref={cssRef} aria-hidden="true" />
-            <div className="layer is-over" ref={glRef} aria-hidden="true" />
-          </div>
-          <div className="screen-effects-overlay" aria-hidden="true">
+    <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
+      <div className="stage" style={lensShare === null ? undefined : { '--lens-h-user': lensHeightValue(lensShare) }}>
+        <div className="lens">
+          <LensEdge side="top" />
+          <LensEdge side="bottom" />
+          <div className="lens-frame" ref={surfaceRef}>
             <div
-              className="screen-vignette"
-              style={{ opacity: effects.vignette?.on ? effects.vignette.strength : 0 }}
-            />
-            <div
-              className="screen-grain"
-              style={{ opacity: effects.grain?.on ? effects.grain.strength * 0.25 : 0 }}
-            />
-          </div>
-          <div className="lens-labels">
-            <p className="lens-corner is-left">
-              <span className="lens-project">{data.tree.rootName}</span>
-              <span className="lens-version mono">
-                {name} {version}
-              </span>
-            </p>
-            <p className="lens-corner is-center">
-              <span className="lens-project">{project}</span>
-            </p>
-            <div className="lens-corner is-right">
-              <span className="lens-clock mono">{clock}</span>
-              <span className="lens-lanes mono">
-                Working {lens.working} / {lens.total}
-              </span>
-              <span className="lens-bar" aria-hidden="true">
-                <span
-                  className="lens-bar-fill"
-                  style={{ width: `${Math.round(lens.share * 100)}%` }}
-                />
-              </span>
+              className="surface-layers"
+              style={chromaOn ? { filter: 'url(#mr-screen-filter)' } : undefined}
+            >
+              <div className="layer" ref={cssRef} aria-hidden="true" />
+              <div className="layer is-over" ref={glRef} aria-hidden="true" />
             </div>
-            <p className={`lens-corner is-bottom mono is-${lens.tone}`}>{lens.activity}</p>
+            <div className="screen-effects-overlay" aria-hidden="true">
+              <div
+                className="screen-vignette"
+                style={{ opacity: effects.vignette?.on ? effects.vignette.strength : 0 }}
+              />
+              <div
+                className="screen-grain"
+                style={{ opacity: effects.grain?.on ? effects.grain.strength * 0.25 : 0 }}
+              />
+            </div>
+            <div className="lens-labels">
+              <p className="lens-corner is-left">
+                <span className="lens-project">{data.tree.rootName}</span>
+                <span className="lens-version mono">
+                  {name} {version}
+                </span>
+              </p>
+              <p className="lens-corner is-center">
+                <span className="lens-project">{project}</span>
+              </p>
+              <div className="lens-corner is-right">
+                <span className="lens-clock mono">{clock}</span>
+                <span className="lens-lanes mono">
+                  Working {lens.working} / {lens.total}
+                </span>
+                <span className="lens-bar" aria-hidden="true">
+                  <span
+                    className="lens-bar-fill"
+                    style={{ width: `${Math.round(lens.share * 100)}%` }}
+                  />
+                </span>
+              </div>
+              <p className={`lens-corner is-bottom mono is-${lens.tone}`}>{lens.activity}</p>
+            </div>
           </div>
-        </div>
-        <div className="lens-brackets" aria-hidden="true">
-          <span className="lens-mark is-top-left" />
-          <span className="lens-mark is-tick-one" />
-          <span className="lens-mark is-tick-two" />
-          <span className="lens-mark is-bottom-left" />
-          <span className="lens-mark is-bottom-right" />
-        </div>
-        <LensRail
-          side="left"
-          label="Height"
-          share={heightRailShare(lensShare ?? undefined)}
-          multiplier={multiplierText((lensShare ?? LENS_SHARE_DEFAULT) / LENS_SHARE_DEFAULT)}
-          ariaLabel="Lens height"
-          valueText={`${Math.round((lensShare ?? LENS_SHARE_DEFAULT) * 100)} percent of the window`}
-          onShare={(share, done) => changeLensShare(lensShareFromRail(share), done)}
-          onWheel={(deltaY) => changeLensShare(lensShareAfterWheel(lensShare ?? undefined, deltaY))}
-        />
-        <LensRail
-          side="right"
-          label="Zoom"
-          share={zoom.share}
-          multiplier={multiplierText(zoom.multiplier)}
-          ariaLabel="Zoom"
-          valueText={`${multiplierText(zoom.multiplier)} of the overview`}
-          onShare={(share) => roomRef.current?.setZoomShare?.(share)}
-          onWheel={(deltaY) => roomRef.current?.zoomBy?.(deltaY)}
-        />
-        {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
-      </div>
-      {hasFilter && (
-        <svg
-          className="screen-filter-defs"
-          aria-hidden="true"
-          style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none', overflow: 'hidden' }}
-        >
-          <defs>
-            <filter id="mr-screen-filter" x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
-              {fishEyeOn && (
-                <feImage
-                  href={barrelMap}
-                  x="0%"
-                  y="0%"
-                  width="100%"
-                  height="100%"
-                  preserveAspectRatio="none"
-                  result="barrel"
-                />
-              )}
-              {chromaOn && (
-                <>
-                  <feColorMatrix
-                    in="SourceGraphic"
-                    type="matrix"
-                    result="red"
-                    values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
-                  />
-                  <feOffset in="red" dx={chromaDx} dy="0" result="redShift" />
-                  <feColorMatrix
-                    in="SourceGraphic"
-                    type="matrix"
-                    result="green"
-                    values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
-                  />
-                  <feColorMatrix
-                    in="SourceGraphic"
-                    type="matrix"
-                    result="blue"
-                    values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
-                  />
-                  <feOffset in="blue" dx={-chromaDx} dy="0" result="blueShift" />
-                  <feBlend in="redShift" in2="green" mode="screen" result="rg" />
-                  <feBlend in="rg" in2="blueShift" mode="screen" result="chroma" />
-                </>
-              )}
-              {fishEyeOn && (
-                <feDisplacementMap
-                  in={chromaOn ? 'chroma' : 'SourceGraphic'}
-                  in2="barrel"
-                  scale={fishEyeScale}
-                  xChannelSelector="R"
-                  yChannelSelector="G"
-                  result="filtered"
-                />
-              )}
-            </filter>
-          </defs>
-        </svg>
-      )}
-      {live && (
-        <div className="stage-badge" style={{ ...BADGE, color: snapshot.status === 'live' ? 'var(--yellow)' : 'var(--red)' }} role="status">
-          {live.simulated ? 'Demo' : 'Live'} // {snapshot.status === 'live' ? 'connected' : snapshot.status}
-        </div>
-      )}
-      {following && (
-        <div className="stage-badge" style={{ ...BADGE, bottom: live ? 128 : 96, color: 'var(--white)' }} role="status">
-          Follow // {following}
-        </div>
-      )}
-      {toast && (
-        <div className="stage-badge" style={{ ...BADGE, bottom: live ? 164 : 132, color: 'var(--white)', maxWidth: 360, textTransform: 'none' }} role="status">
-          {toast}
-        </div>
-      )}
-      <OrchestratorActivity.Provider value={orchestratorActivity}>
-        <CostsModeContext.Provider value={costMode}>
-          <Hud
-            snapshot={snapshot}
-            project={project}
-            focused={focused}
-            speeds={SPEEDS}
-            fpsStats={fpsStats}
-            mode={mode}
-            client={client}
-            assistantPaths={assistantPaths}
-            onAssistantAction={runAssistant}
-            controlTarget={controlTarget}
-            markers={timeline?.markers ?? NONE}
-            log={log}
-            costs={dockCosts}
-            liveRuns={dockRuns}
-            tasks={dockTasks}
-            liveAvailable={liveAvailable}
-            onMode={onMode}
-            onToggle={() => player.toggle()}
-            onSeek={(value) => player.seek(value)}
-            onSpeed={changeSpeed}
-            onFocus={focus}
-            onOverview={overview}
-            openTerminals={openChips}
-            onToggleTerminal={toggleTerminal}
-            onShowTerminals={showTerminals}
-            health={health}
-            ladder={ladder}
-            effects={effects}
-            onSettingsChange={handleSettingsChange}
+          <LensRail
+            side="left"
+            label="Height"
+            share={heightRailShare(lensShare ?? undefined)}
+            multiplier={multiplierText((lensShare ?? LENS_SHARE_DEFAULT) / LENS_SHARE_DEFAULT)}
+            ariaLabel="Lens height"
+            valueText={`${Math.round((lensShare ?? LENS_SHARE_DEFAULT) * 100)} percent of the window`}
+            onShare={(share, done) => changeLensShare(lensShareFromRail(share), done)}
+            onWheel={(deltaY) => changeLensShare(lensShareAfterWheel(lensShare ?? undefined, deltaY))}
           />
-        </CostsModeContext.Provider>
-      </OrchestratorActivity.Provider>
-    </div>
+          <LensRail
+            side="right"
+            label="Zoom"
+            share={zoom.share}
+            multiplier={multiplierText(zoom.multiplier)}
+            ariaLabel="Zoom"
+            valueText={`${multiplierText(zoom.multiplier)} of the overview`}
+            onShare={(share) => roomRef.current?.setZoomShare?.(share)}
+            onWheel={(deltaY) => roomRef.current?.zoomBy?.(deltaY)}
+          />
+          {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
+        </div>
+        {chromaOn && (
+          <svg
+            className="screen-filter-defs"
+            aria-hidden="true"
+            style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none', overflow: 'hidden' }}
+          >
+            <defs>
+              <filter id="mr-screen-filter" x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
+                <feColorMatrix
+                  in="SourceGraphic"
+                  type="matrix"
+                  result="red"
+                  values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                />
+                <feOffset in="red" dx={chromaDx} dy="0" result="redShift" />
+                <feColorMatrix
+                  in="SourceGraphic"
+                  type="matrix"
+                  result="green"
+                  values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                />
+                <feColorMatrix
+                  in="SourceGraphic"
+                  type="matrix"
+                  result="blue"
+                  values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
+                />
+                <feOffset in="blue" dx={-chromaDx} dy="0" result="blueShift" />
+                <feBlend in="redShift" in2="green" mode="screen" result="rg" />
+                <feBlend in="rg" in2="blueShift" mode="screen" result="chroma" />
+              </filter>
+            </defs>
+          </svg>
+        )}
+        {following && (
+          <div className="stage-badge" style={{ ...BADGE, bottom: live ? 128 : 96, color: 'var(--white)' }} role="status">
+            Follow // {following}
+          </div>
+        )}
+        {toast && (
+          <div className="stage-badge" style={{ ...BADGE, bottom: live ? 164 : 132, color: 'var(--white)', maxWidth: 360, textTransform: 'none' }} role="status">
+            {toast}
+          </div>
+        )}
+        <OrchestratorActivity.Provider value={orchestratorActivity}>
+          <CostsModeContext.Provider value={costMode}>
+            <Hud
+              snapshot={snapshot}
+              project={project}
+              focused={focused}
+              speeds={SPEEDS}
+              fpsStats={fpsStats}
+              mode={mode}
+              client={client}
+              assistantPaths={assistantPaths}
+              onAssistantAction={runAssistant}
+              controlTarget={controlTarget}
+              markers={timeline?.markers ?? NONE}
+              log={log}
+              costs={dockCosts}
+              liveRuns={dockRuns}
+              tasks={dockTasks}
+              liveAvailable={liveAvailable}
+              onMode={onMode}
+              onToggle={() => player.toggle()}
+              onSeek={(value) => player.seek(value)}
+              onSpeed={changeSpeed}
+              onFocus={focus}
+              onOverview={overview}
+              openTerminals={openChips}
+              onToggleTerminal={toggleTerminal}
+              onShowTerminals={showTerminals}
+              health={health}
+              ladder={ladder}
+              effects={effects}
+              onSettingsChange={handleSettingsChange}
+            />
+          </CostsModeContext.Provider>
+        </OrchestratorActivity.Provider>
+      </div>
+    </LiveBadgeContext.Provider>
   )
 }

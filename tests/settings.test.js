@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { validateBridgeUrl } from '../src/ui/Connect.jsx'
 import { readStorage, writeStorage } from '../src/storage.js'
-import { barrelPixels } from '../src/ui/barrel.js'
+import { EFFECTS } from '../src/ui/Settings.jsx'
 import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
 
 function makeStorage(initial = {}) {
@@ -149,10 +149,20 @@ describe('validateBridgeUrl', () => {
 })
 
 describe('effectSettings', () => {
+  it('lists four screen effects without a fish eye row', () => {
+    expect(EFFECTS.map((effect) => effect.label)).toEqual([
+      'Chromatic aberration',
+      'Vignette',
+      'Grain',
+      'Fine dust',
+    ])
+  })
+
   it('fills defaults when saved settings are empty or invalid', () => {
     const defaults = effectSettings()
     expect(defaults.alwaysDepth).toBe(2)
-    expect(defaults.fishEye).toEqual({ on: false, strength: 0.2 })
+    expect(defaults.fishEye).toBeUndefined()
+    expect(defaults.fisheye).toBeUndefined()
     expect(defaults.aberration).toEqual({ on: false, strength: 0.2 })
     expect(defaults.chromaticAberration).toEqual({ on: false, strength: 0.2 })
     expect(defaults.vignette).toEqual({ on: true, strength: 0.2 })
@@ -179,33 +189,35 @@ describe('effectSettings', () => {
 
   it('clamps effect strengths between 0 and 1', () => {
     const res = effectSettings({
-      fishEye: { on: true, strength: 2.5 },
+      aberration: { on: true, strength: 2.5 },
       vignette: { on: false, strength: -1 },
       grain: { on: true, strength: 0.75 },
     })
-    expect(res.fishEye).toEqual({ on: true, strength: 1 })
+    expect(res.aberration).toEqual({ on: true, strength: 1 })
     expect(res.vignette).toEqual({ on: false, strength: 0 })
     expect(res.grain).toEqual({ on: true, strength: 0.75 })
   })
 
   it('accepts boolean and numeric shortcuts', () => {
     const res = effectSettings({
-      fishEye: true,
+      aberration: true,
       grain: false,
       dust: 0.85,
     })
-    expect(res.fishEye).toEqual({ on: true, strength: 0.2 })
+    expect(res.aberration).toEqual({ on: true, strength: 0.2 })
     expect(res.grain).toEqual({ on: false, strength: 0.2 })
     expect(res.dust).toEqual({ on: true, strength: 0.85, pulse: false })
   })
 
-  it('recognizes aliases for effect names', () => {
+  it('recognizes aliases for effect names and ignores a saved fish eye', () => {
     const res = effectSettings({
+      fishEye: { on: true, strength: 0.4 },
       fisheye: { on: true, strength: 0.4 },
       chromaticAberration: { on: true, strength: 0.5 },
       fineDust: { on: false, strength: 0.1 },
     })
-    expect(res.fishEye).toEqual({ on: true, strength: 0.4 })
+    expect(res.fishEye).toBeUndefined()
+    expect(res.fisheye).toBeUndefined()
     expect(res.aberration).toEqual({ on: true, strength: 0.5 })
     expect(res.chromaticAberration).toEqual({ on: true, strength: 0.5 })
     expect(res.dust).toEqual({ on: false, strength: 0.1, pulse: false })
@@ -220,40 +232,60 @@ describe('effectSettings', () => {
 
     const updated = saveEffectSettings(storage, {
       alwaysDepth: 3,
-      fishEye: { on: true, strength: 0.6 },
+      aberration: { on: true, strength: 0.6 },
       vignette: { on: false, strength: 0 },
     })
     expect(updated.alwaysDepth).toBe(3)
-    expect(updated.fishEye).toEqual({ on: true, strength: 0.6 })
+    expect(updated.aberration).toEqual({ on: true, strength: 0.6 })
     expect(updated.vignette).toEqual({ on: false, strength: 0 })
 
     const reloaded = loadEffectSettings(storage)
     expect(reloaded.alwaysDepth).toBe(3)
-    expect(reloaded.fishEye).toEqual({ on: true, strength: 0.6 })
+    expect(reloaded.aberration).toEqual({ on: true, strength: 0.6 })
     expect(reloaded.vignette).toEqual({ on: false, strength: 0 })
 
     const raw = JSON.parse(storage.getItem(SETTINGS_KEY))
     expect(raw.alwaysDepth).toBe(3)
-    expect(raw.effects.fishEye).toEqual({ on: true, strength: 0.6 })
+    expect(raw.effects.aberration).toEqual({ on: true, strength: 0.6 })
+    expect(raw.effects.fishEye).toBeUndefined()
     expect(raw.source).toBe('bridge')
   })
 
   it('preserves existing effect values on partial effect patches', () => {
     const storage = makeStorage()
     saveEffectSettings(storage, {
-      fishEye: { on: false, strength: 0.85 },
+      aberration: { on: false, strength: 0.85 },
       grain: { on: true, strength: 0.7 },
     })
 
     const afterOn = saveEffectSettings(storage, {
-      fishEye: { on: true },
+      aberration: { on: true },
     })
-    expect(afterOn.fishEye).toEqual({ on: true, strength: 0.85 })
+    expect(afterOn.aberration).toEqual({ on: true, strength: 0.85 })
 
     const afterStrength = saveEffectSettings(storage, {
       grain: { strength: 0.4 },
     })
     expect(afterStrength.grain).toEqual({ on: true, strength: 0.4 })
+  })
+
+  it('drops a fish eye value from an older saved setting', () => {
+    const storage = makeStorage({
+      [SETTINGS_KEY]: JSON.stringify({
+        effects: {
+          fishEye: { on: true, strength: 1 },
+          aberration: { on: true, strength: 0.4 },
+        },
+      }),
+    })
+    const loaded = loadEffectSettings(storage)
+    expect(loaded.fishEye).toBeUndefined()
+    expect(loaded.aberration).toEqual({ on: true, strength: 0.4 })
+
+    saveEffectSettings(storage, { alwaysDepth: 2 })
+    const raw = JSON.parse(storage.getItem(SETTINGS_KEY))
+    expect(raw.effects.fishEye).toBeUndefined()
+    expect(raw.effects.aberration).toEqual({ on: true, strength: 0.4 })
   })
 })
 
@@ -310,21 +342,5 @@ describe('soundSettings', () => {
     const loaded = loadSettings(storage)
     expect(loaded.speed).toBe(2)
     expect(loaded.sound).toEqual(updated)
-  })
-})
-
-describe('barrelPixels', () => {
-  const size = 16
-  const pixels = barrelPixels(size)
-  const at = (x, y) => [...pixels.slice((y * size + x) * 4, (y * size + x) * 4 + 4)]
-
-  it('leaves the corners where they are', () => {
-    expect(at(0, 0)).toEqual([128, 128, 128, 255])
-  })
-
-  it('pulls a point right of the centre towards it', () => {
-    const [red, green] = at(12, 8)
-    expect(red).toBeLessThan(128)
-    expect(Math.abs(green - 128)).toBeLessThanOrEqual(8)
   })
 })

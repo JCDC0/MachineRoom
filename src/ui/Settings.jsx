@@ -7,7 +7,6 @@ import { effectSettings, loadSoundSettings, saveSoundSettings } from './settings
 import { sound } from './sound.js'
 
 export const EFFECTS = [
-  { key: 'fishEye', label: 'Fish eye', costly: false },
   { key: 'aberration', label: 'Chromatic aberration', costly: false },
   { key: 'vignette', label: 'Vignette', costly: false },
   { key: 'grain', label: 'Grain', costly: false },

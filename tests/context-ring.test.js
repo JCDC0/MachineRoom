@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import Transport from '../src/ui/Transport.jsx'
+import Transport, { LiveBadgeContext, liveBadgeText } from '../src/ui/Transport.jsx'
 import {
   contextLabel,
   contextPercent,
@@ -150,5 +150,37 @@ describe('the transport under the lens', () => {
     expect(replay).toContain('class="transport"')
     expect(replay).not.toContain('transport-orchestrator')
     expect(replay).not.toContain('transport-context')
+    expect(replay).not.toContain('transport-badge')
+  })
+
+  it('puts the live link tag at the left of the bar beside Live feed', () => {
+    const connected = renderToString(
+      createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1] })
+    )
+    expect(connected).toContain('class="transport-live-head"')
+    expect(connected).toContain('class="transport-badge is-live"')
+    expect(connected).toContain('Live // connected')
+    expect(connected.indexOf('transport-badge')).toBeLessThan(connected.indexOf('Live feed'))
+
+    const down = renderToString(
+      createElement(Transport, { snapshot: { ...LIVE, status: 'reconnecting' }, speeds: [1] })
+    )
+    expect(down).toContain('class="transport-badge is-down"')
+    expect(down).toContain('Live // reconnecting')
+  })
+
+  it('says Demo in the tag when the room plays the demo', () => {
+    const html = renderToString(
+      createElement(
+        LiveBadgeContext.Provider,
+        { value: 'demo' },
+        createElement(Transport, { snapshot: { ...LIVE, status: 'live' }, speeds: [1] })
+      )
+    )
+    expect(html).toContain('Demo // connected')
+    expect(liveBadgeText('live')).toBe('Live // connected')
+    expect(liveBadgeText('disconnected')).toBe('Live // disconnected')
+    expect(liveBadgeText(undefined)).toBe('Live // connecting')
+    expect(liveBadgeText('live', 'demo')).toBe('Demo // connected')
   })
 })

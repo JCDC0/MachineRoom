@@ -25,7 +25,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
 export const DEFAULT_EFFECTS = Object.freeze({
   alwaysDepth: 2,
-  fishEye: Object.freeze({ on: false, strength: 0.2 }),
   aberration: Object.freeze({ on: false, strength: 0.2 }),
   vignette: Object.freeze({ on: true, strength: 0.2 }),
   grain: Object.freeze({ on: false, strength: 0.2 }),
@@ -83,7 +82,6 @@ export function effectSettings(saved) {
   }
 
   const alwaysDepth = clampDepth(source.alwaysDepth ?? root.alwaysDepth)
-  const fishEye = clampEffect(source.fishEye ?? source.fisheye, false, 0.2)
   const aberration = clampEffect(source.aberration ?? source.chromaticAberration, false, 0.2)
   const vignette = clampEffect(source.vignette, true, 0.2)
   const grain = clampEffect(source.grain, false, 0.2)
@@ -92,8 +90,6 @@ export function effectSettings(saved) {
 
   return {
     alwaysDepth,
-    fishEye,
-    fisheye: fishEye,
     aberration,
     chromaticAberration: aberration,
     vignette,
@@ -137,7 +133,6 @@ function normalizeSettings(raw) {
   if (raw.effects && typeof raw.effects === 'object') {
     const norm = effectSettings(raw.effects)
     out.effects = {
-      fishEye: norm.fishEye,
       aberration: norm.aberration,
       vignette: norm.vignette,
       grain: norm.grain,
@@ -225,16 +220,14 @@ export function saveEffectSettings(storage = store(), partial) {
   const current = loadEffectSettings(storage)
   const incoming = partial && typeof partial === 'object' && !Array.isArray(partial) ? partial : {}
   const mergedEffects = {}
-  for (const key of ['fishEye', 'aberration', 'vignette', 'grain', 'dust']) {
+  for (const key of ['aberration', 'vignette', 'grain', 'dust']) {
     const inc =
       incoming[key] ??
       (key === 'aberration'
         ? incoming.chromaticAberration
         : key === 'dust'
           ? incoming.fineDust
-          : key === 'fishEye'
-            ? incoming.fisheye
-            : undefined)
+          : undefined)
     if (inc && typeof inc === 'object' && !Array.isArray(inc)) {
       mergedEffects[key] = { ...(current[key] ?? {}), ...inc }
     } else if (inc !== undefined) {
@@ -251,7 +244,6 @@ export function saveEffectSettings(storage = store(), partial) {
   saveSettings(storage, {
     alwaysDepth: merged.alwaysDepth,
     effects: {
-      fishEye: merged.fishEye,
       aberration: merged.aberration,
       vignette: merged.vignette,
       grain: merged.grain,
