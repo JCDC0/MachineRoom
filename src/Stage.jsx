@@ -59,7 +59,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (typeof window === 'undefined') return null
     if (live && !live.simulated) return null
     const params = new URLSearchParams(window.location.search)
-    const demo = Boolean(live?.simulated) || params.get('ladder') === 'demo' || data.fixture === DEFAULT_FIXTURE
+    const ladder = params.get('ladder')
+    const demo = Boolean(live?.simulated) || ladder === 'demo' || (ladder === null && data.fixture === DEFAULT_FIXTURE)
     if (!demo) return null
     return { subs: DEMO_SUBS }
   }, [data.fixture, live])

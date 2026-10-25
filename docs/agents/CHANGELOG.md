@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `?replay&ladder=none` no longer gets the demo ladder from the default fixture, and the OpenCode lane notes name all ten lanes and say Paperclip is gone (found by R14).
+
 - The lens's top and bottom edges curve inward, as in the owner's sketch, with a thin edge line drawn on the same curve.
 
 - The waiting card hides while the orchestrator chat is open, the chat has a solid background and at least 320 pixels below 1024 wide, and the waiting card counts the agents instead of naming more than four.
