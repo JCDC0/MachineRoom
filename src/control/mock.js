@@ -1,5 +1,4 @@
-import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from '../../server/agents-config.js'
-import { resolveContextWindow } from '../../server/models.js'
+import { harnessUnavailableProblem, modelUnavailableProblem, resolveContextWindow } from '../../server/model-list.js'
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { briefMarkdown, planPrompt } from '../briefs/plan.js'
@@ -7,6 +6,10 @@ import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
 import { readLadder } from '../model/hierarchy.js'
 import { chooseRoute } from '../policy/route.js'
 import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
+
+function laneHasHarness(lanes, harness) {
+  return Object.values(lanes ?? {}).some((lane) => lane?.cli?.harness === harness)
+}
 
 export const CLIENT_METHODS = [
   'agents',
@@ -512,7 +515,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     }
     const baseLanes = Object.fromEntries(state.lanes.map((lane) => [lane.key, { cli: { harness: lane.harness, bin: process.execPath } }]))
     const mockHarnesses = ['claude', 'opencode', 'hermes']
-      .filter((key) => isHarnessAvailable(key, { lanes: baseLanes }) || ['claude', 'opencode'].includes(key))
+      .filter((key) => laneHasHarness(baseLanes, key) || ['claude', 'opencode'].includes(key))
       .map((key) => ({
         key,
         name: key === 'claude' ? 'Claude Code' : key === 'opencode' ? 'OpenCode' : 'Hermes',
@@ -1064,7 +1067,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (confirmed !== true) throw new Error('Confirm the harness change first.')
         if (!harness) throw new Error('Choose a harness.')
         const baseLanes = Object.fromEntries(state.lanes.map((lane) => [lane.key, { cli: { harness: lane.harness, bin: process.execPath } }]))
-        const available = ['claude', 'opencode', 'hermes'].includes(harness) || isHarnessAvailable(harness, { lanes: baseLanes })
+        const available = ['claude', 'opencode', 'hermes'].includes(harness) || laneHasHarness(baseLanes, harness)
         if (!available) throw new Error(harnessUnavailableProblem(harness))
         const allowed = state.models.some((m) => m.id === model && m.harness === harness)
         if (!allowed) throw new Error(modelUnavailableProblem(model, harness))

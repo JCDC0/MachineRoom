@@ -4,6 +4,7 @@ import { readEndpoints } from './endpoints.js'
 import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
+import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
 
 export const MAX_AGENTS = 30
 export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot']
@@ -39,13 +40,7 @@ export const MAX_AGENTS_PROBLEM = 'At most 30 custom agents are allowed.'
 export const LANES_JSON_DELETE_PROBLEM = 'A lane from lanes.json cannot be deleted; make it inactive instead.'
 export const LANES_JSON_UPDATE_PROBLEM = 'A lane from lanes.json cannot be updated.'
 
-export function harnessUnavailableProblem(harness) {
-  return `The harness ${harness} is not available on this computer.`
-}
-
-export function modelUnavailableProblem(model, harness) {
-  return `The model ${model} is not available for ${harness}.`
-}
+export { harnessUnavailableProblem, modelUnavailableProblem }
 
 export function effortUnavailableProblem(effort, harness) {
   return `The effort ${effort} is not available for ${harness}.`
