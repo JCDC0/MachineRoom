@@ -38,7 +38,9 @@ export default function Waiting({ agents = [], status = 'connecting', orchestrat
   const agentSummary =
     names.length === 0
       ? 'No agents listed yet.'
-      : `${names.length === 1 ? '1 agent ready' : `${names.length} agents ready`}: ${names.join(', ')}`
+      : names.length > 4
+        ? `${names.length} agents ready.`
+        : `${names.length === 1 ? '1 agent ready' : `${names.length} agents ready`}: ${names.join(', ')}`
 
   return (
     <aside

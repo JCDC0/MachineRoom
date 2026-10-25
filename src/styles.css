@@ -2302,6 +2302,10 @@ summary:focus-visible,
   pointer-events: auto;
 }
 
+body:has(#hud-orchestrator-chat) .waiting {
+  display: none;
+}
+
 .waiting-card {
   padding: 0;
   background: var(--corner-ticks), rgb(0 0 0 / 0.9);
@@ -4769,7 +4773,7 @@ summary:focus-visible,
   display: flex;
   flex-direction: column;
   gap: var(--space);
-  background-color: rgb(0 0 0 / 0.95);
+  background-color: #000;
   background-image: var(--corner-ticks);
   border: 1px solid rgb(255 255 255 / 0.4);
   border-radius: 2px;
@@ -5331,7 +5335,7 @@ summary:focus-visible,
 
 @media (max-width: 1023px) {
   .mr-orch {
-    max-height: calc(100vh - var(--menu-h) - var(--lens-h) - var(--transport-h) - var(--space) * 4);
+    max-height: max(320px, calc(100vh - var(--menu-h) - var(--lens-h) - var(--transport-h) - var(--space) * 4));
   }
 }
 
