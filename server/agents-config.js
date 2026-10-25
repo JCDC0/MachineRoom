@@ -6,7 +6,7 @@ import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
 
 export const MAX_AGENTS = 30
-export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom']
+export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot']
 
 export const HARNESS_NAMES = {
   claude: 'Claude Code',
@@ -14,6 +14,8 @@ export const HARNESS_NAMES = {
   agy: 'AGY',
   acp: 'ACP',
   machineroom: 'MachineRoom',
+  codex: 'Codex',
+  copilot: 'GitHub Copilot',
 }
 
 export const HARNESS_EFFORTS = {
@@ -22,6 +24,8 @@ export const HARNESS_EFFORTS = {
   agy: [],
   acp: [],
   machineroom: [],
+  codex: ['low', 'medium', 'high', 'xhigh'],
+  copilot: ['low', 'medium', 'high', 'xhigh', 'max'],
 }
 
 export const ORIGIN_CREATE_PROBLEM = 'A request to create a lane needs a page Origin.'
