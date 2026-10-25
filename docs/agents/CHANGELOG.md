@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- At 900 pixels and wider the strip and the dock give way to a lower half with the conversation in the middle, Overview and its drawer on the right, and the model, effort and Compact controls under the input (task U34).
+
 - The menu row and the info strip no longer draw a straight line along the lens, so only the curved edges show (the owner's sketch).
 
 - MachineRoom's own lane worktrees moved from `C:\GitHub\MachineRoom-<lane>` into `.worktrees\<lane>` inside the checkout; `lanes.json` and its notes name the new paths, `.gitignore` lists `.worktrees/`, and the Vite dev server does not watch it.
