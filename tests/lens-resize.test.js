@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { distanceFromShare, shareFromDistance } from '../src/engine/camera.js'
+import { distanceFromShare, fitView, shareFromDistance } from '../src/engine/camera.js'
 import {
   LENS_SHARE_DEFAULT,
   LENS_SHARE_MAX,
@@ -89,5 +89,20 @@ describe('lens rails', () => {
     expect(loadSettings(storage).lensShare).toBe(0.7)
     saveSettings(storage, { lensShare: 5 })
     expect(loadSettings(storage).lensShare).toBe(LENS_SHARE_MAX)
+  })
+})
+
+describe('the overview aims at the hub centre', () => {
+  it('keeps the target on the given centre and still fits every sphere', () => {
+    const spheres = [
+      { x: 0, y: 0, z: 0, r: 300 },
+      { x: 0, y: -360, z: 0, r: 200 },
+      { x: 2000, y: 400, z: -1500, r: 250 },
+    ]
+    const free = fitView(spheres, { width: 1600, height: 700 })
+    const centred = fitView(spheres, { width: 1600, height: 700, center: { x: 0, y: 0, z: 0 } })
+    expect(centred.target).toEqual({ x: 0, y: 0, z: 0 })
+    expect(free.target).not.toEqual({ x: 0, y: 0, z: 0 })
+    expect(centred.dist).toBeGreaterThanOrEqual(free.dist)
   })
 })

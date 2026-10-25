@@ -41,8 +41,8 @@ const radiusY = (s) => {
 }
 const radius = (s) => Math.max(radiusX(s), radiusY(s))
 
-export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, fov = FOV, aspect = 1.6, width = 0, height = 0, min = FIT_MIN } = {}) {
-  if (spheres.length === 0) return { target: { x: OVERVIEW.x, y: OVERVIEW.y, z: OVERVIEW.z }, dist: OVERVIEW.dist }
+export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, fov = FOV, aspect = 1.6, width = 0, height = 0, min = FIT_MIN, center = null } = {}) {
+  if (spheres.length === 0) return { target: center ? { x: center.x, y: center.y, z: center.z } : { x: OVERVIEW.x, y: OVERVIEW.y, z: OVERVIEW.z }, dist: OVERVIEW.dist }
   const lensAspect = Number(width) > 0 && Number(height) > 0 ? Number(width) / Number(height) : aspect
   const { back, right, up } = viewBasis(yaw, pitch)
   const low = { x: Infinity, y: Infinity, z: Infinity }
@@ -67,11 +67,13 @@ export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, f
   }
   const sx = (span.x0 + span.x1) / 2
   const sy = (span.y0 + span.y1) / 2
-  const target = {
-    x: middle.x + right.x * sx + up.x * sy,
-    y: middle.y + right.y * sx + up.y * sy,
-    z: middle.z + right.z * sx + up.z * sy,
-  }
+  const target = center
+    ? { x: center.x, y: center.y, z: center.z }
+    : {
+        x: middle.x + right.x * sx + up.x * sy,
+        y: middle.y + right.y * sx + up.y * sy,
+        z: middle.z + right.z * sx + up.z * sy,
+      }
   const tanV = Math.tan((fov * Math.PI) / 360) * FIT_MARGIN.y
   const tanH = Math.tan((fov * Math.PI) / 360) * lensAspect * FIT_MARGIN.x
   let dist = min
