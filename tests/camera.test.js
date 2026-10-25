@@ -60,8 +60,11 @@ describe('fitView', () => {
     expect(fitView([{ x: 0, y: 0, z: 0, r: 10 }]).dist).toBe(FIT_MIN)
   })
 
-  it('fits to the lens width and height', () => {
-    expect(fitView(room, { width: 1280, height: 464 })).toEqual(fitView(room, { aspect: 1280 / 464 }))
+  it('fits the wide lens, not the taller window behind it', () => {
+    const lens = fitView(faces, { width: 1280, height: 464, min: 0 })
+    const windowView = fitView(faces, { width: 1280, height: 800, min: 0 })
+    expect(lens.dist).toBeLessThan(windowView.dist)
+    expect(inside(lens, faces, 1280 / 464)).toBe(true)
   })
 
   it('comes closer than the old 1800 floor for a small room', () => {
