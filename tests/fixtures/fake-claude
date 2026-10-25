@@ -22,10 +22,15 @@ if (instructionFile) {
     instruction = readFileSync(instructionFile, 'utf8')
   } catch {}
 }
+const subMatch = /Your id is `([a-z0-9-]{1,24})`/.exec(instruction)
+const subId = subMatch ? subMatch[1] : ''
+const role = subId ? 'sub' : 'main'
 const resumed = args.includes('--resume')
 const callsFile = String(process.env.MR_E2E_CLAUDE_CALLS ?? '')
 const lane = String(process.env.MR_E2E_LANE ?? 'opencode')
-const task = 'Write the lane note from the fake lane.\n\nWrite one file in the working folder and print one tool line.'
+const task = subId
+  ? 'Write the lane note from the fake lane.\n\nWrite one file outside the docs scope, commit it, and print one tool line.'
+  : 'Write the lane note from the fake lane.\n\nWrite one file in the working folder and print one tool line.'
 
 function note(entry) {
   if (!callsFile) return
@@ -45,12 +50,12 @@ if (resumed) {
     JSON.stringify({
       type: 'result',
       subtype: 'success',
-      result: 'Second turn: the lane report reached me.',
+      result: subId ? 'Sub reply: I will not merge the file outside the scope.' : 'Second turn: the lane report reached me.',
       total_cost_usd: 0.02,
       usage: { input_tokens: 20, output_tokens: 5 },
     })
   )
-  note({ turn: 'second', args })
+  note({ turn: 'second', role, subId, args })
 } else {
   const found = /(https?:\/\/(?:127\.0\.0\.1|localhost):\d+)/.exec(instruction)
   const bridge = found ? found[1] : ''
@@ -61,7 +66,7 @@ if (resumed) {
       const response = await fetch(`${bridge}/api/control/runs`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ lane, tasks: [task], worktree: true, confirmed: true }),
+        body: JSON.stringify({ lane, tasks: [task], worktree: true, confirmed: true, ...(subId ? { startedBy: subId } : {}) }),
       })
       status = response.status
       body = await response.text()
@@ -84,5 +89,5 @@ if (resumed) {
       usage: { input_tokens: 10, output_tokens: 3 },
     })
   )
-  note({ turn: 'first', args, cwd: process.cwd(), instruction, status, body })
+  note({ turn: 'first', role, subId, args, cwd: process.cwd(), instruction, status, body })
 }

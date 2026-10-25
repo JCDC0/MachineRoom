@@ -3,6 +3,7 @@ import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSy
 import { delimiter, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { worktreeFor } from '../src/briefs/run.js'
 import { createBridge } from '../server/index.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -12,6 +13,10 @@ import { makeTempDir } from './helpers/tempRoot.js'
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
 const TASK_SUBJECT = 'Write the lane note from the fake lane.'
 const SECOND_REPLY = 'Second turn: the lane report reached me.'
+const SUB_ID = 'writer'
+const SUB_LANE = 'opencode'
+const OUTSIDE_FILE = 'lane-note.txt'
+const SUB_REPLY = 'Sub reply: I will not merge the file outside the scope.'
 const cleanups = []
 
 afterEach(async () => {
@@ -140,6 +145,67 @@ function valueAfter(args, flag) {
   return args[args.indexOf(flag) + 1]
 }
 
+function readRecords(folder) {
+  const file = join(folder, 'runs.jsonl')
+  if (!existsSync(file)) return []
+  return readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      try {
+        return JSON.parse(line)
+      } catch {
+        return null
+      }
+    })
+    .filter(Boolean)
+}
+
+function postAsPage(url, body) {
+  return getJson(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: new URL(url).origin },
+    body: JSON.stringify(body),
+  })
+}
+
+async function makeRig() {
+  const base = makeTempDir('mr-orchestrator-e2e-')
+  cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const runs = join(base, 'runs')
+  mkdirSync(runs, { recursive: true })
+  const project = makeProject(base, join(FIXTURES, 'fake-lane.cjs'))
+  const lanes = writeLanes(base)
+  const callsFile = join(base, 'claude-calls.jsonl')
+  const children = new Set()
+  const bridge = createBridge({
+    projectRoot: project,
+    port: 0,
+    env: {},
+    runsFolder: runs,
+    lanesFile: lanes.file,
+    orchestratorFolder: runs,
+    orchestratorSpawn: spawnOrchestrator(callsFile, children),
+    lanesSource: {
+      folder: runs,
+      lanes: lanes.lanes,
+      repoRoot: project,
+      pollMs: 20,
+      quietMs: 60000,
+      primeMs: 600000,
+    },
+  })
+  cleanups.push(async () => {
+    await bridge.stop()
+    for (const child of children) {
+      if (child.exitCode === null && child.signalCode === null) killTree(child)
+    }
+    await new Promise((done) => setTimeout(done, 50))
+  })
+  const { url } = await bridge.start()
+  return { url, project, runs, callsFile }
+}
+
 function sameFolder(one, two) {
   const left = resolve(one)
   const right = resolve(two)
@@ -155,40 +221,8 @@ describe('the orchestrator loop with real programs', () => {
       return
     }
 
-    const base = makeTempDir('mr-orchestrator-e2e-')
-    cleanups.push(() => rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
-    const runs = join(base, 'runs')
-    mkdirSync(runs, { recursive: true })
-    const project = makeProject(base, join(FIXTURES, 'fake-lane.cjs'))
+    const { url, project, runs, callsFile } = await makeRig()
     const head = gitIn(project, ['rev-parse', 'HEAD'])
-    const lanes = writeLanes(base)
-    const callsFile = join(base, 'claude-calls.jsonl')
-    const children = new Set()
-    const bridge = createBridge({
-      projectRoot: project,
-      port: 0,
-      env: {},
-      runsFolder: runs,
-      lanesFile: lanes.file,
-      orchestratorFolder: runs,
-      orchestratorSpawn: spawnOrchestrator(callsFile, children),
-      lanesSource: {
-        folder: runs,
-        lanes: lanes.lanes,
-        repoRoot: project,
-        pollMs: 20,
-        quietMs: 60000,
-        primeMs: 600000,
-      },
-    })
-    cleanups.push(async () => {
-      await bridge.stop()
-      for (const child of children) {
-        if (child.exitCode === null && child.signalCode === null) killTree(child)
-      }
-      await new Promise((done) => setTimeout(done, 50))
-    })
-    const { url } = await bridge.start()
 
     const sent = await postJson(`${url}/api/orchestrator/messages`, {
       text: 'Start one lane for the end to end test.',
@@ -213,7 +247,7 @@ describe('the orchestrator loop with real programs', () => {
     expect(first.instruction).toContain('You are the orchestrator')
     expect(first.status).toBe(202)
 
-    const worktree = join(base, 'project-mr-opencode')
+    const worktree = worktreeFor(project, 'opencode')
     await waitFor(() => existsSync(join(worktree, 'lane-note.txt')), {
       timeoutMs: 30000,
       what: 'the fake lane to write its file in the worktree',
@@ -276,5 +310,101 @@ describe('the orchestrator loop with real programs', () => {
       { timeoutMs: 15000, what: 'the orchestrator to rest after the second turn' }
     )
     expect(final.messages.some((message) => message.text.includes(SECOND_REPLY))).toBe(true)
+  }, 120000)
+
+  it('wakes a restricted sub with an outside scope file and carries its reply to the main', async (context) => {
+    try {
+      gitPath()
+    } catch {
+      context.skip('Git is not on the PATH, so the lane worktree cannot be made.')
+      return
+    }
+
+    const { url, project, runs, callsFile } = await makeRig()
+    const worktree = worktreeFor(project, SUB_LANE)
+
+    const attached = await postAsPage(`${url}/api/orchestrator/ladder`, {
+      ladder: {
+        subs: [
+          {
+            id: SUB_ID,
+            name: 'Docs writer',
+            harness: 'claude',
+            model: 'opus',
+            lanes: [SUB_LANE],
+            scope: ['docs/**'],
+            restricted: true,
+            setBy: 'owner',
+          },
+        ],
+      },
+      by: 'owner',
+      confirmed: true,
+    })
+    expect(attached.status).toBe(200)
+    const ladder = await getJson(`${url}/api/orchestrators`)
+    const sub = ladder.body.find((entry) => entry.id === SUB_ID)
+    expect(sub).toMatchObject({ lanes: [SUB_LANE], scope: ['docs/**'], restricted: true, setBy: 'owner' })
+
+    const asked = await postAsPage(`${url}/api/orchestrator/messages`, {
+      id: SUB_ID,
+      from: 'owner',
+      text: 'Start the docs lane for the sub end to end test.',
+      confirmed: true,
+    })
+    expect(asked.status).toBe(202)
+
+    const first = await waitFor(
+      () => readCalls(callsFile).find((call) => call.role === 'sub' && call.turn === 'first') ?? null,
+      { timeoutMs: 20000, what: 'the sub orchestrator first turn' }
+    )
+    expect(first.subId).toBe(SUB_ID)
+    expect(first.status).toBe(202)
+
+    await waitFor(() => existsSync(join(worktree, OUTSIDE_FILE)), {
+      timeoutMs: 45000,
+      what: 'the fake lane to write its file in the sub worktree',
+    })
+    expect(sameFolder(gitIn(worktree, ['rev-parse', '--show-toplevel']), worktree)).toBe(true)
+    expect(readFileSync(join(worktree, OUTSIDE_FILE), 'utf8')).toBe('The fake lane wrote this file.\n')
+    expect(existsSync(join(project, OUTSIDE_FILE))).toBe(false)
+
+    const record = await waitFor(
+      () => readRecords(runs).find((item) => item.lane === SUB_LANE && item.startedBy === SUB_ID) ?? null,
+      { timeoutMs: 45000, what: 'the lane run record started by the sub' }
+    )
+    expect(sameFolder(record.project, worktree)).toBe(true)
+    expect(record.queue).toMatch(/^machineroom\/queue-opencode-/)
+
+    const warning = await waitFor(
+      async () => {
+        const { body } = await getJson(`${url}/api/orchestrator?id=${SUB_ID}`)
+        return body.messages.find((message) => message.from === 'room' && message.text.startsWith('Outside the scope, do not merge:')) ?? null
+      },
+      { timeoutMs: 45000, what: 'the outside scope wake in the sub chat' }
+    )
+    expect(warning.text).toContain(`- ${OUTSIDE_FILE}`)
+    expect(warning.text).toContain('Run opencode-queue-')
+
+    await waitFor(
+      async () => {
+        const { body } = await getJson(`${url}/api/orchestrator`)
+        return body.messages.find((message) => message.from === 'room' && message.text === warning.text) ?? null
+      },
+      { timeoutMs: 20000, what: 'the same room message in the main chat' }
+    )
+
+    const reply = await waitFor(
+      async () => {
+        const { body } = await getJson(`${url}/api/orchestrator`)
+        return body.messages.find((message) => message.from === `sub:${SUB_ID}` && message.text === SUB_REPLY) ?? null
+      },
+      { timeoutMs: 30000, what: 'the sub reply in the main chat' }
+    )
+    expect(reply.text).toBe(SUB_REPLY)
+
+    const main = await getJson(`${url}/api/orchestrator`)
+    expect(main.body.messages.filter((message) => message.from === 'room')).toHaveLength(1)
+    expect(readCalls(callsFile).filter((call) => call.role === 'main')).toHaveLength(0)
   }, 120000)
 })
