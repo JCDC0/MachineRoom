@@ -3,7 +3,7 @@ import { existsSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { runDoctor } from '../server/doctor.js'
+import { openBrowser, openCommand, runDoctor, upBlock } from '../server/doctor.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -253,5 +253,141 @@ describe('the machine-room doctor command', () => {
     expect(run.code).toBe(0)
     expect(run.stdout).toContain('Usage: machine-room')
     expect(run.stdout).toContain('--no-sessions')
+    expect(run.stdout).toContain('--open')
+  })
+})
+
+describe('the up block and browser open command', () => {
+  it('formats the short block with the address, waiting room line and Ctrl+C', () => {
+    const url = 'http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174'
+    expect(upBlock(url)).toEqual([
+      `machine-room: open ${url}`,
+      'The room fills when a lane or a session works on the project.',
+      'Press Ctrl+C in the terminal to stop the room.',
+    ])
+  })
+
+  it('chooses the platform open command per platform', () => {
+    const url = 'http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174'
+    const win = openCommand(url, {
+      platform: 'win32',
+      env: { Path: 'C:\\Windows\\System32' },
+      check: (p) => p === 'C:\\Windows\\System32\\cmd.exe',
+    })
+    expect(win).toEqual({
+      command: 'C:\\Windows\\System32\\cmd.exe',
+      args: ['/c', 'start', '', url],
+    })
+
+    const mac = openCommand(url, {
+      platform: 'darwin',
+      env: { PATH: '/usr/bin' },
+      check: (p) => p === '/usr/bin/open',
+    })
+    expect(mac).toEqual({
+      command: 'open',
+      args: [url],
+    })
+
+    const linux = openCommand(url, {
+      platform: 'linux',
+      env: { PATH: '/usr/bin' },
+      check: (p) => p === '/usr/bin/xdg-open',
+    })
+    expect(linux).toEqual({
+      command: 'xdg-open',
+      args: [url],
+    })
+
+    const missing = openCommand(url, {
+      platform: 'linux',
+      env: { PATH: '/usr/bin' },
+      check: () => false,
+    })
+    expect(missing).toBeNull()
+  })
+
+  it('spawns the browser with fake spawn per platform and unrefs the child', () => {
+    const url = 'http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174'
+    const spawned = []
+    const fakeSpawn = (command, args, options) => {
+      let unreferenced = false
+      spawned.push({ command, args, options, get unreferenced() { return unreferenced } })
+      return {
+        on: () => {},
+        unref: () => {
+          unreferenced = true
+        },
+      }
+    }
+
+    const ranWin = openBrowser(url, {
+      platform: 'win32',
+      env: { Path: 'C:\\Windows\\System32' },
+      check: (p) => p === 'C:\\Windows\\System32\\cmd.exe',
+      spawn: fakeSpawn,
+    })
+    expect(ranWin).toBe(true)
+    expect(spawned[0].command).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(spawned[0].args).toEqual(['/c', 'start', '', url])
+    expect(spawned[0].options).toMatchObject({ detached: true, stdio: 'ignore' })
+    expect(spawned[0].unreferenced).toBe(true)
+
+    const ranMac = openBrowser(url, {
+      platform: 'darwin',
+      env: { PATH: '/usr/bin' },
+      check: (p) => p === '/usr/bin/open',
+      spawn: fakeSpawn,
+    })
+    expect(ranMac).toBe(true)
+    expect(spawned[1].command).toBe('open')
+    expect(spawned[1].args).toEqual([url])
+
+    const ranLinux = openBrowser(url, {
+      platform: 'linux',
+      env: { PATH: '/usr/bin' },
+      check: (p) => p === '/usr/bin/xdg-open',
+      spawn: fakeSpawn,
+    })
+    expect(ranLinux).toBe(true)
+    expect(spawned[2].command).toBe('xdg-open')
+    expect(spawned[2].args).toEqual([url])
+  })
+
+  it('prints a line and does not throw when the program is missing or fails to spawn', () => {
+    const url = 'http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174'
+    const logged = []
+    const log = (line) => logged.push(line)
+
+    const ranMissing = openBrowser(url, {
+      platform: 'linux',
+      env: { PATH: '/usr/bin' },
+      check: () => false,
+      log,
+    })
+    expect(ranMissing).toBe(false)
+    expect(logged).toEqual(['The xdg-open program was not found.'])
+
+    const handlers = {}
+    const fakeSpawn = () => ({
+      on: (event, handler) => {
+        handlers[event] = handler
+      },
+      unref: () => {},
+    })
+
+    const ranError = openBrowser(url, {
+      platform: 'darwin',
+      env: { PATH: '/usr/bin' },
+      check: () => true,
+      spawn: fakeSpawn,
+      log,
+    })
+    expect(ranError).toBe(true)
+    handlers.error(new Error('ENOENT'))
+    expect(logged).toEqual([
+      'The xdg-open program was not found.',
+      'The open program was not found.',
+    ])
   })
 })

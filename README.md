@@ -19,8 +19,9 @@ npm run build
 npm run serve -- up --root <your project folder>
 ```
 
-`up` checks the project folder, git, the runs folder and the lane programs. It prints one line for each check, then serves the room on one port. Open the address it prints, for example `http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174`. The page opens live, on your folder.
+`up` checks the project folder, git, the runs folder and the lane programs. It prints one line for each check, then serves the room on one port. After the checks, it prints a short block: the address to open (for example `http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174`), a line saying the room fills when a lane or a session works on the project, and how to stop it with Ctrl+C. Open that address in your browser. The page opens live, on your folder.
 
+- Pass `--open` to open that address in your default browser automatically.
 - `up` turns both sources on. `--lanes` shows the runs started by the lane runner and by Dispatch. `--sessions` shows your own Claude Code and OpenCode sessions on that folder.
 - `--no-sessions` leaves your sessions out. `--port <n>` picks another port.
 - Quote the folder when its path has spaces.

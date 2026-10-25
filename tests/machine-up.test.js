@@ -95,6 +95,30 @@ function waitForAddress(run, timeoutMs = 20000) {
   })
 }
 
+function waitForText(run, marker, timeoutMs = 20000) {
+  return new Promise((resolveText, rejectText) => {
+    let timer
+    const finish = (settle, value) => {
+      clearTimeout(timer)
+      run.child.stdout.off('data', check)
+      run.child.off('exit', onExit)
+      settle(value)
+    }
+    const check = () => {
+      if (run.stdout.includes(marker)) finish(resolveText, run.stdout)
+    }
+    const onExit = (code) => {
+      finish(rejectText, new Error(`the bin exited ${code}. stderr: ${run.stderr}`))
+    }
+    timer = setTimeout(() => {
+      finish(rejectText, new Error(`the bin did not print ${marker}. stderr: ${run.stderr}`))
+    }, timeoutMs)
+    run.child.stdout.on('data', check)
+    run.child.once('exit', onExit)
+    check()
+  })
+}
+
 function waitForExit(child, timeoutMs = 10000) {
   return new Promise((resolveExit, rejectExit) => {
     if (child.exitCode !== null || child.signalCode !== null) {
@@ -133,8 +157,12 @@ describe('machine-room up', () => {
     expect(health).toMatchObject({ ok: true, lanes: true, sessions: true })
 
     const lines = outputLines(run)
-    expect(lines.at(-1)).toBe(`machine-room: open ${address}`)
-    const checks = lines.slice(0, -1)
+    expect(lines.slice(-3)).toEqual([
+      `machine-room: open ${address}`,
+      'The room fills when a lane or a session works on the project.',
+      'Press Ctrl+C in the terminal to stop the room.',
+    ])
+    const checks = lines.slice(0, -3)
     expect(checks.length).toBeGreaterThan(3)
     expect(checks.every((line) => /^(ok|FAIL) /.test(line))).toBe(true)
     expect(checks[0]).toContain('The project folder')
@@ -174,6 +202,30 @@ describe('machine-room up', () => {
     expect(lines[addressAt - 1]).toBe(SOME_CHECKS_FAILED)
     expect(lines.slice(0, addressAt).filter((line) => line.startsWith('FAIL '))).toHaveLength(1)
     expect(lines).toContainEqual(expect.stringContaining('does not exist.'))
+    expect(lines.slice(addressAt, addressAt + 3)).toEqual([
+      `machine-room: open ${address}`,
+      'The room fills when a lane or a session works on the project.',
+      'Press Ctrl+C in the terminal to stop the room.',
+    ])
+
+    await kill(run)
+  }, 30000)
+
+  it('accepts --open with up', async () => {
+    const project = makeProject()
+    const temp = makeFolder('machine-room-up-temp-')
+    const { dist } = makeDist()
+    const env = childEnv(temp)
+    env.PATH = ''
+    delete env.Path
+    delete env.ComSpec
+    delete env.COMSPEC
+    const run = startBin(['up', '--open', '--root', project, '--dist', dist, '--port', '0'], env)
+
+    await waitForAddress(run)
+    await waitForText(run, 'program was not found.')
+    const lines = outputLines(run)
+    expect(lines).toContainEqual(expect.stringMatching(/The (?:cmd|open|xdg-open) program was not found\./))
 
     await kill(run)
   }, 30000)

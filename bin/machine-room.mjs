@@ -2,7 +2,7 @@
 import { statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runDoctor } from '../server/doctor.js'
+import { openBrowser, runDoctor, upBlock } from '../server/doctor.js'
 import { createBridge } from '../server/index.js'
 
 const USAGE = [
@@ -21,6 +21,7 @@ const USAGE = [
   '  --lanes             show lane runs live from the run-lane logs (MACHINEROOM_LANES=1)',
   '  --sessions          show Claude Code and OpenCode sessions on the project live (MACHINEROOM_SESSIONS=1)',
   '  --no-sessions       keep the session source off when up runs it by default',
+  '  --open              open the room in the default browser',
   '  --help              show this help',
 ].join('\n')
 
@@ -38,6 +39,7 @@ const FLAGS = {
   '--lanes': 'lanes',
   '--sessions': 'sessions',
   '--no-sessions': 'noSessions',
+  '--open': 'open',
 }
 
 const SOME_CHECKS_FAILED = 'Some checks failed. The room opens anyway.'
@@ -99,7 +101,7 @@ function prepare(options) {
   return dist
 }
 
-async function startRoom(options, dist) {
+async function startRoom(options, dist, { block = false } = {}) {
   let bridge
   let info
   try {
@@ -116,7 +118,16 @@ async function startRoom(options, dist) {
     process.exit(1)
   }
 
-  console.log(`machine-room: open http://127.0.0.1:${info.port}/?live&bridge=http://127.0.0.1:${info.port}`)
+  const url = `http://127.0.0.1:${info.port}/?live&bridge=http://127.0.0.1:${info.port}`
+  if (block) {
+    for (const line of upBlock(url)) console.log(line)
+  } else {
+    console.log(`machine-room: open ${url}`)
+  }
+
+  if (options.open) {
+    openBrowser(url)
+  }
 
   let stopping = false
   async function shutdown() {
@@ -139,7 +150,7 @@ async function startRoom(options, dist) {
 
 async function serve(options) {
   const dist = prepare(options)
-  await startRoom(options, dist)
+  await startRoom(options, dist, { block: false })
 }
 
 async function up(options) {
@@ -149,7 +160,7 @@ async function up(options) {
   const result = runDoctor(options)
   for (const line of result.lines) console.log(line)
   if (result.exitCode !== 0) console.log(SOME_CHECKS_FAILED)
-  await startRoom(options, dist)
+  await startRoom(options, dist, { block: true })
 }
 
 const argv = process.argv.slice(2)
