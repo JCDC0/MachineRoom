@@ -4,6 +4,18 @@ export const SESSION_TITLE_MAX = 80
 export const PREVIEW_LIMIT = 200
 export const AGENT_NAME_MAX = 40
 
+export const SIDEBAR_TABS = Object.freeze([
+  { key: 'chat', label: 'Chat' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'agents', label: 'Agents' },
+])
+export const SIDEBAR_TAB_DEFAULT = 'chat'
+
+export function normalizeSidebarTab(value) {
+  const key = typeof value === 'string' ? value.trim() : ''
+  return SIDEBAR_TABS.some((tab) => tab.key === key) ? key : SIDEBAR_TAB_DEFAULT
+}
+
 const HIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
 
 export function cleanText(value, max = 0) {

@@ -8561,3 +8561,162 @@ body:has(#hud-orchestrator-chat) .waiting {
   line-height: 1.4;
   color: rgb(255 255 255 / 0.5);
 }
+
+/* U45: the left drawer in Chat, Projects and Agents tabs, and Attach at the foot of Agents */
+.mr-side-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 56px);
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 8px 8px 6px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-side .mr-side-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 56px;
+  height: 56px;
+  padding: 4px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 2px;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.mr-side .mr-side-tab:hover:not(:disabled) {
+  border-color: rgb(255 255 255 / 0.3);
+  background: rgb(255 255 255 / 0.06);
+  color: var(--white);
+}
+
+.mr-side .mr-side-tab.is-open {
+  outline: 1px solid #e5ff00;
+  outline-offset: -1px;
+  border-color: transparent;
+  color: var(--white);
+}
+
+.mr-side-tab-label {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.mr-side .mr-side-new.is-rounded {
+  width: 100%;
+  justify-content: center;
+  margin: 0 0 8px;
+  border-radius: 999px;
+}
+
+.mr-side-chat,
+.mr-side-agents {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mr-side-chat .mr-side-conversations {
+  padding-left: 0;
+}
+
+.mr-side .mr-side-project.is-button {
+  width: 100%;
+  padding: 0 4px;
+  text-align: left;
+}
+
+.mr-side .mr-side-project.is-current {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.mr-ladder {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-side-agents .mr-family {
+  border-bottom: 0;
+}
+
+.mr-ladder .mr-side-head {
+  margin-top: 0;
+  padding: 0;
+}
+
+.mr-ladder .mr-orch-attach {
+  gap: 5px;
+  padding: 6px;
+}
+
+.mr-side .mr-ladder button {
+  padding: 5px 10px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 2px;
+  background: transparent;
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.mr-side .mr-ladder button:hover:not(:disabled) {
+  border-color: var(--white);
+  background: rgb(255 255 255 / 0.08);
+}
+
+.mr-side .mr-ladder .mr-orch-attach-open {
+  margin-left: auto;
+  color: rgb(255 255 255 / 0.8);
+}
+
+.mr-side .mr-ladder .mr-orch-confirm-btn.is-start {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.mr-side .mr-ladder .mr-orch-confirm-btn.is-stop,
+.mr-side .mr-ladder .mr-side-action.is-danger {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.mr-side .mr-ladder .mr-orch-confirm-btn.is-cancel {
+  color: rgb(255 255 255 / 0.7);
+}
+
+.mr-ladder-subs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mr-ladder-sub {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 0 0 0 4px;
+}
+
+.mr-ladder-sub-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-ladder .mr-orch-problems {
+  font-size: 9px;
+  color: var(--red);
+}
+
+.mr-ladder .mr-orch-confirm {
+  padding: 6px;
+}

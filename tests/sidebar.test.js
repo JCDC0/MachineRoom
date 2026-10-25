@@ -3,11 +3,13 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
+import SidebarTabs from '../src/ui/SidebarTabs.jsx'
 import {
   agentCountLine,
   groupSessions,
   laneChoice,
   laneSummary,
+  normalizeSidebarTab,
   previewLines,
   projectName,
   sessionAge,
@@ -173,19 +175,67 @@ describe('waitForBridge', () => {
   })
 })
 
+describe('Sidebar tabs', () => {
+  it('draws Chat, Projects and Agents with the open one marked', () => {
+    const html = renderToString(createElement(SidebarTabs, { value: 'projects' }))
+    expect(html).toContain('role="tablist"')
+    expect(html).toContain('aria-label="Sidebar tabs"')
+    expect(html).toContain('>Chat</span>')
+    expect(html).toContain('>Projects</span>')
+    expect(html).toContain('>Agents</span>')
+    expect(html).toContain('aria-selected="true"')
+    expect(html).toContain('aria-selected="false"')
+    const open = html.slice(html.indexOf('mr-side-tab is-open'), html.indexOf('</button>', html.indexOf('mr-side-tab is-open')))
+    expect(open).toContain('Projects')
+  })
+
+  it('opens Chat when the saved tab is missing or unknown', () => {
+    for (const value of [undefined, '', 'elsewhere', 42]) {
+      const html = renderToString(createElement(SidebarTabs, { value }))
+      const open = html.slice(html.indexOf('mr-side-tab is-open'), html.indexOf('</button>', html.indexOf('mr-side-tab is-open')))
+      expect(open).toContain('Chat')
+    }
+    expect(normalizeSidebarTab('agents')).toBe('agents')
+  })
+})
+
+function renderSidebar(tab, props) {
+  const savedWindow = globalThis.window
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) =>
+        key === 'machineroom.settings' ? JSON.stringify({ sidebarTab: tab }) : null,
+      setItem: () => {},
+    },
+  }
+  try {
+    return renderToString(createElement(Sidebar, props))
+  } finally {
+    if (savedWindow === undefined) delete globalThis.window
+    else globalThis.window = savedWindow
+  }
+}
+
 describe('Sidebar without bridge methods', () => {
-  it('shows the project, the live note, New conversation and Settings', () => {
-    const html = renderToString(
-      createElement(Sidebar, { client: null, live: false, project: '/MachineRoom' })
-    )
-    expect(html).toContain('class="hud-sessions-button mr-side-new"')
+  it('shows the three tabs, New conversation, the project, the live note and Settings in Chat', () => {
+    const html = renderSidebar('chat', { client: null, live: false, project: '/MachineRoom' })
+    expect(html).toContain('class="mr-side-tabs"')
+    expect(html).toContain('class="hud-sessions-button mr-side-new is-rounded"')
     expect(html).toContain('New conversation')
-    expect(html).toContain('Projects')
-    expect(html).toContain('Open folder')
     expect(html).toContain('MachineRoom')
     expect(html).toContain('Projects and conversations appear when the room runs live.')
     expect(html).toContain('class="hud-strip-settings"')
     expect(html).not.toContain('mr-family')
+    expect(html).not.toContain('mr-side-projects')
+  })
+
+  it('keeps the projects in their own tab', () => {
+    const html = renderSidebar('projects', { client: null, live: false, project: '/MachineRoom' })
+    expect(html).toContain('class="mr-side-projects"')
+    expect(html).toContain('Open folder')
+    expect(html).toContain('MachineRoom')
+    expect(html).toContain('Projects and conversations appear when the room runs live.')
+    expect(html).not.toContain('New conversation')
   })
 })
 
@@ -197,33 +247,34 @@ describe('The family tree in a live sidebar', () => {
     lanes: async () => ({ max: 6, lanes: [] }),
     harnesses: async () => [],
     models: async () => ({ models: [] }),
+    orchestrators: async () => [],
+    setLadder: async () => ({ ladder: { subs: [] } }),
   }
 
-  it('puts the open Agents tree above the projects', () => {
-    const html = renderToString(createElement(Sidebar, { client, live: true, project: '/MachineRoom' }))
+  it('puts the open Agents tree and the Attach form in the Agents tab', () => {
+    const html = renderSidebar('agents', { client, live: true, project: '/MachineRoom' })
     const tree = html.indexOf('mr-family')
-    const projects = html.indexOf('mr-side-projects')
+    const attach = html.indexOf('aria-label="Sub orchestrators"')
     expect(tree).toBeGreaterThan(-1)
-    expect(projects).toBeGreaterThan(tree)
+    expect(attach).toBeGreaterThan(tree)
     expect(html).toContain('Loading agents...')
-    expect(html).toContain('aria-expanded="true"')
-    expect(html).not.toContain('Add agent')
-    expect(html).not.toContain('mr-side-lane')
+    expect(html).toContain('>Attach</button>')
+    expect(html).toContain('No sub orchestrators yet.')
+    expect(html).not.toContain('mr-side-projects')
+    expect(html).not.toContain('New conversation')
   })
 
   it('leaves the tree out when the bridge cannot list the family', () => {
-    const html = renderToString(
-      createElement(Sidebar, {
-        client: {
-          projects: async () => ({ current: null, recent: [] }),
-          orchestratorSessions: async () => ({}),
-        },
-        live: true,
-        project: '/MachineRoom',
-      })
-    )
+    const html = renderSidebar('agents', {
+      client: {
+        projects: async () => ({ current: null, recent: [] }),
+        orchestratorSessions: async () => ({}),
+      },
+      live: true,
+      project: '/MachineRoom',
+    })
     expect(html).not.toContain('mr-family')
-    expect(html).toContain('mr-side-projects')
+    expect(html).toContain('Agents appear when the room runs live.')
   })
 })
 
