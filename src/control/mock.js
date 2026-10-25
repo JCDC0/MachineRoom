@@ -1552,13 +1552,20 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     deleteLane: ({ key, confirmed = true } = {}) =>
       call('deleteLane', () => {
         if (confirmed !== true) throw new Error('Confirm deleting the lane first.')
+        if (key === 'orchestrator') {
+          throw new Error('A lane from lanes.json cannot be deleted; make it inactive instead.')
+        }
         const idx = state.lanes.findIndex((l) => l.key === key)
         if (idx === -1) throw new Error(`The lane ${key} was not found.`)
         const lane = state.lanes[idx]
-        if (lane.custom !== true) throw new Error('A lane from lanes.json cannot be deleted; make it inactive instead.')
         if (lane.working === true) throw new Error(`The lane ${key} is running.`)
         state.lanes.splice(idx, 1)
+        for (const sub of ladder.subs) {
+          sub.lanes = sub.lanes.filter((laneKey) => laneKey !== key)
+        }
+        state.agents = state.agents.filter((agent) => agent.key !== key)
         emit({ topic: 'agents' })
+        emit({ topic: 'family' })
         return { ok: true, deleted: key }
       }),
 
@@ -1577,7 +1584,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           if (optionsOrLanes.confirmed !== undefined) confirmed = optionsOrLanes.confirmed
         }
         if (confirmed !== true) throw new Error('Confirm the active lanes first.')
-        if (!Array.isArray(lanes) || lanes.length === 0) throw new Error('Choose at least one lane.')
+        if (!Array.isArray(lanes)) throw new Error('Choose at least one lane.')
         const seen = new Set()
         for (const key of lanes) {
           if (typeof key !== 'string' || !state.lanes.some((l) => l.key === key)) {
@@ -1729,7 +1736,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     family: () =>
       call('family', () => {
-        const directLanes = state.lanes.filter((l) => l.active && !ladder.subs.some((s) => s.lanes.includes(l.key))).map((l) => l.key)
+        const directLanes = state.lanes.filter((l) => !ladder.subs.some((s) => s.lanes.includes(l.key))).map((l) => l.key)
         const mainNode = {
           id: 'orchestrator',
           kind: 'orchestrator',
@@ -1751,29 +1758,27 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           model: sub.model,
           effort: null,
           parent: 'orchestrator',
-          children: sub.lanes.filter((key) => state.lanes.some((l) => l.key === key && l.active)),
+          children: sub.lanes.filter((key) => state.lanes.some((l) => l.key === key)),
           active: true,
           working: false,
           custom: false,
         }))
-        const laneNodes = state.lanes
-          .filter((lane) => lane.active)
-          .map((lane) => {
-            const sub = ladder.subs.find((s) => s.lanes.includes(lane.key))
-            return {
-              id: lane.key,
-              kind: 'lane',
-              label: familyLabels.get(lane.key) || 'Code agent',
-              harness: lane.harness,
-              model: lane.model,
-              effort: lane.effort ?? null,
-              parent: sub ? sub.id : 'orchestrator',
-              children: [],
-              active: true,
-              working: Boolean(lane.working),
-              custom: Boolean(lane.custom),
-            }
-          })
+        const laneNodes = state.lanes.map((lane) => {
+          const sub = ladder.subs.find((s) => s.lanes.includes(lane.key))
+          return {
+            id: lane.key,
+            kind: 'lane',
+            label: familyLabels.get(lane.key) || 'Code agent',
+            harness: lane.harness,
+            model: lane.model,
+            effort: lane.effort ?? null,
+            parent: sub ? sub.id : 'orchestrator',
+            children: [],
+            active: Boolean(lane.active),
+            working: Boolean(lane.working),
+            custom: Boolean(lane.custom),
+          }
+        })
         return {
           nodes: [mainNode, ...subNodes, ...laneNodes],
           keys: [...keySlots.keys()].sort().map((name) => ({ name })),

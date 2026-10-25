@@ -44,12 +44,19 @@ export function readActiveLanesChoice(file) {
     if (!existsSync(file)) return null
     const text = readFileSync(file, 'utf8')
     const parsed = JSON.parse(text)
-    if (Array.isArray(parsed)) return parsed
+    if (Array.isArray(parsed)) return parsed.length > 0 ? parsed : null
     if (parsed && Array.isArray(parsed.lanes)) return parsed.lanes
     return []
   } catch {
     return null
   }
+}
+
+export function writeActiveLanes(file, lanes) {
+  const list = Array.isArray(lanes) ? lanes : []
+  const content = list.length > 0 ? list : { lanes: [] }
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, `${JSON.stringify(content, null, 2)}\n`)
 }
 
 export function eligibleLanes(lanesConfig = {}) {
@@ -143,8 +150,7 @@ export function createActiveLanesApi(options = {}) {
     if (saved === null) return
     if (!saved.includes(key)) {
       saved.push(key)
-      mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`)
+      writeActiveLanes(file, saved)
     }
   }
 
@@ -154,8 +160,7 @@ export function createActiveLanesApi(options = {}) {
     if (saved === null) return
     const filtered = saved.filter((k) => k !== key)
     if (filtered.length !== saved.length) {
-      mkdirSync(dirname(file), { recursive: true })
-      writeFileSync(file, `${JSON.stringify(filtered, null, 2)}\n`)
+      writeActiveLanes(file, filtered)
     }
   }
 
@@ -208,7 +213,7 @@ export function createActiveLanesApi(options = {}) {
         return true
       }
 
-      if (!Array.isArray(body.lanes) || body.lanes.length === 0) {
+      if (!Array.isArray(body.lanes)) {
         sendJson(req, res, 400, { error: EMPTY_ACTIVE_LANES_PROBLEM })
         return true
       }
@@ -231,8 +236,7 @@ export function createActiveLanesApi(options = {}) {
 
       const file = choiceFile()
       try {
-        mkdirSync(dirname(file), { recursive: true })
-        writeFileSync(file, `${JSON.stringify(body.lanes, null, 2)}\n`)
+        writeActiveLanes(file, body.lanes)
       } catch {
         sendJson(req, res, 500, { error: 'The bridge could not save the active lanes.' })
         return true

@@ -94,6 +94,17 @@ describe('the family tree order', () => {
     expect(tree.rows.find((row) => row.id === 'editor')).toMatchObject({ active: false })
   })
 
+  it('keeps a turned-off lane in the rows and names its state off', () => {
+    const tree = familyTree({
+      nodes: [
+        { id: 'orchestrator', kind: 'orchestrator', children: ['a'] },
+        { id: 'a', kind: 'lane', label: 'A', parent: 'orchestrator', active: false },
+      ],
+    })
+    expect(tree.rows.map((row) => row.id)).toEqual(['orchestrator', 'a'])
+    expect(stateWord(tree.rows[1])).toBe('off')
+  })
+
   it('drops a duplicate node and falls back for a missing label', () => {
     const tree = familyTree({
       nodes: [

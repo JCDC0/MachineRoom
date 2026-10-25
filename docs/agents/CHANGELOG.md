@@ -5,6 +5,11 @@
 - The lens edges are a compass tape centred on the camera's heading, with a tick every 5 degrees at 6 pixels per degree, a taller tick and a label (`N 000`, `NE 045`, `015` ...) every 15 degrees, the `+` lubber mark and the corner brackets kept, and the heading read from the new `yaw()` on the camera rig and the room (task U50).
 - At its default and maximum height the lens fills the window from the menu to the transport, which sits at the bottom of the viewport with the lower half below the fold (task U50).
 - The compass heading, the bearing labels and the edge ticks and labels are pure and tested (task U50).
+- A turned-off lane stays in the Agents family tree with `active: false`, an off dot and its place under its parent, on the bridge and in the mock, while `/api/agents` and runs still leave it off (task U49).
+- The owner can save an empty active lane list, written as `{ lanes: [] }`, so the last active lane can be turned off (task U49).
+- Any lane except `orchestrator` can be deleted: an owner-made lane leaves `agents.json`, a `lanes.json` lane joins its `removed` list, and both leave the active lanes with `agents` and `family` notices (task U49).
+- A lane's switch turns it on or off at once without a confirm card, and every lane row and lane editor has a trash button or Remove behind a danger confirm card (task U49).
+
 - Every model picker has a shared circular `Refresh models` button that reads `client.harnessModels` when it opens, spins for a refresh, keeps a saved model that left the list and shows the answer's error, with a search field on the chat picker (task U47).
 - Chromatic aberration splits each colour channel from the centre of the lens with a `feDisplacementMap` per channel over a radial map drawn once on a canvas, with no shift at the centre, red pushed outward and blue inward, and the strength scaling the displacement (task U48).
 - Grain is crisp single pixel white noise on a 128 pixel tile, redrawn five times a second even under reduced motion, with its strength as the opacity (task U48).

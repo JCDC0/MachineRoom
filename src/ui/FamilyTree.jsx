@@ -439,7 +439,7 @@ export function FamilyTree({ client = null }) {
   }
 
   function askRemove(node) {
-    if (!node.custom) return
+    if (node.kind !== 'lane') return
     if (typeof client?.deleteLane !== 'function') {
       setActionError('This bridge cannot remove an agent.')
       return
@@ -457,7 +457,7 @@ export function FamilyTree({ client = null }) {
     })
   }
 
-  function askLaneToggle(node, on) {
+  async function toggleLane(node, on) {
     if (typeof client?.setActiveLanes !== 'function') {
       setActionError('This bridge cannot change the agents.')
       return
@@ -466,17 +466,19 @@ export function FamilyTree({ client = null }) {
       setActionError('The lanes are not loaded yet.')
       return
     }
+    if (busy) return
     const choice = laneChoice(lanes.lanes, on ? { add: [node.id] } : { remove: [node.id] })
-    ask({
-      text: on ? `Turn on ${node.label}?` : `Turn off ${node.label}?`,
-      label: on ? 'Turn on' : 'Turn off',
-      tone: on ? 'primary' : 'danger',
-      busyText: on ? 'Turning on the agent...' : 'Turning off the agent...',
-      run: async () => {
-        await client.setActiveLanes({ lanes: choice, confirmed: true })
-        await refresh()
-      },
-    })
+    setActionError('')
+    setBusy(true)
+    try {
+      await client.setActiveLanes({ lanes: choice, confirmed: true })
+      await refresh()
+    } catch (error) {
+      setActionError(messageOf(error))
+      await refresh().catch(() => {})
+    } finally {
+      setBusy(false)
+    }
   }
 
   function askProposal(proposal, approve) {
@@ -784,16 +786,14 @@ export function FamilyTree({ client = null }) {
               >
                 Save
               </button>
-              {node.custom ? (
-                <button
-                  type="button"
-                  className="mr-side-action is-danger"
-                  disabled={busy || typeof client?.deleteLane !== 'function'}
-                  onClick={() => askRemove(node)}
-                >
-                  Remove
-                </button>
-              ) : null}
+              <button
+                type="button"
+                className="mr-side-action is-danger"
+                disabled={busy || typeof client?.deleteLane !== 'function'}
+                onClick={() => askRemove(node)}
+              >
+                Remove
+              </button>
             </div>
           </>
         ) : (
@@ -1086,9 +1086,30 @@ export function FamilyTree({ client = null }) {
               aria-label={`${node.active ? 'Turn off' : 'Turn on'} ${node.label}`}
               className={`mr-side-switch${node.active ? ' is-on' : ''}`}
               disabled={busy || typeof client?.setActiveLanes !== 'function'}
-              onClick={() => askLaneToggle(node, !node.active)}
+              onClick={() => toggleLane(node, !node.active)}
             >
               <span className="mr-side-switch-knob" aria-hidden="true" />
+            </button>
+          ) : null}
+          {node.kind === 'lane' ? (
+            <button
+              type="button"
+              className="mr-family-trash"
+              aria-label={`Delete ${node.label}`}
+              title={`Delete ${node.label}`}
+              disabled={busy || typeof client?.deleteLane !== 'function'}
+              onClick={() => askRemove(node)}
+            >
+              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+                <path
+                  d="M2 3.5h8M4.5 3.5V2.5h3v1M3.4 3.5l.4 6h4.4l.4-6M5 5.5v2.6M7 5.5v2.6"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </button>
           ) : null}
           <button

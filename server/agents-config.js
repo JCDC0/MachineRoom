@@ -150,10 +150,22 @@ export function agentsConfigFile(runsDir) {
   return join(runsDir, 'agents.json')
 }
 
+function readRemovedList(value) {
+  if (!Array.isArray(value)) return []
+  const list = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const key = entry.trim()
+    if (!key || key === 'orchestrator' || list.includes(key)) continue
+    list.push(key)
+  }
+  return list
+}
+
 export function readAgentsConfig(runsDir) {
   const file = agentsConfigFile(runsDir)
   try {
-    if (!existsSync(file)) return { agents: [] }
+    if (!existsSync(file)) return { agents: [], removed: [] }
     const text = readFileSync(file, 'utf8')
     const parsed = JSON.parse(text)
     if (parsed && Array.isArray(parsed.agents)) {
@@ -161,11 +173,12 @@ export function readAgentsConfig(runsDir) {
         agents: parsed.agents.filter(
           (a) => a && typeof a === 'object' && typeof a.key === 'string' && a.key.trim()
         ),
+        removed: readRemovedList(parsed.removed),
       }
     }
-    return { agents: [] }
+    return { agents: [], removed: [] }
   } catch {
-    return { agents: [] }
+    return { agents: [], removed: [] }
   }
 }
 
@@ -274,9 +287,15 @@ export function readAllLanes(options = {}) {
   }
 
   const base = lanesJson ?? readLanes(folder)
-  const agents = agentsList ?? readAgentsConfig(runsDir).agents
+  const config = readAgentsConfig(runsDir)
+  const agents = agentsList ?? config.agents
+  const removed = new Set(config.removed)
 
-  const all = { ...base }
+  const all = {}
+  for (const [key, lane] of Object.entries(base ?? {})) {
+    if (key !== 'orchestrator' && removed.has(key)) continue
+    all[key] = lane
+  }
   for (const agent of agents) {
     if (agent && typeof agent.key === 'string' && agent.key) {
       all[agent.key] = buildMadeLane(agent, base)
@@ -338,7 +357,7 @@ export function createAgentLane(body, {
     effort = effortText
   }
 
-  const { agents } = readAgentsConfig(runs)
+  const { agents, removed } = readAgentsConfig(runs)
   if (agents.length >= MAX_AGENTS) {
     return { ok: false, status: 400, error: MAX_AGENTS_PROBLEM }
   }
@@ -355,7 +374,7 @@ export function createAgentLane(body, {
   }
 
   agents.push(newAgent)
-  saveAgentsConfig(runs, { agents })
+  saveAgentsConfig(runs, { agents, removed })
 
   const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
   if (active && typeof active.isChosen === 'function' && active.isChosen()) {
@@ -442,7 +461,7 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
 
-      const { agents } = readAgentsConfig(runsDir)
+      const { agents, removed } = readAgentsConfig(runsDir)
       const agent = agents.find((a) => a.key === key)
       if (!agent) {
         sendJson(req, res, 404, { error: laneNotFoundProblem(key) })
@@ -520,7 +539,7 @@ export function createAgentsConfigApi(options = {}) {
         }
       }
 
-      saveAgentsConfig(runsDir, { agents })
+      saveAgentsConfig(runsDir, { agents, removed })
 
       if (typeof notify === 'function') {
         notify({ topic: 'agents' })
@@ -541,15 +560,16 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
       const key = deleteMatch[1]
-      const baseLanes = getBaseLanes()
-      if (Object.hasOwn(baseLanes, key)) {
+      if (key === 'orchestrator') {
         sendJson(req, res, 400, { error: LANES_JSON_DELETE_PROBLEM })
         return true
       }
 
-      const { agents } = readAgentsConfig(runsDir)
-      const agentIndex = agents.findIndex((a) => a.key === key)
-      if (agentIndex === -1) {
+      const baseLanes = getBaseLanes()
+      const config = readAgentsConfig(runsDir)
+      const fromBase = Object.hasOwn(baseLanes, key) && !config.removed.includes(key)
+      const agentIndex = config.agents.findIndex((a) => a.key === key)
+      if (!fromBase && agentIndex === -1) {
         sendJson(req, res, 404, { error: laneNotFoundProblem(key) })
         return true
       }
@@ -567,8 +587,14 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
 
-      agents.splice(agentIndex, 1)
-      saveAgentsConfig(runsDir, { agents })
+      const agents = config.agents
+      let removed = config.removed
+      if (fromBase) {
+        removed = [...removed, key]
+      } else {
+        agents.splice(agentIndex, 1)
+      }
+      saveAgentsConfig(runsDir, { agents, removed })
 
       const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
       if (active && typeof active.isChosen === 'function' && active.isChosen()) {
@@ -579,6 +605,7 @@ export function createAgentsConfigApi(options = {}) {
 
       if (typeof notify === 'function') {
         notify({ topic: 'agents' })
+        notify({ topic: 'family' })
       }
 
       sendJson(req, res, 200, { ok: true, deleted: key })

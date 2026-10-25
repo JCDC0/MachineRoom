@@ -9090,3 +9090,26 @@ body:has(#hud-orchestrator-chat) .waiting {
     animation: none;
   }
 }
+
+/* U49: the family tree keeps turned-off lanes and deletes with a trash button. */
+.mr-family .mr-family-trash {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: rgb(255 255 255 / 0.4);
+}
+
+.mr-family .mr-family-trash:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.mr-family .mr-family-trash:disabled {
+  color: rgb(255 255 255 / 0.18);
+}

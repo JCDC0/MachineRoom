@@ -577,6 +577,72 @@ describe('Approve and decline proposals', () => {
   })
 })
 
+describe('turned-off lanes in the family tree', () => {
+  function bridgeClient(url) {
+    return createClient({
+      baseUrl: url,
+      fetchImpl: (input, init) =>
+        fetch(input, { ...init, headers: { ...init?.headers, origin: 'http://localhost:5173' } }),
+    })
+  }
+
+  it('keeps every eligible lane in the nodes and children with active false', async () => {
+    const { url } = await startBridge()
+    const client = bridgeClient(url)
+
+    await client.setActiveLanes({ lanes: ['opencode2'], confirmed: true })
+
+    const family = await client.family()
+    const ids = family.nodes.map((node) => node.id)
+    expect(ids).toContain('opencode')
+    expect(ids).toContain('claude')
+    expect(family.nodes.find((node) => node.id === 'opencode').active).toBe(false)
+    expect(family.nodes.find((node) => node.id === 'claude').active).toBe(false)
+    expect(family.nodes.find((node) => node.id === 'opencode2').active).toBe(true)
+
+    const main = family.nodes.find((node) => node.id === 'orchestrator')
+    expect(main.children).toContain('opencode')
+    expect(main.children).toContain('opencode2')
+    expect(main.children).toContain('claude')
+
+    const agents = await request(`${url}/api/agents`, { origin: '' })
+    expect(agents.body.map((agent) => agent.key)).not.toContain('opencode')
+    expect(agents.body.map((agent) => agent.key)).toContain('opencode2')
+  })
+
+  it('keeps the tree when the owner turns off the last active lane, and the mock does the same', async () => {
+    const { url } = await startBridge()
+    const client = bridgeClient(url)
+
+    await client.setActiveLanes({ lanes: [], confirmed: true })
+
+    const family = await client.family()
+    expect(family.nodes.filter((node) => node.kind === 'lane')).toHaveLength(3)
+    expect(family.nodes.filter((node) => node.kind === 'lane').every((node) => node.active === false)).toBe(true)
+    const main = family.nodes.find((node) => node.id === 'orchestrator')
+    expect(main.children).toEqual(expect.arrayContaining(['opencode', 'opencode2', 'claude']))
+
+    const mock = createMockClient({ latencyMs: 0 })
+    await mock.setActiveLanes({ lanes: [], confirmed: true })
+    const mockFamily = await mock.family()
+    expect(mockFamily.nodes.filter((node) => node.kind === 'lane')).toHaveLength(5)
+    expect(mockFamily.nodes.filter((node) => node.kind === 'lane').every((node) => node.active === false)).toBe(true)
+    expect((await mock.agents()).length).toBe(0)
+  })
+
+  it('deletes any lane except the orchestrator on the mock', async () => {
+    const mock = createMockClient({ latencyMs: 0 })
+    await mock.deleteLane({ key: 'opencode3', confirmed: true })
+    const family = await mock.family()
+    expect(family.nodes.some((node) => node.id === 'opencode3')).toBe(false)
+    const sub = family.nodes.find((node) => node.id === 'frontend')
+    expect(sub.children).not.toContain('opencode3')
+    await expect(mock.deleteLane({ key: 'orchestrator', confirmed: true })).rejects.toThrow(
+      'A lane from lanes.json cannot be deleted; make it inactive instead.'
+    )
+  })
+})
+
 describe('Control client and mock family methods', () => {
   it('calls family methods on mock client', async () => {
     const mock = createMockClient({ latencyMs: 0 })
