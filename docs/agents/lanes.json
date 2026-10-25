@@ -53,10 +53,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. You may start the real Paperclip (paperclipai run) to check the shape of GET routes. If you start it, stop it when you are done, kill any orphaned postgres worker, and check that ports 3100 and 54329 are free.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -78,10 +75,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode2",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -103,10 +97,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode3",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -128,10 +119,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode4",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -153,10 +141,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode5",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -178,10 +163,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode6",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -203,10 +185,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode7",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -228,10 +207,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode8",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -253,10 +229,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode9",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
@@ -278,10 +251,7 @@
     },
     "worktree": "C:\\GitHub\\MachineRoom-opencode10",
     "role": "You own the bridge (server/**), scripts/**, src/control/**, src/assistant/** and src/decider/**, and from 0.1.126 the UI briefs the owner moved from AGY (src/ui/**, src/styles.css, src/engine/**).",
-    "forbidden": [
-      "src/Stage.jsx",
-      "src/App.jsx"
-    ],
+    "forbidden": [],
     "notes": [
       "Do not start an agent run and do not change any Paperclip setting. Do not start the real Paperclip: the first OpenCode lane may be using it. To check the shape of a route, run npm run fake-paperclip on a free port.",
       "Test anything that starts a process by really starting it once on this Windows machine, for example with --version. A fake runner in a test does not prove the command can start.",
