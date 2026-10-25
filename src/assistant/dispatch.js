@@ -2,43 +2,9 @@ import { validateAction } from './actions.js'
 
 const done = (message = '') => ({ ok: true, message })
 const refused = (message) => ({ ok: false, message })
-const dollars = (cents) => `$${(cents / 100).toFixed(2)}`
-
-const NO_CLIENT = 'No control connection yet. Start the bridge to change tasks, budgets or agents.'
 
 export function createDispatcher(host) {
   const nameOf = (key) => host.agentName?.(key) ?? key
-
-  function findTarget(agents, key) {
-    const roomId = host.agentId?.(key)
-    const name = String(nameOf(key)).toLowerCase()
-    return (
-      agents.find((agent) => roomId && agent.id === roomId) ??
-      agents.find((agent) => agent.key === key) ??
-      agents.find((agent) => String(agent.name).toLowerCase() === name)
-    )
-  }
-
-  async function write(action) {
-    const client = host.client
-    if (!client) return refused(NO_CLIENT)
-    const key = action.assignee ?? action.agent
-    const agents = await client.agents()
-    const target = findTarget(agents, key)
-    if (!target) return refused(`${nameOf(key)} is not known to the control plane.`)
-    if (action.type === 'propose_dispatch') {
-      const issue = await client.createIssue({ title: action.title, assigneeAgentId: target.id })
-      host.openPanel('tasks', issue.identifier)
-      return done(`Created ${issue.identifier} for ${target.name}.`)
-    }
-    if (action.type === 'propose_budget') {
-      await client.setAgentBudget(target.id, action.cents)
-      return done(`The budget of ${target.name} is now ${dollars(action.cents)} a month.`)
-    }
-    if (typeof client.updateAgent !== 'function') return refused('Subagent settings need the hire and update calls (task C3c).')
-    await client.updateAgent(target.id, { subagentsAllowed: action.allowed })
-    return done(`${target.name} may ${action.allowed ? '' : 'not '}start subagents.`)
-  }
 
   function openConfig({ agent, section }) {
     const name = nameOf(agent)
@@ -96,7 +62,7 @@ export function createDispatcher(host) {
     if (!checked.ok) return refused('That request is not allowed.')
     if (checked.confirm && !confirmed) return refused('That needs your confirmation first.')
     try {
-      return checked.confirm ? await write(checked.action) : read(checked.action)
+      return read(checked.action)
     } catch (error) {
       return refused(error?.message || 'The request failed.')
     }

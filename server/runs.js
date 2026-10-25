@@ -396,7 +396,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     const registry = typeof orchestrators === 'function' ? orchestrators() : null
     const page = Boolean(req.headers.origin)
     if (!page) {
-      if (registry && (projectRun || req.headers['x-machineroom-orchestrator'] || Object.hasOwn(body, 'startedBy'))) {
+      if (registry) {
         const tokenHeader = req.headers['x-machineroom-orchestrator']
         const token = typeof tokenHeader === 'string' ? tokenHeader.trim() : Array.isArray(tokenHeader) ? tokenHeader[0].trim() : ''
         const actor = registry.idForToken(token)

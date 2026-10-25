@@ -6,6 +6,7 @@
 
 - The guide tests click Take the tour and the help panel's Guide button in a DOM, the tour selectors are found in the rendered HUD, and the camera test fits a wide lens instead of the window (task T24).
 - At 900 pixels and wider the dock starts closed under a 72 pixel strip that shows the agent, its model, its context or tokens and cost, Compact and its three newest log lines, and the strip's Expand control or Escape opens and closes the dock (task U29).
+- A no-Origin run request without a token is refused when the bridge has orchestrators, and the assistant drops approvals, issue creation and agent and budget edits (task Q14).
 
 - `?replay&ladder=none` no longer gets the demo ladder from the default fixture, and the OpenCode lane notes name all ten lanes and say Paperclip is gone (found by R14).
 - Add compact now, an autocompact percent and a model route per orchestrator (task O9).

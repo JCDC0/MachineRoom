@@ -321,7 +321,12 @@ const TINY_RUNNER = [
   'await new Promise((done) => setTimeout(done, 300))',
   "const folder = join(process.env.TEMP || tmpdir(), 'machineroom-runs')",
   "mkdirSync(folder, { recursive: true })",
-  "const record = { lane: args[0], briefs: args.slice(1), model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: null, log: null, branch: '', commits: [] }",
+  'const briefs = []',
+  'for (let i = 1; i < args.length; i += 1) {',
+  "  if (args[i] === '--started-by') { i += 1; continue }",
+  '  briefs.push(args[i])',
+  '}',
+  "const record = { lane: args[0], briefs, model: null, reasoning: null, startedAt: new Date().toISOString(), minutes: 0, exitCode: 0, killed: false, costUsd: null, log: null, branch: '', commits: [] }",
   "appendFileSync(join(folder, 'runs.jsonl'), JSON.stringify(record) + '\\n')",
 ].join('\n')
 
@@ -386,6 +391,17 @@ describe('run routes', () => {
     writeFileSync(join(runs, 'runs.jsonl'), `${lines.join('\n')}\n`)
   }
 
+  function tokenPost(url, body, token = '') {
+    return getJson(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { 'X-MachineRoom-Orchestrator': token } : {}),
+      },
+      body: JSON.stringify(body),
+    })
+  }
+
   async function startRunsBridge({ script = TINY_RUNNER, project = true } = {}) {
     const dir = tempDir()
     if (project) writeRunsProject(dir)
@@ -400,7 +416,8 @@ describe('run routes', () => {
         env: {},
       },
     })
-    return { url: started.url, dir, bridge: started.bridge }
+    const token = started.bridge.orchestrators()?.token('orchestrator') ?? ''
+    return { url: started.url, dir, bridge: started.bridge, token }
   }
 
   it('answers lane totals over every record, not just the last 20', async () => {
@@ -615,8 +632,13 @@ describe('run routes', () => {
 
   it('starts the runner with an argument list, keeps the last five lines and records the run when it ends', async () => {
     useRunsTemp()
-    const { url } = await startRunsBridge()
-    const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e', 'B6'], confirmed: true })
+    const { url, token } = await startRunsBridge()
+
+    const noToken = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e', 'B6'], confirmed: true })
+    expect(noToken.status).toBe(403)
+    expect(noToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e', 'B6'], confirmed: true }, token)
     expect(res.status).toBe(202)
     const entry = res.body
     expect(entry.lane).toBe('opencode')
@@ -647,30 +669,30 @@ describe('run routes', () => {
 
   it('refuses a bad lane, a bad brief and a second run on a busy lane with plain sentences', async () => {
     useRunsTemp()
-    const { url } = await startRunsBridge({ script: TINY_SLEEPER })
+    const { url, token } = await startRunsBridge({ script: TINY_SLEEPER })
 
-    const noLane = await postJson(`${url}/api/control/runs`, { briefs: ['C3e'], confirmed: true })
+    const noLane = await tokenPost(`${url}/api/control/runs`, { briefs: ['C3e'], confirmed: true }, token)
     expect(noLane.status).toBe(400)
     expect(noLane.body).toEqual({ error: 'Choose a lane from the list.' })
-    const badLane = await postJson(`${url}/api/control/runs`, { lane: 'nobody', briefs: ['C3e'], confirmed: true })
+    const badLane = await tokenPost(`${url}/api/control/runs`, { lane: 'nobody', briefs: ['C3e'], confirmed: true }, token)
     expect(badLane.body).toEqual({ error: 'Choose a lane from the list.' })
-    const noCli = await postJson(`${url}/api/control/runs`, { lane: 'agy', briefs: ['C3e'], confirmed: true })
+    const noCli = await tokenPost(`${url}/api/control/runs`, { lane: 'agy', briefs: ['C3e'], confirmed: true }, token)
     expect(noCli.status).toBe(400)
     expect(noCli.body).toEqual({ error: 'That lane has no command line.' })
 
-    const empty = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: [], confirmed: true })
+    const empty = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: [], confirmed: true }, token)
     expect(empty.body).toEqual({ error: 'Choose one to five briefs.' })
-    const tooMany = await postJson(`${url}/api/control/runs`, {
+    const tooMany = await tokenPost(`${url}/api/control/runs`, {
       lane: 'opencode',
       briefs: ['B6', 'C3e', 'B6', 'C3e', 'B6', 'C3e'],
       confirmed: true,
-    })
+    }, token)
     expect(tooMany.body).toEqual({ error: 'Choose one to five briefs.' })
-    const notAList = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: 'C3e', confirmed: true })
+    const notAList = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: 'C3e', confirmed: true }, token)
     expect(notAList.body).toEqual({ error: 'Choose one to five briefs.' })
 
     for (const briefs of [['c3e'], ['C3e&calc'], ['Z9'], ['C3e', 42]]) {
-      const badId = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs, confirmed: true })
+      const badId = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs, confirmed: true }, token)
       expect(badId.status).toBe(400)
       expect(badId.body).toEqual({ error: 'Choose a brief from the list.' })
     }
@@ -678,19 +700,19 @@ describe('run routes', () => {
     const wrongMethod = await fetch(`${url}/api/control/runs`, { method: 'DELETE' })
     expect(wrongMethod.status).toBe(405)
 
-    const started = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e'], confirmed: true })
+    const started = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e'], confirmed: true }, token)
     expect(started.status).toBe(202)
-    const busy = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['B6'], confirmed: true })
+    const busy = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['B6'], confirmed: true }, token)
     expect(busy.status).toBe(409)
     expect(busy.body).toEqual({ error: 'That lane is already running.' })
-    const otherLane = await postJson(`${url}/api/control/runs`, { lane: 'opencode2', briefs: ['B6'], confirmed: true })
+    const otherLane = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode2', briefs: ['B6'], confirmed: true }, token)
     expect(otherLane.status).toBe(202)
   })
 
   it('refuses a retired lane before it starts', async () => {
     useRunsTemp()
-    const { url } = await startRunsBridge()
-    const res = await postJson(`${url}/api/control/runs`, { lane: 'hermes', briefs: ['C3e'], confirmed: true })
+    const { url, token } = await startRunsBridge()
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'hermes', briefs: ['C3e'], confirmed: true }, token)
     expect(res.status).toBe(400)
     expect(res.body).toEqual({ error: 'The hermes lane is retired.' })
     const { running } = (await getJson(`${url}/api/control/runs`)).body
@@ -699,12 +721,12 @@ describe('run routes', () => {
 
   it('refuses a run that was not confirmed', async () => {
     useRunsTemp()
-    const { url } = await startRunsBridge()
+    const { url, token } = await startRunsBridge()
 
     for (const confirmed of [undefined, false, 'true', 1]) {
       const body = { lane: 'opencode', briefs: ['C3e'] }
       if (confirmed !== undefined) body.confirmed = confirmed
-      const res = await postJson(`${url}/api/control/runs`, body)
+      const res = await tokenPost(`${url}/api/control/runs`, body, token)
       expect(res.status, String(confirmed)).toBe(400)
       expect(res.body, String(confirmed)).toEqual({ error: 'Confirm the run first.' })
     }
@@ -716,8 +738,8 @@ describe('run routes', () => {
 
   it('answers 404 without a path when the brief files are missing', async () => {
     useRunsTemp()
-    const { url, dir } = await startRunsBridge({ project: false })
-    const res = await postJson(`${url}/api/control/runs`, { lane: 'hermes', briefs: ['C3e'], confirmed: true })
+    const { url, dir, token } = await startRunsBridge({ project: false })
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'hermes', briefs: ['C3e'], confirmed: true }, token)
     expect(res.status).toBe(404)
     expect(res.body.error).toMatch(/missing/i)
     expect(res.body.error).not.toContain(dir)
@@ -726,8 +748,8 @@ describe('run routes', () => {
 
   it('keeps the run going after the request and kills it when the bridge stops', async () => {
     useRunsTemp()
-    const { url, bridge } = await startRunsBridge({ script: TINY_SLEEPER })
-    const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e'], confirmed: true })
+    const { url, bridge, token } = await startRunsBridge({ script: TINY_SLEEPER })
+    const res = await tokenPost(`${url}/api/control/runs`, { lane: 'opencode', briefs: ['C3e'], confirmed: true }, token)
     expect(res.status).toBe(202)
 
     let pid = 0
