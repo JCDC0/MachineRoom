@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The control drawer drops the issue form and Dispatch keeps only brief runs, project task runs and the runs list (task U25).
+- The Plan tab and its panel are gone, so the drawer has Dispatch, Tasks, Meters, Team and Reviews (task U25).
+- A task thread has no comment composer and Team lists the lanes read only, with no hire or edit controls (task U25).
+- The route and model helpers that only the issue form used are deleted (task U25).
+
 - `package-lock.json` carries the root `bin` entry, so `npm install` in a fresh clone leaves the tree clean (found by D11).
 
 - The end to end orchestrator test now covers a restricted sub: the owner's ladder attach, a lane started with `startedBy`, an outside scope file, the wake in the sub and the main chat, and the sub's reply as `sub:<id>` (task T22).

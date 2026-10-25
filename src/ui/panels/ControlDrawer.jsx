@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import DispatchPanel from './DispatchPanel.jsx'
-import PlanPanel from './PlanPanel.jsx'
 import TasksPanel from './TasksPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
 import AgentBuilder from './AgentBuilder.jsx'
@@ -22,19 +21,12 @@ export default function ControlDrawer({
 }) {
   const hasTeamTab = typeof client?.agents === 'function'
   const hasReviewsTab = typeof client?.reviews === 'function'
-  const hasPlanTab = typeof client?.askPlanner === 'function' && typeof client?.plan === 'function'
   const tabs = useMemo(() => {
     const next = [...BASE_TABS]
-    if (hasPlanTab) next.push({ id: 'plan', label: 'Plan' })
     if (hasTeamTab) next.push({ id: 'agents', label: 'Team' })
     if (hasReviewsTab) next.push({ id: 'reviews', label: 'Reviews' })
     return next
-  }, [hasTeamTab, hasReviewsTab, hasPlanTab])
-
-  const [internalTarget, setInternalTarget] = useState(null)
-  const internalNonceRef = useRef(0)
-
-  const effectiveTarget = internalTarget ?? controlTarget
+  }, [hasTeamTab, hasReviewsTab])
 
   const [activeTab, setActiveTab] = useState(() => {
     const rawId = controlTarget?.issueIdentifier
@@ -47,7 +39,6 @@ export default function ControlDrawer({
   const tabRefs = useRef({})
   const triggerRef = useRef(null)
   const lastTargetNonceRef = useRef(controlTarget?.nonce ?? null)
-  const lastInternalNonceRef = useRef(null)
 
   useEffect(() => {
     if (!tabs.some((t) => t.id === activeTab)) {
@@ -59,7 +50,6 @@ export default function ControlDrawer({
     if (controlTarget?.nonce != null) {
       if (controlTarget.nonce !== lastTargetNonceRef.current) {
         lastTargetNonceRef.current = controlTarget.nonce
-        setInternalTarget(null)
         const rawId = controlTarget.issueIdentifier
         const hasId = typeof rawId === 'string' ? rawId.trim().length > 0 : rawId != null && String(rawId).trim().length > 0
         if (hasId) {
@@ -72,21 +62,6 @@ export default function ControlDrawer({
       lastTargetNonceRef.current = null
     }
   }, [controlTarget, tabs])
-
-  useEffect(() => {
-    if (internalTarget?.nonce != null && internalTarget.nonce !== lastInternalNonceRef.current) {
-      lastInternalNonceRef.current = internalTarget.nonce
-      if (internalTarget.tab && tabs.some((t) => t.id === internalTarget.tab)) {
-        setActiveTab(internalTarget.tab)
-      }
-    }
-  }, [internalTarget, tabs])
-
-  function handleSelectControlTarget(target) {
-    if (!target || typeof target !== 'object') return
-    internalNonceRef.current += 1
-    setInternalTarget({ ...target, nonce: `internal-${internalNonceRef.current}` })
-  }
 
   useEffect(() => {
     if (open) {
@@ -138,8 +113,8 @@ export default function ControlDrawer({
   }
 
   const dispatchBriefId =
-    effectiveTarget?.tab === 'dispatch' && typeof effectiveTarget.briefId === 'string' && effectiveTarget.briefId.trim()
-      ? effectiveTarget.briefId.trim()
+    controlTarget?.tab === 'dispatch' && typeof controlTarget.briefId === 'string' && controlTarget.briefId.trim()
+      ? controlTarget.briefId.trim()
       : undefined
 
   if (!open) return null
@@ -206,10 +181,7 @@ export default function ControlDrawer({
               targetBriefId={dispatchBriefId}
             />
           )}
-          {activeTab === 'plan' && hasPlanTab && (
-            <PlanPanel client={client} onSelectControlTarget={handleSelectControlTarget} />
-          )}
-          {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={effectiveTarget} />}
+          {activeTab === 'tasks' && <TasksPanel client={client} controlTarget={controlTarget} />}
           {activeTab === 'meters' && <MetersPanel client={client} />}
           {activeTab === 'agents' && hasTeamTab && (
             <AgentBuilder client={client} />

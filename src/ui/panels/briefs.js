@@ -38,10 +38,6 @@ export const OWNER_LABELS = Object.freeze({
   owner: 'Owner',
 })
 
-function escapeRegExp(text) {
-  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 export function getFirstOwner(briefOrOwner) {
   if (!briefOrOwner) return ''
   if (typeof briefOrOwner === 'string') {
@@ -116,35 +112,6 @@ export function runLaneFor(brief, running, lanes) {
     (name) => name !== owner && harnessName(name) === harness && !busy.has(name)
   )
   return free || owner
-}
-
-export function chooseAssignee(briefOrOwner, agents) {
-  let target = briefOrOwner
-  let list = agents
-  if (
-    Array.isArray(briefOrOwner) &&
-    !Array.isArray(agents) &&
-    briefOrOwner.some((item) => item && typeof item === 'object' && 'id' in item)
-  ) {
-    list = briefOrOwner
-    target = agents
-  }
-  if (!Array.isArray(list) || list.length === 0) return ''
-  const owner = getFirstOwner(target)
-  if (!owner) return ''
-
-  const exact = list.find(
-    (agent) => typeof agent?.name === 'string' && agent.name.trim().toLowerCase() === owner
-  )
-  if (exact?.id) return exact.id
-
-  const wordPattern = new RegExp(`\\b${escapeRegExp(owner)}\\b`, 'i')
-  const wordMatch = list.find(
-    (agent) => typeof agent?.name === 'string' && wordPattern.test(agent.name.trim())
-  )
-  if (wordMatch?.id) return wordMatch.id
-
-  return ''
 }
 
 export function groupBriefsByOwner(briefs) {
