@@ -16,6 +16,7 @@ MachineRoom is a React and three.js viewer that shows coding agents working on a
 - Never read, print, store or commit an API key or token.
 - Never write the owner's Windows user name or a real home path into a file, a test, a fixture, a doc or a commit message, even inside an example command or a probe's output. Write `C:\Users\<name>` instead, and build a test path from `os.userInfo().username` at run time. `npm run history-audit` refuses a push that carries one.
 - Stop every process you start and delete any scratch or log file you wrote.
+- Use what your own harness gives you: its skills, tools, subagents and search, whenever they help the brief. The rules here still hold for what you change.
 
 ## Report
 

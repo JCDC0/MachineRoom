@@ -1,8 +1,23 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { railShareFromPointer, railStep } from './lensResize.js'
 
 export default function LensRail({ side, label, share, multiplier, ariaLabel, valueText, onShare, onWheel }) {
   const dragRef = useRef(null)
+  const railRef = useRef(null)
+  const wheelRef = useRef(onWheel)
+  wheelRef.current = onWheel
+
+  useEffect(() => {
+    const rail = railRef.current
+    if (!rail) return undefined
+    function wheel(event) {
+      event.preventDefault()
+      event.stopPropagation()
+      wheelRef.current(event.deltaY)
+    }
+    rail.addEventListener('wheel', wheel, { passive: false })
+    return () => rail.removeEventListener('wheel', wheel)
+  }, [])
   const position = Math.min(1, Math.max(0, Number(share) || 0))
 
   function down(event) {
@@ -42,10 +57,7 @@ export default function LensRail({ side, label, share, multiplier, ariaLabel, va
       onPointerMove={move}
       onPointerUp={up}
       onPointerCancel={up}
-      onWheel={(event) => {
-        event.stopPropagation()
-        onWheel(event.deltaY)
-      }}
+      ref={railRef}
     >
       <span className="lens-rail-label mono">{label}</span>
       <div

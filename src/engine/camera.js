@@ -189,6 +189,7 @@ export function createCameraRig(camera, surface) {
 
   function wheel(event) {
     if (event.target.closest('.hud, .mr-board, .lens-rail')) return
+    event.preventDefault()
     zoomBy(event.deltaY)
   }
 
@@ -196,7 +197,7 @@ export function createCameraRig(camera, surface) {
   window.addEventListener('pointermove', move)
   window.addEventListener('pointermove', hover)
   window.addEventListener('pointerup', up)
-  surface.addEventListener('wheel', wheel, { passive: true })
+  surface.addEventListener('wheel', wheel, { passive: false })
 
   function reset() {
     follow = null

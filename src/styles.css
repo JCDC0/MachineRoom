@@ -7641,3 +7641,31 @@ body:has(#hud-orchestrator-chat) .waiting {
     display: none;
   }
 }
+
+/* The whole page scrolls at 900 pixels and wider: the lens on top, the lower half below it */
+@media (min-width: 900px) {
+  html {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  body,
+  #root {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  .stage {
+    position: relative;
+    inset: auto;
+    min-height: 100vh;
+  }
+
+  .hud-lower {
+    flex: none;
+    height: max(520px, calc(100vh - var(--menu-h)));
+  }
+}
