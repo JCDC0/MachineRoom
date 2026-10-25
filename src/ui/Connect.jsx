@@ -144,7 +144,7 @@ export default function Connect({
               <h2>Connect through the bridge</h2>
             </div>
             <p className="connect-hint">
-              Run <code className="mono">npm run bridge</code> in your terminal to stream agents and the project file list.
+              Run <code className="mono">npm run serve -- up --root YOUR-PROJECT</code> in a terminal, then open the address it prints, or paste the bridge address below.
             </p>
             <div className="connect-field">
               <div className="connect-field-row">

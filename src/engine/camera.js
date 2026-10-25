@@ -6,7 +6,7 @@ const MAX_DIST = 26000
 
 export const OVERVIEW = { x: 0, y: 200, z: 0, yaw: 0.42, pitch: 0.3, dist: 2600 }
 export const FOV = 50
-export const FIT_MIN = 1800
+export const FIT_MIN = 900
 export const CARD_NAME_FONT = 15
 export const CARD_NAME_MIN = 11
 export const FOLLOW_HOLD_MS = 4000
@@ -14,7 +14,7 @@ export const FOLLOW_EASE_MS = 1200
 const FOLLOW_WIDE_MIN = 900
 const FOLLOW_CLOSE_MIN = 620
 const MIDDLE_EDGE = 1 / 6
-const FIT_MARGIN = { x: 0.8, y: 0.84 }
+const FIT_MARGIN = { x: 0.95, y: 0.95 }
 const DRIFT_X = 60
 const DRIFT_Y = 36
 const driftRight = new THREE.Vector3()
@@ -28,16 +28,30 @@ export function viewBasis(yaw, pitch) {
 }
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
+const finiteRadius = (value) => (Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null)
+const radiusX = (s) => {
+  const value = finiteRadius(s?.rx)
+  if (value !== null) return value
+  return finiteRadius(s?.r) ?? 0
+}
+const radiusY = (s) => {
+  const value = finiteRadius(s?.ry)
+  if (value !== null) return value
+  return finiteRadius(s?.r) ?? 0
+}
+const radius = (s) => Math.max(radiusX(s), radiusY(s))
 
-export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, fov = FOV, aspect = 1.6, min = FIT_MIN } = {}) {
+export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, fov = FOV, aspect = 1.6, width = 0, height = 0, min = FIT_MIN } = {}) {
   if (spheres.length === 0) return { target: { x: OVERVIEW.x, y: OVERVIEW.y, z: OVERVIEW.z }, dist: OVERVIEW.dist }
+  const lensAspect = Number(width) > 0 && Number(height) > 0 ? Number(width) / Number(height) : aspect
   const { back, right, up } = viewBasis(yaw, pitch)
   const low = { x: Infinity, y: Infinity, z: Infinity }
   const high = { x: -Infinity, y: -Infinity, z: -Infinity }
   for (const s of spheres) {
+    const r = radius(s)
     for (const axis of ['x', 'y', 'z']) {
-      low[axis] = Math.min(low[axis], s[axis] - s.r)
-      high[axis] = Math.max(high[axis], s[axis] + s.r)
+      low[axis] = Math.min(low[axis], s[axis] - r)
+      high[axis] = Math.max(high[axis], s[axis] + r)
     }
   }
   const middle = { x: (low.x + high.x) / 2, y: (low.y + high.y) / 2, z: (low.z + high.z) / 2 }
@@ -46,10 +60,10 @@ export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, f
     const d = { x: s.x - middle.x, y: s.y - middle.y, z: s.z - middle.z }
     const x = dot(d, right)
     const y = dot(d, up)
-    span.x0 = Math.min(span.x0, x - s.r)
-    span.x1 = Math.max(span.x1, x + s.r)
-    span.y0 = Math.min(span.y0, y - s.r)
-    span.y1 = Math.max(span.y1, y + s.r)
+    span.x0 = Math.min(span.x0, x - radiusX(s))
+    span.x1 = Math.max(span.x1, x + radiusX(s))
+    span.y0 = Math.min(span.y0, y - radiusY(s))
+    span.y1 = Math.max(span.y1, y + radiusY(s))
   }
   const sx = (span.x0 + span.x1) / 2
   const sy = (span.y0 + span.y1) / 2
@@ -59,12 +73,12 @@ export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, f
     z: middle.z + right.z * sx + up.z * sy,
   }
   const tanV = Math.tan((fov * Math.PI) / 360) * FIT_MARGIN.y
-  const tanH = Math.tan((fov * Math.PI) / 360) * aspect * FIT_MARGIN.x
+  const tanH = Math.tan((fov * Math.PI) / 360) * lensAspect * FIT_MARGIN.x
   let dist = min
   for (const s of spheres) {
     const d = { x: s.x - target.x, y: s.y - target.y, z: s.z - target.z }
     const depth = dot(d, back)
-    dist = Math.max(dist, (Math.abs(dot(d, right)) + s.r) / tanH + depth, (Math.abs(dot(d, up)) + s.r) / tanV + depth)
+    dist = Math.max(dist, (Math.abs(dot(d, right)) + radiusX(s)) / tanH + depth, (Math.abs(dot(d, up)) + radiusY(s)) / tanV + depth)
   }
   return { target, dist: Math.min(dist, MAX_DIST) }
 }
