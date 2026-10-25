@@ -567,6 +567,7 @@ describe('the orchestrator registry', () => {
     const files = makeBase({ ladder: { subs: [FRONTEND] } })
     const lanes = {
       ...LANES,
+      orchestrator: { ...LANES.orchestrator, cli: { ...LANES.orchestrator.cli, bin: process.execPath } },
       claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', bin: process.execPath, model: 'sonnet' } },
       opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/deepseek-v4.1-flash' } },
       acp: { name: 'ACP', harness: 'ACP', cli: { harness: 'acp', bin: join(files.base, 'does-not-exist.exe'), model: 'm' } },
