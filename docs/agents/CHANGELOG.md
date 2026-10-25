@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The dock's context column shows the selected agent, else the first working agent, else the orchestrator, and leaves out rows with nothing to say (task U22).
 - `package-lock.json` carries the root `bin` entry, so `npm install` in a fresh clone leaves the tree clean (found by D11).
 
 - The end to end orchestrator test now covers a restricted sub: the owner's ladder attach, a lane started with `startedBy`, an outside scope file, the wake in the sub and the main chat, and the sub's reply as `sub:<id>` (task T22).

@@ -5,6 +5,7 @@ import { isOrchestratorAgent } from './agentList.js'
 export const DOCK_LOG_LIMIT = 12
 export const NOT_REPORTED = 'not reported'
 export const NONE = 'none'
+export const EMPTY_PROMPT = 'Pick an agent on the left to see what it is doing.'
 
 const STATUS_WORDS = {
   active: 'idle',
@@ -67,17 +68,26 @@ function resolveAgent(agent, roster) {
   if (isObject(agent)) {
     const key = clean(agent.key)
     const id = clean(agent.id)
+    if (!key && !id && !clean(agent.name)) return null
     const found = roster.find((item) => sameAgent(item, key, id))
     return found ? { ...found, ...agent } : agent
   }
   const wanted = clean(agent)
-  if (wanted) {
-    const found = roster.find((item) => sameAgent(item, wanted, wanted))
-    if (found) return found
-  }
-  const orchestrator = roster.find(isOrchestratorAgent)
-  if (orchestrator) return orchestrator
-  return { key: 'orchestrator', name: 'Orchestrator', orchestrator: true }
+  if (!wanted) return null
+  const found = roster.find((item) => sameAgent(item, wanted, wanted))
+  if (found) return found
+  return { key: wanted, name: wanted }
+}
+
+function isWorking(agent) {
+  const status = clean(agent?.status).toLowerCase()
+  return status === 'working' || status === 'running'
+}
+
+function workingFallback(working, roster) {
+  const given = resolveAgent(working, roster)
+  if (given) return given
+  return roster.find(isWorking) ?? null
 }
 
 function matchingRuns(liveRuns, selected) {
@@ -295,18 +305,52 @@ function sectorData(selected, orchestrator) {
   }
 }
 
-export function agentContext({ agent = null, lanes = null, costs = null, liveRuns = null, tasks = null, log = null, orchestrator = null } = {}) {
+function emptyContext() {
+  return {
+    empty: true,
+    message: EMPTY_PROMPT,
+    isOrchestrator: false,
+    key: '',
+    name: '',
+    harness: NOT_REPORTED,
+    model: NOT_REPORTED,
+    status: 'idle',
+    task: NONE,
+    command: NONE,
+    cost: NOT_REPORTED,
+    costCents: null,
+    tokens: NOT_REPORTED,
+    inputTokens: null,
+    outputTokens: null,
+    sector: null,
+    lanes: null,
+    scope: null,
+    restricted: null,
+    setBy: null,
+    log: [],
+    context: null,
+    autocompact: null,
+  }
+}
+
+export function agentContext({ agent = null, working = null, lanes = null, costs = null, liveRuns = null, tasks = null, log = null, orchestrator = null } = {}) {
   const roster = Array.isArray(lanes) ? lanes.filter(isObject) : []
   const selected = resolveAgent(agent, roster)
-  const isOrchestrator = agent === null || agent === undefined || isOrchestratorAgent(selected)
-  const source = isOrchestrator ? withOrchestratorData(selected, orchestrator) : selected
+  const chosen =
+    selected ??
+    workingFallback(working, roster) ??
+    roster.find(isOrchestratorAgent) ??
+    null
+  if (!chosen) return emptyContext()
+  const isOrchestrator = isOrchestratorAgent(chosen)
+  const source = isOrchestrator ? withOrchestratorData(chosen, orchestrator) : chosen
   const key = clean(source?.key) || clean(source?.id)
   const name = clean(source?.name) || key || 'Agent'
   const harness = clean(source?.harness) || clean(source?.adapterType) || NOT_REPORTED
   const model = clean(source?.model) || NOT_REPORTED
   const run = currentRun(liveRuns, source)
 
-  const taskRoster = taskRosterFor(roster, selected, controlAgentId(selected, costs, liveRuns))
+  const taskRoster = taskRosterFor(roster, source, controlAgentId(source, costs, liveRuns))
   const taskMap = agentTasks(Array.isArray(liveRuns) ? liveRuns : [], Array.isArray(tasks) ? tasks : [], taskRoster)
   const task = clean(taskMap.get(key)) || NONE
 
@@ -325,7 +369,7 @@ export function agentContext({ agent = null, lanes = null, costs = null, liveRun
     commandFromLog(entries) ||
     NONE
 
-  const row = costRowFor(costs, selected)
+  const row = costRowFor(costs, source)
   const costCents = numberOrNull(row?.costCents)
   const reported = Boolean(row) && row.reported !== false && costCents !== null
   const inputTokens = reported ? numberOrNull(row.inputTokens) : null
@@ -339,6 +383,7 @@ export function agentContext({ agent = null, lanes = null, costs = null, liveRun
   const sectorInfo = sectorData(source, orchestrator)
 
   return {
+    empty: false,
     isOrchestrator,
     key,
     name,

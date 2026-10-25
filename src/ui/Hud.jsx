@@ -121,6 +121,7 @@ export default function Hud({
   const list = agentList(snapshot?.agents ?? [], idleOpen)
   const grouped = ladderGroups(list.rows, ladder)
   const nav = grouped ?? list
+  const workingAgent = list.rows.find((row) => row.agent?.status === 'working')?.agent ?? null
   const activeRows = list.rows.filter((row) => row.group !== 'idle')
   const idleRows = list.rows.filter((row) => row.group === 'idle')
   const listRef = useRef(nav)
@@ -557,6 +558,7 @@ export default function Hud({
         <div className="hud-dock-context">
           <AgentDock
             agent={focused}
+            working={workingAgent}
             lanes={snapshot?.agents ?? []}
             costs={costs}
             liveRuns={liveRuns}
