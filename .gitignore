@@ -11,3 +11,5 @@ dist/
 decide-report*.json
 public/recordings/
 Concepts/
+
+/music/
