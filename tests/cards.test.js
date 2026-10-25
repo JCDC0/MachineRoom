@@ -1,18 +1,22 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import {
+  CARD_NAME_MAX,
   CARD_SCALES,
   CARD_W,
   cardHeight,
+  cardName,
   cardPlan,
   cardRows,
   cardSize,
+  cardTitle,
   createCards,
   createRowFrameKey,
   fadeProgress,
   openChain,
   planOpenSet,
   rowOffset,
+  stackNamesHidden,
   stackOverflow,
   viewInput,
   viewKey,
@@ -161,6 +165,92 @@ describe('card size', () => {
   it('places rows from the top of the card down', () => {
     expect(rowOffset(3, 0)).toBeGreaterThan(rowOffset(3, 1))
     expect(rowOffset(3, 0)).toBeLessThan(cardHeight(3) / 2)
+  })
+
+  it('widens a card for a long name and leaves a short name at the base width', () => {
+    const long = 'machineroom-very-long-name-tests'
+    expect(cardSize({ path: 'src', state: 'closed' }).width).toBe(CARD_W)
+    expect(cardSize({ path: long, state: 'closed' }).width).toBeGreaterThan(CARD_W)
+    expect(cardSize({ path: long, state: 'open' }).width).toBeCloseTo(cardSize({ path: long, state: 'closed' }).width * CARD_SCALES.open, 6)
+    expect(cardSize({ path: `${long}-more`, state: 'closed' }).width).toBe(cardSize({ path: long, state: 'closed' }).width)
+  })
+})
+
+describe('card names', () => {
+  const LONG = 'machineroom-very-long-name-tests'
+
+  it('shows a short name in full with its slash and the long name cut from the middle', () => {
+    expect(cardName('src')).toBe('src/')
+    expect(cardName('', 'demo')).toBe('demo/')
+    const exact = 'abcdefghijklmnopqrstuvwx'
+    expect(exact).toHaveLength(CARD_NAME_MAX)
+    expect(cardName(exact)).toBe(`${exact}/`)
+    const name = cardName(LONG)
+    expect(name.endsWith('/')).toBe(true)
+    const cut = name.slice(0, -1)
+    expect(cut).toHaveLength(CARD_NAME_MAX)
+    expect(cut).toContain('...')
+    expect(cut.startsWith('machineroom')).toBe(true)
+    expect(cut.endsWith('name-tests')).toBe(true)
+  })
+
+  it('keeps the full path for the title', () => {
+    expect(cardTitle('src/engine/cards')).toBe('src/engine/cards')
+    expect(cardTitle(LONG)).toBe(LONG)
+    expect(cardTitle('', 'demo')).toBe('demo')
+  })
+
+  it('hides the names behind the front card of a stack', () => {
+    const views = [{ path: '' }, { path: 'lib' }, { path: 'lib/a' }, { path: 'lib/b' }, { path: 'src' }, { path: 'src/a' }]
+    expect([...stackNamesHidden(views)].sort()).toEqual(['lib/a', 'lib/b', 'src/a'])
+    expect([...stackNamesHidden(views, new Set(['lib']))]).toEqual(['src/a'])
+    expect([...stackNamesHidden(views, new Set(['lib/a']))]).toEqual(['src/a'])
+  })
+
+  it('puts the full path on the card and keeps a long name inside its width', () => {
+    const rootName = LONG
+    const tree = makeTree({ root: rootName, files: [`${rootName}/a.js`] })
+    const state = createState(tree, [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), rootName, alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const root = cards.cards.get('')
+    const folder = cards.cards.get(rootName)
+    expect(root.element.title).toBe(rootName)
+    expect(root.name.textContent).toBe('machineroom...name-tests/')
+    expect(parseFloat(root.element.style.width)).toBeGreaterThan(CARD_W)
+    expect(folder.element.title).toBe(rootName)
+    expect(folder.name.textContent).toBe('machineroom...name-tests/')
+    cards.dispose()
+  })
+
+  it('keeps a short name clear of a lens width cap', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    const first = cards.cards.values().next().value
+    first.element.parentElement = { clientHeight: 400 }
+    const view = camera()
+    view.position.set(0, 0, 5000)
+    view.updateMatrixWorld(true)
+    cards.update(state, 0.016, view)
+    const card = cards.cards.get('docs')
+    expect(card.name.style.transform).toMatch(/^scale\(/)
+    expect(card.name.style.maxWidth).toBeUndefined()
+    cards.dispose()
+  })
+
+  it('hides the name of a card that sits behind its parent in a stack', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const front = cards.cards.get('lib')
+    const behind = cards.cards.get('lib/a')
+    expect(front.name.style.display).not.toBe('none')
+    expect(behind.name.style.display).toBe('none')
+    expect(behind.element.title).toBe('lib/a')
+    cards.dispose()
   })
 })
 
