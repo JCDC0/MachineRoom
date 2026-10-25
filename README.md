@@ -45,9 +45,9 @@ Press Ctrl+C in the terminal to stop the room.
 - The agent list, in the dock: one row for each agent, with its lane key, status and a Log button. With a ladder, the list groups under the main orchestrator, then a header for each sub with its name, state and lane count, then a `Main` header for the lanes in no sub. Working, queued, failed and recently finished lanes come first in each group. The rest sit under one collapsible idle row.
 - A subagent appears beside its parent as a smaller shape with its own chip.
 - Follow mode: `F` cycles wide, close up and off. It follows the card an agent is touching. A click in the room, `0` or `1` to `9` ends it.
-- CONTROL at the top right, or `C`: opens the drawer with Dispatch, Tasks, Meters, Plan, Team and Reviews.
+- CONTROL at the top right, or `C`: opens the drawer with Dispatch, Tasks, Meters, Team and Reviews.
 - ORCHESTRATOR beside it, or `/`: opens the chat with the room's orchestrator. It is there when the room runs with `--lanes`.
-- The cost board in the dock shows this month's spend per lane from the run records.
+- The cost board in the dock shows this month's spend per lane from the run records in a live room. In a replay or the demo it reads `Sample costs`, made up for the replay.
 - While any agent works, cards off its path dim, and the cards on the path glow.
 - There is no randomness. The same recording always draws the same room.
 
@@ -213,12 +213,11 @@ Open `/?replay&scale=200000&fps`. The frame line sits in the top left panel. `np
 
 ## The control drawer
 
-The drawer needs a control client. It is there in replay, the demo and a live room through a bridge. With a control client, the drawer has up to six tabs.
+The drawer needs a control client. It is there in replay, the demo and a live room through a bridge. With a control client, the drawer has five tabs: Dispatch, Tasks, Meters, Team and Reviews.
 
-- Dispatch: pick an open brief to see its prompt and route, or run a task on your project when `--lanes` is on. The Route row suggests a lane and model, with a Use button when the policy names one. The Runs list shows running and recent lane runs.
+- Dispatch: pick an open brief to see its prompt, or run a task on your project when `--lanes` is on. The Runs list shows running and recent lane runs.
 - Tasks: open and finished tasks from the lane runs. A task with a live run reads `running AGENT` or `queued AGENT`. Open one to read its thread. A write is refused.
 - Meters: this month's spend per lane from the run records. A budget change is refused.
-- Plan: write a goal and ask the planner behind a confirm card; the bridge answers that plans come from lane runs. Each brief shows its size, files, tests and route. Tick the ones to add to `docs/agents/TASKS.md` behind a second confirm card, then open one in Dispatch with `Dispatch <id>`.
 - Team: the lanes from `docs/agents/lanes.json`. New lanes are added in that file.
 - Reviews: each lane's branch, commits ahead, files and last run. Click a row for the diff. Merge opens a confirm card with a message and merges the head you read.
 
