@@ -48,17 +48,17 @@ export const TOUR_STEPS = [
   },
   {
     label: 'The agent list',
-    selector: '.hud-dock-agents',
+    selector: '.hud-dock-agents, .hud-strip',
     text: 'The dock lists the main orchestrator first, then each sub orchestrator sector and the Main group, with working lanes above the collapsible idle row and number keys to focus them.',
   },
   {
     label: 'The agent context',
-    selector: '.hud-dock-context',
+    selector: '.hud-dock-context, .hud-strip',
     text: "The middle column shows the selected agent: its harness, model, status, sector or scope, task, current command, this month's spend and tokens, and its recent log lines.",
   },
   {
     label: 'Settings and costs',
-    selector: '.hud-dock-side',
+    selector: '.hud-dock-side, .hud-strip',
     text: "The right column holds the folder depth and five screen effects for the lens above this month's cost board per lane.",
   },
   {

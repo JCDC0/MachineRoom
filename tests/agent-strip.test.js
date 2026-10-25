@@ -2,6 +2,24 @@ import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { PACKET_DURATION, PACKET_POOL, createAgents, packetSpots, stripPoints } from '../src/engine/agents.js'
 import { apply, createState } from '../src/model/state.js'
+import {
+  AUTOCOMPACT_MAX,
+  AUTOCOMPACT_MIN,
+  DEFAULT_AUTOCOMPACT_PERCENT,
+  STRIP_LOG_LIMIT,
+  agentChoices,
+  autocompactPercent,
+  clampAutocompactPercent,
+  contextLine,
+  formatCount,
+  harnessKey,
+  laneLine,
+  modelChoices,
+  orchestratorId,
+  statusTone,
+  stripLogLines,
+  wideLayout,
+} from '../src/ui/agentStrip.js'
 
 const from = { x: 0, y: 290, z: 300 }
 const to = { x: 620, y: 460, z: -80 }
@@ -177,6 +195,188 @@ describe('packets after a run ends', () => {
     expect(view.packetSends).toHaveLength(queuedDuringWork)
     expect(view.packets.geometry.drawRange.count).toBe(0)
     agents.dispose()
+  })
+})
+
+describe('agent strip layout', () => {
+  it('turns the wide layout on at 900 pixels', () => {
+    expect(wideLayout(899)).toBe(false)
+    expect(wideLayout(900)).toBe(true)
+    expect(wideLayout(1600)).toBe(true)
+    expect(wideLayout(0)).toBe(false)
+    expect(wideLayout('1200')).toBe(true)
+    expect(wideLayout('wide')).toBe(false)
+  })
+
+  it('maps a status to the dot tone', () => {
+    expect(statusTone('working')).toBe('working')
+    expect(statusTone('running')).toBe('working')
+    expect(statusTone('queued')).toBe('queued')
+    expect(statusTone('failed')).toBe('error')
+    expect(statusTone('error')).toBe('error')
+    expect(statusTone('finished')).toBe('done')
+    expect(statusTone('done')).toBe('done')
+    expect(statusTone('idle')).toBe('idle')
+    expect(statusTone('')).toBe('idle')
+  })
+})
+
+describe('the context line', () => {
+  it('gives the used tokens and the window', () => {
+    expect(contextLine({ context: { tokens: 128400, window: 200000 } })).toBe(
+      'Context size 128.4k / 200.0k'
+    )
+    expect(contextLine({ context: { tokens: 900, window: 2000 } })).toBe('Context size 900 / 2.0k')
+  })
+
+  it('says so when the bridge has no context numbers', () => {
+    expect(contextLine({ context: null })).toBe('')
+    expect(contextLine({})).toBe('')
+    expect(contextLine(null)).toBe('')
+    expect(contextLine({ context: { tokens: null, window: 200000 } })).toBe(
+      'Context size not reported'
+    )
+    expect(contextLine({ context: { tokens: 20, window: 0 } })).toBe('Context size not reported')
+  })
+
+  it('formats small and large counts the way the dock does', () => {
+    expect(formatCount(0)).toBe('0')
+    expect(formatCount(999)).toBe('999')
+    expect(formatCount(1000)).toBe('1.0k')
+    expect(formatCount(200000)).toBe('200.0k')
+    expect(formatCount(null)).toBe('?')
+  })
+})
+
+describe('the lane line', () => {
+  it('shows this month of tokens and cost for a lane', () => {
+    expect(laneLine({ tokens: '1.2k in / 300 out', cost: '$12.34' })).toBe(
+      'Tokens 1.2k in / 300 out, $12.34 this month'
+    )
+  })
+
+  it('says when a lane reports nothing', () => {
+    expect(laneLine({ tokens: 'not reported', cost: 'not reported' })).toBe(
+      'Tokens not reported, cost not reported this month'
+    )
+    expect(laneLine(null)).toBe('')
+  })
+})
+
+describe('the three log lines', () => {
+  it('keeps the newest three and puts them last, each with a chevron', () => {
+    const log = [
+      { text: 'read a.js', tone: 'normal' },
+      { text: 'write b.js', tone: 'normal' },
+      { text: 'failed c.js', tone: 'error' },
+      { text: 'read d.js', tone: 'normal' },
+    ]
+    expect(STRIP_LOG_LIMIT).toBe(3)
+    expect(stripLogLines(log)).toEqual([
+      { text: '> write b.js', tone: 'normal' },
+      { text: '> failed c.js', tone: 'error' },
+      { text: '> read d.js', tone: 'normal' },
+    ])
+  })
+
+  it('takes plain strings and drops empty lines', () => {
+    expect(stripLogLines(['one', '', 'two', '  ', 'three', 'four'])).toEqual([
+      { text: '> two', tone: 'normal' },
+      { text: '> three', tone: 'normal' },
+      { text: '> four', tone: 'normal' },
+    ])
+    expect(stripLogLines(null)).toEqual([])
+  })
+
+  it('honours another limit', () => {
+    expect(stripLogLines(['one', 'two'], 1)).toEqual([{ text: '> two', tone: 'normal' }])
+  })
+})
+
+describe('the model choices', () => {
+  const models = [
+    { id: 'opencode/free', label: 'Free', harness: 'opencode' },
+    { id: 'opencode-go/flash', label: 'Flash', harness: 'opencode' },
+    { id: 'claude-opus', label: 'Opus', harness: 'claude' },
+    { id: 'opencode/free', label: 'Free again', harness: 'opencode' },
+    { id: 'no-harness', label: 'Loose', harness: null },
+  ]
+
+  it('keeps only the models for the harness', () => {
+    expect(modelChoices(models, 'opencode')).toEqual([
+      { id: 'opencode/free', label: 'Free' },
+      { id: 'opencode-go/flash', label: 'Flash' },
+    ])
+    expect(modelChoices(models, 'claude')).toEqual([{ id: 'claude-opus', label: 'Opus' }])
+  })
+
+  it('reads an adapter name as its harness', () => {
+    expect(harnessKey('opencode_local')).toBe('opencode')
+    expect(harnessKey('claude_local')).toBe('claude')
+    expect(harnessKey('not reported')).toBe('')
+    expect(modelChoices(models, 'claude_local')).toEqual([{ id: 'claude-opus', label: 'Opus' }])
+  })
+
+  it('lists every model when the harness is unknown', () => {
+    expect(modelChoices(models, '')).toHaveLength(4)
+    expect(modelChoices(models, 'not reported')).toHaveLength(4)
+  })
+
+  it('reads a list wrapped in an object and fills a missing label', () => {
+    expect(modelChoices({ models: [{ id: 'a' }, { id: 'b', label: 'B' }] }, '')).toEqual([
+      { id: 'a', label: 'a' },
+      { id: 'b', label: 'B' },
+    ])
+    expect(modelChoices(null, 'opencode')).toEqual([])
+  })
+})
+
+describe('the agent choices', () => {
+  it('lists the top-level agents, idle ones included', () => {
+    const choices = agentChoices([
+      { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
+      { key: 'opencode', name: 'OpenCode', status: 'working' },
+      { key: 'claude', name: 'Claude', status: 'idle' },
+      { key: 'child', name: 'Child', parent: 'opencode', status: 'working' },
+    ])
+    expect(choices).toEqual([
+      { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
+      { key: 'opencode', name: 'OpenCode', status: 'working' },
+      { key: 'claude', name: 'Claude', status: 'idle' },
+    ])
+  })
+
+  it('copes with a missing roster', () => {
+    expect(agentChoices(null)).toEqual([])
+  })
+})
+
+describe('the autocompact percent', () => {
+  it('keeps the percent between 50 and 95', () => {
+    expect(AUTOCOMPACT_MIN).toBe(50)
+    expect(AUTOCOMPACT_MAX).toBe(95)
+    expect(clampAutocompactPercent(49)).toBe(50)
+    expect(clampAutocompactPercent(80)).toBe(80)
+    expect(clampAutocompactPercent(96)).toBe(95)
+    expect(clampAutocompactPercent(80.6)).toBe(81)
+    expect(clampAutocompactPercent('72')).toBe(72)
+    expect(clampAutocompactPercent('x')).toBe(DEFAULT_AUTOCOMPACT_PERCENT)
+  })
+
+  it('reads the saved percent from the orchestrator answer', () => {
+    expect(autocompactPercent({ autocompactPercent: 65 })).toBe(65)
+    expect(autocompactPercent({ autocompactPercent: 10 })).toBe(50)
+    expect(autocompactPercent({ autocompactPercent: 99 })).toBe(95)
+    expect(autocompactPercent({})).toBe(DEFAULT_AUTOCOMPACT_PERCENT)
+    expect(autocompactPercent(null)).toBe(DEFAULT_AUTOCOMPACT_PERCENT)
+  })
+})
+
+describe('the orchestrator id', () => {
+  it('drops the sub prefix and keeps the main id', () => {
+    expect(orchestratorId('orchestrator')).toBe('orchestrator')
+    expect(orchestratorId('sub-ui')).toBe('ui')
+    expect(orchestratorId('')).toBe('')
   })
 })
 
