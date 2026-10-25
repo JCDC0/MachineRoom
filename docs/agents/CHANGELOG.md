@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Each orchestrator gets an in-memory token, required in X-MachineRoom-Orchestrator for ladder changes, sub messages and lane runs (task O8).
+
 - `package-lock.json` carries the root `bin` entry, so `npm install` in a fresh clone leaves the tree clean (found by D11).
 
 - The end to end orchestrator test now covers a restricted sub: the owner's ladder attach, a lane started with `startedBy`, an outside scope file, the wake in the sub and the main chat, and the sub's reply as `sub:<id>` (task T22).

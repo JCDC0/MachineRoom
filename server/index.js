@@ -636,7 +636,7 @@ export function createBridge(options = {}) {
       res.writeHead(204, {
         ...corsHeaders(req, isAllowed),
         'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
-        'Access-Control-Allow-Headers': 'Last-Event-ID, Content-Type',
+        'Access-Control-Allow-Headers': 'Last-Event-ID, Content-Type, X-MachineRoom-Orchestrator',
       })
       res.end()
       return
@@ -823,7 +823,7 @@ export function createBridge(options = {}) {
     })
   }
 
-  return { server, start, stop }
+  return { server, start, stop, orchestrators: () => orchestrators }
 }
 
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href

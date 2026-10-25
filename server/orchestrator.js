@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { createHash, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
   createWriteStream,
@@ -180,14 +180,22 @@ function fallbackPrompt(projectRoot, runsFolder) {
   ].join(' ')
 }
 
-function instructionFor(file, projectRoot, runsFolder, bridgeUrl) {
+function instructionFor(file, projectRoot, runsFolder, bridgeUrl, token = '') {
   const text = readText(file).trim()
   const source = text || fallbackPrompt(projectRoot, runsFolder)
-  return source
+  let resolved = source
     .replaceAll('{{PROJECT}}', projectRoot)
     .replaceAll('{{MACHINEROOM}}', REPO_ROOT)
     .replaceAll('{{RUNS}}', runsFolder)
     .replaceAll('{{BRIDGE}}', bridgeUrl)
+  if (token) {
+    if (resolved.includes('{{TOKEN}}')) {
+      resolved = resolved.replaceAll('{{TOKEN}}', token)
+    } else {
+      resolved = `${resolved}\nSend the header X-MachineRoom-Orchestrator: ${token} on every bridge request.`
+    }
+  }
+  return resolved
 }
 
 // A bare name is looked up on PATH, so Windows never runs a claude.exe that sits in the project folder.
@@ -312,7 +320,9 @@ export function createOrchestrator({
   outsideFiles = null,
   onOutsideScope = null,
   contextWindow: contextWindowOption = 0,
+  token: tokenOption = '',
 } = {}) {
+  const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
   const key = String(id) === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
@@ -561,7 +571,13 @@ export function createOrchestrator({
       return
     }
     const message = compaction ? COMPACT_PROMPT : turnText(turnMessages)
-    const baseInstruction = instructionFor(promptFile, root, folder, String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''))
+    const baseInstruction = instructionFor(
+      promptFile,
+      root,
+      folder,
+      String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''),
+      token
+    )
     const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
     let args
     if (harness === 'opencode') {
@@ -808,5 +824,5 @@ export function createOrchestrator({
   persist()
   maybeStartTurn()
 
-  return { answer, send, deliver, stop, setAutocompact, getLadder, setLadder, onFrame, close }
+  return { answer, send, deliver, stop, setAutocompact, getLadder, setLadder, onFrame, close, token }
 }

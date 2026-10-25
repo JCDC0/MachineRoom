@@ -267,6 +267,17 @@ function pagePost(url, body) {
   })
 }
 
+function tokenPost(url, body, token = '') {
+  return getJson(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      ...(token ? { 'X-MachineRoom-Orchestrator': token } : {}),
+    },
+    body: JSON.stringify(body),
+  })
+}
+
 describe('branchChanges', () => {
   it('diffs against the project branch, not main', () => {
     const base = makeTempDir('mr-branch-')
@@ -523,7 +534,8 @@ describe('the orchestrator registry', () => {
 
   it('refuses a ladder that does not read and a write without a confirmation', async () => {
     const rig = await makeBridge(makeBase())
-    const unconfirmed = await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'owner' })
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+    const unconfirmed = await tokenPost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'owner' }, mainToken)
     expect(unconfirmed.body).toEqual({ error: 'Confirm the ladder first.' })
 
     const missing = await pagePost(`${rig.url}/api/orchestrator/ladder`, { by: 'owner', confirmed: true })
@@ -550,31 +562,32 @@ describe('the orchestrator registry', () => {
 
   it('lets only the owner change a scope the owner set', async () => {
     const rig = await makeBridge(makeBase())
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
     expect((await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })).status).toBe(200)
 
-    const changedScope = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+    const changedScope = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [{ ...FRONTEND, scope: ['src/ui/**', 'src/engine/**'] }] },
       by: 'orchestrator',
       confirmed: true,
-    })
+    }, mainToken)
     expect(changedScope.status).toBe(403)
     expect(changedScope.body.problems[0]).toContain('Sub "frontend" was set by the owner')
 
-    const changedRestriction = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+    const changedRestriction = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [{ ...FRONTEND, restricted: false }] },
       by: 'orchestrator',
       confirmed: true,
-    })
+    }, mainToken)
     expect(changedRestriction.status).toBe(403)
 
-    const same = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+    const same = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [FRONTEND] },
       by: 'orchestrator',
       confirmed: true,
-    })
+    }, mainToken)
     expect(same.status).toBe(200)
 
-    const removal = await postJson(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'orchestrator', confirmed: true })
+    const removal = await tokenPost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'orchestrator', confirmed: true }, mainToken)
     expect(removal.status).toBe(403)
     expect(removal.body.problems[0]).toContain('only the owner can remove it')
 
@@ -593,13 +606,14 @@ describe('the orchestrator registry', () => {
 
   it('reads the actor from the request, not the body', async () => {
     const rig = await makeBridge(makeBase())
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
     expect((await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })).status).toBe(200)
 
-    const ownerLadder = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+    const ownerLadder = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [{ ...FRONTEND, scope: ['src/engine/**'] }] },
       by: 'owner',
       confirmed: true,
-    })
+    }, mainToken)
     expect(ownerLadder.status).toBe(403)
     expect(ownerLadder.body).toEqual({ error: 'A request with no Origin cannot change the ladder as the owner.' })
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[1].scope).toEqual(['src/ui/**'])
@@ -618,21 +632,21 @@ describe('the orchestrator registry', () => {
     })
     expect(pageDefault.status).toBe(200)
 
-    const ownerMessage = await postJson(`${rig.url}/api/orchestrator/messages`, {
+    const ownerMessage = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',
       text: 'Do the goal',
       from: 'owner',
       confirmed: true,
-    })
+    }, mainToken)
     expect(ownerMessage.status).toBe(403)
     expect(ownerMessage.body).toEqual({ error: 'A request with no Origin cannot send a message as the owner.' })
     expect(rig.chat('frontend').messages.some((message) => message.from === 'owner')).toBe(false)
 
-    const orchestratorMessage = await postJson(`${rig.url}/api/orchestrator/messages`, {
+    const orchestratorMessage = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',
       text: 'Report back',
       confirmed: true,
-    })
+    }, mainToken)
     expect(orchestratorMessage.status).toBe(202)
     expect(rig.chat('frontend').messages.some((message) => message.from === 'orchestrator' && message.text === 'Report back')).toBe(true)
 
@@ -648,6 +662,7 @@ describe('the orchestrator registry', () => {
 
   it('sends a message from the main orchestrator to a sub only from a request with no origin', async () => {
     const rig = await makeBridge(makeBase())
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
     await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
 
     const page = await pagePost(`${rig.url}/api/orchestrator/messages`, {
@@ -659,26 +674,26 @@ describe('the orchestrator registry', () => {
     expect(page.status).toBe(403)
     expect(page.body).toEqual({ error: 'A page cannot send a message as the orchestrator.' })
 
-    const unconfirmed = await postJson(`${rig.url}/api/orchestrator/messages`, {
+    const unconfirmed = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',
       text: 'Do the goal',
       from: 'orchestrator',
-    })
+    }, mainToken)
     expect(unconfirmed.status).toBe(400)
 
-    const toMain = await postJson(`${rig.url}/api/orchestrator/messages`, {
+    const toMain = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
       text: 'Do the goal',
       from: 'orchestrator',
       confirmed: true,
-    })
+    }, mainToken)
     expect(toMain.status).toBe(400)
 
-    const sent = await postJson(`${rig.url}/api/orchestrator/messages`, {
+    const sent = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',
       text: 'Do the goal',
       from: 'orchestrator',
       confirmed: true,
-    })
+    }, mainToken)
     expect(sent.status).toBe(202)
     expect(rig.chat('frontend').messages.some((message) => message.from === 'orchestrator' && message.text === 'Do the goal')).toBe(true)
   })
@@ -692,58 +707,128 @@ describe('starting lanes from a sub orchestrator', () => {
     const runnerCalls = join(files.base, 'runner-calls.jsonl')
     const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
     await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+    const subToken = rig.bridge.orchestrators().token('frontend')
 
-    const outside = await postJson(`${rig.url}/api/control/runs`, {
+    const outside = await tokenPost(`${rig.url}/api/control/runs`, {
       lane: 'opencode2',
       task: 'Fix it.',
-      startedBy: 'frontend',
       confirmed: true,
-    })
+    }, subToken)
     expect(outside.status).toBe(403)
     expect(outside.body.error).toContain('Frontend')
     expect(outside.body.error).toContain('opencode2')
 
-    const unknown = await postJson(`${rig.url}/api/control/runs`, {
+    const mismatch = await tokenPost(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
       task: 'Fix it.',
       startedBy: 'missing',
       confirmed: true,
-    })
-    expect(unknown.status).toBe(400)
+    }, subToken)
+    expect(mismatch.status).toBe(403)
+    expect(mismatch.body).toEqual({ error: 'The startedBy orchestrator must match the token.' })
 
-    const inside = await postJson(`${rig.url}/api/control/runs`, {
+    const subNamingMain = await tokenPost(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
       task: 'Fix it.',
-      startedBy: 'frontend',
+      startedBy: 'orchestrator',
+      confirmed: true,
+    }, subToken)
+    expect(subNamingMain.status).toBe(403)
+    expect(subNamingMain.body).toEqual({ error: 'The startedBy orchestrator must match the token.' })
+
+    const noToken = await postJson(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
       confirmed: true,
     })
+    expect(noToken.status).toBe(403)
+    expect(noToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+
+    const wrongToken = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      confirmed: true,
+    }, 'wrong-token')
+    expect(wrongToken.status).toBe(403)
+    expect(wrongToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+
+    const inside = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      confirmed: true,
+    }, subToken)
     expect(inside.status).toBe(202)
     await waitFor(() => readLines(runnerCalls).length === 1)
     expect(readLines(runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
 
-    const main = await postJson(`${rig.url}/api/control/runs`, { lane: 'opencode2', task: 'Fix it.', confirmed: true })
+    const main = await tokenPost(`${rig.url}/api/control/runs`, { lane: 'opencode2', task: 'Fix it.', confirmed: true }, mainToken)
     expect(main.status).toBe(202)
     await waitFor(() => readLines(runnerCalls).length === 2)
-    expect(readLines(runnerCalls)[1]).not.toContain('--started-by')
+    expect(readLines(runnerCalls)[1].slice(-2)).toEqual(['--started-by', 'orchestrator'])
   })
 
-  it('refuses a run that claims the main orchestrator without an Origin and allows a page to name it', async () => {
+  it('refuses no-Origin requests without valid tokens and lets pages start runs', async () => {
     const files = makeBase()
     const runner = join(files.base, 'runner.mjs')
     writeFileSync(runner, RUNNER)
     const runnerCalls = join(files.base, 'runner-calls.jsonl')
     const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
     await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+    const subToken = rig.bridge.orchestrators().token('frontend')
 
-    const claimed = await postJson(`${rig.url}/api/control/runs`, {
+    const claimedNoToken = await postJson(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
       task: 'Fix it.',
       startedBy: 'orchestrator',
       confirmed: true,
     })
-    expect(claimed.status).toBe(403)
-    expect(claimed.body).toEqual({ error: 'A request with no Origin cannot start a run as the main orchestrator.' })
+    expect(claimedNoToken.status).toBe(403)
+    expect(claimedNoToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
     expect(readLines(runnerCalls)).toHaveLength(0)
+
+    const subLadder = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [FRONTEND] },
+      by: 'orchestrator',
+      confirmed: true,
+    }, subToken)
+    expect(subLadder.status).toBe(403)
+    expect(subLadder.body).toEqual({ error: "A ladder change needs the main orchestrator's token." })
+
+    const noTokenLadder = await postJson(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [FRONTEND] },
+      by: 'orchestrator',
+      confirmed: true,
+    })
+    expect(noTokenLadder.status).toBe(403)
+    expect(noTokenLadder.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+
+    const wrongTokenLadder = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
+      ladder: { subs: [FRONTEND] },
+      by: 'orchestrator',
+      confirmed: true,
+    }, 'wrong-token')
+    expect(wrongTokenLadder.status).toBe(403)
+    expect(wrongTokenLadder.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+
+    const subMessage = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
+      id: 'frontend',
+      text: 'Do the goal',
+      from: 'orchestrator',
+      confirmed: true,
+    }, subToken)
+    expect(subMessage.status).toBe(403)
+    expect(subMessage.body).toEqual({ error: "A message to a sub needs the main orchestrator's token." })
+
+    const noTokenMessage = await postJson(`${rig.url}/api/orchestrator/messages`, {
+      id: 'frontend',
+      text: 'Do the goal',
+      from: 'orchestrator',
+      confirmed: true,
+    })
+    expect(noTokenMessage.status).toBe(403)
+    expect(noTokenMessage.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
 
     const page = await pagePost(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
@@ -754,6 +839,27 @@ describe('starting lanes from a sub orchestrator', () => {
     expect(page.status).toBe(202)
     await waitFor(() => readLines(runnerCalls).length === 1)
     expect(readLines(runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'orchestrator'])
+
+    const unknownPage = await pagePost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      startedBy: 'missing',
+      confirmed: true,
+    })
+    expect(unknownPage.status).toBe(400)
+    expect(unknownPage.body).toEqual({ error: 'There is no orchestrator with that id.' })
+  })
+
+  it('makes new tokens when the bridge restarts', async () => {
+    const files = makeBase()
+    const first = await makeBridge(files)
+    const firstToken = first.bridge.orchestrators().token('orchestrator')
+    expect(firstToken).toBeTruthy()
+    await first.bridge.stop()
+    const second = await makeBridge(files)
+    const secondToken = second.bridge.orchestrators().token('orchestrator')
+    expect(secondToken).toBeTruthy()
+    expect(secondToken).not.toBe(firstToken)
   })
 
   it('parses --started-by and writes it into the run record', () => {

@@ -24,6 +24,7 @@ You talk to its owner through MachineRoom.
 ## Start the lanes
 
 - The room starts the lanes for you, so they keep running after your turn ends. Never start a lane from your own shell.
+- Send the header X-MachineRoom-Orchestrator: {{TOKEN}} on every bridge request.
 - For each lane, write a JSON body to a file under {{RUNS}}, for example `{{RUNS}}/start-opencode3.json`:
 
 ```
@@ -33,7 +34,7 @@ You talk to its owner through MachineRoom.
 - Then send it:
 
 ```
-curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/start-opencode3.json {{BRIDGE}}/api/control/runs
+curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{RUNS}}/start-opencode3.json {{BRIDGE}}/api/control/runs
 ```
 
 - A 202 answer means the lane started on a new branch in its own worktree of the project. Any other answer says why in `error`; fix that and try again.
@@ -58,7 +59,7 @@ curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/star
 ```
 
 ```
-curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/ladder.json {{BRIDGE}}/api/orchestrator/ladder
+curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{RUNS}}/ladder.json {{BRIDGE}}/api/orchestrator/ladder
 ```
 
 - A 200 answer replaces the ladder, starts the new subs and stops the removed ones.
@@ -71,7 +72,7 @@ curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/ladd
 ```
 
 ```
-curl -s -X POST -H "Content-Type: application/json" --data-binary @{{RUNS}}/goal-frontend.json {{BRIDGE}}/api/orchestrator/messages
+curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{RUNS}}/goal-frontend.json {{BRIDGE}}/api/orchestrator/messages
 ```
 
 - Start a lane for a sub by adding `"startedBy": "frontend"` to the run body. That run's end wakes the sub, not you.
