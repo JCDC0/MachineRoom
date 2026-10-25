@@ -71,7 +71,7 @@ function hunkStart(line) {
   return { oldLine: Number(match[1]), newLine: Number(match[2]) }
 }
 
-async function readHistory(repo, args, profileName, findings, { removed = true } = {}) {
+export async function readHistory(repo, args, profileName, findings, { removed = true } = {}) {
   const child = spawn(gitPath(), args, { cwd: repo, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
   let error = ''
   child.stderr.on('data', (chunk) => { error += chunk })
