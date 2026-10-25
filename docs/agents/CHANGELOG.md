@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The project review tests copy a room and a project made once, so each test starts one git worktree instead of building two repositories (task T21).
+- `worktreePlan` reads whether a folder is a checkout and its common git folder in one git command, so a `--worktree` check starts three git commands instead of five (task T21).
+- The reviews route resolves this checkout once per process instead of once per bridge, and the review tests skip the tree read they do not use (task T21).
+- The worktree reuse test leaves the clean reuse to `prepareWorktree` after the dirty refusal, so it starts fewer git commands under load (task T21).
+- The lane lock tests use a process id that is never alive, so a Windows process that reused a dead test child's id cannot make a stale lock look live (task T21).
+
 - History audit: on GitHub Actions the profile check is off, since the runner's user name (`runner`) is not the owner's and is a word the docs use.
 
 - The soak test reads the bridge history again after the run ends, since a page that joins mid-run gets the history and then live frames (CI failed on Ubuntu with 501 frames).

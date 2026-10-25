@@ -1,12 +1,13 @@
-import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { releaseLaneLock, takeLaneLock } from '../scripts/lane-lock.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
+const DEAD_PID = 2147483647
+
 function deadPid() {
-  return spawnSync(process.execPath, ['-e', ''], { windowsHide: true }).pid
+  return DEAD_PID
 }
 
 function lockPath(folder, lane = 'hermes') {
