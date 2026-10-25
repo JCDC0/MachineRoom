@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The connect screen names `npm run serve -- up --root YOUR-PROJECT` instead of the old `npm run bridge`.
+
 - AGY, AGY 2 and AGY 3 are backend lanes on Flash, the OpenCode lanes may change App and Stage, and a lane prompt leaves out the forbidden paths line when the lane has none.
 - Tests cover the history audit range audit with removed lines and the profile check when GITHUB_ACTIONS is true (task T23).
 - The default replay and the demo play the scenario-i ladder run, and `?fixture=sandbox` keeps the old sandbox run reachable (task U21).
