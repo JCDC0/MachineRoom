@@ -28,6 +28,8 @@ import { loadEffectSettings, loadSettings, saveEffectSettings, saveSettings } fr
 import { setFineDust } from './engine/void.js'
 import { barrelDataUri } from './ui/barrel.js'
 import Waiting from './ui/Waiting.jsx'
+import LensRail from './ui/LensRail.jsx'
+import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, lensShareAfterWheel, lensShareFromRail, multiplierText } from './ui/lensResize.js'
 
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
@@ -98,6 +100,25 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
   const [effects, setEffects] = useState(() => loadEffectSettings(store()))
+  const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensShare ?? null)
+  const [zoom, setZoom] = useState({ share: 0, multiplier: 1 })
+
+  function changeLensShare(next, save = true) {
+    const share = clampLensShare(next)
+    setLensShare(share)
+    if (save) saveSettings(store(), { lensShare: share })
+  }
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const room = roomRef.current
+      if (!room?.zoomShare) return
+      const share = Math.round(room.zoomShare() * 200) / 200
+      const multiplier = Math.round(room.zoomMultiplier() * 10) / 10
+      setZoom((now) => (now.share === share && now.multiplier === multiplier ? now : { share, multiplier }))
+    }, 120)
+    return () => clearInterval(timer)
+  }, [])
   const [ladder, setLadder] = useState(null)
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
@@ -519,7 +540,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const clock = lensClock(Boolean(live), snapshot.position)
 
   return (
-    <div className="stage">
+    <div className="stage" style={lensShare === null ? undefined : { '--lens-h-user': lensHeightValue(lensShare) }}>
       <svg
         className="lens-clip-defs"
         aria-hidden="true"
@@ -586,6 +607,26 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           <span className="lens-mark is-bottom-left" />
           <span className="lens-mark is-bottom-right" />
         </div>
+        <LensRail
+          side="left"
+          label="Height"
+          share={heightRailShare(lensShare ?? undefined)}
+          multiplier={multiplierText((lensShare ?? LENS_SHARE_DEFAULT) / LENS_SHARE_DEFAULT)}
+          ariaLabel="Lens height"
+          valueText={`${Math.round((lensShare ?? LENS_SHARE_DEFAULT) * 100)} percent of the window`}
+          onShare={(share, done) => changeLensShare(lensShareFromRail(share), done)}
+          onWheel={(deltaY) => changeLensShare(lensShareAfterWheel(lensShare ?? undefined, deltaY))}
+        />
+        <LensRail
+          side="right"
+          label="Zoom"
+          share={zoom.share}
+          multiplier={multiplierText(zoom.multiplier)}
+          ariaLabel="Zoom"
+          valueText={`${multiplierText(zoom.multiplier)} of the overview`}
+          onShare={(share) => roomRef.current?.setZoomShare?.(share)}
+          onWheel={(deltaY) => roomRef.current?.zoomBy?.(deltaY)}
+        />
         {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
       </div>
       {hasFilter && (

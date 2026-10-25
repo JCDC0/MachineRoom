@@ -7014,7 +7014,7 @@ body:has(#hud-orchestrator-chat) .waiting {
 /* Task U34: the lower half, with the conversation in the middle and Overview on the right. */
 @media (min-width: 900px) {
   .stage {
-    --lens-h: max(320px, 52vh);
+    --lens-h: var(--lens-h-user, max(320px, 52vh));
   }
 
   .transport {
@@ -7544,4 +7544,100 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .has-launcher .mr-guide-backdrop {
   display: none;
+}
+
+/* The lens rails: height on the left, zoom on the right */
+.lens-rail {
+  position: absolute;
+  top: 16%;
+  bottom: 16%;
+  z-index: 4;
+  width: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+}
+
+.lens-rail.is-left {
+  left: 6px;
+  display: none;
+}
+
+.lens-rail.is-right {
+  right: 6px;
+}
+
+.lens-rail-label,
+.lens-rail-value {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.4);
+  white-space: nowrap;
+}
+
+.lens-rail-value {
+  text-transform: none;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.lens-rail-track {
+  position: relative;
+  flex: 1 1 auto;
+  width: 20px;
+  outline: none;
+}
+
+.lens-rail-track::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(255 255 255 / 0.18);
+}
+
+.lens-rail-fill {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 1px;
+  background: rgb(255 255 255 / 0.55);
+}
+
+.lens-rail-handle {
+  position: absolute;
+  left: 50%;
+  width: 14px;
+  height: 2px;
+  background: var(--white);
+  transform: translate(-50%, 50%);
+}
+
+.lens-rail:hover .lens-rail-handle,
+.lens-rail:active .lens-rail-handle {
+  box-shadow: 0 0 0 1px var(--yellow);
+}
+
+.lens-rail-track:focus-visible {
+  outline: 1px solid var(--yellow);
+  outline-offset: 2px;
+}
+
+@media (min-width: 900px) {
+  .lens-rail.is-left {
+    display: flex;
+  }
+
+  .lens-mark.is-top-left,
+  .lens-mark.is-tick-one,
+  .lens-mark.is-tick-two,
+  .lens-mark.is-bottom-left {
+    display: none;
+  }
 }

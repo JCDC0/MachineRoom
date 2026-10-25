@@ -125,6 +125,18 @@ export function followTarget(previous, next, frame, now) {
   return { path: wanted.path, at: now, moved: true }
 }
 
+export function shareFromDistance(dist) {
+  const span = Math.log(MAX_DIST) - Math.log(MIN_DIST)
+  const d = THREE.MathUtils.clamp(Number(dist) || MAX_DIST, MIN_DIST, MAX_DIST)
+  return (Math.log(MAX_DIST) - Math.log(d)) / span
+}
+
+export function distanceFromShare(share) {
+  const span = Math.log(MAX_DIST) - Math.log(MIN_DIST)
+  const s = THREE.MathUtils.clamp(Number(share) || 0, 0, 1)
+  return Math.exp(Math.log(MAX_DIST) - s * span)
+}
+
 export function createCameraRig(camera, surface) {
   const view = { target: new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z), yaw: OVERVIEW.yaw, pitch: OVERVIEW.pitch, dist: OVERVIEW.dist }
   const goal = { target: view.target.clone(), yaw: view.yaw, pitch: view.pitch, dist: view.dist }
@@ -170,10 +182,14 @@ export function createCameraRig(camera, surface) {
     if (drag.moved < 6) onClick(event)
   }
 
-  function wheel(event) {
-    if (event.target.closest('.hud, .mr-board')) return
+  function zoomBy(deltaY) {
     adjusted = true
-    goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(event.deltaY * 0.001), MIN_DIST, MAX_DIST)
+    goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(deltaY * 0.001), MIN_DIST, MAX_DIST)
+  }
+
+  function wheel(event) {
+    if (event.target.closest('.hud, .mr-board, .lens-rail')) return
+    zoomBy(event.deltaY)
   }
 
   surface.addEventListener('pointerdown', down)
@@ -260,6 +276,13 @@ export function createCameraRig(camera, surface) {
   return {
     update,
     snap,
+    zoomBy,
+    zoomShare: () => shareFromDistance(goal.dist),
+    setZoomShare(share) {
+      adjusted = true
+      goal.dist = distanceFromShare(share)
+    },
+    zoomMultiplier: () => overviewDist / goal.dist,
     setClickHandler(handler) {
       onClick = handler
     },

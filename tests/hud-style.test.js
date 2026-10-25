@@ -309,7 +309,7 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.hud-lower-crumb')
     expect(css).toContain('.hud-overview')
     expect(css).toContain('.hud-drawer')
-    expect(css).toContain('--lens-h: max(320px, 52vh)')
+    expect(css).toContain('--lens-h: var(--lens-h-user, max(320px, 52vh))')
     expect(css).toContain('.hud-dock[hidden]')
   })
 })

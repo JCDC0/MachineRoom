@@ -519,6 +519,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   return {
     onActivity,
     reset: sync,
+    zoomBy: (deltaY) => rig.zoomBy(deltaY),
+    zoomShare: () => rig.zoomShare(),
+    setZoomShare: (share) => rig.setZoomShare(share),
+    zoomMultiplier: () => rig.zoomMultiplier(),
     focus: focusAgent,
     focusTerminal,
     focusPath,

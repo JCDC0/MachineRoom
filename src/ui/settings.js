@@ -1,4 +1,5 @@
 import { readStorage, store, writeStorage } from '../storage.js'
+import { clampLensShare } from './lensResize.js'
 
 export const SETTINGS_KEY = 'machineroom.settings'
 
@@ -90,6 +91,10 @@ function normalizeSettings(raw) {
     dockOpen: typeof raw.dockOpen === 'boolean' ? raw.dockOpen : DEFAULT_SETTINGS.dockOpen,
     speed: typeof raw.speed === 'number' && Number.isFinite(raw.speed) && raw.speed > 0 ? raw.speed : DEFAULT_SETTINGS.speed,
     helpSeen: typeof raw.helpSeen === 'boolean' ? raw.helpSeen : DEFAULT_SETTINGS.helpSeen,
+  }
+
+  if (raw.lensShare !== undefined && Number.isFinite(Number(raw.lensShare))) {
+    out.lensShare = clampLensShare(raw.lensShare)
   }
 
   const depth = raw.alwaysDepth ?? raw.effects?.alwaysDepth
