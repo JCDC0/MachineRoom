@@ -131,86 +131,18 @@ summary:focus-visible,
 
 .lens-edge {
   position: absolute;
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  height: 24px;
+  color: rgb(255 255 255 / 0.35);
   pointer-events: none;
-}
-
-.lens-edge path {
-  fill: none;
-  stroke: rgb(255 255 255 / 0.35);
-  stroke-width: 1px;
-  vector-effect: non-scaling-stroke;
-}
-
-.lens-brackets {
-  display: none;
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  pointer-events: none;
-}
-
-.lens-mark {
-  position: absolute;
-  border-color: rgb(255 255 255 / 0.3);
-  border-style: solid;
-}
-
-.lens-mark.is-top-left {
-  left: 18px;
-  top: 28px;
-  width: 14px;
-  height: 14px;
-  border-width: 1px 0 0 1px;
-}
-
-.lens-mark.is-tick-one,
-.lens-mark.is-tick-two {
-  left: 16px;
-  width: 7px;
-  height: 0;
-  border-width: 1px 0 0;
-}
-
-.lens-mark.is-tick-one {
-  top: 40%;
-}
-
-.lens-mark.is-tick-two {
-  top: 60%;
-}
-
-.lens-mark.is-bottom-left {
-  left: 18px;
-  bottom: 28px;
-  width: 14px;
-  height: 14px;
-  border-width: 0 0 1px 1px;
-}
-
-.lens-mark.is-bottom-right {
-  right: 18px;
-  bottom: 28px;
-  width: 14px;
-  height: 14px;
-  border-width: 0 1px 1px 0;
-}
-
-@media (min-width: 900px) {
-  .lens-brackets {
-    display: block;
-  }
 }
 
 .lens-frame {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  clip-path: url(#mr-lens-clip);
   box-shadow: inset 0 0 64px rgb(255 255 255 / 0.05);
   cursor: grab;
 }
@@ -7622,13 +7554,6 @@ body:has(#hud-orchestrator-chat) .waiting {
   .lens-rail.is-left {
     display: flex;
   }
-
-  .lens-mark.is-top-left,
-  .lens-mark.is-tick-one,
-  .lens-mark.is-tick-two,
-  .lens-mark.is-bottom-left {
-    display: none;
-  }
 }
 
 /* The whole page scrolls at 900 pixels and wider: the lens on top, the lower half below it */
@@ -8196,7 +8121,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   overflow-wrap: anywhere;
 }
 
-/* The live and follow badges sit inside the lens's bottom left corner, never over the chat */
+/* The follow and toast badges sit inside the lens's bottom left corner, never over the chat */
 @media (min-width: 900px) {
   .stage-badge {
     top: calc(var(--menu-h) + var(--lens-h) - 64px);
@@ -8946,4 +8871,112 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .mr-ladder .mr-orch-confirm {
   padding: 6px;
+}
+
+/* U46: the straight lens edges and marks, and the live link tag in the transport row */
+.lens-edge.is-top {
+  top: 0;
+}
+
+.lens-edge.is-bottom {
+  bottom: 0;
+}
+
+.lens-edge-rule {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+}
+
+.lens-edge-line,
+.lens-edge-tick {
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.lens-edge-label {
+  fill: currentColor;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+}
+
+.lens-edge-cross {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  color: currentColor;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.lens-edge.is-top .lens-edge-cross {
+  top: 2px;
+}
+
+.lens-edge.is-bottom .lens-edge-cross {
+  bottom: 2px;
+}
+
+.lens-edge-corner {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  border: 0 solid currentColor;
+}
+
+.lens-edge.is-top .lens-edge-corner.is-left {
+  left: 0;
+  top: 0;
+  border-width: 1px 0 0 1px;
+}
+
+.lens-edge.is-top .lens-edge-corner.is-right {
+  right: 0;
+  top: 0;
+  border-width: 1px 1px 0 0;
+}
+
+.lens-edge.is-bottom .lens-edge-corner.is-left {
+  left: 0;
+  bottom: 0;
+  border-width: 0 0 1px 1px;
+}
+
+.lens-edge.is-bottom .lens-edge-corner.is-right {
+  right: 0;
+  bottom: 0;
+  border-width: 0 1px 1px 0;
+}
+
+.transport-live-head {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space) * 1.5);
+  min-width: 0;
+}
+
+.transport-badge {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  background: rgb(0 0 0 / 0.7);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.transport-badge.is-live {
+  color: var(--yellow);
+}
+
+.transport-badge.is-down {
+  color: var(--red);
 }

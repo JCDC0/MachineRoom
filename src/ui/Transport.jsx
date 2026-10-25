@@ -1,3 +1,4 @@
+import { createContext, useContext } from 'react'
 import {
   contextLabel,
   contextShare,
@@ -5,6 +6,13 @@ import {
   contextTone,
   orchestratorStateWord,
 } from './contextRing.js'
+
+export const LiveBadgeContext = createContext('live')
+
+export function liveBadgeText(status, kind = 'live') {
+  const state = status === 'live' ? 'connected' : status || 'connecting'
+  return `${kind === 'demo' ? 'Demo' : 'Live'} // ${state}`
+}
 
 function clock(ms) {
   const total = Math.max(0, Math.floor(ms / 1000))
@@ -76,12 +84,21 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
   const { position, duration, playing, speed } = snapshot
   const finished = position >= duration
   const main = orchestrator && typeof orchestrator === 'object' ? orchestrator : null
+  const badgeKind = useContext(LiveBadgeContext)
+  const badge = (
+    <span className={`transport-badge is-${snapshot.status === 'live' ? 'live' : 'down'}`} role="status">
+      {liveBadgeText(snapshot.status, badgeKind)}
+    </span>
+  )
 
   if (snapshot.live) {
     if (!main) {
       return (
         <div className="transport is-live">
-          <span className="mono">Live feed</span>
+          <div className="transport-live-head">
+            {badge}
+            <span className="mono">Live feed</span>
+          </div>
           <span className="mono">{clock(position)} since opening</span>
         </div>
       )
@@ -89,7 +106,10 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
     const state = orchestratorStateWord(main.state)
     return (
       <div className="transport is-live has-orchestrator">
-        <span className="mono">Live feed</span>
+        <div className="transport-live-head">
+          {badge}
+          <span className="mono">Live feed</span>
+        </div>
         <button
           type="button"
           className="transport-orchestrator"

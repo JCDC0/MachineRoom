@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The lens has straight top and bottom edges with a tick every 40 pixels, a taller tick and a 9 pixel Space Mono coordinate label every 200, a `+` crosshair at the middle of each edge and a bracket at each corner, and its `mr-lens-clip` curve is gone (task U46).
+- The live link tag moves out of the lens into the left end of the transport beside `Live feed`, in the same yellow and red, and the follow and toast badges stay in the lens (task U46).
+- Fish eye is removed from Settings, `effectSettings` and `saveEffectSettings`, with its barrel map and `feDisplacementMap`; an old saved value is ignored and chromatic aberration keeps its `feOffset` filter (task U46).
 - The page loads again: the mock control client no longer reaches server code that reads files (a 0.1.386 regression that left a black page), the pure model list moved to `server/model-list.js`, and `tests/browser-imports.test.js` fails when the page entry reaches any Node module.
 - The owner saves up to 20 OpenAI-compatible endpoints from provider presets in Settings, each with a base URL, a key slot and up to 50 models, and a machineroom lane can run on one through `mr-agent --endpoint` (task H10).
 - The MachineRoom harness has `web_search` and `web_fetch` tools over SearXNG, Tavily, Brave or DuckDuckGo, with the provider saved in `<runs>/search.json`, address-checked page fetches capped at 1 MB and 20 seconds, a Web search section in Settings behind a confirm card, and the provider routes on the bridge (task H12).
