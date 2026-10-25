@@ -4552,7 +4552,6 @@ summary:focus-visible,
   line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
-  text-overflow: ellipsis;
   transform-origin: left top;
 }
 

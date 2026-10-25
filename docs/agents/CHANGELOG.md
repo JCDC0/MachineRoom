@@ -15,6 +15,7 @@
 - A task thread has no comment composer and Team lists the lanes read only, with no hire or edit controls (task U25).
 - The route and model helpers that only the issue form used are deleted (task U25).
 - The overview fits the lens viewport's own width and height and each card by its face, and can come closer than 1800 units, so the hub, the agents and the always-present cards fill more of the short lens (task U24).
+- A folder card shows its name in full up to 24 characters, widens to fit it, cuts only a longer name from the middle with the full path in its title, and the cards stacked behind it show no name (task U26).
 
 - `package-lock.json` carries the root `bin` entry, so `npm install` in a fresh clone leaves the tree clean (found by D11).
 

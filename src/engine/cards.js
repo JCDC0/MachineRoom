@@ -19,7 +19,10 @@ export const CARD_TAB_H = 8
 export const CARD_TAB_LEFT = -1
 export const CARD_TAB_TOP = -9
 export const CARD_SCALES = { closed: 1, open: 1.2, files: 1.8 }
-export const CARD_NAME_CAP = 1.4
+export const CARD_NAME_MAX = 24
+export const CARD_NAME_PAD = 28
+const NAME_WIDE = new Set(['M', 'W'])
+const NAME_NARROW = new Set(['I', 'J'])
 const FLASH_MS = 1100
 const FAIL_MS = 2600
 const FADE_MS = 400
@@ -159,6 +162,27 @@ export function stackOverflow(views, open = new Set()) {
   return { hidden, extra }
 }
 
+export function stackNamesHidden(views, open = new Set()) {
+  const paths = new Set()
+  for (const view of views ?? []) if (typeof view?.path === 'string') paths.add(view.path)
+  const kids = new Map()
+  for (const path of paths) {
+    if (path === '') continue
+    const parent = dirname(path)
+    if (!paths.has(parent)) continue
+    const list = kids.get(parent)
+    if (list) list.push(path)
+    else kids.set(parent, [path])
+  }
+  const hidden = new Set()
+  for (const [parent, list] of kids) {
+    if (parent === '' || open.has(parent)) continue
+    if (list.some((path) => open.has(path))) continue
+    for (const path of list) hidden.add(path)
+  }
+  return hidden
+}
+
 export function cardHeight(rows) {
   return HEAD_H + rows * ROW_H + CARD_PAD
 }
@@ -171,10 +195,46 @@ export function cardRows(view) {
   return view.state === 'files' ? view.items.length + (view.hiddenItems > 0 ? 1 : 0) : 0
 }
 
-export function cardSize(view) {
+export function clipCardName(name, max = CARD_NAME_MAX) {
+  const chars = Array.from(String(name ?? ''))
+  const limit = Math.max(4, Math.floor(Number(max) || CARD_NAME_MAX))
+  if (chars.length <= limit) return chars.join('')
+  const keep = limit - 3
+  const start = Math.ceil(keep / 2)
+  const end = keep - start
+  return `${chars.slice(0, start).join('')}...${end > 0 ? chars.slice(-end).join('') : ''}`
+}
+
+export function cardName(path, rootName = 'root') {
+  if (typeof path !== 'string') return ''
+  const folder = path === '' ? String(rootName) : basename(path)
+  if (folder === '') return ''
+  return `${clipCardName(visibleText(folder))}/`
+}
+
+export function cardTitle(path, rootName = 'root') {
+  if (typeof path !== 'string') return ''
+  return visibleText(path === '' ? String(rootName) : path)
+}
+
+function cardBaseWidth(path, rootName) {
+  const name = cardName(path, rootName)
+  if (name === '') return CARD_W
+  let text = 0
+  for (const char of Array.from(name.toUpperCase())) {
+    if (NAME_WIDE.has(char)) text += 15
+    else if (NAME_NARROW.has(char)) text += 4.5
+    else if (/[A-Z0-9]/.test(char)) text += 9.6
+    else text += 6.5
+    text += 0.6
+  }
+  return Math.max(CARD_W, Math.ceil(text) + CARD_NAME_PAD)
+}
+
+export function cardSize(view, rootName = 'root') {
   const scale = CARD_SCALES[view.state] ?? 1
   const back = (view.back ?? 0) * BACK_STEP
-  return { scale, width: (CARD_W + back) * scale, height: (cardHeight(cardRows(view)) + back) * scale }
+  return { scale, width: (cardBaseWidth(view?.path, rootName) + back) * scale, height: (cardHeight(cardRows(view)) + back) * scale }
 }
 
 function backLayers(view) {
@@ -226,7 +286,7 @@ export function cardRadius(view) {
   return Math.hypot(width, height) / 2
 }
 
-export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new Map(), obstacles = [] } = {}) {
+export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new Map(), obstacles = [], rootName = 'root' } = {}) {
   const pins = [...pinned]
   const input = viewInput(state, pins)
   const plan = planFolderView({ ...input, alwaysDepth })
@@ -238,7 +298,7 @@ export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new M
     if (overflow.hidden.has(view.path)) continue
     drawn.set(view.path, { ...view, back: Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
   }
-  const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view) }))
+  const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view, rootName) }))
   const openKey = [...open].sort().join('\n')
   const layoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${obstacleKeyOf(obstacles)}|${openKey}`
   const placed = layoutSphere(entries, { previous, obstacles, open })
@@ -252,7 +312,7 @@ export function overviewSpheres(cards) {
     if (!root && card?.view?.pinned !== true) continue
     const at = card?.home
     if (!at || ![at.x, at.y, at.z].every(Number.isFinite)) continue
-    const size = card.view ? cardSize(card.view) : null
+    const size = card.view ? cardSize(card.view, card.rootName) : null
     out.push({
       x: at.x,
       y: at.y,
@@ -376,12 +436,17 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   }
 
   function makeCard(path) {
+    const width = cardBaseWidth(path, rootName)
+    const title = cardTitle(path, rootName)
     const element = el('div', 'mr-card is-closed')
     element.dataset.path = path
+    element.style.width = `${width}px`
+    element.title = title
     const backs = el('div', 'mr-card-backs')
     const head = el('div', 'mr-card-head')
     const tab = el('div', 'mr-card-tab')
-    const name = el('div', 'mr-card-name', visibleText(path === '' ? `${rootName}/` : `${basename(path)}/`))
+    const name = el('div', 'mr-card-name', cardName(path, rootName))
+    name.title = title
     const meta = el('div', 'mr-card-meta')
     head.append(tab, name, meta)
     const items = el('div', 'mr-card-items')
@@ -419,6 +484,8 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       occluder,
       home: object.position.clone(),
       scale,
+      rootName,
+      nameHidden: false,
       rows: [],
       rowPaths: [],
       view: null,
@@ -595,8 +662,9 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const planKeyNext = viewKey(state, [...pinned])
     if (planKeyNext === planKey) return false
     planKey = planKeyNext
-    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, previous: homes, obstacles: boardObstacles })
+    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, previous: homes, obstacles: boardObstacles, rootName })
     const drawn = layout.drawn
+    const hiddenNames = stackNamesHidden([...drawn.values()], layout.open)
     const focusPaths = new Set()
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
     const files = new Set([...focusPaths].filter((path) => state.files.has(path)))
@@ -658,6 +726,11 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
       if (card.occluderKey !== `${card.height}|${backLayers(view)}`) paintOccluder(card, view)
       paintRows(card, view)
       card.meta.textContent = metaText(view)
+      const hideName = hiddenNames.has(view.path)
+      if (card.nameHidden !== hideName) {
+        card.nameHidden = hideName
+        card.name.style.display = hideName ? 'none' : ''
+      }
     }
     const entries = layout.entries
     const layoutChanged = layout.layoutKey !== layoutKey
@@ -912,7 +985,6 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
           card.nameScale = scale
           const rounded = Math.round(scale * 1000) / 1000
           card.name.style.transform = rounded === 1 ? '' : `scale(${rounded})`
-          card.name.style.maxWidth = rounded === 1 ? '' : `${Math.max(24, Math.floor((CARD_NAME_CAP * CARD_W) / rounded))}px`
         }
       }
 
