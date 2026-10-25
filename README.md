@@ -25,6 +25,8 @@ npm run serve -- up --root <your project folder>
 - `--no-sessions` leaves your sessions out. `--port <n>` picks another port.
 - Quote the folder when its path has spaces.
 
+Press Ctrl+C in the terminal to stop the room.
+
 ## What you see
 
 - The hub: a flat ring in the middle. Each agent parks at its own slot, working or not. The orchestrator floats above the centre.
@@ -121,7 +123,7 @@ Run the doctor on the folder you watch:
 npm run serve -- doctor --root <your project folder>
 ```
 
-It checks that the project folder exists, git is on the PATH, the runs folder can be written, and every lane program starts. It prints `ok` or `FAIL` for each line and exits 1 on a failure. Fix the failed line and run it again. `up` prints the same lines and opens the room anyway, with `Some checks failed. The room opens anyway.`
+It checks that the project folder exists, git is on the PATH, the runs folder can be written, and every lane program is found. It prints `ok` or `FAIL` for each line and exits 1 on a failure. Fix the failed line and run it again. `up` prints the same lines and opens the room anyway, with `Some checks failed. The room opens anyway.`
 
 A line that names an environment variable that is not set means the lane's `cli.bin` uses `%NAME%`. Set that variable, or use a full path.
 
@@ -138,6 +140,8 @@ npm run serve -- up --root <your project folder> --port 5175
 ```
 
 Or set `PORT`. The room prints the new address. `--port 0` picks a free port.
+
+If another room is already running on the same project, the message names that room instead, and a new port does not help. Open the address the first room printed, or stop that room.
 
 ### No agents are shown
 
@@ -236,6 +240,8 @@ To start a lane on a folder without Dispatch, name the folder with `--project` a
 npm run run-lane -- opencode --project <folder> --task "Fix the failing test."
 npm run run-lane -- opencode --project <folder> --task-file task.md
 ```
+
+Add `--dry-run` to print the program, its arguments and the folder, and start nothing.
 
 The runner refuses the MachineRoom checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. It runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
 
