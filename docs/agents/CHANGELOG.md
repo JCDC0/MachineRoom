@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Compact card and the agent dock ask for autocompact with one plain number in percent or tokens, convert between them through the context window, show where it compacts, and keep the owner's compact rules or name the default ones (task U40).
 - Log and Settings open from the menu as dropdowns under it, like Control, at every width; the Overview card keeps Agent and Costs, and the sidebar's Settings opens the same dropdown. The fine dust is soft round specks in three sizes that grow as the camera nears them, not 3 pixel points.
 - At 900 pixels and wider the whole page scrolls: the lens keeps the height its rail sets and the lower half below it is as tall as the window under the menu (at least 520 pixels), so a taller lens pushes the lower half down instead of squeezing it. The wheel over the lens or a rail zooms or sizes without scrolling the page. Lanes may use their own harness's skills, tools and subagents (HOUSE-RULES).
 - Two rails sit on the lens: Height on the left (900 pixels and wider) makes the lens taller or shorter, from 30 to 80 percent of the window, saved as `lensShare`, and Zoom on the right moves the camera closer or further on a log scale. Each has a faint label on top and a multiplier below (the height against the default, the zoom against the overview), and both follow a drag, the wheel over them and the arrow, Page and Home and End keys.

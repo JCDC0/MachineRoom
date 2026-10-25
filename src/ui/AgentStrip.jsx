@@ -1,10 +1,5 @@
-import { useEffect, useState } from 'react'
-import {
-  AUTOCOMPACT_MAX,
-  AUTOCOMPACT_MIN,
-  autocompactPercent,
-  clampAutocompactPercent,
-} from './agentStrip.js'
+import { useState } from 'react'
+import AutocompactInput from './AutocompactInput.jsx'
 
 function messageOf(error, fallback) {
   return error instanceof Error && error.message.trim() ? error.message : fallback
@@ -15,7 +10,6 @@ export default function CompactCard({
   id = 'orchestrator',
   orchestrator = null,
   client = null,
-  onAutocompact = () => ({ ok: true }),
   onChange = () => {},
   onClose = () => {},
 }) {
@@ -23,39 +17,8 @@ export default function CompactCard({
   const [confirm, setConfirm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
-  const [percent, setPercent] = useState(() => autocompactPercent(orchestrator))
-  const [percentBusy, setPercentBusy] = useState(false)
-  const [settingsError, setSettingsError] = useState('')
-
-  useEffect(() => {
-    const value = Number(orchestrator?.autocompactPercent)
-    if (Number.isFinite(value)) setPercent(clampAutocompactPercent(value))
-  }, [orchestrator?.autocompactPercent])
 
   const canCompact = typeof client?.compactOrchestrator === 'function'
-  const canAutocompact = typeof client?.setAutocompact === 'function'
-  const autocompactOn = orchestrator?.autocompact === true
-
-  async function commitAutocompact(on, value = percent) {
-    if (typeof client?.setAutocompact !== 'function') {
-      setSettingsError('The bridge cannot change autocompact.')
-      return
-    }
-    const next = clampAutocompactPercent(value)
-    setPercent(next)
-    setPercentBusy(true)
-    setSettingsError('')
-    try {
-      const result = await onAutocompact(id, on, next)
-      if (result && result.ok === false) {
-        setSettingsError(result.message || 'The bridge refused the change.')
-      }
-    } catch (failure) {
-      setSettingsError(messageOf(failure, 'The bridge refused the change.'))
-    } finally {
-      setPercentBusy(false)
-    }
-  }
 
   async function runCompact() {
     if (saving) return
@@ -112,33 +75,11 @@ export default function CompactCard({
       {!canCompact && (
         <p className="strip-note">Compacting is not available from this bridge.</p>
       )}
-      <div className="strip-switch-row">
-        <label className="strip-switch">
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="Autocompact"
-            checked={autocompactOn}
-            disabled={!canAutocompact || percentBusy}
-            onChange={(event) => commitAutocompact(event.target.checked, percent)}
-          />
-          <span>Autocompact</span>
-        </label>
-        <input
-          type="range"
-          min={AUTOCOMPACT_MIN}
-          max={AUTOCOMPACT_MAX}
-          step="1"
-          value={percent}
-          aria-label="Autocompact percent"
-          disabled={!canAutocompact || percentBusy}
-          onChange={(event) => setPercent(Number(event.target.value))}
-          onPointerUp={() => commitAutocompact(autocompactOn, percent)}
-          onKeyUp={() => commitAutocompact(autocompactOn, percent)}
-        />
-        <span className="strip-percent mono">{percent}%</span>
-      </div>
-      {settingsError && <p className="strip-note is-error">{settingsError}</p>}
+      <AutocompactInput
+        orchestrator={orchestrator ?? { id }}
+        client={client}
+        onSaved={onChange}
+      />
       {confirm && (
         <section className="mr-orch-confirm" aria-label="Compact the orchestrator">
           <p className="mr-orch-confirm-text">{`Compact ${name} now?`}</p>

@@ -861,10 +861,11 @@ export default function Hud({
             tasks={tasks}
             log={log}
             orchestrator={orchestratorInfo}
+            client={client}
             onFocus={onFocus}
             onToggleTerminal={onToggleTerminal}
             onOpenChat={() => chatAvailable && setChatOpen(true)}
-            onAutocompact={changeAutocompact}
+            onSaved={() => setOrchestratorNonce((value) => value + 1)}
           />
         </div>
         <div className="hud-dock-side">
@@ -1008,13 +1009,14 @@ export default function Hud({
                   tasks={tasks}
                   log={log}
                   orchestrator={orchestratorInfo}
+                  client={client}
                   onFocus={onFocus}
                   onToggleTerminal={onToggleTerminal}
                   onOpenChat={() => {
                     setChatFocus((value) => value + 1)
                     setDrawer(null)
                   }}
-                  onAutocompact={changeAutocompact}
+                  onSaved={() => setOrchestratorNonce((value) => value + 1)}
                 />
               </div>
               <div className="hud-drawer-section" hidden={drawer !== 'costs'}>

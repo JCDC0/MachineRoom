@@ -1,3 +1,5 @@
+import AutocompactInput from './AutocompactInput.jsx'
+import { orchestratorEntry } from './agentStrip.js'
 import { agentContext } from './agentContext.js'
 
 const NOTHING_TO_SAY = new Set(['not reported', 'none'])
@@ -40,10 +42,11 @@ export default function AgentDock({
   tasks = null,
   log = null,
   orchestrator = null,
+  client = null,
   onFocus = () => {},
   onToggleTerminal = () => {},
   onOpenChat = () => {},
-  onAutocompact = () => {},
+  onSaved = () => {},
 }) {
   const context = agentContext({ agent, working, lanes, costs, liveRuns, tasks, log, orchestrator })
 
@@ -59,6 +62,7 @@ export default function AgentDock({
   if (context.isOrchestrator && context.context) {
     rows.push(['Context', `${context.context.label} of ${context.context.window} tokens`])
   }
+  const settings = context.isOrchestrator ? orchestratorEntry(orchestrator, context.key) : null
 
   return (
     <section className="agent-dock" aria-label="Agent context">
@@ -77,24 +81,12 @@ export default function AgentDock({
             </dd>
           </div>
         ))}
-        {context.isOrchestrator && context.autocompact !== null && (
-          <div className="agent-dock-row">
-            <dt>Autocompact</dt>
-            <dd className="mono">
-              <label>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  aria-label="Autocompact"
-                  checked={context.autocompact}
-                  onChange={(event) => onAutocompact(context.key, event.target.checked)}
-                />
-                {context.autocompact ? ' on' : ' off'}
-              </label>
-            </dd>
-          </div>
-        )}
       </dl>
+      {settings && (
+        <div className="agent-dock-autocompact">
+          <AutocompactInput orchestrator={settings} client={client} onSaved={onSaved} />
+        </div>
+      )}
       <ol className="agent-dock-log" aria-label="Recent log lines">
         {context.log.length === 0 ? (
           <li className="agent-dock-line is-dim mono">No log lines.</li>
