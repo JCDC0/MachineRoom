@@ -904,6 +904,7 @@ export function createOrchestrator({
       autocompactMode,
       autocompactValue,
       compactRules,
+      defaultCompactRules: DEFAULT_COMPACT_RULES,
       autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
       effort: effort ?? null,
       messages: messages.map((message) => ({ ...message })),
