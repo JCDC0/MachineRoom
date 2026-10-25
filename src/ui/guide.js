@@ -32,44 +32,75 @@ export const TOUR_STEPS = [
   {
     label: 'The lens',
     selector: '.lens',
-    text: 'The room sits in the lens at the top, with the project name at its top left, the working lane count at its top right and the newest activity at its bottom right.',
+    text: 'This lens holds the room, with the project name, the working lanes and the newest activity.',
   },
   {
     label: 'The hub and an agent',
     selector: '.mr-term',
-    text: 'The hub ring in the middle splits into sector arcs for sub orchestrators, the main orchestrator floats above the centre, and the outlined terminal chip beside an agent opens its log.',
+    text: 'This terminal chip sits beside an agent above the hub and opens its log when you click it.',
   },
   {
     label: 'A working tunnel',
     selector: '.mr-card.is-targeted, .mr-callout.is-working, .mr-term.is-working',
-    wait: 'working',
-    waitText: 'Waiting for an agent to start working.',
-    text: 'A working agent sends a yellow tunnel and packets to the file card it touches, and four yellow brackets frame that card; white is a read or write, green is finished and red is a failure.',
+    text: 'This yellow tunnel runs from a working agent to the file it touches, with packets along it.',
   },
   {
     label: 'The agent list',
-    selector: '.hud-dock-agents, .hud-strip',
-    text: 'The dock shows the selected agent, else the first working agent, else the orchestrator, and lists the main orchestrator first, then each sub and the Main group, with number keys to focus them.',
+    selector: '.hud-dock-agents',
+    text: 'This agent column lists every agent in the room, and the number keys focus them.',
   },
   {
     label: 'The agent context',
-    selector: '.hud-dock-context, .hud-strip',
-    text: "The middle column shows the selected agent: its harness, model, status, sector or scope, task, current command, this month's spend and tokens, and its recent log lines.",
+    selector: '.hud-dock-context',
+    text: "This context column shows the selected agent's harness, model, task, cost and recent log lines.",
   },
   {
     label: 'Settings and costs',
-    selector: '.hud-dock-side, .hud-strip',
-    text: "The right column holds the folder depth and five screen effects for the lens above this month's cost board per lane.",
+    selector: '.hud-dock-side',
+    text: "This side column holds the folder depth, the screen effects and this month's cost board.",
   },
   {
     label: 'The transport',
     selector: '.transport',
-    text: 'The transport at the foot plays or pauses the replay, seeks across the timeline and its white, green and red run markers, and changes the replay speed.',
+    text: 'This transport plays or pauses the replay, seeks along the timeline and sets its speed.',
   },
   {
     label: 'Control and orchestrator',
     selector: '.hud-actions',
-    text: 'CONTROL or C opens Dispatch, Tasks, Meters, Team and Reviews; with --lanes, ORCHESTRATOR or / opens the orchestrator chat, and in a replay / opens the assistant; ? lists every key.',
+    text: 'This action row opens Control for tasks, runs and reviews, and the orchestrator chat when the room runs with --lanes.',
+  },
+]
+
+export const LIVE_TOUR_STEPS = [
+  {
+    label: 'The lens',
+    selector: '.lens',
+    text: 'This lens shows your project as a room, with its folders, hub and agents.',
+  },
+  {
+    label: 'The hub and its agents',
+    selector: '.mr-term[data-agent="orchestrator"]',
+    text: "This terminal chip shows the orchestrator's name and status above the hub and its agents.",
+  },
+  {
+    label: 'Model and effort',
+    selector: '.hud-strip-model',
+    text: 'This model line in the strip shows the model and effort for the agent and opens the model list.',
+  },
+  {
+    label: 'Compact',
+    selector: '.hud-strip-compact',
+    text: "This Compact button squeezes the orchestrator's context into a short summary.",
+  },
+  {
+    label: 'Settings',
+    selector: '.hud-strip-settings',
+    text: 'This Settings button opens the folder depth and the screen effects.',
+  },
+  {
+    label: 'Sessions',
+    selector: '.hud-sessions-button',
+    text: 'This sessions button opens the drawer of agents and orchestrator conversations.',
   },
 ]
 
@@ -158,8 +189,21 @@ export function confirmCardOpen(doc) {
   }
 }
 
+export function setupCardOpen(doc) {
+  if (!doc || typeof doc.querySelector !== 'function') return false
+  try {
+    return Boolean(doc.querySelector('.mr-setup'))
+  } catch {
+    return false
+  }
+}
+
+export function guideBlocked(doc) {
+  return confirmCardOpen(doc) || setupCardOpen(doc)
+}
+
 export function guideCanOpen(doc) {
-  if (confirmCardOpen(doc)) return false
+  if (guideBlocked(doc)) return false
   if (doc && typeof doc.querySelector === 'function') {
     try {
       helpTourPending = Boolean(doc.querySelector('#hud-help-dialog'))
@@ -312,23 +356,35 @@ export function stepTargetRect(doc, stepOrSelector, viewport = null) {
   return null
 }
 
-export function stepReady(step, snapshot = null, doc = null, viewport = null) {
-  if (!step || !step.wait) return true
-  if (step.wait === 'working') {
-    const workingInSnapshot = Boolean(
-      snapshot &&
-        Array.isArray(snapshot.agents) &&
-        snapshot.agents.some(
-          (agent) =>
-            agent &&
-            (agent.status === 'working' ||
-              (Array.isArray(agent.focus) ? agent.focus.length > 0 : Boolean(agent.focus)))
-        )
-    )
-    if (workingInSnapshot) return true
-    return stepTargetRect(doc, step, viewport) !== null
-  }
+export function stepAvailable(step, doc, viewport = null) {
   return stepTargetRect(doc, step, viewport) !== null
+}
+
+export function availableSteps(steps, doc, viewport = null) {
+  const list = Array.isArray(steps) ? steps : []
+  return list.filter((step) => stepAvailable(step, doc, viewport))
+}
+
+export function nextStepIndex(steps, from, doc, viewport = null, direction = 1) {
+  const list = Array.isArray(steps) ? steps : []
+  if (list.length === 0) return null
+  const step = direction < 0 ? -1 : 1
+  let index = Number.isInteger(from) ? from + step : step > 0 ? 0 : list.length - 1
+  while (index >= 0 && index < list.length) {
+    if (stepAvailable(list[index], doc, viewport)) return index
+    index += step
+  }
+  return null
+}
+
+export function resolveStepIndex(steps, from, doc, viewport = null) {
+  const list = Array.isArray(steps) ? steps : []
+  if (list.length === 0) return null
+  const start = Number.isInteger(from) ? Math.min(Math.max(from, 0), list.length - 1) : 0
+  if (stepAvailable(list[start], doc, viewport)) return start
+  const forward = nextStepIndex(list, start, doc, viewport, 1)
+  if (forward !== null) return forward
+  return nextStepIndex(list, start, doc, viewport, -1)
 }
 
 export function placeGuideCard(

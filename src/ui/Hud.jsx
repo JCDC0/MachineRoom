@@ -9,6 +9,7 @@ import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
+import SetupCard from './SetupCard.jsx'
 import { agentForNumber, agentList } from './agentList.js'
 import { wideLayout } from './agentStrip.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
@@ -114,7 +115,10 @@ export default function Hud({
   const [orchestratorNonce, setOrchestratorNonce] = useState(0)
   const [orchestratorInfo, setOrchestratorInfo] = useState(null)
   const [guideOpen, setGuideOpen] = useState(
-    () => typeof window !== 'undefined' && shouldShowGuide() && guideCanOpen(document)
+    () => typeof window !== 'undefined' && shouldShowGuide()
+  )
+  const [setupChecked, setSetupChecked] = useState(
+    () => mode !== 'live' || !client || typeof client.lanes !== 'function'
   )
   const [internalHelpOpen, setHelpOpen] = useState(
     () => Boolean(initialHelpOpen || controlledHelpOpen)
@@ -772,7 +776,11 @@ export default function Hud({
         </div>
       )}
 
-      {guideOpen && <Guide onClose={closeGuide} />}
+      {guideOpen && setupChecked && <Guide mode={mode} onClose={closeGuide} />}
+
+      {mode === 'live' && client && (
+        <SetupCard client={client} onCheck={() => setSetupChecked(true)} />
+      )}
 
       {!chatAvailable && (
         <Assistant

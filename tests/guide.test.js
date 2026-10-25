@@ -9,23 +9,30 @@ import {
   CONFIRM_SELECTOR,
   GUIDE_FLAG,
   GUIDE_STEPS,
+  LIVE_TOUR_STEPS,
   TOUR_STEPS,
+  availableSteps,
   clampStep,
   confirmCardOpen,
   connectHref,
   findStepTarget,
+  guideBlocked,
   guideCanOpen,
   guideSeen,
   isFirstBoot,
   markGuideSeen,
+  nextStepIndex,
   placeGuideCard,
+  resolveStepIndex,
   setTourSpeed,
+  setupCardOpen,
   shouldShowGuide,
-  stepReady,
+  stepAvailable,
   stepTargetRect,
   tourRequested,
 } from '../src/ui/guide.js'
 import { SETTINGS_KEY } from '../src/ui/settings.js'
+import { resetSetupPostponed } from '../src/ui/setup.js'
 
 const realWindow = globalThis.window
 
@@ -433,6 +440,7 @@ const SNAPSHOT = {
 }
 
 afterEach(() => {
+  resetSetupPostponed()
   if (realWindow === undefined) delete globalThis.window
   else globalThis.window = realWindow
 })
@@ -579,6 +587,19 @@ describe('confirm cards', () => {
     }
     expect(() => confirmCardOpen(broken)).not.toThrow()
     expect(confirmCardOpen(broken)).toBe(false)
+  })
+
+  it('holds the guide until the setup card is gone', () => {
+    const doc = {
+      querySelector(selector) {
+        return selector === '.mr-setup' ? {} : null
+      },
+    }
+    expect(setupCardOpen(doc)).toBe(true)
+    expect(guideBlocked(doc)).toBe(true)
+    expect(guideCanOpen(doc)).toBe(false)
+    expect(setupCardOpen(null)).toBe(false)
+    expect(guideBlocked(null)).toBe(false)
   })
 })
 
@@ -730,7 +751,7 @@ describe('first boot and Connect tour entry', () => {
 })
 
 describe('tour steps, selector lookup and card placement', () => {
-  it('holds eight tour steps with one sentence each and finds the HUD ones in the HUD', async () => {
+  it('holds eight replay steps and six live steps, each one This sentence', async () => {
     expect(TOUR_STEPS).toHaveLength(8)
     expect(TOUR_STEPS.map((step) => step.label)).toEqual([
       'The lens',
@@ -742,17 +763,38 @@ describe('tour steps, selector lookup and card placement', () => {
       'The transport',
       'Control and orchestrator',
     ])
-    expect(TOUR_STEPS[1].text).toContain('outlined terminal chip')
-    expect(TOUR_STEPS[1].text).toContain('opens its log')
-    expect(TOUR_STEPS[3].text).toContain('selected agent, else the first working agent, else the orchestrator')
-    expect(TOUR_STEPS[7].text).toContain('Dispatch, Tasks, Meters, Team and Reviews')
-    expect(TOUR_STEPS[7].text).toContain('with --lanes')
-    expect(TOUR_STEPS[7].text).toContain('in a replay / opens the assistant')
-    const outsideHud = new Set([
-      '.lens',
-      '.mr-term',
-      '.mr-card.is-targeted, .mr-callout.is-working, .mr-term.is-working',
+    expect(LIVE_TOUR_STEPS).toHaveLength(6)
+    expect(LIVE_TOUR_STEPS.map((step) => step.label)).toEqual([
+      'The lens',
+      'The hub and its agents',
+      'Model and effort',
+      'Compact',
+      'Settings',
+      'Sessions',
     ])
+    expect(LIVE_TOUR_STEPS.map((step) => step.selector)).toEqual([
+      '.lens',
+      '.mr-term[data-agent="orchestrator"]',
+      '.hud-strip-model',
+      '.hud-strip-compact',
+      '.hud-strip-settings',
+      '.hud-sessions-button',
+    ])
+    expect(TOUR_STEPS[0].text).toContain('This lens')
+    expect(TOUR_STEPS[1].text).toContain('This terminal chip')
+    expect(TOUR_STEPS[2].text).toContain('This yellow tunnel')
+    expect(TOUR_STEPS[7].text).toContain('This action row')
+    expect(LIVE_TOUR_STEPS[1].text).toContain('This terminal chip')
+    expect(LIVE_TOUR_STEPS[2].text).toContain('This model line')
+    expect(LIVE_TOUR_STEPS[5].text).toContain('This sessions button')
+    for (const step of [...TOUR_STEPS, ...LIVE_TOUR_STEPS]) {
+      expect(step.text.startsWith('This ')).toBe(true)
+      expect(step.text.endsWith('.')).toBe(true)
+      expect(step.text.split('.').length - 1).toBe(1)
+      expect(step.text.length).toBeGreaterThan(20)
+      expect(step.text.length).toBeLessThan(140)
+    }
+    const outsideHud = new Set(['.lens', '.mr-term', '.mr-card.is-targeted, .mr-callout.is-working, .mr-term.is-working'])
     const hudSteps = TOUR_STEPS.filter((step) => !outsideHud.has(step.selector))
     expect(hudSteps).toHaveLength(5)
     await withDom(async ({ container, dom, root }) => {
@@ -764,14 +806,10 @@ describe('tour steps, selector lookup and card placement', () => {
         expect(container.querySelector(step.selector), step.selector).not.toBeNull()
       }
     })
-    for (const step of TOUR_STEPS) {
-      expect(step.text.endsWith('.')).toBe(true)
-      expect(step.text.split('.').length - 1).toBe(1)
-      expect(step.text.length).toBeGreaterThan(20)
-      expect(step.text.length).toBeLessThan(200)
-    }
     expect(clampStep(7, TOUR_STEPS)).toBe(7)
     expect(clampStep(99, TOUR_STEPS)).toBe(7)
+    expect(clampStep(5, LIVE_TOUR_STEPS)).toBe(5)
+    expect(clampStep(99, LIVE_TOUR_STEPS)).toBe(5)
   })
 
   it('looks up visible elements and skips missing, hidden or off-screen targets', () => {
@@ -810,25 +848,34 @@ describe('tour steps, selector lookup and card placement', () => {
       bottom: 240,
     })
     expect(findStepTarget(doc, TOUR_STEPS[1], viewport)).toBe(visible)
+    expect(findStepTarget(doc, TOUR_STEPS[4], viewport)).toBeNull()
     expect(findStepTarget(doc, TOUR_STEPS[5], viewport)).toBeNull()
     expect(findStepTarget(doc, TOUR_STEPS[6], viewport)).toBeNull()
     expect(findStepTarget(doc, TOUR_STEPS[7], viewport)).toBeNull()
     expect(stepTargetRect(null, TOUR_STEPS[0], viewport)).toBeNull()
   })
 
-  it('waits on the tunnel step until an agent is working or a tunnel target is visible', () => {
-    const tunnelStep = TOUR_STEPS[2]
-    expect(stepReady(tunnelStep, { agents: [{ key: 'opencode', status: 'idle' }] }, null)).toBe(false)
-    expect(stepReady(tunnelStep, { agents: [{ key: 'opencode', status: 'working' }] }, null)).toBe(true)
-
-    const docWithTarget = {
-      querySelector: (selector) =>
-        selector === '.mr-card.is-targeted'
-          ? { getBoundingClientRect: () => ({ left: 100, top: 100, width: 180, height: 120 }) }
-          : null,
+  it('skips a missing step instead of showing it in the middle', () => {
+    const lens = { getBoundingClientRect: () => ({ left: 0, top: 44, width: 1280, height: 464 }) }
+    const transport = {
+      getBoundingClientRect: () => ({ left: 20, top: 700, width: 900, height: 48 }),
     }
-    expect(stepReady(tunnelStep, { agents: [] }, docWithTarget)).toBe(true)
-    expect(stepReady(TOUR_STEPS[0], { agents: [] }, null)).toBe(true)
+    const doc = {
+      querySelectorAll(selector) {
+        if (selector === '.lens') return [lens]
+        if (selector === '.transport') return [transport]
+        return []
+      },
+    }
+    const viewport = { width: 1280, height: 800 }
+    const found = availableSteps(TOUR_STEPS, doc, viewport)
+    expect(found.map((step) => step.label)).toEqual(['The lens', 'The transport'])
+    expect(stepAvailable(TOUR_STEPS[1], doc, viewport)).toBe(false)
+    expect(nextStepIndex(TOUR_STEPS, 0, doc, viewport)).toBe(6)
+    expect(nextStepIndex(TOUR_STEPS, 6, doc, viewport)).toBeNull()
+    expect(resolveStepIndex(TOUR_STEPS, 1, doc, viewport)).toBe(6)
+    expect(resolveStepIndex(TOUR_STEPS, 7, doc, viewport)).toBe(6)
+    expect(resolveStepIndex(TOUR_STEPS, 0, { querySelectorAll: () => [] }, viewport)).toBeNull()
   })
 
   it('places the card beside a visible target inside the window and centers it when missing', () => {
@@ -880,37 +927,49 @@ describe('tour steps, selector lookup and card placement', () => {
     }
   })
 
-  it('renders the tour with an outline around a present target, a waiting note when not ready, and last-step choices', () => {
-    const docWithLens = {
-      querySelector: (selector) =>
-        selector === '.lens'
-          ? { getBoundingClientRect: () => ({ left: 0, top: 44, width: 1280, height: 464 }) }
-          : null,
+  it('renders the tour with an outline beside a present target, skips a missing step and offers the last choices', () => {
+    const target = (rect) => ({ getBoundingClientRect: () => rect })
+    const lens = target({ left: 0, top: 44, width: 1280, height: 464 })
+    const chip = target({ left: 600, top: 300, width: 180, height: 80 })
+    const all = {
+      querySelectorAll(selector) {
+        if (selector === '.lens') return [lens]
+        if (selector === '.mr-term') return [chip]
+        if (selector === '.mr-card.is-targeted, .mr-callout.is-working, .mr-term.is-working') {
+          return [chip]
+        }
+        if (selector === '.hud-dock-agents') return [target({ left: 20, top: 560, width: 320, height: 220 })]
+        if (selector === '.hud-dock-context') return [target({ left: 360, top: 560, width: 420, height: 220 })]
+        if (selector === '.hud-dock-side') return [target({ left: 800, top: 560, width: 400, height: 220 })]
+        if (selector === '.transport') return [target({ left: 20, top: 720, width: 900, height: 48 })]
+        if (selector === '.hud-actions') return [target({ left: 900, top: 8, width: 340, height: 40 })]
+        return []
+      },
     }
     const step1 = renderToString(
-      createElement(Guide, { tour: true, initialStep: 0, doc: docWithLens })
+      createElement(Guide, { tour: true, initialStep: 0, doc: all })
     )
     expect(step1).toContain('1 / 8')
     expect(step1).toContain('class="mr-guide-outline"')
     expect(step1).toContain('mr-guide is-tour is-placed')
     expect(step1).toContain('data-selector=".lens"')
+    expect(step1).toContain(TOUR_STEPS[0].text)
 
-    const waitingTunnel = renderToString(
-      createElement(Guide, {
-        tour: true,
-        initialStep: 2,
-        snapshot: { agents: [{ key: 'opencode', status: 'idle' }] },
-        doc: fakeDocument(null),
-      })
+    const lensOnly = {
+      querySelectorAll(selector) {
+        return selector === '.lens' ? [lens] : []
+      },
+    }
+    const skipped = renderToString(
+      createElement(Guide, { tour: true, initialStep: 2, doc: lensOnly })
     )
-    expect(waitingTunnel).toContain('3 / 8')
-    expect(waitingTunnel).toContain('Waiting for an agent to start working.')
-    expect(waitingTunnel).toContain('mr-guide is-tour is-centered')
-    expect(waitingTunnel).not.toContain('class="mr-guide-outline"')
-    expect(waitingTunnel).toContain('>Next</button>')
+    expect(skipped).toContain('1 / 1')
+    expect(skipped).toContain(TOUR_STEPS[0].text)
+    expect(skipped).toContain('class="mr-guide-outline"')
+    expect(skipped).not.toContain('mr-guide is-tour is-centered')
 
     const finalStep = renderToString(
-      createElement(Guide, { tour: true, initialStep: 7, doc: fakeDocument(null) })
+      createElement(Guide, { tour: true, initialStep: 7, doc: all })
     )
     expect(finalStep).toContain('8 / 8')
     expect(finalStep).toContain('>Connect to my project</button>')
@@ -922,20 +981,112 @@ describe('tour steps, selector lookup and card placement', () => {
     expect(overConfirm).toBe('')
   })
 
+  it('runs the live tour in its outlined mode and skips a missing strip control', () => {
+    const target = (rect) => ({ getBoundingClientRect: () => rect })
+    const lens = target({ left: 0, top: 44, width: 1280, height: 464 })
+    const liveDoc = {
+      querySelectorAll(selector) {
+        if (selector === '.lens') return [lens]
+        if (selector === '.mr-term[data-agent="orchestrator"]') {
+          return [target({ left: 620, top: 280, width: 180, height: 80 })]
+        }
+        return []
+      },
+    }
+    const live = renderToString(
+      createElement(Guide, { mode: 'live', initialStep: 0, doc: liveDoc })
+    )
+    expect(live).toContain('1 / 2')
+    expect(live).toContain(LIVE_TOUR_STEPS[0].text)
+    expect(live).toContain('class="mr-guide-outline"')
+    expect(live).toContain('mr-guide is-tour is-placed')
+
+    const modelOnly = {
+      querySelectorAll(selector) {
+        if (selector === '.hud-strip-model') {
+          return [target({ left: 40, top: 520, width: 260, height: 24 })]
+        }
+        return []
+      },
+    }
+    const skipped = renderToString(
+      createElement(Guide, { mode: 'live', initialStep: 0, doc: modelOnly })
+    )
+    expect(skipped).toContain('1 / 1')
+    expect(skipped).toContain(LIVE_TOUR_STEPS[2].text)
+    expect(skipped).toContain('data-selector=".hud-strip-model"')
+    expect(skipped).not.toContain('mr-guide is-tour is-centered')
+
+    const done = renderToString(
+      createElement(Guide, { mode: 'live', initialStep: 5, doc: modelOnly })
+    )
+    expect(done).toContain('1 / 1')
+    expect(done).toContain('>Done</button>')
+    expect(done).not.toContain('>Connect to my project</button>')
+  })
+
+  it('shows the setup card before the live tour and starts the tour after Later', async () => {
+    await withDom(async ({ container, dom, root }) => {
+      const lens = dom.document.createElement('div')
+      lens.className = 'lens'
+      lens.getBoundingClientRect = () => ({ left: 0, top: 44, width: 1200, height: 460 })
+      dom.body.appendChild(lens)
+      const calls = []
+      const client = {
+        lanes: async () => ({
+          lanes: [
+            { key: 'opencode', name: 'OpenCode' },
+            { key: 'opencode2', name: 'OpenCode 2' },
+            { key: 'claude', name: 'Claude' },
+          ],
+          max: 3,
+          chosen: false,
+        }),
+        setActiveLanes: async (payload) => {
+          calls.push(payload)
+        },
+      }
+      await act(async () => {
+        root.render(
+          createElement(Hud, { mode: 'live', snapshot: SNAPSHOT, speeds: [1], client })
+        )
+      })
+      await act(async () => {})
+      expect(container.textContent).toContain('How many agents should work on this project?')
+      expect(container.textContent).not.toContain(LIVE_TOUR_STEPS[0].text)
+      const later = buttonWithText(container, 'Later')
+      expect(later).not.toBeNull()
+      await act(async () => {
+        later.click()
+      })
+      expect(calls).toEqual([])
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 320))
+      })
+      expect(container.textContent).toContain('1 / 1')
+      expect(container.textContent).toContain(LIVE_TOUR_STEPS[0].text)
+      resetSetupPostponed()
+    })
+  })
+
   it('opens the tour when the Help dialog Guide button is clicked', async () => {
     await withDom(async ({ container, dom, root }) => {
       dom.window.localStorage.setItem(GUIDE_FLAG, '1')
+      const lens = dom.document.createElement('div')
+      lens.className = 'lens'
+      lens.getBoundingClientRect = () => ({ left: 0, top: 44, width: 1200, height: 460 })
+      dom.body.appendChild(lens)
       await act(async () => {
         root.render(createElement(Hud, { snapshot: SNAPSHOT, speeds: [1], helpOpen: true }))
       })
       expect(container.textContent).toContain('Keyboard Shortcuts')
-      expect(container.textContent).not.toContain('1 / 8')
+      expect(container.textContent).not.toContain('1 / 1')
       const guideButton = buttonWithText(container, 'Guide')
       expect(guideButton).not.toBeNull()
       await act(async () => {
         guideButton.click()
       })
-      expect(container.textContent).toContain('1 / 8')
+      expect(container.textContent).toContain('1 / 1')
       expect(container.textContent).toContain(TOUR_STEPS[0].text)
     })
   })
