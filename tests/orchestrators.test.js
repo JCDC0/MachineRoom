@@ -438,11 +438,22 @@ describe('the orchestrator registry', () => {
     const rig = await makeBridge(makeBase())
     const chat = await getJson(`${rig.url}/api/orchestrator`)
     expect(chat.status).toBe(200)
-    expect(chat.body).toMatchObject({ contextTokens: null, contextWindow: 200000, autocompact: true, autocompactPercent: 80 })
+    expect(chat.body).toMatchObject({
+      contextTokens: null,
+      contextWindow: 200000,
+      autocompact: true,
+      autocompactMode: 'percent',
+      autocompactValue: 80,
+      compactRules: '',
+      autocompactPercent: 80,
+    })
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[0]).toMatchObject({
       contextTokens: null,
       contextWindow: 200000,
       autocompact: true,
+      autocompactMode: 'percent',
+      autocompactValue: 80,
+      compactRules: '',
       autocompactPercent: 80,
     })
 
@@ -454,16 +465,56 @@ describe('the orchestrator registry', () => {
       error: 'Confirm the autocompact change first.',
     })
     expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: 'yes', confirmed: true })).status).toBe(400)
-    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', percent: 45, confirmed: true })).status).toBe(400)
-    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', percent: 99, confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', percent: 0, confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', percent: 101, confirmed: true })).status).toBe(400)
+    expect(
+      (await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', mode: 'tokens', value: 999, confirmed: true })).status
+    ).toBe(400)
+    expect(
+      (await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', mode: 'tokens', value: 10000001, confirmed: true })).status
+    ).toBe(400)
+    expect(
+      (await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', mode: 'invalid', confirmed: true })).status
+    ).toBe(400)
+    expect(
+      (await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', rules: 'a'.repeat(2001), confirmed: true })).status
+    ).toBe(400)
 
     const off = await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false, percent: 75, confirmed: true })
     expect(off.status).toBe(200)
-    expect(off.body).toEqual({ id: 'orchestrator', autocompact: false, autocompactPercent: 75 })
+    expect(off.body).toEqual({
+      id: 'orchestrator',
+      autocompact: false,
+      autocompactMode: 'percent',
+      autocompactValue: 75,
+      compactRules: '',
+      autocompactPercent: 75,
+    })
     expect((await getJson(`${rig.url}/api/orchestrator`)).body.autocompact).toBe(false)
     expect((await getJson(`${rig.url}/api/orchestrator`)).body.autocompactPercent).toBe(75)
     expect(rig.chat().autocompact).toBe(false)
     expect(rig.chat().autocompactPercent).toBe(75)
+
+    const tokensRes = await pagePost(`${rig.url}/api/orchestrator/autocompact`, {
+      id: 'orchestrator',
+      mode: 'tokens',
+      value: 60000,
+      rules: 'Keep all decisions.',
+      confirmed: true,
+    })
+    expect(tokensRes.status).toBe(200)
+    expect(tokensRes.body).toMatchObject({
+      id: 'orchestrator',
+      autocompact: false,
+      autocompactMode: 'tokens',
+      autocompactValue: 60000,
+      compactRules: 'Keep all decisions.',
+    })
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body).toMatchObject({
+      autocompactMode: 'tokens',
+      autocompactValue: 60000,
+      compactRules: 'Keep all decisions.',
+    })
 
     const page = await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: true, confirmed: true })
     expect(page.status).toBe(200)
@@ -475,6 +526,9 @@ describe('the orchestrator registry', () => {
       contextTokens: null,
       contextWindow: 200000,
       autocompact: true,
+      autocompactMode: 'percent',
+      autocompactValue: 80,
+      compactRules: '',
       autocompactPercent: 80,
     })
     expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'frontend', on: false, percent: 60, confirmed: true })).status).toBe(200)

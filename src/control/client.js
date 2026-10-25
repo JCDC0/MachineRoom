@@ -227,15 +227,24 @@ export function createClient({
     setAutocompact: (idOrOptions, onArg, percentArg) => {
       let id
       let on
+      let mode
+      let value
+      let rules
       let percent
       if (typeof idOrOptions === 'object' && idOrOptions !== null) {
         id = idOrOptions.id
         on = idOrOptions.on
+        mode = idOrOptions.mode
+        value = idOrOptions.value
+        rules = idOrOptions.rules
         percent = idOrOptions.percent
       } else {
         id = idOrOptions
         if (typeof onArg === 'object' && onArg !== null) {
           on = onArg.on
+          mode = onArg.mode
+          value = onArg.value
+          rules = onArg.rules
           percent = onArg.percent
         } else {
           on = onArg
@@ -246,6 +255,9 @@ export function createClient({
         id: id === undefined || id === null || id === '' ? 'orchestrator' : id,
       }
       if (on !== undefined) body.on = on
+      if (mode !== undefined) body.mode = mode
+      if (value !== undefined) body.value = value
+      if (rules !== undefined) body.rules = rules
       if (percent !== undefined) body.percent = percent
       body.confirmed = true
       return request('POST', '/api/orchestrator/autocompact', body)

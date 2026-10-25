@@ -5,7 +5,23 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
-import { chatFileFor, chatLockFileFor, createOrchestrator, contextTokensFromLog, COMPACTED_MESSAGE, COMPACT_PROMPT, RESTART_MESSAGE } from '../server/orchestrator.js'
+import {
+  chatFileFor,
+  chatLockFileFor,
+  createOrchestrator,
+  contextTokensFromLog,
+  compactPrompt,
+  COMPACTED_MESSAGE,
+  COMPACT_PROMPT,
+  DEFAULT_COMPACT_RULES,
+  DEFAULT_AUTOCOMPACT_MODE,
+  DEFAULT_AUTOCOMPACT_VALUE,
+  AUTOCOMPACT_MODE_PROBLEM,
+  AUTOCOMPACT_PERCENT_PROBLEM,
+  AUTOCOMPACT_TOKENS_PROBLEM,
+  AUTOCOMPACT_RULES_PROBLEM,
+  RESTART_MESSAGE,
+} from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -460,9 +476,16 @@ describe('autocompact', () => {
     const sessionId = valueAfter(calls[0].args, '--session-id')
     expect(calls[1].args).toContain('--resume')
     expect(valueAfter(calls[1].args, '--resume')).toBe(sessionId)
-    expect(calls[1].args[1]).toBe(COMPACT_PROMPT)
+    expect(calls[1].args[1]).toBe(compactPrompt())
     expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
-    expect(rig.answer()).toMatchObject({ contextTokens: null, contextWindow: 200000, autocompact: true })
+    expect(rig.answer()).toMatchObject({
+      contextTokens: null,
+      contextWindow: 200000,
+      autocompact: true,
+      autocompactMode: 'percent',
+      autocompactValue: 80,
+      compactRules: '',
+    })
     const saved = stateFile(rig)
     expect(saved.sessionId).toBeNull()
     expect(saved.summary).toContain('Reply: Write a summary')
@@ -484,7 +507,7 @@ describe('autocompact', () => {
     const rig = makeRig()
     expect(rig.orchestrator.setAutocompact({ on: false, confirmed: true })).toEqual({
       status: 200,
-      body: { id: 'orchestrator', autocompact: false, autocompactPercent: 80 },
+      body: { id: 'orchestrator', autocompact: false, autocompactMode: 'percent', autocompactValue: 80, compactRules: '', autocompactPercent: 80 },
     })
     rig.behaviour.input = 180000
     rig.send('Build the room.')
@@ -499,13 +522,156 @@ describe('autocompact', () => {
     const rig = makeRig()
     expect(rig.orchestrator.setAutocompact({ on: true, percent: 60, confirmed: true })).toEqual({
       status: 200,
-      body: { id: 'orchestrator', autocompact: true, autocompactPercent: 60 },
+      body: { id: 'orchestrator', autocompact: true, autocompactMode: 'percent', autocompactValue: 60, compactRules: '', autocompactPercent: 60 },
     })
     rig.behaviour.input = 130000
     rig.send('Build the room.')
     await waitFor(() => rig.calls().length === 2 && rig.answer().state === 'idle', 15000, 'the compacted session')
     expect(rig.calls()).toHaveLength(2)
-    expect(rig.answer().autocompactPercent).toBe(60)
+    expect(rig.answer().autocompactValue).toBe(60)
+  })
+
+  it('autocompacts in tokens mode when contextTokens reaches the token threshold', async () => {
+    const rig = makeRig()
+    expect(
+      rig.orchestrator.setAutocompact({ on: true, mode: 'tokens', value: 30000, confirmed: true })
+    ).toEqual({
+      status: 200,
+      body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 30000, compactRules: '', autocompactPercent: 15 },
+    })
+    expect(rig.answer()).toMatchObject({ autocompactMode: 'tokens', autocompactValue: 30000 })
+    rig.behaviour.input = 35000
+    rig.send('Build the room in tokens mode.')
+    await waitFor(() => rig.calls().length === 2 && rig.answer().state === 'idle', 15000, 'the compacted tokens session')
+    expect(rig.calls()).toHaveLength(2)
+  })
+
+  it('uses default rules or owner rules in compactPrompt', async () => {
+    expect(compactPrompt()).toBe(`${COMPACT_PROMPT}\n\nKeep these in the summary:\n${DEFAULT_COMPACT_RULES}`)
+    expect(compactPrompt('', 'Keep decisions and test results.')).toBe(
+      `${COMPACT_PROMPT}\n\nKeep these in the summary:\nKeep decisions and test results.`
+    )
+    expect(compactPrompt('Manual keep only.', 'Owner rules ignored.')).toBe(
+      `${COMPACT_PROMPT}\n\nKeep these in the summary:\nManual keep only.`
+    )
+
+    const rig = makeRig()
+    rig.orchestrator.setAutocompact({ rules: 'Track open runs and PRs.', confirmed: true })
+    rig.behaviour.input = 165000
+    rig.send('Work on the project.')
+    await waitFor(() => rig.calls().length === 2 && rig.answer().state === 'idle', 15000, 'the compacted session')
+    expect(rig.calls()[1].args[1]).toBe(`${COMPACT_PROMPT}\n\nKeep these in the summary:\nTrack open runs and PRs.`)
+  })
+
+  it('reads a chat file holding the old autocompactPercent as percent mode with that value', () => {
+    const base = makeTempDir('mr-orchestrator-old-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const oldFile = chatFileFor(projectRoot, runs, 'orchestrator')
+    writeFileSync(
+      oldFile,
+      JSON.stringify({
+        project: projectRoot,
+        sessionId: null,
+        state: 'idle',
+        messages: [],
+        pending: [],
+        autocompact: true,
+        autocompactPercent: 72,
+      })
+    )
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+    })
+    expect(orchestrator.answer()).toMatchObject({
+      autocompact: true,
+      autocompactMode: 'percent',
+      autocompactValue: 72,
+      compactRules: '',
+      autocompactPercent: 72,
+    })
+  })
+
+  it('refuses autocompact mode, value and rules out of range with 400 and one sentence', () => {
+    const rig = makeRig()
+    expect(rig.orchestrator.setAutocompact({ confirmed: false })).toEqual({
+      status: 400,
+      body: { error: 'Confirm the autocompact change first.' },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true })).toEqual({
+      status: 400,
+      body: { error: 'Say whether autocompact is on or off.' },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, on: 'yes' })).toEqual({
+      status: 400,
+      body: { error: 'Say whether autocompact is on or off.' },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, mode: 'characters' })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_MODE_PROBLEM },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, mode: 'percent', value: 0 })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_PERCENT_PROBLEM },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, mode: 'percent', value: 100.1 })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_PERCENT_PROBLEM },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, percent: 0 })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_PERCENT_PROBLEM },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, mode: 'tokens', value: 999 })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_TOKENS_PROBLEM },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, mode: 'tokens', value: 10000001 })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_TOKENS_PROBLEM },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, mode: 'tokens', value: 5000.5 })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_TOKENS_PROBLEM },
+    })
+    expect(rig.orchestrator.setAutocompact({ confirmed: true, rules: 'x'.repeat(2001) })).toEqual({
+      status: 400,
+      body: { error: AUTOCOMPACT_RULES_PROBLEM },
+    })
+    expect(
+      rig.orchestrator.setAutocompact({ confirmed: true, mode: 'tokens', value: 50000, rules: 'Valid rules.' })
+    ).toEqual({
+      status: 200,
+      body: {
+        id: 'orchestrator',
+        autocompact: true,
+        autocompactMode: 'tokens',
+        autocompactValue: 50000,
+        compactRules: 'Valid rules.',
+        autocompactPercent: 25,
+      },
+    })
+  })
+
+  it('enforces the no-loop rule: a compact turn never starts another compact turn', async () => {
+    const rig = makeRig()
+    rig.behaviour.input = 170000
+    rig.send('Turn 1: initial message.')
+    await waitFor(() => rig.calls().length === 2 && rig.answer().state === 'idle', 15000, 'initial compaction')
+
+    expect(rig.calls()).toHaveLength(2)
+    await sleep(200)
+    expect(rig.calls()).toHaveLength(2)
+    expect(rig.answer().state).toBe('idle')
+
+    rig.behaviour.input = 12
+    rig.send('Turn 3: next owner turn.')
+    await waitFor(() => rig.calls().length === 3 && rig.answer().state === 'idle', 15000, 'turn after compaction')
+    expect(rig.calls()).toHaveLength(3)
   })
 
   it('runs compact now with keep text and refuses while running or with no session', async () => {
