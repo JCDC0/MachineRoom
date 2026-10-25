@@ -238,6 +238,78 @@ export function readAllLanes(options = {}) {
   return all
 }
 
+export function createAgentLane(body, {
+  runsFolder: runsDir,
+  lanes = {},
+  env = process.env,
+  activeLanes = null,
+  notify = null,
+} = {}) {
+  if (body?.confirmed !== true) {
+    return { ok: false, status: 400, error: CONFIRM_CREATE_PROBLEM }
+  }
+
+  const name = typeof body?.name === 'string' ? body.name.trim() : ''
+  if (!name || name.length > 40) {
+    return { ok: false, status: 400, error: NAME_LENGTH_PROBLEM }
+  }
+
+  const harness = typeof body?.harness === 'string' ? body.harness.trim() : ''
+  const baseLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
+  const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env })
+  if (!available) {
+    return { ok: false, status: 400, error: harnessUnavailableProblem(harness) }
+  }
+
+  const allowedModels = MODELS.filter((m) => m.harness === harness).map((m) => m.id)
+  const model = typeof body?.model === 'string' ? body.model.trim() : ''
+  if (!allowedModels.includes(model)) {
+    return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
+  }
+
+  const allowedEfforts = HARNESS_EFFORTS[harness] ?? []
+  let effort = null
+  if (body?.effort !== undefined && body?.effort !== null && body?.effort !== '') {
+    const effortText = String(body.effort).trim()
+    if (!allowedEfforts.includes(effortText)) {
+      return { ok: false, status: 400, error: effortUnavailableProblem(body.effort, harness) }
+    }
+    effort = effortText
+  }
+
+  const runs = runsDir ?? runsFolder()
+  const { agents } = readAgentsConfig(runs)
+  if (agents.length >= MAX_AGENTS) {
+    return { ok: false, status: 400, error: MAX_AGENTS_PROBLEM }
+  }
+
+  const key = nextFreeKey(harness, baseLanes, agents)
+  const newAgent = {
+    key,
+    name,
+    harness,
+    model,
+    effort,
+    createdAt: new Date().toISOString(),
+  }
+
+  agents.push(newAgent)
+  saveAgentsConfig(runs, { agents })
+
+  const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+  if (active && typeof active.isChosen === 'function' && active.isChosen()) {
+    if (typeof active.addActiveLane === 'function') {
+      active.addActiveLane(key)
+    }
+  }
+
+  if (typeof notify === 'function') {
+    notify({ topic: 'agents' })
+  }
+
+  return { ok: true, status: 200, agent: newAgent }
+}
+
 export function createAgentsConfigApi(options = {}) {
   const runsDir = options.runsFolder ?? runsFolder()
   const sendJson = options.sendJson
@@ -276,74 +348,19 @@ export function createAgentsConfigApi(options = {}) {
       const body = await readJsonBody(req, res)
       if (body === null) return true
 
-      if (body.confirmed !== true) {
-        sendJson(req, res, 400, { error: CONFIRM_CREATE_PROBLEM })
+      const result = createAgentLane(body, {
+        runsFolder: runsDir,
+        lanes: getBaseLanes,
+        env,
+        activeLanes,
+        notify,
+      })
+      if (!result.ok) {
+        sendJson(req, res, result.status, { error: result.error })
         return true
       }
 
-      const name = typeof body.name === 'string' ? body.name.trim() : ''
-      if (!name || name.length > 40) {
-        sendJson(req, res, 400, { error: NAME_LENGTH_PROBLEM })
-        return true
-      }
-
-      const harness = typeof body.harness === 'string' ? body.harness.trim() : ''
-      const baseLanes = getBaseLanes()
-      const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env })
-      if (!available) {
-        sendJson(req, res, 400, { error: harnessUnavailableProblem(harness) })
-        return true
-      }
-
-      const allowedModels = MODELS.filter((m) => m.harness === harness).map((m) => m.id)
-      const model = typeof body.model === 'string' ? body.model.trim() : ''
-      if (!allowedModels.includes(model)) {
-        sendJson(req, res, 400, { error: modelUnavailableProblem(body.model, harness) })
-        return true
-      }
-
-      const allowedEfforts = HARNESS_EFFORTS[harness] ?? []
-      let effort = null
-      if (body.effort !== undefined && body.effort !== null && body.effort !== '') {
-        const effortText = String(body.effort).trim()
-        if (!allowedEfforts.includes(effortText)) {
-          sendJson(req, res, 400, { error: effortUnavailableProblem(body.effort, harness) })
-          return true
-        }
-        effort = effortText
-      }
-
-      const { agents } = readAgentsConfig(runsDir)
-      if (agents.length >= MAX_AGENTS) {
-        sendJson(req, res, 400, { error: MAX_AGENTS_PROBLEM })
-        return true
-      }
-
-      const key = nextFreeKey(harness, baseLanes, agents)
-      const newAgent = {
-        key,
-        name,
-        harness,
-        model,
-        effort,
-        createdAt: new Date().toISOString(),
-      }
-
-      agents.push(newAgent)
-      saveAgentsConfig(runsDir, { agents })
-
-      const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
-      if (active && typeof active.isChosen === 'function' && active.isChosen()) {
-        if (typeof active.addActiveLane === 'function') {
-          active.addActiveLane(key)
-        }
-      }
-
-      if (typeof notify === 'function') {
-        notify({ topic: 'agents' })
-      }
-
-      sendJson(req, res, 200, newAgent)
+      sendJson(req, res, 200, result.agent)
       return true
     }
 

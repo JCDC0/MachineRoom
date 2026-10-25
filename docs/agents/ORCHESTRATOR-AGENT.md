@@ -79,6 +79,10 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 - Start a lane for a sub by adding `"startedBy": "frontend"` to the run body. That run's end wakes the sub, not you.
 - A sub reports back as a message from `sub:frontend` in your chat. Treat it as a lane report.
 
+## Propose an agent
+
+To add an agent, post a proposal with your token and a reason, tell the owner in your reply, and never act as if it was approved until the room says so.
+
 ## When a run ends
 
 - Read its record in `{{RUNS}}/runs.jsonl` and its log.
