@@ -8209,3 +8209,241 @@ body:has(#hud-orchestrator-chat) .waiting {
     top: calc(var(--menu-h) + var(--lens-h) - 96px);
   }
 }
+
+/* U43: the family tree at the top of the sidebar */
+.mr-family {
+  flex: 0 0 auto;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-family-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.mr-family-node {
+  display: flex;
+  flex-direction: column;
+}
+
+.mr-family-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.mr-family-indent {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+}
+
+.mr-family-vline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(255 255 255 / 0.14);
+}
+
+.mr-family-hline {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 1px;
+  background: rgb(255 255 255 / 0.14);
+}
+
+.mr-family .mr-family-open {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 2px;
+  border-left: 2px solid transparent;
+  border-radius: 2px;
+}
+
+.mr-family .mr-family-open:hover,
+.mr-family .mr-family-open[aria-expanded='true'] {
+  border-left-color: var(--yellow);
+  background: rgb(255 255 255 / 0.05);
+}
+
+.mr-family-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mr-family-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-family-kind {
+  flex: 0 0 auto;
+  padding: 0 3px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 2px;
+  font-size: 7px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.32);
+}
+
+.mr-family-meta {
+  width: 100%;
+  overflow: hidden;
+  font-size: 8px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.35);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-family-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.25);
+}
+
+.mr-family-dot.is-working {
+  background: var(--yellow);
+  box-shadow: 0 0 6px rgb(229 255 0 / 0.6);
+}
+
+.mr-family-dot.is-off {
+  background: transparent;
+  border: 1px solid rgb(255 255 255 / 0.25);
+}
+
+.mr-family-row .mr-side-switch {
+  margin-top: 5px;
+}
+
+.mr-family .mr-family-add {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  color: rgb(255 255 255 / 0.5);
+  text-align: center;
+}
+
+.mr-family .mr-family-add:hover:not(:disabled),
+.mr-family .mr-family-add[aria-expanded='true'] {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.mr-family-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 6px;
+  padding: 6px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.mr-family-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+
+.mr-family-group {
+  margin: 6px 4px 2px;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.32);
+}
+
+.mr-family-request {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px 6px;
+  border: 1px solid rgb(255 255 255 / 0.12);
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.mr-family-request-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  margin: 0;
+  font-size: 10px;
+}
+
+.mr-family-request-meta {
+  margin: 0;
+  font-size: 8px;
+  color: rgb(255 255 255 / 0.4);
+}
+
+.mr-family-request-reason {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.mr-family-request-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.mr-family-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px;
+  border: 1px dashed rgb(255 255 255 / 0.14);
+  border-radius: 3px;
+}
+
+.mr-family-key-actions,
+.mr-family-key-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mr-family-note {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.mr-family-note.is-error {
+  color: var(--red);
+}
+
+.mr-family-confirm-detail {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.5);
+}
