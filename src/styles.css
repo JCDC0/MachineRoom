@@ -8209,3 +8209,17 @@ body:has(#hud-orchestrator-chat) .waiting {
     top: calc(var(--menu-h) + var(--lens-h) - 96px);
   }
 }
+
+/* Hamburger icons mark the dropdowns */
+.mr-menu-icon {
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+  opacity: 0.8;
+}
+
+.hud-band-v,
+.hud-lower-picker-v {
+  display: inline-flex;
+  align-items: center;
+}

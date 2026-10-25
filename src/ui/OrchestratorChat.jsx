@@ -1,4 +1,5 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react'
+import MenuIcon from './MenuIcon.jsx'
 import CompactCard from './AgentStrip.jsx'
 import {
   contextLine,
@@ -1020,8 +1021,8 @@ export default function OrchestratorChat({
                 >
                   <span>Model:</span>
                   <span className="hud-lower-picker-value mono">{shownModel}</span>
-                  <span className="hud-lower-picker-v mono" aria-hidden="true">
-                    V
+                  <span className="hud-lower-picker-v" aria-hidden="true">
+                    <MenuIcon />
                   </span>
                 </button>
                 <button
@@ -1033,8 +1034,8 @@ export default function OrchestratorChat({
                 >
                   <span>Effort:</span>
                   <span className="hud-lower-picker-value mono">{shownEffort}</span>
-                  <span className="hud-lower-picker-v mono" aria-hidden="true">
-                    V
+                  <span className="hud-lower-picker-v" aria-hidden="true">
+                    <MenuIcon />
                   </span>
                 </button>
                 <button

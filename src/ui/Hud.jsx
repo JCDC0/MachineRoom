@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import MenuIcon from './MenuIcon.jsx'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
@@ -621,7 +622,7 @@ export default function Hud({
                 aria-label={`Orchestrator conversations, showing ${conversationTitle}`}
                 onClick={() => setChatListOpen((open) => !open)}
               >
-                <span className="hud-band-v mono" aria-hidden="true">V</span>
+                <span className="hud-band-v" aria-hidden="true"><MenuIcon /></span>
                 <span className="hud-band-title">{conversationTitle}</span>
               </button>
               {chatListOpen && (

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A small hamburger icon (`MenuIcon.jsx`) marks each dropdown, the conversation switch in the top band and the model and effort pickers, in place of the letter V.
 - The folder lines rest dimmer (0.1 instead of 0.22) and the root project card draws no faint folders behind it, since its folders already stand in the room.
 - The overview camera aims at the hub centre and only fits its distance to the cards, so the ring sits in the middle of the lens instead of the middle of all the cards. The live badge sits inside the lens's bottom left corner at 900 pixels and wider, off the chat input.
 - The roster tests point their lanes at Node's own program, so they pass on a computer without Claude Code or OpenCode, as CI is.
