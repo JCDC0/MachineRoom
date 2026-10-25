@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The top band shows `/NAME` and the orchestrator conversation list at 900 pixels and wider, the lens moves its labels and shows the clock, brackets and the waiting card inside it, and the tour and guide texts say how the dock picks an agent and where `/` leads (task U30).
+
 - The README names the five drawer tabs and the sample costs in a replay, ARCHITECTURE names the dock fallback and the tour's terminal chip, and TASKS marks its old path split as history (task D13).
 
 - The guide tests click Take the tour and the help panel's Guide button in a DOM, the tour selectors are found in the rendered HUD, and the camera test fits a wide lens instead of the window (task T24).

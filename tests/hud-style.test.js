@@ -256,6 +256,52 @@ describe('HUD concept style structure', () => {
     }
   })
 
+  it('shows the project and conversation band at 900 pixels wide', () => {
+    const savedWindow = globalThis.window
+    const storage = {
+      getItem: (key) => (key === 'machineroom.guide' ? '1' : null),
+      setItem: () => {},
+    }
+    globalThis.window = {
+      innerWidth: 1200,
+      location: { search: '' },
+      localStorage: storage,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }
+    try {
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot: SAMPLE_SNAPSHOT,
+          speeds: [1, 2, 4],
+          project: '/agent-sandbox',
+        })
+      )
+      expect(html).toContain('class="hud-band"')
+      expect(html).toContain('class="hud-band-project">/agent-sandbox')
+      expect(html).toContain('hud-band-v mono')
+      expect(html).toContain('hud-band-title">Main')
+      expect(html).toContain('aria-label="Orchestrator conversations, showing Main"')
+      expect(html).not.toContain('class="hud-header-strip"')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
+  })
+
+  it('defines the lens brackets and the waiting card inside the lens in styles.css', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    expect(css).toContain('.hud-band-project')
+    expect(css).toContain('.lens-corner.is-center')
+    expect(css).toContain('.lens-clock')
+    expect(css).toContain('.lens-brackets')
+    expect(css).toContain('.lens-mark.is-top-left')
+    expect(css).toContain('.lens-mark.is-bottom-right')
+    expect(css).toContain('border-color: rgb(255 255 255 / 0.3)')
+    expect(css).toMatch(/@media \(min-width: 900px\) \{\n  \.waiting \{/)
+  })
+
   it('defines corner ticks, 0.04em title spacing, and faint red scanlines in styles.css', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('--corner-ticks:')

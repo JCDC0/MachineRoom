@@ -12,7 +12,7 @@ export const GUIDE_STEPS = [
   },
   {
     label: 'The dock',
-    text: "The dock below has three columns: the agent list on the left, the selected agent's context in the middle, and the settings and costs on the right.",
+    text: 'The dock has three columns: the agent list on the left, the selected agent, else the first working, else the orchestrator in the middle, and the settings and costs on the right.',
   },
   {
     label: 'The tunnel',
@@ -20,11 +20,11 @@ export const GUIDE_STEPS = [
   },
   {
     label: 'The chat',
-    text: 'The orchestrator chat sits at the bottom right: press / or click ORCHESTRATOR, Attach adds a sub orchestrator, and its tabs switch between them.',
+    text: 'The orchestrator chat sits at the bottom right when the room runs with --lanes: press / or click ORCHESTRATOR, Attach adds a sub orchestrator, and its tabs switch between them.',
   },
   {
     label: 'The keys',
-    text: 'C opens the control drawer, L the event log, T an agent log, F follow mode, 0 the overview, and ? lists every key.',
+    text: 'C opens the control drawer, L the event log, T an agent log, F follow mode, 0 the overview, / opens the chat with --lanes or the assistant in a replay, and ? lists every key.',
   },
 ]
 
@@ -37,7 +37,7 @@ export const TOUR_STEPS = [
   {
     label: 'The hub and an agent',
     selector: '.mr-term',
-    text: 'The hub ring in the middle splits into sector arcs for sub orchestrators, each agent parks at its slot with a terminal chip beside it, and the main orchestrator floats above the centre.',
+    text: 'The hub ring in the middle splits into sector arcs for sub orchestrators, the main orchestrator floats above the centre, and the outlined terminal chip beside an agent opens its log.',
   },
   {
     label: 'A working tunnel',
@@ -49,7 +49,7 @@ export const TOUR_STEPS = [
   {
     label: 'The agent list',
     selector: '.hud-dock-agents, .hud-strip',
-    text: 'The dock lists the main orchestrator first, then each sub orchestrator sector and the Main group, with working lanes above the collapsible idle row and number keys to focus them.',
+    text: 'The dock shows the selected agent, else the first working agent, else the orchestrator, and lists the main orchestrator first, then each sub and the Main group, with number keys to focus them.',
   },
   {
     label: 'The agent context',
@@ -69,7 +69,7 @@ export const TOUR_STEPS = [
   {
     label: 'Control and orchestrator',
     selector: '.hud-actions',
-    text: 'CONTROL or C opens Dispatch, Tasks, Meters and Reviews, ORCHESTRATOR or / opens the orchestrator chat and its sector tabs, and ? lists every key.',
+    text: 'CONTROL or C opens Dispatch, Tasks, Meters, Team and Reviews; with --lanes, ORCHESTRATOR or / opens the orchestrator chat, and in a replay / opens the assistant; ? lists every key.',
   },
 ]
 

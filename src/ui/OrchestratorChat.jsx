@@ -244,6 +244,8 @@ export default function OrchestratorChat({
   client = null,
   open = true,
   onClose,
+  selected: selectedTab = undefined,
+  onSelect = null,
   initialChat = null,
   initialDraft = '',
   initialConfirm = null,
@@ -254,9 +256,11 @@ export default function OrchestratorChat({
 }) {
   const [chats, setChats] = useState(() => ({ orchestrator: initialChatState(initialChat) }))
   const [list, setList] = useState(() => initialList(initialOrchestrators))
-  const [selected, setSelected] = useState(() =>
+  const [ownSelected, setOwnSelected] = useState(() =>
     typeof initialSelected === 'string' && initialSelected ? initialSelected : 'orchestrator'
   )
+  const controlled = typeof selectedTab === 'string' && selectedTab !== ''
+  const selected = controlled ? selectedTab : ownSelected
   const [loadedIds, setLoadedIds] = useState(() => (initialChat ? { orchestrator: true } : {}))
   const [draft, setDraft] = useState(() => clampDraft(initialDraft))
   const [confirm, setConfirm] = useState(() =>
@@ -451,8 +455,13 @@ export default function OrchestratorChat({
 
   useEffect(() => {
     if (selected === 'orchestrator' || list.length === 0) return
-    if (!list.some((entry) => entry.id === selected)) setSelected('orchestrator')
+    if (!list.some((entry) => entry.id === selected)) changeSelected('orchestrator')
   }, [list, selected])
+
+  function changeSelected(id) {
+    if (controlled) onSelect?.(id)
+    else setOwnSelected(id)
+  }
 
   async function deliver(text, id = selected) {
     if (!client) {
@@ -531,7 +540,7 @@ export default function OrchestratorChat({
 
   function selectTab(id) {
     if (id === selected) return
-    setSelected(id)
+    changeSelected(id)
     setConfirm(null)
     setConfirmSub(null)
     setDetach(null)
@@ -606,7 +615,7 @@ export default function OrchestratorChat({
       setForm(null)
       setIdTouched(false)
       await readListRef.current?.()
-      setSelected(id)
+      changeSelected(id)
     } catch (failure) {
       const nextProblems = Array.isArray(failure?.problems) ? failure.problems : []
       setProblems(nextProblems)
@@ -633,7 +642,7 @@ export default function OrchestratorChat({
       setForm(null)
       setIdTouched(false)
       await readListRef.current?.()
-      if (selected === id) setSelected('orchestrator')
+      if (selected === id) changeSelected('orchestrator')
     } catch (failure) {
       const nextProblems = Array.isArray(failure?.problems) ? failure.problems : []
       setProblems(nextProblems)

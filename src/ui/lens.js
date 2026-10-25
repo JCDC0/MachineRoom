@@ -6,6 +6,30 @@ function isSubOrchestrator(agent) {
   return typeof agent.key === 'string' && agent.key.trim().startsWith('sub-')
 }
 
+function pad(value) {
+  return String(value).padStart(2, '0')
+}
+
+export function lensProject(name) {
+  const text = typeof name === 'string' ? name.trim() : ''
+  if (!text) return '/'
+  return text.startsWith('/') ? text : `/${text}`
+}
+
+export function lensClock(live, position, now = Date.now()) {
+  if (live) {
+    const date = new Date(now)
+    if (!Number.isFinite(date.getTime())) return '00:00:00'
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+  }
+  const value = Number(position)
+  const total = Number.isFinite(value) ? Math.max(0, Math.floor(value / 1000)) : 0
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`
+}
+
 export function lensStatus(agents, log) {
   const roster = Array.isArray(agents) ? agents : []
   const lanes = roster
