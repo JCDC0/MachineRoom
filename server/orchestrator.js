@@ -29,7 +29,12 @@ export const ORCHESTRATOR_ROOM_WINDOW_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
 export const DEFAULT_CONTEXT_WINDOW = 200000
 export const AUTOCOMPACT_SHARE = 0.8
+export const DEFAULT_AUTOCOMPACT_MODE = 'percent'
+export const DEFAULT_AUTOCOMPACT_VALUE = 80
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
+export const COMPACT_RULES_LIMIT = 2000
+export const DEFAULT_COMPACT_RULES =
+  "keep the owner's goals and standing rules in the owner's words, the decisions made and why, each lane run started with its branch and result, the files changed, what is unfinished or blocked, and the next steps; leave out tool output, logs and work already merged and checked."
 export const COMPACT_PROMPT =
   'Write a summary of the work so far, the open runs and the next steps, in at most 40 lines. Reply with the summary only.'
 export const COMPACTED_MESSAGE = 'The session was compacted. The next turn starts a new session with the summary.'
@@ -39,7 +44,10 @@ export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first
 export const CONFIRM_COMPACT_PROBLEM = 'Confirm the compact first.'
 export const CONFIRM_MODEL_PROBLEM = 'Confirm the model change first.'
 export const AUTOCOMPACT_PROBLEM = 'Say whether autocompact is on or off.'
-export const AUTOCOMPACT_PERCENT_PROBLEM = 'Percent must be a whole number from 50 to 95.'
+export const AUTOCOMPACT_MODE_PROBLEM = 'Mode must be percent or tokens.'
+export const AUTOCOMPACT_PERCENT_PROBLEM = 'Percent must be a number above 0 and at most 100.'
+export const AUTOCOMPACT_TOKENS_PROBLEM = 'Tokens must be a whole number from 1000 to 10000000.'
+export const AUTOCOMPACT_RULES_PROBLEM = 'Compact rules must be at most 2000 characters.'
 export const COMPACT_RUNNING_PROBLEM = 'A turn is already running.'
 export const NO_SESSION_PROBLEM = 'The orchestrator has no session yet.'
 export const COMPACT_KEEP_LIMIT = 2000
@@ -276,9 +284,10 @@ export function contextTokensFromLog(harness, log) {
   return found
 }
 
-export function compactPrompt(keep = '') {
-  const text = typeof keep === 'string' ? keep.trim() : ''
-  if (!text) return COMPACT_PROMPT
+export function compactPrompt(keep = '', rules = '') {
+  const manual = typeof keep === 'string' ? keep.trim() : ''
+  const ownerRules = typeof rules === 'string' ? rules.trim() : ''
+  const text = manual || ownerRules || DEFAULT_COMPACT_RULES
   return `${COMPACT_PROMPT}\n\nKeep these in the summary:\n${text}`
 }
 
@@ -413,7 +422,9 @@ export function createOrchestrator({
   let contextTokens = null
   let contextWindow = windowOption || DEFAULT_CONTEXT_WINDOW
   let autocompact = true
-  let autocompactPercent = DEFAULT_AUTOCOMPACT_PERCENT
+  let autocompactMode = DEFAULT_AUTOCOMPACT_MODE
+  let autocompactValue = DEFAULT_AUTOCOMPACT_VALUE
+  let compactRules = ''
   let effort = null
   let currentSessionId = null
   let currentTitle = null
@@ -452,7 +463,10 @@ export function createOrchestrator({
         contextTokens,
         contextWindow,
         autocompact,
-        autocompactPercent,
+        autocompactMode,
+        autocompactValue,
+        compactRules,
+        autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
         effort,
         currentSessionId,
         currentTitle,
@@ -535,13 +549,31 @@ export function createOrchestrator({
     if (saved.state === 'paused') state = 'paused'
     if (saved.ladder && typeof saved.ladder === 'object' && !Array.isArray(saved.ladder)) ladder = saved.ladder
     if (typeof saved.autocompact === 'boolean') autocompact = saved.autocompact
-    if (
+    if (saved.autocompactMode === 'percent' || saved.autocompactMode === 'tokens') {
+      autocompactMode = saved.autocompactMode
+      if (typeof saved.autocompactValue === 'number' && Number.isFinite(saved.autocompactValue)) {
+        if (autocompactMode === 'percent' && saved.autocompactValue > 0 && saved.autocompactValue <= 100) {
+          autocompactValue = saved.autocompactValue
+        } else if (
+          autocompactMode === 'tokens' &&
+          Number.isInteger(saved.autocompactValue) &&
+          saved.autocompactValue >= 1000 &&
+          saved.autocompactValue <= 10000000
+        ) {
+          autocompactValue = saved.autocompactValue
+        }
+      }
+    } else if (
       typeof saved.autocompactPercent === 'number' &&
-      Number.isInteger(saved.autocompactPercent) &&
-      saved.autocompactPercent >= 50 &&
-      saved.autocompactPercent <= 95
+      Number.isFinite(saved.autocompactPercent) &&
+      saved.autocompactPercent > 0 &&
+      saved.autocompactPercent <= 100
     ) {
-      autocompactPercent = saved.autocompactPercent
+      autocompactMode = 'percent'
+      autocompactValue = saved.autocompactPercent
+    }
+    if (typeof saved.compactRules === 'string') {
+      compactRules = saved.compactRules.slice(0, COMPACT_RULES_LIMIT)
     }
     if (typeof saved.contextTokens === 'number' && Number.isFinite(saved.contextTokens) && saved.contextTokens >= 0) {
       contextTokens = Math.round(saved.contextTokens)
@@ -719,7 +751,7 @@ export function createOrchestrator({
       setState('idle')
       return
     }
-    const message = compaction ? compactPrompt(keepText) : turnText(turnMessages)
+    const message = compaction ? compactPrompt(keepText, compactRules) : turnText(turnMessages)
     const baseInstruction = instructionFor(
       promptFile,
       root,
@@ -843,7 +875,12 @@ export function createOrchestrator({
       if (!stopped) maybeStartTurn()
       return
     }
-    if (autocompact && sessionId && contextTokens !== null && contextTokens / contextWindow >= autocompactPercent / 100) {
+    const contextPastRule =
+      contextTokens !== null &&
+      (autocompactMode === 'tokens'
+        ? contextTokens >= autocompactValue
+        : contextWindow > 0 && (contextTokens / contextWindow) * 100 >= autocompactValue)
+    if (autocompact && sessionId && contextPastRule) {
       pendingCompaction = { keep: '' }
     }
     if (!stopped) {
@@ -864,7 +901,10 @@ export function createOrchestrator({
       contextTokens,
       contextWindow,
       autocompact,
-      autocompactPercent,
+      autocompactMode,
+      autocompactValue,
+      compactRules,
+      autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
       effort: effort ?? null,
       messages: messages.map((message) => ({ ...message })),
     }
@@ -907,22 +947,80 @@ export function createOrchestrator({
 
   function setAutocompact(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_AUTOCOMPACT_PROBLEM } }
-    if (body.on === undefined && body.percent === undefined) {
+    if (
+      body.on === undefined &&
+      body.mode === undefined &&
+      body.value === undefined &&
+      body.rules === undefined &&
+      body.percent === undefined
+    ) {
       return { status: 400, body: { error: AUTOCOMPACT_PROBLEM } }
     }
     if (body.on !== undefined && typeof body.on !== 'boolean') {
       return { status: 400, body: { error: AUTOCOMPACT_PROBLEM } }
     }
+    if (body.mode !== undefined && body.mode !== 'percent' && body.mode !== 'tokens') {
+      return { status: 400, body: { error: AUTOCOMPACT_MODE_PROBLEM } }
+    }
+    const targetMode = body.mode !== undefined ? body.mode : (body.percent !== undefined ? 'percent' : autocompactMode)
+
     if (body.percent !== undefined) {
-      if (typeof body.percent !== 'number' || !Number.isInteger(body.percent) || body.percent < 50 || body.percent > 95) {
+      if (typeof body.percent !== 'number' || !Number.isFinite(body.percent) || body.percent <= 0 || body.percent > 100) {
         return { status: 400, body: { error: AUTOCOMPACT_PERCENT_PROBLEM } }
       }
     }
+
+    if (body.value !== undefined) {
+      if (targetMode === 'percent') {
+        if (typeof body.value !== 'number' || !Number.isFinite(body.value) || body.value <= 0 || body.value > 100) {
+          return { status: 400, body: { error: AUTOCOMPACT_PERCENT_PROBLEM } }
+        }
+      } else if (targetMode === 'tokens') {
+        if (typeof body.value !== 'number' || !Number.isInteger(body.value) || body.value < 1000 || body.value > 10000000) {
+          return { status: 400, body: { error: AUTOCOMPACT_TOKENS_PROBLEM } }
+        }
+      }
+    } else if (body.mode !== undefined && body.percent === undefined) {
+      if (body.mode === 'percent') {
+        if (typeof autocompactValue !== 'number' || !Number.isFinite(autocompactValue) || autocompactValue <= 0 || autocompactValue > 100) {
+          return { status: 400, body: { error: AUTOCOMPACT_PERCENT_PROBLEM } }
+        }
+      } else if (body.mode === 'tokens') {
+        if (typeof autocompactValue !== 'number' || !Number.isInteger(autocompactValue) || autocompactValue < 1000 || autocompactValue > 10000000) {
+          return { status: 400, body: { error: AUTOCOMPACT_TOKENS_PROBLEM } }
+        }
+      }
+    }
+
+    if (body.rules !== undefined && body.rules !== null) {
+      if (typeof body.rules !== 'string' || body.rules.length > COMPACT_RULES_LIMIT) {
+        return { status: 400, body: { error: AUTOCOMPACT_RULES_PROBLEM } }
+      }
+    }
+
     if (typeof body.on === 'boolean') autocompact = body.on
-    if (body.percent !== undefined) autocompactPercent = body.percent
+    if (body.mode !== undefined) autocompactMode = body.mode
+    if (body.value !== undefined) autocompactValue = body.value
+    if (body.percent !== undefined) {
+      autocompactMode = 'percent'
+      autocompactValue = body.percent
+    }
+    if (body.rules !== undefined) {
+      compactRules = body.rules === null ? '' : body.rules
+    }
     persist()
     notify()
-    return { status: 200, body: { id: key, autocompact, autocompactPercent } }
+    return {
+      status: 200,
+      body: {
+        id: key,
+        autocompact,
+        autocompactMode,
+        autocompactValue,
+        compactRules,
+        autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
+      },
+    }
   }
 
   function compact(body) {

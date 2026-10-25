@@ -4,6 +4,8 @@
 
 - The sidebar's Agents roster sits at the top, open: the orchestrators and every lane with their harness, model, effort and autocompact percent, inline editors behind confirm cards, and Add agent from the harnesses on this computer (task U39).
 - The Compact card and the agent dock ask for autocompact with one plain number in percent or tokens, convert between them through the context window, show where it compacts, and keep the owner's compact rules or name the default ones (task U40).
+- Compact by tokens or percent with autocompactMode, autocompactValue and default compactRules per orchestrator (task O14).
+
 - Log and Settings open from the menu as dropdowns under it, like Control, at every width; the Overview card keeps Agent and Costs, and the sidebar's Settings opens the same dropdown. The fine dust is soft round specks in three sizes that grow as the camera nears them, not 3 pixel points.
 - The root card sits in the park space just under the hub ring, every top-level folder's string ends there, strings brighten only on a working agent's path, each lane has a faint grey line to the main orchestrator, and packets start at the agent's centre on its tunnel (task U38).
 

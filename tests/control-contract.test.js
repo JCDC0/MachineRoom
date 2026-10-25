@@ -410,6 +410,9 @@ describe('the mock client still answers the contract', () => {
     const client = createMockClient({ latencyMs: 0 })
     expect((await client.orchestrator()).autocompact).toBe(true)
     expect((await client.orchestrator()).autocompactPercent).toBe(80)
+    expect((await client.orchestrator()).autocompactMode).toBe('percent')
+    expect((await client.orchestrator()).autocompactValue).toBe(80)
+    expect((await client.orchestrator()).compactRules).toBe('')
     await client.setAutocompact('orchestrator', false)
     expect((await client.orchestrator()).autocompact).toBe(false)
     expect((await client.orchestrators()).find((entry) => entry.id === 'orchestrator').autocompact).toBe(false)
@@ -419,8 +422,24 @@ describe('the mock client still answers the contract', () => {
     await client.setAutocompact('orchestrator', true, 75)
     expect((await client.orchestrator()).autocompact).toBe(true)
     expect((await client.orchestrator()).autocompactPercent).toBe(75)
+    expect((await client.orchestrator()).autocompactValue).toBe(75)
+    await client.setAutocompact('orchestrator', { on: true, mode: 'tokens', value: 50000, rules: 'Keep decisions.' })
+    expect((await client.orchestrator()).autocompactMode).toBe('tokens')
+    expect((await client.orchestrator()).autocompactValue).toBe(50000)
+    expect((await client.orchestrator()).compactRules).toBe('Keep decisions.')
     await expect(client.setAutocompact('orchestrator', 'yes')).rejects.toThrow('Say whether autocompact is on or off.')
-    await expect(client.setAutocompact('orchestrator', true, 40)).rejects.toThrow('Percent must be a whole number from 50 to 95.')
+    await expect(client.setAutocompact('orchestrator', true, 0)).rejects.toThrow('Percent must be a number above 0 and at most 100.')
+    await expect(client.setAutocompact('orchestrator', true, 105)).rejects.toThrow('Percent must be a number above 0 and at most 100.')
+    await expect(client.setAutocompact('orchestrator', { mode: 'tokens', value: 999 })).rejects.toThrow(
+      'Tokens must be a whole number from 1000 to 10000000.'
+    )
+    await expect(client.setAutocompact('orchestrator', { mode: 'tokens', value: 10000001 })).rejects.toThrow(
+      'Tokens must be a whole number from 1000 to 10000000.'
+    )
+    await expect(client.setAutocompact('orchestrator', { mode: 'invalid' })).rejects.toThrow('Mode must be percent or tokens.')
+    await expect(client.setAutocompact('orchestrator', { rules: 'x'.repeat(2001) })).rejects.toThrow(
+      'Compact rules must be at most 2000 characters.'
+    )
   })
 
   it('compacts an orchestrator and sets its model on the mock', async () => {
@@ -523,6 +542,7 @@ describe('the control client orchestrator routes', () => {
     const { calls, client } = recorder({ id: 'frontend', autocompact: false, autocompactPercent: 75 })
     await client.setAutocompact('frontend', false)
     await client.setAutocompact(undefined, true, 75)
+    await client.setAutocompact({ id: 'frontend', on: true, mode: 'tokens', value: 20000, rules: 'Keep tests' })
     expect(calls).toEqual([
       {
         url: 'http://127.0.0.1:9/api/orchestrator/autocompact',
@@ -533,6 +553,11 @@ describe('the control client orchestrator routes', () => {
         url: 'http://127.0.0.1:9/api/orchestrator/autocompact',
         method: 'POST',
         body: JSON.stringify({ id: 'orchestrator', on: true, percent: 75, confirmed: true }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/autocompact',
+        method: 'POST',
+        body: JSON.stringify({ id: 'frontend', on: true, mode: 'tokens', value: 20000, rules: 'Keep tests', confirmed: true }),
       },
     ])
   })

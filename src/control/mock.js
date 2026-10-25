@@ -342,6 +342,9 @@ function seed(at) {
       contextTokens: 96000,
       contextWindow: 200000,
       autocompact: true,
+      autocompactMode: 'percent',
+      autocompactValue: 80,
+      compactRules: '',
       autocompactPercent: 80,
       effort: null,
       sessions: [
@@ -430,6 +433,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       contextTokens: null,
       contextWindow: 200000,
       autocompact: true,
+      autocompactMode: 'percent',
+      autocompactValue: 80,
+      compactRules: '',
       autocompactPercent: 80,
       effort: null,
       sessions: [],
@@ -467,6 +473,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         contextTokens: state.orchestratorChat.contextTokens,
         contextWindow: state.orchestratorChat.contextWindow,
         autocompact: state.orchestratorChat.autocompact,
+        autocompactMode: state.orchestratorChat.autocompactMode ?? 'percent',
+        autocompactValue: state.orchestratorChat.autocompactValue ?? 80,
+        compactRules: state.orchestratorChat.compactRules ?? '',
         autocompactPercent: state.orchestratorChat.autocompactPercent ?? 80,
         effort: state.orchestratorChat.effort ?? null,
         lanes: MOCK_LANE_KEYS.filter((lane) => !claimed.has(lane)),
@@ -483,6 +492,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         contextTokens: ensureSubChat(sub).contextTokens,
         contextWindow: ensureSubChat(sub).contextWindow,
         autocompact: ensureSubChat(sub).autocompact,
+        autocompactMode: ensureSubChat(sub).autocompactMode ?? 'percent',
+        autocompactValue: ensureSubChat(sub).autocompactValue ?? 80,
+        compactRules: ensureSubChat(sub).compactRules ?? '',
         autocompactPercent: ensureSubChat(sub).autocompactPercent ?? 80,
         effort: ensureSubChat(sub).effort ?? null,
         lanes: [...sub.lanes],
@@ -811,36 +823,98 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       call('setAutocompact', () => {
         let id
         let on
+        let mode
+        let value
+        let rules
         let percent
         if (typeof idOrOptions === 'object' && idOrOptions !== null) {
           id = idOrOptions.id
           on = idOrOptions.on
+          mode = idOrOptions.mode
+          value = idOrOptions.value
+          rules = idOrOptions.rules
           percent = idOrOptions.percent
         } else {
           id = idOrOptions
           if (typeof onArg === 'object' && onArg !== null) {
             on = onArg.on
+            mode = onArg.mode
+            value = onArg.value
+            rules = onArg.rules
             percent = onArg.percent
           } else {
             on = onArg
             percent = percentArg
           }
         }
-        if (on === undefined && percent === undefined) throw new Error('Say whether autocompact is on or off.')
+        if (
+          on === undefined &&
+          mode === undefined &&
+          value === undefined &&
+          rules === undefined &&
+          percent === undefined
+        ) {
+          throw new Error('Say whether autocompact is on or off.')
+        }
         if (on !== undefined && typeof on !== 'boolean') throw new Error('Say whether autocompact is on or off.')
-        if (percent !== undefined) {
-          if (typeof percent !== 'number' || !Number.isInteger(percent) || percent < 50 || percent > 95) {
-            throw new Error('Percent must be a whole number from 50 to 95.')
-          }
+        if (mode !== undefined && mode !== 'percent' && mode !== 'tokens') {
+          throw new Error('Mode must be percent or tokens.')
         }
         const chat = chatStore(id)
+        const targetMode = mode !== undefined ? mode : (percent !== undefined ? 'percent' : (chat.autocompactMode ?? 'percent'))
+        if (percent !== undefined) {
+          if (typeof percent !== 'number' || !Number.isFinite(percent) || percent <= 0 || percent > 100) {
+            throw new Error('Percent must be a number above 0 and at most 100.')
+          }
+        }
+        if (value !== undefined) {
+          if (targetMode === 'percent') {
+            if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0 || value > 100) {
+              throw new Error('Percent must be a number above 0 and at most 100.')
+            }
+          } else if (targetMode === 'tokens') {
+            if (typeof value !== 'number' || !Number.isInteger(value) || value < 1000 || value > 10000000) {
+              throw new Error('Tokens must be a whole number from 1000 to 10000000.')
+            }
+          }
+        } else if (mode !== undefined && percent === undefined) {
+          const currentVal = chat.autocompactValue ?? chat.autocompactPercent ?? 80
+          if (mode === 'percent') {
+            if (typeof currentVal !== 'number' || !Number.isFinite(currentVal) || currentVal <= 0 || currentVal > 100) {
+              throw new Error('Percent must be a number above 0 and at most 100.')
+            }
+          } else if (mode === 'tokens') {
+            if (typeof currentVal !== 'number' || !Number.isInteger(currentVal) || currentVal < 1000 || currentVal > 10000000) {
+              throw new Error('Tokens must be a whole number from 1000 to 10000000.')
+            }
+          }
+        }
+        if (rules !== undefined && rules !== null) {
+          if (typeof rules !== 'string' || rules.length > 2000) {
+            throw new Error('Compact rules must be at most 2000 characters.')
+          }
+        }
         if (typeof on === 'boolean') chat.autocompact = on
-        if (percent !== undefined) chat.autocompactPercent = percent
+        if (mode !== undefined) chat.autocompactMode = mode
+        if (value !== undefined) chat.autocompactValue = value
+        if (percent !== undefined) {
+          chat.autocompactMode = 'percent'
+          chat.autocompactValue = percent
+          chat.autocompactPercent = percent
+        } else if (chat.autocompactMode === 'percent') {
+          chat.autocompactPercent = chat.autocompactValue
+        }
+        if (rules !== undefined) {
+          chat.compactRules = rules === null ? '' : rules
+        }
         emit({ topic: 'orchestrator' })
         return {
           id: id ?? 'orchestrator',
           autocompact: chat.autocompact,
-          autocompactPercent: chat.autocompactPercent ?? 80,
+          autocompactMode: chat.autocompactMode ?? 'percent',
+          autocompactValue: chat.autocompactValue ?? 80,
+          compactRules: chat.compactRules ?? '',
+          autocompactPercent: chat.autocompactPercent ?? (chat.autocompactMode === 'percent' ? chat.autocompactValue : 80),
         }
       }),
 
