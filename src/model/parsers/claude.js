@@ -7,12 +7,14 @@ const KINDS = [
   [/^(write|create)/i, 'write'],
   [/^(terminal|bash|shell)/i, 'shell'],
   [/^(glob|grep|search|find|ls|list)/i, 'search'],
+  [/^(websearch|webfetch|web_search|web_fetch)/i, 'web'],
 ]
 const FILE_NAME = /^(Read|Edit|MultiEdit|NotebookEdit|Write)\s+(.+)$/i
 const FILE_KINDS = new Set(['read', 'edit', 'write'])
 const STREAM_FILES = new Set(['read', 'write', 'edit', 'multiedit', 'notebookedit'])
 const STREAM_FOLDERS = new Set(['glob', 'grep', 'ls'])
 const STREAM_TASKS = new Set(['task', 'agent'])
+const STREAM_WEB = new Set(['websearch', 'webfetch'])
 const PROFILE_PATH = /(?:[A-Za-z]:[\\/]Users[\\/][^\\/\s"'<>|?*]+|\/(?:home|Users)\/[^/\s"'<>|?*]+)(?:[\\/][^\\/\s"'<>|?*]+)*/g
 const PROFILE_QUOTED = /(["'])((?:[A-Za-z]:[\\/]Users[\\/]|\/(?:home|Users)\/)[^"']*)\1/g
 
@@ -112,6 +114,12 @@ export function createClaudeParser(ctx) {
       call.command = typeof input.command === 'string' ? input.command : ''
       touches = commandTouch(ctx, call.command)
       label = commandLabel(call.command, 'bash')
+    } else if (STREAM_WEB.has(lower)) {
+      call.kind = 'web'
+      const query = typeof input.query === 'string' ? input.query.trim() : ''
+      const url = typeof input.url === 'string' ? input.url.trim() : ''
+      const shown = lower === 'webfetch' ? url : query
+      label = shown ? `web ${lower === 'webfetch' ? 'fetch' : 'search'} ${shorten(shown)}` : `web ${lower === 'webfetch' ? 'fetch' : 'search'}`
     } else if (STREAM_TASKS.has(lower)) {
       const description = typeof input.description === 'string' ? input.description.trim() : ''
       if (input.run_in_background === true) call.background = true

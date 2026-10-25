@@ -3,8 +3,9 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
 import { HUB_CENTER, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
+import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_SHAPE, PREFERRED, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
-import { GREEN, RED, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
+import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 
 const STYLE = {
   idle: { color: WHITE, opacity: 0.35, spin: 0.15 },
@@ -145,6 +146,32 @@ export function orchestratorLineEnds(from, to, out = []) {
   return points
 }
 
+export function webTunnelEnd(agentPlace, internetPlace, radius = INTERNET_RADIUS, out = {}) {
+  const point = out ?? {}
+  const ax = Number.isFinite(Number(agentPlace?.x)) ? Number(agentPlace.x) : 0
+  const ay = Number.isFinite(Number(agentPlace?.y)) ? Number(agentPlace.y) : 0
+  const az = Number.isFinite(Number(agentPlace?.z)) ? Number(agentPlace.z) : 0
+  const ix = Number.isFinite(Number(internetPlace?.x)) ? Number(internetPlace.x) : 0
+  const iy = Number.isFinite(Number(internetPlace?.y)) ? Number(internetPlace.y) : 0
+  const iz = Number.isFinite(Number(internetPlace?.z)) ? Number(internetPlace.z) : 0
+  const dx = ax - ix
+  const dy = ay - iy
+  const dz = az - iz
+  const length = Math.hypot(dx, dy, dz)
+  const reach = Math.max(0, Number.isFinite(Number(radius)) ? Number(radius) : 0)
+  if (!(length > 0) || reach === 0) {
+    point.x = ix
+    point.y = iy
+    point.z = iz
+    return point
+  }
+  const scale = Math.min(1, reach / length)
+  point.x = ix + dx * scale
+  point.y = iy + dy * scale
+  point.z = iz + dz * scale
+  return point
+}
+
 export function packetSpots(now, sends, duration = PACKET_DURATION, reduced = false, out = []) {
   const spots = out ?? []
   spots.length = 0
@@ -182,6 +209,8 @@ function packetPoints() {
 const chipNear = new THREE.Vector3()
 const traceEnd = new THREE.Vector3()
 const stripStart = new THREE.Vector3()
+const webEdgePoint = new THREE.Vector3()
+const webReturnPoint = new THREE.Vector3()
 const calloutPos = new THREE.Vector3()
 const camUp = new THREE.Vector3()
 const rotMatrix = new THREE.Matrix4()
@@ -297,6 +326,62 @@ export function createAgents(scene, roster, cssScene = null) {
     view.packetFractions.length = 0
   }
 
+  function webStart(key, place) {
+    const view = views.get(key)
+    if (!view) return false
+    view.web = true
+    view.webReturnUntil = 0
+    view.webSends.length = 0
+    view.webFractions.length = 0
+    if (place) view.webPlace.set(place.x, place.y, place.z)
+    return true
+  }
+
+  function webEnd(key, now) {
+    const view = views.get(key)
+    if (!view || !view.web) return false
+    view.web = false
+    view.webSends.length = 0
+    for (let index = 0; index < PACKET_BURST; index += 1) {
+      view.webSends.push(now + index * PACKET_BURST_GAP)
+    }
+    view.webFractions.length = 0
+    view.webReturnUntil = now + PACKET_DURATION + (PACKET_BURST - 1) * PACKET_BURST_GAP
+    return true
+  }
+
+  function webActive() {
+    let count = 0
+    for (const view of views.values()) {
+      if (view.web) count += 1
+    }
+    return count
+  }
+
+  function drawReturnPackets(view, now, fade) {
+    const spots = packetSpots(now, view.webSends, PACKET_DURATION, false, view.webFractions)
+    const geometry = view.packets.geometry
+    const attr = geometry.getAttribute('position')
+    const array = attr.array
+    const a = webTunnelEnd(view.group.position, view.webPlace, INTERNET_RADIUS, webReturnPoint)
+    const b = view.group.position
+    const dx = b.x - a.x
+    const dy = b.y - a.y
+    const dz = b.z - a.z
+    for (let index = 0; index < spots.length; index += 1) {
+      const t = spots[index]
+      const base = index * 3
+      array[base] = a.x + dx * t
+      array[base + 1] = a.y + dy * t
+      array[base + 2] = a.z + dz * t
+    }
+    geometry.setDrawRange(0, spots.length)
+    attr.needsUpdate = true
+    view.packets.material.color.setHex(WEB)
+    view.packets.material.opacity = STRIP_OPACITY * fade
+    view.packets.visible = spots.length > 0
+  }
+
   function updatePackets(view, now, fade, sending, from, to) {
     if (sending && (view.packetNextAt === 0 || now >= view.packetNextAt)) {
       queuePacket(view, now)
@@ -391,6 +476,11 @@ export function createAgents(scene, roster, cssScene = null) {
       packetBurstAt: -Infinity,
       stripOpacity: 0,
       stripColor: YELLOW,
+      web: false,
+      webPlace: new THREE.Vector3(),
+      webSends: [],
+      webFractions: [],
+      webReturnUntil: 0,
       home,
       touch: home.clone(),
       aim: null,
@@ -765,32 +855,44 @@ export function createAgents(scene, roster, cssScene = null) {
         view.orchestratorLink.visible = true
       }
 
+      if (view.web && status !== 'working' && status !== 'queued') view.web = false
+      const webOn = view.web && (status === 'working' || status === 'queued')
+      const returning = !isStill && now < view.webReturnUntil
       const pointer = view.pointer ?? (working ? focusPointer(state, entry) : null)
       let color = null
-      if (pointer) {
+      if (webOn) color = WEB
+      else if (pointer) {
         if (working && lastFailed) color = RED
         else if (working) color = YELLOW
         else if (fresh) color = GREEN
         else if (status === 'error') color = RED
       }
-      const stripOn = Boolean(pointer) && color !== null
+      const stripOn = (webOn || Boolean(pointer)) && color !== null
       if (color !== null) view.stripColor = color
       view.stripOpacity += ((stripOn ? STRIP_OPACITY : 0) - view.stripOpacity) * easeRate(delta, 6, isStill)
       const stripVisible = view.stripOpacity > 0.02 && fade > 0.01
       view.strip.visible = stripVisible
-      if (pointer) {
+      if (webOn) {
+        webTunnelEnd(view.group.position, view.webPlace, INTERNET_RADIUS, webEdgePoint)
+      } else if (pointer) {
         view.side = world.side(pointer.dir)
         world.edge(pointer.dir, pointer.file, view.side, traceEnd)
         view.touch.copy(traceEnd)
       } else {
         view.touch.copy(view.home)
       }
+      const stripEnd = webOn ? webEdgePoint : view.touch
       if (stripVisible) {
         stripStart.copy(view.group.position)
-        const [a, b] = stripPoints(stripStart, view.touch, view.stripEnds)
+        const [a, b] = stripPoints(stripStart, stripEnd, view.stripEnds)
         setEnds(view.strip, a, b)
         view.stripMaterial.color.setHex(view.stripColor)
         view.stripMaterial.opacity = view.stripOpacity * fade
+      }
+      if (returning) {
+        drawReturnPackets(view, now, fade)
+      } else if (stripVisible) {
+        const [a, b] = view.stripEnds
         if (!isStill) {
           updatePackets(view, now, fade, status === 'working' && stripOn, a, b)
         } else {
@@ -817,6 +919,10 @@ export function createAgents(scene, roster, cssScene = null) {
       view.side = -1
       view.stripOpacity = 0
       view.strip.visible = false
+      view.web = false
+      view.webSends.length = 0
+      view.webFractions.length = 0
+      view.webReturnUntil = 0
       hidePackets(view)
       view.packetBurstAt = -Infinity
       view.group.position.copy(view.home)
@@ -850,5 +956,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setRoster, dispose, beat, hubCenter: HUB_CENTER }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setRoster, dispose, beat, webStart, webEnd, webActive, hubCenter: HUB_CENTER }
 }

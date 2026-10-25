@@ -6,6 +6,7 @@ import { FOV, OVERVIEW, createCameraRig, fitView, followTarget } from './camera.
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
+import { createInternet } from './internet.js'
 import { createLabels } from './labels.js'
 import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
@@ -170,6 +171,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const roster = agents.map(roomAgent)
   const hub = createHub(scene, roster)
   const agentSet = createAgents(scene, roster, cssScene)
+  const internet = createInternet(scene, texture)
   const terminals = createTerminals(cssScene, roster, { onPick })
   const board = createCostBoard(surface, { onPick })
   let boardShown = boardVisible(width)
@@ -265,6 +267,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function sync(state) {
     timers.clear()
+    webCalls.clear()
     labels.clear()
     pulses.forEach((pulse) => {
       pulse.active = false
@@ -375,9 +378,33 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (followCardPath(path, followFocus.following())) followCard = { path: decision.path, at: decision.at }
   }
 
+  const webCalls = new Map()
+
+  function trackWeb(activity) {
+    const now = performance.now()
+    const callKey = `${activity.agent}:${activity.id}`
+    if (activity.type === 'tool.start' && activity.tool === 'web') {
+      if (typeof activity.id === 'string') webCalls.set(callKey, activity.agent)
+      agentSet.webStart(activity.agent, internet.position)
+      return
+    }
+    if (activity.type === 'tool.end' && webCalls.has(callKey)) {
+      webCalls.delete(callKey)
+      agentSet.webEnd(activity.agent, now)
+      return
+    }
+    if (activity.type !== 'run.end' && activity.type !== 'agent.end') return
+    for (const [storedKey, agentKey] of webCalls) {
+      if (agentKey !== activity.agent) continue
+      webCalls.delete(storedKey)
+      agentSet.webEnd(agentKey, now)
+    }
+  }
+
   function onActivity(activity) {
     const view = agentSet.views.get(activity.agent)
     if (!view) return
+    trackWeb(activity)
     const position = view.group.position
     if (followFocus.following() && activity.type === 'tool.start') {
       const path = touchedCard(activity)
@@ -458,6 +485,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const mask = masks.of(state)
     space.update(delta)
     hub.update(now / 1000, delta, camera, height)
+    internet.update(delta, agentSet.webActive() > 0)
     if (cards.update(state, delta, camera, mask)) {
       relink()
       refit()
@@ -615,6 +643,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       rig.dispose()
       agentSet.dispose()
       terminals.dispose()
+      internet.dispose()
       board.dispose()
       labels.dispose()
       strings.dispose()

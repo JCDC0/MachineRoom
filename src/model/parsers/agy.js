@@ -9,6 +9,17 @@ const TOOLS = {
   multi_replace_file_content: ['edit', 'TargetFile'],
   edit_file: ['edit', 'Path'],
   run_command: ['shell', 'CommandLine'],
+  search_web: ['web', null],
+  read_url_content: ['web', null],
+}
+const WEB_FIELDS = {
+  search_web: ['query', 'Query'],
+  read_url_content: ['url', 'Url', 'URL'],
+}
+
+function webLabel(name, value) {
+  const verb = name === 'read_url_content' ? 'fetch' : 'search'
+  return value ? `web ${verb} ${shorten(value)}` : `web ${verb}`
 }
 
 function subagentList(output) {
@@ -53,6 +64,12 @@ export function createAgyParser(ctx) {
     } else if (value && tool === 'shell') {
       touches = commandTouch(ctx, value)
       label = `$ ${shorten(value)}`
+    } else if (tool === 'web') {
+      const fields = WEB_FIELDS[step.tool_name] ?? []
+      const shown = fields
+        .map((name) => step.tool_info?.parameters?.[name])
+        .find((item) => typeof item === 'string' && item.trim() !== '')
+      label = webLabel(step.tool_name, shown ? shown.trim() : '')
     }
     out.push(credit(entry, toolStart({ time, id, tool, label, touches })))
   }

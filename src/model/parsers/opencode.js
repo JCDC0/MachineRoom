@@ -1,6 +1,6 @@
 import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
-const TOOLS = { shell: 'shell', bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'search', grep: 'search', list: 'search' }
+const TOOLS = { shell: 'shell', bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'search', grep: 'search', list: 'search', websearch: 'web', webfetch: 'web' }
 const OUTPUT_PATH = /(?:Created file successfully|Edited|Wrote|Updated|Written)[:\s]+(\S+)/i
 const MASK = '***REDACTED***'
 const BROKEN_TOOL = /"tool"\s*:\s*"(shell|read|write|edit)"/
@@ -82,6 +82,9 @@ export function createOpencodeParser(ctx) {
       label = `$ ${shorten(command)}`
     } else if (tool === 'search') {
       label = `${name} ${shorten(input.pattern ?? input.path ?? '')}`
+    } else if (tool === 'web') {
+      const shown = name === 'webfetch' ? input.url ?? '' : input.query ?? ''
+      label = shown ? `web ${name === 'webfetch' ? 'fetch' : 'search'} ${shorten(shown)}` : `web ${name === 'webfetch' ? 'fetch' : 'search'}`
     } else if (name === 'subagent') {
       const description = shorten(typeof input.description === 'string' ? input.description : '')
       label = description ? `subagent: ${description}` : 'subagent'

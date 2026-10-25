@@ -1,6 +1,8 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { ORCHESTRATOR_LINK_OPACITY, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, createAgents, orchestratorLineEnds, packetSpots, stripPoints } from '../src/engine/agents.js'
+import { ORCHESTRATOR_LINK_OPACITY, PACKET_BURST, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, createAgents, orchestratorLineEnds, packetSpots, stripPoints, webTunnelEnd } from '../src/engine/agents.js'
+import { INTERNET_RADIUS } from '../src/engine/internet.js'
+import { WEB } from '../src/engine/sprites.js'
 import { apply, createState } from '../src/model/state.js'
 import {
   AUTOCOMPACT_MAX,
@@ -91,6 +93,7 @@ function harness() {
   const world = {
     right: new THREE.Vector3(1, 0, 0),
     back: new THREE.Vector3(0, 0, 1),
+    internet: new THREE.Vector3(0, 1280, 0),
     side: () => 1,
     edge: (dir, file, side, out) => out.set(edge.x, edge.y, edge.z),
   }
@@ -163,6 +166,96 @@ describe('orchestratorLineEnds', () => {
   it('keeps the two opacities apart, the lane fainter than a folder string', () => {
     expect(ORCHESTRATOR_LINK_OPACITY).toBeLessThan(0.22)
     expect(SUB_ORCHESTRATOR_LINK_OPACITY).toBe(0.3)
+  })
+})
+
+describe('webTunnelEnd', () => {
+  const internet = { x: 0, y: 1280, z: 0 }
+  const agent = { x: 300, y: 1280, z: 0 }
+
+  it('ends on the shape toward the agent, one radius from its centre', () => {
+    const end = webTunnelEnd(agent, internet, INTERNET_RADIUS)
+    expect(end).toEqual({ x: INTERNET_RADIUS, y: 1280, z: 0 })
+    expect(Math.hypot(end.x - internet.x, end.y - internet.y, end.z - internet.z)).toBeCloseTo(INTERNET_RADIUS, 6)
+  })
+
+  it('returns the agent itself when it sits inside the shape', () => {
+    const inside = { x: 20, y: 1290, z: 0 }
+    expect(webTunnelEnd(inside, internet, INTERNET_RADIUS)).toEqual(inside)
+  })
+
+  it('writes into a point it is given and reads junk as the centre', () => {
+    const out = {}
+    const end = webTunnelEnd(agent, internet, INTERNET_RADIUS, out)
+    expect(end).toBe(out)
+    expect(webTunnelEnd(null, null, INTERNET_RADIUS)).toEqual({ x: 0, y: 0, z: 0 })
+  })
+})
+
+describe('the tunnel for a web call', () => {
+  it('goes from the agent to the internet shape in blue and keeps the last file focus', () => {
+    const { agents, state, terminals, world } = harness()
+    startWrite(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+    const focus = [...state.agents.get('a').focus]
+
+    expect(agents.webStart('a', world.internet)).toBe(true)
+    expect(agents.webActive()).toBe(1)
+    agents.update(state, 0.016, 1020, world, terminals)
+
+    expect(view.strip.material.color.getHex()).toBe(WEB)
+    const strip = view.strip.geometry.attributes.position.array
+    const end = { x: strip[3], y: strip[4], z: strip[5] }
+    expect(Math.hypot(end.x - world.internet.x, end.y - world.internet.y, end.z - world.internet.z)).toBeCloseTo(INTERNET_RADIUS, 2)
+    const packets = view.packets.geometry.attributes.position.array
+    const count = view.packets.geometry.drawRange.count
+    expect(count).toBeGreaterThan(0)
+    const agentPoint = view.group.position
+    const span = { x: end.x - agentPoint.x, y: end.y - agentPoint.y, z: end.z - agentPoint.z }
+    for (let index = 0; index < count; index += 1) {
+      const offset = {
+        x: packets[index * 3] - agentPoint.x,
+        y: packets[index * 3 + 1] - agentPoint.y,
+        z: packets[index * 3 + 2] - agentPoint.z,
+      }
+      const cross = {
+        x: offset.y * span.z - offset.z * span.y,
+        y: offset.z * span.x - offset.x * span.z,
+        z: offset.x * span.y - offset.y * span.x,
+      }
+      expect(Math.hypot(cross.x, cross.y, cross.z)).toBeLessThan(0.5)
+    }
+    const before = packets[1]
+    agents.update(state, 0.016, 1100, world, terminals)
+    expect(packets[1]).toBeGreaterThan(before)
+    expect(state.agents.get('a').focus).toEqual(focus)
+    agents.dispose()
+  })
+
+  it('sends a burst of five packets back from the shape when the call ends', () => {
+    const { agents, state, terminals, world } = harness()
+    startWrite(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+    agents.webStart('a', world.internet)
+    agents.update(state, 0.016, 1020, world, terminals)
+
+    expect(agents.webEnd('a', 1030)).toBe(true)
+    expect(agents.webActive()).toBe(0)
+    expect(view.webSends).toHaveLength(PACKET_BURST)
+    expect(view.webSends[0]).toBe(1030)
+    expect(view.webSends[PACKET_BURST - 1]).toBe(1030 + (PACKET_BURST - 1) * 30)
+    agents.update(state, 0.016, 1040, world, terminals)
+
+    const packets = view.packets.geometry.attributes.position.array
+    expect(view.packets.geometry.drawRange.count).toBe(1)
+    const distance = Math.hypot(packets[0] - world.internet.x, packets[1] - world.internet.y, packets[2] - world.internet.z)
+    const shapeDistance = view.group.position.distanceTo(world.internet)
+    expect(distance).toBeGreaterThan(INTERNET_RADIUS - 1)
+    expect(distance).toBeLessThan(shapeDistance)
+    expect(view.packets.material.color.getHex()).toBe(WEB)
+    agents.dispose()
   })
 })
 
