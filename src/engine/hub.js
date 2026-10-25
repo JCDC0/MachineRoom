@@ -18,12 +18,15 @@ export const SECTOR_ARC_OPACITY = Object.freeze({ main: 0.52, sub: 0.88 })
 export const SECTOR_LABEL_BASE = 0.9
 export const SECTOR_LABEL_FONT = 28
 export const SECTOR_LABEL_MIN = 12
+export const SECTOR_LABEL_OUT = 220
+export const SECTOR_LABEL_SPREAD = 60
+export const SECTOR_LABEL_DROP = 180
+export const SECTOR_LABEL_OPACITY = 0.45
+export const SECTOR_LABEL_COLOR = `rgba(255,255,255,${SECTOR_LABEL_OPACITY})`
 
 const TICKS = 120
 const DASHES = 72
 const SLOT_RADIUS = 46
-const SECTOR_LABEL_RADIUS = HUB_RADIUS + 120
-const SECTOR_LABEL_Y = 90
 const ARC_STEPS = 96
 const SECTOR_EPSILON = 0.0001
 const labelWorld = new THREE.Vector3()
@@ -55,6 +58,20 @@ export function sectorLabelScale(depth, focal, base = SECTOR_LABEL_BASE) {
   const focus = Number(focal)
   if (!(distance > 0) || !(focus > 0)) return 1
   return minTextScale((focus / distance) * base, SECTOR_LABEL_FONT, SECTOR_LABEL_MIN)
+}
+
+export function sectorLabelRadius(radius = HUB_RADIUS, sectors = 1) {
+  const ring = Number(radius)
+  const count = Number.isFinite(Number(sectors)) ? Math.max(1, Math.floor(Number(sectors))) : 1
+  const base = Number.isFinite(ring) && ring > 0 ? ring : HUB_RADIUS
+  return base + SECTOR_LABEL_OUT + (count - 1) * SECTOR_LABEL_SPREAD
+}
+
+export function sectorLabelPoint(angle, radius = HUB_RADIUS, sectors = 1, out = new THREE.Vector3()) {
+  const mid = Number(angle)
+  const theta = Number.isFinite(mid) ? mid : 0
+  const distance = sectorLabelRadius(radius, sectors)
+  return out.set(Math.cos(theta) * distance, -SECTOR_LABEL_DROP, Math.sin(theta) * distance)
 }
 
 export function sectorArcTone(main) {
@@ -146,7 +163,8 @@ function buildSectors(ladder, parkedKeys, group) {
   const lines = []
   const labels = []
   if (!ladder) return { lines, labels }
-  for (const arc of sectorArcs(ladder, parkedKeys)) {
+  const arcs = sectorArcs(ladder, parkedKeys)
+  for (const arc of arcs) {
     const span = arc.end - arc.start
     if (!(span > SECTOR_EPSILON)) continue
     const draw = arcDrawSpan(arc.start, arc.end)
@@ -167,8 +185,8 @@ function buildSectors(ladder, parkedKeys, group) {
       lines.push(line)
     })
     const mid = (arc.start + arc.end) / 2
-    const label = textSprite(String(arc.name).toUpperCase(), { scale: SECTOR_LABEL_BASE, color: 'rgba(255,255,255,.8)' })
-    label.position.set(Math.cos(mid) * SECTOR_LABEL_RADIUS, SECTOR_LABEL_Y, Math.sin(mid) * SECTOR_LABEL_RADIUS)
+    const label = textSprite(String(arc.name).toUpperCase(), { scale: SECTOR_LABEL_BASE, color: SECTOR_LABEL_COLOR })
+    label.position.copy(sectorLabelPoint(mid, HUB_RADIUS, arcs.length))
     label.userData.base = { x: label.scale.x, y: label.scale.y }
     label.userData.factor = 1
     sector.add(label)
