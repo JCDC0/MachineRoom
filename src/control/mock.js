@@ -53,6 +53,7 @@ export const CLIENT_METHODS = [
   'startRun',
   'lanes',
   'harnesses',
+  'harnessModels',
   'providers',
   'endpoints',
   'saveEndpoint',
@@ -1410,6 +1411,25 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           efforts: [],
         },
       ]),
+
+    harnessModels: (harnessOrOptions = {}) =>
+      call('harnessModels', () => {
+        let harness = ''
+        if (typeof harnessOrOptions === 'string') {
+          harness = harnessOrOptions
+        } else if (harnessOrOptions && typeof harnessOrOptions === 'object') {
+          harness = typeof harnessOrOptions.harness === 'string' ? harnessOrOptions.harness : ''
+        }
+        const models = state.models
+          .filter((m) => m.harness === harness)
+          .map(({ id, label }) => ({ id, label }))
+        return {
+          harness,
+          models,
+          source: 'list',
+          fetchedAt: new Date().toISOString(),
+        }
+      }),
 
     providers: () => call('providers', () => clone(MOCK_PROVIDERS)),
 

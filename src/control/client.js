@@ -385,6 +385,20 @@ export function createClient({
 
     harnesses: () => request('GET', '/api/harnesses'),
 
+    harnessModels: (harnessOrOptions = {}, refreshOption = false) => {
+      let harness = ''
+      let refresh = false
+      if (typeof harnessOrOptions === 'string') {
+        harness = harnessOrOptions
+        refresh = Boolean(refreshOption)
+      } else if (harnessOrOptions && typeof harnessOrOptions === 'object') {
+        harness = typeof harnessOrOptions.harness === 'string' ? harnessOrOptions.harness : ''
+        refresh = Boolean(harnessOrOptions.refresh)
+      }
+      const query = refresh ? '?refresh=1' : ''
+      return request('GET', `/api/harnesses/${encodeURIComponent(harness)}/models${query}`)
+    },
+
     providers: () => request('GET', '/api/providers'),
 
     endpoints: async () => {
