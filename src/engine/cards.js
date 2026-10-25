@@ -252,7 +252,15 @@ export function overviewSpheres(cards) {
     if (!root && card?.view?.pinned !== true) continue
     const at = card?.home
     if (!at || ![at.x, at.y, at.z].every(Number.isFinite)) continue
-    out.push({ x: at.x, y: at.y, z: at.z, r: card.view ? cardRadius(card.view) : 0 })
+    const size = card.view ? cardSize(card.view) : null
+    out.push({
+      x: at.x,
+      y: at.y,
+      z: at.z,
+      r: size ? Math.hypot(size.width, size.height) / 2 : 0,
+      rx: size ? size.width / 2 : 0,
+      ry: size ? size.height / 2 : 0,
+    })
   }
   return out
 }

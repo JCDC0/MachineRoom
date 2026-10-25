@@ -17,9 +17,17 @@ function inside(view, spheres, aspect) {
   return spheres.every((s) => {
     const d = { x: s.x - view.target.x, y: s.y - view.target.y, z: s.z - view.target.z }
     const depth = view.dist - dot(d, back)
-    return Math.abs(dot(d, right)) + s.r <= depth * tan * aspect + 1e-6 && Math.abs(dot(d, up)) + s.r <= depth * tan + 1e-6
+    const rx = Number.isFinite(s.rx) ? s.rx : s.r
+    const ry = Number.isFinite(s.ry) ? s.ry : s.r
+    return Math.abs(dot(d, right)) + rx <= depth * tan * aspect + 1e-6 && Math.abs(dot(d, up)) + ry <= depth * tan + 1e-6
   })
 }
+
+const faces = [
+  { x: 0, y: 0, z: 0, r: Math.hypot(124, 32), rx: 124, ry: 32 },
+  { x: -900, y: 400, z: 300, r: Math.hypot(124, 32), rx: 124, ry: 32 },
+  { x: 1100, y: -300, z: -500, r: Math.hypot(170, 60), rx: 170, ry: 60 },
+]
 
 describe('viewBasis', () => {
   it('gives three unit vectors at right angles', () => {
@@ -50,6 +58,30 @@ describe('fitView', () => {
 
   it('never goes closer than the minimum', () => {
     expect(fitView([{ x: 0, y: 0, z: 0, r: 10 }]).dist).toBe(FIT_MIN)
+  })
+
+  it('fits to the lens width and height', () => {
+    expect(fitView(room, { width: 1280, height: 464 })).toEqual(fitView(room, { aspect: 1280 / 464 }))
+  })
+
+  it('comes closer than the old 1800 floor for a small room', () => {
+    const view = fitView([{ x: 0, y: 200, z: 0, r: 460 }], { width: 1280, height: 464 })
+    expect(view.dist).toBeGreaterThanOrEqual(FIT_MIN)
+    expect(view.dist).toBeLessThan(1800)
+  })
+
+  it('fits a flat card by its face, not its diagonal', () => {
+    const sphere = faces.map((s) => ({ x: s.x, y: s.y, z: s.z, r: s.r }))
+    const flat = fitView(faces, { width: 1280, height: 464, min: 0 })
+    const round = fitView(sphere, { width: 1280, height: 464, min: 0 })
+    expect(flat.dist).toBeLessThan(round.dist)
+    expect(inside(flat, faces, 1280 / 464)).toBe(true)
+  })
+
+  it('keeps flat cards inside a narrow lens too', () => {
+    const aspect = 640 / 900
+    const view = fitView(faces, { width: 640, height: 900, min: 0 })
+    expect(inside(view, faces, aspect)).toBe(true)
   })
 
   it('backs off on a narrow window', () => {

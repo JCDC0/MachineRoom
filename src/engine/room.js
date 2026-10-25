@@ -208,7 +208,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function refit(force = false) {
     const spheres = [HUB_SPHERE, ...cards.overviewSpheres()]
-    const next = fitView(spheres, { aspect: width / height })
+    const next = fitView(spheres, { width, height })
     if (!force && fitted) {
       const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
       if (shift < REFIT_SHIFT && Math.abs(next.dist - fitted.dist) < fitted.dist * REFIT_RATIO) return
