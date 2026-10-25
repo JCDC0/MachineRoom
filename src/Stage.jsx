@@ -7,7 +7,7 @@ import { costModeFor } from './engine/board.js'
 import { openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
-import { openStream, socketUrl, toAgents } from './live/source.js'
+import { openStream, socketUrl, toAgents, diffRoster, loadAgents } from './live/source.js'
 import { appendLiveLog, buildTimeline, createLogger, entriesUpTo } from './model/log.js'
 import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
@@ -56,6 +56,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const glRef = useRef(null)
   const cssRef = useRef(null)
   const roomRef = useRef(null)
+  const liveRosterRef = useRef(null)
   const live = data.live ?? null
   const costMode = costModeFor(mode, Boolean(live?.simulated))
   const demoLadder = useMemo(() => {
@@ -80,6 +81,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       }))
     return [...data.agents, ...subs]
   }, [data.agents, demoLadder])
+  if (liveRosterRef.current === null) liveRosterRef.current = agents
   const player = useMemo(() => {
     const handlers = {
       tree: data.tree,
@@ -190,6 +192,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
 
   useEffect(() => {
+    liveRosterRef.current = agents
+  }, [agents])
+
+  useEffect(() => {
     const room = createRoom({
       surface: surfaceRef.current,
       gl: glRef.current,
@@ -293,6 +299,33 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       unsubscribe()
     }
   }, [client, demoLadder, live])
+
+  useEffect(() => {
+    if (!live || live.simulated || !live.bridge) return undefined
+    let active = true
+    const latest = latestOnly()
+
+    async function updateRoster() {
+      const isLatest = latest()
+      try {
+        const next = await loadAgents(live.bridge)
+        if (!active || !isLatest()) return
+        if (!diffRoster(liveRosterRef.current, next).changed) return
+        liveRosterRef.current = next
+        roomRef.current?.setRoster(next)
+      } catch {}
+    }
+
+    updateRoster()
+    const timer = setInterval(updateRoster, 60000)
+    const unsubscribe = subscribeToNotices(client, ['agents'], updateRoster)
+
+    return () => {
+      active = false
+      clearInterval(timer)
+      unsubscribe()
+    }
+  }, [client, live])
 
   useEffect(() => {
     setFineDust(effects.dust)

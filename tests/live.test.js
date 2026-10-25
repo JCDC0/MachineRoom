@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createLivePlayer } from '../src/live/livePlayer.js'
-import { openStream, parserFor, socketUrl, toAgents } from '../src/live/source.js'
+import { diffRoster, loadAgents, openStream, parserFor, socketUrl, toAgents } from '../src/live/source.js'
 import { makeTree } from '../src/model/paths.js'
 import { SEEN_LIMIT, buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
@@ -80,6 +80,80 @@ describe('agent discovery', () => {
       lane: false,
       sub: true,
     })
+  })
+
+  it('marks the two session readers, and only them', () => {
+    const agents = toAgents([
+      { id: 'a', name: 'OpenCode', adapterType: 'opencode_local', key: 'opencode' },
+      { id: 'b', name: 'Claude Code session', adapterType: 'claude_local', key: 'claude-session' },
+      { id: 'c', name: 'OpenCode session', adapterType: 'opencode_local', key: 'opencode-session' },
+    ])
+    expect(Object.fromEntries(agents.map((agent) => [agent.key, agent.sessionReader]))).toEqual({
+      'claude-session': true,
+      'opencode-session': true,
+      opencode: false,
+    })
+  })
+})
+
+describe('reading the agent list again', () => {
+  it('asks the bridge for /api/agents and reads the roster', async () => {
+    const calls = []
+    const fetchImpl = async (url) => {
+      calls.push(url)
+      return {
+        ok: true,
+        json: async () => [
+          { id: 'a', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local' },
+          { id: 'b', key: 'claude-session', name: 'Claude Code session', adapterType: 'claude_local' },
+        ],
+      }
+    }
+    const agents = await loadAgents('http://127.0.0.1:3100', fetchImpl)
+    expect(calls).toEqual(['http://127.0.0.1:3100/api/agents'])
+    expect(agents.map((agent) => [agent.key, agent.sessionReader])).toEqual([
+      ['claude-session', true],
+      ['opencode', false],
+    ])
+  })
+
+  it('fails when the bridge does not answer', async () => {
+    await expect(loadAgents('http://127.0.0.1:3100', async () => ({ ok: false, status: 500 }))).rejects.toThrow('500')
+  })
+})
+
+describe('the roster diff', () => {
+  const lane = (key) => ({ key, name: key })
+
+  it('finds a new and a gone agent and leaves the rest alone', () => {
+    const diff = diffRoster([lane('opencode'), lane('claude')], [lane('opencode'), lane('hermes')])
+    expect(diff.added.map((agent) => agent.key)).toEqual(['hermes'])
+    expect(diff.removed.map((agent) => agent.key)).toEqual(['claude'])
+    expect(diff.reordered).toBe(false)
+    expect(diff.changed).toBe(true)
+  })
+
+  it('reports no change for the same roster', () => {
+    const roster = [lane('opencode'), lane('claude')]
+    const diff = diffRoster(roster, roster.map((agent) => ({ ...agent })))
+    expect(diff.added).toEqual([])
+    expect(diff.removed).toEqual([])
+    expect(diff.reordered).toBe(false)
+    expect(diff.changed).toBe(false)
+  })
+
+  it('reports a reorder of the same agents, since the slots follow the roster order', () => {
+    const diff = diffRoster([lane('opencode'), lane('claude')], [lane('claude'), lane('opencode')])
+    expect(diff.added).toEqual([])
+    expect(diff.removed).toEqual([])
+    expect(diff.reordered).toBe(true)
+    expect(diff.changed).toBe(true)
+  })
+
+  it('copes with a missing or empty list', () => {
+    expect(diffRoster(null, [lane('opencode')])).toMatchObject({ changed: true })
+    expect(diffRoster([lane('opencode')], null)).toMatchObject({ changed: true })
+    expect(diffRoster([], [])).toMatchObject({ changed: false })
   })
 })
 

@@ -136,6 +136,17 @@ export function createLater(delay = 250) {
   return { later, clear }
 }
 
+export function roomAgent(agent) {
+  return {
+    key: agent.key,
+    name: agent.name,
+    shape: agent.parser ?? agent.key,
+    role: agent.role ?? null,
+    subOrchestrator: agent.subOrchestrator === true,
+    sessionReader: agent.sessionReader === true,
+  }
+}
+
 export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
   const texture = glowTexture()
   const scene = new THREE.Scene()
@@ -156,14 +167,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   css.appendChild(cssRenderer.domElement)
 
   const space = createVoid(scene, texture)
-  const hub = createHub(scene, agents)
-  const roster = agents.map((agent) => ({
-    key: agent.key,
-    name: agent.name,
-    shape: agent.parser ?? agent.key,
-    role: agent.role ?? null,
-    subOrchestrator: agent.subOrchestrator === true,
-  }))
+  const roster = agents.map(roomAgent)
+  const hub = createHub(scene, roster)
   const agentSet = createAgents(scene, roster, cssScene)
   const terminals = createTerminals(cssScene, roster, { onPick })
   const board = createCostBoard(surface, { onPick })
@@ -246,7 +251,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const rect = gl.getBoundingClientRect()
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
     raycaster.setFromCamera(pointer, camera)
-    const hit = raycaster.intersectObjects(agentSet.pickables, false)[0]
+    const hit = raycaster
+      .intersectObjects(agentSet.pickables, false)
+      .find((item) => agentSet.views.get(item.object.userData.key)?.group.visible !== false)
     if (hit) onPick(hit.object.userData.key)
     else endFollow()
   })
@@ -590,6 +597,16 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     setLadder(ladder) {
       hub.setLadder(ladder)
       agentSet.setLadder(ladder)
+    },
+    setRoster(next) {
+      const list = (Array.isArray(next) ? next : []).map(roomAgent)
+      hub.setRoster(list)
+      agentSet.setRoster(list, terminals)
+      const focused = followFocus.focused()
+      if (focused && !agentSet.views.has(focused)) {
+        followFocus.clear()
+        if (followFocus.following()) endFollow()
+      }
     },
     dispose() {
       cancelAnimationFrame(frameId)
