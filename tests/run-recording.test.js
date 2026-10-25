@@ -150,7 +150,7 @@ describe('agentsFile and treeFile', () => {
   it('names the agent and the worktree the same way the frames do', () => {
     const agents = agentsFile('hermes', lanes)
     expect(agents).toEqual({
-      projectRoot: 'MachineRoom-hermes',
+      projectRoot: 'MachineRoom',
       agents: [
         {
           id: 'agent-hermes',
@@ -175,6 +175,8 @@ describe('agentsFile and treeFile', () => {
       root: 'MachineRoom-hermes',
       files: ['src/a.js'],
     })
+    expect(treeFile('C:\\GitHub\\MachineRoom\\.worktrees\\hermes', ['src/a.js']).root).toBe('MachineRoom')
+    expect(treeFile('/work/Other/.worktrees/opencode/', ['src/a.js']).root).toBe('Other')
   })
 
   it('refuses an unknown lane and an unknown harness', () => {

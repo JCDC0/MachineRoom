@@ -181,7 +181,7 @@ export function agentsFile(lane, lanes) {
   if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The recording does not know the ${harness} adapter.`)
   const adapterType = harnessByKey[harness].adapterType
   return {
-    projectRoot: basename(entry.worktree ?? ''),
+    projectRoot: projectName(entry.worktree),
     agents: [
       {
         id: `agent-${key}`,
@@ -194,9 +194,14 @@ export function agentsFile(lane, lanes) {
   }
 }
 
+export function projectName(folder) {
+  const parts = String(folder ?? '').split(/[\\/]+/).filter(Boolean)
+  return parts.length >= 3 && parts.at(-2) === '.worktrees' ? parts.at(-3) : basename(folder ?? '')
+}
+
 export function treeFile(root, files) {
   return {
-    root: basename(root ?? ''),
+    root: projectName(root),
     files: Array.isArray(files) ? files.map(String) : [],
   }
 }

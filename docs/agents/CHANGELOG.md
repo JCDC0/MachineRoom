@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- MachineRoom's own lane worktrees moved from `C:\GitHub\MachineRoom-<lane>` into `.worktrees\<lane>` inside the checkout; `lanes.json` and its notes name the new paths, `.gitignore` lists `.worktrees/`, and the Vite dev server does not watch it.
+
 - A lane worktree lives inside its project at `.worktrees/<lane>` instead of beside it as `<project>-mr-<lane>`, so a project's lanes stay in one folder; run-lane adds `/.worktrees/` to the project's `.git/info/exclude`, and the bridge's tree and watcher skip it.
 
 - A `machineroom` command, linked once with `npm link`, starts the room on the folder it runs in (or the folder given), prints `MachineRoom is running.` with the address, and opens the browser; `--no-open` leaves it closed, and the build hint names the MachineRoom folder.

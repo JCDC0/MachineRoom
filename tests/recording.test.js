@@ -132,7 +132,7 @@ const agyLines = agyChunks.map((chunk) => chunk.replace(/\r?\n$/, ''))
 describe('AGY as a lane', () => {
   it('names the AGY agent with the process adapter the parser picker reads as AGY', () => {
     expect(agentsFile('agy', lanes)).toEqual({
-      projectRoot: 'MachineRoom-agy',
+      projectRoot: 'MachineRoom',
       agents: [{ id: 'agent-agy', key: 'agy', name: 'agy', adapterType: 'process', parser: 'agy' }],
     })
   })
@@ -180,7 +180,7 @@ describe('Claude Code as a lane', () => {
 
   it('names the Claude agent with the claude_local adapter the parser picker reads as Claude', () => {
     expect(agentsFile('claude', lanes)).toEqual({
-      projectRoot: 'MachineRoom-claude',
+      projectRoot: 'MachineRoom',
       agents: [{ id: 'agent-claude', key: 'claude', name: 'Claude Code', adapterType: 'claude_local', parser: 'claude' }],
     })
   })

@@ -84,7 +84,7 @@ describe('lanes', () => {
     for (const [key, lane] of promptLanes) {
       for (const field of ['name', 'harness', 'model', 'worktree', 'role']) expect(typeof lane[field], `${key} ${field}`).toBe('string')
       expect(Array.isArray(lane.forbidden), key).toBe(true)
-      expect(lane.worktree, key).toMatch(/^C:\\GitHub\\MachineRoom-/)
+      expect(lane.worktree, key).toMatch(/^C:\\GitHub\\MachineRoom\\\.worktrees\\/)
     }
     expect(new Set(promptLanes.map(([, lane]) => lane.worktree)).size).toBe(promptLanes.length)
     expect(lanes.orchestrator).toMatchObject({
@@ -116,7 +116,7 @@ describe('buildPrompt', () => {
   it('builds a prompt for one task', () => {
     const prompt = make(['U4'], 'opencode')
     expect(prompt.split('\n')[0]).toBe("Model to select in OpenCode: DeepSeek V4.1 Flash 1017 (in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash), reasoning max.")
-    expect(prompt).toContain('Your worktree is C:\\GitHub\\MachineRoom-opencode. Run: git switch -c feat/u4-reject-a-foreign refs/heads/main')
+    expect(prompt).toContain('Your worktree is C:\\GitHub\\MachineRoom\\.worktrees\\opencode. Run: git switch -c feat/u4-reject-a-foreign refs/heads/main')
     expect(prompt).toContain('Task U4: Reject a foreign Host header in the bridge.')
     expect(prompt).toContain(byId('U4').text)
     expect(prompt).toContain('Commit with the prefix 0.1.36 and one plain sentence. Do not push.')

@@ -67,9 +67,9 @@ A PASS is not a review.
 | Lane | Model | Owns |
 | --- | --- | --- |
 | Orchestrator (main checkout, Claude Code) | Claude Code | `docs/agents/**`, merges, versions |
-| OpenCode (`C:\GitHub\MachineRoom-opencode`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/control/**`, `src/assistant/**`, `src/decider/**`; from 0.1.126 also the UI briefs moved from AGY (U6a, U7, U9, U10a), which the orchestrator checks by eye |
-| OpenCode 2 to 10 (`C:\GitHub\MachineRoom-opencode2` to `-opencode10`) | `opencode-go/deepseek-v4.1-flash`, max | the same as OpenCode; small briefs by the routing policy |
-| Claude (`C:\GitHub\MachineRoom-claude`) | Claude Sonnet | works on the brief in its own worktree and reports back |
+| OpenCode (`C:\GitHub\MachineRoom\.worktrees\opencode`) | `opencode-go/deepseek-v4.1-flash`, max | `server/**`, `scripts/**`, `src/control/**`, `src/assistant/**`, `src/decider/**`; from 0.1.126 also the UI briefs moved from AGY (U6a, U7, U9, U10a), which the orchestrator checks by eye |
+| OpenCode 2 to 10 (`C:\GitHub\MachineRoom\.worktrees\opencode2` to `opencode10`) | `opencode-go/deepseek-v4.1-flash`, max | the same as OpenCode; small briefs by the routing policy |
+| Claude (`C:\GitHub\MachineRoom\.worktrees\claude`) | Claude Sonnet | works on the brief in its own worktree and reports back |
 | Hermes (retired) | `deepseek/deepseek-v4.1-flash-1017`, xhigh | its old work goes to OpenCode 2 |
 | AGY (retired) | `gemini-3.8-flash-high` | `src/ui/**`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx`, `src/App.jsx` when it works |
 
