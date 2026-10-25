@@ -20,6 +20,8 @@ import {
   stateWord,
 } from './family.js'
 import { changeSub, ladderFromOrchestrators } from './ladderForm.js'
+import { ModelSelect, useHarnessModels } from './ModelRefresh.jsx'
+import { withHarnessModels, withModelRows } from './modelRefresh.js'
 import { AGENT_NAME_MAX, agentCountLine, cleanText, laneChoice, laneSummary } from './sidebar.js'
 
 function messageOf(error) {
@@ -144,6 +146,52 @@ export function FamilyTree({ client = null }) {
   const summary = laneSummary(lanes)
   const countLine = lanes ? agentCountLine(summary.active.length, summary.max) : 'Loading agents...'
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
+
+  const editorHarness = useMemo(() => {
+    if (!editingNode) return null
+    if (editingNode.kind === 'lane') return findHarness(harnesses, editingNode.harness)
+    const key = nodeDraft?.harness ?? editingNode.harness
+    return nodeHarnessOptions(editingNode).find((row) => row.key === key) ?? null
+  }, [editingNode, harnesses, nodeDraft?.harness])
+  const editorFallback = useMemo(
+    () => (editorHarness ? harnessModels(editorHarness, models) : []),
+    [editorHarness, models]
+  )
+  const editorModels = useHarnessModels({
+    client,
+    harness: editorHarness?.key ?? '',
+    open: Boolean(editingNode),
+    fallback: editorFallback,
+    value: nodeDraft?.model ?? '',
+  })
+
+  const childHarness = useMemo(() => {
+    if (!childFor) return null
+    return childHarnesses(harnesses, models).find((row) => row.key === draft?.harness) ?? null
+  }, [childFor, draft?.harness, harnesses, models])
+  const childFallback = useMemo(
+    () => (childHarness ? harnessModels(childHarness, models) : []),
+    [childHarness, models]
+  )
+  const childModels = useHarnessModels({
+    client,
+    harness: childHarness?.key ?? '',
+    open: Boolean(childFor),
+    fallback: childFallback,
+    value: draft?.model ?? '',
+  })
+
+  useEffect(() => {
+    if (!editorHarness?.key || !editorModels.live || editorModels.live.length === 0) return
+    setHarnesses((current) => withHarnessModels(current, editorHarness.key, editorModels.live))
+    setModels((current) => withModelRows(current, editorModels.live, editorHarness.key))
+  }, [editorHarness?.key, editorModels.live])
+
+  useEffect(() => {
+    if (!childHarness?.key || !childModels.live || childModels.live.length === 0) return
+    setHarnesses((current) => withHarnessModels(current, childHarness.key, childModels.live))
+    setModels((current) => withModelRows(current, childModels.live, childHarness.key))
+  }, [childHarness?.key, childModels.live])
 
   useEffect(() => {
     if (editing && !tree.nodes.some((node) => node.id === editing)) {
@@ -658,7 +706,7 @@ export function FamilyTree({ client = null }) {
     const harness = lane
       ? findHarness(harnesses, node.harness)
       : options.find((row) => row.key === nodeDraft.harness) ?? null
-    const choices = harness ? harnessModels(harness, models) : []
+    const choices = harness ? editorModels.choices : []
     const efforts = harness ? harnessEfforts(harness) : []
     const canLabel = typeof client?.setAgentLabel === 'function'
     return (
@@ -691,30 +739,18 @@ export function FamilyTree({ client = null }) {
         {lane ? (
           <>
             <p className="mr-family-note mono">{`Harness ${node.harness || 'unknown'}`}</p>
-            {choices.length > 0 ? (
-              <label className="mr-side-field">
-                <span className="mr-side-field-label mono">Model</span>
-                <select
-                  className="mr-side-select mono"
-                  aria-label={`Model for ${node.label}`}
-                  value={nodeDraft.model}
-                  onChange={(event) => setNodeDraft({ ...nodeDraft, model: event.target.value })}
-                >
-                  {!nodeDraft.model ? (
-                    <option value="" disabled>
-                      Choose a model
-                    </option>
-                  ) : null}
-                  {choices.map((choice) => (
-                    <option value={choice.id} key={choice.id}>
-                      {choice.label}
-                    </option>
-                  ))}
-                  {nodeDraft.model && !choices.some((choice) => choice.id === nodeDraft.model) ? (
-                    <option value={nodeDraft.model}>{nodeDraft.model}</option>
-                  ) : null}
-                </select>
-              </label>
+            {harness ? (
+              <ModelSelect
+                label="Model"
+                ariaLabel={`Model for ${node.label}`}
+                value={nodeDraft.model}
+                choices={choices}
+                onChange={(model) => setNodeDraft({ ...nodeDraft, model })}
+                onRefresh={editorModels.refresh}
+                loading={editorModels.loading}
+                error={editorModels.error}
+                canRefresh={editorModels.canRefresh}
+              />
             ) : (
               <p className="mr-side-note is-dim">No models listed for this harness.</p>
             )}
@@ -787,33 +823,17 @@ export function FamilyTree({ client = null }) {
               <p className="mr-side-note is-dim">No harnesses are listed.</p>
             )}
             {harness ? (
-              choices.length > 0 ? (
-                <label className="mr-side-field">
-                  <span className="mr-side-field-label mono">Model</span>
-                  <select
-                    className="mr-side-select mono"
-                    aria-label={`Model for ${node.label}`}
-                    value={nodeDraft.model}
-                    onChange={(event) => setNodeDraft({ ...nodeDraft, model: event.target.value })}
-                  >
-                    {!nodeDraft.model ? (
-                      <option value="" disabled>
-                        Choose a model
-                      </option>
-                    ) : null}
-                    {choices.map((choice) => (
-                      <option value={choice.id} key={choice.id}>
-                        {choice.label}
-                      </option>
-                    ))}
-                    {nodeDraft.model && !choices.some((choice) => choice.id === nodeDraft.model) ? (
-                      <option value={nodeDraft.model}>{nodeDraft.model}</option>
-                    ) : null}
-                  </select>
-                </label>
-              ) : (
-                <p className="mr-side-note is-dim">No models listed for this harness.</p>
-              )
+              <ModelSelect
+                label="Model"
+                ariaLabel={`Model for ${node.label}`}
+                value={nodeDraft.model}
+                choices={choices}
+                onChange={(model) => setNodeDraft({ ...nodeDraft, model })}
+                onRefresh={editorModels.refresh}
+                loading={editorModels.loading}
+                error={editorModels.error}
+                canRefresh={editorModels.canRefresh}
+              />
             ) : null}
             {harness ? (
               <label className="mr-side-field">
@@ -871,7 +891,7 @@ export function FamilyTree({ client = null }) {
     if (!draft) return null
     const offered = childHarnesses(harnesses, models)
     const selected = offered.find((row) => row.key === draft.harness) ?? null
-    const choices = selected ? harnessModels(selected, models) : []
+    const choices = selected ? childModels.choices : []
     const efforts = selected ? harnessEfforts(selected) : []
     const direct = draft.harness === DIRECT_HARNESS
     const canCreate = typeof client?.createLane === 'function'
@@ -981,25 +1001,18 @@ export function FamilyTree({ client = null }) {
             ) : null}
           </div>
         ) : null}
-        {selected && choices.length > 0 ? (
-          <label className="mr-side-field">
-            <span className="mr-side-field-label mono">Model</span>
-            <select
-              className="mr-side-select mono"
-              aria-label="New agent model"
-              value={draft.model}
-              onChange={(event) => setDraft({ ...draft, model: event.target.value })}
-            >
-              {choices.map((choice) => (
-                <option value={choice.id} key={choice.id}>
-                  {choice.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        {selected && choices.length === 0 ? (
-          <p className="mr-side-note is-dim">No models listed for this harness.</p>
+        {selected ? (
+          <ModelSelect
+            label="Model"
+            ariaLabel="New agent model"
+            value={draft.model}
+            choices={choices}
+            onChange={(model) => setDraft({ ...draft, model })}
+            onRefresh={childModels.refresh}
+            loading={childModels.loading}
+            error={childModels.error}
+            canRefresh={childModels.canRefresh}
+          />
         ) : null}
         {selected && efforts.length > 0 ? (
           <label className="mr-side-field">

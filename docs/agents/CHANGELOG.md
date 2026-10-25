@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every model picker has a shared circular `Refresh models` button that reads `client.harnessModels` when it opens, spins for a refresh, keeps a saved model that left the list and shows the answer's error, with a search field on the chat picker (task U47).
 - AGY lists its 13 models (Gemini 4 Argon, Gemini 3.8 Flash, Claude Opus and Sonnet 5.5 and GPT-OSS 120B, each at its levels, from `agy models`) in the model pickers instead of none.
 - The fine dust holds up to 12000 specks between 400 and 6000 units from the hub, so the room fills at full strength, and the internet shape rests dim (0.08) and glows bright, with its label, only while an agent searches or fetches.
 - The lens has straight top and bottom edges with a tick every 40 pixels, a taller tick and a 9 pixel Space Mono coordinate label every 200, a `+` crosshair at the middle of each edge and a bracket at each corner, and its `mr-lens-clip` curve is gone (task U46).

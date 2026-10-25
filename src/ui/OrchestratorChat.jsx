@@ -1,6 +1,8 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
 import CompactCard from './AgentStrip.jsx'
+import ModelRefresh, { useHarnessModels } from './ModelRefresh.jsx'
+import { filterModelChoices, groupModelChoices, modelChoiceText } from './modelRefresh.js'
 import {
   contextLine,
   effortLabel,
@@ -132,6 +134,7 @@ export default function OrchestratorChat({
   const [models, setModels] = useState(null)
   const [modelsLoading, setModelsLoading] = useState(false)
   const [modelsError, setModelsError] = useState('')
+  const [modelQuery, setModelQuery] = useState('')
   const [modelConfirm, setModelConfirm] = useState(null)
   const [modelSaving, setModelSaving] = useState(false)
   const [modelError, setModelError] = useState('')
@@ -165,13 +168,28 @@ export default function OrchestratorChat({
   const harness = typeof current?.harness === 'string' ? current.harness : ''
   const shownModel = modelSaved || model || 'not reported'
   const shownEffort = effortSaved || effortLabel(orchestratorEffort(list, selected), harness)
-  const modelList = modelChoices(models, harness)
+  const staticModels = modelChoices(models, harness)
+  const modelRefresh = useHarnessModels({
+    client,
+    harness,
+    open: modelsOpen,
+    fallback: staticModels,
+    value: model,
+  })
+  const modelList = modelRefresh.choices
+  const visibleModels = filterModelChoices(modelRefresh.choices, modelQuery)
+  const modelGroups = groupModelChoices(
+    visibleModels,
+    visibleModels.some((choice) => choice.id === model) ? model : ''
+  )
   const effortChoices = effortLevels(harness)
   const context = contextLine({
     context: { tokens: current?.contextTokens, window: current?.contextWindow },
   })
   const canSetModel = inline && typeof client?.setOrchestratorModel === 'function'
   const canSetEffort = inline && typeof client?.setOrchestratorEffort === 'function'
+  const canReadModels =
+    typeof client?.models === 'function' || typeof client?.harnessModels === 'function'
   const project = chat.project
   const projectLabel = projectBaseName(project)
   const lines = chatLines(chat)
@@ -298,6 +316,7 @@ export default function OrchestratorChat({
     setEffortError('')
     setModelSaved('')
     setEffortSaved('')
+    setModelQuery('')
   }, [selected])
 
   useEffect(() => {
@@ -421,6 +440,7 @@ export default function OrchestratorChat({
     setEffortConfirm('')
     setModelError('')
     setEffortError('')
+    setModelQuery('')
   }
 
   function messageOf(failure, fallback) {
@@ -434,6 +454,7 @@ export default function OrchestratorChat({
     }
     closePickers()
     setModelsOpen(true)
+    setModelQuery('')
     if (models !== null || typeof client?.models !== 'function') return
     setModelsLoading(true)
     setModelsError('')
@@ -444,6 +465,30 @@ export default function OrchestratorChat({
     } finally {
       setModelsLoading(false)
     }
+  }
+
+  function chooseModel(choice) {
+    setModelsOpen(false)
+    setModelQuery('')
+    setModelError('')
+    setModelConfirm(choice)
+  }
+
+  function renderModelChoice(choice) {
+    return (
+      <button
+        type="button"
+        className={`strip-model-choice mr-model-choice${choice.id === model ? ' is-current' : ''}`}
+        key={choice.id}
+        title={modelChoiceText(choice)}
+        onClick={() => chooseModel(choice)}
+      >
+        <span className="mr-model-choice-name">{choice.label}</span>
+        {choice.label !== choice.id ? (
+          <span className="mr-model-choice-id mono">{choice.id}</span>
+        ) : null}
+      </button>
+    )
   }
 
   async function saveModel() {
@@ -681,6 +726,11 @@ export default function OrchestratorChat({
                     <MenuIcon />
                   </span>
                 </button>
+                <ModelRefresh
+                  onRefresh={modelRefresh.refresh}
+                  loading={modelRefresh.loading}
+                  disabled={!modelRefresh.canRefresh}
+                />
                 <button
                   type="button"
                   className="hud-strip-effort"
@@ -731,41 +781,53 @@ export default function OrchestratorChat({
                   </svg>
                 </button>
               </div>
+              {modelRefresh.error ? (
+                <p className="mr-model-error mono" role="alert">
+                  {modelRefresh.error}
+                </p>
+              ) : null}
               <div className="mr-orch-meta">
                 {count ? <span className="mr-orch-count mono">{count}</span> : null}
               </div>
 
               {modelsOpen ? (
                 <div className="strip-pop is-models" aria-label="Models">
-                  {typeof client?.models !== 'function' && (
-                    <p className="strip-note">Models are not available.</p>
-                  )}
-                  {typeof client?.models === 'function' && modelsLoading && (
+                  <div className="mr-model-pop-head">
+                    <input
+                      type="search"
+                      className="mr-model-search mono"
+                      value={modelQuery}
+                      placeholder="Search models..."
+                      aria-label="Search models"
+                      onChange={(event) => setModelQuery(event.target.value)}
+                    />
+                  </div>
+                  {!canReadModels && <p className="strip-note">Models are not available.</p>}
+                  {(modelsLoading || modelRefresh.loading) && (
                     <p className="strip-note">Loading models.</p>
                   )}
-                  {typeof client?.models === 'function' && !modelsLoading && modelsError && (
+                  {!modelsLoading && modelsError ? (
                     <p className="strip-note is-error">{modelsError}</p>
+                  ) : null}
+                  {!modelsLoading && !modelRefresh.loading && canReadModels && modelList.length === 0 && (
+                    <p className="strip-note">No models for this harness.</p>
                   )}
-                  {typeof client?.models === 'function' &&
-                    !modelsLoading &&
-                    !modelsError &&
-                    modelList.length === 0 && (
-                      <p className="strip-note">No models for this harness.</p>
-                    )}
-                  {modelList.map((choice) => (
-                    <button
-                      type="button"
-                      className={`strip-model-choice${choice.id === model ? ' is-current' : ''}`}
-                      key={choice.id}
-                      onClick={() => {
-                        setModelsOpen(false)
-                        setModelError('')
-                        setModelConfirm(choice)
-                      }}
-                    >
-                      {choice.label}
-                    </button>
-                  ))}
+                  {!modelsLoading &&
+                    !modelRefresh.loading &&
+                    modelList.length > 0 &&
+                    visibleModels.length === 0 && <p className="strip-note">No models found</p>}
+                  {modelGroups.current ? (
+                    <>
+                      <p className="mr-model-group mono">Current</p>
+                      {renderModelChoice(modelGroups.current)}
+                    </>
+                  ) : null}
+                  {modelGroups.rest.length > 0 ? (
+                    <>
+                      <p className="mr-model-group mono">Models</p>
+                      {modelGroups.rest.map((choice) => renderModelChoice(choice))}
+                    </>
+                  ) : null}
                   {!canSetModel && <p className="strip-note">Read only here.</p>}
                 </div>
               ) : null}
