@@ -181,7 +181,7 @@ describe('agentsFile and treeFile', () => {
 
   it('refuses an unknown lane and an unknown harness', () => {
     expect(() => agentsFile('nobody', lanes)).toThrow(/no lane named nobody/)
-    expect(() => framesFromRun({ harness: 'codex', log: '', record: { lane: 'claude', startedAt: '2026-10-19T00:00:00.000Z' } })).toThrow(/does not know/)
+    expect(() => framesFromRun({ harness: 'unknown-harness', log: '', record: { lane: 'claude', startedAt: '2026-10-19T00:00:00.000Z' } })).toThrow(/does not know/)
     expect(() => framesFromRun({ harness: 'opencode', log: '', record: {} })).toThrow(/start time/)
   })
 })

@@ -7,4 +7,11 @@ export const MODELS = [
   { id: 'xiaomi/mimo-v2.6-pro', label: 'MiMo v2.6 Pro', harness: 'machineroom', tier: 'medium', free: false },
   { id: 'deepseek/deepseek-v4.1-flash-1017', label: 'DeepSeek v4.1 Flash (OpenRouter)', harness: 'machineroom', tier: 'medium', free: false },
   { id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek v4.1 Flash (Go)', harness: 'opencode', tier: 'medium', free: false },
+  { id: 'gpt-6-luna', label: 'GPT-6 Luna', harness: 'codex', tier: 'small', free: false },
+  { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', harness: 'codex', tier: 'medium', free: false },
+  { id: 'gpt-6-astra', label: 'GPT-6 Astra', harness: 'codex', tier: 'large', free: false },
+  { id: 'claude-haiku-4.5', label: 'Claude Haiku 4.5', harness: 'copilot', tier: 'small', free: false },
+  { id: 'claude-sonnet-4.5', label: 'Claude Sonnet 4.5', harness: 'copilot', tier: 'medium', free: false },
+  { id: 'gpt-5-mini', label: 'GPT-5 mini', harness: 'copilot', tier: 'small', free: false },
+  { id: 'gpt-5', label: 'GPT-5', harness: 'copilot', tier: 'large', free: false },
 ]

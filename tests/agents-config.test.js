@@ -244,6 +244,16 @@ describe('GET /api/harnesses', () => {
     expect(machineroom.efforts).toEqual([])
     expect(machineroom.models.map((item) => item.id)).toEqual(['xiaomi/mimo-v2.6-pro', 'deepseek/deepseek-v4.1-flash-1017'])
     expect(machineroom.available).toBe(false)
+
+    const codex = body.find((item) => item.key === 'codex')
+    expect(codex.name).toBe('Codex')
+    expect(codex.efforts).toEqual(['low', 'medium', 'high', 'xhigh'])
+    expect(codex.models.map((item) => item.id)).toEqual(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra'])
+
+    const copilot = body.find((item) => item.key === 'copilot')
+    expect(copilot.name).toBe('GitHub Copilot')
+    expect(copilot.efforts).toEqual(['low', 'medium', 'high', 'xhigh', 'max'])
+    expect(copilot.models.map((item) => item.id)).toEqual(['claude-haiku-4.5', 'claude-sonnet-4.5', 'gpt-5-mini', 'gpt-5'])
   })
 })
 

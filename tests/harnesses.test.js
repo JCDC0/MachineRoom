@@ -32,20 +32,22 @@ const agyLine = JSON.stringify({
 
 describe('harness registry', () => {
   it('lists one descriptor per harness, in agent order', () => {
-    expect(HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp', 'machineroom'])
-    expect(AGENT_ORDER).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp', 'machineroom'])
+    expect(HARNESSES.map((harness) => harness.key)).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot'])
+    expect(AGENT_ORDER).toEqual(['claude', 'hermes', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot'])
     expect(Object.keys(harnessByKey)).toEqual(AGENT_ORDER)
     for (const harness of HARNESSES) expect(harnessByKey[harness.key]).toBe(harness)
   })
 
   it('maps each adapter type to its harness', () => {
-    expect(Object.keys(harnessByAdapter).sort()).toEqual(['acp_local', 'claude_local', 'hermes_local', 'machineroom_local', 'opencode_local', 'process'])
+    expect(Object.keys(harnessByAdapter).sort()).toEqual(['acp_local', 'claude_local', 'codex_local', 'copilot_local', 'hermes_local', 'machineroom_local', 'opencode_local', 'process'])
     expect(harnessByAdapter.claude_local).toBe(harnessByKey.claude)
     expect(harnessByAdapter.hermes_local).toBe(harnessByKey.hermes)
     expect(harnessByAdapter.opencode_local).toBe(harnessByKey.opencode)
     expect(harnessByAdapter.process).toBe(harnessByKey.agy)
     expect(harnessByAdapter.acp_local).toBe(harnessByKey.acp)
     expect(harnessByAdapter.machineroom_local).toBe(harnessByKey.machineroom)
+    expect(harnessByAdapter.codex_local).toBe(harnessByKey.codex)
+    expect(harnessByAdapter.copilot_local).toBe(harnessByKey.copilot)
   })
 
   it('keeps the brief owner order the room has always used', () => {
@@ -119,6 +121,18 @@ describe('harness line readers', () => {
     expect(read(agyLine, 1000)).toEqual({ chunk: `${agyLine}\n`, at: 1000, read: true })
   })
 
+  it('reads a Codex command_execution line', () => {
+    const codexLine = JSON.stringify({ type: 'item.started', item: { type: 'command_execution', command: 'npm test' } })
+    const read = createRunLineReader('codex')
+    expect(read(codexLine, 1000)).toEqual({ chunk: `${codexLine}\n`, at: 1000, read: true })
+  })
+
+  it('reads a Copilot tool execution line', () => {
+    const copilotLine = JSON.stringify({ type: 'tool.execution_start', toolName: 'shell', parameters: { command: 'npm test' } })
+    const read = createRunLineReader('copilot')
+    expect(read(copilotLine, 1000)).toEqual({ chunk: `${copilotLine}\n`, at: 1000, read: true })
+  })
+
   it('takes the time from a JSON line when the caller gives none', () => {
     const line = JSON.stringify({ ...JSON.parse(opencodeLine), timestamp: 1234 })
     expect(createRunLineReader('opencode')(line).at).toBe(1234)
@@ -182,6 +196,26 @@ describe('harness reports and usage', () => {
     expect(harnessByKey.hermes.report(log)).toEqual(['First line.', 'Second line.'])
     expect(harnessByKey.hermes.reply(log)).toBe('First line.\nSecond line.')
     expect(harnessByKey.hermes.usage(log)).toEqual({ costUsd: null, inputTokens: null, outputTokens: null })
+  })
+
+  it('reads the Codex message and turn.completed usage lines', () => {
+    const log = lines(
+      { type: 'item.completed', item: { type: 'agent_message', text: 'Fixed.\nDone.' } },
+      { type: 'turn.completed', usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 45 } },
+    )
+    expect(harnessByKey.codex.report(log)).toEqual(['Fixed.', 'Done.'])
+    expect(harnessByKey.codex.reply(log)).toBe('Fixed.\nDone.')
+    expect(harnessByKey.codex.usage(log)).toEqual({ costUsd: null, inputTokens: 120, outputTokens: 45 })
+  })
+
+  it('reads the Copilot message and usage lines', () => {
+    const log = lines(
+      { type: 'assistant.message', data: { content: 'Applied.\nFinished.' } },
+      { type: 'session.completed', usage: { input_tokens: 80, output_tokens: 30 } },
+    )
+    expect(harnessByKey.copilot.report(log)).toEqual(['Applied.', 'Finished.'])
+    expect(harnessByKey.copilot.reply(log)).toBe('Applied.\nFinished.')
+    expect(harnessByKey.copilot.usage(log)).toEqual({ costUsd: null, inputTokens: 80, outputTokens: 30 })
   })
 
   it('gives an empty report for an empty log', () => {
