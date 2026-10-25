@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { boardLines, boardVisible, createCostBoard } from '../src/engine/board.js'
+import { boardLines, boardVisible, costLabels, costModeFor, createCostBoard } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
 import { createMockClient } from '../src/control/mock.js'
 import { toAgents } from '../src/live/source.js'
@@ -262,6 +262,25 @@ describe('boardLines', () => {
   })
 })
 
+describe('costLabels', () => {
+  it('labels a replay and a demo as sample costs and leaves a live room unlabelled', () => {
+    const sample = {
+      title: 'Sample costs',
+      note: 'These numbers are made up for the replay.',
+    }
+    expect(costLabels('replay')).toEqual(sample)
+    expect(costLabels('demo')).toEqual(sample)
+    expect(costLabels('live')).toBeNull()
+    expect(costLabels(undefined)).toBeNull()
+  })
+
+  it('turns the room mode and the demo switch into a cost mode', () => {
+    expect(costModeFor('replay')).toBe('replay')
+    expect(costModeFor('live', false)).toBe('live')
+    expect(costModeFor('live', true)).toBe('demo')
+  })
+})
+
 describe('createCostBoard', () => {
   it('adds its element to the container, updates rows, handles pick, and removes on dispose', async () => {
     const container = document.createElement('div')
@@ -294,6 +313,32 @@ describe('createCostBoard', () => {
 
     board.dispose()
     expect(board.element.removed).toBe(true)
+  })
+
+  it('shows the sample title and note in a replay or a demo and nothing when live', async () => {
+    const client = createMockClient()
+    const [agentsRaw, costsRaw] = await Promise.all([client.agents(), client.costs()])
+    const roster = toAgents(agentsRaw)
+    const liveBoard = costBoard(costsRaw, roster)
+    const board = createCostBoard(document.createElement('div'))
+    const title = () => board.element.querySelector('.mr-board-title').textContent
+    const note = () => board.element.querySelector('.mr-board-note')
+
+    board.update({ ...liveBoard, costMode: 'replay' })
+    expect(title()).toBe('Sample costs')
+    expect(note().textContent).toBe('These numbers are made up for the replay.')
+    expect(note().style.display).toBe('')
+
+    board.update({ ...liveBoard, costMode: 'demo' })
+    expect(title()).toBe('Sample costs')
+    expect(note().style.display).toBe('')
+
+    board.update({ ...liveBoard, costMode: 'live' })
+    expect(title()).toBe('COSTS')
+    expect(note().textContent).toBe('')
+    expect(note().style.display).toBe('none')
+
+    board.dispose()
   })
 
   it('hides below 900 pixels wide and shows at 900', () => {

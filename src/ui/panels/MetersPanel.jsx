@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useState } from 'react'
 import { visibleText } from '../../model/paths.js'
+import { costLabels } from '../../engine/board.js'
 import { clampPercent, formatCents, listOf, meterTone, percentOf, textOf } from './format.js'
 import { subscribeToNotices } from './notices.js'
+
+export const CostsModeContext = createContext('live')
 
 function tokenCount(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
@@ -21,6 +24,8 @@ function tokenText(row) {
 }
 
 export default function MetersPanel({ client, initialCosts = null }) {
+  const costMode = useContext(CostsModeContext)
+  const sample = costLabels(costMode)
   const [costs, setCosts] = useState(initialCosts)
   const [loading, setLoading] = useState(() => initialCosts == null)
   const [loadError, setLoadError] = useState(null)
@@ -65,7 +70,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
   return (
     <div className="meters-panel">
       <div className="panel-toolbar">
-        <span className="panel-count mono">Spend</span>
+        <span className="panel-count mono">{sample ? sample.title : 'Spend'}</span>
         <button
           type="button"
           onClick={() => {
@@ -75,6 +80,8 @@ export default function MetersPanel({ client, initialCosts = null }) {
           Refresh
         </button>
       </div>
+
+      {sample && <div className="meter-label-dim mono">{sample.note}</div>}
 
       {loading ? (
         <div className="panel-state mono">Loading meters...</div>

@@ -2,9 +2,10 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
-import MetersPanel from '../src/ui/panels/MetersPanel.jsx'
+import MetersPanel, { CostsModeContext } from '../src/ui/panels/MetersPanel.jsx'
 
 const SPEND_NOTE = 'Spend comes from the lane run records. Budgets are not set here.'
+const SAMPLE_NOTE = 'These numbers are made up for the replay.'
 
 const COSTS = {
   summary: { spendCents: 405, budgetCents: 0, utilizationPercent: null },
@@ -17,16 +18,31 @@ const COSTS = {
   quota: [],
 }
 
-function renderPanel(costs = COSTS) {
-  return renderToString(
-    createElement(MetersPanel, {
-      client: createMockClient({ latencyMs: 0 }),
-      initialCosts: costs,
-    })
-  )
+function renderPanel(costs = COSTS, costMode = null) {
+  const panel = createElement(MetersPanel, {
+    client: createMockClient({ latencyMs: 0 }),
+    initialCosts: costs,
+  })
+  if (costMode == null) return renderToString(panel)
+  return renderToString(createElement(CostsModeContext.Provider, { value: costMode }, panel))
 }
 
 describe('MetersPanel', () => {
+  it('labels made-up costs in a replay and a demo', () => {
+    for (const costMode of ['replay', 'demo']) {
+      const html = renderPanel(COSTS, costMode)
+      expect(html).toContain('Sample costs')
+      expect(html).toContain(SAMPLE_NOTE)
+    }
+  })
+
+  it('leaves a live room with the plain spend title and no sample note', () => {
+    const html = renderPanel(COSTS, 'live')
+    expect(html).toContain('Spend')
+    expect(html).not.toContain('Sample costs')
+    expect(html).not.toContain(SAMPLE_NOTE)
+  })
+
   it('shows this month spend and the tokens per lane', () => {
     const html = renderPanel()
     expect(html).toContain('Spent this month')
