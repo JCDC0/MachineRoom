@@ -98,6 +98,9 @@ export function createPlayer({ activities, tree, agents, idleCapMs = 4000, tailM
         agents: [...state.agents.values()].map((agent) => ({
           key: agent.key,
           name: agent.name,
+          id: agent.id ?? null,
+          harness: agent.harness ?? null,
+          model: agent.model ?? null,
           status: agent.status,
           label: agent.label,
           runs: agent.runs,

@@ -15,6 +15,7 @@
 - `npm run worktrees -- --clean` removes a lane worktree's `node_modules` link before `git worktree remove`, so a worktree the runner made is removed without `--force` and the project's modules stay (task Q12f).
 - A sub orchestrator agent from `GET /api/agents` carries its harness and model, taken from the sub or from the first lane with that harness, so its dock no longer shows `claude_local` or `not reported` (task Q12d).
 
+- The dock gets each lane's harness and model: the room state keeps the agent's id, harness and model, and both snapshot maps pass them on (task Q12h).
 - History audit: a range audit (`--from`) leaves out removed lines, which were in the history before the range, so CI does not fail when a commit deletes a test that held a fake key.
 
 - The agent dock shows a sub orchestrator's lanes, scope, restriction and who set them, and a lane in a sector shows the sector's name and rules, in the order the brief asks (task O7).

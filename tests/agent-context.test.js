@@ -1,6 +1,9 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
+import { createLivePlayer } from '../src/live/livePlayer.js'
+import { toAgents } from '../src/live/source.js'
+import { createPlayer } from '../src/model/player.js'
 import AgentDock from '../src/ui/AgentDock.jsx'
 import Hud from '../src/ui/Hud.jsx'
 import { agentContext } from '../src/ui/agentContext.js'
@@ -116,6 +119,41 @@ describe('agentContext', () => {
     expect(result.tokens).toBe('1.2k in / 300 out')
     expect(result.context).toBeNull()
     expect(result.log).toEqual([])
+  })
+
+  it('a lane keeps its identity, harness and model through the room state', () => {
+    const tree = { root: 'room', files: [], dirs: [], created: [] }
+    const source = toAgents([lane])
+    const players = [
+      createPlayer({ tree, agents: source, activities: [], onReset: () => {} }),
+      createLivePlayer({ tree, agents: source }),
+    ]
+
+    for (const player of players) {
+      const snapshot = player.snapshot()
+      const [row] = snapshot.agents
+      const result = agentContext({ agent: row, lanes: snapshot.agents })
+
+      expect(row.id).toBe('agent-opencode')
+      expect(row.harness).toBe('opencode')
+      expect(row.model).toBe('opencode-go/deepseek-v4.1-flash')
+      expect(result.harness).toBe('opencode')
+      expect(result.model).toBe('opencode-go/deepseek-v4.1-flash')
+
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot,
+          speeds: [1, 2, 4],
+          focused: 'opencode',
+          costs: board([]),
+          liveRuns: [],
+          tasks: [],
+          log: [],
+        })
+      )
+      expect(html).toContain('opencode-go/deepseek-v4.1-flash')
+    }
   })
 
   it('a working lane with a task', () => {
