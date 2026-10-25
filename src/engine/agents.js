@@ -34,6 +34,8 @@ export const CHILD_GAP = 120
 export const SUB_ORCHESTRATOR_SCALE = 0.7
 export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.5
 export const SUB_ORCHESTRATOR_RADIUS = HUB_RADIUS * 2.4
+export const ORCHESTRATOR_LINK_OPACITY = 0.1
+export const SUB_ORCHESTRATOR_LINK_OPACITY = 0.3
 
 export function subOrchestratorPlace(arc, out = null) {
   const start = Number(arc?.start)
@@ -99,6 +101,20 @@ export function childPlace(parentPlace, index = 0) {
 }
 
 export function stripPoints(from, to, out = []) {
+  const points = out ?? []
+  points.length = 2
+  points[0] = points[0] ?? {}
+  points[1] = points[1] ?? {}
+  points[0].x = from.x
+  points[0].y = from.y
+  points[0].z = from.z
+  points[1].x = to.x
+  points[1].y = to.y
+  points[1].z = to.z
+  return points
+}
+
+export function orchestratorLineEnds(from, to, out = []) {
   const points = out ?? []
   points.length = 2
   points[0] = points[0] ?? {}
@@ -264,7 +280,7 @@ export function createAgents(scene, roster, cssScene = null) {
     view.packetFractions.length = 0
   }
 
-  function updatePackets(view, now, fade, sending) {
+  function updatePackets(view, now, fade, sending, from, to) {
     if (sending && (view.packetNextAt === 0 || now >= view.packetNextAt)) {
       queuePacket(view, now)
       view.packetNextAt = now + PACKET_INTERVAL
@@ -273,8 +289,8 @@ export function createAgents(scene, roster, cssScene = null) {
     const geometry = view.packets.geometry
     const attr = geometry.getAttribute('position')
     const array = attr.array
-    const a = stripStart
-    const b = view.touch
+    const a = from
+    const b = to
     const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z
     for (let i = 0; i < spots.length; i += 1) {
       const t = spots[i]
@@ -311,7 +327,10 @@ export function createAgents(scene, roster, cssScene = null) {
     strip.visible = false
     const packets = packetPoints()
     const parentLink = parentKey ? lineBetween(lineMaterial(WHITE, 0.3)) : null
-    const orchestratorLink = sub ? lineBetween(lineMaterial(WHITE, 0.3)) : null
+    const orchestratorLink = parentKey === null && !orchestrator
+      ? lineBetween(lineMaterial(WHITE, sub ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY))
+      : null
+    if (orchestratorLink) orchestratorLink.renderOrder = -1
 
     const callout = makeCallout(agent.name)
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
@@ -340,6 +359,7 @@ export function createAgents(scene, roster, cssScene = null) {
       link,
       parentLink,
       orchestratorLink,
+      orchestratorEnds: [{}, {}],
       scale,
       fadeStart: 0,
       strip,
@@ -615,10 +635,11 @@ export function createAgents(scene, roster, cssScene = null) {
       }
       if (view.orchestratorLink) {
         const mainAt = mainView ? mainView.group.position : ORCHESTRATOR_HOME
-        setEnds(view.orchestratorLink, mainAt, view.group.position)
+        const [start, end] = orchestratorLineEnds(mainAt, view.group.position, view.orchestratorEnds)
+        setEnds(view.orchestratorLink, start, end)
         view.orchestratorLink.material.color.setHex(WHITE)
-        view.orchestratorLink.material.opacity = 0.3 * opacityFactor
-        view.orchestratorLink.visible = opacityFactor > 0.01
+        view.orchestratorLink.material.opacity = view.subOrchestrator ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY
+        view.orchestratorLink.visible = true
       }
 
       const pointer = view.pointer ?? (working ? focusPointer(state, entry) : null)
@@ -647,9 +668,11 @@ export function createAgents(scene, roster, cssScene = null) {
         setEnds(view.strip, a, b)
         view.stripMaterial.color.setHex(view.stripColor)
         view.stripMaterial.opacity = view.stripOpacity * fade
-      }
-      if (stripVisible && !isStill) {
-        updatePackets(view, now, fade, status === 'working' && stripOn)
+        if (!isStill) {
+          updatePackets(view, now, fade, status === 'working' && stripOn, a, b)
+        } else {
+          hidePackets(view)
+        }
       } else {
         hidePackets(view)
       }

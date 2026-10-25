@@ -66,6 +66,17 @@ describe('the working mask', () => {
     for (let frame = 0; frame < 5; frame += 1) expect(cache.of(state)).toBe(idle)
     expect(cache.builds()).toBe(4)
   })
+
+  it('lights a working path only, not a recent touch or an idle agent', () => {
+    const cache = createWorkingMaskCache()
+    const state = working(['src/a.js'])
+    state.recent = ['docs/b.md']
+    state.agents.set('claude', { key: 'claude', status: 'done', focus: ['docs/b.md'] })
+    const mask = cache.of(state)
+    expect(mask.lit).toEqual(new Set(['', 'src']))
+    expect(mask.lit.has('docs')).toBe(false)
+    expect(mask.targeted).toEqual(new Set(['src']))
+  })
 })
 
 describe('the follow focus', () => {

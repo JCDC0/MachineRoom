@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
+import { HUB_CENTER } from '../src/engine/hub.js'
+import { ROOT_DROP } from '../src/engine/sphere.js'
 import { strandPoints } from '../src/engine/strings.js'
 
 describe('strandPoints', () => {
@@ -84,6 +86,22 @@ describe('strandPoints', () => {
       const along = offset.dot(span) / span.lengthSq()
       expect(along).toBeGreaterThanOrEqual(0)
       expect(along).toBeLessThanOrEqual(1)
+    })
+  })
+
+  it('runs a top-level string from the root card to the folder and no further', () => {
+    const root = new THREE.Vector3(HUB_CENTER.x, HUB_CENTER.y - ROOT_DROP, HUB_CENTER.z)
+    const folder = new THREE.Vector3(820, 640, -1060)
+    const span = new THREE.Vector3().subVectors(folder, root)
+    const pts = strandPoints({ a: root, b: folder }, 24, 11)
+    expect(pts.length).toBeGreaterThan(4)
+    pts.forEach((pt) => {
+      const offset = new THREE.Vector3().subVectors(pt, root)
+      const cross = new THREE.Vector3().crossVectors(offset, span)
+      expect(cross.length()).toBeLessThan(1e-6)
+      const along = offset.dot(span) / span.lengthSq()
+      expect(along).toBeGreaterThan(0)
+      expect(along).toBeLessThan(1)
     })
   })
 })

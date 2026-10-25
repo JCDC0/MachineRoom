@@ -164,7 +164,7 @@ describe('the cabinet', () => {
 })
 
 describe('the layout', () => {
-  it('keeps the root below the hub centre', () => {
+  it('keeps the root in the park space just under the hub', () => {
     const entries = topTree(12)
     for (const placed of [layoutSphere(entries), layoutSphere(entries, { previous: layoutSphere(entries) })]) {
       const root = placed.get('')
@@ -172,6 +172,7 @@ describe('the layout', () => {
       expect(root.z).toBe(0)
       expect(root.y).toBe(HUB_CENTER.y - ROOT_DROP)
       expect(root.y).toBeLessThan(HUB_CENTER.y - HUB_RADIUS)
+      expect(HUB_CENTER.y - root.y).toBeLessThan(HUB_RADIUS * 2)
     }
   })
 
