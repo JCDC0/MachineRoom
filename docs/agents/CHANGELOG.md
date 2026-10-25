@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Sector names sit below the ring plane and further out, dimmer than the agents' names, and spread wider with each sector so four names never overlap (task U27).
+
 - The connect screen names `npm run serve -- up --root YOUR-PROJECT` instead of the old `npm run bridge`.
 
 - AGY, AGY 2 and AGY 3 are backend lanes on Flash, the OpenCode lanes may change App and Stage, and a lane prompt leaves out the forbidden paths line when the lane has none.
