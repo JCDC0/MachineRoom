@@ -6,6 +6,8 @@
 
 - The scope check reads a lane worktree only from the lane file's own keys, so an inherited key cannot name a folder (task R13).
 - The scope check runs its diff with external diff and textconv off, so a configured diff program is not run (task R13).
+- The bridge reads the actor from the request: a page Origin is the owner and no Origin is an orchestrator, so a no-Origin ladder write as owner, owner message or main orchestrator run is refused with 403, while a page can still write the ladder, send a message and start a run (task Q13a).
+
 - History audit: on GitHub Actions the profile check is off, since the runner's user name (`runner`) is not the owner's and is a word the docs use.
 
 - The soak test reads the bridge history again after the run ends, since a page that joins mid-run gets the history and then live frames (CI failed on Ubuntu with 501 frames).

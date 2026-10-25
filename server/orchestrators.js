@@ -15,7 +15,9 @@ import { gitPath } from './programPath.js'
 export const CONFIRM_LADDER_PROBLEM = 'Confirm the ladder first.'
 export const NO_ORCHESTRATOR_PROBLEM = 'There is no orchestrator with that id.'
 export const LADDER_BY_PROBLEM = 'A ladder change comes from the owner or the orchestrator.'
+export const OWNER_LADDER_PROBLEM = 'A request with no Origin cannot change the ladder as the owner.'
 export const PAGE_LADDER_PROBLEM = 'A page cannot change the ladder as the orchestrator.'
+export const OWNER_MESSAGE_PROBLEM = 'A request with no Origin cannot send a message as the owner.'
 export const PAGE_MESSAGE_PROBLEM = 'A page cannot send a message as the orchestrator.'
 export const ORCHESTRATOR_TARGET_PROBLEM = 'The orchestrator sends a message to a sub orchestrator.'
 export const MESSAGE_FROM_PROBLEM = 'A message comes from the owner or the orchestrator.'
@@ -322,7 +324,13 @@ export function createOrchestrators({
     const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : ORCHESTRATOR_KEY
     const instance = instances.get(id)
     if (!instance) return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
-    const from = body.from === undefined || body.from === null || body.from === '' ? 'owner' : body.from
+    const from =
+      body.from === undefined || body.from === null || body.from === ''
+        ? page
+          ? 'owner'
+          : 'orchestrator'
+        : body.from
+    if (from === 'owner' && !page) return { status: 403, body: { error: OWNER_MESSAGE_PROBLEM } }
     if (from === 'orchestrator') {
       if (page) return { status: 403, body: { error: PAGE_MESSAGE_PROBLEM } }
       if (id === ORCHESTRATOR_KEY) return { status: 400, body: { error: ORCHESTRATOR_TARGET_PROBLEM } }
@@ -340,8 +348,14 @@ export function createOrchestrators({
 
   function ladderChange(body, page) {
     if (body.confirmed !== true) return { status: 400, body: { error: CONFIRM_LADDER_PROBLEM } }
-    const by = body.by === undefined || body.by === null || body.by === '' ? 'owner' : body.by
+    const by =
+      body.by === undefined || body.by === null || body.by === ''
+        ? page
+          ? 'owner'
+          : 'orchestrator'
+        : body.by
     if (by !== 'owner' && by !== 'orchestrator') return { status: 400, body: { error: LADDER_BY_PROBLEM } }
+    if (by === 'owner' && !page) return { status: 403, body: { error: OWNER_LADDER_PROBLEM } }
     if (by === 'orchestrator' && page) return { status: 403, body: { error: PAGE_LADDER_PROBLEM } }
     const next = readLadder(body.ladder, { lanes: laneKeys })
     if (next.problems.length > 0) {

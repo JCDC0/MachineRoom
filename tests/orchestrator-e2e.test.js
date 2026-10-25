@@ -7,7 +7,7 @@ import { worktreeFor } from '../src/briefs/run.js'
 import { createBridge } from '../server/index.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
-import { getJson, postJson, waitFor } from './helpers/bridge.js'
+import { getJson, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures')
@@ -224,9 +224,13 @@ describe('the orchestrator loop with real programs', () => {
     const { url, project, runs, callsFile } = await makeRig()
     const head = gitIn(project, ['rev-parse', 'HEAD'])
 
-    const sent = await postJson(`${url}/api/orchestrator/messages`, {
-      text: 'Start one lane for the end to end test.',
-      confirmed: true,
+    const sent = await getJson(`${url}/api/orchestrator/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'http://localhost:5173' },
+      body: JSON.stringify({
+        text: 'Start one lane for the end to end test.',
+        confirmed: true,
+      }),
     })
     expect(sent.status).toBe(202)
 

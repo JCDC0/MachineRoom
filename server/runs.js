@@ -18,6 +18,7 @@ export const TASKS_LIMIT = 20
 export const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 export const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 export const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
+export const MAIN_RUN_PROBLEM = 'A request with no Origin cannot start a run as the main orchestrator.'
 export const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
 export const BRIEF_PROJECT_PROBLEM = 'Briefs run in this repository. Use a task or a queue on another project.'
 export function notGitProblem(project, { queue = false } = {}) {
@@ -394,6 +395,10 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
       if (!wanted) {
         sendJson(req, res, 400, { error: 'startedBy needs an orchestrator id.' })
+        return true
+      }
+      if (wanted === 'orchestrator' && !req.headers.origin) {
+        sendJson(req, res, 403, { error: MAIN_RUN_PROBLEM })
         return true
       }
       const registry = typeof orchestrators === 'function' ? orchestrators() : null
