@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The README says how to stop the room with Ctrl+C (task D11).
+- The README shows `--dry-run` beside a project lane run (task D11).
+- The README says the doctor finds the lane programs, not that it starts them (task D11).
+- The README names the stop when another room is already running on the project (task D11).
+- A room that cannot start prints `machine-room could not start:` and one sentence, including when another room holds the project, instead of a stack trace (task D11).
+
 - History audit: on GitHub Actions the profile check is off, since the runner's user name (`runner`) is not the owner's and is a word the docs use.
 
 - The soak test reads the bridge history again after the run ends, since a page that joins mid-run gets the history and then live frames (CI failed on Ubuntu with 501 frames).

@@ -129,6 +129,31 @@ function childEnv(tempRoot) {
   return env
 }
 
+function waitForStartLine(child) {
+  return new Promise((resolveLine, rejectLine) => {
+    let output = ''
+    let errors = ''
+    const timer = setTimeout(() => {
+      rejectLine(new Error(`the bin printed no start line. stderr: ${errors}`))
+    }, 8000)
+    child.stdout.on('data', (chunk) => {
+      output += chunk
+      const match = /^(machine-room: open (http:\/\/127\.0\.0\.1:\d+\/\?live&bridge=http:\/\/127\.0\.0\.1:\d+))$/m.exec(output)
+      if (match) {
+        clearTimeout(timer)
+        resolveLine(match[1])
+      }
+    })
+    child.stderr.on('data', (chunk) => {
+      errors += chunk
+    })
+    child.once('exit', (code) => {
+      clearTimeout(timer)
+      rejectLine(new Error(`the bin exited ${code}. stderr: ${errors}`))
+    })
+  })
+}
+
 describe('static viewer files from the bridge', () => {
   it('serves index.html at the root', async () => {
     const { url } = shared
@@ -241,28 +266,7 @@ describe('machine-room bin', () => {
     cleanups.push(() => {
       if (child.exitCode === null && child.signalCode === null) child.kill()
     })
-    const line = await new Promise((resolveLine, rejectLine) => {
-      let output = ''
-      let errors = ''
-      const timer = setTimeout(() => {
-        rejectLine(new Error(`the bin printed no start line. stderr: ${errors}`))
-      }, 8000)
-      child.stdout.on('data', (chunk) => {
-        output += chunk
-        const match = /^(machine-room: open (http:\/\/127\.0\.0\.1:\d+\/\?live&bridge=http:\/\/127\.0\.0\.1:\d+))$/m.exec(output)
-        if (match) {
-          clearTimeout(timer)
-          resolveLine(match[1])
-        }
-      })
-      child.stderr.on('data', (chunk) => {
-        errors += chunk
-      })
-      child.once('exit', (code) => {
-        clearTimeout(timer)
-        rejectLine(new Error(`the bin exited ${code}. stderr: ${errors}`))
-      })
-    })
+    const line = await waitForStartLine(child)
     const openUrl = line.replace(/^machine-room: open /, '')
     const url = new URL(openUrl).origin
     expect(line).toBe(`machine-room: open ${url}/?live&bridge=${url}`)
@@ -278,6 +282,30 @@ describe('machine-room bin', () => {
     child.kill()
     await waitForExit(child)
   }, 15000)
+
+  it('stops with one line when a room already runs on the project', async () => {
+    const { base, dist } = makeDist()
+    const args = [BIN, '--dist', dist, '--root', base, '--port', '0', '--lanes']
+    const first = spawn(process.execPath, args, { env: childEnv(base), stdio: ['ignore', 'pipe', 'pipe'] })
+    cleanups.push(() => {
+      if (first.exitCode === null && first.signalCode === null) first.kill()
+    })
+    await waitForStartLine(first)
+    const second = spawn(process.execPath, args, { env: childEnv(base), stdio: ['ignore', 'pipe', 'pipe'] })
+    let output = ''
+    second.stdout.on('data', (chunk) => {
+      output += chunk
+    })
+    second.stderr.on('data', (chunk) => {
+      output += chunk
+    })
+    const { code } = await waitForExit(second)
+    expect(code).toBe(1)
+    expect(output).toContain('machine-room could not start: Another room is already running on this project')
+    expect(output).not.toMatch(/\n\s+at /)
+    first.kill()
+    await waitForExit(first)
+  }, 20000)
 
   it('prints the help and exits cleanly', async () => {
     const child = spawn(process.execPath, [BIN, '--help'], { env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] })

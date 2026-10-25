@@ -100,16 +100,16 @@ function prepare(options) {
 }
 
 async function startRoom(options, dist) {
-  const bridge = createBridge({
-    projectRoot: options.projectRoot,
-    port: options.port,
-    staticDir: dist,
-    lanesSource: options.lanes === true,
-    sessionsSource: options.sessions === true,
-  })
-
+  let bridge
   let info
   try {
+    bridge = createBridge({
+      projectRoot: options.projectRoot,
+      port: options.port,
+      staticDir: dist,
+      lanesSource: options.lanes === true,
+      sessionsSource: options.sessions === true,
+    })
     info = await bridge.start()
   } catch (error) {
     console.error(`machine-room could not start: ${error.message}`)
