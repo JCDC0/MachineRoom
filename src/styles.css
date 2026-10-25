@@ -419,7 +419,6 @@ summary:focus-visible,
   gap: var(--space);
   padding: 0 calc(var(--space) * 2);
   background: var(--black);
-  border-bottom: 1px solid rgb(255 255 255 / 0.18);
   pointer-events: auto;
 }
 
@@ -744,7 +743,6 @@ summary:focus-visible,
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   padding: 0 calc(var(--space) * 2);
-  border-top: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: rgb(0 0 0 / 0.88);
 }
