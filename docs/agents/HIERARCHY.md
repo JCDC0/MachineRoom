@@ -1,6 +1,6 @@
 # Orchestrators in a ladder (built)
 
-Status: built. The plan was written on 2026-10-24 at the owner's request. O1 to O7 are merged, and each step below gives its version. V23 made the sectors readable, V25 grouped the dock's agent list, V26 named each sector once, and S10 added the demo replay (`?replay&fixture=scenario-i`). One point from the version 7 audit waits for the owner: X3, where the scope check reads only committed work. X1 is fixed in 0.1.336: the bridge reads the actor from the request, and the sector gate is advisory until each sub has its own token. Briefs O1 to O7 in `TASKS.md`.
+Status: built. The plan was written on 2026-10-24 at the owner's request. O1 to O7 are merged, and each step below gives its version. V23 made the sectors readable, V25 grouped the dock's agent list, V26 named each sector once, and S10 added the demo replay (`?replay&fixture=scenario-i`). One point from the version 7 audit waits for the owner: X3, where the scope check reads only committed work. X1 is fixed: each orchestrator has its own in-memory token and the sector gate is enforced (O8). Briefs O1 to O8 in `TASKS.md`.
 
 ## What the owner asked for
 
@@ -86,4 +86,4 @@ One point waits for the owner:
 
 - X3. The scope check reads only committed work, so uncommitted edits are not listed. See `AUDIT-2026-10-V7.md`.
 
-X1 is fixed in 0.1.336: the bridge reads the actor from the request, and the sector gate stays advisory until each sub has its own token.
+X1 is fixed: each orchestrator gets its own in-memory token, required in X-MachineRoom-Orchestrator, and the sector gate is enforced (O8, 0.1.342).

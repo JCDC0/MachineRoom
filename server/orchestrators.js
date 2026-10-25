@@ -21,6 +21,9 @@ export const OWNER_MESSAGE_PROBLEM = 'A request with no Origin cannot send a mes
 export const PAGE_MESSAGE_PROBLEM = 'A page cannot send a message as the orchestrator.'
 export const ORCHESTRATOR_TARGET_PROBLEM = 'The orchestrator sends a message to a sub orchestrator.'
 export const MESSAGE_FROM_PROBLEM = 'A message comes from the owner or the orchestrator.'
+export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestrator token.'
+export const MAIN_LADDER_PROBLEM = 'A ladder change needs the main orchestrator\'s token.'
+export const MAIN_MESSAGE_PROBLEM = 'A message to a sub needs the main orchestrator\'s token.'
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -320,7 +323,26 @@ export function createOrchestrators({
     return instances.get(key) ?? null
   }
 
-  function message(body, page) {
+  function token(id) {
+    const key = typeof id === 'string' && id.trim() ? id.trim() : ORCHESTRATOR_KEY
+    const instance = instances.get(key)
+    return instance?.token ?? null
+  }
+
+  function idForToken(value) {
+    if (typeof value !== 'string' || !value) return null
+    for (const [id, instance] of instances) {
+      if (instance.token && instance.token === value) return id
+    }
+    return null
+  }
+
+  function message(body, page, tokenValue = '') {
+    if (!page) {
+      const actor = idForToken(tokenValue)
+      if (!actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
+      if (actor !== ORCHESTRATOR_KEY) return { status: 403, body: { error: MAIN_MESSAGE_PROBLEM } }
+    }
     const id = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : ORCHESTRATOR_KEY
     const instance = instances.get(id)
     if (!instance) return { status: 404, body: { error: NO_ORCHESTRATOR_PROBLEM } }
@@ -346,7 +368,12 @@ export function createOrchestrators({
     return instance.send(body)
   }
 
-  function ladderChange(body, page) {
+  function ladderChange(body, page, tokenValue = '') {
+    if (!page) {
+      const actor = idForToken(tokenValue)
+      if (!actor) return { status: 403, body: { error: NO_TOKEN_PROBLEM } }
+      if (actor !== ORCHESTRATOR_KEY) return { status: 403, body: { error: MAIN_LADDER_PROBLEM } }
+    }
     if (body.confirmed !== true) return { status: 400, body: { error: CONFIRM_LADDER_PROBLEM } }
     const by =
       body.by === undefined || body.by === null || body.by === ''
@@ -390,6 +417,8 @@ export function createOrchestrators({
     const path = url.pathname
     const method = req.method ?? 'GET'
     const page = Boolean(req.headers.origin)
+    const tokenHeader = req.headers['x-machineroom-orchestrator']
+    const token = typeof tokenHeader === 'string' ? tokenHeader.trim() : Array.isArray(tokenHeader) ? tokenHeader[0].trim() : ''
     if (path === '/api/orchestrators') {
       if (method !== 'GET') return methodNotAllowed(req, res)
       sendJson(req, res, 200, list())
@@ -409,7 +438,7 @@ export function createOrchestrators({
       if (method !== 'POST') return methodNotAllowed(req, res)
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const out = message(body, page)
+      const out = message(body, page, token)
       sendJson(req, res, out.status, out.body)
       return true
     }
@@ -443,7 +472,7 @@ export function createOrchestrators({
       if (method !== 'POST') return methodNotAllowed(req, res)
       const body = await readJsonBody(req, res)
       if (body === null) return true
-      const out = ladderChange(body, page)
+      const out = ladderChange(body, page, token)
       sendJson(req, res, out.status, out.body)
       return true
     }
@@ -463,5 +492,5 @@ export function createOrchestrators({
 
   sync()
 
-  return { main, handle, list, subs, sector, find, onFrame, close }
+  return { main, handle, list, subs, sector, find, token, idForToken, onFrame, close }
 }

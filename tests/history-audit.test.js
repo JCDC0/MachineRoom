@@ -529,6 +529,18 @@ describe('maskKeys', () => {
     expect(maskKeys(`OPENROUTER_API_KEY=${fakeOr}`)).toEqual({ text: 'OPENROUTER_API_KEY=[key]', count: 1 })
     expect(maskKeys('OPENAI_API_KEY="abc123"')).toEqual({ text: 'OPENAI_API_KEY="[key]"', count: 1 })
     expect(maskKeys(`ANTHROPIC_API_KEY=${fakeSk}`)).toEqual({ text: 'ANTHROPIC_API_KEY=[key]', count: 1 })
+    expect(maskKeys('X-MachineRoom-Orchestrator: secret-orchestrator-token-value')).toEqual({
+      text: 'X-MachineRoom-Orchestrator: [key]',
+      count: 1,
+    })
+    expect(maskKeys('x-machineroom-orchestrator: secret-orchestrator-token-value')).toEqual({
+      text: 'x-machineroom-orchestrator: [key]',
+      count: 1,
+    })
+    expect(maskKeys('curl -H "X-MachineRoom-Orchestrator: secret-token" http://localhost:4040/api/control/runs')).toEqual({
+      text: 'curl -H "X-MachineRoom-Orchestrator: [key]" http://localhost:4040/api/control/runs',
+      count: 1,
+    })
   })
 
   it('leaves a 40 character git sha and a UUID alone', () => {
@@ -544,6 +556,7 @@ describe('maskKeys', () => {
     expect(maskKeys('ANTHROPIC_API_KEY=xxx')).toEqual({ text: 'ANTHROPIC_API_KEY=xxx', count: 0 })
     expect(maskKeys('OPENAI_API_KEY=<your key>')).toEqual({ text: 'OPENAI_API_KEY=<your key>', count: 0 })
     expect(maskKeys('OPENAI_API_KEY=')).toEqual({ text: 'OPENAI_API_KEY=', count: 0 })
+    expect(maskKeys('X-MachineRoom-Orchestrator: {{TOKEN}}')).toEqual({ text: 'X-MachineRoom-Orchestrator: {{TOKEN}}', count: 0 })
     expect(maskKeys('OPENROUTER_API_KEY=${OPENROUTER_API_KEY}')).toEqual({
       text: 'OPENROUTER_API_KEY=${OPENROUTER_API_KEY}',
       count: 0,

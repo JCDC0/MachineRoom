@@ -7,6 +7,7 @@ const GOOGLE_KEY = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}/g
 const GITHUB_TOKEN = /(?<![A-Za-z0-9_])(?:ghp_|gho_|github_pat_)\w{20,}/g
 const AWS_TOKEN = /(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}/g
 const KEY_SETTING = /(?<![A-Za-z0-9_])(OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY)(?![A-Za-z0-9_])\s*(?::|=)(?![=>])\s*(['"]?)([^\s'"]*)\2/g
+const HEADER_SETTING = /(?<![A-Za-z0-9_-])([Xx]-[Mm]achine[Rr]oom-[Oo]rchestrator)(?![A-Za-z0-9_-])\s*(?::|=)(?![=>])\s*(['"]?)([^\s'"]*)\2/gi
 const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g
 const USER_PATH = /[A-Za-z]:[\\/]Users[\\/](<[^<>\s]{1,64}>|\$env:[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|[^\s\\/"'`,;:<>|?*)\]}]+)/gi
 const GRADED_PATH = /(?<![A-Za-z0-9])coursework(?![A-Za-z0-9])/gi
@@ -49,6 +50,7 @@ function isVersionDomain(domain) {
 function isPlaceholder(value) {
   if (value === '') return true
   if (value.startsWith('<')) return true
+  if (value.startsWith('{{') && value.endsWith('}}')) return true
   if (value.includes('...') || value.includes('…')) return true
   return PLACEHOLDER.test(value)
 }
@@ -158,15 +160,17 @@ export const KEY_MASK = '[key]'
 function keyRanges(line) {
   const ranges = []
   const settings = []
-  eachMatch(KEY_SETTING, line, (match) => {
-    const raw = match[3] ?? ''
-    const start = match.index + match[0].lastIndexOf(raw)
-    const value = raw.replace(/\\+$/, '')
-    if (value === '') return
-    settings.push([start, start + value.length])
-    if (value === KEY_MASK || isPlaceholder(value)) return
-    ranges.push([start, start + value.length])
-  })
+  for (const re of [KEY_SETTING, HEADER_SETTING]) {
+    eachMatch(re, line, (match) => {
+      const raw = match[3] ?? ''
+      const start = match.index + match[0].lastIndexOf(raw)
+      const value = raw.replace(/\\+$/, '')
+      if (value === '') return
+      settings.push([start, start + value.length])
+      if (value === KEY_MASK || isPlaceholder(value)) return
+      ranges.push([start, start + value.length])
+    })
+  }
   for (const re of [SK_TOKEN, GITHUB_TOKEN, AWS_TOKEN, GOOGLE_KEY]) {
     eachMatch(re, line, (match) => {
       const inside = settings.some(([start, end]) => match.index >= start && match.index < end)
@@ -223,16 +227,23 @@ const TAIL_SCAN = 1024
 const RUN_ENDS = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const LINE_BREAK = /(\r\n|\r|\n)/
 const TOKEN_CHAR = /[A-Za-z0-9_-]/
-const SETTING_NAMES = ['OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
+const SETTING_NAMES = [
+  'OPENROUTER_API_KEY',
+  'ANTHROPIC_API_KEY',
+  'OPENAI_API_KEY',
+  'X-MachineRoom-Orchestrator',
+  'x-machineroom-orchestrator',
+]
 const GITHUB_HEADS = ['ghp_', 'gho_', 'github_pat_']
-const OPEN_SETTING = /(?<![A-Za-z0-9_])(?:OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY)\s*(?:[:=]\s*['"]?[^\s'"]*)?$/
+const OPEN_SETTING = /(?<![A-Za-z0-9_-])(?:OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPENAI_API_KEY|[Xx]-[Mm]achine[Rr]oom-[Oo]rchestrator)\s*(?:[:=]\s*['"]?[^\s'"]*)?$/i
 const OPEN_SK = /^(?:s|sk|sk-[A-Za-z0-9_-]*)$/
 const OPEN_GOOGLE = /^(?:A|AI|AIz|AIza[0-9A-Za-z_-]{0,34})$/
 const OPEN_GITHUB = /^(?:ghp_|gho_|github_pat_)\w*$/
 const OPEN_AWS = /^(?:A|AK|AKI|AKIA[0-9A-Z]{0,15})$/
 
 function isHeadOf(words, text) {
-  return words.some((word) => word.startsWith(text))
+  const lower = text.toLowerCase()
+  return words.some((word) => word.toLowerCase().startsWith(lower))
 }
 
 function openToken(word) {

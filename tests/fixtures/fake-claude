@@ -59,13 +59,18 @@ if (resumed) {
 } else {
   const found = /(https?:\/\/(?:127\.0\.0\.1|localhost):\d+)/.exec(instruction)
   const bridge = found ? found[1] : ''
+  const tokenMatch = /X-MachineRoom-Orchestrator:\s*([^\s\r\n`"']+)/i.exec(instruction)
+  const token = tokenMatch ? tokenMatch[1] : ''
   let status = 0
   let body = ''
   if (bridge) {
     try {
       const response = await fetch(`${bridge}/api/control/runs`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(token ? { 'X-MachineRoom-Orchestrator': token } : {}),
+        },
         body: JSON.stringify({ lane, tasks: [task], worktree: true, confirmed: true, ...(subId ? { startedBy: subId } : {}) }),
       })
       status = response.status

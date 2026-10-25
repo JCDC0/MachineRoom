@@ -19,6 +19,8 @@ export const TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characte
 export const TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'
 export const RUN_KIND_PROBLEM = 'Send a task, a queue or briefs, not more than one.'
 export const MAIN_RUN_PROBLEM = 'A request with no Origin cannot start a run as the main orchestrator.'
+export const NO_TOKEN_PROBLEM = 'A request with no Origin needs a valid orchestrator token.'
+export const TOKEN_MISMATCH_PROBLEM = 'The startedBy orchestrator must match the token.'
 export const QUEUE_DIRTY_PROBLEM = 'A queue needs a clean project.'
 export const BRIEF_PROJECT_PROBLEM = 'Briefs run in this repository. Use a task or a queue on another project.'
 export function notGitProblem(project, { queue = false } = {}) {
@@ -391,17 +393,37 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     let startedBy = ''
-    if (Object.hasOwn(body, 'startedBy')) {
+    const registry = typeof orchestrators === 'function' ? orchestrators() : null
+    const page = Boolean(req.headers.origin)
+    if (!page) {
+      if (registry && (projectRun || req.headers['x-machineroom-orchestrator'] || Object.hasOwn(body, 'startedBy'))) {
+        const tokenHeader = req.headers['x-machineroom-orchestrator']
+        const token = typeof tokenHeader === 'string' ? tokenHeader.trim() : Array.isArray(tokenHeader) ? tokenHeader[0].trim() : ''
+        const actor = registry.idForToken(token)
+        if (!actor) {
+          sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
+          return true
+        }
+        startedBy = actor
+        if (Object.hasOwn(body, 'startedBy')) {
+          const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
+          if (wanted !== actor) {
+            sendJson(req, res, 403, { error: TOKEN_MISMATCH_PROBLEM })
+            return true
+          }
+        }
+        const sector = registry.sector(actor)
+        if (actor !== 'orchestrator' && Array.isArray(sector?.lanes) && !sector.lanes.includes(lane)) {
+          sendJson(req, res, 403, { error: `The ${sector.name} sector does not hold the lane ${lane}.` })
+          return true
+        }
+      }
+    } else if (Object.hasOwn(body, 'startedBy')) {
       const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
       if (!wanted) {
         sendJson(req, res, 400, { error: 'startedBy needs an orchestrator id.' })
         return true
       }
-      if (wanted === 'orchestrator' && !req.headers.origin) {
-        sendJson(req, res, 403, { error: MAIN_RUN_PROBLEM })
-        return true
-      }
-      const registry = typeof orchestrators === 'function' ? orchestrators() : null
       const sector = registry ? registry.sector(wanted) : null
       if (!sector) {
         sendJson(req, res, 400, { error: 'There is no orchestrator with that id.' })

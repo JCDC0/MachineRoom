@@ -294,8 +294,11 @@ describe('one orchestrator turn', () => {
     expect(calls[0].args).not.toContain('--resume')
     const sessionId = valueAfter(calls[0].args, '--session-id')
     expect(sessionId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(typeof rig.orchestrator.token).toBe('string')
+    expect(rig.orchestrator.token).toHaveLength(32)
+    expect(rig.answer().token).toBeUndefined()
     expect(valueAfter(calls[0].args, '--append-system-prompt')).toBe(
-      `project=${rig.projectRoot}\nmachineroom=${REPO_ROOT}\nruns=${rig.runs}\nbridge=http://127.0.0.1:5999`
+      `project=${rig.projectRoot}\nmachineroom=${REPO_ROOT}\nruns=${rig.runs}\nbridge=http://127.0.0.1:5999\nSend the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token} on every bridge request.`
     )
     const reply = rig.answer().messages.at(-1)
     expect(reply.from).toBe('orchestrator')
@@ -396,14 +399,15 @@ describe('one orchestrator turn', () => {
     expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: You have hit your session limit.')
   })
 
-  it('uses the three-sentence fallback when the prompt file is missing', async () => {
+  it('uses the fallback when the prompt file is missing', async () => {
     const rig = makeRig({ prompt: null })
     rig.send('Hello')
     await waitIdle(rig, 1)
     const instruction = valueAfter(rig.calls()[0].args, '--append-system-prompt')
     expect(instruction).toContain(rig.projectRoot)
     expect(instruction).toContain('Never push')
-    expect(instruction.split(/\.\s+/)).toHaveLength(3)
+    expect(instruction).toContain(`Send the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token}`)
+    expect(instruction.split(/\.\s+/)).toHaveLength(4)
   })
 })
 
