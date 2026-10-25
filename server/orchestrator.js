@@ -17,6 +17,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
+import { MODELS } from './models.js'
 import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
 
@@ -28,13 +29,22 @@ export const ORCHESTRATOR_ROOM_WINDOW_MS = 60 * 60 * 1000
 export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
 export const DEFAULT_CONTEXT_WINDOW = 200000
 export const AUTOCOMPACT_SHARE = 0.8
+export const DEFAULT_AUTOCOMPACT_PERCENT = 80
 export const COMPACT_PROMPT =
   'Write a summary of the work so far, the open runs and the next steps, in at most 40 lines. Reply with the summary only.'
 export const COMPACTED_MESSAGE = 'The session was compacted. The next turn starts a new session with the summary.'
 export const CONFIRM_MESSAGE_PROBLEM = 'Confirm the message first.'
 export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
 export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first.'
+export const CONFIRM_COMPACT_PROBLEM = 'Confirm the compact first.'
+export const CONFIRM_MODEL_PROBLEM = 'Confirm the model change first.'
 export const AUTOCOMPACT_PROBLEM = 'Say whether autocompact is on or off.'
+export const AUTOCOMPACT_PERCENT_PROBLEM = 'Percent must be a whole number from 50 to 95.'
+export const COMPACT_RUNNING_PROBLEM = 'A turn is already running.'
+export const NO_SESSION_PROBLEM = 'The orchestrator has no session yet.'
+export const COMPACT_KEEP_LIMIT = 2000
+export const COMPACT_KEEP_PROBLEM = 'Write at most 2000 characters to keep.'
+export const MODEL_PROBLEM = 'Choose a model listed for this harness.'
 export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
@@ -254,6 +264,12 @@ export function contextTokensFromLog(harness, log) {
   return found
 }
 
+export function compactPrompt(keep = '') {
+  const text = typeof keep === 'string' ? keep.trim() : ''
+  if (!text) return COMPACT_PROMPT
+  return `${COMPACT_PROMPT}\n\nKeep these in the summary:\n${text}`
+}
+
 function blockFor(message) {
   const from = String(message?.from ?? '')
   const label = from === 'owner' ? 'Owner' : from === 'room' ? 'Room' : from.startsWith('sub:') ? `Sub ${from.slice(4)}` : 'Orchestrator'
@@ -336,7 +352,7 @@ export function createOrchestrator({
       : String(lane.cli.harness ?? 'claude') === 'opencode'
         ? 'opencode'
         : 'claude'
-  const model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
+  let model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
   const bin = binOption ? String(binOption) : String(lane.cli.bin ?? (harness === 'opencode' ? 'opencode' : 'claude'))
   const windowOption = Number.isFinite(contextWindowOption) && contextWindowOption > 0
     ? Math.round(contextWindowOption)
@@ -355,8 +371,9 @@ export function createOrchestrator({
   let contextTokens = null
   let contextWindow = windowOption || DEFAULT_CONTEXT_WINDOW
   let autocompact = true
+  let autocompactPercent = DEFAULT_AUTOCOMPACT_PERCENT
   let summary = ''
-  let pendingCompaction = false
+  let pendingCompaction = null
 
   function notify() {
     try {
@@ -378,7 +395,21 @@ export function createOrchestrator({
     try {
       mkdirSync(folder, { recursive: true })
       const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
-      const saved = { project: root, sessionId, state, messages, pending: waiting, roomTurns, contextTokens, contextWindow, autocompact, summary, ...(ladder ? { ladder } : {}) }
+      const saved = {
+        project: root,
+        sessionId,
+        state,
+        model,
+        messages,
+        pending: waiting,
+        roomTurns,
+        contextTokens,
+        contextWindow,
+        autocompact,
+        autocompactPercent,
+        summary,
+        ...(ladder ? { ladder } : {}),
+      }
       const temporary = `${conversationFile}.tmp`
       writeFileSync(temporary, `${JSON.stringify(saved, null, 2)}\n`)
       renameSync(temporary, conversationFile)
@@ -438,10 +469,19 @@ export function createOrchestrator({
       return
     }
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
+    if (typeof saved.model === 'string' && saved.model.trim() !== '') model = saved.model.trim()
     if (saved.state === 'working') state = 'idle'
     if (saved.state === 'paused') state = 'paused'
     if (saved.ladder && typeof saved.ladder === 'object' && !Array.isArray(saved.ladder)) ladder = saved.ladder
     if (typeof saved.autocompact === 'boolean') autocompact = saved.autocompact
+    if (
+      typeof saved.autocompactPercent === 'number' &&
+      Number.isInteger(saved.autocompactPercent) &&
+      saved.autocompactPercent >= 50 &&
+      saved.autocompactPercent <= 95
+    ) {
+      autocompactPercent = saved.autocompactPercent
+    }
     if (typeof saved.contextTokens === 'number' && Number.isFinite(saved.contextTokens) && saved.contextTokens >= 0) {
       contextTokens = Math.round(saved.contextTokens)
     }
@@ -544,9 +584,11 @@ export function createOrchestrator({
     startTurn()
   }
 
-  function startTurn() {
-    const compaction = pendingCompaction
-    pendingCompaction = false
+  function startTurn(options = null) {
+    const manualCompacting = Boolean(options?.compacting)
+    const keepText = manualCompacting ? (options.keep || '') : (pendingCompaction?.keep || '')
+    const compaction = manualCompacting || Boolean(pendingCompaction)
+    pendingCompaction = null
     const turnMessages = compaction ? [] : pending.splice(0, pending.length)
     const hasOwner = turnMessages.some((message) => message.from === 'owner')
     if (!hasOwner) roomTurns.push(now())
@@ -570,7 +612,7 @@ export function createOrchestrator({
       setState('idle')
       return
     }
-    const message = compaction ? COMPACT_PROMPT : turnText(turnMessages)
+    const message = compaction ? compactPrompt(keepText) : turnText(turnMessages)
     const baseInstruction = instructionFor(
       promptFile,
       root,
@@ -692,8 +734,8 @@ export function createOrchestrator({
       if (!stopped) maybeStartTurn()
       return
     }
-    if (autocompact && sessionId && contextTokens !== null && contextTokens / contextWindow >= AUTOCOMPACT_SHARE) {
-      pendingCompaction = true
+    if (autocompact && sessionId && contextTokens !== null && contextTokens / contextWindow >= autocompactPercent / 100) {
+      pendingCompaction = { keep: '' }
     }
     if (!stopped) {
       setState(state === 'paused' ? 'paused' : 'idle')
@@ -713,6 +755,7 @@ export function createOrchestrator({
       contextTokens,
       contextWindow,
       autocompact,
+      autocompactPercent,
       messages: messages.map((message) => ({ ...message })),
     }
   }
@@ -754,11 +797,51 @@ export function createOrchestrator({
 
   function setAutocompact(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_AUTOCOMPACT_PROBLEM } }
-    if (typeof body.on !== 'boolean') return { status: 400, body: { error: AUTOCOMPACT_PROBLEM } }
-    autocompact = body.on
+    if (body.on === undefined && body.percent === undefined) {
+      return { status: 400, body: { error: AUTOCOMPACT_PROBLEM } }
+    }
+    if (body.on !== undefined && typeof body.on !== 'boolean') {
+      return { status: 400, body: { error: AUTOCOMPACT_PROBLEM } }
+    }
+    if (body.percent !== undefined) {
+      if (typeof body.percent !== 'number' || !Number.isInteger(body.percent) || body.percent < 50 || body.percent > 95) {
+        return { status: 400, body: { error: AUTOCOMPACT_PERCENT_PROBLEM } }
+      }
+    }
+    if (typeof body.on === 'boolean') autocompact = body.on
+    if (body.percent !== undefined) autocompactPercent = body.percent
     persist()
     notify()
-    return { status: 200, body: { id: key, autocompact } }
+    return { status: 200, body: { id: key, autocompact, autocompactPercent } }
+  }
+
+  function compact(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_COMPACT_PROBLEM } }
+    if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    if (!sessionId) return { status: 400, body: { error: NO_SESSION_PROBLEM } }
+    let keep = ''
+    if (body?.keep !== undefined && body?.keep !== null) {
+      if (typeof body.keep !== 'string' || body.keep.trim().length > COMPACT_KEEP_LIMIT) {
+        return { status: 400, body: { error: COMPACT_KEEP_PROBLEM } }
+      }
+      keep = body.keep.trim()
+    }
+    if (state === 'paused') setState('idle')
+    startTurn({ compacting: true, keep })
+    return { status: 200, body: { ok: true } }
+  }
+
+  function setModel(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_MODEL_PROBLEM } }
+    const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
+    if (!nextModel) return { status: 400, body: { error: MODEL_PROBLEM } }
+    const allowed = MODELS.some((item) => item.id === nextModel && item.harness === harness)
+    if (!allowed) return { status: 400, body: { error: MODEL_PROBLEM } }
+    model = nextModel
+    persist()
+    notify()
+    return { status: 200, body: { id: key, model } }
   }
 
   function getLadder() {
@@ -824,5 +907,5 @@ export function createOrchestrator({
   persist()
   maybeStartTurn()
 
-  return { answer, send, deliver, stop, setAutocompact, getLadder, setLadder, onFrame, close, token }
+  return { answer, send, deliver, stop, setAutocompact, compact, setModel, getLadder, setLadder, onFrame, close, token }
 }

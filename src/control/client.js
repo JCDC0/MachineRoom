@@ -217,12 +217,57 @@ export function createClient({
       return request('POST', '/api/orchestrator/stop', body)
     },
 
-    setAutocompact: (id, on) =>
-      request('POST', '/api/orchestrator/autocompact', {
+    compactOrchestrator: ({ id, keep, confirmed = true } = {}) => {
+      const body = { confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      if (keep !== undefined && keep !== null) body.keep = keep
+      return request('POST', '/api/orchestrator/compact', body)
+    },
+
+    setAutocompact: (idOrOptions, onArg, percentArg) => {
+      let id
+      let on
+      let percent
+      if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+        id = idOrOptions.id
+        on = idOrOptions.on
+        percent = idOrOptions.percent
+      } else {
+        id = idOrOptions
+        if (typeof onArg === 'object' && onArg !== null) {
+          on = onArg.on
+          percent = onArg.percent
+        } else {
+          on = onArg
+          percent = percentArg
+        }
+      }
+      const body = {
         id: id === undefined || id === null || id === '' ? 'orchestrator' : id,
-        on,
-        confirmed: true,
-      }),
+      }
+      if (on !== undefined) body.on = on
+      if (percent !== undefined) body.percent = percent
+      body.confirmed = true
+      return request('POST', '/api/orchestrator/autocompact', body)
+    },
+
+    setOrchestratorModel: (idOrOptions, modelArg, options = {}) => {
+      let id
+      let model
+      let confirmed = true
+      if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+        id = idOrOptions.id
+        model = idOrOptions.model
+        if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+      } else {
+        id = idOrOptions
+        model = modelArg
+        if (options.confirmed !== undefined) confirmed = options.confirmed
+      }
+      const body = { model, confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      return request('POST', '/api/orchestrator/model', body)
+    },
 
     setLadder: (ladder) => request('POST', '/api/orchestrator/ladder', { ladder, by: 'owner', confirmed: true }),
 

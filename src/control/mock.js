@@ -31,7 +31,9 @@ export const CLIENT_METHODS = [
   'sendOrchestrator',
   'sendToOrchestrator',
   'stopOrchestrator',
+  'compactOrchestrator',
   'setAutocompact',
+  'setOrchestratorModel',
   'setLadder',
   'startRun',
   'reviews',
@@ -292,6 +294,7 @@ function seed(at) {
       contextTokens: 96000,
       contextWindow: 200000,
       autocompact: true,
+      autocompactPercent: 80,
       messages: [
         { id: 'orchestrator-message-1', from: 'owner', text: 'What is running?', at: iso(40) },
         { id: 'orchestrator-message-2', from: 'orchestrator', text: 'OpenCode has one run on JC-19. I will report when it ends.', at: iso(38) },
@@ -346,6 +349,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       contextTokens: null,
       contextWindow: 200000,
       autocompact: true,
+      autocompactPercent: 80,
       messages: [],
     }
     subChats.set(sub.id, chat)
@@ -380,6 +384,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         contextTokens: state.orchestratorChat.contextTokens,
         contextWindow: state.orchestratorChat.contextWindow,
         autocompact: state.orchestratorChat.autocompact,
+        autocompactPercent: state.orchestratorChat.autocompactPercent ?? 80,
         lanes: MOCK_LANE_KEYS.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -394,6 +399,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         contextTokens: ensureSubChat(sub).contextTokens,
         contextWindow: ensureSubChat(sub).contextWindow,
         autocompact: ensureSubChat(sub).autocompact,
+        autocompactPercent: ensureSubChat(sub).autocompactPercent ?? 80,
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted !== false,
@@ -686,13 +692,94 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return { ok: true }
       }),
 
-    setAutocompact: (id, on) =>
-      call('setAutocompact', () => {
-        if (typeof on !== 'boolean') throw new Error('Say whether autocompact is on or off.')
+    compactOrchestrator: (options = {}) =>
+      call('compactOrchestrator', () => {
+        const { id, keep, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm the compact first.')
+        if (keep !== undefined && keep !== null) {
+          if (typeof keep !== 'string' || keep.trim().length > 2000) {
+            throw new Error('Write at most 2000 characters to keep.')
+          }
+        }
         const chat = chatStore(id)
-        chat.autocompact = on
+        if (chat.state === 'working') throw new Error('A turn is already running.')
+        chat.contextTokens = 12000
+        orchestratorMessageCounter += 1
+        chat.messages.push({
+          id: `orchestrator-message-${orchestratorMessageCounter}`,
+          from: 'room',
+          text: 'The session was compacted. The next turn starts a new session with the summary.',
+          at: new Date(now()).toISOString(),
+        })
         emit({ topic: 'orchestrator' })
-        return { id: id ?? 'orchestrator', autocompact: on }
+        return { ok: true }
+      }),
+
+    setAutocompact: (idOrOptions, onArg, percentArg) =>
+      call('setAutocompact', () => {
+        let id
+        let on
+        let percent
+        if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+          id = idOrOptions.id
+          on = idOrOptions.on
+          percent = idOrOptions.percent
+        } else {
+          id = idOrOptions
+          if (typeof onArg === 'object' && onArg !== null) {
+            on = onArg.on
+            percent = onArg.percent
+          } else {
+            on = onArg
+            percent = percentArg
+          }
+        }
+        if (on === undefined && percent === undefined) throw new Error('Say whether autocompact is on or off.')
+        if (on !== undefined && typeof on !== 'boolean') throw new Error('Say whether autocompact is on or off.')
+        if (percent !== undefined) {
+          if (typeof percent !== 'number' || !Number.isInteger(percent) || percent < 50 || percent > 95) {
+            throw new Error('Percent must be a whole number from 50 to 95.')
+          }
+        }
+        const chat = chatStore(id)
+        if (typeof on === 'boolean') chat.autocompact = on
+        if (percent !== undefined) chat.autocompactPercent = percent
+        emit({ topic: 'orchestrator' })
+        return {
+          id: id ?? 'orchestrator',
+          autocompact: chat.autocompact,
+          autocompactPercent: chat.autocompactPercent ?? 80,
+        }
+      }),
+
+    setOrchestratorModel: (idOrOptions, modelArg, options = {}) =>
+      call('setOrchestratorModel', () => {
+        let id
+        let model
+        let confirmed = true
+        if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+          id = idOrOptions.id
+          model = idOrOptions.model
+          if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+        } else {
+          id = idOrOptions
+          model = modelArg
+          if (options.confirmed !== undefined) confirmed = options.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the model change first.')
+        const chat = chatStore(id)
+        const harness = (id && id !== 'orchestrator')
+          ? (ladder.subs.find((s) => s.id === id)?.harness ?? 'opencode')
+          : 'claude'
+        const allowed = state.models.some((m) => m.id === model && m.harness === harness)
+        if (!allowed) throw new Error('Choose a model listed for this harness.')
+        chat.model = model
+        if (id && id !== 'orchestrator') {
+          const sub = ladder.subs.find((s) => s.id === id)
+          if (sub) sub.model = model
+        }
+        emit({ topic: 'orchestrator' })
+        return { id: id ?? 'orchestrator', model }
       }),
 
     setLadder: (next) => call('setLadder', () => replaceLadder(next)),
