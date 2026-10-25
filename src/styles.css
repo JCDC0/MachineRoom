@@ -9,7 +9,7 @@
   --menu-h: 52px;
   --transport-h: 56px;
   --strip-h: 72px;
-  --lens-h: max(360px, 58vh);
+  --lens-h: calc(100vh - var(--menu-h) - var(--transport-h));
   --sans: 'Jost', system-ui, sans-serif;
   --mono: 'Space Mono', ui-monospace, monospace;
   --corner-ticks:
@@ -6918,7 +6918,7 @@ body:has(#hud-orchestrator-chat) .waiting {
 /* Task U34: the lower half, with the conversation in the middle and Overview on the right. */
 @media (min-width: 900px) {
   .stage {
-    --lens-h: var(--lens-h-user, max(320px, 52vh));
+    --lens-h: var(--lens-h-user, calc(100vh - var(--menu-h) - var(--transport-h)));
   }
 
   .transport {
@@ -6926,6 +6926,7 @@ body:has(#hud-orchestrator-chat) .waiting {
     padding: 4px calc(var(--space) * 2);
     border-left: 0;
     border-right: 0;
+    min-height: var(--transport-h);
   }
 
   .hud-lower {

@@ -25,7 +25,8 @@ function memoryStore() {
 }
 
 describe('lens rails', () => {
-  it('clamps the lens share and falls back to the default', () => {
+  it('clamps the lens share and falls back to the full lens', () => {
+    expect(LENS_SHARE_DEFAULT).toBe(LENS_SHARE_MAX)
     expect(clampLensShare(0.1)).toBe(LENS_SHARE_MIN)
     expect(clampLensShare(2)).toBe(LENS_SHARE_MAX)
     expect(clampLensShare('x')).toBe(LENS_SHARE_DEFAULT)
@@ -65,8 +66,13 @@ describe('lens rails', () => {
     expect(lensShareAfterWheel(0.79, -1000)).toBe(LENS_SHARE_MAX)
   })
 
-  it('writes a CSS height with a floor and a multiplier', () => {
+  it('fills to the transport at the maximum share and keeps a floor below it', () => {
+    const full = 'calc(100vh - var(--menu-h) - var(--transport-h))'
     expect(lensHeightValue(0.52)).toBe('max(240px, 52.0vh)')
+    expect(lensHeightValue(0.79)).toBe('max(240px, 79.0vh)')
+    expect(lensHeightValue(LENS_SHARE_MAX)).toBe(full)
+    expect(lensHeightValue(1)).toBe(full)
+    expect(lensHeightValue('x')).toBe(full)
     expect(multiplierText(1)).toBe('1.0x')
     expect(multiplierText(2.46)).toBe('2.5x')
     expect(multiplierText(12.4)).toBe('12x')

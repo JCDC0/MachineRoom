@@ -280,6 +280,7 @@ export function createCameraRig(camera, surface) {
     update,
     snap,
     zoomBy,
+    yaw: () => view.yaw,
     zoomShare: () => shareFromDistance(goal.dist),
     setZoomShare(share) {
       adjusted = true

@@ -1,5 +1,6 @@
+import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, fitView, minTextScale, viewBasis } from '../src/engine/camera.js'
+import { CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, createCameraRig, fitView, minTextScale, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -28,6 +29,40 @@ const faces = [
   { x: -900, y: 400, z: 300, r: Math.hypot(124, 32), rx: 124, ry: 32 },
   { x: 1100, y: -300, z: -500, r: Math.hypot(170, 60), rx: 170, ry: 60 },
 ]
+
+describe('camera rig yaw', () => {
+  it('reports the view yaw and follows a drag', () => {
+    const saved = globalThis.window
+    const listeners = {}
+    globalThis.window = {
+      matchMedia: () => ({ matches: false }),
+      addEventListener: (type, handler) => {
+        if (!listeners[type]) listeners[type] = []
+        listeners[type].push(handler)
+      },
+      removeEventListener: () => {},
+    }
+    try {
+      const camera = new THREE.PerspectiveCamera()
+      const surfaceListeners = {}
+      const surface = {
+        addEventListener: (type, handler) => {
+          surfaceListeners[type] = handler
+        },
+        removeEventListener: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 800 }),
+      }
+      const rig = createCameraRig(camera, surface)
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw)
+      surfaceListeners.pointerdown({ clientX: 500, clientY: 400, target: { closest: () => null } })
+      for (const handler of listeners.pointermove ?? []) handler({ clientX: 400, clientY: 400 })
+      rig.snap()
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw + 0.5)
+    } finally {
+      globalThis.window = saved
+    }
+  })
+})
 
 describe('viewBasis', () => {
   it('gives three unit vectors at right angles', () => {
