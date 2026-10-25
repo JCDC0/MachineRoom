@@ -27,7 +27,7 @@ export const DEFAULT_EFFECTS = Object.freeze({
   aberration: Object.freeze({ on: false, strength: 0.2 }),
   vignette: Object.freeze({ on: true, strength: 0.2 }),
   grain: Object.freeze({ on: false, strength: 0.2 }),
-  dust: Object.freeze({ on: true, strength: 0.2 }),
+  dust: Object.freeze({ on: true, strength: 0.2, pulse: false }),
 })
 
 function clampVolume(value, fallback) {
@@ -85,7 +85,8 @@ export function effectSettings(saved) {
   const aberration = clampEffect(source.aberration ?? source.chromaticAberration, false, 0.2)
   const vignette = clampEffect(source.vignette, true, 0.2)
   const grain = clampEffect(source.grain, false, 0.2)
-  const dust = clampEffect(source.dust ?? source.fineDust, true, 0.2)
+  const dustRaw = source.dust ?? source.fineDust
+  const dust = { ...clampEffect(dustRaw, true, 0.2), pulse: dustRaw?.pulse === true }
 
   return {
     alwaysDepth,

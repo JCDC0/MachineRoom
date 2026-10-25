@@ -5,7 +5,7 @@ export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
 const TICK = 50
 const DUST = 1800
-export const MOTES = 1400
+export const MOTES = 4000
 export const MOTE_INNER = 400
 export const MOTE_OUTER = 9000
 export const SPECK_BANDS = [
@@ -14,13 +14,25 @@ export const SPECK_BANDS = [
   { size: 38, fade: 0.45 },
 ]
 
-let fineDustOptions = { on: true, strength: 0.2 }
+let fineDustOptions = { on: true, strength: 0.2, pulse: false }
 const fineDustMaterials = new Set()
+const fineDustGeometries = new Set()
+let pulseLevel = 1
 
 export function moteOpacity({ on, strength } = {}) {
   const value = Number(strength)
   if (!on || !Number.isFinite(value) || value <= 0) return 0
-  return Math.min(1, 0.25 + value * 0.75)
+  return 0.7
+}
+
+export function moteCount({ on, strength } = {}, total = MOTES) {
+  const value = Number(strength)
+  if (!on || !Number.isFinite(value) || value <= 0) return 0
+  return Math.round(total * Math.min(1, value))
+}
+
+export function dustPulse(seconds) {
+  return 0.6 + 0.4 * Math.sin(seconds * 1.2)
 }
 
 export function motePoints(count = MOTES, seed = 1337, inner = MOTE_INNER, outer = MOTE_OUTER) {
@@ -44,8 +56,16 @@ export function speckBands(points, bands = SPECK_BANDS.length) {
 
 export function setFineDust(options = {}) {
   fineDustOptions = { ...fineDustOptions, ...options }
+  if (!fineDustOptions.pulse) pulseLevel = 1
+  for (const geometry of fineDustGeometries) {
+    geometry.setDrawRange(0, moteCount(fineDustOptions, geometry.userData.total))
+  }
+  applyDustOpacity()
+}
+
+function applyDustOpacity() {
   for (const mat of fineDustMaterials) {
-    mat.opacity = moteOpacity(fineDustOptions) * (mat.userData.fade ?? 1)
+    mat.opacity = moteOpacity(fineDustOptions) * (mat.userData.fade ?? 1) * pulseLevel
     mat.visible = mat.opacity > 0
   }
 }
@@ -122,6 +142,8 @@ export function createVoid(scene, texture) {
   group.add(dust)
 
   const fineDust = new THREE.Group()
+  const fineGeometries = []
+  let elapsed = 0
   const fineMaterials = speckBands(motePoints()).map((points, index) => {
     const band = SPECK_BANDS[index]
     const material = new THREE.PointsMaterial({
@@ -136,7 +158,12 @@ export function createVoid(scene, texture) {
     material.userData.fade = band.fade
     material.visible = material.opacity > 0
     fineDustMaterials.add(material)
-    fineDust.add(new THREE.Points(new THREE.BufferGeometry().setFromPoints(points), material))
+    const geometry = new THREE.BufferGeometry().setFromPoints(points)
+    geometry.userData.total = points.length
+    geometry.setDrawRange(0, moteCount(fineDustOptions, points.length))
+    fineDustGeometries.add(geometry)
+    fineGeometries.push(geometry)
+    fineDust.add(new THREE.Points(geometry, material))
     return material
   })
   group.add(fineDust)
@@ -148,11 +175,20 @@ export function createVoid(scene, texture) {
       dust.rotation.y += delta * 0.004
       fineDust.rotation.y += delta * 0.002
       fineDust.rotation.x += delta * 0.001
+      if (fineDustOptions.pulse) {
+        elapsed += delta
+        pulseLevel = dustPulse(elapsed)
+        applyDustOpacity()
+      }
+    } else if (pulseLevel !== 1) {
+      pulseLevel = 1
+      applyDustOpacity()
     }
   }
 
   function dispose() {
     for (const material of fineMaterials) fineDustMaterials.delete(material)
+    for (const geometry of fineGeometries) fineDustGeometries.delete(geometry)
     scene.remove(group)
     group.traverse((object) => {
       object.geometry?.dispose()

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MOTES, MOTE_INNER, MOTE_OUTER, SPECK_BANDS, moteOpacity, motePoints, speckBands } from '../src/engine/void.js'
+import { MOTES, MOTE_INNER, MOTE_OUTER, SPECK_BANDS, dustPulse, moteCount, moteOpacity, motePoints, speckBands } from '../src/engine/void.js'
 
 describe('motePoints', () => {
   it('places every mote in the volume between the inner and outer radius', () => {
@@ -29,10 +29,28 @@ describe('moteOpacity', () => {
     expect(moteOpacity({ on: true, strength: Number.NaN })).toBe(0)
   })
 
-  it('stays visible at the default strength and never passes 1', () => {
-    expect(moteOpacity({ on: true, strength: 0.2 })).toBeCloseTo(0.4)
-    expect(moteOpacity({ on: true, strength: 1 })).toBe(1)
-    expect(moteOpacity({ on: true, strength: 5 })).toBe(1)
+  it('holds one brightness at any strength, since strength sets the count', () => {
+    expect(moteOpacity({ on: true, strength: 0.2 })).toBe(moteOpacity({ on: true, strength: 1 }))
+    expect(moteOpacity({ on: true, strength: 1 })).toBeGreaterThan(0)
+  })
+})
+
+describe('moteCount', () => {
+  it('draws more specks as the strength grows, none when off', () => {
+    expect(moteCount({ on: false, strength: 1 })).toBe(0)
+    expect(moteCount({ on: true, strength: 0 })).toBe(0)
+    expect(moteCount({ on: true, strength: 0.25 }, 400)).toBe(100)
+    expect(moteCount({ on: true, strength: 1 })).toBe(MOTES)
+    expect(moteCount({ on: true, strength: 5 })).toBe(MOTES)
+  })
+})
+
+describe('dustPulse', () => {
+  it('breathes between dim and full', () => {
+    const values = Array.from({ length: 60 }, (_, i) => dustPulse(i / 4))
+    expect(Math.min(...values)).toBeGreaterThanOrEqual(0.2)
+    expect(Math.max(...values)).toBeLessThanOrEqual(1)
+    expect(Math.max(...values) - Math.min(...values)).toBeGreaterThan(0.5)
   })
 })
 

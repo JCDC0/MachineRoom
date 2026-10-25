@@ -149,8 +149,8 @@ describe('effectSettings', () => {
     expect(defaults.chromaticAberration).toEqual({ on: false, strength: 0.2 })
     expect(defaults.vignette).toEqual({ on: true, strength: 0.2 })
     expect(defaults.grain).toEqual({ on: false, strength: 0.2 })
-    expect(defaults.dust).toEqual({ on: true, strength: 0.2 })
-    expect(defaults.fineDust).toEqual({ on: true, strength: 0.2 })
+    expect(defaults.dust).toEqual({ on: true, strength: 0.2, pulse: false })
+    expect(defaults.fineDust).toEqual({ on: true, strength: 0.2, pulse: false })
 
     expect(effectSettings(null)).toEqual(defaults)
     expect(effectSettings({})).toEqual(defaults)
@@ -188,7 +188,7 @@ describe('effectSettings', () => {
     })
     expect(res.fishEye).toEqual({ on: true, strength: 0.2 })
     expect(res.grain).toEqual({ on: false, strength: 0.2 })
-    expect(res.dust).toEqual({ on: true, strength: 0.85 })
+    expect(res.dust).toEqual({ on: true, strength: 0.85, pulse: false })
   })
 
   it('recognizes aliases for effect names', () => {
@@ -200,8 +200,8 @@ describe('effectSettings', () => {
     expect(res.fishEye).toEqual({ on: true, strength: 0.4 })
     expect(res.aberration).toEqual({ on: true, strength: 0.5 })
     expect(res.chromaticAberration).toEqual({ on: true, strength: 0.5 })
-    expect(res.dust).toEqual({ on: false, strength: 0.1 })
-    expect(res.fineDust).toEqual({ on: false, strength: 0.1 })
+    expect(res.dust).toEqual({ on: false, strength: 0.1, pulse: false })
+    expect(res.fineDust).toEqual({ on: false, strength: 0.1, pulse: false })
   })
 
   it('reads nested effects and persists to storage', () => {

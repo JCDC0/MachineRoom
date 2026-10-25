@@ -96,6 +96,19 @@ export default function Settings({ effects, onChange, onClose }) {
                       >
                         {effect.on ? 'On' : 'Off'}
                       </button>
+                      {key === 'dust' && (
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={effect.pulse === true}
+                          aria-label="Fine dust pulse"
+                          className={`hud-settings-switch ${effect.pulse ? 'is-on' : ''}`}
+                          disabled={!effect.on}
+                          onClick={() => updateEffect(key, { pulse: !effect.pulse })}
+                        >
+                          {effect.pulse ? 'Pulse' : 'Steady'}
+                        </button>
+                      )}
                       <span className="hud-settings-value mono">
                         {Math.round(effect.strength * 100)}%
                       </span>
