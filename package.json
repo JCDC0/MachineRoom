@@ -1,13 +1,14 @@
 {
   "name": "machine-room",
   "private": true,
-  "version": "0.1.364",
+  "version": "0.1.365",
   "type": "module",
   "engines": {
     "node": ">=24"
   },
   "bin": {
-    "machine-room": "bin/machine-room.mjs"
+    "machine-room": "bin/machine-room.mjs",
+    "machineroom": "bin/machineroom.mjs"
   },
   "files": [
     "bin/",

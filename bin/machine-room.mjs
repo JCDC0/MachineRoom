@@ -94,7 +94,7 @@ function prepare(options) {
   const dist = resolve(options.dist ?? join(binDir, '..', 'dist'))
 
   if (!hasIndex(dist)) {
-    console.error('Build the viewer first with npm run build.')
+    console.error(`Build the viewer first with npm run build. Run it in ${resolve(binDir, '..')}.`)
     process.exit(1)
   }
 

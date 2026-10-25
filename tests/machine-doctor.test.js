@@ -1,9 +1,9 @@
 import { spawn } from 'node:child_process'
 import { existsSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { openBrowser, openCommand, runDoctor, upBlock } from '../server/doctor.js'
+import { openBrowser, openCommand, runDoctor, upArgs, upBlock } from '../server/doctor.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -261,6 +261,7 @@ describe('the up block and browser open command', () => {
   it('formats the short block with the address, waiting room line and Ctrl+C', () => {
     const url = 'http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174'
     expect(upBlock(url)).toEqual([
+      'MachineRoom is running.',
       `machine-room: open ${url}`,
       'The room fills when a lane or a session works on the project.',
       'Press Ctrl+C in the terminal to stop the room.',
@@ -391,3 +392,22 @@ describe('the up block and browser open command', () => {
     ])
   })
 })
+
+describe('the machineroom command', () => {
+  const cwd = resolve('/work/LowBeam')
+
+  it('runs up on the current folder and opens the browser', () => {
+    expect(upArgs([], cwd)).toEqual({ root: cwd, args: ['up', '--root', cwd, '--open'] })
+  })
+
+  it('takes a folder first and passes the other options through', () => {
+    const other = resolve('/work/ulolTris')
+    expect(upArgs([other, '--port', '5199'], cwd)).toEqual({ root: other, args: ['up', '--root', other, '--open', '--port', '5199'] })
+    expect(upArgs(['../ulolTris'], cwd).root).toBe(resolve(cwd, '../ulolTris'))
+  })
+
+  it('leaves the browser closed with --no-open', () => {
+    expect(upArgs(['--no-open', '--no-sessions'], cwd).args).toEqual(['up', '--root', cwd, '--no-sessions'])
+  })
+})
+

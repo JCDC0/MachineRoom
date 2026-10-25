@@ -157,12 +157,13 @@ describe('machine-room up', () => {
     expect(health).toMatchObject({ ok: true, lanes: true, sessions: true })
 
     const lines = outputLines(run)
-    expect(lines.slice(-3)).toEqual([
+    expect(lines.slice(-4)).toEqual([
+      'MachineRoom is running.',
       `machine-room: open ${address}`,
       'The room fills when a lane or a session works on the project.',
       'Press Ctrl+C in the terminal to stop the room.',
     ])
-    const checks = lines.slice(0, -3)
+    const checks = lines.slice(0, -4)
     expect(checks.length).toBeGreaterThan(3)
     expect(checks.every((line) => /^(ok|FAIL) /.test(line))).toBe(true)
     expect(checks[0]).toContain('The project folder')
@@ -199,7 +200,8 @@ describe('machine-room up', () => {
     const lines = outputLines(run)
     const addressAt = lines.findIndex((line) => line.startsWith('machine-room: open '))
     expect(addressAt).toBeGreaterThan(0)
-    expect(lines[addressAt - 1]).toBe(SOME_CHECKS_FAILED)
+    expect(lines[addressAt - 1]).toBe('MachineRoom is running.')
+    expect(lines[addressAt - 2]).toBe(SOME_CHECKS_FAILED)
     expect(lines.slice(0, addressAt).filter((line) => line.startsWith('FAIL '))).toHaveLength(1)
     expect(lines).toContainEqual(expect.stringContaining('does not exist.'))
     expect(lines.slice(addressAt, addressAt + 3)).toEqual([

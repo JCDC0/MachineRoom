@@ -11,7 +11,23 @@ MachineRoom shows coding agents working on one project as a 3D machine room in y
 
 ## Start it on your project
 
-Run these in the MachineRoom folder:
+The short way: link the `machineroom` command once, then start the room from any project folder.
+
+```
+cd <MachineRoom folder>
+npm install
+npm run build
+npm link
+```
+
+```
+cd <your project folder>
+machineroom
+```
+
+`machineroom` runs `up` on the folder you are in, prints `MachineRoom is running.` with the address, and opens the room in your browser. `machineroom <folder>` starts it on another folder, `--no-open` leaves the browser closed, and `--port`, `--no-sessions` and `--help` work as below. After you pull a new MachineRoom version, run `npm run build` in the MachineRoom folder again. `npm unlink -g machine-room` removes the command.
+
+The long way runs these in the MachineRoom folder:
 
 ```
 npm install

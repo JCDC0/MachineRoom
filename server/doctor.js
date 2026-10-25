@@ -203,8 +203,18 @@ export function openBrowser(url, options = {}) {
 
 export function upBlock(url) {
   return [
+    'MachineRoom is running.',
     `machine-room: open ${url}`,
     'The room fills when a lane or a session works on the project.',
     'Press Ctrl+C in the terminal to stop the room.',
   ]
+}
+
+export function upArgs(args, cwd = process.cwd()) {
+  const rest = [...args]
+  const folder = rest[0] && !rest[0].startsWith('-') ? rest.shift() : cwd
+  const root = resolve(cwd, folder)
+  const open = !rest.includes('--no-open')
+  const flags = rest.filter((arg) => arg !== '--no-open' && arg !== '--open')
+  return { root, args: ['up', '--root', root, ...(open ? ['--open'] : []), ...flags] }
 }

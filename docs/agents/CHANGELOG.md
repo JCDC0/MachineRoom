@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A `machineroom` command, linked once with `npm link`, starts the room on the folder it runs in (or the folder given), prints `MachineRoom is running.` with the address, and opens the browser; `--no-open` leaves it closed, and the build hint names the MachineRoom folder.
+
 - The top band shows `/NAME` and the orchestrator conversation list at 900 pixels and wider, the lens moves its labels and shows the clock, brackets and the waiting card inside it, and the tour and guide texts say how the dock picks an agent and where `/` leads (task U30).
 
 - The README names the five drawer tabs and the sample costs in a replay, ARCHITECTURE names the dock fallback and the tour's terminal chip, and TASKS marks its old path split as history (task D13).
