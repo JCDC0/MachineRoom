@@ -29,6 +29,7 @@ describe('settings', () => {
       source: 'bridge',
       bridge: 'http://127.0.0.1:9999',
       logOpen: true,
+      dockOpen: true,
       speed: 4,
       helpSeen: true,
     })
@@ -37,6 +38,7 @@ describe('settings', () => {
       source: 'bridge',
       bridge: 'http://127.0.0.1:9999',
       logOpen: true,
+      dockOpen: true,
       speed: 4,
       helpSeen: true,
     })
@@ -81,6 +83,7 @@ describe('settings', () => {
         bridge: 123,
         speed: -5,
         logOpen: 'yes',
+        dockOpen: 'yes',
         helpSeen: true,
       }),
     })
@@ -108,6 +111,7 @@ describe('settings', () => {
       ...DEFAULT_SETTINGS,
       speed: 2,
       logOpen: true,
+      dockOpen: false,
     })
   })
 

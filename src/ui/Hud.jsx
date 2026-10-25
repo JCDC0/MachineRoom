@@ -1,17 +1,21 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { store } from '../storage.js'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import AgentDock from './AgentDock.jsx'
+import AgentStrip from './AgentStrip.jsx'
 import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
 import { agentForNumber, agentList } from './agentList.js'
+import { wideLayout } from './agentStrip.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
 import { ladderGroups } from './ladderGroups.js'
 import { orchestratorOn } from './orchestratorChat.js'
+import { loadSettings, saveSettings } from './settings.js'
 import {
   areAllTerminalsOpen,
   isTerminalOpen,
@@ -98,6 +102,11 @@ export default function Hud({
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
   const [idleOpen, setIdleOpen] = useState(false)
+  const [dockOpen, setDockOpen] = useState(() => loadSettings(store()).dockOpen === true)
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0
+  )
+  const [orchestratorNonce, setOrchestratorNonce] = useState(0)
   const [orchestratorInfo, setOrchestratorInfo] = useState(null)
   const [guideOpen, setGuideOpen] = useState(
     () => typeof window !== 'undefined' && shouldShowGuide() && guideCanOpen(document)
@@ -109,6 +118,8 @@ export default function Hud({
   const [healthOpen, setHealthOpen] = useState(false)
   const notice = healthNotice(health)
   const chatAvailable = orchestratorOn(health)
+  const wide = wideLayout(viewportWidth)
+  const dockShown = !wide || dockOpen
   const logBodyRef = useRef(null)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
   const visibleLog = log.slice(-50)
@@ -142,6 +153,40 @@ export default function Hud({
   }
 
   useEffect(() => {
+    function onResize() {
+      setViewportWidth(Number(window.innerWidth) || 0)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  function changeDockOpen(next) {
+    setDockOpen(next)
+    saveSettings(store(), { dockOpen: next })
+  }
+
+  function toggleLog() {
+    if (wide && !dockOpen) {
+      changeDockOpen(true)
+      setLogOpen(true)
+      setControlOpen(false)
+      return
+    }
+    const next = !logOpen
+    setLogOpen(next)
+    if (next) setControlOpen(false)
+  }
+
+  function toggleSettings() {
+    if (wide && !dockOpen) {
+      changeDockOpen(true)
+      setSettingsOpen(true)
+      return
+    }
+    setSettingsOpen(!settingsOpen)
+  }
+
+  useEffect(() => {
     if (controlOpen) {
       setLogOpen(false)
     }
@@ -152,7 +197,7 @@ export default function Hud({
   }, [chatAvailable])
 
   useEffect(() => {
-    if (!chatAvailable || !client || typeof client.orchestrators !== 'function') {
+    if (!client || typeof client.orchestrators !== 'function' || (!chatAvailable && !wide)) {
       setOrchestratorInfo(null)
       return undefined
     }
@@ -181,19 +226,30 @@ export default function Hud({
       clearInterval(timer)
       if (typeof unsubscribe === 'function') unsubscribe()
     }
-  }, [chatAvailable, client])
+  }, [chatAvailable, client, wide, orchestratorNonce])
 
-  async function changeAutocompact(id, on) {
-    if (!client || typeof client.setAutocompact !== 'function') return
+  async function changeAutocompact(id, on, percent) {
+    if (!client || typeof client.setAutocompact !== 'function') {
+      return { ok: false, message: 'Autocompact is not available from this bridge.' }
+    }
     try {
-      const answer = await client.setAutocompact(id, on)
+      const answer =
+        percent === undefined || percent === null
+          ? await client.setAutocompact(id, on)
+          : await client.setAutocompact(id, on, percent)
       setOrchestratorInfo((current) => ({
         ...(current ?? {}),
         ...(answer && typeof answer === 'object' ? answer : {}),
         id: current?.id ?? id,
         autocompact: on,
       }))
-    } catch {}
+      return { ok: true }
+    } catch (error) {
+      return {
+        ok: false,
+        message: error instanceof Error && error.message ? error.message : 'The bridge refused the change.',
+      }
+    }
   }
 
   useEffect(() => {
@@ -229,17 +285,14 @@ export default function Hud({
         setHealthOpen(false)
         setSettingsOpen(false)
         setMenuOpen(false)
+        if (wide && dockOpen) changeDockOpen(false)
         return
       }
       if (hudKeyBlocked(event.target)) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key === 'l' || event.key === 'L') {
         event.preventDefault()
-        setLogOpen((open) => {
-          const next = !open
-          if (next) setControlOpen(false)
-          return next
-        })
+        toggleLog()
       } else if (chatAvailable && event.key === '/') {
         event.preventDefault()
         setChatOpen(true)
@@ -257,7 +310,7 @@ export default function Hud({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [client, chatAvailable])
+  }, [client, chatAvailable, wide, dockOpen, logOpen])
 
   useEffect(() => {
     if (logOpen && logBodyRef.current) {
@@ -418,13 +471,7 @@ export default function Hud({
             aria-pressed={logOpen}
             aria-expanded={logOpen}
             aria-controls="hud-log-drawer"
-            onClick={() => {
-              setLogOpen((open) => {
-                const next = !open
-                if (next) setControlOpen(false)
-                return next
-              })
-            }}
+            onClick={toggleLog}
           >
             <span>Log</span>
             <span className="agent-key mono">L</span>
@@ -436,7 +483,7 @@ export default function Hud({
             aria-expanded={settingsOpen}
             aria-controls="hud-settings"
             aria-label="Settings"
-            onClick={() => setSettingsOpen((open) => !open)}
+            onClick={toggleSettings}
           >
             <span>Settings</span>
           </button>
@@ -484,7 +531,7 @@ export default function Hud({
         )}
       </header>
 
-      <section className="hud-dock" aria-label="Dock">
+      <section className="hud-dock" aria-label="Dock" hidden={!dockShown}>
         <div className="hud-dock-agents">
           {fpsStats ? (
             <p className="hud-fps-line mono">
@@ -589,6 +636,27 @@ export default function Hud({
           <li className="is-line">Line from an agent: the file it is working on</li>
         </ul>
       </section>
+
+      {wide && (
+        <AgentStrip
+          agent={focused}
+          working={workingAgent}
+          lanes={snapshot?.agents ?? []}
+          costs={costs}
+          liveRuns={liveRuns}
+          tasks={tasks}
+          log={log}
+          orchestrator={orchestratorInfo}
+          client={client}
+          dockOpen={dockOpen}
+          onFocus={onFocus}
+          onOpenDock={() => changeDockOpen(true)}
+          onToggleDock={() => changeDockOpen(!dockOpen)}
+          onOpenSettings={toggleSettings}
+          onAutocompact={changeAutocompact}
+          onOrchestratorChange={() => setOrchestratorNonce((value) => value + 1)}
+        />
+      )}
 
       {client && (
         <ControlDrawer

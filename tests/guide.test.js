@@ -342,9 +342,9 @@ describe('tour steps, selector lookup and card placement', () => {
       '.lens',
       '.mr-term',
       '.mr-card.is-targeted, .mr-callout.is-working, .mr-term.is-working',
-      '.hud-dock-agents',
-      '.hud-dock-context',
-      '.hud-dock-side',
+      '.hud-dock-agents, .hud-strip',
+      '.hud-dock-context, .hud-strip',
+      '.hud-dock-side, .hud-strip',
       '.transport',
       '.hud-actions',
     ])

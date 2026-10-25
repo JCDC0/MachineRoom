@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
+import AgentStrip from '../src/ui/AgentStrip.jsx'
 import Assistant from '../src/ui/Assistant.jsx'
 import Hud from '../src/ui/Hud.jsx'
 import ControlDrawer from '../src/ui/panels/ControlDrawer.jsx'
@@ -43,6 +44,7 @@ describe('HUD concept style structure', () => {
     expect(html).toContain('class="agent-subtags mono"')
     expect(html).toContain('class="agent-subtag agent-lane"')
     expect(html).toContain('class="agent-subtag agent-status"')
+    expect(html).not.toContain('hud-strip')
   })
 
   it('renders the help overlay as a numbered index list with a box-drawing rule', () => {
@@ -133,6 +135,127 @@ describe('HUD concept style structure', () => {
     expect(waitingHtml).toContain('<span class="waiting-cursor" aria-hidden="true">_</span>')
   })
 
+  it('renders the compact strip with the identity, context and three log lines', () => {
+    const agents = [
+      { key: 'orchestrator', name: 'Orchestrator', status: 'working', harness: 'claude', model: 'opus' },
+      { key: 'opencode', name: 'OpenCode', status: 'idle', adapterType: 'opencode_local', model: 'flash' },
+    ]
+    const log = [
+      { agent: 'orchestrator', text: 'read a.js', tone: 'normal' },
+      { agent: 'orchestrator', text: 'write b.js', tone: 'normal' },
+      { agent: 'orchestrator', text: 'failed c.js', tone: 'error' },
+      { agent: 'orchestrator', text: 'read d.js', tone: 'done' },
+    ]
+    const html = renderToString(
+      createElement(AgentStrip, {
+        lanes: agents,
+        log,
+        orchestrator: {
+          id: 'orchestrator',
+          model: 'opus',
+          harness: 'claude',
+          contextTokens: 96000,
+          contextWindow: 200000,
+          autocompact: true,
+          autocompactPercent: 70,
+        },
+        client: {},
+      })
+    )
+
+    expect(html).toContain('class="hud-strip is-closed"')
+    expect(html).toContain('strip-dot is-working')
+    expect(html).toContain('strip-name-text">Orchestrator')
+    expect(html).toContain('Model:')
+    expect(html).toContain('Context size 96.0k / 200.0k')
+    expect(html).toContain('Compact')
+    expect(html).toContain('Settings')
+    expect(html).toContain('&gt; write b.js')
+    expect(html).toContain('&gt; failed c.js')
+    expect(html).toContain('read d.js')
+    expect(html).not.toContain('read a.js')
+    expect((html.match(/strip-log-line/g) ?? []).length).toBe(3)
+    expect(html).toContain('Expand')
+  })
+
+  it('renders the lane tokens and cost in the strip instead of the context line', () => {
+    const html = renderToString(
+      createElement(AgentStrip, {
+        agent: 'opencode',
+        lanes: [
+          { key: 'orchestrator', name: 'Orchestrator', status: 'idle' },
+          { key: 'opencode', name: 'OpenCode', status: 'working', adapterType: 'opencode_local', model: 'flash' },
+        ],
+        costs: {
+          rows: [
+            {
+              key: 'opencode',
+              agentId: 'agent-opencode',
+              costCents: 143,
+              inputTokens: 214000,
+              outputTokens: 31000,
+              reported: true,
+            },
+          ],
+        },
+        client: {},
+        dockOpen: true,
+      })
+    )
+
+    expect(html).toContain('class="hud-strip is-open"')
+    expect(html).toContain('Tokens 214.0k in / 31.0k out, $1.43 this month')
+    expect(html).not.toContain('Context size')
+    expect(html).not.toContain('Compact')
+    expect(html).toContain('Close')
+  })
+
+  it('shows the strip and hides the dock at 900 pixels wide', () => {
+    const savedWindow = globalThis.window
+    let savedSettings = null
+    const storage = {
+      getItem: (key) => {
+        if (key === 'machineroom.guide') return '1'
+        if (key === 'machineroom.settings') return savedSettings
+        return null
+      },
+      setItem: () => {},
+    }
+    globalThis.window = {
+      innerWidth: 1200,
+      location: { search: '' },
+      localStorage: storage,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }
+    try {
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot: SAMPLE_SNAPSHOT,
+          speeds: [1, 2, 4],
+        })
+      )
+      expect(html).toContain('class="hud-strip is-closed"')
+      expect(html).toContain('class="hud-dock"')
+      expect(html).toMatch(/class="hud-dock"[^>]*hidden/)
+
+      savedSettings = JSON.stringify({ dockOpen: true })
+      const open = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot: SAMPLE_SNAPSHOT,
+          speeds: [1, 2, 4],
+        })
+      )
+      expect(open).toContain('class="hud-strip is-open"')
+      expect(open).not.toMatch(/class="hud-dock"[^>]*hidden/)
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
+  })
+
   it('defines corner ticks, 0.04em title spacing, and faint red scanlines in styles.css', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('--corner-ticks:')
@@ -140,5 +263,8 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('letter-spacing: 0.04em;')
     expect(css).toContain('.mr-item.is-failed')
     expect(css).toContain('.mr-card.is-flash-red .mr-card-face')
+    expect(css).toContain('.stage:has(.hud-strip.is-closed)')
+    expect(css).toContain('--strip-h: 72px')
+    expect(css).toContain('.hud-dock[hidden]')
   })
 })

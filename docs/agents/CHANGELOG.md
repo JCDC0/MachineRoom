@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- At 900 pixels and wider the dock starts closed under a 72 pixel strip that shows the agent, its model, its context or tokens and cost, Compact and its three newest log lines, and the strip's Expand control or Escape opens and closes the dock (task U29).
+
 - `?replay&ladder=none` no longer gets the demo ladder from the default fixture, and the OpenCode lane notes name all ten lanes and say Paperclip is gone (found by R14).
 
 - The lens's top and bottom edges curve inward, as in the owner's sketch, with a thin edge line drawn on the same curve.
