@@ -1,7 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { HUB_CENTER } from '../src/engine/hub.js'
-import { ROOT_DROP } from '../src/engine/sphere.js'
+import { ROOT_PLACE } from '../src/engine/ring.js'
 import { strandPoints } from '../src/engine/strings.js'
 
 describe('strandPoints', () => {
@@ -90,7 +89,7 @@ describe('strandPoints', () => {
   })
 
   it('runs a top-level string from the root card to the folder and no further', () => {
-    const root = new THREE.Vector3(HUB_CENTER.x, HUB_CENTER.y - ROOT_DROP, HUB_CENTER.z)
+    const root = new THREE.Vector3(ROOT_PLACE.x, ROOT_PLACE.y, ROOT_PLACE.z)
     const folder = new THREE.Vector3(820, 640, -1060)
     const span = new THREE.Vector3().subVectors(folder, root)
     const pts = strandPoints({ a: root, b: folder }, 24, 11)

@@ -1,17 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { PACKET_POOL, childPlace, packetSpots, stripPoints } from '../src/engine/agents.js'
-import { cardSize, openChain, stackOverflow, viewInput } from '../src/engine/cards.js'
+import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
 import { isOrchestrator } from '../src/engine/shapes.js'
-import { SPHERE_CENTER, STACK_LIMIT, layoutSphere } from '../src/engine/sphere.js'
-import { planFolderView } from '../src/model/folderView.js'
+import { RING_CENTER, RING_FRONT, ROOT_DROP } from '../src/engine/ring.js'
 import { dirname } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadScenario } from './helpers.js'
 
 function distance(point) {
-  return Math.hypot(point.x - SPHERE_CENTER.x, point.y - SPHERE_CENTER.y, point.z - SPHERE_CENTER.z)
+  return Math.hypot(point.x - RING_CENTER.x, point.y - RING_CENTER.y, point.z - RING_CENTER.z)
 }
 
 function checkPoint(point, label) {
@@ -21,24 +20,12 @@ function checkPoint(point, label) {
 }
 
 function layoutRoom(state, homes) {
-  const input = viewInput(state)
-  const plan = planFolderView({ ...input, alwaysDepth: 2 })
-  const views = [...plan].sort((a, b) => a.path.length - b.path.length)
-  const open = openChain(state)
-  const overflow = stackOverflow(views, open)
-  const drawn = new Map()
-  for (const view of views) {
-    if (overflow.hidden.has(view.path)) continue
-    drawn.set(view.path, { ...view, back: Math.min(3, (view.back ?? 0) + (overflow.extra.get(view.path) ?? 0)) })
+  const layout = cardPlan(state, { alwaysDepth: 2, previous: homes })
+  for (const [path, spot] of layout.placed) {
+    const size = layout.entries.find((entry) => entry.path === path)
+    homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height, slot: spot.slot })
   }
-  const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view) }))
-  const placed = layoutSphere(entries, { previous: homes, open })
-  const sizes = new Map(entries.map((entry) => [entry.path, entry]))
-  for (const [path, spot] of placed) {
-    const size = sizes.get(path)
-    homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height })
-  }
-  return { drawn, open, placed }
+  return { drawn: layout.drawn, placed: layout.placed }
 }
 
 function nearestDrawnParent(path, paths) {
@@ -65,7 +52,7 @@ function runRoom(frames, agents, tree) {
   function step(activity) {
     apply(state, activity)
     activities.push(activity)
-    const { drawn, open, placed } = layoutRoom(state, homes)
+    const { drawn, placed } = layoutRoom(state, homes)
     largest = Math.max(largest, placed.size)
 
     const signature = []
@@ -80,19 +67,14 @@ function runRoom(frames, agents, tree) {
 
     const root = placed.get('')
     expect(root, 'the root is drawn').toBeTruthy()
-    expect(root.y, 'the root sits below the hub').toBeLessThan(SPHERE_CENTER.y)
+    expect(root.y, 'the root sits just below the hub plane').toBe(HUB_CENTER.y - ROOT_DROP)
+    expect((root.x - HUB_CENTER.x) * RING_FRONT.x + (root.z - HUB_CENTER.z) * RING_FRONT.z).toBeGreaterThan(0)
 
     const drawnPaths = new Set(drawn.keys())
-    const childCounts = new Map()
     for (const path of drawnPaths) {
-      if (path === '') continue
-      const parent = nearestDrawnParent(path, drawnPaths)
-      if (parent === null) continue
-      childCounts.set(parent, (childCounts.get(parent) ?? 0) + 1)
-    }
-    for (const [path, count] of childCounts) {
-      if (open.has(path)) continue
-      expect(count, `${path || 'root'} stacks ${count} children`).toBeLessThanOrEqual(STACK_LIMIT)
+      if (path === '' || path.split('/').length > 1) continue
+      const spot = placed.get(path)
+      expect(distance(spot), `${path} sits outside the root`).toBeGreaterThan(distance(root))
     }
 
     for (const agent of state.agents.values()) {

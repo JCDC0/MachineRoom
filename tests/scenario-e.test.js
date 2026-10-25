@@ -6,28 +6,28 @@ import { loadScenario } from './helpers.js'
 const OTHER_FIXTURES = {
   'fixtures/sandbox': {
     activities: '485d94210c7f1c8e',
-    plans: 'd6687f030f0b9dca',
-    layouts: '5ac731d1bde05301',
+    plans: '6dab246be0dc06a2',
+    layouts: '476da06f391527c9',
   },
   'fixtures/scenario-a': {
     activities: '1894ba2b0fa96ff4',
-    plans: 'a968c054f9cfe12c',
-    layouts: '1066a41161bbc2ec',
+    plans: '70d7b3ec3fb1f703',
+    layouts: '76dae9d1d1cd39c6',
   },
   'fixtures/scenario-b': {
     activities: '0a10dbb64e548bb9',
-    plans: 'f99f954e8043c19a',
-    layouts: '771932cb7b319ecc',
+    plans: '8ffbd6484e9cfd8d',
+    layouts: '794d090d4d94cfa7',
   },
   'fixtures/scenario-c': {
     activities: 'e6dc4d8a1b46b1d2',
-    plans: 'f22d812a58e58fe7',
-    layouts: '66e853ab6eb96aaf',
+    plans: '209e2edc80cfd82f',
+    layouts: '3f9efee7c83e0e54',
   },
   'fixtures/scenario-d': {
     activities: '2fab820498862bc2',
-    plans: 'aeba5c940991f527',
-    layouts: '4e6f96410d5d57ff',
+    plans: '895e32dddf24ede1',
+    layouts: '9f855076a1ac9be1',
   },
 }
 
