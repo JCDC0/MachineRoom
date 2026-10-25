@@ -221,6 +221,81 @@ describe('agentContext', () => {
     expect(result.outputTokens).toBeNull()
   })
 
+  it('picks the first working agent when none is selected', () => {
+    const secondWorking = {
+      id: 'agent-hermes',
+      key: 'hermes',
+      name: 'Hermes',
+      harness: 'hermes',
+      model: 'hermes-4',
+      status: 'working',
+    }
+    const result = agentContext({
+      agent: null,
+      lanes: [freeLane, { ...lane, status: 'working' }, secondWorking, orchestrator],
+      costs: board([costRow]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+    })
+
+    expect(result.empty).toBe(false)
+    expect(result.key).toBe('opencode')
+    expect(result.status).toBe('working')
+    expect(result.isOrchestrator).toBe(false)
+    expect(result.cost).toBe('$12.34')
+  })
+
+  it('takes the working agent the dock is given', () => {
+    const given = { ...freeLane, status: 'working' }
+    const result = agentContext({
+      agent: null,
+      working: given,
+      lanes: [{ ...lane, status: 'working' }, given],
+      costs: board([costRow]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+    })
+
+    expect(result.key).toBe('claude')
+    expect(result.status).toBe('working')
+    expect(result.isOrchestrator).toBe(false)
+  })
+
+  it('keeps the selected agent when it ends', () => {
+    const ended = { ...lane, status: 'done' }
+    const other = { ...freeLane, status: 'working' }
+    const result = agentContext({
+      agent: 'opencode',
+      lanes: [ended, other, orchestrator],
+      costs: board([costRow]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+    })
+
+    expect(result.key).toBe('opencode')
+    expect(result.status).toBe('finished')
+    expect(result.name).toBe('OpenCode')
+  })
+
+  it('asks for a pick when no agent can be shown', () => {
+    const result = agentContext({
+      agent: null,
+      lanes: [freeLane],
+      costs: board([]),
+      liveRuns: [],
+      tasks: [],
+      log: [],
+    })
+
+    expect(result.empty).toBe(true)
+    expect(result.key).toBe('')
+    expect(result.name).toBe('')
+    expect(result.message).toBe('Pick an agent on the left to see what it is doing.')
+  })
+
   it('the orchestrator with context data', () => {
     const withContext = {
       ...orchestrator,
@@ -519,6 +594,49 @@ describe('AgentDock', () => {
     expect(html.indexOf('Restricted')).toBeLessThan(html.indexOf('Set by'))
     expect(html.indexOf('Set by')).toBeLessThan(html.indexOf('Key'))
   })
+
+  it('draws only the pick line when there is no agent to show', () => {
+    const html = renderToString(
+      createElement(AgentDock, {
+        agent: null,
+        lanes: [freeLane],
+        costs: board([]),
+        liveRuns: [],
+        tasks: [],
+        log: [],
+      })
+    )
+
+    expect(html).toContain('Pick an agent on the left to see what it is doing.')
+    expect(html).not.toContain('Orchestrator')
+    expect(html).not.toContain('not reported')
+    expect(html).not.toContain('Focus')
+    expect(html).not.toContain('No log lines.')
+  })
+
+  it('leaves out rows with nothing to say except Status', () => {
+    const bare = { key: 'claude', name: 'Claude', status: 'idle' }
+    const html = renderToString(
+      createElement(AgentDock, {
+        agent: bare,
+        lanes: [bare],
+        costs: board([]),
+        liveRuns: [],
+        tasks: [],
+        log: [],
+      })
+    )
+
+    expect(html).toContain('Status')
+    expect(html).toContain('idle')
+    expect(html).not.toContain('not reported')
+    expect(html).not.toContain('>Harness<')
+    expect(html).not.toContain('>Model<')
+    expect(html).not.toContain('>Task<')
+    expect(html).not.toContain('>Command<')
+    expect(html).not.toContain('>Cost<')
+    expect(html).not.toContain('>Tokens<')
+  })
 })
 
 describe('Hud dock', () => {
@@ -555,5 +673,43 @@ describe('Hud dock', () => {
     expect(html).toContain('$12.34')
     expect(html).toContain('1.2k in / 300 out')
     expect(html).toContain('JC-19')
+  })
+
+  it('shows the working lane when nothing is focused', () => {
+    const roomLane = { key: 'claude', name: 'Claude', status: 'working', runs: 1 }
+    const html = renderToString(
+      createElement(Hud, {
+        mode: 'replay',
+        snapshot: {
+          position: 0,
+          duration: 60,
+          playing: false,
+          speed: 1,
+          agents: [roomLane],
+          log: [],
+        },
+        speeds: [1, 2, 4],
+        focused: null,
+        costs: board([
+          {
+            key: 'claude',
+            agentId: 'agent-claude',
+            name: 'Claude',
+            costCents: 4242,
+            inputTokens: 10,
+            outputTokens: 5,
+            reported: true,
+            share: 1,
+          },
+        ]),
+        liveRuns: [],
+        tasks: [],
+        log: [],
+      })
+    )
+
+    expect(html).toContain('$42.42')
+    expect(html).not.toContain('Orchestrator')
+    expect(html).not.toContain('Pick an agent on the left')
   })
 })

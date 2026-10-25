@@ -1,7 +1,39 @@
 import { agentContext } from './agentContext.js'
 
+const NOTHING_TO_SAY = new Set(['not reported', 'none'])
+
+function hasValue(value) {
+  const text = String(value ?? '').trim()
+  return text.length > 0 && !NOTHING_TO_SAY.has(text.toLowerCase())
+}
+
+function dockRows(context) {
+  const candidates = [
+    ['Status', context.status || 'idle'],
+    ['Sector', context.sector],
+    ['Lanes', context.lanes],
+    ['Scope', context.scope],
+    ['Restricted', context.restricted],
+    ['Set by', context.setBy],
+    ['Key', context.key],
+    ['Harness', context.harness],
+    ['Model', context.model],
+    ['Task', context.task],
+    ['Command', context.command],
+    ['Cost', context.cost],
+    ['Tokens', context.tokens],
+  ]
+  const rows = []
+  for (const [label, value] of candidates) {
+    if (label !== 'Status' && !hasValue(value)) continue
+    rows.push([label, value])
+  }
+  return rows
+}
+
 export default function AgentDock({
   agent = null,
+  working = null,
   lanes = null,
   costs = null,
   liveRuns = null,
@@ -13,22 +45,17 @@ export default function AgentDock({
   onOpenChat = () => {},
   onAutocompact = () => {},
 }) {
-  const context = agentContext({ agent, lanes, costs, liveRuns, tasks, log, orchestrator })
-  const rows = [['Status', context.status]]
-  if (context.sector !== null) rows.push(['Sector', context.sector])
-  if (context.lanes !== null) rows.push(['Lanes', context.lanes])
-  if (context.scope !== null) rows.push(['Scope', context.scope])
-  if (context.restricted !== null) rows.push(['Restricted', context.restricted])
-  if (context.setBy !== null) rows.push(['Set by', context.setBy])
-  rows.push(
-    ['Key', context.key],
-    ['Harness', context.harness],
-    ['Model', context.model],
-    ['Task', context.task],
-    ['Command', context.command],
-    ['Cost', context.cost],
-    ['Tokens', context.tokens]
-  )
+  const context = agentContext({ agent, working, lanes, costs, liveRuns, tasks, log, orchestrator })
+
+  if (context.empty) {
+    return (
+      <section className="agent-dock" aria-label="Agent context">
+        <p className="agent-dock-line is-dim mono">{context.message}</p>
+      </section>
+    )
+  }
+
+  const rows = dockRows(context)
   if (context.isOrchestrator && context.context) {
     rows.push(['Context', `${context.context.label} of ${context.context.window} tokens`])
   }
