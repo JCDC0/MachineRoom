@@ -5,11 +5,23 @@ import Hud from '../src/ui/Hud.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
 import {
   agentCountLine,
+  agentDraft,
+  agentFormProblem,
+  agentFormSummary,
+  autocompactLine,
+  clampAutocompactPercent,
   groupSessions,
+  harnessEfforts,
+  harnessGroups,
+  harnessModels,
   laneChoice,
+  laneFormProblem,
   laneSummary,
+  orchestratorRoster,
   previewLines,
   projectName,
+  rosterLanes,
+  rosterSummary,
   sessionAge,
   sessionRows,
   waitForBridge,
@@ -109,11 +121,11 @@ describe('agents and projects', () => {
 
   it('writes the count line and splits active from inactive', () => {
     const summary = laneSummary(lanes)
-    expect(summary.line).toBe('2 of 4 agents')
+    expect(summary.line).toBe('2 of 4 active')
     expect(summary.active.map((lane) => lane.key)).toEqual(['a', 'c'])
     expect(summary.inactive.map((lane) => lane.key)).toEqual(['b'])
-    expect(agentCountLine(0, 0)).toBe('0 of 0 agents')
-    expect(agentCountLine(2, 1)).toBe('2 of 2 agents')
+    expect(agentCountLine(0, 0)).toBe('0 of 0 active')
+    expect(agentCountLine(2, 1)).toBe('2 of 2 active')
   })
 
   it('keeps the file order when a lane is added or removed', () => {
@@ -126,6 +138,131 @@ describe('agents and projects', () => {
     expect(projectName({ name: 'MachineRoom', path: 'C:\\GitHub\\MachineRoom' })).toBe('MachineRoom')
     expect(projectName({ path: 'C:\\GitHub\\MachineRoom' })).toBe('MachineRoom')
     expect(projectName({})).toBe('Project')
+  })
+})
+
+describe('the roster', () => {
+  const orchestrators = [
+    { id: 'orchestrator', name: 'Orchestrator', harness: 'claude', model: 'opus', effort: 'high', autocompact: true, autocompactPercent: 82 },
+    { id: 'frontend', name: 'Frontend', harness: 'opencode', model: 'opencode-go/x', effort: 'max', autocompact: false, autocompactPercent: 200 },
+  ]
+
+  it('puts Main first and keeps each orchestrator setting', () => {
+    const rows = orchestratorRoster({ orchestrators: [...orchestrators].reverse() })
+    expect(rows.map((row) => row.name)).toEqual(['Main', 'Frontend'])
+    expect(rows[0]).toMatchObject({
+      harness: 'claude',
+      model: 'opus',
+      effort: 'high',
+      autocompact: true,
+      percent: 82,
+      sub: false,
+    })
+    expect(rows[1]).toMatchObject({ autocompact: false, percent: 95, sub: true })
+  })
+
+  it('writes the autocompact line and clamps the percent', () => {
+    expect(autocompactLine({ autocompact: true, percent: 80 })).toBe('autocompact 80%')
+    expect(autocompactLine({ autocompact: false, percent: 80 })).toBe('autocompact off')
+    expect(clampAutocompactPercent(20)).toBe(50)
+    expect(clampAutocompactPercent(120)).toBe(95)
+    expect(clampAutocompactPercent('73.6')).toBe(74)
+  })
+
+  it('lists every lane with its harness, model, effort and switches', () => {
+    const rows = rosterLanes({
+      max: 6,
+      lanes: [
+        { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', effort: 'high', active: true, working: true },
+        { key: 'mine', name: 'Mine', harness: 'opencode', model: 'qwen', effort: 'low', active: false, custom: true },
+      ],
+    })
+    expect(rows[0]).toMatchObject({ key: 'claude', active: true, working: true, custom: false, effort: 'high' })
+    expect(rows[1]).toMatchObject({ key: 'mine', active: false, custom: true, effort: 'low' })
+  })
+
+  it('counts the active lanes above the list', () => {
+    const summary = rosterSummary(orchestrators, {
+      max: 6,
+      lanes: [
+        { key: 'a', active: true },
+        { key: 'b', active: false },
+        { key: 'c' },
+      ],
+    })
+    expect(summary.line).toBe('2 of 6 active')
+    expect(summary.orchestrators).toHaveLength(2)
+    expect(summary.lanes).toHaveLength(3)
+  })
+})
+
+describe('the add form', () => {
+  const harnesses = {
+    harnesses: [
+      { key: 'claude', name: 'Claude Code', available: true, models: [{ id: 'sonnet', label: 'Sonnet' }], efforts: ['low', 'high'] },
+      { key: 'opencode', name: 'OpenCode', available: true, models: [{ id: 'qwen', label: 'Qwen' }], efforts: [] },
+      { key: 'agy', name: 'Antigravity', available: false, models: [], efforts: [] },
+    ],
+  }
+
+  it('splits the harnesses into the ones here and the ones missing', () => {
+    const groups = harnessGroups(harnesses)
+    expect(groups.available.map((harness) => harness.key)).toEqual(['claude', 'opencode'])
+    expect(groups.unavailable.map((harness) => harness.key)).toEqual(['agy'])
+    expect(harnessModels(groups.all[0], null).map((model) => model.id)).toEqual(['sonnet'])
+    expect(harnessEfforts(groups.all[0])).toEqual(['low', 'high'])
+    expect(harnessEfforts(groups.all[1])).toEqual([])
+  })
+
+  it('falls back to the bridge model list for a harness key', () => {
+    const models = {
+      models: [
+        { id: 'claude-x', harness: 'claude', label: 'Claude X' },
+        { id: 'opencode-y', harness: 'opencode', label: 'OpenCode Y' },
+      ],
+    }
+    expect(harnessModels('claude', models).map((model) => model.id)).toEqual(['claude-x'])
+    expect(harnessModels('unknown', models)).toEqual([])
+  })
+
+  it('starts on the first harness that is on this computer', () => {
+    expect(agentDraft(harnesses)).toMatchObject({
+      name: '',
+      harness: 'claude',
+      model: 'sonnet',
+      effort: 'low',
+    })
+  })
+
+  it('checks the name, the harness, the model and the effort', () => {
+    const draft = { name: 'Writer', harness: 'claude', model: 'sonnet', effort: 'high' }
+    expect(agentFormProblem(draft, harnesses)).toBe('')
+    expect(agentFormProblem({ ...draft, name: ' ' }, harnesses)).toBe('Write a name for the agent.')
+    expect(agentFormProblem({ ...draft, name: 'x'.repeat(41) }, harnesses)).toBe('Keep the name to 40 characters.')
+    expect(agentFormProblem({ ...draft, harness: 'agy' }, harnesses)).toBe('That harness is not on this computer.')
+    expect(agentFormProblem({ ...draft, harness: 'nope' }, harnesses)).toBe('Choose a harness.')
+    expect(agentFormProblem({ ...draft, model: 'other' }, harnesses)).toBe('Choose a model for this harness.')
+    expect(agentFormProblem({ ...draft, effort: 'max' }, harnesses)).toBe('Choose an effort for this harness.')
+    const plain = { name: 'Writer', harness: 'opencode', model: 'qwen', effort: '' }
+    expect(agentFormProblem(plain, harnesses)).toBe('')
+    expect(agentFormProblem({ ...plain, effort: 'max' }, harnesses)).toBe('This harness has no effort levels.')
+  })
+
+  it('names the harness and model on the confirm card', () => {
+    const draft = { name: 'Writer', harness: 'claude', model: 'sonnet' }
+    expect(agentFormSummary(draft, harnesses)).toBe('Add "Writer" on Claude Code with sonnet?')
+  })
+
+  it('checks a lane edit before the confirm card', () => {
+    const draft = { name: 'Mine', model: 'sonnet', effort: 'high' }
+    const lists = { models: [{ id: 'sonnet' }, { id: 'opus' }], efforts: ['low', 'high'] }
+    expect(laneFormProblem(draft, lists)).toBe('')
+    expect(laneFormProblem({ ...draft, name: '' }, lists)).toBe('Write a name for the agent.')
+    expect(laneFormProblem({ ...draft, name: 'x'.repeat(41) }, lists)).toBe('Keep the name to 40 characters.')
+    expect(laneFormProblem({ ...draft, model: 'other' }, lists)).toBe('Choose a model for this harness.')
+    expect(laneFormProblem({ ...draft, effort: 'max' }, lists)).toBe('Choose an effort for this harness.')
+    expect(laneFormProblem(draft, { models: [], efforts: [] })).toBe('')
+    expect(laneFormProblem({ ...draft, model: 'other', effort: 'max' }, { models: [], efforts: [] })).toBe('')
   })
 })
 
@@ -186,6 +323,45 @@ describe('Sidebar without bridge methods', () => {
     expect(html).toContain('Projects and conversations appear when the room runs live.')
     expect(html).toContain('class="hud-strip-settings"')
     expect(html).not.toContain('mr-side-lane')
+  })
+})
+
+describe('The roster in a live sidebar', () => {
+  const client = {
+    projects: async () => ({ current: { path: 'C:\\GitHub\\MachineRoom', name: 'MachineRoom' }, recent: [] }),
+    orchestratorSessions: async () => ({ sessions: [] }),
+    lanes: async () => ({ max: 6, lanes: [] }),
+    orchestrators: async () => [],
+    harnesses: async () => [],
+    models: async () => ({ models: [] }),
+  }
+
+  it('puts the open Agents list above the projects', () => {
+    const html = renderToString(createElement(Sidebar, { client, live: true, project: '/MachineRoom' }))
+    const roster = html.indexOf('mr-side-agents')
+    const projects = html.indexOf('mr-side-projects')
+    expect(roster).toBeGreaterThan(-1)
+    expect(projects).toBeGreaterThan(roster)
+    expect(html).toContain('Loading agents...')
+    expect(html).toContain('Orchestrators')
+    expect(html).toContain('Lanes')
+    expect(html).toContain('Add agent')
+    expect(html).toContain('aria-expanded="true"')
+  })
+
+  it('leaves the roster out when the bridge cannot list agents', () => {
+    const html = renderToString(
+      createElement(Sidebar, {
+        client: {
+          projects: async () => ({ current: null, recent: [] }),
+          orchestratorSessions: async () => ({}),
+        },
+        live: true,
+        project: '/MachineRoom',
+      })
+    )
+    expect(html).not.toContain('mr-side-agents')
+    expect(html).toContain('mr-side-projects')
   })
 })
 
