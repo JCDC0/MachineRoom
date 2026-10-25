@@ -427,37 +427,75 @@ describe('the orchestrator registry', () => {
     const rig = await makeBridge(makeBase())
     const chat = await getJson(`${rig.url}/api/orchestrator`)
     expect(chat.status).toBe(200)
-    expect(chat.body).toMatchObject({ contextTokens: null, contextWindow: 200000, autocompact: true })
+    expect(chat.body).toMatchObject({ contextTokens: null, contextWindow: 200000, autocompact: true, autocompactPercent: 80 })
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[0]).toMatchObject({
       contextTokens: null,
       contextWindow: 200000,
       autocompact: true,
+      autocompactPercent: 80,
     })
 
-    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false })).body).toEqual({
+    const noOrigin = await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false, confirmed: true })
+    expect(noOrigin.status).toBe(403)
+    expect(noOrigin.body).toEqual({ error: 'A request with no Origin cannot set autocompact.' })
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false })).body).toEqual({
       error: 'Confirm the autocompact change first.',
     })
-    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: 'yes', confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: 'yes', confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', percent: 45, confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', percent: 99, confirmed: true })).status).toBe(400)
 
-    const off = await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false, confirmed: true })
+    const off = await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false, percent: 75, confirmed: true })
     expect(off.status).toBe(200)
-    expect(off.body).toEqual({ id: 'orchestrator', autocompact: false })
+    expect(off.body).toEqual({ id: 'orchestrator', autocompact: false, autocompactPercent: 75 })
     expect((await getJson(`${rig.url}/api/orchestrator`)).body.autocompact).toBe(false)
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.autocompactPercent).toBe(75)
     expect(rig.chat().autocompact).toBe(false)
+    expect(rig.chat().autocompactPercent).toBe(75)
 
     const page = await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: true, confirmed: true })
     expect(page.status).toBe(200)
     expect((await getJson(`${rig.url}/api/orchestrator`)).body.autocompact).toBe(true)
-    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'missing', on: true, confirmed: true })).status).toBe(404)
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'missing', on: true, confirmed: true })).status).toBe(404)
 
     await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[1]).toMatchObject({
       contextTokens: null,
       contextWindow: 200000,
       autocompact: true,
+      autocompactPercent: 80,
     })
-    expect((await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'frontend', on: false, confirmed: true })).status).toBe(200)
+    expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'frontend', on: false, percent: 60, confirmed: true })).status).toBe(200)
     expect(rig.chat('frontend').autocompact).toBe(false)
+    expect(rig.chat('frontend').autocompactPercent).toBe(60)
+  })
+
+  it('compacts now and sets the model for an orchestrator', async () => {
+    const rig = await makeBridge(makeBase())
+    const noOriginCompact = await postJson(`${rig.url}/api/orchestrator/compact`, { confirmed: true })
+    expect(noOriginCompact.status).toBe(403)
+    expect(noOriginCompact.body).toEqual({ error: 'A request with no Origin cannot compact an orchestrator.' })
+
+    const noOriginModel = await postJson(`${rig.url}/api/orchestrator/model`, { model: 'claude-sonnet-5-5', confirmed: true })
+    expect(noOriginModel.status).toBe(403)
+    expect(noOriginModel.body).toEqual({ error: 'A request with no Origin cannot set the model.' })
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/compact`, {})).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/compact`, { confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/compact`, { confirmed: true, keep: 'a'.repeat(2001) })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/compact`, { id: 'missing', confirmed: true })).status).toBe(404)
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/model`, { confirmed: false })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/model`, { model: 'unlisted-model', confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/model`, { model: 'opencode/deepseek-v4.1-flash-free', confirmed: true })).status).toBe(400)
+    expect((await pagePost(`${rig.url}/api/orchestrator/model`, { id: 'missing', model: 'claude-haiku-5-5', confirmed: true })).status).toBe(404)
+
+    const modelSet = await pagePost(`${rig.url}/api/orchestrator/model`, { model: 'claude-haiku-5-5', confirmed: true })
+    expect(modelSet.status).toBe(200)
+    expect(modelSet.body).toEqual({ id: 'orchestrator', model: 'claude-haiku-5-5' })
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.model).toBe('claude-haiku-5-5')
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body[0].model).toBe('claude-haiku-5-5')
   })
 
   it('attaches a sub from the owner ladder, answers its chat by id and removes it', async () => {

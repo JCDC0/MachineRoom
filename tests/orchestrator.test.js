@@ -480,15 +480,86 @@ describe('autocompact', () => {
     const rig = makeRig()
     expect(rig.orchestrator.setAutocompact({ on: false, confirmed: true })).toEqual({
       status: 200,
-      body: { id: 'orchestrator', autocompact: false },
+      body: { id: 'orchestrator', autocompact: false, autocompactPercent: 80 },
     })
     rig.behaviour.input = 180000
     rig.send('Build the room.')
     await waitFor(() => rig.calls().length === 1 && rig.answer().state === 'idle', 15000, 'the turn to end')
     expect(rig.calls()).toHaveLength(1)
-    expect(rig.answer()).toMatchObject({ contextTokens: 180000, autocompact: false })
+    expect(rig.answer()).toMatchObject({ contextTokens: 180000, autocompact: false, autocompactPercent: 80 })
     expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
     expect(stateFile(rig).sessionId).toBe(valueAfter(rig.calls()[0].args, '--session-id'))
+  })
+
+  it('autocompacts at a custom percent set by the owner', async () => {
+    const rig = makeRig()
+    expect(rig.orchestrator.setAutocompact({ on: true, percent: 60, confirmed: true })).toEqual({
+      status: 200,
+      body: { id: 'orchestrator', autocompact: true, autocompactPercent: 60 },
+    })
+    rig.behaviour.input = 130000
+    rig.send('Build the room.')
+    await waitFor(() => rig.calls().length === 2 && rig.answer().state === 'idle', 15000, 'the compacted session')
+    expect(rig.calls()).toHaveLength(2)
+    expect(rig.answer().autocompactPercent).toBe(60)
+  })
+
+  it('runs compact now with keep text and refuses while running or with no session', async () => {
+    const rig = makeRig()
+    expect(rig.orchestrator.compact({ confirmed: true })).toEqual({
+      status: 400,
+      body: { error: 'The orchestrator has no session yet.' },
+    })
+
+    rig.behaviour.mode = 'hold'
+    rig.send('Start turn')
+    await waitFor(() => rig.answer().state === 'working', 5000, 'turn to start')
+
+    expect(rig.orchestrator.compact({ confirmed: true })).toEqual({
+      status: 409,
+      body: { error: 'A turn is already running.' },
+    })
+
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 1)
+
+    expect(rig.orchestrator.compact({ confirmed: true, keep: 'a'.repeat(2001) })).toEqual({
+      status: 400,
+      body: { error: 'Write at most 2000 characters to keep.' },
+    })
+
+    const compacted = rig.orchestrator.compact({ confirmed: true, keep: 'Keep the tests and bridge passing.' })
+    expect(compacted).toEqual({ status: 200, body: { ok: true } })
+    await waitIdle(rig, 2)
+
+    const calls = rig.calls()
+    expect(calls).toHaveLength(2)
+    expect(calls[1].args[1]).toContain(COMPACT_PROMPT)
+    expect(calls[1].args[1]).toContain('Keep these in the summary:\nKeep the tests and bridge passing.')
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+  })
+
+  it('sets a model listed for its harness and refuses unlisted models', async () => {
+    const rig = makeRig()
+    expect(rig.orchestrator.setModel({ model: 'unlisted-model', confirmed: true })).toEqual({
+      status: 400,
+      body: { error: 'Choose a model listed for this harness.' },
+    })
+    expect(rig.orchestrator.setModel({ model: 'opencode/deepseek-v4.1-flash-free', confirmed: true })).toEqual({
+      status: 400,
+      body: { error: 'Choose a model listed for this harness.' },
+    })
+
+    expect(rig.orchestrator.setModel({ model: 'claude-sonnet-5-5', confirmed: true })).toEqual({
+      status: 200,
+      body: { id: 'orchestrator', model: 'claude-sonnet-5-5' },
+    })
+    expect(rig.answer().model).toBe('claude-sonnet-5-5')
+
+    rig.send('Check the model.')
+    await waitIdle(rig, 1)
+    const turnArgs = rig.calls()[0].args
+    expect(valueAfter(turnArgs, '--model')).toBe('claude-sonnet-5-5')
   })
 })
 

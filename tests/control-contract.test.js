@@ -399,13 +399,31 @@ describe('the mock client still answers the contract', () => {
   it('turns autocompact off and on for each orchestrator', async () => {
     const client = createMockClient({ latencyMs: 0 })
     expect((await client.orchestrator()).autocompact).toBe(true)
+    expect((await client.orchestrator()).autocompactPercent).toBe(80)
     await client.setAutocompact('orchestrator', false)
     expect((await client.orchestrator()).autocompact).toBe(false)
     expect((await client.orchestrators()).find((entry) => entry.id === 'orchestrator').autocompact).toBe(false)
     await client.setAutocompact('frontend', false)
     expect((await client.orchestrators()).find((entry) => entry.id === 'frontend').autocompact).toBe(false)
     expect((await client.orchestrator('frontend')).autocompact).toBe(false)
+    await client.setAutocompact('orchestrator', true, 75)
+    expect((await client.orchestrator()).autocompact).toBe(true)
+    expect((await client.orchestrator()).autocompactPercent).toBe(75)
     await expect(client.setAutocompact('orchestrator', 'yes')).rejects.toThrow('Say whether autocompact is on or off.')
+    await expect(client.setAutocompact('orchestrator', true, 40)).rejects.toThrow('Percent must be a whole number from 50 to 95.')
+  })
+
+  it('compacts an orchestrator and sets its model on the mock', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    await client.compactOrchestrator({ id: 'orchestrator', keep: 'Keep tests' })
+    const chat = await client.orchestrator('orchestrator')
+    expect(chat.messages.at(-1).text).toContain('The session was compacted.')
+
+    await client.setOrchestratorModel({ id: 'orchestrator', model: 'claude-haiku-5-5' })
+    expect((await client.orchestrator('orchestrator')).model).toBe('claude-haiku-5-5')
+    await expect(client.setOrchestratorModel({ id: 'orchestrator', model: 'unlisted-model' })).rejects.toThrow(
+      'Choose a model listed for this harness.'
+    )
   })
 })
 
@@ -446,9 +464,9 @@ describe('the control client orchestrator routes', () => {
   })
 
   it('sets autocompact at the named orchestrator', async () => {
-    const { calls, client } = recorder({ id: 'frontend', autocompact: false })
+    const { calls, client } = recorder({ id: 'frontend', autocompact: false, autocompactPercent: 75 })
     await client.setAutocompact('frontend', false)
-    await client.setAutocompact(undefined, true)
+    await client.setAutocompact(undefined, true, 75)
     expect(calls).toEqual([
       {
         url: 'http://127.0.0.1:9/api/orchestrator/autocompact',
@@ -458,7 +476,31 @@ describe('the control client orchestrator routes', () => {
       {
         url: 'http://127.0.0.1:9/api/orchestrator/autocompact',
         method: 'POST',
-        body: JSON.stringify({ id: 'orchestrator', on: true, confirmed: true }),
+        body: JSON.stringify({ id: 'orchestrator', on: true, percent: 75, confirmed: true }),
+      },
+    ])
+  })
+
+  it('compacts and sets model at the named orchestrator', async () => {
+    const { calls, client } = recorder({ ok: true })
+    await client.compactOrchestrator()
+    await client.compactOrchestrator({ id: 'frontend', keep: 'Keep all tests' })
+    await client.setOrchestratorModel({ id: 'frontend', model: 'claude-haiku-5-5' })
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/compact',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/compact',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, id: 'frontend', keep: 'Keep all tests' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/model',
+        method: 'POST',
+        body: JSON.stringify({ model: 'claude-haiku-5-5', confirmed: true, id: 'frontend' }),
       },
     ])
   })

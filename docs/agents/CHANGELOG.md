@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add compact now, an autocompact percent and a model route per orchestrator (task O9).
+
 - The lens's top and bottom edges curve inward, as in the owner's sketch, with a thin edge line drawn on the same curve.
 
 - The waiting card hides while the orchestrator chat is open, the chat has a solid background and at least 320 pixels below 1024 wide, and the waiting card counts the agents instead of naming more than four.

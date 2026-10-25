@@ -5,6 +5,7 @@ import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hie
 import {
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
+  DEFAULT_AUTOCOMPACT_PERCENT,
   DEFAULT_CONTEXT_WINDOW,
   MESSAGE_PROBLEM,
   ORCHESTRATOR_KEY,
@@ -21,6 +22,9 @@ export const OWNER_MESSAGE_PROBLEM = 'A request with no Origin cannot send a mes
 export const PAGE_MESSAGE_PROBLEM = 'A page cannot send a message as the orchestrator.'
 export const ORCHESTRATOR_TARGET_PROBLEM = 'The orchestrator sends a message to a sub orchestrator.'
 export const MESSAGE_FROM_PROBLEM = 'A message comes from the owner or the orchestrator.'
+export const OWNER_COMPACT_PROBLEM = 'A request with no Origin cannot compact an orchestrator.'
+export const OWNER_AUTOCOMPACT_PROBLEM = 'A request with no Origin cannot set autocompact.'
+export const OWNER_MODEL_PROBLEM = 'A request with no Origin cannot set the model.'
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -271,6 +275,7 @@ export function createOrchestrators({
         contextTokens: answer.contextTokens,
         contextWindow: answer.contextWindow,
         autocompact: answer.autocompact,
+        autocompactPercent: answer.autocompactPercent,
         lanes: laneKeys.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -289,6 +294,7 @@ export function createOrchestrators({
         contextTokens: state?.contextTokens ?? null,
         contextWindow: state?.contextWindow ?? subConfig(sub).contextWindow ?? DEFAULT_CONTEXT_WINDOW,
         autocompact: state?.autocompact ?? true,
+        autocompactPercent: state?.autocompactPercent ?? DEFAULT_AUTOCOMPACT_PERCENT,
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted,
@@ -426,8 +432,29 @@ export function createOrchestrators({
       sendJson(req, res, out.status, out.body)
       return true
     }
+    if (path === '/api/orchestrator/compact') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_COMPACT_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.compact(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
     if (path === '/api/orchestrator/autocompact') {
       if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_AUTOCOMPACT_PROBLEM })
+        return true
+      }
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const instance = find(body.id)
@@ -436,6 +463,23 @@ export function createOrchestrators({
         return true
       }
       const out = instance.setAutocompact(body)
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/model') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_MODEL_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.setModel(body)
       sendJson(req, res, out.status, out.body)
       return true
     }
