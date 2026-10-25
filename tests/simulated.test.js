@@ -1,11 +1,16 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createPipeline } from '../src/model/pipeline.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
-import { openSimulated, simulatedSpeed } from '../src/live/simulated.js'
+import { loadDemo, openSimulated, simulatedSpeed } from '../src/live/simulated.js'
 import { makeTree } from '../src/model/paths.js'
 import { loadRecording } from './helpers.js'
 
 const recording = loadRecording()
+const DEMO_RUN = '{"type":"heartbeat.run.queued","createdAt":"2026-10-25T10:00:00.000Z","payload":{"runId":"demo-1","agentId":"demo-agent"}}\n'
+const DEMO_AGENTS = {
+  projectRoot: 'agent-sandbox',
+  agents: [{ id: 'demo-agent', key: 'claude', name: 'Claude Code', parser: 'claude' }],
+}
 
 function harness(frames, options = {}) {
   const timers = []
@@ -50,6 +55,27 @@ describe('simulatedSpeed', () => {
 
   it('clamps a huge speed down to 64', () => {
     expect(simulatedSpeed('1e9')).toBe(64)
+  })
+})
+
+describe('loadDemo', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reads the scenario-i run and agent list', async () => {
+    const asked = []
+    vi.stubGlobal('fetch', async (url) => {
+      asked.push(url)
+      if (url === '/fixtures/scenario-i-run.jsonl') return { text: async () => DEMO_RUN }
+      if (url === '/fixtures/scenario-i-agents.json') return { json: async () => DEMO_AGENTS }
+      throw new Error(`unexpected ${url}`)
+    })
+    const demo = await loadDemo('/fixtures/')
+    expect(asked.sort()).toEqual(['/fixtures/scenario-i-agents.json', '/fixtures/scenario-i-run.jsonl'])
+    expect(demo.rootName).toBe('agent-sandbox')
+    expect(demo.agents.map((agent) => agent.key)).toEqual(['claude'])
+    expect(demo.frames).toHaveLength(1)
   })
 })
 

@@ -1,7 +1,17 @@
-import { describe, expect, it } from 'vitest'
-import { describeRecording, filterRecordings, loadRecordingIndex, parseRecordingIndex, replayFiles } from '../src/model/replay.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_FIXTURE, describeRecording, filterRecordings, loadRecordingIndex, loadReplay, parseRecordingIndex, replayFiles } from '../src/model/replay.js'
 
 const READ_FAILED = 'The list of recordings could not be read.'
+const DEFAULT_FILES = {
+  run: 'fixtures/scenario-i-run.jsonl',
+  agents: 'fixtures/scenario-i-agents.json',
+  tree: 'fixtures/scenario-i-tree.json',
+}
+const SANDBOX_FILES = {
+  run: 'fixtures/sandbox-run.jsonl',
+  agents: 'fixtures/agents.json',
+  tree: 'fixtures/sandbox-tree.json',
+}
 
 function entry(name, extra = {}) {
   return {
@@ -308,13 +318,11 @@ describe('loadRecordingIndex', () => {
 })
 
 describe('replayFiles', () => {
-  it('names the sandbox fixtures with no recording', () => {
-    expect(replayFiles()).toEqual({
-      run: 'fixtures/sandbox-run.jsonl',
-      agents: 'fixtures/agents.json',
-      tree: 'fixtures/sandbox-tree.json',
-    })
-    expect(replayFiles(null)).toEqual(replayFiles())
+  it('names the default scenario-i fixture with no recording', () => {
+    expect(DEFAULT_FIXTURE).toBe('scenario-i')
+    expect(replayFiles()).toEqual(DEFAULT_FILES)
+    expect(replayFiles(null)).toEqual(DEFAULT_FILES)
+    expect(replayFiles(null, null)).toEqual(DEFAULT_FILES)
   })
 
   it('names the three files of a recording', () => {
@@ -333,13 +341,51 @@ describe('replayFiles', () => {
     })
   })
 
-  it('falls back to the sandbox for a fixture name that is not allowed', () => {
+  it('keeps the sandbox run reachable by its name', () => {
+    expect(replayFiles(null, 'sandbox')).toEqual(SANDBOX_FILES)
+  })
+
+  it('falls back to the default fixture for a fixture name that is not allowed', () => {
     for (const name of ['scenario-', 'scenario-ee', 'scenario-E', 'scenario-1', '../scenario-e', 'scenario-e/../x', '']) {
-      expect(replayFiles(null, name)).toEqual(replayFiles())
+      expect(replayFiles(null, name)).toEqual(DEFAULT_FILES)
     }
   })
 
   it('keeps a recording ahead of a fixture name', () => {
     expect(replayFiles('hermes-20261020-060000', 'scenario-e')).toEqual(replayFiles('hermes-20261020-060000'))
+    expect(replayFiles('hermes-20261020-060000', 'sandbox')).toEqual(replayFiles('hermes-20261020-060000'))
+  })
+})
+
+describe('loadReplay', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function answer() {
+    return async (url) => ({
+      ok: true,
+      status: 200,
+      text: async () => '',
+      json: async () => (String(url).endsWith('agents.json') ? { agents: [] } : { root: 'agent-sandbox', files: [], created: [] }),
+    })
+  }
+
+  it('names the fixture it played so the room can set the demo ladder', async () => {
+    vi.stubGlobal('fetch', answer())
+    expect((await loadReplay({ base: '/' })).fixture).toBe(DEFAULT_FIXTURE)
+    expect((await loadReplay({ base: '/', fixture: 'scenario-e' })).fixture).toBe('scenario-e')
+    expect((await loadReplay({ base: '/', fixture: 'sandbox' })).fixture).toBe('sandbox')
+  })
+
+  it('names no fixture for a recording', async () => {
+    vi.stubGlobal('fetch', answer())
+    expect((await loadReplay({ base: '/', recording: 'hermes-20261020-060000' })).fixture).toBeUndefined()
+  })
+
+  it('names the fixture it could not load', async () => {
+    vi.stubGlobal('fetch', async () => ({ ok: false, status: 404 }))
+    await expect(loadReplay({ base: '/' })).rejects.toThrow('The fixture scenario-i could not be loaded.')
+    await expect(loadReplay({ base: '/', fixture: 'sandbox' })).rejects.toThrow('The fixture sandbox could not be loaded.')
   })
 })

@@ -99,10 +99,21 @@ describe('sandboxFiles', () => {
 })
 
 describe('fixtureNames', () => {
-  it('puts the default agent list where the default replay reads it', () => {
-    const names = fixtureNames()
+  it('puts a fixture agent list where its replay reads it', () => {
+    for (const name of ['scenario-i', 'scenario-z']) {
+      const names = fixtureNames(name)
+      expect(replayFiles(null, name), name).toEqual({
+        run: `fixtures/${names.run}`,
+        agents: `fixtures/${names.agents}`,
+        tree: `fixtures/${names.tree}`,
+      })
+    }
+  })
+
+  it('keeps the sandbox agent list where the sandbox replay reads it', () => {
+    const names = fixtureNames('sandbox')
     expect(names.agents).toBe('agents.json')
-    expect(replayFiles()).toEqual({
+    expect(replayFiles(null, 'sandbox')).toEqual({
       run: `fixtures/${names.run}`,
       agents: `fixtures/${names.agents}`,
       tree: `fixtures/${names.tree}`,
