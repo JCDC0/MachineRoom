@@ -194,7 +194,7 @@ async function resolveCommit(repo, name) {
 
 async function main() {
   const repo = process.cwd()
-  const profileName = userInfo().username
+  const profileName = process.env.GITHUB_ACTIONS === 'true' ? '' : userInfo().username
   let options
   try {
     options = parseAuditArgs(process.argv.slice(2))
