@@ -2,38 +2,46 @@
 
 ## Where we are
 
-Version 0.1.259. This docs branch is 0.1.260. The room is no longer a Paperclip viewer: it follows its own sources, and Paperclip is optional.
+Version 0.1.331. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
 
 What works:
 
-- Live lane runs with `--lanes`: OpenCode and Claude Code, on a brief or on another project (`run-lane --project`).
-- Task queues with `run-lane --queue`, and several tasks in Dispatch, one commit per task on a `machineroom/queue-<stamp>` branch, tests after each task, a stop at the first failure.
+- Live lane runs with `--lanes`: OpenCode and Claude Code, on a brief or on another project (`run-lane --project`), with one run per project and lanes in their own worktrees side by side.
+- Task queues with `run-lane --queue` and Dispatch: one commit per task on a `machineroom/queue-<lane>-<stamp>` branch, tests after each task, and a stop at the first failure. The Dispatch project section can give each of several tasks its own idle lane and worktree.
 - The owner's own Claude Code and OpenCode sessions with `--sessions`, read only, tool calls and results only.
-- The control drawer on `C`: Dispatch, Tasks, Approvals, Meters, Plan, Agents and Reviews. In lane mode, tasks, live runs and costs come from the run records; approvals are empty and backups belong to Paperclip.
-- Replays and recordings: every run on a brief writes a recording, and `/?recording=<name>` plays it.
-- Paperclip as an optional source: tasks, approvals, budgets, quotas and backups when an instance runs.
+- The orchestrator chat on `/` or ORCHESTRATOR: Claude Code or OpenCode, confirm cards for Start and Stop, recovery after a restart, Markdown replies, the project folder named, a tab per orchestrator, and its context use with an Autocompact switch that summarises a session at 80 percent.
+- Sub orchestrators: `readLadder` and the ladder routes, ring sectors and sub shapes, chat tabs and Attach, and the live ladder from `client.orchestrators()`. Lanes in no sector stay with the main orchestrator. `?replay&fixture=scenario-i` plays two subs and their lanes working.
+- The page: the lens with its corner labels, the scrolling dock with the agent list, the selected agent's context and the settings above the cost board, the guide, and a short agent list with one idle row. With a ladder the list groups by sector.
+- Reviews and merges from the drawer, including lanes that work in worktrees beside another project.
+- `npm run worktrees` lists the lane worktrees a project leaves and cleans only the clean merged ones.
+- The harness registry: steps H1 to H4 are merged as H5, H6, H7 and H8, so a harness brings a browser descriptor and, when it has sessions, a Node reader. The `acp` harness runs any Agent Client Protocol agent through `scripts/acp-run.mjs`. Hermes and AGY stay supported and retired in `lanes.json`.
+- Replays and recordings, and a test suite that is about 40 percent faster than before T1.
 
 What was checked live:
 
+- A real queue on ulolTris through the room: `machine-room up --lanes --sessions` from that folder, four tasks in Dispatch, one OpenCode lane, 43 minutes, each task committed after `npm test` passed, main untouched, nothing pushed. The room showed each task live and turned green.
+- The LowBeam milestone too. The owner's two projects have now run through the room.
 - OpenCode, Claude Code and AGY each ran for real through `run-lane --project` on a scratch git project and showed in the room.
 - A task typed in Dispatch ran on OpenCode 2 on a scratch project and made the change there.
 - Three OpenCode lanes worked at once with `--lanes`, with their strips and active rows right.
 - A real Claude Code run showed its `Explore` subagent in the room.
-- AGY ran end to end through `run-lane -- agy --project`, and the room showed it working, then finished in green.
-- A dry run parsed the four tasks of a queue on ulolTris and found `npm test`.
 
 Not checked live yet:
 
-- A whole queue on ulolTris or LowBeam. The owner's milestone is the first real run.
+- A real sub orchestrator ladder. The routes, the room and the chat are tested, and `?replay&fixture=scenario-i` plays two subs and their lanes, but nobody has attached one to a running room yet.
 - The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
+- The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
+- A real ACP agent. The harness is tested on recorded `opencode acp` updates and a fake agent, and no lane uses it yet.
+- The room by eye after the lens and the sectors: V23 and V24 are merged and say what they saw, but the owner has not looked at the built room at 1280 by 800, 900 by 700, 768 by 1024 or a phone.
 
 ## Next
 
-The owner's milestone, in order:
+In order:
 
-1. A queue on ulolTris. Start the room on that folder with `--lanes`, press `C`, open Dispatch, and give the tasks in the Run on this project box, separated by a line of `---`. Check the branch and the commits. The queue has only been dry-run there.
-2. Then LowBeam, the same way.
-3. Then H1 to H4, when the owner says. `docs/agents/HARNESSES.md` holds the plan: the registry and one descriptor per harness, the UI lists from the registry, the session readers through the registry, and a generic ACP harness.
+1. Q12h, the last of the version 7 audit fixes.
+2. The room checked by eye at 1280 by 800, 900 by 700, 768 by 1024 and a phone, with V23's sector labels, V24's narrow layout, V25's grouped agent list and V26's single sector names now in.
+
+After that the owner decides the licence and the public release.
 
 ## History: the plan from 0.1.37
 
