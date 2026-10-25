@@ -6055,3 +6055,140 @@ body:has(#hud-orchestrator-chat) .waiting {
     border-radius: 0;
   }
 }
+
+/* U33: the first-run setup card */
+.mr-setup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 14;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--space) * 3);
+  background: rgb(0 0 0 / 0.72);
+}
+
+.mr-setup {
+  width: min(520px, 100%);
+  max-height: calc(100vh - var(--space) * 6);
+  overflow-y: auto;
+  padding: calc(var(--space) * 3);
+  background-color: var(--black);
+  background-image: var(--corner-ticks);
+  border: 1px solid var(--white);
+  border-radius: 2px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.85);
+}
+
+.mr-setup-kicker {
+  margin: 0 0 var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--yellow);
+}
+
+.mr-setup-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--white);
+}
+
+.mr-setup-stepper {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space) * 2);
+  margin-top: calc(var(--space) * 2);
+}
+
+.mr-setup-step {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 18px;
+  color: var(--white);
+}
+
+.mr-setup-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mr-setup-count {
+  min-width: 96px;
+  font-size: 14px;
+  color: var(--yellow);
+  text-align: center;
+}
+
+.mr-setup-lanes {
+  list-style: none;
+  margin: calc(var(--space) * 2) 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.mr-setup-lane {
+  display: flex;
+  justify-content: space-between;
+  gap: calc(var(--space) * 2);
+  padding: var(--space) 0;
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.mr-setup-lane-name {
+  font-size: 14px;
+  color: var(--white);
+}
+
+.mr-setup-lane-key {
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-setup-error {
+  margin: var(--space) 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+}
+
+.mr-setup-note {
+  margin: var(--space) 0 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.mr-setup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space);
+  margin-top: calc(var(--space) * 3);
+}
+
+.mr-setup-later {
+  color: var(--white);
+  background: transparent;
+  border-color: var(--line);
+}
+
+.mr-setup-start {
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+  border-color: var(--yellow);
+}
+
+.mr-setup-start:hover:not(:disabled) {
+  background: rgb(229 255 0 / 0.18);
+}
+
+.mr-setup :focus-visible {
+  outline: 1px solid var(--yellow);
+  outline-offset: 2px;
+}

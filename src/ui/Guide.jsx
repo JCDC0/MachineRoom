@@ -3,16 +3,19 @@ import {
   DEFAULT_CARD_SIZE,
   DEFAULT_VIEWPORT,
   GUIDE_STEPS,
+  LIVE_TOUR_STEPS,
   TOUR_STEPS,
+  availableSteps,
   clampStep,
-  confirmCardOpen,
   connectHref,
   consumeHelpTour,
   findStepTarget,
+  guideBlocked,
   markGuideSeen,
+  nextStepIndex,
   placeGuideCard,
+  resolveStepIndex,
   setTourSpeed,
-  stepReady,
   stepTargetRect,
   tourRequested,
 } from './guide.js'
@@ -48,28 +51,32 @@ export default function Guide({
   initialStep = 0,
   onClose = NOOP,
   tour = undefined,
-  snapshot = undefined,
   onConnect = undefined,
   doc = undefined,
   viewport = undefined,
+  mode = 'replay',
 }) {
   const [fromHelp] = useState(() => consumeHelpTour())
   const urlTour = tourRequested()
-  const isTour = Boolean(tour !== undefined ? tour : fromHelp || urlTour)
-  const steps = isTour ? TOUR_STEPS : GUIDE_STEPS
+  const live = mode === 'live'
+  const isTour = live || Boolean(tour !== undefined ? tour : fromHelp || urlTour)
+  const steps = live ? LIVE_TOUR_STEPS : isTour ? TOUR_STEPS : GUIDE_STEPS
   const [step, setStep] = useState(() => clampStep(initialStep, steps))
   const cardRef = useRef(null)
   const actionRef = useRef(null)
   const safeIndex = clampStep(step, steps)
-  const current = steps[safeIndex]
-  const last = safeIndex === steps.length - 1
   const activeDoc = doc !== undefined ? doc : typeof document !== 'undefined' ? document : null
-  const [blocked, setBlocked] = useState(() => confirmCardOpen(activeDoc))
+  const [blocked, setBlocked] = useState(() => guideBlocked(activeDoc))
 
   const computeLayout = useCallback(() => {
     if (!isTour) return null
     const vp = viewport ?? readViewport(activeDoc)
-    const readyNow = stepReady(current, snapshot, activeDoc, vp)
+    const index = resolveStepIndex(steps, step, activeDoc, vp)
+    if (index === null) {
+      return { requested: step, index: null, position: 0, total: 0, placement: null }
+    }
+    const current = steps[index]
+    const targetRect = stepTargetRect(activeDoc, current, vp)
     const cardEl = cardRef.current
     const cardRect =
       cardEl && typeof cardEl.getBoundingClientRect === 'function'
@@ -79,13 +86,16 @@ export default function Guide({
       cardRect && cardRect.width > 0 && cardRect.height > 0
         ? { width: cardRect.width, height: cardRect.height }
         : DEFAULT_CARD_SIZE
-    const targetRect = readyNow ? stepTargetRect(activeDoc, current, vp) : null
+    const available = availableSteps(steps, activeDoc, vp)
+    const position = available.findIndex((entry) => entry === current) + 1
     return {
-      index: safeIndex,
-      ready: readyNow,
+      requested: step,
+      index,
+      position: position > 0 ? position : 1,
+      total: available.length,
       placement: placeGuideCard(targetRect, cardSize, vp),
     }
-  }, [activeDoc, current, isTour, safeIndex, snapshot, viewport])
+  }, [activeDoc, isTour, step, steps, viewport])
 
   const [layout, setLayout] = useState(computeLayout)
 
@@ -95,22 +105,24 @@ export default function Guide({
 
   useSafeLayoutEffect(() => {
     if (!isTour) return
+    const current = layout?.index != null ? steps[layout.index] : null
+    if (!current) return
     const target = findStepTarget(activeDoc, current)
     if (target && typeof target.scrollIntoView === 'function' && target.closest?.('.hud-dock')) {
       target.scrollIntoView({ block: 'nearest' })
     }
-  }, [activeDoc, current, isTour])
+  }, [activeDoc, isTour, layout?.index, steps])
 
   useSafeLayoutEffect(() => {
     if (!isTour) return
-    setBlocked(confirmCardOpen(activeDoc))
+    setBlocked(guideBlocked(activeDoc))
     setLayout(computeLayout())
   }, [activeDoc, computeLayout, isTour])
 
   useEffect(() => {
     if (!isTour) return undefined
     const update = () => {
-      setBlocked(confirmCardOpen(activeDoc))
+      setBlocked(guideBlocked(activeDoc))
       setLayout(computeLayout())
     }
     update()
@@ -126,11 +138,11 @@ export default function Guide({
     }
   }, [activeDoc, computeLayout, isTour])
 
-  useEffect(() => {
+  useSafeLayoutEffect(() => {
     if (!activeDoc || typeof MutationObserver === 'undefined') return undefined
     const body = activeDoc.body
     if (!body) return undefined
-    const check = () => setBlocked(confirmCardOpen(activeDoc))
+    const check = () => setBlocked(guideBlocked(activeDoc))
     const observer = new MutationObserver(check)
     observer.observe(body, { childList: true, subtree: true })
     return () => observer.disconnect()
@@ -187,20 +199,39 @@ export default function Guide({
 
   if (blocked) return null
 
-  const activeLayout = isTour
-    ? layout && layout.index === safeIndex
-      ? layout
-      : computeLayout()
-    : null
-  const placement = activeLayout?.placement ?? null
-  const ready = isTour ? Boolean(activeLayout?.ready) : true
+  const activeLayout =
+    isTour && layout && layout.requested === step ? layout : isTour ? computeLayout() : null
+  if (isTour && (!activeLayout || activeLayout.index === null)) return null
+
+  const shownIndex = isTour ? activeLayout.index : safeIndex
+  const current = shownIndex === null ? null : steps[shownIndex]
+  if (!current) return null
+
+  const vp = viewport ?? readViewport(activeDoc)
+  const nextIndex = isTour ? nextStepIndex(steps, shownIndex, activeDoc, vp, 1) : null
+  const last = isTour ? nextIndex === null : safeIndex === steps.length - 1
+  const placement = isTour ? activeLayout.placement : null
+  const position = isTour ? activeLayout.position : safeIndex + 1
+  const total = isTour ? activeLayout.total : steps.length
 
   function advance() {
-    if (last) {
+    if (!isTour) {
+      if (last) {
+        finishClose()
+        return
+      }
+      setStep((value) => clampStep(value + 1, steps))
+      return
+    }
+    if (shownIndex === null) {
       finishClose()
       return
     }
-    setStep((value) => clampStep(value + 1, steps))
+    if (nextIndex === null) {
+      finishClose()
+      return
+    }
+    setStep(nextIndex)
   }
 
   return (
@@ -236,7 +267,7 @@ export default function Guide({
           <h2 className="mr-guide-title" id="mr-guide-title">
             Guide
           </h2>
-          <span className="mr-guide-count mono">{`${safeIndex + 1} / ${steps.length}`}</span>
+          <span className="mr-guide-count mono">{`${position} / ${total}`}</span>
           <button type="button" className="mr-guide-skip mono" onClick={finishClose}>
             Skip
           </button>
@@ -245,36 +276,45 @@ export default function Guide({
         <p className="mr-guide-text" aria-live="polite">
           {current.text}
         </p>
-        {isTour && !ready && current.waitText && (
-          <p className="mr-guide-wait mono" role="status">
-            {current.waitText}
-          </p>
-        )}
         <ol className="mr-guide-dots" aria-hidden="true">
-          {steps.map((item, index) => (
-            <li
-              key={item.label}
-              className={`mr-guide-dot${index === safeIndex ? ' is-current' : ''}${
-                index < safeIndex ? ' is-done' : ''
-              }`}
-            />
-          ))}
+          {Array.from({ length: total }, (_, index) => {
+            const dot = index + 1
+            return (
+              <li
+                key={index}
+                className={`mr-guide-dot${dot === position ? ' is-current' : ''}${
+                  dot < position ? ' is-done' : ''
+                }`}
+              />
+            )
+          })}
         </ol>
         <div className="mr-guide-actions">
           {isTour && last ? (
-            <>
-              <button type="button" className="mr-guide-secondary mono" onClick={finishClose}>
-                Keep watching
-              </button>
+            live ? (
               <button
                 type="button"
                 className="mr-guide-next mono"
-                onClick={handleConnect}
+                onClick={finishClose}
                 ref={actionRef}
               >
-                Connect to my project
+                Done
               </button>
-            </>
+            ) : (
+              <>
+                <button type="button" className="mr-guide-secondary mono" onClick={finishClose}>
+                  Keep watching
+                </button>
+                <button
+                  type="button"
+                  className="mr-guide-next mono"
+                  onClick={handleConnect}
+                  ref={actionRef}
+                >
+                  Connect to my project
+                </button>
+              </>
+            )
           ) : (
             <button type="button" className="mr-guide-next mono" onClick={advance} ref={actionRef}>
               {last ? 'Done' : 'Next'}
