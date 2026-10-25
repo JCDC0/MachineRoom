@@ -7,6 +7,7 @@ import AgentDock from './AgentDock.jsx'
 import AgentStrip from './AgentStrip.jsx'
 import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
+import Launcher from './Launcher.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
 import SetupCard from './SetupCard.jsx'
@@ -781,6 +782,8 @@ export default function Hud({
       {mode === 'live' && client && (
         <SetupCard client={client} onCheck={() => setSetupChecked(true)} />
       )}
+
+      <Launcher client={client} live={mode === 'live'} />
 
       {!chatAvailable && (
         <Assistant
