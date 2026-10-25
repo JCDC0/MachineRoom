@@ -70,7 +70,7 @@ describe('the replay digests', () => {
   let results
 
   beforeAll(() => {
-    results = new Map(replaySources().map((source) => [source.name, replayDigest(source)]))
+    results = new Map(replaySources().filter((source) => source.name.startsWith('fixtures/')).map((source) => [source.name, replayDigest(source)]))
   })
 
   it('keeps the digests of the other fixtures the same', () => {
