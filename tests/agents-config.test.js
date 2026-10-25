@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -59,13 +60,13 @@ const SAMPLE_LANES = {
   orchestrator: {
     name: 'Orchestrator',
     harness: 'Claude Code',
-    cli: { harness: 'claude', bin: 'claude', model: 'opus', contextWindow: 200000 },
+    cli: { harness: 'claude', bin: process.execPath, model: 'opus', contextWindow: 200000 },
   },
   claude: {
     name: 'Claude Code',
     harness: 'Claude Code',
     model: 'Claude Sonnet',
-    cli: { harness: 'claude', bin: 'claude', model: 'sonnet' },
+    cli: { harness: 'claude', bin: process.execPath, model: 'sonnet' },
     worktree: 'C:\\work\\claude',
     role: 'You work on briefs.',
     forbidden: ['src/App.jsx'],
@@ -75,7 +76,7 @@ const SAMPLE_LANES = {
     name: 'OpenCode',
     harness: 'OpenCode',
     model: 'DeepSeek',
-    cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/deepseek-v4.1-flash' },
+    cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/deepseek-v4.1-flash' },
     worktree: 'C:\\work\\opencode',
     role: 'You own the bridge.',
     forbidden: [],
@@ -84,12 +85,12 @@ const SAMPLE_LANES = {
   opencode2: {
     name: 'OpenCode 2',
     harness: 'OpenCode',
-    cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/deepseek-v4.1-flash' },
+    cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/deepseek-v4.1-flash' },
   },
   agy: {
     name: 'agy',
     harness: 'agy',
-    cli: { harness: 'agy', bin: 'agy.exe', model: 'gemini-3.8-flash-high' },
+    cli: { harness: 'agy', bin: join(tmpdir(), 'machineroom-no-such-agy', 'agy.exe'), model: 'gemini-3.8-flash-high' },
     notes: ['AGY note.'],
   },
 }
@@ -187,7 +188,7 @@ describe('merged list and template copying', () => {
     expect(made.model).toBe('claude-haiku-5-5')
     expect(made.effort).toBe('high')
     expect(made.reasoning).toBe('high')
-    expect(made.cli).toEqual({ harness: 'claude', bin: 'claude', model: 'claude-haiku-5-5' })
+    expect(made.cli).toEqual({ harness: 'claude', bin: process.execPath, model: 'claude-haiku-5-5' })
     expect(made.role).toBeUndefined()
     expect(made.forbidden).toBeUndefined()
     expect(made.notes).toEqual(['Keep output short.'])
