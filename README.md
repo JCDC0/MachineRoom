@@ -24,6 +24,7 @@ npm run serve -- up --root <your project folder>
 - `up` turns both sources on. `--lanes` shows the runs started by the lane runner and by Dispatch. `--sessions` shows your own Claude Code and OpenCode sessions on that folder.
 - `--no-sessions` leaves your sessions out. `--port <n>` picks another port.
 - Quote the folder when its path has spaces.
+- A first visit with no saved connection opens the connect screen with two short sentences and `Take the tour` focused; it opens `/?replay&fixture=scenario-i&tour`, steps through the room's parts on the demo ladder with a yellow outline, and offers `Connect to my project` and `Keep watching` on the last step.
 
 Press Ctrl+C in the terminal to stop the room.
 
