@@ -4,6 +4,7 @@
 
 - The README names the five drawer tabs and the sample costs in a replay, ARCHITECTURE names the dock fallback and the tour's terminal chip, and TASKS marks its old path split as history (task D13).
 
+- The guide tests click Take the tour and the help panel's Guide button in a DOM, the tour selectors are found in the rendered HUD, and the camera test fits a wide lens instead of the window (task T24).
 - `?replay&ladder=none` no longer gets the demo ladder from the default fixture, and the OpenCode lane notes name all ten lanes and say Paperclip is gone (found by R14).
 
 - The lens's top and bottom edges curve inward, as in the owner's sketch, with a thin edge line drawn on the same curve.
