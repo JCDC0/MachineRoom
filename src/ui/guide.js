@@ -1,4 +1,6 @@
+import { tourEnabled } from '../startup.js'
 import { readStorage, store, writeStorage } from '../storage.js'
+import { SETTINGS_KEY, savedSource } from './settings.js'
 
 export const GUIDE_FLAG = 'machineroom.guide'
 export const GUIDE_SEEN = '1'
@@ -26,12 +28,69 @@ export const GUIDE_STEPS = [
   },
 ]
 
+export const TOUR_STEPS = [
+  {
+    label: 'The lens',
+    selector: '.lens',
+    text: 'The room sits in the lens at the top, with the project name at its top left, the working lane count at its top right and the newest activity at its bottom right.',
+  },
+  {
+    label: 'The hub and an agent',
+    selector: '.mr-term',
+    text: 'The hub ring in the middle splits into sector arcs for sub orchestrators, each agent parks at its slot with a terminal chip beside it, and the main orchestrator floats above the centre.',
+  },
+  {
+    label: 'A working tunnel',
+    selector: '.mr-card.is-targeted, .mr-callout.is-working, .mr-term.is-working',
+    wait: 'working',
+    waitText: 'Waiting for an agent to start working.',
+    text: 'A working agent sends a yellow tunnel and packets to the file card it touches, and four yellow brackets frame that card; white is a read or write, green is finished and red is a failure.',
+  },
+  {
+    label: 'The agent list',
+    selector: '.hud-dock-agents',
+    text: 'The dock lists the main orchestrator first, then each sub orchestrator sector and the Main group, with working lanes above the collapsible idle row and number keys to focus them.',
+  },
+  {
+    label: 'The agent context',
+    selector: '.hud-dock-context',
+    text: "The middle column shows the selected agent: its harness, model, status, sector or scope, task, current command, this month's spend and tokens, and its recent log lines.",
+  },
+  {
+    label: 'Settings and costs',
+    selector: '.hud-dock-side',
+    text: "The right column holds the folder depth and five screen effects for the lens above this month's cost board per lane.",
+  },
+  {
+    label: 'The transport',
+    selector: '.transport',
+    text: 'The transport at the foot plays or pauses the replay, seeks across the timeline and its white, green and red run markers, and changes the replay speed.',
+  },
+  {
+    label: 'Control and orchestrator',
+    selector: '.hud-actions',
+    text: 'CONTROL or C opens Dispatch, Tasks, Meters and Reviews, ORCHESTRATOR or / opens the orchestrator chat and its sector tabs, and ? lists every key.',
+  },
+]
+
 export const CONFIRM_SELECTOR =
   '.brief-confirm-card, .backup-confirm-card, .mr-orch-confirm, .mr-assistant-btn-confirm'
 
-export function clampStep(value) {
+export const DEFAULT_CARD_SIZE = Object.freeze({ width: 420, height: 220 })
+export const DEFAULT_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
+const WINDOW_MARGIN = 16
+
+let helpTourPending = false
+
+function clamp(value, min, max) {
+  if (max < min) return min
+  return Math.min(Math.max(value, min), max)
+}
+
+export function clampStep(value, steps = GUIDE_STEPS) {
+  const list = Array.isArray(steps) && steps.length > 0 ? steps : GUIDE_STEPS
   if (!Number.isInteger(value)) return 0
-  return Math.min(Math.max(value, 0), GUIDE_STEPS.length - 1)
+  return Math.min(Math.max(value, 0), list.length - 1)
 }
 
 export function guideSeen(storage = store()) {
@@ -42,8 +101,44 @@ export function guideSeen(storage = store()) {
   }
 }
 
-export function shouldShowGuide(storage = store()) {
+export function tourRequested(search = typeof window !== 'undefined' ? window.location?.search : '') {
+  if (search && typeof search.has === 'function') return tourEnabled(search)
+  if (typeof search !== 'string' || search === '') return false
+  try {
+    return tourEnabled(new URLSearchParams(search))
+  } catch {
+    return false
+  }
+}
+
+export function shouldShowGuide(
+  storage = store(),
+  search = typeof window !== 'undefined' ? window.location?.search : ''
+) {
+  if (tourRequested(search)) return true
   return !guideSeen(storage)
+}
+
+export function isFirstBoot(storage = store()) {
+  return savedSource(storage) === null && !guideSeen(storage)
+}
+
+export function setTourSpeed(storage = store()) {
+  const raw = readStorage(SETTINGS_KEY, storage)
+  if (!raw) return false
+  try {
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false
+    if (parsed.speed === 1) return true
+    return writeStorage(SETTINGS_KEY, JSON.stringify({ ...parsed, speed: 1 }), storage)
+  } catch {
+    return false
+  }
+}
+
+export function connectHref(pathname = '/') {
+  const path = typeof pathname === 'string' && pathname !== '' ? pathname : '/'
+  return `${path}?connect`
 }
 
 export function markGuideSeen(storage = store()) {
@@ -64,5 +159,282 @@ export function confirmCardOpen(doc) {
 }
 
 export function guideCanOpen(doc) {
-  return !confirmCardOpen(doc)
+  if (confirmCardOpen(doc)) return false
+  if (doc && typeof doc.querySelector === 'function') {
+    try {
+      helpTourPending = Boolean(doc.querySelector('#hud-help-dialog'))
+    } catch {
+      helpTourPending = false
+    }
+  }
+  return true
+}
+
+export function consumeHelpTour() {
+  const pending = helpTourPending
+  helpTourPending = false
+  return pending
+}
+
+function readElementRect(element, doc) {
+  if (!element || typeof element !== 'object') return null
+  if (element.hidden === true) return null
+  const style = element.style
+  if (
+    style &&
+    (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+  ) {
+    return null
+  }
+  const view = doc?.defaultView ?? (typeof window !== 'undefined' ? window : null)
+  if (view && typeof view.getComputedStyle === 'function' && typeof Element !== 'undefined' && element instanceof Element) {
+    try {
+      const computed = view.getComputedStyle(element)
+      if (
+        computed &&
+        (computed.display === 'none' ||
+          computed.visibility === 'hidden' ||
+          Number(computed.opacity) === 0)
+      ) {
+        return null
+      }
+    } catch {
+      return null
+    }
+  }
+  const raw =
+    typeof element.getBoundingClientRect === 'function'
+      ? element.getBoundingClientRect()
+      : element.rect && typeof element.rect === 'object'
+        ? element.rect
+        : element
+  const left = Number(raw?.left ?? raw?.x ?? 0)
+  const top = Number(raw?.top ?? raw?.y ?? 0)
+  const width = Number(raw?.width ?? 0)
+  const height = Number(raw?.height ?? 0)
+  if (!Number.isFinite(left) || !Number.isFinite(top) || !(width > 0) || !(height > 0)) {
+    return null
+  }
+  return {
+    left,
+    top,
+    width,
+    height,
+    right: left + width,
+    bottom: top + height,
+  }
+}
+
+function clipRectToViewport(rect, viewport) {
+  if (!rect) return null
+  const vw = Number(viewport?.width)
+  const vh = Number(viewport?.height)
+  if (!(vw > 0) || !(vh > 0)) return rect
+  const left = Math.max(0, rect.left)
+  const top = Math.max(0, rect.top)
+  const right = Math.min(vw, rect.right)
+  const bottom = Math.min(vh, rect.bottom)
+  if (right <= left || bottom <= top) return null
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+    right,
+    bottom,
+  }
+}
+
+function queryCandidates(doc, selector) {
+  if (!doc || typeof selector !== 'string' || selector.trim() === '') return []
+  if (typeof doc.querySelectorAll === 'function') {
+    try {
+      const found = Array.from(doc.querySelectorAll(selector)).filter(Boolean)
+      if (found.length > 0) return found
+    } catch {}
+  }
+  if (typeof doc.querySelector === 'function') {
+    try {
+      const one = doc.querySelector(selector)
+      if (one) return [one]
+    } catch {}
+  }
+  const parts = selector
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  const list = []
+  for (const part of parts) {
+    try {
+      if (typeof doc.querySelectorAll === 'function') {
+        const found = Array.from(doc.querySelectorAll(part))
+        for (const item of found) {
+          if (item && !list.includes(item)) list.push(item)
+        }
+      } else if (typeof doc.querySelector === 'function') {
+        const item = doc.querySelector(part)
+        if (item && !list.includes(item)) list.push(item)
+      }
+    } catch {
+      continue
+    }
+  }
+  if (list.length === 0 && parts.length > 1 && typeof doc.querySelector === 'function') {
+    try {
+      const fallback = doc.querySelector(selector)
+      if (fallback) list.push(fallback)
+    } catch {
+      return list
+    }
+  }
+  return list
+}
+
+export function findStepTarget(doc, stepOrSelector, viewport = null) {
+  const selector =
+    typeof stepOrSelector === 'string' ? stepOrSelector : stepOrSelector?.selector ?? ''
+  const candidates = queryCandidates(doc, selector)
+  for (const candidate of candidates) {
+    const rect = clipRectToViewport(readElementRect(candidate, doc), viewport)
+    if (rect) return candidate
+  }
+  return null
+}
+
+export function stepTargetRect(doc, stepOrSelector, viewport = null) {
+  const selector =
+    typeof stepOrSelector === 'string' ? stepOrSelector : stepOrSelector?.selector ?? ''
+  const candidates = queryCandidates(doc, selector)
+  for (const candidate of candidates) {
+    const rect = clipRectToViewport(readElementRect(candidate, doc), viewport)
+    if (rect) return rect
+  }
+  return null
+}
+
+export function stepReady(step, snapshot = null, doc = null, viewport = null) {
+  if (!step || !step.wait) return true
+  if (step.wait === 'working') {
+    const workingInSnapshot = Boolean(
+      snapshot &&
+        Array.isArray(snapshot.agents) &&
+        snapshot.agents.some(
+          (agent) =>
+            agent &&
+            (agent.status === 'working' ||
+              (Array.isArray(agent.focus) ? agent.focus.length > 0 : Boolean(agent.focus)))
+        )
+    )
+    if (workingInSnapshot) return true
+    return stepTargetRect(doc, step, viewport) !== null
+  }
+  return stepTargetRect(doc, step, viewport) !== null
+}
+
+export function placeGuideCard(
+  targetRect,
+  cardSize = DEFAULT_CARD_SIZE,
+  viewport = DEFAULT_VIEWPORT,
+  gap = 12
+) {
+  const vw = Number(viewport?.width) > 0 ? Number(viewport.width) : DEFAULT_VIEWPORT.width
+  const vh = Number(viewport?.height) > 0 ? Number(viewport.height) : DEFAULT_VIEWPORT.height
+  const margin = Math.min(WINDOW_MARGIN, Math.max(8, Math.floor(Math.min(vw, vh) * 0.04)))
+  const cw = Math.min(
+    Number(cardSize?.width) > 0 ? Number(cardSize.width) : DEFAULT_CARD_SIZE.width,
+    Math.max(160, vw - margin * 2)
+  )
+  const ch = Math.min(
+    Number(cardSize?.height) > 0 ? Number(cardSize.height) : DEFAULT_CARD_SIZE.height,
+    Math.max(120, vh - margin * 2)
+  )
+  const maxLeft = Math.max(margin, vw - cw - margin)
+  const maxTop = Math.max(margin, vh - ch - margin)
+
+  const clipped = clipRectToViewport(
+    targetRect &&
+      Number.isFinite(Number(targetRect.left)) &&
+      Number.isFinite(Number(targetRect.top)) &&
+      Number(targetRect.width) > 0 &&
+      Number(targetRect.height) > 0
+      ? {
+          left: Number(targetRect.left),
+          top: Number(targetRect.top),
+          width: Number(targetRect.width),
+          height: Number(targetRect.height),
+          right: Number(targetRect.left) + Number(targetRect.width),
+          bottom: Number(targetRect.top) + Number(targetRect.height),
+        }
+      : null,
+    { width: vw, height: vh }
+  )
+
+  if (!clipped) {
+    return {
+      centered: true,
+      side: 'center',
+      left: Math.round(clamp((vw - cw) / 2, margin, maxLeft)),
+      top: Math.round(clamp((vh - ch) / 2, margin, maxTop)),
+      outline: null,
+    }
+  }
+
+  const oLeft = clamp(Math.round(clipped.left), 2, Math.max(2, vw - 4))
+  const oTop = clamp(Math.round(clipped.top), 2, Math.max(2, vh - 4))
+  const oRight = clamp(Math.round(clipped.right), oLeft + 2, Math.max(oLeft + 2, vw - 2))
+  const oBottom = clamp(Math.round(clipped.bottom), oTop + 2, Math.max(oTop + 2, vh - 2))
+  const outline = {
+    left: oLeft,
+    top: oTop,
+    width: oRight - oLeft,
+    height: oBottom - oTop,
+  }
+
+  const roomBottom = vh - margin - oBottom
+  const roomTop = oTop - margin
+  const roomRight = vw - margin - oRight
+  const roomLeft = oLeft - margin
+
+  const candidates =
+    outline.width >= vw * 0.55
+      ? [
+          { side: 'bottom', fits: roomBottom >= ch + gap, room: roomBottom },
+          { side: 'top', fits: roomTop >= ch + gap, room: roomTop },
+          { side: 'right', fits: roomRight >= cw + gap, room: roomRight },
+          { side: 'left', fits: roomLeft >= cw + gap, room: roomLeft },
+        ]
+      : [
+          { side: 'right', fits: roomRight >= cw + gap, room: roomRight },
+          { side: 'left', fits: roomLeft >= cw + gap, room: roomLeft },
+          { side: 'bottom', fits: roomBottom >= ch + gap, room: roomBottom },
+          { side: 'top', fits: roomTop >= ch + gap, room: roomTop },
+        ]
+
+  const chosen =
+    candidates.find((item) => item.fits) ??
+    [...candidates].sort((a, b) => b.room - a.room)[0]
+
+  let left = (vw - cw) / 2
+  let top = (vh - ch) / 2
+  if (chosen.side === 'bottom') {
+    left = oLeft
+    top = oBottom + gap
+  } else if (chosen.side === 'top') {
+    left = oLeft
+    top = oTop - ch - gap
+  } else if (chosen.side === 'right') {
+    left = oRight + gap
+    top = oTop
+  } else if (chosen.side === 'left') {
+    left = oLeft - cw - gap
+    top = oTop
+  }
+
+  return {
+    centered: false,
+    side: chosen.side,
+    left: Math.round(clamp(left, margin, maxLeft)),
+    top: Math.round(clamp(top, margin, maxTop)),
+    outline,
+  }
 }

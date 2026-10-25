@@ -19,6 +19,7 @@
 - The reviews route resolves this checkout once per process instead of once per bridge, and the review tests skip the tree read they do not use (task T21).
 - The worktree reuse test leaves the clean reuse to `prepareWorktree` after the dirty refusal, so it starts fewer git commands under load (task T21).
 - The lane lock tests use a process id that is never alive, so a Windows process that reused a dead test child's id cannot make a stale lock look live (task T21).
+- The connect screen opens with two short sentences and a `Take the tour` button focused on first boot; it opens `?replay&fixture=scenario-i&tour` at the start at 1x, draws a thin `#e5ff00` outline around the eight tour targets and places the card beside them, waits for a working tunnel with Next always available, and offers `Connect to my project` and `Keep watching` on the last step, while the Guide button opens the tour and a visit that is not a tour keeps the plain five step guide (task G9).
 
 - History audit: on GitHub Actions the profile check is off, since the runner's user name (`runner`) is not the owner's and is a word the docs use.
 

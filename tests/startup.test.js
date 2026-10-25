@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chooseRoute, connectionFrom, foreignLinkNotice, linkAddressAllowed, recordingName } from '../src/startup.js'
+import { chooseRoute, connectionFrom, foreignLinkNotice, linkAddressAllowed, recordingName, tourEnabled } from '../src/startup.js'
 import { replayFiles } from '../src/model/replay.js'
 
 const saved = { source: 'bridge', bridge: 'http://127.0.0.1:5174', speed: 2 }
@@ -39,6 +39,14 @@ describe('chooseRoute', () => {
 
   it('opens the replay for a recording address', () => {
     expect(chooseRoute(at('recording=hermes-T8-20261019-233640'), saved, true).mode).toBe('replay')
+  })
+
+  it('opens the replay for a tour address and reads the tour parameter', () => {
+    expect(chooseRoute(at('replay&fixture=scenario-i&tour'), saved, false).mode).toBe('replay')
+    expect(chooseRoute(at('tour'), saved, false).mode).toBe('replay')
+    expect(tourEnabled(at('replay&fixture=scenario-i&tour'))).toBe(true)
+    expect(tourEnabled(at('replay'))).toBe(false)
+    expect(tourEnabled(null)).toBe(false)
   })
 })
 

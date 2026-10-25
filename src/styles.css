@@ -1192,6 +1192,18 @@ summary:focus-visible,
   z-index: 12;
 }
 
+.mr-guide-backdrop.is-tour {
+  background: rgb(0 0 0 / 0.28);
+}
+
+.mr-guide-outline {
+  position: fixed;
+  border: 1px solid var(--yellow);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 12;
+}
+
 .mr-guide {
   width: min(520px, 100%);
   max-height: calc(100vh - var(--space) * 6);
@@ -1202,6 +1214,17 @@ summary:focus-visible,
   border-radius: 2px;
   display: flex;
   flex-direction: column;
+}
+
+.mr-guide.is-tour {
+  width: min(420px, calc(100vw - var(--space) * 4));
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.85);
+  z-index: 13;
+}
+
+.mr-guide.is-tour.is-placed {
+  position: fixed;
+  margin: 0;
 }
 
 .mr-guide-head {
@@ -1268,6 +1291,16 @@ summary:focus-visible,
   color: var(--white);
 }
 
+.mr-guide-wait {
+  margin: 0;
+  padding: var(--space) calc(var(--space) * 2) 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: var(--yellow);
+}
+
 .mr-guide-dots {
   list-style: none;
   margin: 0;
@@ -1292,8 +1325,29 @@ summary:focus-visible,
 
 .mr-guide-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: var(--space);
   padding: calc(var(--space) * 2);
+}
+
+.mr-guide-secondary {
+  min-width: 96px;
+  padding: var(--space) calc(var(--space) * 2);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.mr-guide-secondary:hover {
+  border-color: var(--white);
 }
 
 .mr-guide-next {
@@ -1874,10 +1928,13 @@ summary:focus-visible,
 
 @media (prefers-reduced-motion: reduce) {
   button,
+  .mr-guide,
+  .mr-guide-outline,
   .mr-term,
   .mr-callout,
   .mr-board-row {
     transition: none;
+    animation: none;
   }
 
   .mr-term.is-working .mr-line:last-child::after,
@@ -2435,6 +2492,39 @@ summary:focus-visible,
   flex-direction: column;
   gap: calc(var(--space) * 1.5);
   transition: border-color 150ms, background-color 150ms;
+}
+
+.connect-card.connect-tour {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space) * 2);
+}
+
+.connect-intro {
+  flex: 1 1 280px;
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: rgb(255 255 255 / 0.9);
+}
+
+.connect-tour-button {
+  min-width: 192px;
+  padding: calc(var(--space) * 1.25) calc(var(--space) * 3);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-color: var(--yellow);
+  color: var(--yellow);
+  background: rgb(229 255 0 / 0.08);
+}
+
+.connect-tour-button:hover:not(:disabled) {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.18);
 }
 
 .connect-card.is-selected {

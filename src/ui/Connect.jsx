@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { name, tagline } from './brand.js'
+import { isFirstBoot } from './guide.js'
 import { DEFAULT_SETTINGS } from './settings.js'
+
+export const TOUR_QUERY = '?replay&fixture=scenario-i&tour'
+export const CONNECT_INTRO =
+  'MachineRoom shows coding agents working on your project as a 3D room in the browser. It follows the orchestrator, sub orchestrators and coding lanes live on your files, or replays a recorded run.'
 
 const DEFAULT_INITIAL = {
   bridge: DEFAULT_SETTINGS.bridge,
@@ -26,14 +31,22 @@ export default function Connect({
   initial = DEFAULT_INITIAL,
   error = null,
   busy = false,
+  firstBoot = undefined,
+  onTour,
   onSubmit,
   onReplay,
   onDemo,
 }) {
   const [bridge, setBridge] = useState(initial?.bridge ?? DEFAULT_INITIAL.bridge)
   const [fieldError, setFieldError] = useState(null)
+  const tourButtonRef = useRef(null)
   const bridgeInputRef = useRef(null)
   const lastInitialBridgeRef = useRef(initial?.bridge ?? DEFAULT_INITIAL.bridge)
+  const boot = firstBoot !== undefined ? Boolean(firstBoot) : isFirstBoot()
+
+  useEffect(() => {
+    if (boot) tourButtonRef.current?.focus?.()
+  }, [boot])
 
   useEffect(() => {
     const next = initial?.bridge
@@ -45,6 +58,22 @@ export default function Connect({
 
   function currentSettings() {
     return { source: 'bridge', bridge: bridge.trim() }
+  }
+
+  function handleTour() {
+    if (busy) return
+    if (onTour) {
+      onTour()
+      return
+    }
+    if (typeof window === 'undefined') return
+    const href = `${window.location?.pathname ?? '/'}${TOUR_QUERY}`
+    window.history?.replaceState?.(null, '', href)
+    if (onReplay) {
+      onReplay()
+      return
+    }
+    window.location?.assign?.(href)
   }
 
   function handleSubmit(event) {
@@ -94,6 +123,20 @@ export default function Connect({
             <p>{error}</p>
           </div>
         )}
+
+        <section className={`connect-card connect-tour${boot ? ' is-selected' : ''}`}>
+          <p className="connect-intro">{CONNECT_INTRO}</p>
+          <button
+            ref={tourButtonRef}
+            type="button"
+            className="connect-tour-button mono"
+            onClick={handleTour}
+            disabled={busy}
+            autoFocus={boot || undefined}
+          >
+            Take the tour
+          </button>
+        </section>
 
         <form className="connect-grid" onSubmit={handleSubmit} noValidate>
           <section className="connect-card is-selected">
