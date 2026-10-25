@@ -439,6 +439,28 @@ export function createClient({
       return request('POST', '/api/projects/open', { path, confirmed })
     },
 
+    family: () => request('GET', '/api/family'),
+
+    setAgentLabel: ({ id, label, confirmed = true } = {}) =>
+      request('POST', '/api/family/label', { id, label, confirmed }),
+
+    keys: async () => {
+      const data = await request('GET', '/api/keys')
+      return Array.isArray(data) ? data : data?.keys ?? []
+    },
+
+    setKey: ({ name, value, confirmed = true } = {}) =>
+      request('POST', '/api/keys', { name, value, confirmed }),
+
+    deleteKey: ({ name, confirmed = true } = {}) =>
+      request('POST', `/api/keys/${encodeURIComponent(name ?? '')}/delete`, { confirmed }),
+
+    approveProposal: ({ id, confirmed = true } = {}) =>
+      request('POST', `/api/family/proposals/${encodeURIComponent(id ?? '')}/approve`, { confirmed }),
+
+    declineProposal: ({ id, confirmed = true } = {}) =>
+      request('POST', `/api/family/proposals/${encodeURIComponent(id ?? '')}/decline`, { confirmed }),
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()

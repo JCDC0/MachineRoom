@@ -15,6 +15,7 @@ import {
   ORCHESTRATOR_MESSAGE_LIMIT,
 } from './orchestrator.js'
 import { gitPath } from './programPath.js'
+import { readAllLanes } from './agents-config.js'
 
 export const CONFIRM_LADDER_PROBLEM = 'Confirm the ladder first.'
 export const NO_ORCHESTRATOR_PROBLEM = 'There is no orchestrator with that id.'
@@ -148,11 +149,15 @@ export function createOrchestrators({
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
-  const laneKeys = Object.keys(lanes ?? {}).filter((key) => key !== ORCHESTRATOR_KEY)
   const mainName = typeof lanes?.[ORCHESTRATOR_KEY]?.name === 'string' ? lanes[ORCHESTRATOR_KEY].name : 'Orchestrator'
   const instances = new Map()
   const configs = new Map()
   let stopped = false
+
+  function currentLaneKeys() {
+    const all = readAllLanes({ runsFolder: folder, lanesJson: typeof lanes === 'function' ? lanes() : (lanes ?? {}) })
+    return Object.keys(all).filter((key) => key !== ORCHESTRATOR_KEY)
+  }
 
   const main = createOrchestrator({
     id: ORCHESTRATOR_KEY,
@@ -172,7 +177,7 @@ export function createOrchestrators({
   function readSaved() {
     const raw = main.getLadder()
     if (!raw) return { ladder: { subs: [] }, problems: [] }
-    return readLadder(raw, { lanes: laneKeys })
+    return readLadder(raw, { lanes: currentLaneKeys() })
   }
 
   function laneDefaults(harness) {
@@ -289,7 +294,7 @@ export function createOrchestrators({
         defaultCompactRules: DEFAULT_COMPACT_RULES,
         autocompactPercent: answer.autocompactPercent,
         effort: answer.effort ?? null,
-        lanes: laneKeys.filter((lane) => !claimed.has(lane)),
+        lanes: currentLaneKeys().filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
         setBy: 'owner',
@@ -332,7 +337,7 @@ export function createOrchestrators({
     const { ladder } = readSaved()
     if (key === ORCHESTRATOR_KEY) {
       const claimed = new Set(ladder.subs.flatMap((sub) => sub.lanes))
-      return { id: ORCHESTRATOR_KEY, name: mainName, lanes: laneKeys.filter((lane) => !claimed.has(lane)) }
+      return { id: ORCHESTRATOR_KEY, name: mainName, lanes: currentLaneKeys().filter((lane) => !claimed.has(lane)) }
     }
     const sub = ladder.subs.find((entry) => entry.id === key)
     if (!sub) return null
@@ -405,7 +410,7 @@ export function createOrchestrators({
     if (by !== 'owner' && by !== 'orchestrator') return { status: 400, body: { error: LADDER_BY_PROBLEM } }
     if (by === 'owner' && !page) return { status: 403, body: { error: OWNER_LADDER_PROBLEM } }
     if (by === 'orchestrator' && page) return { status: 403, body: { error: PAGE_LADDER_PROBLEM } }
-    const next = readLadder(body.ladder, { lanes: laneKeys })
+    const next = readLadder(body.ladder, { lanes: currentLaneKeys() })
     if (next.problems.length > 0) {
       return { status: 400, body: { error: next.problems.join(' '), problems: next.problems } }
     }
@@ -667,5 +672,18 @@ export function createOrchestrators({
 
   sync()
 
-  return { main, handle, list, subs, sector, find, token, idForToken, onFrame, close }
+  return {
+    main,
+    handle,
+    list,
+    subs,
+    sector,
+    find,
+    token,
+    idForToken,
+    onFrame,
+    close,
+    ladderChange,
+    getLadder: () => readSaved().ladder,
+  }
 }

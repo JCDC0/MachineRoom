@@ -13,6 +13,7 @@ import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
+import { createFamilyApi } from './family.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
 import { createMusicApi } from './music.js'
 import { createOrchestrators } from './orchestrators.js'
@@ -418,6 +419,24 @@ export function createBridge(options = {}) {
     readJsonBody,
     now: options.now,
   })
+  const familyApi = createFamilyApi({
+    projectRoot,
+    runsFolder: bridgeRunsFolder,
+    lanes: () => (lanesSourceOn ? lanesConfig : readLanes()),
+    activeLanes: () => activeLanes,
+    orchestrators: () => orchestrators,
+    isWorking: (key) => {
+      const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
+      const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
+      return fromSource || fromRuns
+    },
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
+    sendJson,
+    readJsonBody,
+    env,
+  })
   const treeSent = new WeakMap()
   const folderClients = new WeakSet()
   const treeClients = new WeakSet()
@@ -712,6 +731,7 @@ export function createBridge(options = {}) {
 
     if (orchestrators && (await orchestrators.handle(req, res, url))) return
     if (await projects.handle(req, res, url)) return
+    if (await familyApi.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {

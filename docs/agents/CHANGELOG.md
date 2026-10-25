@@ -6,6 +6,8 @@
 - A small hamburger icon (`MenuIcon.jsx`) marks each dropdown, the conversation switch in the top band and the model and effort pickers, in place of the letter V.
 - The folder lines rest dimmer (0.1 instead of 0.22) and the root project card draws no faint folders behind it, since its folders already stand in the room.
 - A live room re-reads `/api/agents` on each `agents` notice and updates its roster in place, so a new lane gets a view, chip, callout and hub slot, a lane that is gone loses them, the slots re-space and the camera stays; a session reader takes no slot and draws nothing until its first run (task U44).
+- The family tree on the bridge, key slots, agent proposals and labels (task O16).
+
 - The overview camera aims at the hub centre and only fits its distance to the cards, so the ring sits in the middle of the lens instead of the middle of all the cards. The live badge sits inside the lens's bottom left corner at 900 pixels and wider, off the chat input.
 - The live transport under the lens shows the orchestrator's state and a context ring beside the clock, and a click on either scrolls to the conversation and focuses the chat input (task U42).
 - The MachineRoom harness runs a small agent on any OpenAI-compatible key through `scripts/mr-agent.mjs`, with read, write, edit, list, search and shell tools, stream-json lines the room and `summarizeRun` already read, the `machineroom` descriptor and two OpenRouter models (task H9).

@@ -58,6 +58,13 @@ export const CLIENT_METHODS = [
   'decide',
   'projects',
   'openProject',
+  'family',
+  'setAgentLabel',
+  'keys',
+  'setKey',
+  'deleteKey',
+  'approveProposal',
+  'declineProposal',
   'subscribe',
 ]
 
@@ -427,6 +434,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const reviewState = clone(SAMPLE_REVIEWS)
   let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
   const subChats = new Map()
+  const familyLabels = new Map()
+  const keySlots = new Map()
+  const proposals = []
 
   function ensureSubChat(sub) {
     if (subChats.has(sub.id)) return subChats.get(sub.id)
@@ -1516,6 +1526,121 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         if (confirmed !== true) throw new Error('Confirm opening the project first.')
         if (typeof path !== 'string' || !path.trim()) throw new Error('Provide an absolute folder path.')
         return { ok: true, restarting: true, path }
+      }),
+
+    family: () =>
+      call('family', () => {
+        const directLanes = state.lanes.filter((l) => l.active && !ladder.subs.some((s) => s.lanes.includes(l.key))).map((l) => l.key)
+        const mainNode = {
+          id: 'orchestrator',
+          kind: 'orchestrator',
+          label: familyLabels.get('orchestrator') || 'Orchestrator',
+          harness: 'claude',
+          model: state.orchestratorChat.model,
+          effort: null,
+          parent: null,
+          children: [...ladder.subs.map((s) => s.id), ...directLanes],
+          active: true,
+          working: state.orchestratorChat.state === 'working',
+          custom: false,
+        }
+        const subNodes = ladder.subs.map((sub) => ({
+          id: sub.id,
+          kind: 'sub',
+          label: familyLabels.get(sub.id) || 'Sub orchestrator',
+          harness: sub.harness,
+          model: sub.model,
+          effort: null,
+          parent: 'orchestrator',
+          children: sub.lanes.filter((key) => state.lanes.some((l) => l.key === key && l.active)),
+          active: true,
+          working: false,
+          custom: false,
+        }))
+        const laneNodes = state.lanes
+          .filter((lane) => lane.active)
+          .map((lane) => {
+            const sub = ladder.subs.find((s) => s.lanes.includes(lane.key))
+            return {
+              id: lane.key,
+              kind: 'lane',
+              label: familyLabels.get(lane.key) || 'Code agent',
+              harness: lane.harness,
+              model: lane.model,
+              effort: lane.effort ?? null,
+              parent: sub ? sub.id : 'orchestrator',
+              children: [],
+              active: true,
+              working: Boolean(lane.working),
+              custom: Boolean(lane.custom),
+            }
+          })
+        return {
+          nodes: [mainNode, ...subNodes, ...laneNodes],
+          keys: [...keySlots.keys()].sort().map((name) => ({ name })),
+          proposals: clone(proposals),
+        }
+      }),
+
+    setAgentLabel: (options = {}) =>
+      call('setAgentLabel', () => {
+        const { id, label, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm setting the label first.')
+        if (typeof label !== 'string' || !label.trim() || label.trim().length > 40) {
+          throw new Error('The label must be 1 to 40 characters.')
+        }
+        familyLabels.set(id, label.trim())
+        emit({ topic: 'family' })
+        return { ok: true, id, label: label.trim() }
+      }),
+
+    keys: () => call('keys', () => [...keySlots.keys()].sort().map((name) => ({ name }))),
+
+    setKey: (options = {}) =>
+      call('setKey', () => {
+        const { name, value, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm setting the key first.')
+        if (typeof name !== 'string' || !/^[A-Za-z0-9 _-]{1,40}$/.test(name)) {
+          throw new Error('The key name must be 1 to 40 letters, digits, space, dash or underscore.')
+        }
+        if (typeof value !== 'string' || value.length < 1 || value.length > 500) {
+          throw new Error('The key value must be 1 to 500 characters.')
+        }
+        keySlots.set(name, value)
+        emit({ topic: 'family' })
+        return { ok: true, name }
+      }),
+
+    deleteKey: (options = {}) =>
+      call('deleteKey', () => {
+        const { name, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm deleting the key first.')
+        if (!keySlots.has(name)) throw new Error(`The key ${name} was not found.`)
+        keySlots.delete(name)
+        emit({ topic: 'family' })
+        return { ok: true, deleted: name }
+      }),
+
+    approveProposal: (options = {}) =>
+      call('approveProposal', () => {
+        const { id, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm approving the proposal first.')
+        const index = proposals.findIndex((p) => p.id === id)
+        if (index === -1) throw new Error('The proposal was not found.')
+        proposals.splice(index, 1)
+        emit({ topic: 'family' })
+        return { ok: true, approved: id }
+      }),
+
+    declineProposal: (options = {}) =>
+      call('declineProposal', () => {
+        const { id, confirmed = true } = options
+        if (confirmed !== true) throw new Error('Confirm declining the proposal first.')
+        const index = proposals.findIndex((p) => p.id === id)
+        if (index === -1) throw new Error('The proposal was not found.')
+        proposals.splice(index, 1)
+        emit({ topic: 'family' })
+        return { ok: true, declined: id }
       }),
 
     subscribe(listener) {
