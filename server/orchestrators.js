@@ -68,12 +68,28 @@ export function branchChanges(record, lanes = {}, options = {}) {
   if (!base) return null
   try {
     const prefix = projectPrefix(project)
-    return gitText(folder, ['diff', '--name-only', '--relative', `${base}...HEAD`])
+    const relativePath = (path) => {
+      if (!path) return ''
+      return prefix && path.startsWith(prefix) ? path.slice(prefix.length) : path
+    }
+    const committed = gitText(folder, ['diff', '--name-only', '--relative', `${base}...HEAD`])
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => (prefix && line.startsWith(prefix) ? line.slice(prefix.length) : line))
-      .filter(Boolean)
+    const fields = gitText(folder, ['status', '--porcelain', '--untracked-files=all', '-z']).split('\0')
+    const uncommitted = []
+    for (let index = 0; index < fields.length; index += 1) {
+      const field = fields[index]
+      if (!field) continue
+      const code = field.slice(0, 2)
+      uncommitted.push(field.slice(3))
+      if (code.includes('R') || code.includes('C')) {
+        uncommitted.push(fields[index + 1] ?? '')
+        index += 1
+      }
+    }
+    const paths = [...committed, ...uncommitted].map(relativePath).filter(Boolean)
+    return [...new Set(paths)]
   } catch {
     return null
   }

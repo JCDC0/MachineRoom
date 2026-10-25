@@ -13,6 +13,7 @@
 - A live page keeps the agent key the bridge sends and the sub orchestrator flag, so a sub is drawn above its sector instead of as a lane (task Q12g).
 - `docs/agents/HIERARCHY.md` now says the ladder is built: O1 to O7 with their versions, the V23, V25, V26 and S10 changes, and the two points X1 and X3 that wait for the owner (task D10).
 - The scope check diffs a lane against the project's current branch instead of `main`, lists paths relative to the project folder, ignores case on Windows, and tells the parent when git cannot be read (task Q12a).
+- The scope check reads uncommitted work too: untracked, modified, deleted and renamed paths from `git status` join the committed changes, relative to the project folder and with no duplicates (task Q13b).
 
 - `npm run worktrees -- --clean` removes a lane worktree's `node_modules` link before `git worktree remove`, so a worktree the runner made is removed without `--force` and the project's modules stay (task Q12f).
 - A sub orchestrator agent from `GET /api/agents` carries its harness and model, taken from the sub or from the first lane with that harness, so its dock no longer shows `claude_local` or `not reported` (task Q12d).

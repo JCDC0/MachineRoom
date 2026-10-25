@@ -314,6 +314,75 @@ describe('branchChanges', () => {
 
     expect(branchChanges({ project: worktree }, {}, { project })).toEqual(['server/y.js', 'src/a.js'])
   })
+
+  it('lists uncommitted paths beside the committed ones', () => {
+    const base = makeTempDir('mr-branch-')
+    cleanups.push(() => removeTempDir(base))
+    const project = join(base, 'project')
+    mkdirSync(join(project, 'src'), { recursive: true })
+    mkdirSync(join(project, 'server'), { recursive: true })
+    writeFileSync(join(project, 'src', 'old.js'), 'old\n')
+    writeFileSync(join(project, 'server', 'edited.js'), 'one\n')
+    git(project, ['init', '-b', 'main'])
+    git(project, ['config', 'user.email', 'test@example.com'])
+    git(project, ['config', 'user.name', 'Test'])
+    git(project, ['add', '.'])
+    git(project, ['commit', '-m', 'base'])
+
+    const worktree = join(base, 'worktree')
+    git(project, ['worktree', 'add', '-b', 'feat/k3', worktree])
+    writeFileSync(join(worktree, 'server', 'committed.js'), 'committed\n')
+    git(worktree, ['add', '.'])
+    git(worktree, ['commit', '-m', 'change'])
+    writeFileSync(join(worktree, 'server', 'committed.js'), 'committed again\n')
+    writeFileSync(join(worktree, 'server', 'edited.js'), 'two\n')
+    writeFileSync(join(worktree, 'secret.txt'), 'secret\n')
+    mkdirSync(join(worktree, 'secret'), { recursive: true })
+    git(worktree, ['mv', 'src/old.js', 'secret/moved.js'])
+
+    expect(branchChanges({ project: worktree }, {}, { project }).sort()).toEqual(
+      ['secret/moved.js', 'secret.txt', 'server/committed.js', 'server/edited.js', 'src/old.js'].sort()
+    )
+  })
+
+  it('lists an untracked file in the project folder', () => {
+    const base = makeTempDir('mr-branch-')
+    cleanups.push(() => removeTempDir(base))
+    const project = join(base, 'project')
+    mkdirSync(join(project, 'src'), { recursive: true })
+    writeFileSync(join(project, 'src', 'a.js'), 'one\n')
+    git(project, ['init', '-b', 'main'])
+    git(project, ['config', 'user.email', 'test@example.com'])
+    git(project, ['config', 'user.name', 'Test'])
+    git(project, ['add', '.'])
+    git(project, ['commit', '-m', 'base'])
+    writeFileSync(join(project, 'secret.txt'), 'secret\n')
+
+    expect(branchChanges({ project })).toEqual(['secret.txt'])
+  })
+
+  it('lists only the committed changes when the tree is clean', () => {
+    const base = makeTempDir('mr-branch-')
+    cleanups.push(() => removeTempDir(base))
+    const project = join(base, 'project')
+    mkdirSync(join(project, 'src'), { recursive: true })
+    writeFileSync(join(project, 'src', 'a.js'), 'one\n')
+    git(project, ['init', '-b', 'main'])
+    git(project, ['config', 'user.email', 'test@example.com'])
+    git(project, ['config', 'user.name', 'Test'])
+    git(project, ['add', '.'])
+    git(project, ['commit', '-m', 'base'])
+
+    const worktree = join(base, 'worktree')
+    git(project, ['worktree', 'add', '-b', 'feat/k3', worktree])
+    writeFileSync(join(worktree, 'src', 'a.js'), 'two\n')
+    mkdirSync(join(worktree, 'server'), { recursive: true })
+    writeFileSync(join(worktree, 'server', 'b.js'), 'outside\n')
+    git(worktree, ['add', '.'])
+    git(worktree, ['commit', '-m', 'change'])
+
+    expect(branchChanges({ project: worktree }, {}, { project }).sort()).toEqual(['server/b.js', 'src/a.js'])
+  })
 })
 
 describe('the orchestrator registry', () => {
