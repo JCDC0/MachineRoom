@@ -127,6 +127,7 @@ async function startReviewsBridge(lanes, { patchLimit, withFiles = true, project
     reconnectMinMs: 60000,
     reconnectMaxMs: 60000,
     patchLimit,
+    readTree: () => Promise.resolve({ root: 'project', files: [], created: [] }),
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()

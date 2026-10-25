@@ -170,12 +170,20 @@ describe('the worktree on a real repository', () => {
     const base = tempDir()
     const project = initRepo(base)
     const path = prepareWorktree(project, 'opencode').path
-    expect(worktreePlan(project, 'opencode')).toEqual({ path, made: false })
     writeFileSync(join(path, 'readme.txt'), 'changed\n')
     expect(() => worktreePlan(project, 'opencode')).toThrow(`The worktree ${path} has uncommitted changes. Commit or discard them first.`)
     expect(() => prepareWorktree(project, 'opencode')).toThrow(path)
     git(path, ['checkout', '--', 'readme.txt'])
-    expect(worktreePlan(project, 'opencode')).toEqual({ path, made: false })
+    expect(prepareWorktree(project, 'opencode')).toEqual({ path, made: false })
+  })
+
+  it('refuses a worktree that belongs to another project', () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    const other = initRepo(base, 'Other2')
+    const path = worktreeFor(project, 'opencode')
+    git(other, ['worktree', 'add', '--detach', path, 'HEAD'])
+    expect(() => worktreePlan(project, 'opencode')).toThrow(`The worktree ${path} belongs to another project.`)
   })
 
   it('moves a reused worktree to the project HEAD, so a new queue starts from the current commit', () => {

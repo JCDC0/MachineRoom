@@ -18,6 +18,12 @@ const MAIN_BASE = { ref: MAIN_REF, name: 'main' }
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const ROOM_BRIEFS = join(REPO_ROOT, 'docs', 'agents')
 export const DEFAULT_PATCH_LIMIT = 400 * 1024
+let codeCheckoutPath = null
+
+function codeCheckout() {
+  if (codeCheckoutPath === null) codeCheckoutPath = mainCheckoutOf(REPO_ROOT)
+  return codeCheckoutPath
+}
 
 function pathKey(path) {
   try {
@@ -156,8 +162,8 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const limit = Number.isInteger(patchLimit) && patchLimit > 0 ? patchLimit : DEFAULT_PATCH_LIMIT
   const roomCheckout = resolvedRoot ? mainCheckoutOf(resolvedRoot) : ''
-  const codeCheckout = roomCheckout ? mainCheckoutOf(REPO_ROOT) : ''
-  const otherProject = Boolean(roomCheckout && codeCheckout && pathKey(roomCheckout) !== pathKey(codeCheckout))
+  const codeCheckoutHere = roomCheckout ? codeCheckout() : ''
+  const otherProject = Boolean(roomCheckout && codeCheckoutHere && pathKey(roomCheckout) !== pathKey(codeCheckoutHere))
   const lanesFolder =
     resolvedBriefs && existsSync(join(resolvedBriefs, 'lanes.json'))
       ? resolvedBriefs

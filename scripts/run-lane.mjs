@@ -89,12 +89,14 @@ function worktreeChanges(worktree) {
 export function worktreePlan(project, lane) {
   const path = worktreeFor(project, lane)
   if (!path) throw new Error('--worktree needs a project folder and a lane.')
-  if (!gitCheckout(project)) throw new Error(`The project folder ${project} is not a git folder. --worktree needs one.`)
+  const projectGit = gitFolder(project)
+  if (!projectGit.checkout) throw new Error(`The project folder ${project} is not a git folder. --worktree needs one.`)
   if (!existsSync(path)) return { path, made: true }
   const stat = statSync(path)
   if (!stat.isDirectory()) throw new Error(`The worktree ${path} is not a folder.`)
-  if (!gitCheckout(path)) throw new Error(`The worktree ${path} is not a git worktree of the project.`)
-  if (gitCommonDir(path) !== gitCommonDir(project)) throw new Error(`The worktree ${path} belongs to another project.`)
+  const worktreeGit = gitFolder(path)
+  if (!worktreeGit.checkout) throw new Error(`The worktree ${path} is not a git worktree of the project.`)
+  if (worktreeGit.commonDir !== projectGit.commonDir) throw new Error(`The worktree ${path} belongs to another project.`)
   if (worktreeChanges(path).length > 0) throw new Error(`The worktree ${path} has uncommitted changes. Commit or discard them first.`)
   return { path, made: false }
 }
@@ -319,10 +321,18 @@ function gitRead(cwd, args) {
   return String(result.stdout ?? '').trim()
 }
 
+function gitFolder(cwd) {
+  const text = gitRead(cwd, ['rev-parse', '--is-inside-work-tree', '--git-common-dir'])
+  if (!text) return { checkout: false, commonDir: '' }
+  const [inside = '', common = ''] = text.split(/\r?\n/)
+  return {
+    checkout: inside.trim() === 'true',
+    commonDir: common ? realPath(resolve(cwd, common)) : '',
+  }
+}
+
 function gitCommonDir(cwd) {
-  const common = gitRead(cwd, ['rev-parse', '--git-common-dir'])
-  if (!common) return ''
-  return realPath(resolve(cwd, common))
+  return gitFolder(cwd).commonDir
 }
 
 let mainCheckoutPath = null

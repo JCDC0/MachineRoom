@@ -1,11 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import ReviewsPanel from '../src/ui/panels/ReviewsPanel.jsx'
 import { defaultMergeMessage, reviewRow } from '../src/ui/panels/reviews.js'
@@ -15,12 +15,52 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const REAL_TMP = tmpdir()
 const NO_GIT_CONFIG = join(REAL_TMP, 'machineroom-project-reviews-no-git-config')
 const cleanups = []
+let templateRoot = ''
+let templateRoom = ''
+let templateProject = ''
 
 afterEach(async () => {
   while (cleanups.length > 0) {
     const fn = cleanups.pop()
     await fn()
   }
+})
+
+beforeEach(() => {
+  const dir = makeTempDir()
+  const previous = process.env.TEMP
+  process.env.TEMP = dir
+  cleanups.push(() => {
+    if (previous === undefined) delete process.env.TEMP
+    else process.env.TEMP = previous
+  })
+})
+
+beforeAll(() => {
+  templateRoot = makeTempRoot('mr-project-reviews-template-')
+  templateRoom = join(templateRoot, 'room')
+  templateProject = join(templateRoot, 'project')
+
+  initRepo(templateRoom, 'main')
+  mkdirSync(join(templateRoom, 'docs', 'agents'), { recursive: true })
+  writeFileSync(join(templateRoom, 'docs', 'agents', 'lanes.json'), '{}')
+  writeFileSync(join(templateRoom, 'README.md'), 'room\n')
+  git(templateRoom, ['add', '.'])
+  git(templateRoom, ['commit', '-m', 'room'])
+
+  initRepo(templateProject, 'trunk')
+  writeFileSync(join(templateProject, 'notes.txt'), 'hello\n')
+  git(templateProject, ['add', 'notes.txt'])
+  git(templateProject, ['commit', '-m', 'first'])
+  git(templateProject, ['switch', '-c', 'feat/x'])
+  writeFileSync(join(templateProject, 'extra.js'), 'export const x = 1\n')
+  git(templateProject, ['add', 'extra.js'])
+  git(templateProject, ['commit', '-m', 'lane work'])
+  git(templateProject, ['switch', 'trunk'])
+})
+
+afterAll(() => {
+  rmSync(templateRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
 function makeTempDir() {
@@ -70,38 +110,12 @@ function makeProject({ detach = false } = {}) {
     quiet: { name: 'No worktree here' },
   }
 
-  initRepo(room, 'main')
-  mkdirSync(join(room, 'docs', 'agents'), { recursive: true })
+  cpSync(templateRoom, room, { recursive: true })
+  cpSync(templateProject, project, { recursive: true })
   writeFileSync(join(room, 'docs', 'agents', 'lanes.json'), JSON.stringify(lanes))
-  writeFileSync(join(room, 'README.md'), 'room\n')
-  git(room, ['add', '.'])
-  git(room, ['commit', '-m', 'room'])
-
-  initRepo(project, 'trunk')
-  writeFileSync(join(project, 'notes.txt'), 'hello\n')
-  git(project, ['add', 'notes.txt'])
-  git(project, ['commit', '-m', 'first'])
-
-  if (detach) {
-    git(project, ['worktree', 'add', '--detach', worktree])
-  } else {
-    git(project, ['worktree', 'add', '-b', 'feat/x', worktree])
-  }
-  writeFileSync(join(worktree, 'extra.js'), 'export const x = 1\n')
-  git(worktree, ['add', 'extra.js'])
-  git(worktree, ['commit', '-m', 'lane work'])
+  git(project, ['worktree', 'add', ...(detach ? ['--detach'] : []), worktree, 'feat/x'])
 
   return { base, room, project, worktree, briefsDir: join(room, 'docs', 'agents') }
-}
-
-function useRunsTemp() {
-  const dir = makeTempDir()
-  const previous = process.env.TEMP
-  process.env.TEMP = dir
-  cleanups.push(() => {
-    process.env.TEMP = previous
-  })
-  return dir
 }
 
 async function startBridge({ projectRoot, briefsDir }) {
@@ -113,6 +127,7 @@ async function startBridge({ projectRoot, briefsDir }) {
     companyId: 'company-1',
     reconnectMinMs: 60000,
     reconnectMaxMs: 60000,
+    readTree: () => Promise.resolve({ root: 'project', files: [], created: [] }),
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
@@ -129,7 +144,6 @@ function mergeRequest(url, lane, body) {
 
 describe('review routes on another project', () => {
   it('lists the lane whose project worktree exists and names the project branch', async () => {
-    useRunsTemp()
     const { project, worktree, briefsDir } = makeProject()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
     const res = await fetch(`${url}/api/control/reviews`)
@@ -210,7 +224,6 @@ describe('review routes on another project', () => {
   }, 40000)
 
   it('reads the room lanes when the project has no lane file of its own', async () => {
-    useRunsTemp()
     const { room, project, briefsDir } = makeProject()
     rmSync(join(room, 'docs', 'agents', 'lanes.json'))
     const { url } = await startBridge({ projectRoot: project, briefsDir })
@@ -222,7 +235,6 @@ describe('review routes on another project', () => {
   }, 40000)
 
   it('fast-forwards a detached lane worktree, as a run-lane task makes it', async () => {
-    useRunsTemp()
     const { project, worktree, briefsDir } = makeProject({ detach: true })
     const head = git(worktree, ['rev-parse', 'HEAD']).trim()
     const { url } = await startBridge({ projectRoot: project, briefsDir })
@@ -237,7 +249,6 @@ describe('review routes on another project', () => {
   }, 40000)
 
   it('still reads every configured lane against main on MachineRoom itself', async () => {
-    useRunsTemp()
     const briefsDir = join(REPO_ROOT, 'docs', 'agents')
     const lanesFile = JSON.parse(readFileSync(join(briefsDir, 'lanes.json'), 'utf8'))
     const configured = Object.values(lanesFile).filter(
