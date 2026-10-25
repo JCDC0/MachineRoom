@@ -1,23 +1,11 @@
 import { Fragment, useEffect, useState } from 'react'
-import AutocompactInput from './AutocompactInput.jsx'
+import FamilyTree from './FamilyTree.jsx'
 import {
-  AGENT_NAME_MAX,
   ORCHESTRATOR_ID,
   SESSION_LIMIT,
-  agentDraft,
-  agentFormProblem,
-  agentFormSummary,
-  autocompactLine,
   cleanText,
-  findHarness,
-  harnessEfforts,
-  harnessGroups,
-  harnessModels,
-  laneChoice,
-  laneFormProblem,
   previewLines,
   projectName,
-  rosterSummary,
   sessionAge,
   sessionTitle,
   sessionRows,
@@ -49,13 +37,10 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
   const connected = live === true
   const canProjects = typeof client?.projects === 'function'
   const canSessions = typeof client?.orchestratorSessions === 'function'
+  const canFamily = typeof client?.family === 'function'
   const available = connected && canProjects && canSessions
   const [projects, setProjects] = useState(null)
   const [sessions, setSessions] = useState(null)
-  const [lanes, setLanes] = useState(null)
-  const [orchestrators, setOrchestrators] = useState(null)
-  const [harnesses, setHarnesses] = useState(null)
-  const [models, setModels] = useState(null)
   const [readError, setReadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -64,10 +49,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
   const [showAll, setShowAll] = useState(false)
   const [collapsed, setCollapsed] = useState([])
   const [opened, setOpened] = useState([])
-  const [agentsOpen, setAgentsOpen] = useState(true)
-  const [adding, setAdding] = useState(false)
-  const [draft, setDraft] = useState(null)
-  const [editing, setEditing] = useState(null)
   const [renaming, setRenaming] = useState(null)
 
   useEffect(() => {
@@ -77,10 +58,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     const reads = [
       ['projects', () => client?.projects?.()],
       ['sessions', () => client?.orchestratorSessions?.({ id: ORCHESTRATOR_ID })],
-      ['lanes', () => client?.lanes?.()],
-      ['orchestrators', () => client?.orchestrators?.()],
-      ['harnesses', () => client?.harnesses?.()],
-      ['models', () => client?.models?.()],
     ]
     const jobs = reads.map(([, read]) => {
       try {
@@ -97,10 +74,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
       })
       if (values.projects) setProjects(values.projects)
       if (values.sessions) setSessions(values.sessions)
-      if (values.lanes) setLanes(values.lanes)
-      if (values.orchestrators) setOrchestrators(values.orchestrators)
-      if (values.harnesses) setHarnesses(values.harnesses)
-      if (values.models) setModels(values.models)
       const failed = results.find((result) => result.status === 'rejected')
       if (failed) setReadError(messageOf(failed.reason))
     })
@@ -108,18 +81,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
       active = false
     }
   }, [client, connected])
-
-  useEffect(() => {
-    if (!adding) return
-    const groups = harnessGroups(harnesses)
-    if (groups.available.length === 0) return
-    if (!draft || !draft.harness) {
-      setDraft((current) => ({
-        ...agentDraft(harnesses, models),
-        name: current?.name ?? '',
-      }))
-    }
-  }, [adding, draft, harnesses, models])
 
   useEffect(() => {
     if (!confirm) return undefined
@@ -137,18 +98,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     if (typeof client?.orchestratorSessions !== 'function') return
     const answer = await client.orchestratorSessions({ id: ORCHESTRATOR_ID })
     setSessions(answer)
-  }
-
-  async function refreshLanes() {
-    if (typeof client?.lanes !== 'function') return
-    const answer = await client.lanes()
-    setLanes(answer)
-  }
-
-  async function refreshOrchestrators() {
-    if (typeof client?.orchestrators !== 'function') return
-    const answer = await client.orchestrators()
-    setOrchestrators(answer)
   }
 
   function ask(config) {
@@ -350,218 +299,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     })
   }
 
-  function askLane(lane, on) {
-    if (typeof client?.setActiveLanes !== 'function') {
-      setActionError('This bridge cannot change the agents.')
-      return
-    }
-    const label = cleanText(lane?.name, 80) || cleanText(lane?.key, 80)
-    const choice = laneChoice(lanes?.lanes, on ? { add: [lane.key] } : { remove: [lane.key] })
-    ask({
-      text: on ? `Add ${label} to the active agents?` : `Remove ${label} from the active agents?`,
-      label: on ? 'Add agent' : 'Remove agent',
-      tone: on ? 'primary' : 'danger',
-      busyText: on ? 'Adding the agent...' : 'Removing the agent...',
-      run: async () => {
-        await client.setActiveLanes({ lanes: choice, confirmed: true })
-        await refreshLanes()
-      },
-    })
-  }
-
-  function harnessFor(key) {
-    return findHarness(harnesses, key) ?? cleanText(key, 40)
-  }
-
-  function openOrchestrator(row) {
-    if (editing && editing.kind === 'orchestrator' && editing.id === row.id) {
-      setEditing(null)
-      return
-    }
-    setActionError('')
-    setAdding(false)
-    setDraft(null)
-    setEditing({
-      kind: 'orchestrator',
-      id: row.id,
-      name: row.name,
-      harness: row.harness,
-      model: row.model,
-      effort: row.effort,
-      autocompact: row.autocompact,
-      percent: row.percent,
-    })
-  }
-
-  function askOrchestratorModel(row, model) {
-    if (!model || model === row.model) return
-    if (typeof client?.setOrchestratorModel !== 'function') {
-      setActionError('This bridge cannot set a model.')
-      return
-    }
-    ask({
-      text: `Set ${model} for ${row.name}?`,
-      label: 'Set model',
-      busyText: 'Setting the model...',
-      run: async () => {
-        await client.setOrchestratorModel({ id: row.id, model, confirmed: true })
-        setEditing((current) =>
-          current && current.kind === 'orchestrator' && current.id === row.id
-            ? { ...current, model }
-            : current
-        )
-        await refreshOrchestrators()
-      },
-    })
-  }
-
-  function askOrchestratorEffort(row, effort) {
-    if (!effort || effort === row.effort) return
-    if (typeof client?.setOrchestratorEffort !== 'function') {
-      setActionError('This bridge cannot set an effort.')
-      return
-    }
-    ask({
-      text: `Set effort ${effort} for ${row.name}?`,
-      label: 'Set effort',
-      busyText: 'Setting the effort...',
-      run: async () => {
-        await client.setOrchestratorEffort({ id: row.id, effort, confirmed: true })
-        setEditing((current) =>
-          current && current.kind === 'orchestrator' && current.id === row.id
-            ? { ...current, effort }
-            : current
-        )
-        await refreshOrchestrators()
-      },
-    })
-  }
-
-  function openLane(lane) {
-    if (editing && editing.kind === 'lane' && editing.key === lane.key) {
-      setEditing(null)
-      return
-    }
-    setActionError('')
-    setAdding(false)
-    setDraft(null)
-    setEditing({
-      kind: 'lane',
-      key: lane.key,
-      harness: lane.harness,
-      name: lane.name,
-      model: lane.model,
-      effort: lane.effort,
-    })
-  }
-
-  function askLaneSave(lane) {
-    if (!editing || editing.kind !== 'lane' || editing.key !== lane.key) return
-    if (typeof client?.updateLane !== 'function') {
-      setActionError('This bridge cannot change an agent.')
-      return
-    }
-    const host = harnessFor(lane.harness)
-    const problem = laneFormProblem(editing, {
-      models: harnessModels(host, models),
-      efforts: harnessEfforts(host),
-    })
-    if (problem) {
-      setActionError(problem)
-      return
-    }
-    const name = cleanText(editing.name, AGENT_NAME_MAX)
-    ask({
-      text: `Save "${name}"${editing.model ? ` on ${editing.model}` : ''}?`,
-      label: 'Save',
-      busyText: 'Saving the agent...',
-      run: async () => {
-        await client.updateLane({
-          key: lane.key,
-          name,
-          model: editing.model,
-          effort: editing.effort,
-          confirmed: true,
-        })
-        setEditing(null)
-        await refreshLanes()
-      },
-    })
-  }
-
-  function askLaneRemove(lane) {
-    if (typeof client?.deleteLane !== 'function') {
-      setActionError('This bridge cannot remove an agent.')
-      return
-    }
-    ask({
-      text: `Remove "${lane.name}"? This cannot be undone.`,
-      label: 'Remove',
-      tone: 'danger',
-      busyText: 'Removing the agent...',
-      run: async () => {
-        await client.deleteLane({ key: lane.key, confirmed: true })
-        setEditing((current) =>
-          current && current.kind === 'lane' && current.key === lane.key ? null : current
-        )
-        await refreshLanes()
-      },
-    })
-  }
-
-  function toggleAdd() {
-    if (adding) {
-      setAdding(false)
-      setDraft(null)
-      return
-    }
-    setActionError('')
-    setEditing(null)
-    setDraft(agentDraft(harnesses, models))
-    setAdding(true)
-  }
-
-  function chooseHarness(harness) {
-    if (!harness || harness.available !== true) return
-    const choices = harnessModels(harness, models)
-    const efforts = harnessEfforts(harness)
-    setDraft((current) => ({
-      ...(current ?? { name: '' }),
-      harness: harness.key,
-      model: choices[0]?.id ?? '',
-      effort: efforts[0] ?? '',
-    }))
-  }
-
-  function askCreate() {
-    if (typeof client?.createLane !== 'function') {
-      setActionError('This bridge cannot create an agent.')
-      return
-    }
-    const problem = agentFormProblem(draft, harnesses, models)
-    if (problem) {
-      setActionError(problem)
-      return
-    }
-    const payload = {
-      name: cleanText(draft?.name, AGENT_NAME_MAX),
-      harness: draft.harness,
-      model: draft.model,
-      effort: draft.effort,
-    }
-    ask({
-      text: agentFormSummary(draft, harnesses),
-      label: 'Create',
-      busyText: 'Creating the agent...',
-      run: async () => {
-        await client.createLane({ ...payload, confirmed: true })
-        setAdding(false)
-        setDraft(null)
-        await refreshLanes()
-      },
-    })
-  }
-
   function showProjects() {
     if (typeof window === 'undefined') return
     window.dispatchEvent(new CustomEvent('machineroom:projects'))
@@ -583,7 +320,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
 
   const now = Date.now()
   const rows = sessionRows(sessions, { expanded: showAll })
-  const roster = rosterSummary(orchestrators, lanes)
   const fallbackName =
     cleanText(String(project ?? '').replace(/^\/+/, '')) || 'Project'
   const currentProject = projects?.current && typeof projects.current === 'object' ? projects.current : null
@@ -819,431 +555,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     )
   }
 
-  function renderOrchestrator(row) {
-    const isEditing = Boolean(
-      editing && editing.kind === 'orchestrator' && editing.id === row.id
-    )
-    return (
-      <Fragment key={row.id}>
-        <button
-          type="button"
-          className={`mr-side-orch${isEditing ? ' is-open' : ''}`}
-          aria-expanded={isEditing}
-          aria-label={`Edit ${row.name}`}
-          onClick={() => openOrchestrator(row)}
-        >
-          <span className="mr-side-orch-top">
-            <span className="mr-side-lane-name">{row.name}</span>
-            {row.sub ? <span className="mr-side-tag mono">sub</span> : null}
-          </span>
-          <span className="mr-side-meta mono">
-            <span>{row.harness || 'harness unknown'}</span>
-            <span className="mr-side-meta-model" title={row.model}>
-              {row.model || 'no model'}
-            </span>
-            <span>{row.effort || 'default'}</span>
-            <span>{autocompactLine(row)}</span>
-          </span>
-        </button>
-        {isEditing ? renderOrchestratorEditor(row) : null}
-      </Fragment>
-    )
-  }
-
-  function renderOrchestratorEditor(row) {
-    const host = harnessFor(row.harness)
-    const choices = harnessModels(host, models)
-    const efforts = harnessEfforts(host)
-    const current = editing
-    return (
-      <div className="mr-side-editor" role="group" aria-label={`Settings for ${row.name}`}>
-        {typeof client?.setOrchestratorModel === 'function' ? (
-          <label className="mr-side-field">
-            <span className="mr-side-field-label mono">Model</span>
-            <select
-              className="mr-side-select mono"
-              aria-label={`Model for ${row.name}`}
-              value={current.model}
-              onChange={(event) => askOrchestratorModel(row, event.target.value)}
-            >
-              {!current.model ? (
-                <option value="" disabled>
-                  Choose a model
-                </option>
-              ) : null}
-              {choices.map((choice) => (
-                <option value={choice.id} key={choice.id}>
-                  {choice.label}
-                </option>
-              ))}
-              {current.model && !choices.some((choice) => choice.id === current.model) ? (
-                <option value={current.model}>{current.model}</option>
-              ) : null}
-            </select>
-          </label>
-        ) : (
-          <p className="mr-side-note is-dim">This bridge cannot set a model.</p>
-        )}
-        {typeof client?.setOrchestratorEffort === 'function' ? (
-          efforts.length > 0 ? (
-            <label className="mr-side-field">
-              <span className="mr-side-field-label mono">Effort</span>
-              <select
-                className="mr-side-select mono"
-                aria-label={`Effort for ${row.name}`}
-                value={current.effort}
-                onChange={(event) => askOrchestratorEffort(row, event.target.value)}
-              >
-                <option value="" disabled>
-                  default
-                </option>
-                {efforts.map((level) => (
-                  <option value={level} key={level}>
-                    {level}
-                  </option>
-                ))}
-                {current.effort && !efforts.includes(current.effort) ? (
-                  <option value={current.effort}>{current.effort}</option>
-                ) : null}
-              </select>
-            </label>
-          ) : (
-            <p className="mr-side-note is-dim">No effort levels for this harness.</p>
-          )
-        ) : (
-          <p className="mr-side-note is-dim">This bridge cannot set an effort.</p>
-        )}
-        <AutocompactInput orchestrator={row.source ?? row} client={client} onSaved={refreshOrchestrators} />
-        <div className="mr-side-form-actions">
-          <button type="button" className="mr-side-action" onClick={() => setEditing(null)}>
-            Close
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  function renderLane(lane) {
-    const isEditing = Boolean(editing && editing.kind === 'lane' && editing.key === lane.key)
-    const host = harnessFor(lane.harness)
-    const choices = harnessModels(host, models)
-    const efforts = harnessEfforts(host)
-    return (
-      <Fragment key={lane.key}>
-        <div className={`mr-side-lane${lane.active ? ' is-active' : ''}`}>
-          <span className={`mr-side-dot${lane.working ? ' is-working' : ''}`} aria-hidden="true" />
-          <div className="mr-side-lane-body">
-            <div className="mr-side-lane-top">
-              {lane.custom ? (
-                <button
-                  type="button"
-                  className="mr-side-lane-name"
-                  aria-expanded={isEditing}
-                  onClick={() => openLane(lane)}
-                >
-                  {lane.name}
-                </button>
-              ) : (
-                <span className="mr-side-lane-name">{lane.name}</span>
-              )}
-              <button
-                type="button"
-                role="switch"
-                aria-checked={lane.active}
-                aria-label={`${lane.active ? 'Turn off' : 'Turn on'} ${lane.name}`}
-                className={`mr-side-switch${lane.active ? ' is-on' : ''}`}
-                disabled={busy}
-                onClick={() => askLane(lane, !lane.active)}
-              >
-                <span className="mr-side-switch-knob" aria-hidden="true" />
-              </button>
-            </div>
-            <div className="mr-side-meta mono">
-              <span>{lane.harness || 'harness unknown'}</span>
-              <span className="mr-side-meta-model" title={lane.model}>
-                {lane.model || 'no model'}
-              </span>
-              <span>{lane.effort || 'default'}</span>
-            </div>
-            {lane.custom ? (
-              <div className="mr-side-lane-actions">
-                <button
-                  type="button"
-                  className="mr-side-action"
-                  disabled={busy || typeof client?.updateLane !== 'function'}
-                  onClick={() => openLane(lane)}
-                >
-                  {isEditing ? 'Close' : 'Edit'}
-                </button>
-                <button
-                  type="button"
-                  className="mr-side-action is-danger"
-                  disabled={busy || typeof client?.deleteLane !== 'function'}
-                  onClick={() => askLaneRemove(lane)}
-                >
-                  Remove
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        {isEditing ? renderLaneEditor(lane, choices, efforts) : null}
-      </Fragment>
-    )
-  }
-
-  function renderLaneEditor(lane, choices, efforts) {
-    const current = editing
-    return (
-      <form
-        className="mr-side-editor"
-        aria-label={`Edit ${lane.name}`}
-        onSubmit={(event) => {
-          event.preventDefault()
-          askLaneSave(lane)
-        }}
-      >
-        <label className="mr-side-field">
-          <span className="mr-side-field-label mono">Name</span>
-          <input
-            className="mr-side-input mono"
-            value={current.name}
-            maxLength={AGENT_NAME_MAX}
-            aria-label={`Name for ${lane.name}`}
-            onChange={(event) => setEditing({ ...current, name: event.target.value })}
-          />
-        </label>
-        {choices.length > 0 ? (
-          <label className="mr-side-field">
-            <span className="mr-side-field-label mono">Model</span>
-            <select
-              className="mr-side-select mono"
-              aria-label={`Model for ${lane.name}`}
-              value={current.model}
-              onChange={(event) => setEditing({ ...current, model: event.target.value })}
-            >
-              {!current.model ? (
-                <option value="" disabled>
-                  Choose a model
-                </option>
-              ) : null}
-              {choices.map((choice) => (
-                <option value={choice.id} key={choice.id}>
-                  {choice.label}
-                </option>
-              ))}
-              {current.model && !choices.some((choice) => choice.id === current.model) ? (
-                <option value={current.model}>{current.model}</option>
-              ) : null}
-            </select>
-          </label>
-        ) : (
-          <p className="mr-side-note is-dim">No models listed for this harness.</p>
-        )}
-        {efforts.length > 0 ? (
-          <label className="mr-side-field">
-            <span className="mr-side-field-label mono">Effort</span>
-            <select
-              className="mr-side-select mono"
-              aria-label={`Effort for ${lane.name}`}
-              value={current.effort}
-              onChange={(event) => setEditing({ ...current, effort: event.target.value })}
-            >
-              <option value="" disabled>
-                default
-              </option>
-              {efforts.map((level) => (
-                <option value={level} key={level}>
-                  {level}
-                </option>
-              ))}
-              {current.effort && !efforts.includes(current.effort) ? (
-                <option value={current.effort}>{current.effort}</option>
-              ) : null}
-            </select>
-          </label>
-        ) : null}
-        <div className="mr-side-form-actions">
-          <button
-            type="submit"
-            className="mr-side-primary"
-            disabled={busy || typeof client?.updateLane !== 'function'}
-          >
-            Save
-          </button>
-          <button type="button" className="mr-side-action" disabled={busy} onClick={() => setEditing(null)}>
-            Cancel
-          </button>
-        </div>
-        {typeof client?.updateLane !== 'function' ? (
-          <p className="mr-side-note is-dim">This bridge cannot change an agent.</p>
-        ) : null}
-      </form>
-    )
-  }
-
-  function renderAgentForm() {
-    const groups = harnessGroups(harnesses)
-    const selected = draft ? findHarness(harnesses, draft.harness) : null
-    const choices = selected ? harnessModels(selected, models) : []
-    const efforts = selected ? harnessEfforts(selected) : []
-    const canCreate = typeof client?.createLane === 'function'
-    return (
-      <form
-        className="mr-side-agent-form"
-        aria-label="Add agent"
-        onSubmit={(event) => {
-          event.preventDefault()
-          askCreate()
-        }}
-      >
-        {typeof client?.harnesses !== 'function' ? (
-          <p className="mr-side-note is-dim">This bridge cannot list the harnesses.</p>
-        ) : null}
-        {harnesses === null && typeof client?.harnesses === 'function' ? (
-          <p className="mr-side-note">Loading harnesses...</p>
-        ) : null}
-        {harnesses !== null && groups.all.length === 0 ? (
-          <p className="mr-side-note is-dim">No harnesses are listed.</p>
-        ) : null}
-        <label className="mr-side-field">
-          <span className="mr-side-field-label mono">Name</span>
-          <input
-            className="mr-side-input mono"
-            value={draft?.name ?? ''}
-            maxLength={AGENT_NAME_MAX}
-            aria-label="Agent name"
-            onChange={(event) => setDraft({ ...(draft ?? {}), name: event.target.value })}
-          />
-        </label>
-        <div className="mr-side-harnesses" role="group" aria-label="Harness">
-          {groups.available.map((harness) => (
-            <button
-              key={harness.key}
-              type="button"
-              className={`mr-side-harness${draft?.harness === harness.key ? ' is-on' : ''}`}
-              aria-pressed={draft?.harness === harness.key}
-              onClick={() => chooseHarness(harness)}
-            >
-              {harness.name}
-            </button>
-          ))}
-          {groups.unavailable.map((harness) => (
-            <span className="mr-side-harness is-missing" key={harness.key}>
-              <span>{harness.name}</span>
-              <span className="mono">not found on this computer</span>
-            </span>
-          ))}
-        </div>
-        {selected && choices.length > 0 ? (
-          <label className="mr-side-field">
-            <span className="mr-side-field-label mono">Model</span>
-            <select
-              className="mr-side-select mono"
-              aria-label="Agent model"
-              value={draft?.model ?? ''}
-              onChange={(event) => setDraft((current) => ({ ...(current ?? {}), model: event.target.value }))}
-            >
-              {choices.map((choice) => (
-                <option value={choice.id} key={choice.id}>
-                  {choice.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        {selected && choices.length === 0 ? (
-          <p className="mr-side-note is-dim">No models listed for this harness.</p>
-        ) : null}
-        {selected && efforts.length > 0 ? (
-          <label className="mr-side-field">
-            <span className="mr-side-field-label mono">Effort</span>
-            <select
-              className="mr-side-select mono"
-              aria-label="Agent effort"
-              value={draft?.effort ?? ''}
-              onChange={(event) => setDraft((current) => ({ ...(current ?? {}), effort: event.target.value }))}
-            >
-              {efforts.map((level) => (
-                <option value={level} key={level}>
-                  {level}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
-        <div className="mr-side-form-actions">
-          <button type="submit" className="mr-side-primary" disabled={busy || !canCreate}>
-            Create
-          </button>
-          <button
-            type="button"
-            className="mr-side-action"
-            disabled={busy}
-            onClick={() => {
-              setAdding(false)
-              setDraft(null)
-            }}
-          >
-            Cancel
-          </button>
-        </div>
-        {!canCreate ? <p className="mr-side-note is-dim">This bridge cannot create an agent.</p> : null}
-      </form>
-    )
-  }
-
-  function renderAgents() {
-    if (!connected) return null
-    const canOrchestrators = typeof client?.orchestrators === 'function'
-    const canListLanes = typeof client?.lanes === 'function'
-    if (!canOrchestrators && !canListLanes) return null
-    return (
-      <section className="mr-side-agents" aria-label="Agents">
-        <button
-          type="button"
-          className="mr-side-head is-button"
-          aria-expanded={agentsOpen}
-          onClick={() => setAgentsOpen((open) => !open)}
-        >
-          <span className="mr-side-head-title mono">Agents</span>
-          <span className="mr-side-count mono">
-            {lanes ? roster.line : canListLanes ? 'Loading agents...' : 'No lanes'}
-          </span>
-          <span className="mr-side-twist" aria-hidden="true">
-            {agentsOpen ? '-' : '+'}
-          </span>
-        </button>
-        {agentsOpen ? (
-          <div className="mr-side-agent-list">
-            <p className="mr-side-roster-group mono">Orchestrators</p>
-            {!canOrchestrators ? (
-              <p className="mr-side-note is-dim">This bridge cannot list the orchestrators.</p>
-            ) : null}
-            {orchestrators === null && canOrchestrators ? (
-              <p className="mr-side-note">Loading orchestrators...</p>
-            ) : null}
-            {orchestrators !== null && roster.orchestrators.length === 0 ? (
-              <p className="mr-side-note is-dim">No orchestrators are listed.</p>
-            ) : null}
-            {roster.orchestrators.map(renderOrchestrator)}
-            <p className="mr-side-roster-group mono">Lanes</p>
-            {!canListLanes ? <p className="mr-side-note is-dim">This bridge cannot list the lanes.</p> : null}
-            {lanes === null && canListLanes ? <p className="mr-side-note">Loading agents...</p> : null}
-            {lanes !== null && roster.lanes.length === 0 ? (
-              <p className="mr-side-note">No lanes yet.</p>
-            ) : null}
-            {roster.lanes.map(renderLane)}
-            {adding ? renderAgentForm() : null}
-            <button type="button" className="mr-side-add" aria-expanded={adding} onClick={toggleAdd}>
-              Add agent
-            </button>
-          </div>
-        ) : null}
-      </section>
-    )
-  }
-
   function renderPreview() {
     return (
       <section className="mr-side-preview" aria-label="Conversation preview">
@@ -1301,7 +612,7 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
           renderPreview()
         ) : (
           <>
-            {renderAgents()}
+            {connected && canFamily ? <FamilyTree client={client} /> : null}
             {available ? (
               renderProjects()
             ) : (
