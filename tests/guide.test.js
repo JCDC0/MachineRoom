@@ -757,9 +757,9 @@ describe('tour steps, selector lookup and card placement', () => {
       'The lens',
       'The hub and an agent',
       'A working tunnel',
-      'The agent list',
-      'The agent context',
-      'Settings and costs',
+      'The sidebar',
+      'The conversation',
+      'Overview',
       'The transport',
       'Control and orchestrator',
     ])
@@ -770,7 +770,7 @@ describe('tour steps, selector lookup and card placement', () => {
       'Model and effort',
       'Compact',
       'Settings',
-      'Sessions',
+      'New conversation',
     ])
     expect(LIVE_TOUR_STEPS.map((step) => step.selector)).toEqual([
       '.lens',
@@ -785,8 +785,8 @@ describe('tour steps, selector lookup and card placement', () => {
     expect(TOUR_STEPS[2].text).toContain('This yellow tunnel')
     expect(TOUR_STEPS[7].text).toContain('This action row')
     expect(LIVE_TOUR_STEPS[1].text).toContain('This terminal chip')
-    expect(LIVE_TOUR_STEPS[2].text).toContain('This model line')
-    expect(LIVE_TOUR_STEPS[5].text).toContain('This sessions button')
+    expect(LIVE_TOUR_STEPS[2].text).toContain('This model picker')
+    expect(LIVE_TOUR_STEPS[5].text).toContain('This New conversation button')
     for (const step of [...TOUR_STEPS, ...LIVE_TOUR_STEPS]) {
       expect(step.text.startsWith('This ')).toBe(true)
       expect(step.text.endsWith('.')).toBe(true)

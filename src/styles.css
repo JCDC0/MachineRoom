@@ -7541,3 +7541,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   width: 100%;
   border-right: 0;
 }
+
+.has-launcher .mr-guide-backdrop {
+  display: none;
+}

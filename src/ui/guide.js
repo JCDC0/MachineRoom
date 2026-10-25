@@ -45,19 +45,19 @@ export const TOUR_STEPS = [
     text: 'This yellow tunnel runs from a working agent to the file it touches, with packets along it.',
   },
   {
-    label: 'The agent list',
-    selector: '.hud-dock-agents',
-    text: 'This agent column lists every agent in the room, and the number keys focus them.',
+    label: 'The sidebar',
+    selector: '.mr-side, .hud-dock-agents',
+    text: 'This column holds the projects, their conversations and the agents, and the number keys focus agents.',
   },
   {
-    label: 'The agent context',
-    selector: '.hud-dock-context',
-    text: "This context column shows the selected agent's harness, model, task, cost and recent log lines.",
+    label: 'The conversation',
+    selector: '.hud-lower-main, .hud-dock-context',
+    text: 'This middle column shows the conversation with the orchestrator, or the event log in a replay.',
   },
   {
-    label: 'Settings and costs',
-    selector: '.hud-dock-side',
-    text: "This side column holds the folder depth, the screen effects and this month's cost board.",
+    label: 'Overview',
+    selector: '.hud-overview, .hud-dock-side',
+    text: 'This Overview card opens Settings, the selected agent, the costs and the log in a drawer.',
   },
   {
     label: 'The transport',
@@ -85,7 +85,7 @@ export const LIVE_TOUR_STEPS = [
   {
     label: 'Model and effort',
     selector: '.hud-strip-model',
-    text: 'This model line in the strip shows the model and effort for the agent and opens the model list.',
+    text: 'This model picker in the input box sets the model the orchestrator uses, with its effort beside it.',
   },
   {
     label: 'Compact',
@@ -95,12 +95,12 @@ export const LIVE_TOUR_STEPS = [
   {
     label: 'Settings',
     selector: '.hud-strip-settings',
-    text: 'This Settings button opens the folder depth and the screen effects.',
+    text: 'This Settings button at the foot of the sidebar opens the folder depth and the screen effects.',
   },
   {
-    label: 'Sessions',
+    label: 'New conversation',
     selector: '.hud-sessions-button',
-    text: 'This sessions button opens the drawer of agents and orchestrator conversations.',
+    text: 'This New conversation button starts a fresh talk with the orchestrator, and older ones stay listed under the project.',
   },
 ]
 
