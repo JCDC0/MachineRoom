@@ -138,14 +138,27 @@ function readLines(file) {
     .filter(Boolean)
 }
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', project = true } = {}) {
+const FAKE_AGENT_SCRIPT = [
+  "import { appendFileSync } from 'node:fs'",
+  'const args = process.argv.slice(2)',
+  "const calls = String(process.env.MR_CALLS ?? '')",
+  "if (calls) appendFileSync(calls, JSON.stringify({ pid: process.pid, args, cwd: process.cwd() }) + '\\n')",
+  "const at = args.indexOf('--prompt')",
+  "const prompt = at === -1 ? '' : String(args[at + 1] ?? '')",
+  "console.log('Fake reply for: ' + prompt.slice(-40).split('\\n').join(' '))",
+].join('\n')
+
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
   mkdirSync(runs, { recursive: true })
   if (projectRoot) mkdirSync(projectRoot, { recursive: true })
-  const script = join(base, harness === 'opencode' ? 'fake-opencode.mjs' : 'fake-claude.mjs')
-  writeFileSync(script, harness === 'opencode' ? FAKE_OPENCODE : FAKE_CLAUDE)
+  const script = join(
+    base,
+    harness === 'opencode' ? 'fake-opencode.mjs' : harness === 'fake' ? 'fake-agent.mjs' : 'fake-claude.mjs'
+  )
+  writeFileSync(script, harness === 'opencode' ? FAKE_OPENCODE : harness === 'fake' ? FAKE_AGENT_SCRIPT : FAKE_CLAUDE)
   const promptFile = join(base, 'orchestrator-agent.md')
   if (prompt !== null) writeFileSync(promptFile, prompt)
   const callsFile = join(base, 'calls.jsonl')
@@ -171,6 +184,9 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     projectRoot,
     runsFolder: runs,
     lanes,
+    harness,
+    model,
+    contextWindow,
     spawn: spawnFake,
     promptFile,
     bridgeUrl: () => 'http://127.0.0.1:5999',
@@ -178,6 +194,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
     onMasked: (count) => {
       masked.total += count
     },
+    ...(harnesses ? { harnesses } : {}),
   })
   const rig = {
     base,
@@ -1466,5 +1483,131 @@ describe('the lane source and the orchestrator turn', () => {
     expect(
       frames.some((item) => item.type === 'heartbeat.run.log' && String(item.payload.chunk).includes('"type":"tool_use"'))
     ).toBe(true)
+  })
+
+  describe('the context window', () => {
+    it('uses the model contextWindow when listed in models.js', () => {
+      const rig = makeRig({ model: 'claude-haiku-5-5' })
+      expect(rig.answer().contextWindow).toBe(1000000)
+    })
+
+    it('falls back to cli.contextWindow or 200000 when model has no window listed', () => {
+      const rigWithLaneWindow = makeRig({
+        model: 'opus',
+        lanes: {
+          orchestrator: {
+            name: 'Orchestrator',
+            harness: 'Claude Code',
+            cli: { harness: 'claude', bin: 'claude', model: 'opus', contextWindow: 350000 },
+          },
+        },
+      })
+      expect(rigWithLaneWindow.answer().contextWindow).toBe(350000)
+
+      const rigDefault = makeRig({
+        model: 'opus',
+        lanes: {
+          orchestrator: {
+            name: 'Orchestrator',
+            harness: 'Claude Code',
+            cli: { harness: 'claude', bin: 'claude', model: 'opus' },
+          },
+        },
+      })
+      expect(rigDefault.answer().contextWindow).toBe(200000)
+    })
+
+    it('changes the window when the model changes', () => {
+      const rig = makeRig({
+        model: 'opus',
+        lanes: {
+          orchestrator: {
+            name: 'Orchestrator',
+            harness: 'Claude Code',
+            cli: { harness: 'claude', bin: process.execPath, model: 'opus' },
+          },
+          opencode: {
+            name: 'OpenCode',
+            harness: 'OpenCode',
+            cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/qwen3.8-flash' },
+          },
+        },
+      })
+      expect(rig.answer().contextWindow).toBe(200000)
+
+      rig.orchestrator.setModel({ model: 'claude-sonnet-5-5', confirmed: true })
+      expect(rig.answer().contextWindow).toBe(1000000)
+
+      const opencodeRes = rig.orchestrator.setHarness({ harness: 'opencode', model: 'opencode-go/qwen3.8-flash', confirmed: true })
+      expect(opencodeRes.status).toBe(200)
+      expect(rig.answer().contextWindow).toBe(200000)
+
+      const claudeRes = rig.orchestrator.setHarness({ harness: 'claude', model: 'claude-opus-5-5', confirmed: true })
+      expect(claudeRes.status).toBe(200)
+      expect(rig.answer().contextWindow).toBe(1000000)
+    })
+  })
+
+  describe('a fresh turn through a fake harness', () => {
+    it('runs fresh each time with instructions, summary and last 20 messages', async () => {
+      const fakeHarness = {
+        key: 'fake',
+        name: 'Fake',
+        command({ cli, prompt }) {
+          return {
+            file: cli.bin,
+            args: ['--prompt', prompt],
+            cwd: process.cwd(),
+          }
+        },
+        createParser() {
+          return {
+            push() { return [] },
+            flush() { return [] },
+          }
+        },
+        reply(log) {
+          return String(log ?? '').trim()
+        },
+        report(log) {
+          return [String(log ?? '').trim()]
+        },
+        usage() {
+          return { costUsd: 0.05, inputTokens: 42, outputTokens: 8 }
+        },
+      }
+
+      const rig = makeRig({
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: fakeHarness },
+        lanes: {
+          orchestrator: {
+            name: 'Orchestrator',
+            harness: 'Fake',
+            cli: { harness: 'fake', bin: process.execPath, model: 'fake-model' },
+          },
+        },
+      })
+
+      rig.send('First question')
+      await waitFor(() => rig.answer().state === 'idle', 15000, 'first turn to finish')
+      expect(rig.answer().messages).toHaveLength(2)
+      expect(rig.answer().messages[1].text).toContain('Fake reply for:')
+      expect(rig.calls()).toHaveLength(1)
+      const firstPrompt = rig.calls()[0].args[1]
+      expect(firstPrompt).toContain('First question')
+
+      rig.send('Second question')
+      await waitFor(() => rig.answer().state === 'idle', 15000, 'second turn to finish')
+      expect(rig.answer().messages).toHaveLength(4)
+      expect(rig.calls()).toHaveLength(2)
+      const secondPrompt = rig.calls()[1].args[1]
+      expect(secondPrompt).toContain('Owner: First question')
+      expect(secondPrompt).toContain('Orchestrator: Fake reply for:')
+      expect(secondPrompt).toContain('Second question')
+      expect(rig.calls()[1].args).not.toContain('--resume')
+      expect(rig.calls()[1].args).not.toContain('--session')
+    })
   })
 })

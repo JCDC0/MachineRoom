@@ -1,3 +1,5 @@
+import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from '../../server/agents-config.js'
+import { resolveContextWindow } from '../../server/models.js'
 import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { briefMarkdown, planPrompt } from '../briefs/plan.js'
@@ -35,6 +37,7 @@ export const CLIENT_METHODS = [
   'setAutocompact',
   'setOrchestratorModel',
   'setOrchestratorEffort',
+  'setOrchestratorHarness',
   'orchestratorSessions',
   'orchestratorSession',
   'newOrchestratorSession',
@@ -402,9 +405,9 @@ function seed(at) {
     models: [
       { id: 'opencode/deepseek-v4.1-flash-free', label: 'DeepSeek v4.1 Flash (free)', harness: 'opencode', tier: 'small', free: true },
       { id: 'opencode-go/qwen3.8-flash', label: 'Qwen 3.8 Flash', harness: 'opencode', tier: 'small', free: false },
-      { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', harness: 'claude', tier: 'small', free: false },
-      { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', harness: 'claude', tier: 'medium', free: false },
-      { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', harness: 'claude', tier: 'large', free: false },
+      { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', harness: 'claude', tier: 'small', free: false, contextWindow: 1000000 },
+      { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', harness: 'claude', tier: 'medium', free: false, contextWindow: 1000000 },
+      { id: 'claude-opus-5-5', label: 'Claude Opus 5.5', harness: 'claude', tier: 'large', free: false, contextWindow: 1000000 },
       { id: 'xiaomi/mimo-v2.6-pro', label: 'MiMo v2.6 Pro', harness: 'hermes', tier: 'medium', free: false },
       { id: 'deepseek/deepseek-v4.1-flash-1017', label: 'DeepSeek v4.1 Flash (OpenRouter)', harness: 'hermes', tier: 'medium', free: false },
       { id: 'opencode-go/deepseek-v4.1-flash', label: 'DeepSeek v4.1 Flash (Go)', harness: 'opencode', tier: 'medium', free: false },
@@ -467,11 +470,20 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     for (const sub of ladder.subs) {
       for (const lane of sub.lanes) claimed.add(lane)
     }
+    const baseLanes = Object.fromEntries(state.lanes.map((lane) => [lane.key, { cli: { harness: lane.harness, bin: process.execPath } }]))
+    const mockHarnesses = ['claude', 'opencode', 'hermes']
+      .filter((key) => isHarnessAvailable(key, { lanes: baseLanes }) || ['claude', 'opencode'].includes(key))
+      .map((key) => ({
+        key,
+        name: key === 'claude' ? 'Claude Code' : key === 'opencode' ? 'OpenCode' : 'Hermes',
+        harness: key,
+        models: state.models.filter((m) => m.harness === key).map(({ id, label, contextWindow }) => ({ id, label, ...(contextWindow ? { contextWindow } : {}) })),
+      }))
     return [
       {
         id: 'orchestrator',
         name: 'Orchestrator',
-        harness: 'claude',
+        harness: state.orchestratorChat.harness ?? 'claude',
         model: state.orchestratorChat.model,
         state: state.orchestratorChat.state,
         contextTokens: state.orchestratorChat.contextTokens,
@@ -486,6 +498,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         scope: [],
         restricted: false,
         setBy: 'owner',
+        harnesses: mockHarnesses,
       },
       ...ladder.subs.map((sub) => ({
         id: sub.id,
@@ -505,6 +518,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         scope: [...sub.scope],
         restricted: sub.restricted !== false,
         setBy: sub.setBy,
+        harnesses: mockHarnesses,
       })),
     ]
   }
@@ -944,12 +958,63 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const allowed = state.models.some((m) => m.id === model && m.harness === harness)
         if (!allowed) throw new Error('Choose a model listed for this harness.')
         chat.model = model
+        chat.contextWindow = resolveContextWindow(model, harness, chat.contextWindow)
         if (id && id !== 'orchestrator') {
           const sub = ladder.subs.find((s) => s.id === id)
           if (sub) sub.model = model
         }
         emit({ topic: 'orchestrator' })
         return { id: id ?? 'orchestrator', model }
+      }),
+
+    setOrchestratorHarness: (idOrOptions, harnessArg, modelArg, options = {}) =>
+      call('setOrchestratorHarness', () => {
+        let id
+        let harness
+        let model
+        let confirmed = true
+        if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+          id = idOrOptions.id
+          harness = idOrOptions.harness
+          model = idOrOptions.model
+          if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+        } else {
+          id = idOrOptions
+          harness = harnessArg
+          model = modelArg
+          if (options.confirmed !== undefined) confirmed = options.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the harness change first.')
+        if (!harness) throw new Error('Choose a harness.')
+        const baseLanes = Object.fromEntries(state.lanes.map((lane) => [lane.key, { cli: { harness: lane.harness, bin: process.execPath } }]))
+        const available = ['claude', 'opencode', 'hermes'].includes(harness) || isHarnessAvailable(harness, { lanes: baseLanes })
+        if (!available) throw new Error(harnessUnavailableProblem(harness))
+        const allowed = state.models.some((m) => m.id === model && m.harness === harness)
+        if (!allowed) throw new Error(modelUnavailableProblem(model, harness))
+        const chat = chatStore(id)
+        chat.harness = harness
+        chat.model = model
+        chat.sessionId = null
+        chat.opencodeSessionId = null
+        const window = resolveContextWindow(model, harness, chat.contextWindow)
+        chat.contextWindow = window
+        if (id && id !== 'orchestrator') {
+          const sub = ladder.subs.find((s) => s.id === id)
+          if (sub) {
+            sub.harness = harness
+            sub.model = model
+          }
+        }
+        emit({ topic: 'orchestrator' })
+        return {
+          id: id ?? 'orchestrator',
+          name: id ?? 'Orchestrator',
+          harness,
+          model,
+          contextWindow: window,
+          state: chat.state ?? 'idle',
+          messages: chat.messages ? [...chat.messages] : [],
+        }
       }),
 
     setOrchestratorEffort: (idOrOptions, effortArg, options = {}) =>
