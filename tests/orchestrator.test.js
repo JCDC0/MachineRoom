@@ -963,6 +963,163 @@ describe('the orchestrator chat file', () => {
   })
 })
 
+describe('orchestrator reasoning effort and sessions', () => {
+  it('passes effort to claude and opencode turns and rejects unknown levels', async () => {
+    const claudeRig = makeRig()
+    const setClaude = claudeRig.orchestrator.setEffort({ effort: 'xhigh', confirmed: true })
+    expect(setClaude.status).toBe(200)
+    expect(setClaude.body).toEqual({ id: 'orchestrator', effort: 'xhigh' })
+    expect(claudeRig.orchestrator.answer().effort).toBe('xhigh')
+
+    claudeRig.send('Claude effort turn')
+    await waitIdle(claudeRig, 1)
+    const claudeArgs = claudeRig.calls()[0].args
+    expect(claudeArgs).toContain('--effort')
+    expect(valueAfter(claudeArgs, '--effort')).toBe('xhigh')
+
+    claudeRig.orchestrator.setEffort({ effort: null, confirmed: true })
+    expect(claudeRig.orchestrator.answer().effort).toBeNull()
+
+    const badClaude = claudeRig.orchestrator.setEffort({ effort: 'extreme', confirmed: true })
+    expect(badClaude.status).toBe(400)
+    expect(badClaude.body).toEqual({ error: 'Choose an effort level listed for this harness.' })
+
+    const unconfirmed = claudeRig.orchestrator.setEffort({ effort: 'high' })
+    expect(unconfirmed.status).toBe(400)
+    expect(unconfirmed.body).toEqual({ error: 'Confirm the effort change first.' })
+
+    const opencodeRig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
+    const setOpenCode = opencodeRig.orchestrator.setEffort({ effort: 'max', confirmed: true })
+    expect(setOpenCode.status).toBe(200)
+    expect(opencodeRig.orchestrator.answer().effort).toBe('max')
+
+    opencodeRig.send('OpenCode effort turn')
+    await waitIdle(opencodeRig, 1)
+    const opencodeArgs = opencodeRig.calls()[0].args
+    expect(valueAfter(opencodeArgs, '--model')).toBe('opencode-go/deepseek-v4.1-flash#max')
+
+    const opencodeNoXhigh = opencodeRig.orchestrator.setEffort({ effort: 'xhigh', confirmed: true })
+    expect(opencodeNoXhigh.status).toBe(400)
+  })
+
+  it('archives sessions, lists pinned first, resumes an open session, and updates fields', async () => {
+    const rig = makeRig()
+    rig.send('First conversation task')
+    await waitIdle(rig, 1)
+
+    const firstSessionId = valueAfter(rig.calls()[0].args, '--session-id')
+    expect(rig.orchestrator.currentSessionInfo().title).toBe('First conversation task')
+
+    const created = rig.orchestrator.newSession({ confirmed: true })
+    expect(created.status).toBe(200)
+    expect(rig.orchestrator.answer().messages).toHaveLength(0)
+
+    const list1 = rig.orchestrator.listSessions()
+    expect(list1).toHaveLength(1)
+    expect(list1[0].title).toBe('First conversation task')
+    expect(list1[0].count).toBe(2)
+
+    rig.send('Second conversation task that is much longer to test the sixty character title cutting limit')
+    await waitIdle(rig, 2)
+    const secondSessionId = valueAfter(rig.calls()[1].args, '--session-id')
+    expect(secondSessionId).not.toBe(firstSessionId)
+
+    rig.orchestrator.newSession({ confirmed: true })
+    const list2 = rig.orchestrator.listSessions()
+    expect(list2).toHaveLength(2)
+    expect(list2[0].title).toBe('Second conversation task that is much longer to test the six')
+    expect(list2[0].title).toHaveLength(60)
+
+    const updated = rig.orchestrator.updateSession(list1[0].id, {
+      title: 'Renamed first task',
+      pinned: true,
+      starred: true,
+      confirmed: true,
+    })
+    expect(updated.status).toBe(200)
+    expect(updated.body).toMatchObject({ title: 'Renamed first task', pinned: true, starred: true })
+
+    const list3 = rig.orchestrator.listSessions()
+    expect(list3[0].id).toBe(list1[0].id)
+    expect(list3[0].pinned).toBe(true)
+
+    const opened = rig.orchestrator.openSession(list1[0].id, { confirmed: true })
+    expect(opened.status).toBe(200)
+    expect(rig.orchestrator.answer().messages).toHaveLength(2)
+
+    rig.send('Resume first conversation')
+    await waitIdle(rig, 3)
+    const thirdArgs = rig.calls()[2].args
+    expect(thirdArgs).toContain('--resume')
+    expect(valueAfter(thirdArgs, '--resume')).toBe(firstSessionId)
+
+    const single = rig.orchestrator.getSession(list2[0].id)
+    expect(single.status).toBe(200)
+    expect(single.body.id).toBe(list2[0].id)
+    expect(Array.isArray(single.body.messages)).toBe(true)
+
+    const deleted = rig.orchestrator.deleteSession(list2[0].id, { confirmed: true })
+    expect(deleted.status).toBe(200)
+    expect(rig.orchestrator.listSessions().some((s) => s.id === list2[0].id)).toBe(false)
+  })
+
+  it('evicts the oldest unpinned session when reaching 50 sessions', async () => {
+    const rig = makeRig()
+    const filePath = chatFileFor(rig.projectRoot, rig.runs)
+    const initialSessions = []
+    const baseTime = Date.now() - 100000000
+    for (let index = 0; index < 50; index += 1) {
+      initialSessions.push({
+        id: `sess-${index}`,
+        title: `Session ${index}`,
+        startedAt: new Date(baseTime + index * 60000).toISOString(),
+        endedAt: new Date(baseTime + index * 60000 + 30000).toISOString(),
+        pinned: index === 0,
+        starred: false,
+        sessionId: `ses_${index}`,
+        opencodeSessionId: null,
+        summary: '',
+        messages: [{ id: `m-${index}`, from: 'owner', text: `Session ${index}`, at: new Date().toISOString() }],
+      })
+    }
+    rig.orchestrator.close()
+    const state = JSON.parse(readFileSync(filePath, 'utf8'))
+    state.sessions = initialSessions
+    writeFileSync(filePath, JSON.stringify(state, null, 2))
+
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.listSessions()).toHaveLength(50)
+
+    restored.orchestrator.send({ text: 'One more session to trigger eviction', confirmed: true })
+    await waitIdle(restored, 1)
+    const archived = restored.orchestrator.newSession({ confirmed: true })
+    expect(archived.status).toBe(200)
+
+    const list = restored.orchestrator.listSessions()
+    expect(list).toHaveLength(50)
+    expect(list.some((s) => s.id === 'sess-0')).toBe(true)
+    expect(list.some((s) => s.id === 'sess-1')).toBe(false)
+  })
+
+  it('refuses new and open while a turn runs with 409', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('Active running task')
+    await waitFor(() => rig.calls().length === 1)
+
+    const newAttempt = rig.orchestrator.newSession({ confirmed: true })
+    expect(newAttempt.status).toBe(409)
+    expect(newAttempt.body).toEqual({ error: 'A turn is already running.' })
+
+    const openAttempt = rig.orchestrator.openSession('some-id', { confirmed: true })
+    expect(openAttempt.status).toBe(409)
+    expect(openAttempt.body).toEqual({ error: 'A turn is already running.' })
+
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 1)
+  })
+})
+
 describe('the orchestrator routes', () => {
   it('refuses a message without a confirmation, a bad text and a stop without a confirmation', async () => {
     const rig = makeRig()

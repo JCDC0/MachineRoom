@@ -8,6 +8,7 @@
 - A left sidebar lists New conversation, the open project's conversations with pin, star, rename and delete, recent projects, the active agents and Settings, and opens as a full width overlay below 900 pixels (task U35).
 - The owner can choose active lanes with /api/lanes and /api/lanes/active, inactive lanes are left off /api/agents, and runs for inactive lanes are refused (task O11).
 - Open another project from the page: keep recent projects and folder siblings, refuse runs while a turn runs, and restart on the new root (task O12).
+- Add sessions and reasoning effort for each orchestrator (task O10).
 
 - The menu row and the info strip no longer draw a straight line along the lens, so only the curved edges show (the owner's sketch).
 

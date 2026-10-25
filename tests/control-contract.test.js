@@ -435,6 +435,52 @@ describe('the mock client still answers the contract', () => {
       'Choose a model listed for this harness.'
     )
   })
+
+  it('manages reasoning effort and sessions on the mock', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    expect((await client.orchestrator()).effort).toBeNull()
+
+    await client.setOrchestratorEffort({ id: 'orchestrator', effort: 'high' })
+    expect((await client.orchestrator()).effort).toBe('high')
+    expect((await client.orchestrators())[0].effort).toBe('high')
+
+    await expect(client.setOrchestratorEffort({ id: 'orchestrator', effort: 'invalid' })).rejects.toThrow(
+      'Choose an effort level listed for this harness.'
+    )
+
+    await client.setOrchestratorEffort({ id: 'orchestrator', effort: null })
+    expect((await client.orchestrator()).effort).toBeNull()
+
+    const sessions = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(sessions.current.count).toBe(3)
+    expect(sessions.sessions).toHaveLength(2)
+    expect(sessions.sessions[0].pinned).toBe(true)
+
+    const session1 = await client.orchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
+    expect(session1.id).toBe(sessions.sessions[0].id)
+    expect(session1.messages).toHaveLength(2)
+
+    await client.updateOrchestratorSession({
+      id: 'orchestrator',
+      session: sessions.sessions[0].id,
+      title: 'Updated title',
+      pinned: false,
+    })
+    const reloaded = await client.orchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
+    expect(reloaded.title).toBe('Updated title')
+
+    await client.newOrchestratorSession({ id: 'orchestrator' })
+    const afterNew = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(afterNew.current.count).toBe(0)
+
+    await client.openOrchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
+    const afterOpen = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(afterOpen.current.count).toBe(2)
+
+    await client.deleteOrchestratorSession({ id: 'orchestrator', session: sessions.sessions[0].id })
+    const afterDelete = await client.orchestratorSessions({ id: 'orchestrator' })
+    expect(afterDelete.sessions.some((s) => s.id === sessions.sessions[0].id)).toBe(false)
+  })
 })
 
 describe('the control client orchestrator routes', () => {
@@ -511,6 +557,61 @@ describe('the control client orchestrator routes', () => {
         url: 'http://127.0.0.1:9/api/orchestrator/model',
         method: 'POST',
         body: JSON.stringify({ model: 'claude-haiku-5-5', confirmed: true, id: 'frontend' }),
+      },
+    ])
+  })
+
+  it('calls reasoning effort and session routes with correct URLs and bodies', async () => {
+    const { calls, client } = recorder({ ok: true, current: {}, sessions: [], messages: [] })
+    await client.setOrchestratorEffort({ id: 'frontend', effort: 'max' })
+    await client.orchestratorSessions()
+    await client.orchestratorSessions({ id: 'frontend' })
+    await client.orchestratorSession({ id: 'frontend', session: 'sess-1' })
+    await client.newOrchestratorSession({ id: 'frontend' })
+    await client.updateOrchestratorSession({ id: 'frontend', session: 'sess-1', title: 'New title', pinned: true })
+    await client.openOrchestratorSession({ id: 'frontend', session: 'sess-1' })
+    await client.deleteOrchestratorSession({ id: 'frontend', session: 'sess-1' })
+
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/effort',
+        method: 'POST',
+        body: JSON.stringify({ effort: 'max', confirmed: true, id: 'frontend' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions',
+        method: 'GET',
+        body: undefined,
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions?id=frontend',
+        method: 'GET',
+        body: undefined,
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions/sess-1?id=frontend',
+        method: 'GET',
+        body: undefined,
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions/new',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, id: 'frontend' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions/sess-1?id=frontend',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, pinned: true, title: 'New title', id: 'frontend' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions/sess-1/open?id=frontend',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, id: 'frontend' }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/orchestrator/sessions/sess-1/delete?id=frontend',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true, id: 'frontend' }),
       },
     ])
   })
