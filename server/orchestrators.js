@@ -61,14 +61,17 @@ function projectPrefix(project) {
 
 export function branchChanges(record, lanes = {}, options = {}) {
   let folder = typeof record?.project === 'string' && record.project.trim() ? record.project.trim() : ''
-  if (!folder && typeof record?.lane === 'string' && lanes?.[record.lane]?.worktree) folder = lanes[record.lane].worktree
+  const laneEntry = lanes && typeof lanes === 'object' && typeof record?.lane === 'string' && Object.hasOwn(lanes, record.lane)
+    ? lanes[record.lane]
+    : null
+  if (!folder && laneEntry?.worktree) folder = laneEntry.worktree
   if (!folder) return []
   const project = typeof options?.project === 'string' && options.project.trim() ? options.project.trim() : folder
   const base = projectBranch(project)
   if (!base) return null
   try {
     const prefix = projectPrefix(project)
-    return gitText(folder, ['diff', '--name-only', '--relative', `${base}...HEAD`])
+    return gitText(folder, ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '--relative', `${base}...HEAD`])
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
