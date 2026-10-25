@@ -89,7 +89,7 @@ export function buildPrompt({ briefs, laneKey, lanes, rules, version }) {
   lines.push('House rules:')
   for (const rule of rules.rules) lines.push(`- ${rule}`)
   for (const note of lane.notes ?? []) lines.push(`- ${note}`)
-  if (lane.forbidden?.length) lines.push(`- Do not touch these paths: ${lane.forbidden.join(', ')}. If you need a change there, stop and say so in your report.`)
+  if (lane.forbidden.length) lines.push(`- Do not touch these paths: ${lane.forbidden.join(', ')}. If you need a change there, stop and say so in your report.`)
   lines.push('')
   lines.push('Read first, in this order: AGENTS.md (it points to the real guide), docs/agents/ARCHITECTURE.md, then the brief below in docs/agents/TASKS.md.')
   for (const brief of briefs) {
