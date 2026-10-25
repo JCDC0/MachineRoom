@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The live transport under the lens shows the orchestrator's state and a context ring beside the clock, and a click on either scrolls to the conversation and focuses the chat input (task U42).
 - The roster tests point their lanes at Node's own program, so they pass on a computer without Claude Code or OpenCode, as CI is.
 - The sidebar's Agents roster sits at the top, open: the orchestrators and every lane with their harness, model, effort and autocompact percent, inline editors behind confirm cards, and Add agent from the harnesses on this computer (task U39).
 - The Compact card and the agent dock ask for autocompact with one plain number in percent or tokens, convert between them through the context window, show where it compacts, and keep the owner's compact rules or name the default ones (task U40).

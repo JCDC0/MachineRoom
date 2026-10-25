@@ -904,6 +904,7 @@ export default function Hud({
           snapshot={snapshot}
           speeds={speeds}
           markers={markers}
+          orchestrator={orchestratorInfo}
           onToggle={onToggle}
           onSeek={onSeek}
           onSpeed={onSpeed}
