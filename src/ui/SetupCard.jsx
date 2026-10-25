@@ -51,7 +51,7 @@ export default function SetupCard({
         if (!alive) return
         setState(value)
         setCount(initialAgentCount(setupFromAnswer(value)?.max))
-        onCheckRef.current()
+        if (!setupNeeded(value)) onCheckRef.current()
       })
       .catch(() => {
         if (!alive) return
@@ -75,6 +75,7 @@ export default function SetupCard({
   function later() {
     postponeSetup()
     setClosed(true)
+    onCheckRef.current()
     onClose()
   }
 
@@ -91,6 +92,7 @@ export default function SetupCard({
     try {
       await client.setActiveLanes(payload)
       setClosed(true)
+      onCheckRef.current()
       onClose()
     } catch (err) {
       setError(messageOf(err, 'The bridge refused the choice.'))
