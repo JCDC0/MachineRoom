@@ -8323,3 +8323,133 @@ body:has(#hud-orchestrator-chat) .waiting {
     text-transform: none;
   }
 }
+
+/* H12. Web search settings. */
+.mr-search {
+  gap: var(--space);
+}
+
+.mr-search-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.mr-search-row.is-stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.mr-search-select,
+.mr-search-input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px var(--space);
+  font-size: 12px;
+  color: var(--white);
+  background: var(--black);
+  border: 1px solid var(--line);
+}
+
+.mr-search-select:focus,
+.mr-search-input:focus {
+  outline: none;
+  border-color: var(--white);
+}
+
+.mr-search-select:disabled,
+.mr-search-input:disabled {
+  color: rgb(255 255 255 / 0.4);
+}
+
+.mr-search-hint,
+.mr-search-state {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-search-state.is-error {
+  color: var(--red);
+}
+
+.mr-search-state.is-good {
+  color: var(--green);
+}
+
+.mr-search-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.mr-search-save {
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--black);
+  background: var(--yellow);
+  border: 1px solid var(--yellow);
+}
+
+.mr-search-save:disabled {
+  color: rgb(255 255 255 / 0.4);
+  background: transparent;
+  border-color: var(--line);
+}
+
+.mr-search-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space);
+  border: 1px solid var(--yellow);
+}
+
+.mr-search-confirm-text {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.mr-search-confirm-detail {
+  margin: 0;
+  font-size: 11px;
+  color: rgb(255 255 255 / 0.65);
+  word-break: break-all;
+}
+
+.mr-search-confirm-actions {
+  display: flex;
+  gap: var(--space);
+  justify-content: flex-end;
+}
+
+.mr-search-confirm-btn {
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.mr-search-confirm-btn.is-start {
+  color: var(--black);
+  background: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.mr-search-confirm-btn.is-cancel:hover:not(:disabled) {
+  border-color: var(--white);
+}

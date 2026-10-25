@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 import { exec } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { SEARCH_OFF, fetchPage, readSearchChoice, searchWeb } from '../server/search.js'
 
 const DEFAULT_URL = 'https://openrouter.ai/api/v1'
 const FETCH_TIMEOUT_MS = 120000
@@ -74,6 +76,22 @@ const TOOLS = [
       name: 'run_shell',
       description: 'Run a command in the working folder.',
       parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description: 'Search the web and return up to 8 results.',
+      parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'web_fetch',
+      description: 'Fetch an http or https page as plain text.',
+      parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] },
     },
   },
 ]
@@ -238,10 +256,21 @@ function streamInput(name, args) {
     }
   }
   if (name === 'run_shell') return { command: typeof args.command === 'string' ? args.command : '' }
+  if (name === 'web_search') return { query: typeof args.query === 'string' ? args.query : '' }
+  if (name === 'web_fetch') return { url: typeof args.url === 'string' ? args.url : '' }
   return args
 }
 
-const STREAM_NAMES = { read_file: 'Read', write_file: 'Write', edit_file: 'Edit', list_dir: 'LS', search: 'Grep', run_shell: 'Bash' }
+const STREAM_NAMES = {
+  read_file: 'Read',
+  write_file: 'Write',
+  edit_file: 'Edit',
+  list_dir: 'LS',
+  search: 'Grep',
+  run_shell: 'Bash',
+  web_search: 'WebSearch',
+  web_fetch: 'WebFetch',
+}
 
 function readTool(args, cwd) {
   const path = pathFrom(args)
@@ -382,7 +411,47 @@ function shellTool(args, cwd) {
   })
 }
 
-async function runTool(name, args, cwd) {
+function runsFolder() {
+  const given = process.env.MACHINEROOM_RUNS
+  if (typeof given === 'string' && given.trim() !== '') return resolve(given)
+  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+}
+
+async function slotKey(folder, name) {
+  const slot = String(name ?? '').trim()
+  if (slot === '') return ''
+  try {
+    const family = await import('../server/family.js')
+    if (typeof family.readKey === 'function') {
+      const value = await family.readKey(folder, slot)
+      if (typeof value === 'string' && value !== '') return value
+    }
+  } catch {}
+  if (/^[A-Za-z_][A-Za-z0-9_]*$/.test(slot)) {
+    const value = process.env[slot]
+    if (typeof value === 'string' && value !== '') return value
+  }
+  return ''
+}
+
+async function webSearchTool(args, web) {
+  const query = typeof args.query === 'string' ? args.query.trim() : ''
+  if (query === '') return { text: 'web_search needs a query.', isError: true }
+  const choice = readSearchChoice(web.runsFolder)
+  if (choice.provider === '') return { text: SEARCH_OFF, isError: false }
+  const key = choice.keyName === '' ? '' : await slotKey(web.runsFolder, choice.keyName)
+  const outcome = await searchWeb(query, { choice, key })
+  return { text: outcome.text, isError: Boolean(outcome.error) }
+}
+
+async function webFetchTool(args) {
+  const url = typeof args.url === 'string' ? args.url.trim() : ''
+  if (url === '') return { text: 'web_fetch needs a URL.', isError: true }
+  const page = await fetchPage(url)
+  return { text: page.error || page.text || 'The page was empty.', isError: Boolean(page.error) }
+}
+
+async function runTool(name, args, cwd, web) {
   try {
     if (name === 'read_file') return readTool(args, cwd)
     if (name === 'write_file') return writeTool(args, cwd)
@@ -390,6 +459,8 @@ async function runTool(name, args, cwd) {
     if (name === 'list_dir') return listTool(args, cwd)
     if (name === 'search') return searchTool(args, cwd)
     if (name === 'run_shell') return await shellTool(args, cwd)
+    if (name === 'web_search') return await webSearchTool(args, web)
+    if (name === 'web_fetch') return await webFetchTool(args)
     return { text: `The tool ${name} is not known.`, isError: true }
   } catch (error) {
     return { text: String(error?.message ?? error), isError: true }
@@ -433,6 +504,7 @@ async function main() {
     return
   }
   const url = baseUrl(process.env)
+  const web = { runsFolder: runsFolder() }
   const messages = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: options.prompt },
@@ -496,7 +568,7 @@ async function main() {
         const call = calls[index]
         const outcome = inputs[index].error !== ''
           ? { text: inputs[index].error, isError: true }
-          : await runTool(call.name, inputs[index].args, options.cwd)
+          : await runTool(call.name, inputs[index].args, options.cwd, web)
         messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.text })
         writeJson({
           type: 'user',

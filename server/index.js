@@ -21,6 +21,7 @@ import { createPolicyApi } from './policy.js'
 import { createProjectsApi } from './projects.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
+import { createSearchApi } from './search.js'
 import { createSessionsSource } from './sessions-source.js'
 import { gitPath } from './programPath.js'
 import { createStaticHandler } from './static.js'
@@ -409,6 +410,11 @@ export function createBridge(options = {}) {
     })
   }
   const bridgeRunsFolder = resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder())
+  const search = createSearchApi({
+    runsFolder: bridgeRunsFolder,
+    sendJson,
+    readJsonBody,
+  })
   const projects = createProjectsApi({
     projectRoot,
     runsFolder: bridgeRunsFolder,
@@ -706,6 +712,7 @@ export function createBridge(options = {}) {
     if (await policy.handle(req, res, url)) return
     if (await plans.handle(req, res, url)) return
     if (await control.handle(req, res, url)) return
+    if (await search.handle(req, res, url)) return
     if (await assistant.handle(req, res, url)) return
     if (await decideApi.handle(req, res, url)) return
     if (await music.handle(req, res, url)) return

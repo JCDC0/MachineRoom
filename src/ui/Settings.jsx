@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import MusicPlayer from './MusicPlayer.jsx'
+import SearchSettings from './SearchSettings.jsx'
 import { store } from '../storage.js'
 import { effectSettings, loadSoundSettings, saveSoundSettings } from './settings.js'
 import { sound } from './sound.js'
@@ -181,6 +182,8 @@ export default function Settings({ effects, onChange, onClose }) {
             <MusicPlayer />
           </div>
         </div>
+
+        <SearchSettings />
       </div>
     </section>
   )

@@ -19,6 +19,8 @@ export const CLIENT_METHODS = [
   'hireAgent',
   'updateAgent',
   'models',
+  'searchProvider',
+  'setSearchProvider',
   'suggestRoute',
   'briefs',
   'briefPrompt',
@@ -426,6 +428,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
   let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
+  let searchChoice = { provider: '', url: '', keyName: '' }
   const subChats = new Map()
 
   function ensureSubChat(sub) {
@@ -739,6 +742,43 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       }),
 
     models: () => call('models', () => state.models),
+
+    searchProvider: () => call('searchProvider', () => searchChoice),
+
+    setSearchProvider: ({ provider, url, keyName, confirmed = true } = {}) =>
+      call('setSearchProvider', () => {
+        if (confirmed !== true) throw new Error('Confirm web search first.')
+        const name = typeof provider === 'string' ? provider.trim().toLowerCase() : ''
+        if (name !== '' && !['searxng', 'tavily', 'brave', 'duckduckgo'].includes(name)) {
+          throw new Error('Pick SearXNG, Tavily, Brave, DuckDuckGo or Off.')
+        }
+        if (name === '') {
+          searchChoice = { provider: '', url: '', keyName: '' }
+          return searchChoice
+        }
+        const address = typeof url === 'string' ? url.trim() : ''
+        if (name === 'searxng' && address === '') {
+          throw new Error('The SearXNG address must be an http or https address.')
+        }
+        if (address !== '') {
+          let parsed
+          try {
+            parsed = new URL(address)
+          } catch {
+            throw new Error('The SearXNG address must be an http or https address.')
+          }
+          if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+            throw new Error('The SearXNG address must be an http or https address.')
+          }
+        }
+        const slot = typeof keyName === 'string' ? keyName.trim() : ''
+        if (slot !== '' && !/^[A-Za-z0-9 _-]{1,40}$/.test(slot)) {
+          throw new Error('A key slot name holds 1 to 40 letters, digits, spaces, - or _.')
+        }
+        const named = name === 'tavily' || name === 'brave'
+        searchChoice = { provider: name, url: address, keyName: named ? slot : '' }
+        return searchChoice
+      }),
 
     suggestRoute: (profile, { failures } = {}) =>
       call('suggestRoute', () => {

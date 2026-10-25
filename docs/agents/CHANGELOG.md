@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The MachineRoom harness has `web_search` and `web_fetch` tools over SearXNG, Tavily, Brave or DuckDuckGo, with the provider saved in `<runs>/search.json`, address-checked page fetches capped at 1 MB and 20 seconds, a Web search section in Settings behind a confirm card, and the provider routes on the bridge (task H12).
 - The fine dust strength sets how many specks are drawn, up to 4000, instead of only their brightness, and a Pulse switch on its settings row makes them breathe in and out (still under reduced motion).
 - A small hamburger icon (`MenuIcon.jsx`) marks each dropdown, the conversation switch in the top band and the model and effort pickers, in place of the letter V.
 - The folder lines rest dimmer (0.1 instead of 0.22) and the root project card draws no faint folders behind it, since its folders already stand in the room.

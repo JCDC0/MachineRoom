@@ -167,6 +167,11 @@ export function createClient({
 
     models: () => request('GET', '/api/control/models'),
 
+    searchProvider: () => request('GET', '/api/search-provider'),
+
+    setSearchProvider: ({ provider, url, keyName, confirmed = true } = {}) =>
+      request('POST', '/api/search-provider', { provider, url, keyName, confirmed }),
+
     health: () => request('GET', '/api/health'),
 
     suggestRoute: (profile, { failures } = {}) =>
