@@ -21,7 +21,7 @@ describe('actions', () => {
   })
 
   it('marks every write as needing a confirmation', () => {
-    expect([...CONFIRMED].sort()).toEqual(['propose_budget', 'propose_dispatch', 'propose_subagents'])
+    expect([...CONFIRMED]).toEqual([])
     for (const type of ACTION_TYPES) {
       const sample = {
         focus_agent: { agent: 'agy', view: 'wide' },
@@ -32,22 +32,18 @@ describe('actions', () => {
         open_issue: { identifier: 'JC-1' },
         open_config: { agent: 'agy', section: 'keys' },
         replay: { op: 'pause' },
-        propose_dispatch: { assignee: 'agy', title: 'Do it' },
-        propose_budget: { agent: 'agy', cents: 100 },
-        propose_subagents: { agent: 'agy', allowed: true },
       }[type] ?? {}
       const result = validateAction({ type, ...sample }, context)
       expect(result.ok, type).toBe(true)
-      expect(result.confirm, type).toBe(CONFIRMED.has(type))
+      expect(result.confirm, type).toBe(false)
     }
   })
 
   it('checks the limits of each field', () => {
-    expect(validateAction({ type: 'propose_budget', agent: 'agy', cents: -1 }, context).ok).toBe(false)
-    expect(validateAction({ type: 'propose_budget', agent: 'agy', cents: 1.5 }, context).ok).toBe(false)
-    expect(validateAction({ type: 'propose_budget', agent: 'agy', cents: 1000001 }, context).ok).toBe(false)
-    expect(validateAction({ type: 'propose_dispatch', assignee: 'agy', title: ' ' }, context).ok).toBe(false)
-    expect(validateAction({ type: 'propose_dispatch', assignee: 'agy', title: 'x'.repeat(201) }, context).ok).toBe(false)
+    expect(validateAction({ type: 'propose_budget', agent: 'agy', cents: 100 }, context).ok).toBe(false)
+    expect(validateAction({ type: 'propose_dispatch', assignee: 'agy', title: 'Task' }, context).ok).toBe(false)
+    expect(validateAction({ type: 'propose_subagents', agent: 'agy', allowed: true }, context).ok).toBe(false)
+    expect(validateAction({ type: 'open_panel', tab: 'approvals' }, context).ok).toBe(false)
     expect(validateAction({ type: 'open_issue', identifier: 'jc-1' }, context).ok).toBe(false)
     expect(validateAction({ type: 'replay', op: 'speed', value: 3 }, context).ok).toBe(false)
     expect(validateAction({ type: 'open_panel', tab: 'secrets' }, context).ok).toBe(false)
@@ -108,35 +104,28 @@ describe('rule based intent', () => {
     })
   }
 
-  it('turns a delegation into a proposal that needs a confirmation', () => {
-    const result = run('ask opencode to fix the typo in README')
-    expect(result.kind).toBe('propose')
-    expect(result.action).toEqual({ type: 'propose_dispatch', assignee: 'opencode-go', title: 'Fix the typo in README' })
-    expect(validateAction(result.action, context).confirm).toBe(true)
+  it('treats a delegation as an unknown request', () => {
+    expect(run('ask opencode to fix the typo in README').kind).toBe('unknown')
+    expect(run('tell hermes to summarise the docs.').kind).toBe('unknown')
+    expect(run('have agy to review the layout').kind).toBe('unknown')
   })
 
-  it('reads other delegation wordings', () => {
-    expect(run('tell hermes to summarise the docs.').action).toEqual({ type: 'propose_dispatch', assignee: 'hermes', title: 'Summarise the docs' })
-    expect(run('have agy to review the layout').action.assignee).toBe('agy')
+  it('treats budget changes as unknown requests', () => {
+    expect(run('set the budget of hermes to $5').kind).toBe('unknown')
+    expect(run('set agy budget to 2.50 dollars').kind).toBe('unknown')
+    expect(run('change claude code budget to 300 cents').kind).toBe('unknown')
+    expect(run('set the budget to $5').kind).toBe('unknown')
   })
 
-  it('proposes a budget in dollars or cents', () => {
-    expect(run('set the budget of hermes to $5').action).toEqual({ type: 'propose_budget', agent: 'hermes', cents: 500 })
-    expect(run('set agy budget to 2.50 dollars').action).toEqual({ type: 'propose_budget', agent: 'agy', cents: 250 })
-    expect(run('change claude code budget to 300 cents').action).toEqual({ type: 'propose_budget', agent: 'claude-code', cents: 300 })
-    expect(run('set the budget of hermes to $5').kind).toBe('propose')
+  it('treats subagent toggles as unknown requests', () => {
+    expect(run('allow hermes to spawn subagents').kind).toBe('unknown')
+    expect(run('disable subagents for claude code').kind).toBe('unknown')
+    expect(run('no subagents for agy').kind).toBe('unknown')
   })
 
-  it('asks which agent when a budget has none', () => {
-    const result = run('set the budget to $5')
-    expect(result.kind).toBe('ask')
-    expect(result.options.map((option) => option.agent)).toContain('hermes')
-  })
-
-  it('proposes allowing and forbidding subagents', () => {
-    expect(run('allow hermes to spawn subagents').action).toEqual({ type: 'propose_subagents', agent: 'hermes', allowed: true })
-    expect(run('disable subagents for claude code').action).toEqual({ type: 'propose_subagents', agent: 'claude-code', allowed: false })
-    expect(run('no subagents for agy').kind).toBe('propose')
+  it('treats approvals requests as unknown requests', () => {
+    expect(run('approvals').kind).toBe('unknown')
+    expect(run('anything waiting for me').kind).toBe('unknown')
   })
 
   it('asks which agent when the request needs one', () => {
@@ -211,21 +200,22 @@ describe('secrets', () => {
 })
 
 describe('cardFirst', () => {
-  const write = { type: 'propose_budget', agent: 'hermes', cents: 500 }
-
   it('turns a write that came as an action into a confirm card', () => {
-    expect(cardFirst({ kind: 'action', action: write, say: 'Done.' })).toEqual({ kind: 'propose', action: write, say: CARD_SAY })
-    expect(CARD_SAY).toBe('That changes a task, a budget or an agent. Confirm to go on.')
-  })
-
-  it('drops a write that rides on a blocked or ask answer', () => {
-    expect(cardFirst({ kind: 'blocked', action: write, say: 'No.' })).toEqual({ kind: 'blocked', say: 'No.' })
-    expect(cardFirst({ kind: 'ask', action: write, say: 'Which?', options: [] })).toEqual({ kind: 'ask', say: 'Which?', options: [] })
+    CONFIRMED.add('test_write')
+    try {
+      const write = { type: 'test_write' }
+      expect(cardFirst({ kind: 'action', action: write, say: 'Done.' })).toEqual({ kind: 'propose', action: write, say: CARD_SAY })
+      expect(CARD_SAY).toBe('That changes a task, a budget or an agent. Confirm to go on.')
+      expect(cardFirst({ kind: 'blocked', action: write, say: 'No.' })).toEqual({ kind: 'blocked', say: 'No.' })
+      expect(cardFirst({ kind: 'ask', action: write, say: 'Which?', options: [] })).toEqual({ kind: 'ask', say: 'Which?', options: [] })
+    } finally {
+      CONFIRMED.delete('test_write')
+    }
   })
 
   it('leaves reads, cards and odd answers alone', () => {
     const read = { kind: 'action', action: { type: 'overview' }, say: 'Back.' }
-    const card = { kind: 'propose', action: write, say: 'Set it?' }
+    const card = { kind: 'propose', action: { type: 'test' }, say: 'Set it?' }
     expect(cardFirst(read)).toBe(read)
     expect(cardFirst(card)).toBe(card)
     expect(cardFirst(null)).toBe(null)

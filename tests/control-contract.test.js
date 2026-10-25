@@ -198,7 +198,17 @@ async function makeHarness({ records = [] } = {}) {
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
-  const client = createClient({ baseUrl: url })
+  const client = createClient({
+    baseUrl: url,
+    fetchImpl: (input, init = {}) =>
+      fetch(input, {
+        ...init,
+        headers: {
+          ...init?.headers,
+          Origin: 'http://localhost:5173',
+        },
+      }),
+  })
   return { client, url, runs, repo: shared.repo, worktree: shared.worktree }
 }
 

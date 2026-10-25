@@ -1,4 +1,4 @@
-export const TABS = ['dispatch', 'tasks', 'approvals', 'meters', 'agents']
+export const TABS = ['dispatch', 'tasks', 'meters', 'agents']
 export const SECTIONS = ['general', 'model', 'budget', 'subagents', 'keys']
 export const SPEEDS = [1, 2, 4, 8]
 
@@ -7,7 +7,7 @@ const FOLLOWS = ['wide', 'close', 'off']
 const REPLAY_OPS = ['play', 'pause', 'faster', 'slower', 'speed']
 const IDENTIFIER = /^[A-Z]{1,8}-\d{1,6}$/
 
-export const CONFIRMED = new Set(['propose_dispatch', 'propose_budget', 'propose_subagents'])
+export const CONFIRMED = new Set([])
 export const ACTION_TYPES = [
   'focus_agent',
   'focus_terminal',
@@ -20,9 +20,6 @@ export const ACTION_TYPES = [
   'open_log',
   'open_help',
   'replay',
-  'propose_dispatch',
-  'propose_budget',
-  'propose_subagents',
 ]
 
 const known = (context, key) => context.agents.some((agent) => agent.key === key)
@@ -43,13 +40,6 @@ const CHECKS = {
     if (a.op !== 'speed') return { op: a.op }
     return SPEEDS.includes(a.value) && { op: 'speed', value: a.value }
   },
-  propose_dispatch: (a, c) => {
-    const title = typeof a.title === 'string' ? a.title.trim() : ''
-    if (!known(c, a.assignee) || title.length === 0 || title.length > 200) return false
-    return { assignee: a.assignee, title }
-  },
-  propose_budget: (a, c) => known(c, a.agent) && Number.isInteger(a.cents) && a.cents >= 0 && a.cents <= 1000000 && { agent: a.agent, cents: a.cents },
-  propose_subagents: (a, c) => known(c, a.agent) && typeof a.allowed === 'boolean' && { agent: a.agent, allowed: a.allowed },
 }
 
 export function validateAction(action, context) {

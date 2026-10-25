@@ -9,22 +9,18 @@ export const ACTION_GUIDE = {
   focus_path: 'Go to a folder or a file of the project.',
   overview: 'Zoom out to see the whole room.',
   follow: 'Make the camera follow whichever agent is working, or stop doing that.',
-  open_panel: 'Open a panel: costs, approvals, tasks or the new task form.',
+  open_panel: 'Open a panel: costs, tasks or the new task form.',
   open_issue: 'Open one task by its identifier, such as JC-12.',
   open_config: 'Open the settings, model, budget, subagents or keys page of one agent.',
   open_log: 'Show the event log, or what is happening overall.',
   open_help: 'Explain the commands or the keys.',
   replay: 'Control the replay: play, pause or change the speed.',
-  propose_dispatch: 'Create a task and give it to an agent.',
-  propose_budget: 'Set a spending budget for an agent.',
-  propose_subagents: 'Allow or forbid an agent to start subagents.',
   unknown: 'None of these, or the request is unclear, or it asks for something this room cannot do.',
 }
 
 export const TAB_GUIDE = {
   dispatch: 'Create a new task.',
   tasks: 'List tasks and read their threads.',
-  approvals: 'Decisions that wait for the owner.',
   meters: 'Costs, spend, quota and budgets.',
   agents: 'Hire a new agent or change an existing one.',
   [NONE]: 'No panel is asked for.',

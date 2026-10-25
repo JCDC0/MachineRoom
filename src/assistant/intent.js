@@ -18,7 +18,7 @@ const PATH_STOP = new Set([
 ])
 
 const HELP_SAY =
-  'Try: "what is agy doing", "costs", "approvals", "new task", "terminal for hermes", "go to src/engine", "follow", "overview", "configure opencode".'
+  'Try: "what is agy doing", "costs", "new task", "terminal for hermes", "go to src/engine", "follow", "overview", "configure opencode".'
 
 const tokenize = (text) =>
   String(text)
@@ -122,15 +122,6 @@ export function rankPaths(text, paths, limit = 20) {
   return chosen.concat(rest.slice(0, Math.max(0, Math.min(limit, 12) - chosen.length)))
 }
 
-function dollarsToCents(text) {
-  const found = /(\d+(?:\.\d{1,2})?)\s*(dollars?|usd|bucks|cents?|c)?\b/i.exec(text.replace(/\$\s*(\d)/g, '$1 dollars '))
-  if (!found) return null
-  const amount = Number(found[1])
-  if (/^c/i.test(found[2] ?? '')) return Math.round(amount)
-  return Math.round(amount * 100)
-}
-
-const cap = (text) => text.charAt(0).toUpperCase() + text.slice(1)
 const done = (context, action, kind, say) => {
   const checked = validateAction(action, context)
   return checked.ok ? { kind, action: checked.action, say } : { kind: 'unknown', say: HELP_SAY, fallback: true }
@@ -180,22 +171,15 @@ export function interpret(text, context) {
   }
 
   if (/\bsub[- ]?agents?\b|\bspawn(ing)?\b|\bdelegat(e|ion|ing)\b/.test(lower)) {
+    if (/\b(no|disable|forbid|block|never|off|don'?t|dont|disallow|allow|enable|let|permit|on)\b/.test(lower)) {
+      return { kind: 'unknown', say: HELP_SAY }
+    }
     if (!agent) return needAgent('Subagents for which agent?')
-    if (/\b(no|disable|forbid|block|never|off|don'?t|dont|disallow)\b/.test(lower)) {
-      return done(context, { type: 'propose_subagents', agent: agent.key, allowed: false }, 'propose', `Turn subagents off for ${agent.name}?`)
-    }
-    if (/\b(allow|enable|let|permit|on)\b/.test(lower)) {
-      return done(context, { type: 'propose_subagents', agent: agent.key, allowed: true }, 'propose', `Allow ${agent.name} to start subagents?`)
-    }
     return done(context, { type: 'open_config', agent: agent.key, section: 'subagents' }, 'action', `Opening subagent settings for ${agent.name}.`)
   }
 
   if (/\bbudget\b/.test(lower) && /\b(set|change|make|raise|lower|cap|limit|to)\b/.test(lower)) {
-    const cents = dollarsToCents(raw)
-    if (cents !== null) {
-      if (!agent) return needAgent('Budget for which agent?')
-      return done(context, { type: 'propose_budget', agent: agent.key, cents }, 'propose', `Set the monthly budget of ${agent.name} to $${(cents / 100).toFixed(2)}?`)
-    }
+    return { kind: 'unknown', say: HELP_SAY }
   }
   if (/\bbudget\b/.test(lower) && agent) return done(context, { type: 'open_config', agent: agent.key, section: 'budget' }, 'action', `Opening the budget of ${agent.name}.`)
 
@@ -206,19 +190,12 @@ export function interpret(text, context) {
   }
 
   const delegate = /^(?:please\s+)?(?:ask|tell|have|get)\s+(.+?)\s+to\s+(.+)$/i.exec(raw)
-  if (delegate) {
-    const target = resolveAgents(delegate[1], context.agents)
-    if (target.match) {
-      const title = cap(delegate[2].trim().replace(/[.!]+$/, ''))
-      return done(context, { type: 'propose_dispatch', assignee: target.match.key, title }, 'propose', `Create a task for ${target.match.name}: "${title}"?`)
-    }
-    if (target.ambiguous.length) return askAgent(raw, target.ambiguous, 'Which agent?')
-  }
+  if (delegate) return { kind: 'unknown', say: HELP_SAY }
 
   if (/\b(costs?|spend|spending|quota|usage|meters?|money|price|pricing|billing|how much)\b|\btokens\b/.test(lower)) {
     return done(context, { type: 'open_panel', tab: 'meters' }, 'action', agent ? `Showing costs. ${agent.name} is in the list.` : 'Showing costs and quota.')
   }
-  if (/\b(approvals?|approve|pending|waiting for me)\b/.test(lower)) return done(context, { type: 'open_panel', tab: 'approvals' }, 'action', 'Showing approvals.')
+  if (/\b(approvals?|approve|pending|waiting for me)\b/.test(lower)) return { kind: 'unknown', say: HELP_SAY }
 
   const issue = /\b([a-z]{1,8}-\d{1,6})\b/i.exec(raw)
   if (issue && !/\.[a-z]{2,4}\b/i.test(issue[1])) {

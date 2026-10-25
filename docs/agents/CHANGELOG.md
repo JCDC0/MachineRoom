@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A no-Origin run request without a token is refused when the bridge has orchestrators, and the assistant drops approvals, issue creation and agent and budget edits (task Q14).
+
 - `?replay&ladder=none` no longer gets the demo ladder from the default fixture, and the OpenCode lane notes name all ten lanes and say Paperclip is gone (found by R14).
 
 - The lens's top and bottom edges curve inward, as in the owner's sketch, with a thin edge line drawn on the same curve.
