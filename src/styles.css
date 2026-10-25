@@ -8007,3 +8007,123 @@ body:has(#hud-orchestrator-chat) .waiting {
     cursor: pointer;
   }
 }
+
+/* U40: the autocompact value, its unit and the compact rules */
+.mr-autocompact {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.mr-autocompact-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.mr-autocompact-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--white);
+}
+
+.mr-autocompact-units {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+
+.mr-autocompact-unit {
+  min-width: 30px;
+  height: 22px;
+  padding: 0 6px;
+  border: 0;
+  background: transparent;
+  color: rgb(255 255 255 / 0.65);
+  font-family: var(--mono);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.mr-autocompact-unit + .mr-autocompact-unit {
+  border-left: 1px solid var(--line);
+}
+
+.mr-autocompact-unit[aria-pressed='true'] {
+  background: var(--yellow);
+  color: var(--black);
+}
+
+.mr-autocompact-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-autocompact-number {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.mr-autocompact-at {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.mr-autocompact-note {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.mr-autocompact-note.is-error {
+  color: var(--red);
+}
+
+.mr-autocompact-rules {
+  width: 100%;
+  min-height: 58px;
+  resize: vertical;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.04);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.mr-autocompact-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+}
+
+.mr-autocompact-saved {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--green);
+}
+
+.agent-dock-autocompact {
+  margin: 0 0 calc(var(--space) * 1.5);
+}

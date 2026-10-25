@@ -212,6 +212,7 @@ export function orchestratorRoster(value) {
       autocompact: entry.autocompact === true,
       percent: clampAutocompactPercent(entry.autocompactPercent),
       sub: !main,
+      source: entry,
     })
   }
   return rows.sort((left, right) => Number(left.sub) - Number(right.sub))

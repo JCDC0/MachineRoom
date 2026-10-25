@@ -1,8 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
+import AutocompactInput from './AutocompactInput.jsx'
 import {
   AGENT_NAME_MAX,
-  AUTOCOMPACT_MAX,
-  AUTOCOMPACT_MIN,
   ORCHESTRATOR_ID,
   SESSION_LIMIT,
   agentDraft,
@@ -10,7 +9,6 @@ import {
   agentFormSummary,
   autocompactLine,
   cleanText,
-  clampAutocompactPercent,
   findHarness,
   harnessEfforts,
   harnessGroups,
@@ -432,32 +430,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
         setEditing((current) =>
           current && current.kind === 'orchestrator' && current.id === row.id
             ? { ...current, effort }
-            : current
-        )
-        await refreshOrchestrators()
-      },
-    })
-  }
-
-  function askAutocompact(row) {
-    if (!editing || editing.kind !== 'orchestrator' || editing.id !== row.id) return
-    if (typeof client?.setAutocompact !== 'function') {
-      setActionError('This bridge cannot set autocompact.')
-      return
-    }
-    const on = editing.autocompact === true
-    const percent = clampAutocompactPercent(editing.percent)
-    ask({
-      text: on
-        ? `Turn autocompact on at ${percent}% for ${row.name}?`
-        : `Turn autocompact off for ${row.name}?`,
-      label: 'Save',
-      busyText: 'Saving autocompact...',
-      run: async () => {
-        await client.setAutocompact({ id: row.id, on, percent, confirmed: true })
-        setEditing((current) =>
-          current && current.kind === 'orchestrator' && current.id === row.id
-            ? { ...current, autocompact: on, percent }
             : current
         )
         await refreshOrchestrators()
@@ -941,41 +913,7 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
         ) : (
           <p className="mr-side-note is-dim">This bridge cannot set an effort.</p>
         )}
-        {typeof client?.setAutocompact === 'function' ? (
-          <div className="mr-side-auto">
-            <label className="mr-side-field is-inline">
-              <span className="mr-side-field-label mono">Autocompact</span>
-              <input
-                type="checkbox"
-                role="switch"
-                aria-label={`Autocompact for ${row.name}`}
-                checked={current.autocompact === true}
-                onChange={(event) => setEditing({ ...current, autocompact: event.target.checked })}
-              />
-            </label>
-            <label className="mr-side-field is-inline">
-              <span className="mr-side-field-label mono">Percent</span>
-              <input
-                type="range"
-                min={AUTOCOMPACT_MIN}
-                max={AUTOCOMPACT_MAX}
-                step="1"
-                aria-label="Autocompact percent"
-                value={current.percent}
-                disabled={current.autocompact !== true}
-                onChange={(event) =>
-                  setEditing({ ...current, percent: clampAutocompactPercent(event.target.value) })
-                }
-              />
-              <span className="mr-side-percent mono">{`${current.percent}%`}</span>
-            </label>
-            <button type="button" className="mr-side-action" disabled={busy} onClick={() => askAutocompact(row)}>
-              Save
-            </button>
-          </div>
-        ) : (
-          <p className="mr-side-note is-dim">This bridge cannot set autocompact.</p>
-        )}
+        <AutocompactInput orchestrator={row.source ?? row} client={client} onSaved={refreshOrchestrators} />
         <div className="mr-side-form-actions">
           <button type="button" className="mr-side-action" onClick={() => setEditing(null)}>
             Close
