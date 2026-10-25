@@ -8223,3 +8223,103 @@ body:has(#hud-orchestrator-chat) .waiting {
   display: inline-flex;
   align-items: center;
 }
+
+/* U42: the orchestrator and its context ring in the transport row under the lens */
+@media (min-width: 900px) {
+  .transport.is-live.has-orchestrator {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  }
+
+  .hud-lower-main {
+    scroll-margin-top: var(--menu-h);
+  }
+
+  .transport.is-live > .transport-orchestrator {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    justify-self: center;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: rgb(255 255 255 / 0.6);
+    cursor: pointer;
+  }
+
+  .transport.is-live > .transport-orchestrator:hover,
+  .transport.is-live > .transport-orchestrator:focus-visible {
+    color: var(--white);
+    background: none;
+    border: 0;
+  }
+
+  .transport-orchestrator .transport-orchestrator-title {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+  }
+
+  .transport-orchestrator .transport-orchestrator-state {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--white);
+    text-transform: none;
+  }
+
+  .transport-tail {
+    display: inline-flex;
+    align-items: center;
+    gap: calc(var(--space) * 2);
+    justify-self: end;
+  }
+
+  .transport.is-live .transport-context {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--white);
+    cursor: pointer;
+  }
+
+  .transport.is-live .transport-context:hover,
+  .transport.is-live .transport-context:focus-visible {
+    background: none;
+    border: 0;
+  }
+
+  .transport.is-live .transport-context.is-yellow {
+    color: var(--yellow);
+  }
+
+  .transport.is-live .transport-context.is-red {
+    color: var(--red);
+  }
+
+  .transport-context-ring {
+    display: block;
+    overflow: visible;
+  }
+
+  .transport-context-ring circle {
+    fill: none;
+    stroke-width: 2;
+  }
+
+  .transport-context-track {
+    stroke: rgb(255 255 255 / 0.18);
+  }
+
+  .transport-context-arc {
+    stroke: currentColor;
+  }
+
+  .transport.is-live .transport-context-label {
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: currentColor;
+    text-transform: none;
+  }
+}
