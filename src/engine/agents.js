@@ -2,8 +2,8 @@ import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
-import { HUB_CENTER, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, sectorSlotAngles, slotAngle } from './hub.js'
-import { isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
+import { HUB_CENTER, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
+import { ORCHESTRATOR_SHAPE, PREFERRED, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
 import { GREEN, RED, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 
 const STYLE = {
@@ -90,6 +90,15 @@ export function showsNameLabel(agent, sector) {
   const sectorName = typeof sector?.name === 'string' ? sector.name.trim() : ''
   if (!name || !sectorName) return true
   return name.toLowerCase() !== sectorName.toLowerCase()
+}
+
+export function shapeForNewAgent(agent, used = []) {
+  const taken = new Set(Array.isArray(used) ? used : [])
+  if (isOrchestrator(agent) || isSubOrchestrator(agent)) return ORCHESTRATOR_SHAPE
+  const kind = agent?.shape ?? agent?.parser ?? agent?.key
+  const wanted = Object.hasOwn(PREFERRED, kind) ? PREFERRED[kind] : null
+  if (wanted && !taken.has(wanted)) return wanted
+  return nextSpareShape([...taken])
 }
 
 export function childPlace(parentPlace, index = 0) {
@@ -243,14 +252,14 @@ export function createAgents(scene, roster, cssScene = null) {
   const views = new Map()
   const pickables = []
   const shapes = shapesFor(roster)
-  const parked = roster.filter((agent) => !isOrchestrator(agent) && !isSubOrchestrator(agent))
-  const parkedKeys = parked.map((agent) => agent.key)
-  const agentByKey = new Map(roster.map((agent) => [agent.key, agent]))
-  const rosterKeys = new Set(roster.map((agent) => agent.key))
+  let currentRoster = [...roster]
+  let parkedKeys = parkedKeysFor(currentRoster)
+  let agentByKey = new Map(currentRoster.map((agent) => [agent.key, agent]))
+  let rosterKeys = new Set(currentRoster.map((agent) => agent.key))
   const usedShapes = new Set(shapes)
   const retired = new Map()
   const pendingChipRemovals = new Set()
-  let parkedIndex = 0
+  let currentLadder = null
   let sectorList = []
   let slotAngles = sectorSlotAngles(null, parkedKeys)
 
@@ -355,6 +364,8 @@ export function createAgents(scene, roster, cssScene = null) {
       index: orchestrator ? -1 : index,
       orchestrator,
       subOrchestrator: sub,
+      sessionReader: parentKey === null && isSessionReader(agent),
+      readerIndex: 0,
       parentKey,
       shapeName,
       group,
@@ -394,6 +405,7 @@ export function createAgents(scene, roster, cssScene = null) {
       dance: 0,
     }
     views.set(agent.key, view)
+    if (view.sessionReader) group.visible = false
     return view
   }
 
@@ -451,21 +463,96 @@ export function createAgents(scene, roster, cssScene = null) {
     }
   }
 
+  function placeViews() {
+    const readers = [...views.values()].filter((view) => view.sessionReader && !view.parentKey)
+    let readerIndex = 0
+    for (const view of views.values()) {
+      if (view.parentKey) continue
+      const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
+      if (view.subOrchestrator) {
+        const sector = sectorList.find((entry) => entry.id === subIdOf(agent))
+        view.label.visible = showsNameLabel(agent, sector)
+      } else {
+        view.label.visible = true
+      }
+      if (view.orchestrator) {
+        view.index = -1
+        view.home.copy(ORCHESTRATOR_HOME)
+      } else if (view.subOrchestrator) {
+        view.index = -1
+        view.home.copy(subHome(agent))
+      } else if (view.sessionReader) {
+        view.index = -1
+        view.readerIndex = readerIndex
+        readerPoint(readerIndex, readers.length, view.home)
+        readerIndex += 1
+      } else {
+        view.index = parkedKeys.indexOf(view.key)
+        view.home.copy(laneHome(view.key, view.index))
+      }
+    }
+  }
+
+  function setRoster(next, chips = null) {
+    const list = Array.isArray(next) ? next : []
+    const nextKeys = new Set(list.map((agent) => agent.key))
+    for (const view of [...views.values()]) {
+      if (view.parentKey || nextKeys.has(view.key)) continue
+      removeView(view, chips)
+    }
+    let dropped = true
+    while (dropped) {
+      dropped = false
+      for (const view of [...views.values()]) {
+        if (!view.parentKey || views.has(view.parentKey)) continue
+        removeView(view, chips)
+        dropped = true
+      }
+    }
+    currentRoster = [...list]
+    agentByKey = new Map(currentRoster.map((agent) => [agent.key, agent]))
+    rosterKeys = new Set(currentRoster.map((agent) => agent.key))
+    parkedKeys = parkedKeysFor(currentRoster)
+    const added = []
+    for (const agent of currentRoster) {
+      if (views.has(agent.key)) continue
+      const sub = isSubOrchestrator(agent)
+      const shapeName = shapeForNewAgent(agent, [...usedShapes])
+      usedShapes.add(shapeName)
+      const view = addView(agent, {
+        index: -1,
+        shapeName,
+        home: new THREE.Vector3(),
+        scale: sub ? SUB_ORCHESTRATOR_SCALE : 1,
+        subOrchestrator: sub,
+      })
+      chips?.ensure?.(agent.key, agent.name)
+      added.push(view)
+    }
+    layoutHomes(currentLadder)
+    placeViews()
+    for (const view of added) {
+      view.group.position.copy(view.home)
+      view.touch.copy(view.home)
+    }
+  }
+
   layoutHomes(null)
   roster.forEach((agent, rosterIndex) => {
-    const orchestrator = isOrchestrator(agent)
     const sub = isSubOrchestrator(agent)
-    const index = orchestrator || sub ? -1 : parkedIndex
-    if (!orchestrator && !sub) parkedIndex += 1
-    const home = orchestrator ? ORCHESTRATOR_HOME.clone() : sub ? subHome(agent) : laneHome(agent.key, index)
     addView(agent, {
-      index,
+      index: -1,
       shapeName: shapes[rosterIndex],
-      home,
+      home: new THREE.Vector3(),
       scale: sub ? SUB_ORCHESTRATOR_SCALE : 1,
       subOrchestrator: sub,
     })
   })
+  placeViews()
+  for (const view of views.values()) {
+    view.group.position.copy(view.home)
+    view.touch.copy(view.home)
+  }
 
   function setStatus(view, status, now) {
     if (view.style !== status) {
@@ -540,6 +627,18 @@ export function createAgents(scene, roster, cssScene = null) {
       const style = STYLE[status] ?? STYLE.idle
       const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
       const ran = Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
+      if (view.sessionReader && !ran) {
+        view.group.visible = false
+        view.link.visible = false
+        view.callout.object.visible = false
+        view.calloutLine.visible = false
+        if (view.orchestratorLink) view.orchestratorLink.visible = false
+        view.strip.visible = false
+        hidePackets(view)
+        terminals.setVisible?.(view.key, false)
+        continue
+      }
+      view.group.visible = true
       const presence = agentPresence({ status, orchestrator: view.orchestrator || view.subOrchestrator }, ran)
       if (!view.presenceReady) {
         view.presence = presence.dim ? 0 : 1
@@ -734,21 +833,13 @@ export function createAgents(scene, roster, cssScene = null) {
   }
 
   function setLadder(ladder) {
-    layoutHomes(ladder)
-    const isStill = still()
-    for (const view of views.values()) {
-      if (view.parentKey) continue
-      const agent = agentByKey.get(view.key) ?? { key: view.key, name: view.name }
-      if (view.subOrchestrator) {
-        const sector = sectorList.find((entry) => entry.id === subIdOf(agent))
-        view.label.visible = showsNameLabel(agent, sector)
-      } else {
-        view.label.visible = true
+    currentLadder = hasSubs(ladder) ? ladder : null
+    layoutHomes(currentLadder)
+    placeViews()
+    if (still()) {
+      for (const view of views.values()) {
+        if (!view.parentKey) view.group.position.copy(view.home)
       }
-      if (view.orchestrator) view.home.copy(ORCHESTRATOR_HOME)
-      else if (view.subOrchestrator) view.home.copy(subHome(agent))
-      else view.home.copy(laneHome(view.key, view.index))
-      if (isStill) view.group.position.copy(view.home)
     }
   }
 
@@ -759,5 +850,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, dispose, beat, hubCenter: HUB_CENTER }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setRoster, dispose, beat, hubCenter: HUB_CENTER }
 }

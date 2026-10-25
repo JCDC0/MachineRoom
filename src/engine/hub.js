@@ -8,6 +8,7 @@ export const HUB_RADIUS = 300
 export const HUB_Y = 200
 export const PARK_LIFT = 90
 export const ORCHESTRATOR_LIFT = 360
+export const READER_RADIUS = HUB_RADIUS * 1.4
 export const HUB_CENTER = new THREE.Vector3(0, HUB_Y, 0)
 export const ORCHESTRATOR_HOME = new THREE.Vector3(HUB_CENTER.x, HUB_Y + ORCHESTRATOR_LIFT, HUB_CENTER.z)
 
@@ -38,6 +39,31 @@ export function slotAngle(index, count) {
 export function slotPoint(index, count, out = new THREE.Vector3()) {
   const angle = slotAngle(index, count)
   return out.set(Math.cos(angle) * HUB_RADIUS, HUB_Y, Math.sin(angle) * HUB_RADIUS)
+}
+
+export function isSessionReader(agent) {
+  if (!agent) return false
+  if (agent.sessionReader === true) return true
+  return String(agent.key ?? '').endsWith('-session')
+}
+
+export function takesHubSlot(agent) {
+  if (!agent) return false
+  return !isOrchestrator(agent) && !isSubOrchestrator(agent) && !isSessionReader(agent)
+}
+
+export function parkedKeysFor(roster) {
+  const keys = []
+  for (const agent of Array.isArray(roster) ? roster : []) {
+    if (!takesHubSlot(agent) || typeof agent.key !== 'string' || agent.key === '') continue
+    if (!keys.includes(agent.key)) keys.push(agent.key)
+  }
+  return keys
+}
+
+export function readerPoint(index, count, out = new THREE.Vector3()) {
+  const angle = slotAngle(index, count)
+  return out.set(Math.cos(angle) * READER_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * READER_RADIUS)
 }
 
 export function hasSubs(ladder) {
@@ -198,10 +224,8 @@ function buildSectors(ladder, parkedKeys, group) {
 
 export function createHub(scene, agentsOrCount, ladder = null) {
   const roster = Array.isArray(agentsOrCount) ? agentsOrCount : null
-  const parkedKeys = roster
-    ? roster.filter((agent) => !isOrchestrator(agent) && !isSubOrchestrator(agent)).map((agent) => agent.key)
-    : []
-  const count = roster ? parkedKeys.length : Number(agentsOrCount) || 0
+  let parkedKeys = roster ? parkedKeysFor(roster) : []
+  let count = roster ? parkedKeys.length : Number(agentsOrCount) || 0
   const group = new THREE.Group()
   group.position.y = HUB_Y
 
@@ -283,6 +307,13 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     rebuild()
   }
 
+  function setRoster(next) {
+    if (!Array.isArray(next)) return
+    parkedKeys = parkedKeysFor(next)
+    count = parkedKeys.length
+    rebuild()
+  }
+
   function pulse(color, amount) {
     for (const line of ringLines) line.material.color.setHex(color)
     boost = Math.max(boost, amount)
@@ -329,5 +360,5 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   if (currentLadder) rebuild()
 
-  return { group, pulse, setSlot, setLadder, update, dispose }
+  return { group, pulse, setSlot, setLadder, setRoster, parkedKeys: () => [...parkedKeys], update, dispose }
 }

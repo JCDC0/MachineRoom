@@ -29,6 +29,31 @@ export function parserFor(raw) {
   return name.includes(harness.key) ? harness.key : null
 }
 
+const SESSION_READER_SUFFIX = '-session'
+
+function isSessionReaderKey(key) {
+  return String(key ?? '').endsWith(SESSION_READER_SUFFIX)
+}
+
+export function diffRoster(previous, next) {
+  const before = new Map()
+  for (const agent of Array.isArray(previous) ? previous : []) {
+    if (agent && typeof agent.key === 'string') before.set(agent.key, agent)
+  }
+  const after = new Map()
+  for (const agent of Array.isArray(next) ? next : []) {
+    if (agent && typeof agent.key === 'string') after.set(agent.key, agent)
+  }
+  const added = []
+  const removed = []
+  for (const [key, agent] of after) if (!before.has(key)) added.push(agent)
+  for (const [key, agent] of before) if (!after.has(key)) removed.push(agent)
+  const keptBefore = [...before.keys()].filter((key) => after.has(key))
+  const keptAfter = [...after.keys()].filter((key) => before.has(key))
+  const reordered = keptBefore.join('\n') !== keptAfter.join('\n')
+  return { added, removed, reordered, changed: added.length > 0 || removed.length > 0 || reordered }
+}
+
 export function toAgents(rawAgents) {
   const taken = new Set()
   const agents = rawAgents.map((raw) => {
@@ -51,6 +76,7 @@ export function toAgents(rawAgents) {
       harness: typeof raw.harness === 'string' ? raw.harness : null,
       model: typeof raw.model === 'string' ? raw.model : null,
       subOrchestrator: raw.subOrchestrator === true,
+      sessionReader: raw.sessionReader === true || isSessionReaderKey(key),
     }
   })
   const rank = (agent) => {
@@ -73,6 +99,11 @@ export async function loadTree(url, fetchImpl = fetch) {
   const version = readTreeVersion(raw)
   rememberTreeVersion(url, version)
   return version === null ? list : { ...list, version }
+}
+
+export async function loadAgents(url, fetchImpl = fetch) {
+  const raw = await getJson(fetchImpl, `${url}/api/agents`)
+  return toAgents(Array.isArray(raw) ? raw : [])
 }
 
 export function socketUrl(base, companyId) {
