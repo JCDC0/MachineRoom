@@ -94,19 +94,19 @@ function cleanPath(value) {
 }
 
 describe('worktreeFor', () => {
-  it('puts the worktree beside the project with the lane in its name', () => {
+  it('puts the worktree in the .worktrees folder of the project under the lane name', () => {
     const project = join('work', 'Other')
-    expect(worktreeFor(project, 'opencode')).toBe(join('work', 'Other-mr-opencode'))
-    expect(worktreeFor(`${project}${sep}`, 'claude')).toBe(join('work', 'Other-mr-claude'))
-    expect(worktreeFor(`${project}${sep}${sep}`, 'opencode')).toBe(join('work', 'Other-mr-opencode'))
-    expect(worktreeFor(project, 'opencode10')).toBe(join('work', 'Other-mr-opencode10'))
+    expect(worktreeFor(project, 'opencode')).toBe(join('work', 'Other', '.worktrees', 'opencode'))
+    expect(worktreeFor(`${project}${sep}`, 'claude')).toBe(join('work', 'Other', '.worktrees', 'claude'))
+    expect(worktreeFor(`${project}${sep}${sep}`, 'opencode')).toBe(join('work', 'Other', '.worktrees', 'opencode'))
+    expect(worktreeFor(project, 'opencode10')).toBe(join('work', 'Other', '.worktrees', 'opencode10'))
   })
 
   it('keeps the separator style of the project path on Windows', () => {
     if (process.platform !== 'win32') return
-    expect(worktreeFor('C:\\GitHub\\Other', 'opencode')).toBe('C:\\GitHub\\Other-mr-opencode')
-    expect(worktreeFor('C:/GitHub/Other', 'opencode')).toBe('C:/GitHub/Other-mr-opencode')
-    expect(worktreeFor('C:\\GitHub\\Other\\', 'opencode')).toBe('C:\\GitHub\\Other-mr-opencode')
+    expect(worktreeFor('C:\\GitHub\\Other', 'opencode')).toBe('C:\\GitHub\\Other\\.worktrees\\opencode')
+    expect(worktreeFor('C:/GitHub/Other', 'opencode')).toBe('C:/GitHub/Other/.worktrees/opencode')
+    expect(worktreeFor('C:\\GitHub\\Other\\', 'opencode')).toBe('C:\\GitHub\\Other\\.worktrees\\opencode')
   })
 
   it('gives nothing without a project or a lane', () => {

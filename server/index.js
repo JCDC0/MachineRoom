@@ -56,10 +56,10 @@ const TREE_VERSIONS_KEPT = 4
 const TREE_REUSE_MS = 1000
 const WATCH_QUIET_MS = 2000
 const POLL_READ_GAP = 3
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist'])
+const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.worktrees'])
 const TREE_MAX_BUFFER = 64 * 1024 * 1024
 const TREE_TIMEOUT_MS = 20000
-const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules)([/\\]|$)/
+const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules|\.worktrees)([/\\]|$)/
 const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const gzipAsync = promisify(gzipCallback)
 

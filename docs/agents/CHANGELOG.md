@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A lane worktree lives inside its project at `.worktrees/<lane>` instead of beside it as `<project>-mr-<lane>`, so a project's lanes stay in one folder; run-lane adds `/.worktrees/` to the project's `.git/info/exclude`, and the bridge's tree and watcher skip it.
+
 - A `machineroom` command, linked once with `npm link`, starts the room on the folder it runs in (or the folder given), prints `MachineRoom is running.` with the address, and opens the browser; `--no-open` leaves it closed, and the build hint names the MachineRoom folder.
 
 - The top band shows `/NAME` and the orchestrator conversation list at 900 pixels and wider, the lens moves its labels and shows the clock, brackets and the waiting card inside it, and the tour and guide texts say how the dock picks an agent and where `/` leads (task U30).

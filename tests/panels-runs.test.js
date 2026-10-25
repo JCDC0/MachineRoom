@@ -321,9 +321,9 @@ describe('PROJECT_SPLIT_DELAY', () => {
 
 describe('projectWorktreeName', () => {
   it('names the worktree folder beside the project', () => {
-    expect(projectWorktreeName('Other', 'opencode')).toBe('Other-mr-opencode')
-    expect(projectWorktreeName('C:\\GitHub\\Other', 'claude')).toBe('Other-mr-claude')
-    expect(projectWorktreeName('work/Other/', 'opencode10')).toBe('Other-mr-opencode10')
+    expect(projectWorktreeName('Other', 'opencode')).toBe('Other/.worktrees/opencode')
+    expect(projectWorktreeName('C:\\GitHub\\Other', 'claude')).toBe('Other/.worktrees/claude')
+    expect(projectWorktreeName('work/Other/', 'opencode10')).toBe('Other/.worktrees/opencode10')
   })
 
   it('returns an empty name when the project or lane is missing', () => {

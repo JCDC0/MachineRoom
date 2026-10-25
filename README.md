@@ -74,7 +74,7 @@ With `--lanes` on, click ORCHESTRATOR or press `/`. Write what you want built, p
 The orchestrator reads your project's own guide (`AGENTS.md`, `CLAUDE.md` or `docs/agents`) before it plans. It asks short questions, at most three at a time, and waits for the answers. Then it:
 
 - splits the work into tasks that touch different files;
-- starts each task as a lane run in its own git worktree beside your project, named `<project folder>-mr-<lane>`; the bridge starts them, so a run keeps going after the orchestrator's turn ends;
+- starts each task as a lane run in its own git worktree inside your project, at `<project folder>/.worktrees/<lane>`; the bridge starts them, so a run keeps going after the orchestrator's turn ends;
 - wakes when a run ends, reads its log and record, checks the branch, and runs your project's tests and build;
 - merges a passing branch into your project's current branch with a straight-line history, and makes no merge commit;
 - writes a follow-up task when a branch fails;
@@ -95,7 +95,7 @@ A lane is one agent on one harness. Press `C` or click CONTROL, then open Dispat
 - Pick a lane, such as OpenCode or Claude Code.
 - Write one task in the box.
 - Press Run, then Confirm. The confirm card says the run spends money.
-- Own worktree is on by default: the lane works in `<project folder>-mr-<lane>` beside your project, on its own queue branch, so several lanes can work at once and your folder is never touched. Each task is committed there when your project's tests pass.
+- Own worktree is on by default: the lane works in `<project folder>/.worktrees/<lane>` inside your project, on its own queue branch, so several lanes can work at once and your folder is never touched. Each task is committed there when your project's tests pass.
 - With Own worktree off, one task runs in your project folder itself. The runner then makes no branch, writes no recording, and does not run your tests.
 - For several tasks, put a line with only `---` between them. The button reads `Run N tasks in order`. A queue needs a clean git folder: commit or stash first.
 - To give several tasks to different lanes, turn on `One lane per task`. The button reads `Run N tasks on N lanes`. The confirm card lists each task with the idle lane it goes to, and each run starts in its own worktree. The button refuses when there are fewer idle lanes than tasks.
@@ -246,7 +246,7 @@ A lane is one agent. On this repository, each lane has its own worktree and bran
 - Record an outcome. `npm run outcome -- <branch> merged --grade A-` records how a lane run ended. `npm run run-lane -- --outcomes [--since YYYY-MM-DD]` prints the merge table.
 - See it in the room. With `--lanes`, the room draws a run live as its log grows, with its reads and writes on the project's cards, and turns the lane green or red when the run ends. A run on a brief also writes a recording under `public/recordings/` and prints `room: /?recording=<name>`.
 - Try a lane's build beside the stable room. `npm run candidate -- <lane>` builds that worktree and serves it on port 5175, with its own bridge. Leave the stable room running and compare the two. It refuses a lane with no worktree, a worktree with uncommitted changes, and a port in use. See `docs/agents/CANDIDATE.md`.
-- Clean up the worktrees a project leaves. `npm run worktrees -- --project <folder>` lists each `<project folder>-mr-<lane>` with its branch, commits ahead of the project's branch, uncommitted changes and whether it is merged. Add `--clean` to remove only the clean merged ones. It never deletes a branch and never forces a removal. It leaves a lane whose lock file names a live process.
+- Clean up the worktrees a project leaves. `npm run worktrees -- --project <folder>` lists each `<project folder>/.worktrees/<lane>` with its branch, commits ahead of the project's branch, uncommitted changes and whether it is merged. Add `--clean` to remove only the clean merged ones. It never deletes a branch and never forces a removal. It leaves a lane whose lock file names a live process.
 - Review and merge. Press `C`, open Reviews. Each lane shows its branch, commits ahead, files and last run; click it for the diff. Merge is offered on a lane with commits ahead and no uncommitted changes, after a confirm card with a one-line message. The bridge merges one lane at a time, needs the main checkout on main with no uncommitted changes, a clean lane and the lane's exact head, stops on a conflict and leaves main as it was. It never pushes.
 
 ## Run a lane from a terminal
@@ -262,7 +262,7 @@ Add `--dry-run` to print the program, its arguments and the folder, and start no
 
 The runner refuses the MachineRoom checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. It runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
 
-Add `--worktree` to run in a git worktree of the project instead of the project itself. The runner puts the worktree beside the project at `<parent of the project>/<project folder name>-mr-<lane>`. It makes the worktree from the project's HEAD when it is missing, and reuses it when it is there and clean. It refuses a worktree with uncommitted changes and names its path. When the project has `node_modules`, the worktree gets a junction to it on Windows or a symlink elsewhere. A queue with `--worktree` makes its branch in the worktree. The run's record names the worktree as the project, so a room started on the project still shows the run. `--dry-run` prints the worktree path and whether it would be made.
+Add `--worktree` to run in a git worktree of the project instead of the project itself. The runner puts the worktree inside the project at `<project>/.worktrees/<lane>` and adds `/.worktrees/` to the project's `.git/info/exclude`, so git, the project's own files and the room's file tree leave it out and nothing in the project's tracked files changes. It makes the worktree from the project's HEAD when it is missing, and reuses it when it is there and clean. It refuses a worktree with uncommitted changes and names its path. When the project has `node_modules`, the worktree gets a junction to it on Windows or a symlink elsewhere. A queue with `--worktree` makes its branch in the worktree. The run's record names the worktree as the project, so a room started on the project still shows the run. `--dry-run` prints the worktree path and whether it would be made.
 
 To run a queue of tasks on that folder, write them in a plain text file with a line that holds only `---` between them, then:
 

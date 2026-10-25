@@ -182,7 +182,7 @@ export function projectWorktreeName(project, lane) {
   const cut = Math.max(folder.lastIndexOf('/'), folder.lastIndexOf('\\'))
   const name = (cut === -1 ? folder : folder.slice(cut + 1)).trim()
   if (!name || name === '.' || name === '..' || /^[a-zA-Z]:$/.test(name)) return ''
-  return `${name}-mr-${key}`
+  return `${name}/.worktrees/${key}`
 }
 
 export function projectRunBody({ task, tasks, allowDirty, worktree } = {}) {

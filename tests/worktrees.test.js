@@ -67,11 +67,12 @@ function makeProject(prefix) {
   writeFileSync(join(project, 'notes.txt'), 'one\n')
   git(project, ['add', 'notes.txt'])
   git(project, ['commit', '-m', 'first'])
+  writeFileSync(join(project, '.git', 'info', 'exclude'), '/.worktrees/\n')
   return { base, project }
 }
 
 function addWorktree(project, base, lane, branch) {
-  const path = join(base, `sample-mr-${lane}`)
+  const path = join(project, '.worktrees', lane)
   git(project, ['worktree', 'add', '-b', branch, path])
   return path
 }
@@ -111,12 +112,12 @@ describe('parseWorktreeList', () => {
       'HEAD aaaaaaa',
       'branch refs/heads/main',
       '',
-      'worktree C:/Work/sample-mr-opencode8',
+      'worktree C:/Work/sample/.worktrees/opencode8',
       'HEAD bbbbbbb',
       'branch refs/heads/feat/w7',
       'locked another reason',
       '',
-      'worktree C:/Work/sample-mr-hermes',
+      'worktree C:/Work/sample/.worktrees/hermes',
       'HEAD ccccccc',
       'detached',
       'prunable gitdir file points to non-existent location',
@@ -135,7 +136,7 @@ describe('parseWorktreeList', () => {
         prunableReason: '',
       },
       {
-        path: 'C:/Work/sample-mr-opencode8',
+        path: 'C:/Work/sample/.worktrees/opencode8',
         head: 'bbbbbbb',
         branch: 'feat/w7',
         detached: false,
@@ -146,7 +147,7 @@ describe('parseWorktreeList', () => {
         prunableReason: '',
       },
       {
-        path: 'C:/Work/sample-mr-hermes',
+        path: 'C:/Work/sample/.worktrees/hermes',
         head: 'ccccccc',
         branch: '',
         detached: true,
@@ -166,15 +167,15 @@ describe('parseWorktreeList', () => {
 
 describe('worktreeLane', () => {
   it('takes the lane from a folder beside the project', () => {
-    expect(worktreeLane('/work/sample', '/work/sample-mr-opencode8', { platform: 'linux' })).toBe('opencode8')
-    expect(worktreeLane('C:\\Work\\Sample\\', 'C:\\Work\\Sample-mr-hermes', { platform: 'win32' })).toBe('hermes')
+    expect(worktreeLane('/work/sample', '/work/sample/.worktrees/opencode8', { platform: 'linux' })).toBe('opencode8')
+    expect(worktreeLane('C:\\Work\\Sample\\', 'C:\\Work\\sample\\.worktrees\\hermes', { platform: 'win32' })).toBe('hermes')
   })
 
   it('leaves a folder that is not a lane worktree of this project', () => {
-    expect(worktreeLane('/work/sample', '/work/other-mr-hermes', { platform: 'linux' })).toBe('')
-    expect(worktreeLane('/work/sample', '/work/sample-mr-', { platform: 'linux' })).toBe('')
+    expect(worktreeLane('/work/sample', '/work/other/.worktrees/hermes', { platform: 'linux' })).toBe('')
+    expect(worktreeLane('/work/sample', '/work/sample/.worktrees/', { platform: 'linux' })).toBe('')
     expect(worktreeLane('/work/sample', '/work/sample', { platform: 'linux' })).toBe('')
-    expect(worktreeLane('C:\\Work\\sample', 'C:\\Work\\Sample-mr-hermes', { platform: 'linux' })).toBe('')
+    expect(worktreeLane('C:\\Work\\sample', 'C:\\Work\\Sample\\.worktrees\\hermes', { platform: 'linux' })).toBe('')
   })
 })
 
@@ -217,20 +218,20 @@ describe('worktreeLine', () => {
   it('prints the lane, path, branch, ahead count, changes and merge state', () => {
     expect(worktreeLine({
       lane: 'opencode8',
-      path: 'C:\\Work\\sample-mr-opencode8',
+      path: 'C:\\Work\\sample\\.worktrees\\opencode8',
       branch: 'feat/w7',
       ahead: 2,
       dirty: false,
       merged: false,
-    })).toBe('opencode8 | C:\\Work\\sample-mr-opencode8 | feat/w7 | 2 ahead | clean | not merged')
+    })).toBe('opencode8 | C:\\Work\\sample\\.worktrees\\opencode8 | feat/w7 | 2 ahead | clean | not merged')
     expect(worktreeLine({
       lane: 'hermes',
-      path: '/work/sample-mr-hermes',
+      path: '/work/sample/.worktrees/hermes',
       branch: 'detached',
       ahead: 0,
       dirty: true,
       merged: true,
-    })).toBe('hermes | /work/sample-mr-hermes | detached | 0 ahead | uncommitted changes | merged')
+    })).toBe('hermes | /work/sample/.worktrees/hermes | detached | 0 ahead | uncommitted changes | merged')
   })
 
   it('says removed or why it was left', () => {
@@ -276,7 +277,7 @@ describe('the lane worktrees of a real project', () => {
     expect(listed.branch).toBe('main')
     expect(listed.worktrees.map((row) => row.lane)).toEqual(['ahead', 'clean', 'dirty'])
     expect(listed.worktrees.find((row) => row.lane === 'clean')).toMatchObject({
-      path: join(base, 'sample-mr-clean'),
+      path: join(project, '.worktrees', 'clean'),
       branch: 'feat/clean',
       ahead: 0,
       dirty: false,
@@ -305,7 +306,7 @@ describe('the lane worktrees of a real project', () => {
     expect(git(project, ['rev-parse', '--verify', '--quiet', 'refs/heads/feat/clean']).trim()).toHaveLength(40)
     expect(git(project, ['rev-parse', '--verify', '--quiet', 'refs/heads/feat/dirty']).trim()).toHaveLength(40)
     expect(git(project, ['rev-parse', '--verify', '--quiet', 'refs/heads/feat/ahead']).trim()).toHaveLength(40)
-    expect(git(project, ['worktree', 'list', '--porcelain'])).not.toContain('sample-mr-clean')
+    expect(git(project, ['worktree', 'list', '--porcelain'])).not.toContain('.worktrees/clean')
   }, 60000)
 
   it('removes a clean worktree whose node_modules link is a junction and keeps the project modules', () => {

@@ -4,6 +4,7 @@ import { lstatSync, readFileSync, rmdirSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 
 export const USAGE = 'Use: npm run worktrees -- --project FOLDER [--clean] [--json]'
@@ -98,14 +99,15 @@ function folderName(value) {
 }
 
 export function worktreeLane(project, worktree, { platform = process.platform } = {}) {
-  const name = folderName(project)
-  const folder = folderName(worktree)
-  if (!name || !folder) return ''
-  const prefix = `${name}-mr-`
-  const start = folder.slice(0, prefix.length)
-  const matches = platform === 'win32' ? start.toLowerCase() === prefix.toLowerCase() : start === prefix
+  const trim = (value) => String(value ?? '').trim().replace(/[\\/]+$/, '').replace(/\\/g, '/')
+  const home = `${trim(project)}/${WORKTREES_FOLDER}/`
+  const path = trim(worktree)
+  if (!trim(project) || !path) return ''
+  const start = path.slice(0, home.length)
+  const matches = platform === 'win32' ? start.toLowerCase() === home.toLowerCase() : start === home
   if (!matches) return ''
-  return folder.slice(prefix.length)
+  const lane = path.slice(home.length)
+  return lane && !lane.includes('/') ? lane : ''
 }
 
 export function statusChanges(text) {

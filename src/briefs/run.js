@@ -237,12 +237,11 @@ export function worktreeFor(project, lane) {
   const folder = String(project ?? '').trim().replace(/[\\/]+$/, '')
   const key = String(lane ?? '').trim()
   if (!folder || !key || /^[a-zA-Z]:$/.test(folder)) return ''
-  const cut = Math.max(folder.lastIndexOf('/'), folder.lastIndexOf('\\'))
-  const name = cut === -1 ? folder : folder.slice(cut + 1)
-  if (!name) return ''
-  const parent = cut === -1 ? '' : folder.slice(0, cut + 1)
-  return `${parent}${name}-mr-${key}`
+  const sep = folder.includes('\\') ? '\\' : '/'
+  return `${folder}${sep}${WORKTREES_FOLDER}${sep}${key}`
 }
+
+export const WORKTREES_FOLDER = '.worktrees'
 
 export function worktreeProblems({ worktree, project } = {}) {
   if (worktree !== true) return []

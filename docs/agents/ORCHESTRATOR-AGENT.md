@@ -81,7 +81,7 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 ## When a run ends
 
 - Read its record in `{{RUNS}}/runs.jsonl` and its log.
-- The record's project is the worktree. Its path is beside {{PROJECT}}, with `-mr-<lane>` added to the project folder's name.
+- The record's project is the worktree. Its path is `.worktrees/<lane>` inside {{PROJECT}}.
 - The record's `queue` field names the branch the queue made.
 - On a project with no `.git`, there is no worktree and no branch to rebase or merge. Read what changed in the project folder, run the tests there, and report it.
 - Check the branch in that worktree:

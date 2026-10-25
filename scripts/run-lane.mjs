@@ -3,11 +3,11 @@ import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, childEnvironment, commandFor, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor } from '../src/briefs/run.js'
+import { briefProblems, childEnvironment, commandFor, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -119,9 +119,26 @@ function linkNodeModules(project, worktree) {
   }
 }
 
+export function excludeWorktrees(project) {
+  const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: project, encoding: 'utf8', windowsHide: true })
+  const common = String(found.stdout ?? '').trim()
+  if (found.status !== 0 || !common) return
+  const file = join(isAbsolute(common) ? common : join(project, common), 'info', 'exclude')
+  const line = `/${WORKTREES_FOLDER}/`
+  let text = ''
+  try {
+    text = readFileSync(file, 'utf8')
+  } catch {}
+  if (text.split(/\r?\n/).some((entry) => entry.trim() === line)) return
+  mkdirSync(dirname(file), { recursive: true })
+  appendFileSync(file, `${text && !text.endsWith('\n') ? '\n' : ''}${line}\n`)
+}
+
 export function prepareWorktree(project, lane) {
   const plan = worktreePlan(project, lane)
+  excludeWorktrees(project)
   if (plan.made) {
+    mkdirSync(dirname(plan.path), { recursive: true })
     const result = spawnSync(gitPath(), ['worktree', 'add', '--detach', plan.path, 'HEAD'], {
       cwd: project,
       encoding: 'utf8',

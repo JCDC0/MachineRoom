@@ -103,7 +103,7 @@ function makeProject({ detach = false } = {}) {
   const base = makeTempDir()
   const room = join(base, 'room')
   const project = join(base, 'project')
-  const worktree = join(base, 'project-mr-opencode')
+  const worktree = join(project, '.worktrees', 'opencode')
   const lanes = {
     opencode: { name: 'OpenCode' },
     hermes: { name: 'Hermes', worktree: room },
@@ -113,6 +113,7 @@ function makeProject({ detach = false } = {}) {
   cpSync(templateRoom, room, { recursive: true })
   cpSync(templateProject, project, { recursive: true })
   writeFileSync(join(room, 'docs', 'agents', 'lanes.json'), JSON.stringify(lanes))
+  writeFileSync(join(project, '.git', 'info', 'exclude'), '/.worktrees/\n')
   git(project, ['worktree', 'add', ...(detach ? ['--detach'] : []), worktree, 'feat/x'])
 
   return { base, room, project, worktree, briefsDir: join(room, 'docs', 'agents') }
