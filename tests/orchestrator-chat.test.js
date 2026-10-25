@@ -376,6 +376,8 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('Ask the orchestrator anything')
     expect(html).toContain('class="mr-orch-form hud-lower-input"')
     expect(html).toContain('class="hud-strip-model"')
+    expect(html).toContain('title="Refresh models"')
+    expect(html).toContain('class="mr-model-refresh"')
     expect(html).toContain('class="hud-strip-effort"')
     expect(html).toContain('class="hud-strip-compact"')
     expect(html).toContain('Model:')

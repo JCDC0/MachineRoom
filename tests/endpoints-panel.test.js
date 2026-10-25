@@ -83,11 +83,11 @@ describe('EndpointsPanel', () => {
     expect(html).toContain('2 models')
     expect(html).toContain('OpenRouter Work')
     expect(html).toContain('key slot openrouter')
-    expect(html).toContain('Fetch models')
+    expect(html).toContain('Refresh models')
     expect(html).toContain('Delete')
   })
 
-  it('shows the Add endpoint form with the provider preset, key slot picker and fetch button', () => {
+  it('shows the Add endpoint form with the provider preset, key slot picker and refresh button', () => {
     const html = renderPanel({ initialOpen: true, initialKeys: ['openrouter', 'local'] })
     expect(html).toContain('id="endpoints-provider"')
     expect(html).toContain('https://openrouter.ai/api/v1')

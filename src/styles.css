@@ -8947,3 +8947,129 @@ body:has(#hud-orchestrator-chat) .waiting {
 .mr-ladder .mr-orch-confirm {
   padding: 6px;
 }
+
+/* U47: one refresh button and one search field for every model picker. */
+.mr-model-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mr-model-row .mr-side-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mr-model-empty {
+  flex: 1 1 auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.mr-model-refresh {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(255 255 255 / 0.6);
+  cursor: pointer;
+}
+
+.mr-model-refresh:hover:not(:disabled) {
+  border-color: var(--white);
+  color: var(--white);
+}
+
+.mr-model-refresh:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.mr-model-refresh.is-spinning svg {
+  animation: mr-model-spin 0.8s linear infinite;
+}
+
+.mr-model-error {
+  margin: 2px 0 0;
+  font-size: 9px;
+  line-height: 1.35;
+  color: var(--red);
+}
+
+.mr-model-pop-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+
+.mr-model-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: 3px;
+  background: #1b1b1b;
+  color: var(--white);
+  font-size: 10px;
+}
+
+.mr-model-search:focus {
+  border-color: var(--yellow);
+  outline: none;
+}
+
+.mr-model-group {
+  margin: 6px 0 2px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.4);
+}
+
+.mr-model-choice {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.mr-model-choice.is-current {
+  color: var(--yellow);
+}
+
+.mr-model-choice-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-model-choice-id {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.45);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes mr-model-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mr-model-refresh.is-spinning svg {
+    animation: none;
+  }
+}

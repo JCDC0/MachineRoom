@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ModelRefresh from './ModelRefresh.jsx'
 
 const NAME_PATTERN = /^[A-Za-z0-9 _-]{1,40}$/
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
@@ -75,6 +76,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   const [keyNames, setKeyNames] = useState(() => (Array.isArray(initialKeys) ? initialKeys : []))
   const [loading, setLoading] = useState(() => !Array.isArray(initialEndpoints))
   const [error, setError] = useState('')
+  const [modelsError, setModelsError] = useState('')
   const [note, setNote] = useState('')
   const [formOpen, setFormOpen] = useState(Boolean(initialOpen))
   const [name, setName] = useState('')
@@ -84,6 +86,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   const [modelText, setModelText] = useState('')
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [modelsBusy, setModelsBusy] = useState(false)
 
   async function loadData() {
     if (!client || typeof client.endpoints !== 'function') {
@@ -139,6 +142,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     setKeyName('')
     setModelText('')
     setError('')
+    setModelsError('')
     setNote('')
     setConfirm(null)
   }
@@ -228,15 +232,18 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       return
     }
     setBusy(true)
+    setModelsBusy(true)
     setError('')
+    setModelsError('')
     try {
       const models = await client.endpointModels(nameForFetch)
       setModelText(modelsText(models))
       setNote(`Fetched ${endpointCount(models)} for ${nameForFetch}.`)
     } catch (err) {
-      setError(err?.message || 'Could not fetch the models.')
+      setModelsError(err?.message || 'Could not fetch the models.')
     } finally {
       setBusy(false)
+      setModelsBusy(false)
     }
   }
 
@@ -246,6 +253,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       return
     }
     setBusy(true)
+    setModelsBusy(true)
     setError('')
     try {
       const models = await client.endpointModels(endpoint.name)
@@ -254,6 +262,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       setError(err?.message || 'Could not fetch the models.')
     } finally {
       setBusy(false)
+      setModelsBusy(false)
     }
   }
 
@@ -286,14 +295,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
             {endpoint.keyName ? ` // key slot ${endpoint.keyName}` : ' // no key'}
           </div>
           <div className="endpoints-actions">
-            <button
-              type="button"
-              className="hud-settings-switch"
-              disabled={busy}
-              onClick={() => askRowModels(endpoint)}
-            >
-              Fetch models
-            </button>
+            <ModelRefresh onRefresh={() => askRowModels(endpoint)} loading={modelsBusy} disabled={busy && !modelsBusy} />
             <button
               type="button"
               className="hud-settings-switch"
@@ -361,14 +363,11 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               onChange={(event) => setModelText(event.target.value)}
             />
             <div className="endpoints-actions">
-              <button
-                type="button"
-                className="hud-settings-switch"
+              <ModelRefresh
+                onRefresh={() => fetchModels(name.trim(), endpoints.some((entry) => entry.name === name.trim()))}
+                loading={modelsBusy}
                 disabled={busy || name.trim() === ''}
-                onClick={() => fetchModels(name.trim(), endpoints.some((entry) => entry.name === name.trim()))}
-              >
-                Fetch models
-              </button>
+              />
               <button type="button" className="hud-settings-switch" disabled={busy} onClick={askSave}>
                 Save
               </button>
@@ -376,6 +375,11 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
                 Cancel
               </button>
             </div>
+            {modelsError ? (
+              <p className="endpoints-error mono" role="alert">
+                {modelsError}
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
