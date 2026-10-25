@@ -1,5 +1,4 @@
 import * as THREE from 'three'
-import { SPHERE_CENTER } from './sphere.js'
 import { WHITE, YELLOW, glowTexture, seeded, still } from './sprites.js'
 
 const SEGMENTS = 16
@@ -96,7 +95,7 @@ function stringHash(str) {
   return h >>> 0
 }
 
-function linkIsLit(link, mask) {
+export function linkOnPath(link, mask) {
   if (!mask?.dimmed || !mask.lit) return false
   return mask.lit.has(link.from ?? '') && mask.lit.has(link.to ?? '')
 }
@@ -196,7 +195,7 @@ function travelStrand(strand, delta) {
   attr.needsUpdate = true
 }
 
-export function createStrings(scene, { onPath = () => false } = {}) {
+export function createStrings(scene) {
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()
   const glow = glowTexture()
@@ -247,11 +246,11 @@ export function createStrings(scene, { onPath = () => false } = {}) {
     let colorChanged = false
     for (let i = 0; i < ends.length; i += 1) {
       const link = ends[i]
-      if (link.from === null) from.copy(SPHERE_CENTER)
-      else from.copy(centerOf(link.from))
+      from.copy(centerOf(link.from))
       to.copy(centerOf(link.to))
 
-      const level = LINE_LEVEL + ((linkIsLit(link, mask) ? 1 : LINE_LEVEL * DIM_FACTOR) - LINE_LEVEL) * dimLevel
+      const onPath = linkOnPath(link, mask)
+      const level = LINE_LEVEL + ((onPath ? 1 : LINE_LEVEL * DIM_FACTOR) - LINE_LEVEL) * dimLevel
       if (lineLevels[i] !== level) {
         lineLevels[i] = level
         setLinkLevel(colors, i, level)
@@ -293,9 +292,9 @@ export function createStrings(scene, { onPath = () => false } = {}) {
     }
   }
 
-  function build(links, centerOf, anchor = true) {
+  function build(links, centerOf) {
     clear()
-    ends = anchor ? [{ from: null, to: '' }, ...links] : [...links]
+    ends = [...links]
     if (ends.length === 0) return
     const geometry = new THREE.BufferGeometry()
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(ends.length * SEGMENTS * 6), 3))
@@ -347,7 +346,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
         const now = performance.now()
         const delta = Math.min((now - lastTime) / 1000, 0.1)
         lastTime = now
-        const active = onPath(strand.link.to)
+        const active = linkOnPath(strand.link, currentMask)
         const isStill = still()
         if (isStill) {
           strand.yellowLevel = active ? 1 : 0
@@ -357,7 +356,7 @@ export function createStrings(scene, { onPath = () => false } = {}) {
           strand.yellowLevel = Math.max(0, strand.yellowLevel - delta / 1.5)
         }
         if (active && !isStill) travelStrand(strand, delta)
-        const lit = linkIsLit(strand.link, currentMask)
+        const lit = active
         if (strand.paintedYellow === strand.yellowLevel && strand.paintedLit === lit && strand.paintedDim === dimLevel) return
         strand.paintedYellow = strand.yellowLevel
         strand.paintedLit = lit

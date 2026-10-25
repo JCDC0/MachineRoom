@@ -826,7 +826,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     for (const card of cards.values()) {
       if (card.path === '' || card.leaving) continue
       if (!card.path.includes('/')) {
-        links.push({ from: null, to: card.path })
+        links.push({ from: '', to: card.path })
         continue
       }
       const parent = cards.get(dirname(card.path)) ?? nearestCard(dirname(card.path))
