@@ -357,6 +357,22 @@ export function createClient({
 
     lanes: () => request('GET', '/api/lanes'),
 
+    harnesses: () => request('GET', '/api/harnesses'),
+
+    createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
+      request('POST', '/api/lanes/create', { name, harness, model, effort, confirmed }),
+
+    updateLane: ({ key, name, model, effort, confirmed = true } = {}) => {
+      const body = { confirmed }
+      if (name !== undefined) body.name = name
+      if (model !== undefined) body.model = model
+      if (effort !== undefined) body.effort = effort
+      return request('POST', `/api/lanes/${encodeURIComponent(key ?? '')}/update`, body)
+    },
+
+    deleteLane: ({ key, confirmed = true } = {}) =>
+      request('POST', `/api/lanes/${encodeURIComponent(key ?? '')}/delete`, { confirmed }),
+
     setActiveLanes: (optionsOrLanes, maybeConfirmed) => {
       let lanes
       let confirmed = true

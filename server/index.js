@@ -8,6 +8,7 @@ import { gzip as gzipCallback } from 'node:zlib'
 import { createSplitMasker } from '../src/briefs/audit.js'
 import { createUnreadableCounter } from '../src/model/parsers/unreadable.js'
 import { createActiveLanesApi } from './active-lanes.js'
+import { createAgentsConfigApi } from './agents-config.js'
 import { createAssistantApi } from './assistant.js'
 import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
@@ -369,6 +370,23 @@ export function createBridge(options = {}) {
     sendJson,
     readJsonBody,
   })
+  const agentsConfig = createAgentsConfigApi({
+    runsFolder: resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
+    projectRoot,
+    lanes: () => (lanesSourceOn ? lanesConfig : readLanes()),
+    activeLanes: () => activeLanes,
+    isWorking: (key) => {
+      const fromSource = lanesSource ? lanesSource.openRuns().some((r) => r.lane === key) : false
+      const fromRuns = runs && typeof runs.isRunning === 'function' ? runs.isRunning(key) : false
+      return fromSource || fromRuns
+    },
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
+    sendJson,
+    readJsonBody,
+    env,
+  })
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
   if (lanesSourceOn) {
@@ -681,6 +699,7 @@ export function createBridge(options = {}) {
 
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (await briefs.handle(req, res, url)) return
+    if (await agentsConfig.handle(req, res, url)) return
     if (await activeLanes.handle(req, res, url)) return
     if (await runs.handle(req, res, url)) return
     if (await reviews.handle(req, res, url)) return

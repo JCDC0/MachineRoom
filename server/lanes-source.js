@@ -5,7 +5,10 @@ import { dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
+import { readAllLanes } from './agents-config.js'
 import { gitPath } from './programPath.js'
+
+export { readAllLanes }
 
 const DEFAULT_QUIET_MS = 10 * 60 * 1000
 const DEFAULT_POLL_MS = 200
@@ -244,10 +247,14 @@ function subOf(name) {
 export function createLanesSource(options = {}) {
   const folder = resolve(options.folder ?? runsFolder())
   const recordsFile = resolve(options.recordsFile ?? join(folder, 'runs.jsonl'))
-  const lanes = options.lanes ?? readLanes()
-  const subOrchestrators = typeof options.subOrchestrators === 'function' ? options.subOrchestrators : () => []
-  const roomRoot = options.projectRoot ? resolve(options.projectRoot) : ''
   const repoRoot = resolve(options.repoRoot ?? REPO_ROOT)
+  const roomRoot = options.projectRoot ? resolve(options.projectRoot) : ''
+  function currentLanes() {
+    if (typeof options.lanes === 'function') return options.lanes()
+    if (options.lanes) return options.lanes
+    return readAllLanes({ folder: repoRoot, runsFolder: folder })
+  }
+  const subOrchestrators = typeof options.subOrchestrators === 'function' ? options.subOrchestrators : () => []
   const worktreeRoots = new Set([pathKey(repoRoot)])
   const mainCheckout = mainCheckoutOf(repoRoot)
   if (mainCheckout) worktreeRoots.add(pathKey(mainCheckout))
@@ -277,7 +284,7 @@ export function createLanesSource(options = {}) {
   }
 
   function agentsNow() {
-    const list = laneAgents(lanes)
+    const list = laneAgents(currentLanes())
     let subs = []
     try {
       subs = subOrchestrators() ?? []
@@ -285,7 +292,7 @@ export function createLanesSource(options = {}) {
       subs = []
     }
     for (const sub of Array.isArray(subs) ? subs : []) {
-      const agent = subOrchestratorAgent(sub, lanes)
+      const agent = subOrchestratorAgent(sub, currentLanes())
       if (agent && !list.some((item) => item.key === agent.key)) list.push(agent)
     }
     return list
@@ -294,7 +301,7 @@ export function createLanesSource(options = {}) {
   function agentFor(name, map) {
     const sub = subOf(name)
     if (sub) return map.get(sub) ?? null
-    const lane = laneOf(name, lanes)
+    const lane = laneOf(name, currentLanes())
     return lane ? map.get(lane) ?? null : null
   }
 
@@ -321,7 +328,7 @@ export function createLanesSource(options = {}) {
       decoder: new StringDecoder('utf8'),
       skipLine: false,
       feed: createRunLineReader(agent.parser),
-      rewrite: keepPaths ? (line) => line : rewriter(project || lanes[agent.key]?.worktree, roomRoot),
+      rewrite: keepPaths ? (line) => line : rewriter(project || currentLanes()[agent.key]?.worktree, roomRoot),
       startedAt,
       lastGrowth: startedAt,
     }

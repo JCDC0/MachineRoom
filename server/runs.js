@@ -8,6 +8,7 @@ import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems } from 
 import { outcomeTable } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
+import { readAllLanes } from './lanes-source.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
@@ -232,17 +233,18 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     notify({ topic: 'runs' })
   }
 
-  function startRun(lane, briefs, projectRun = null, startedBy = '') {
+  function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '') {
     const entry = { lane, briefs: [...briefs], startedAt: new Date().toISOString(), lastLines: [] }
     if (projectRun?.queue) {
       entry.queue = true
       entry.tasks = projectRun.taskCount
     }
     const startedArgs = startedBy ? ['--started-by', startedBy] : []
+    const reasoningArgs = reasoning ? ['--reasoning', reasoning] : []
     const item = { entry, tail: '' }
     const args = projectRun
       ? projectRun.queue
-        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...startedArgs]
+        ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...startedArgs, ...reasoningArgs]
         : [
             ...command.args,
             lane,
@@ -253,6 +255,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
             ...(projectRun.worktree ? ['--worktree'] : []),
             ...(projectRun.allowDirty ? ['--allow-dirty'] : []),
             ...startedArgs,
+            ...reasoningArgs,
           ]
       : [...command.args, lane, ...briefs, ...startedArgs]
     const child = spawn(command.file, args, {
@@ -355,18 +358,32 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       sendJson(req, res, 400, { error: BRIEF_PROJECT_PROBLEM })
       return true
     }
-    const lanesText = projectRun ? readPath(laneFile) : readText('lanes.json')
-    const tasksText = projectRun ? null : readText('TASKS.md')
-    if (lanesText === null || (!projectRun && tasksText === null)) {
-      sendJson(req, res, 404, { error: 'The brief files are missing.' })
-      return true
-    }
-
     let lanes
-    try {
-      lanes = JSON.parse(lanesText)
-    } catch {
-      lanes = null
+    let tasksText = null
+    if (projectRun) {
+      const lanesText = readPath(laneFile)
+      if (lanesText === null) {
+        sendJson(req, res, 404, { error: 'The brief files are missing.' })
+        return true
+      }
+      try {
+        const base = JSON.parse(lanesText)
+        lanes = readAllLanes({ lanesJson: base, runsFolder: recordsDir() })
+      } catch {
+        lanes = null
+      }
+    } else {
+      const lanesText = readText('lanes.json')
+      tasksText = readText('TASKS.md')
+      if (lanesText === null || tasksText === null) {
+        sendJson(req, res, 404, { error: 'The brief files are missing.' })
+        return true
+      }
+      try {
+        lanes = JSON.parse(lanesText)
+      } catch {
+        lanes = null
+      }
     }
     if (!lanes || typeof lanes !== 'object' || Array.isArray(lanes)) {
       sendJson(req, res, 400, { error: 'The lane file is not valid.' })
@@ -529,13 +546,16 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
 
     let entry
     try {
+      const laneConfig = lanes[lane]
+      const reasoning = laneConfig?.effort || ''
       entry = startRun(
         lane,
         briefs,
         projectRun
           ? { project: resolvedRoot, task, allowDirty, queue: queueFile, taskCount, worktree }
           : null,
-        startedBy
+        startedBy,
+        reasoning
       )
     } catch {
       sendJson(req, res, 500, { error: 'The bridge could not start that run.' })

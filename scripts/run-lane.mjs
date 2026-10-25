@@ -11,6 +11,7 @@ import { briefProblems, childEnvironment, commandFor, DEFAULT_MINUTES, filterRun
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
+import { readAllLanes } from '../server/lanes-source.js'
 import { acpRunCommand } from './acp-run.mjs'
 import { releaseLaneLock, takeLaneLock } from './lane-lock.mjs'
 import { writeRecording } from './recording-files.mjs'
@@ -570,7 +571,8 @@ async function main() {
   const lanesPath = process.env.MACHINEROOM_LANES_FILE
     ? resolve(process.env.MACHINEROOM_LANES_FILE)
     : join(docs, 'lanes.json')
-  const lanes = JSON.parse(readFileSync(lanesPath, 'utf8'))
+  const lanesJson = JSON.parse(readFileSync(lanesPath, 'utf8'))
+  const lanes = readAllLanes({ lanesJson, runsFolder: runsFolder() })
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
   const lane = laneWithOverrides(lanes[options.lane], options)
   lanes[options.lane] = lane
@@ -623,6 +625,11 @@ async function main() {
       releaseLaneLock(lock)
       releaseLaneLock(projectLock)
     }
+  }
+
+  if (!Object.hasOwn(lanesJson, options.lane)) {
+    console.log(`The lane ${options.lane} is not in lanes.json.`)
+    return 1
   }
 
   const briefs = parseBriefs(read('TASKS.md'))

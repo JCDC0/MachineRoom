@@ -130,9 +130,9 @@ describe('active lanes route', () => {
     expect(body.chosen).toBe(false)
     expect(body.max).toBe(3)
     expect(body.lanes).toEqual([
-      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
-      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
-      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', active: true, working: false },
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
+      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
+      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: true, working: false },
     ])
   })
 

@@ -44,6 +44,10 @@ export const CLIENT_METHODS = [
   'setLadder',
   'startRun',
   'lanes',
+  'harnesses',
+  'createLane',
+  'updateLane',
+  'deleteLane',
   'setActiveLanes',
   'reviews',
   'reviewDiff',
@@ -304,11 +308,11 @@ function seed(at) {
       { id: 'agent-opencode4', key: 'opencode4', name: 'OpenCode 4', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
     ],
     lanes: [
-      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', active: true, working: false },
-      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: true },
-      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
-      { key: 'opencode3', name: 'OpenCode 3', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
-      { key: 'opencode4', name: 'OpenCode 4', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
+      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: true, working: false },
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: true },
+      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
+      { key: 'opencode3', name: 'OpenCode 3', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
+      { key: 'opencode4', name: 'OpenCode 4', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
     ],
     chosenLanes: false,
     issues: [
@@ -1223,6 +1227,131 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         max: state.lanes.length,
         chosen: Boolean(state.chosenLanes),
       })),
+
+    harnesses: () =>
+      call('harnesses', () => [
+        {
+          key: 'claude',
+          name: 'Claude Code',
+          available: true,
+          models: [
+            { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
+            { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5' },
+          ],
+          efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        },
+        {
+          key: 'opencode',
+          name: 'OpenCode',
+          available: true,
+          models: [
+            { id: 'opencode/deepseek-v4.1-flash-free', label: 'DeepSeek v4.1 Flash (free)' },
+            { id: 'opencode-go/qwen3.8-flash', label: 'Qwen 3.8 Flash' },
+          ],
+          efforts: ['low', 'medium', 'high', 'max'],
+        },
+        {
+          key: 'agy',
+          name: 'AGY',
+          available: false,
+          models: [],
+          efforts: [],
+        },
+        {
+          key: 'acp',
+          name: 'ACP',
+          available: false,
+          models: [],
+          efforts: [],
+        },
+      ]),
+
+    createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
+      call('createLane', () => {
+        if (confirmed !== true) throw new Error('Confirm creating the lane first.')
+        const cleanName = typeof name === 'string' ? name.trim() : ''
+        if (!cleanName || cleanName.length > 40) throw new Error('The lane name must be 1 to 40 characters.')
+        const harnessList = [
+          { key: 'claude', available: true, models: ['claude-haiku-5-5', 'claude-sonnet-5-5'], efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+          { key: 'opencode', available: true, models: ['opencode/deepseek-v4.1-flash-free', 'opencode-go/qwen3.8-flash'], efforts: ['low', 'medium', 'high', 'max'] },
+          { key: 'agy', available: false, models: [], efforts: [] },
+          { key: 'acp', available: false, models: [], efforts: [] },
+        ]
+        const found = harnessList.find((h) => h.key === harness)
+        if (!found || !found.available) throw new Error(`The harness ${harness} is not available on this computer.`)
+        if (!found.models.includes(model)) throw new Error(`The model ${model} is not available for ${harness}.`)
+        if (effort && !found.efforts.includes(effort)) throw new Error(`The effort ${effort} is not available for ${harness}.`)
+        const customCount = state.lanes.filter((l) => l.custom === true).length
+        if (customCount >= 30) throw new Error('At most 30 custom agents are allowed.')
+        const prefix = `${harness}-`
+        const regex = new RegExp(`^${harness}-?(\\d+)$`)
+        const taken = new Set()
+        for (const l of state.lanes) {
+          if (l.key === harness) taken.add(1)
+          const m = regex.exec(l.key)
+          if (m) taken.add(Number(m[1]))
+        }
+        let n = 1
+        while (taken.has(n) || state.lanes.some((l) => l.key === `${prefix}${n}`)) n += 1
+        const key = `${prefix}${n}`
+        const entry = {
+          key,
+          name: cleanName,
+          harness,
+          model,
+          effort: effort || null,
+          custom: true,
+          active: true,
+          working: false,
+          createdAt: new Date().toISOString(),
+        }
+        state.lanes.push(entry)
+        emit({ topic: 'agents' })
+        return { ...entry }
+      }),
+
+    updateLane: ({ key, name, model, effort, confirmed = true } = {}) =>
+      call('updateLane', () => {
+        if (confirmed !== true) throw new Error('Confirm updating the lane first.')
+        const lane = state.lanes.find((l) => l.key === key)
+        if (!lane) throw new Error(`The lane ${key} was not found.`)
+        if (lane.custom !== true) throw new Error(`The lane ${key} comes from lanes.json and cannot be updated.`)
+        const harnessList = [
+          { key: 'claude', available: true, models: ['claude-haiku-5-5', 'claude-sonnet-5-5'], efforts: ['low', 'medium', 'high', 'xhigh', 'max'] },
+          { key: 'opencode', available: true, models: ['opencode/deepseek-v4.1-flash-free', 'opencode-go/qwen3.8-flash'], efforts: ['low', 'medium', 'high', 'max'] },
+          { key: 'agy', available: false, models: [], efforts: [] },
+          { key: 'acp', available: false, models: [], efforts: [] },
+        ]
+        const found = harnessList.find((h) => h.key === lane.harness)
+        if (name !== undefined) {
+          const cleanName = String(name).trim()
+          if (!cleanName || cleanName.length > 40) throw new Error('The lane name must be 1 to 40 characters.')
+          lane.name = cleanName
+        }
+        if (model !== undefined) {
+          if (!found || !found.models.includes(model)) throw new Error(`The model ${model} is not available for ${lane.harness}.`)
+          lane.model = model
+        }
+        if (effort !== undefined) {
+          if (effort && (!found || !found.efforts.includes(effort))) throw new Error(`The effort ${effort} is not available for ${lane.harness}.`)
+          lane.effort = effort || null
+        }
+        emit({ topic: 'agents' })
+        return { ...lane }
+      }),
+
+    deleteLane: ({ key, confirmed = true } = {}) =>
+      call('deleteLane', () => {
+        if (confirmed !== true) throw new Error('Confirm deleting the lane first.')
+        const idx = state.lanes.findIndex((l) => l.key === key)
+        if (idx === -1) throw new Error(`The lane ${key} was not found.`)
+        const lane = state.lanes[idx]
+        if (lane.custom !== true) throw new Error('A lane from lanes.json cannot be deleted; make it inactive instead.')
+        if (lane.working === true) throw new Error(`The lane ${key} is running.`)
+        state.lanes.splice(idx, 1)
+        emit({ topic: 'agents' })
+        return { ok: true, deleted: key }
+      }),
 
     setActiveLanes: (optionsOrLanes, maybeConfirmed) =>
       call('setActiveLanes', () => {
