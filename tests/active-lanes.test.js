@@ -9,6 +9,7 @@ import {
   activeLanesFileFor,
   projectHash,
   readActiveLanesChoice,
+  writeActiveLanes,
 } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
@@ -120,6 +121,20 @@ describe('active lanes file and hash', () => {
     writeFileSync(file, JSON.stringify(['opencode', 'claude']))
     expect(readActiveLanesChoice(file)).toEqual(['opencode', 'claude'])
   })
+
+  it('reads an empty choice only from the lanes object and not a bare empty array', () => {
+    const runs = tempDir('mr-choice-')
+    const file = join(runs, 'active-lanes-sample.json')
+    writeFileSync(file, '[]')
+    expect(readActiveLanesChoice(file)).toBeNull()
+    writeFileSync(file, JSON.stringify({ lanes: [] }))
+    expect(readActiveLanesChoice(file)).toEqual([])
+    writeActiveLanes(file, [])
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ lanes: [] })
+    expect(readActiveLanesChoice(file)).toEqual([])
+    writeActiveLanes(file, ['opencode'])
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(['opencode'])
+  })
 })
 
 describe('active lanes route', () => {
@@ -158,15 +173,43 @@ describe('active lanes route', () => {
     expect(body.error).toBe(CONFIRM_ACTIVE_LANES_PROBLEM)
   })
 
-  it('refuses empty lanes list with 400', async () => {
+  it('refuses a lanes list that is not an array with 400', async () => {
     const { url } = await startTestBridge()
     const { status, body } = await getJson(`${url}/api/lanes/active`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin: url },
-      body: JSON.stringify({ lanes: [], confirmed: true }),
+      body: JSON.stringify({ lanes: 'opencode', confirmed: true }),
     })
     expect(status).toBe(400)
     expect(body.error).toBe(EMPTY_ACTIVE_LANES_PROBLEM)
+  })
+
+  it('saves an empty lanes list so the last active lane can be turned off', async () => {
+    const { url, projectRoot, runsFolder } = await startTestBridge()
+    const before = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lanes: ['opencode'], confirmed: true }),
+    })
+    expect(before.status).toBe(200)
+
+    const res = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lanes: [], confirmed: true }),
+    })
+    expect(res.status).toBe(200)
+    expect(res.body).toEqual({ ok: true, lanes: [] })
+
+    const file = activeLanesFileFor(projectRoot, runsFolder)
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ lanes: [] })
+
+    const lanes = await getJson(`${url}/api/lanes`)
+    expect(lanes.body.chosen).toBe(true)
+    expect(lanes.body.lanes.every((lane) => lane.active === false)).toBe(true)
+
+    const agents = await getJson(`${url}/api/agents`)
+    expect(agents.body.map((agent) => agent.key)).toEqual(['orchestrator'])
   })
 
   it('refuses repeated lane key with 400', async () => {

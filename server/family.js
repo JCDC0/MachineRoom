@@ -218,7 +218,7 @@ export function buildFamilyNodes({
 
   const laneNodes = []
   for (const lane of eligible) {
-    if (!activeChecker(lane.key)) continue
+    const active = Boolean(activeChecker(lane.key))
     const parentSub = subByLane.get(lane.key)
     const parentId = parentSub ? parentSub.id : ORCHESTRATOR_KEY
     if (parentSub) {
@@ -236,7 +236,7 @@ export function buildFamilyNodes({
       effort: lane.effort ?? null,
       parent: parentId,
       children: [],
-      active: true,
+      active,
       working,
       custom: lane.custom === true,
     })
