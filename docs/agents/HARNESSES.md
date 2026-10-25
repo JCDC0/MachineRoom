@@ -12,7 +12,7 @@ After H1 and H2, adding a harness means touching these:
 | `src/engine/shapes.js` | the wireframe shape per agent key |
 | `server/harnesses/<key>.js` (S7) | `createSessionsReader`, a reader of the harness's own session files (Claude Code and OpenCode today) |
 
-The parser maps in `src/live/source.js` and `src/ui/panels/dispatchModels.js` read `harnessByAdapter`. The UI lane lists read the registry and the agent list: `VALID_LANES` and `validLanes` in `src/ui/panels/briefs.js` read `docs/agents/lanes.json` and an agent list, and the project run lanes and route picker in `src/ui/panels/runs.js` and `src/ui/panels/route.js` read the agents `/api/agents` sends. The bridge puts each agent's parser in `/api/agents`, so `server/index.js` has no adapter map.
+The parser map in `src/live/source.js` reads `harnessByAdapter`. The UI lane lists read the registry and the agent list: `VALID_LANES` and `validLanes` in `src/ui/panels/briefs.js` read `docs/agents/lanes.json` and an agent list, and the project run lanes in `src/ui/panels/runs.js` read the agents `/api/agents` sends. The bridge puts each agent's parser in `/api/agents`, so `server/index.js` has no adapter map.
 
 ## The plan
 

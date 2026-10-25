@@ -7,10 +7,6 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
 
-  const [body, setBody] = useState('')
-  const [posting, setPosting] = useState(false)
-  const [postError, setPostError] = useState(null)
-
   async function loadComments({ isInitial = false } = {}) {
     if (isInitial) {
       setLoading(true)
@@ -43,30 +39,6 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
       loadComments()
     })
   }, [client, issue.id])
-
-  async function handlePost(event) {
-    event?.preventDefault?.()
-    if (!body.trim() || posting) return
-
-    setPosting(true)
-    setPostError(null)
-    try {
-      const newComment = await client.postComment(issue.id, body.trim())
-      setComments((prev) => [...prev, newComment])
-      setBody('')
-    } catch (err) {
-      setPostError(err.message || 'Could not post comment.')
-    } finally {
-      setPosting(false)
-    }
-  }
-
-  function handleKeyDown(event) {
-    if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
-      event.preventDefault()
-      handlePost()
-    }
-  }
 
   const assignee = agents.find((a) => a.id === issue.assigneeAgentId)
   const assigneeName = assignee?.name ?? 'Unassigned'
@@ -129,31 +101,6 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
           </div>
         )}
       </section>
-
-      <form className="thread-composer" onSubmit={handlePost}>
-        {postError && (
-          <div className="panel-banner is-error" role="alert">
-            {postError}
-          </div>
-        )}
-        <div className="panel-field">
-          <label htmlFor="thread-comment-input">Add comment</label>
-          <textarea
-            id="thread-comment-input"
-            rows={3}
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={posting}
-            placeholder="Write a comment. Press Ctrl+Enter to send."
-          />
-        </div>
-        <div className="panel-actions">
-          <button type="submit" disabled={posting || !body.trim()}>
-            {posting ? 'Posting...' : 'Post comment'}
-          </button>
-        </div>
-      </form>
     </div>
   )
 }

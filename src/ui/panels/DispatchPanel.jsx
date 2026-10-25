@@ -1,18 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   briefTarget,
-  chooseAssignee,
   formatBriefTitle,
   groupBriefsByOwner,
   ownerToLane,
   runLaneFor,
   VALID_LANES,
 } from './briefs.js'
-import { modelsFor, resetModel } from './dispatchModels.js'
 import { subscribeToNotices } from './notices.js'
-import { agentForLane, routeFields } from './route.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, PROJECT_SPLIT_DELAY, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, runStartLine, splitTasks, timeSinceStart } from './runs.js'
-import { profileFromBrief } from '../../policy/profile.js'
 
 function wait(ms) {
   return new Promise((resolve) => {
@@ -22,26 +18,15 @@ function wait(ms) {
 
 export default function DispatchPanel({
   client,
-  onCreated,
   targetBriefId,
   initialAgents,
-  initialModels,
-  initialAssigneeAgentId,
-  initialModel,
   initialBriefs,
   initialSelectedBriefId,
-  initialRouteAnswer,
-  initialRouteLoading,
-  initialRouteError,
-  initialRouteNote,
 }) {
   const [targetDismissed, setTargetDismissed] = useState(false)
   const pickedTargetRef = useRef(false)
   const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
-  const [models, setModels] = useState(() => (Array.isArray(initialModels) ? initialModels : []))
-  const [loading, setLoading] = useState(
-    () => !(Array.isArray(initialAgents) && Array.isArray(initialModels))
-  )
+  const [loading, setLoading] = useState(() => !Array.isArray(initialAgents))
   const [loadError, setLoadError] = useState(null)
 
   const [briefs, setBriefs] = useState(() => (Array.isArray(initialBriefs) ? initialBriefs : []))
@@ -59,11 +44,6 @@ export default function DispatchPanel({
   const [showConfirm, setShowConfirm] = useState(false)
   const [startingRun, setStartingRun] = useState(false)
   const [runError, setRunError] = useState(null)
-
-  const [routeLoading, setRouteLoading] = useState(() => Boolean(initialRouteLoading))
-  const [routeError, setRouteError] = useState(() => initialRouteError || null)
-  const [routeAnswer, setRouteAnswer] = useState(() => initialRouteAnswer || null)
-  const [routeNote, setRouteNote] = useState(() => initialRouteNote || null)
 
   const [runsState, setRunsState] = useState({ running: [], recent: [] })
   const [runsLoading, setRunsLoading] = useState(() => typeof client?.runs === 'function')
@@ -83,21 +63,6 @@ export default function DispatchPanel({
 
   const promptReqRef = useRef(0)
   const promptBoxRef = useRef(null)
-  const routeReqRef = useRef(0)
-
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [assigneeAgentId, setAssigneeAgentId] = useState(() => initialAssigneeAgentId || '')
-  const [model, setModel] = useState(() => initialModel || '')
-  const [priority, setPriority] = useState('')
-  const [maxTurnsPerRun, setMaxTurnsPerRun] = useState('')
-  const [timeoutSec, setTimeoutSec] = useState('')
-  const [subagentsAllowed, setSubagentsAllowed] = useState(false)
-
-  const [fieldErrors, setFieldErrors] = useState({})
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState(null)
-  const [createdIdentifier, setCreatedIdentifier] = useState(null)
 
   const hasBriefs = typeof client?.briefs === 'function'
   const hasRuns = typeof client?.runs === 'function'
@@ -109,18 +74,14 @@ export default function DispatchPanel({
   const projectLaneRunning = projectLanes.some((lane) => lane.key === projectLane && lane.running)
 
   async function loadData() {
-    if (!client || (Array.isArray(initialAgents) && Array.isArray(initialModels))) return
+    if (!client || Array.isArray(initialAgents)) return
     setLoading(true)
     setLoadError(null)
     try {
-      const [agentList, modelList] = await Promise.all([
-        client.agents(),
-        client.models(),
-      ])
-      setAgents(agentList)
-      setModels(modelList)
+      const agentList = await client.agents()
+      setAgents(Array.isArray(agentList) ? agentList : [])
     } catch (err) {
-      setLoadError(err.message || 'Could not load options.')
+      setLoadError(err.message || 'Could not load lanes.')
     } finally {
       setLoading(false)
     }
@@ -160,7 +121,7 @@ export default function DispatchPanel({
   async function refreshAgents() {
     try {
       const agentList = await client.agents()
-      setAgents(agentList)
+      setAgents(Array.isArray(agentList) ? agentList : [])
     } catch {
       return
     }
@@ -218,15 +179,6 @@ export default function DispatchPanel({
     })
   }, [client])
 
-  useEffect(() => {
-    if (loading || !model) return
-    const currentAgent = agents.find((item) => item.id === assigneeAgentId) || null
-    const nextModel = resetModel(currentAgent, model, models)
-    if (nextModel !== model) {
-      setModel(nextModel)
-    }
-  }, [loading, assigneeAgentId, agents, models, model])
-
   async function loadPromptForBrief(briefId, briefObj) {
     const brief = briefObj ?? briefs.find((item) => item.id === briefId)
     if (!brief) return
@@ -274,91 +226,27 @@ export default function DispatchPanel({
     }
   }
 
-  async function loadRouteForBrief(brief) {
-    if (!brief) return
-    const reqId = ++routeReqRef.current
-    setRouteLoading(true)
-    setRouteError(null)
-    setRouteAnswer(null)
-    setRouteNote(null)
-
-    if (typeof client?.suggestRoute !== 'function') {
-      setRouteLoading(false)
-      setRouteError('Could not suggest route.')
-      return
-    }
-
-    try {
-      const profile = profileFromBrief(brief)
-      const result = await client.suggestRoute(profile)
-      if (routeReqRef.current !== reqId) return
-      setRouteAnswer(result)
-    } catch (err) {
-      if (routeReqRef.current !== reqId) return
-      setRouteError(err.message || 'Could not suggest route.')
-    } finally {
-      if (routeReqRef.current === reqId) {
-        setRouteLoading(false)
-      }
-    }
-  }
-
-  function handleUseRoute() {
-    if (!routeAnswer?.choice) return
-    const { agentId, model: nextModel, note } = routeFields(routeAnswer.choice, agents, models)
-    if (agentId) {
-      setAssigneeAgentId(agentId)
-      if (fieldErrors.agent) {
-        setFieldErrors((prev) => ({ ...prev, agent: null }))
-      }
-    }
-    if (nextModel !== null && nextModel !== undefined) {
-      setModel(nextModel)
-    }
-    setRouteNote(note || null)
-  }
-
   function pickBrief(id) {
     setSelectedBriefId(id)
     setCopyStatus(null)
     setShowConfirm(false)
     setRunError(null)
     setStartingRun(false)
-    setRouteNote(null)
 
     if (!id) {
       promptReqRef.current += 1
-      routeReqRef.current += 1
       setNotForAgent(false)
       setPromptLoading(false)
       setPromptError(null)
       setPromptText('')
       setPromptModel('')
-      setRouteLoading(false)
-      setRouteError(null)
-      setRouteAnswer(null)
       return
     }
 
     const brief = briefs.find((item) => item.id === id)
     if (!brief) return
 
-    const nextTitle = formatBriefTitle(brief)
-    setTitle(nextTitle)
-    if (nextTitle && fieldErrors.title) {
-      setFieldErrors((prev) => ({ ...prev, title: null }))
-    }
-
-    const matchedAssignee = chooseAssignee(brief, agents)
-    setAssigneeAgentId(matchedAssignee)
-    if (matchedAssignee && fieldErrors.agent) {
-      setFieldErrors((prev) => ({ ...prev, agent: null }))
-    }
-    const nextAgent = agents.find((item) => item.id === matchedAssignee) || null
-    setModel((prevModel) => resetModel(nextAgent, prevModel, models))
-
     loadPromptForBrief(id, brief)
-    loadRouteForBrief(brief)
   }
 
   function handleBriefChange(event) {
@@ -497,92 +385,6 @@ export default function DispatchPanel({
     }
   }
 
-  function handleUseAsDescription() {
-    if (!promptText) return
-    setDescription(promptText)
-  }
-
-  async function handleSubmit(event) {
-    event.preventDefault()
-    setSubmitError(null)
-    setCreatedIdentifier(null)
-
-    const errors = {}
-    if (!title.trim()) {
-      errors.title = 'A title is required.'
-    }
-    if (!assigneeAgentId) {
-      errors.agent = 'Choose an agent for this task.'
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setFieldErrors(errors)
-      setSubmitError('Please complete all required fields.')
-      return
-    }
-    setFieldErrors({})
-
-    setSubmitting(true)
-    try {
-      const draft = {
-        title: title.trim(),
-        assigneeAgentId,
-      }
-      if (description.trim()) draft.description = description.trim()
-      if (priority) draft.priority = priority
-      if (model) draft.model = model
-      if (maxTurnsPerRun !== '') {
-        const turns = parseInt(maxTurnsPerRun, 10)
-        if (!Number.isNaN(turns) && turns > 0) draft.maxTurnsPerRun = turns
-      }
-      if (timeoutSec !== '') {
-        const timeout = parseInt(timeoutSec, 10)
-        if (!Number.isNaN(timeout) && timeout > 0) draft.timeoutSec = timeout
-      }
-      if (subagentsAllowed) {
-        draft.subagentsAllowed = true
-      }
-
-      const created = await client.createIssue(draft)
-      setCreatedIdentifier(created.identifier)
-      setSelectedBriefId('')
-      setPromptText('')
-      setPromptModel('')
-      setShowConfirm(false)
-      setRunError(null)
-      setStartingRun(false)
-      setPromptError(null)
-      setPromptLoading(false)
-      setNotForAgent(false)
-      setCopyStatus(null)
-      setRouteLoading(false)
-      setRouteError(null)
-      setRouteAnswer(null)
-      setRouteNote(null)
-      routeReqRef.current += 1
-      setTitle('')
-      setDescription('')
-      setAssigneeAgentId('')
-      setModel('')
-      setPriority('')
-      setMaxTurnsPerRun('')
-      setTimeoutSec('')
-      setSubagentsAllowed(false)
-      setFieldErrors({})
-      onCreated?.(created)
-    } catch (err) {
-      const message = err.message || 'Could not start task.'
-      setSubmitError(message)
-      if (/title/i.test(message)) {
-        setFieldErrors((prev) => ({ ...prev, title: message }))
-      } else if (/agent/i.test(message)) {
-        setFieldErrors((prev) => ({ ...prev, agent: message }))
-      }
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
   if (loading) {
     return <div className="panel-state mono">Loading dispatch options...</div>
   }
@@ -596,21 +398,7 @@ export default function DispatchPanel({
     )
   }
 
-  if (agents.length === 0) {
-    return <div className="panel-state">No agents available to assign.</div>
-  }
-
   const briefGroups = hasBriefs ? groupBriefsByOwner(briefs) : []
-  const selectedAgent = agents.find((item) => item.id === assigneeAgentId) || null
-  const offeredModels = modelsFor(selectedAgent, models)
-  const defaultOption = offeredModels[0]
-  const availableModels = offeredModels.slice(1)
-  const smallModels = availableModels.filter((item) => item.tier === 'small')
-  const mediumModels = availableModels.filter((item) => item.tier === 'medium')
-  const largeModels = availableModels.filter((item) => item.tier === 'large')
-  const otherModels = availableModels.filter(
-    (item) => !item.tier || !['small', 'medium', 'large'].includes(item.tier)
-  )
   const projectTasks = splitTasks(projectTask)
   const projectQueue = projectTasks.length > 1
   const projectConfirm = projectRunConfirm({
@@ -629,19 +417,7 @@ export default function DispatchPanel({
     (projectSplitRun || (Boolean(projectLane) && !projectLaneRunning))
 
   return (
-    <form className="dispatch-form" onSubmit={handleSubmit} noValidate>
-      {createdIdentifier && (
-        <div className="panel-banner is-success" role="status">
-          Created task {createdIdentifier}.
-        </div>
-      )}
-
-      {submitError && (
-        <div className="panel-banner is-error" role="alert">
-          {submitError}
-        </div>
-      )}
-
+    <div className="dispatch-form">
       {lanesMode && projectLanes.length > 0 && (
         <div className="panel-field project-run-section">
           <div className="panel-field-head">
@@ -995,9 +771,6 @@ export default function DispatchPanel({
                     Run now
                   </button>
                 )}
-                <button type="button" onClick={handleUseAsDescription}>
-                  Use as description
-                </button>
                 {copyStatus && (
                   <span
                     className={`brief-copy-status mono ${copyStatus.ok ? 'is-ok' : 'is-error'}`}
@@ -1109,230 +882,6 @@ export default function DispatchPanel({
           )}
         </div>
       )}
-
-      <div className="panel-field">
-        <div className="panel-field-head">
-          <label htmlFor="dispatch-title">Title</label>
-          {fieldErrors.title && (
-            <span className="field-error mono">{fieldErrors.title}</span>
-          )}
-        </div>
-        <input
-          id="dispatch-title"
-          type="text"
-          value={title}
-          onChange={(event) => {
-            setTitle(event.target.value)
-            if (fieldErrors.title) {
-              setFieldErrors((prev) => ({ ...prev, title: null }))
-            }
-          }}
-          placeholder="Brief task summary"
-          aria-invalid={Boolean(fieldErrors.title)}
-          required
-        />
-      </div>
-
-      <div className="panel-field">
-        <label htmlFor="dispatch-description">Description</label>
-        <textarea
-          id="dispatch-description"
-          rows={3}
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          placeholder="Detailed task instructions"
-        />
-      </div>
-
-      <div className="panel-field">
-        <div className="panel-field-head">
-          <label htmlFor="dispatch-agent">Agent</label>
-          {fieldErrors.agent && (
-            <span className="field-error mono">{fieldErrors.agent}</span>
-          )}
-        </div>
-        <select
-          id="dispatch-agent"
-          value={assigneeAgentId}
-          onChange={(event) => {
-            const nextAgentId = event.target.value
-            setAssigneeAgentId(nextAgentId)
-            if (fieldErrors.agent) {
-              setFieldErrors((prev) => ({ ...prev, agent: null }))
-            }
-            const nextAgent = agents.find((item) => item.id === nextAgentId) || null
-            setModel((prevModel) => resetModel(nextAgent, prevModel, models))
-          }}
-          aria-invalid={Boolean(fieldErrors.agent)}
-          required
-        >
-          <option value="">Select an agent</option>
-          {agents.map((agent) => (
-            <option key={agent.id} value={agent.id}>
-              {agent.name} ({agent.role})
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {selectedBriefId && (
-        <div className="panel-field dispatch-route-row">
-          <label>Route</label>
-          {routeLoading || (!routeError && !routeAnswer) ? (
-            <div className="dispatch-route-state mono" role="status">
-              Reading the policy.
-            </div>
-          ) : routeError ? (
-            <div className="dispatch-route-error mono" role="alert">
-              {routeError}
-            </div>
-          ) : !routeAnswer?.choice ? (
-            <div className="dispatch-route-error mono" role="alert">
-              {routeAnswer?.reason}
-            </div>
-          ) : routeAnswer.choice.lane === 'owner' ? (
-            <div className="dispatch-route-card">
-              <span className="dispatch-route-reason mono">{routeAnswer.reason}</span>
-            </div>
-          ) : (
-            <div className="dispatch-route-card">
-              <div className="dispatch-route-main">
-                <span className="dispatch-route-reason mono">{routeAnswer.reason}</span>
-                <button
-                  type="button"
-                  className="dispatch-route-use-btn"
-                  onClick={handleUseRoute}
-                >
-                  Use
-                </button>
-              </div>
-              {routeNote && (
-                <div className="dispatch-route-note mono" role="status">
-                  {routeNote}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="panel-field">
-        <label htmlFor="dispatch-model">Model</label>
-        <select
-          id="dispatch-model"
-          value={model}
-          onChange={(event) => setModel(event.target.value)}
-        >
-          <option value="">{defaultOption?.label || 'Default model'}</option>
-          {smallModels.length > 0 && (
-            <optgroup label="Small">
-              {smallModels.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                  {item.free && !item.label.toLowerCase().includes('free') ? ' (free)' : ''}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {mediumModels.length > 0 && (
-            <optgroup label="Medium">
-              {mediumModels.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                  {item.free && !item.label.toLowerCase().includes('free') ? ' (free)' : ''}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {largeModels.length > 0 && (
-            <optgroup label="Large">
-              {largeModels.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                  {item.free && !item.label.toLowerCase().includes('free') ? ' (free)' : ''}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {otherModels.length > 0 &&
-            (smallModels.length > 0 || mediumModels.length > 0 || largeModels.length > 0 ? (
-              <optgroup label="Other">
-                {otherModels.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.label}
-                    {item.free && !item.label.toLowerCase().includes('free') ? ' (free)' : ''}
-                  </option>
-                ))}
-              </optgroup>
-            ) : (
-              otherModels.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label}
-                  {item.free && !item.label.toLowerCase().includes('free') ? ' (free)' : ''}
-                </option>
-              ))
-            ))}
-        </select>
-      </div>
-
-      <div className="panel-field">
-        <label htmlFor="dispatch-priority">Priority</label>
-        <select
-          id="dispatch-priority"
-          value={priority}
-          onChange={(event) => setPriority(event.target.value)}
-        >
-          <option value="">Default (medium)</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="critical">Critical</option>
-        </select>
-      </div>
-
-      <details className="panel-limits">
-        <summary>Limits</summary>
-        <div className="panel-limits-fields">
-          <div className="panel-field">
-            <label htmlFor="dispatch-turns">Max turns</label>
-            <input
-              id="dispatch-turns"
-              type="number"
-              min="1"
-              value={maxTurnsPerRun}
-              onChange={(event) => setMaxTurnsPerRun(event.target.value)}
-              placeholder="Default"
-            />
-          </div>
-          <div className="panel-field">
-            <label htmlFor="dispatch-timeout">Timeout (seconds)</label>
-            <input
-              id="dispatch-timeout"
-              type="number"
-              min="1"
-              value={timeoutSec}
-              onChange={(event) => setTimeoutSec(event.target.value)}
-              placeholder="Default"
-            />
-          </div>
-          <div className="panel-checkbox-field">
-            <label>
-              <input
-                type="checkbox"
-                checked={subagentsAllowed}
-                onChange={(event) => setSubagentsAllowed(event.target.checked)}
-              />
-              <span>Subagents allowed</span>
-            </label>
-          </div>
-        </div>
-      </details>
-
-      <div className="panel-actions">
-        <button type="submit" disabled={submitting}>
-          {submitting ? 'Starting task...' : 'Start task'}
-        </button>
-      </div>
-    </form>
+    </div>
   )
 }

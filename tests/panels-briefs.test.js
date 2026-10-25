@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
 import {
   briefTarget,
-  chooseAssignee,
   formatBriefTitle,
   getFirstOwner,
   groupBriefsByOwner,
@@ -10,14 +9,6 @@ import {
   runLaneFor,
   validLanes,
 } from '../src/ui/panels/briefs.js'
-
-const SAMPLE_AGENTS = [
-  { id: 'agent-claude', key: 'claude-code', name: 'Claude Code', role: 'engineer' },
-  { id: 'agent-hermes', key: 'hermes', name: 'Hermes', role: 'engineer' },
-  { id: 'agent-opencode', key: 'opencode-go', name: 'OpenCode Go', role: 'engineer' },
-  { id: 'agent-agy', key: 'agy', name: 'agy', role: 'designer' },
-  { id: 'agent-orchestrator', key: 'orchestrator', name: 'Orchestrator', role: 'ceo' },
-]
 
 describe('formatBriefTitle', () => {
   it('formats a brief as ID title', () => {
@@ -115,39 +106,6 @@ describe('runLaneFor', () => {
     expect(runLaneFor({ owners: ['claude'] }, [], LANES)).toBe('claude')
     expect(runLaneFor({}, ['opencode'], LANES)).toBeNull()
     expect(runLaneFor(null, [], LANES)).toBeNull()
-  })
-})
-
-describe('chooseAssignee', () => {
-  it('matches exact agent name case-insensitively', () => {
-    const exactAgents = [
-      { id: 'a1', name: 'Hermes' },
-      { id: 'a2', name: 'OpenCode' },
-      { id: 'a3', name: 'AGY' },
-    ]
-    expect(chooseAssignee({ owners: ['hermes'] }, exactAgents)).toBe('a1')
-    expect(chooseAssignee({ owners: ['opencode'] }, exactAgents)).toBe('a2')
-    expect(chooseAssignee({ owners: ['agy'] }, exactAgents)).toBe('a3')
-  })
-
-  it('matches agent names in the mock client and picks the first owner when multiple owners exist', () => {
-    expect(chooseAssignee({ owners: ['hermes'] }, SAMPLE_AGENTS)).toBe('agent-hermes')
-    expect(chooseAssignee({ owners: ['agy'] }, SAMPLE_AGENTS)).toBe('agent-agy')
-    expect(chooseAssignee({ owners: ['opencode'] }, SAMPLE_AGENTS)).toBe('agent-opencode')
-    expect(chooseAssignee({ owners: ['opencode', 'agy'] }, SAMPLE_AGENTS)).toBe('agent-opencode')
-    expect(chooseAssignee({ owners: ['claude'] }, SAMPLE_AGENTS)).toBe('agent-claude')
-  })
-
-  it('returns empty string when no agent matches or brief has no owner', () => {
-    expect(chooseAssignee({ owners: [] }, SAMPLE_AGENTS)).toBe('')
-    expect(chooseAssignee({ owners: ['unknown'] }, SAMPLE_AGENTS)).toBe('')
-    expect(chooseAssignee({ owners: ['hermes'] }, [{ id: 'a1', name: 'agy' }])).toBe('')
-    expect(chooseAssignee({ owners: ['hermes'] }, [])).toBe('')
-    expect(chooseAssignee(null, SAMPLE_AGENTS)).toBe('')
-  })
-
-  it('supports reversed argument order (agents, brief)', () => {
-    expect(chooseAssignee(SAMPLE_AGENTS, { owners: ['hermes'] })).toBe('agent-hermes')
   })
 })
 

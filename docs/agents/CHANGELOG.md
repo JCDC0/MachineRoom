@@ -8,6 +8,10 @@
 
 - The dock's context column shows the selected agent, else the first working agent, else the orchestrator, and leaves out rows with nothing to say (task U22).
 - A replay and the demo label the cost board and the Meters tab `Sample costs`, with the dim line `These numbers are made up for the replay.`, while a live room through a bridge keeps its plain labels (task U23).
+- The control drawer drops the issue form and Dispatch keeps only brief runs, project task runs and the runs list (task U25).
+- The Plan tab and its panel are gone, so the drawer has Dispatch, Tasks, Meters, Team and Reviews (task U25).
+- A task thread has no comment composer and Team lists the lanes read only, with no hire or edit controls (task U25).
+- The route and model helpers that only the issue form used are deleted (task U25).
 
 - `package-lock.json` carries the root `bin` entry, so `npm install` in a fresh clone leaves the tree clean (found by D11).
 
