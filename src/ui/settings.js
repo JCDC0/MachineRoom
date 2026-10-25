@@ -1,5 +1,6 @@
 import { readStorage, store, writeStorage } from '../storage.js'
 import { clampLensShare } from './lensResize.js'
+import { SIDEBAR_TAB_DEFAULT, normalizeSidebarTab } from './sidebar.js'
 
 export const SETTINGS_KEY = 'machineroom.settings'
 
@@ -12,6 +13,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   dockOpen: false,
   speed: 1,
   helpSeen: false,
+  sidebarTab: SIDEBAR_TAB_DEFAULT,
   sound: Object.freeze({
     on: true,
     volume: 0.3,
@@ -116,6 +118,7 @@ function normalizeSettings(raw) {
     dockOpen: typeof raw.dockOpen === 'boolean' ? raw.dockOpen : DEFAULT_SETTINGS.dockOpen,
     speed: typeof raw.speed === 'number' && Number.isFinite(raw.speed) && raw.speed > 0 ? raw.speed : DEFAULT_SETTINGS.speed,
     helpSeen: typeof raw.helpSeen === 'boolean' ? raw.helpSeen : DEFAULT_SETTINGS.helpSeen,
+    sidebarTab: normalizeSidebarTab(raw.sidebarTab),
     sound: soundSettings(raw.sound),
   }
 

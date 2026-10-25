@@ -8,7 +8,6 @@ import {
   modelChoices,
   orchestratorEffort,
 } from './agentStrip.js'
-import { addSub, freeLanes, idFromName, ladderFromOrchestrators, removeSub, subFromForm } from './ladderForm.js'
 import {
   ORCH_MAX_CHARS,
   ORCH_REFRESH_MS,
@@ -91,164 +90,6 @@ function initialList(value) {
   return value.filter((entry) => entry && typeof entry === 'object' && typeof entry.id === 'string' && entry.id)
 }
 
-function emptyForm() {
-  return { name: '', id: '', harness: 'opencode', model: '', lanes: [], scope: '', restricted: true }
-}
-
-function AttachForm({ form, lanes, idBase, disabled, onField, onName, onReview, onCancel }) {
-  const name = String(form.name ?? '')
-  const id = String(form.id ?? '')
-  const lanesChosen = Array.isArray(form.lanes) ? form.lanes : []
-
-  function toggleLane(lane) {
-    const next = lanesChosen.includes(lane) ? lanesChosen.filter((entry) => entry !== lane) : [...lanesChosen, lane]
-    onField('lanes', next)
-  }
-
-  return (
-    <section className="mr-orch-attach" aria-label="Attach a sub orchestrator">
-      <p className="mr-orch-attach-title mono">Attach a sub orchestrator</p>
-      <label className="mr-orch-field" htmlFor={`${idBase}-name`}>
-        <span className="mr-orch-field-label mono">Name</span>
-        <input
-          id={`${idBase}-name`}
-          className="mr-orch-field-input mono"
-          value={name}
-          maxLength={40}
-          spellCheck="false"
-          onChange={(event) => onName(event.target.value)}
-        />
-      </label>
-      <label className="mr-orch-field" htmlFor={`${idBase}-id`}>
-        <span className="mr-orch-field-label mono">Id</span>
-        <input
-          id={`${idBase}-id`}
-          className="mr-orch-field-input mono"
-          value={id}
-          maxLength={24}
-          spellCheck="false"
-          onChange={(event) => onField('id', event.target.value)}
-        />
-      </label>
-      <label className="mr-orch-field" htmlFor={`${idBase}-harness`}>
-        <span className="mr-orch-field-label mono">Harness</span>
-        <select
-          id={`${idBase}-harness`}
-          className="mr-orch-field-input mono"
-          value={form.harness === 'claude' ? 'claude' : 'opencode'}
-          onChange={(event) => onField('harness', event.target.value)}
-        >
-          <option value="claude">claude</option>
-          <option value="opencode">opencode</option>
-        </select>
-      </label>
-      <label className="mr-orch-field" htmlFor={`${idBase}-model`}>
-        <span className="mr-orch-field-label mono">Model</span>
-        <input
-          id={`${idBase}-model`}
-          className="mr-orch-field-input mono"
-          value={String(form.model ?? '')}
-          spellCheck="false"
-          onChange={(event) => onField('model', event.target.value)}
-        />
-      </label>
-      <fieldset className="mr-orch-lanes">
-        <legend className="mr-orch-field-label mono">Lanes</legend>
-        {lanes.length === 0 ? (
-          <p className="mr-orch-hint">Every lane belongs to a sub already.</p>
-        ) : (
-          lanes.map((lane) => (
-            <label key={lane} className="mr-orch-lane">
-              <input
-                type="checkbox"
-                checked={lanesChosen.includes(lane)}
-                onChange={() => toggleLane(lane)}
-              />
-              <span className="mono">{lane}</span>
-            </label>
-          ))
-        )}
-      </fieldset>
-      <label className="mr-orch-field" htmlFor={`${idBase}-scope`}>
-        <span className="mr-orch-field-label mono">Scope, one glob per line</span>
-        <textarea
-          id={`${idBase}-scope`}
-          className="mr-orch-field-input is-scope mono"
-          rows={3}
-          spellCheck="false"
-          value={String(form.scope ?? '')}
-          onChange={(event) => onField('scope', event.target.value)}
-        />
-      </label>
-      <label className="mr-orch-switch" htmlFor={`${idBase}-restricted`}>
-        <input
-          id={`${idBase}-restricted`}
-          type="checkbox"
-          checked={form.restricted !== false}
-          onChange={(event) => onField('restricted', event.target.checked)}
-        />
-        <span>Restricted</span>
-      </label>
-      <div className="mr-orch-confirm-actions">
-        <button
-          type="button"
-          className="mr-orch-confirm-btn is-start"
-          onClick={onReview}
-          disabled={disabled || (!name.trim() && !id.trim())}
-        >
-          Review
-        </button>
-        <button type="button" className="mr-orch-confirm-btn is-cancel" onClick={onCancel} disabled={disabled}>
-          Cancel
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function AttachConfirm({ sub, saving, onSave, onCancel }) {
-  const lanes = sub.lanes.length > 0 ? sub.lanes.join(', ') : 'none'
-  const scope = sub.scope.length > 0 ? sub.scope.join(', ') : 'none'
-  return (
-    <section className="mr-orch-confirm is-attach" aria-label="Attach the sub orchestrator">
-      <p className="mr-orch-confirm-text">Attach {sub.name || sub.id}?</p>
-      <p className="mr-orch-confirm-detail mono">Lanes: {lanes}</p>
-      <p className="mr-orch-confirm-detail mono">Scope: {scope}</p>
-      <p className="mr-orch-confirm-text">
-        {sub.restricted
-          ? 'Restricted. Its lanes may change files only in its scope.'
-          : 'Open. Its lanes may change files anywhere in the project.'}
-      </p>
-      <div className="mr-orch-confirm-actions">
-        <button type="button" className="mr-orch-confirm-btn is-start" onClick={onSave} disabled={saving}>
-          {saving ? 'Saving' : 'Save'}
-        </button>
-        <button type="button" className="mr-orch-confirm-btn is-cancel" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-      </div>
-    </section>
-  )
-}
-
-function DetachConfirm({ sub, saving, onDetach, onCancel }) {
-  return (
-    <section className="mr-orch-confirm is-detach" aria-label="Detach the sub orchestrator">
-      <p className="mr-orch-confirm-text">
-        Detach {sub.name || sub.id}? Its lanes go back to the main orchestrator and its turn stops.
-      </p>
-      <div className="mr-orch-confirm-actions">
-        <button type="button" className="mr-orch-confirm-btn is-stop" onClick={onDetach} disabled={saving}>
-          {saving ? 'Saving' : 'Detach'}
-        </button>
-        <button type="button" className="mr-orch-confirm-btn is-cancel" onClick={onCancel} disabled={saving}>
-          Cancel
-        </button>
-      </div>
-    </section>
-  )
-}
-
 export default function OrchestratorChat({
   client = null,
   open = true,
@@ -264,7 +105,6 @@ export default function OrchestratorChat({
   initialConfirm = null,
   initialOrchestrators = null,
   initialSelected = 'orchestrator',
-  initialForm = null,
   activity = '',
 }) {
   const [chats, setChats] = useState(() => ({ orchestrator: initialChatState(initialChat) }))
@@ -285,17 +125,9 @@ export default function OrchestratorChat({
   })
   const [sending, setSending] = useState(false)
   const [stopping, setStopping] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState(null)
   const [readError, setReadError] = useState(null)
-  const [problems, setProblems] = useState([])
-  const [form, setForm] = useState(() =>
-    initialForm && typeof initialForm === 'object' ? { ...emptyForm(), ...initialForm } : null
-  )
-  const [idTouched, setIdTouched] = useState(Boolean(initialForm && typeof initialForm === 'object' && initialForm.id))
-  const [confirmSub, setConfirmSub] = useState(null)
-  const [detach, setDetach] = useState(null)
   const [modelsOpen, setModelsOpen] = useState(false)
   const [models, setModels] = useState(null)
   const [modelsLoading, setModelsLoading] = useState(false)
@@ -312,7 +144,6 @@ export default function OrchestratorChat({
   const [compactOpen, setCompactOpen] = useState(false)
 
   const inputId = useId()
-  const formId = useId()
   const logRef = useRef(null)
   const inputRef = useRef(null)
   const readChatRef = useRef(null)
@@ -345,24 +176,16 @@ export default function OrchestratorChat({
   const projectLabel = projectBaseName(project)
   const lines = chatLines(chat)
   const problem = error ?? readError
-  const canAttach = Boolean(
-    client && typeof client.orchestrators === 'function' && typeof client.setLadder === 'function' && list.length > 0
-  )
-  const ladder = ladderFromOrchestrators(list)
-  const mainLanes = list.find((entry) => entry.id === 'orchestrator')?.lanes ?? []
-  const free = freeLanes(mainLanes, ladder)
   const tabs = [
     {
       id: 'orchestrator',
       label: 'Main',
       state: list.find((entry) => entry.id === 'orchestrator')?.state ?? chats.orchestrator?.state ?? 'idle',
-      sub: false,
     },
     ...subs.map((entry) => ({
       id: entry.id,
       label: entry.name || entry.id,
       state: entry.state ?? chats[entry.id]?.state ?? 'idle',
-      sub: true,
     })),
   ]
   const startText =
@@ -495,20 +318,6 @@ export default function OrchestratorChat({
     if (!open) return undefined
     function onKey(event) {
       if (event.key !== 'Escape') return
-      if (saving) return
-      if (detach) {
-        setDetach(null)
-        return
-      }
-      if (confirmSub) {
-        setConfirmSub(null)
-        return
-      }
-      if (form) {
-        setForm(null)
-        setIdTouched(false)
-        return
-      }
       if (confirm) {
         setConfirm(null)
         return
@@ -517,7 +326,7 @@ export default function OrchestratorChat({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, confirm, confirmSub, detach, form, saving, onClose])
+  }, [open, confirm, onClose])
 
   useEffect(() => {
     if (selected === 'orchestrator' || list.length === 0) return
@@ -707,114 +516,8 @@ export default function OrchestratorChat({
     if (id === selected) return
     changeSelected(id)
     setConfirm(null)
-    setConfirmSub(null)
-    setDetach(null)
-    setForm(null)
-    setIdTouched(false)
-    setProblems([])
     setError(null)
     setReadError(null)
-  }
-
-  function openForm() {
-    setForm(emptyForm())
-    setIdTouched(false)
-    setConfirm(null)
-    setConfirmSub(null)
-    setDetach(null)
-    setProblems([])
-    setError(null)
-  }
-
-  function cancelForm() {
-    setForm(null)
-    setConfirmSub(null)
-    setIdTouched(false)
-  }
-
-  function changeName(value) {
-    setForm((currentForm) => {
-      if (!currentForm) return currentForm
-      const next = { ...currentForm, name: value }
-      if (!idTouched) next.id = idFromName(value)
-      return next
-    })
-  }
-
-  function changeField(field, value) {
-    if (field === 'id') setIdTouched(true)
-    setForm((currentForm) => (currentForm ? { ...currentForm, [field]: value } : currentForm))
-  }
-
-  function reviewForm() {
-    if (!form) return
-    setProblems([])
-    setError(null)
-    setConfirmSub(subFromForm(form))
-  }
-
-  function requestDetach(id) {
-    const entry = list.find((item) => item.id === id)
-    if (!entry) return
-    setDetach(entry)
-    setForm(null)
-    setConfirmSub(null)
-    setConfirm(null)
-    setProblems([])
-    setError(null)
-  }
-
-  async function saveSub() {
-    if (!confirmSub) return
-    if (!client || typeof client.setLadder !== 'function') {
-      setError('The ladder is not connected.')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    setProblems([])
-    try {
-      await client.setLadder(addSub(ladder, confirmSub))
-      const id = confirmSub.id
-      setConfirmSub(null)
-      setForm(null)
-      setIdTouched(false)
-      await readListRef.current?.()
-      changeSelected(id)
-    } catch (failure) {
-      const nextProblems = Array.isArray(failure?.problems) ? failure.problems : []
-      setProblems(nextProblems)
-      if (nextProblems.length === 0) setError(errorText(failure, 'Could not save the ladder.'))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function saveDetach() {
-    if (!detach) return
-    if (!client || typeof client.setLadder !== 'function') {
-      setError('The ladder is not connected.')
-      return
-    }
-    setSaving(true)
-    setError(null)
-    setProblems([])
-    try {
-      const id = detach.id
-      await client.setLadder(removeSub(ladder, id))
-      setDetach(null)
-      setConfirmSub(null)
-      setForm(null)
-      setIdTouched(false)
-      await readListRef.current?.()
-      if (selected === id) changeSelected('orchestrator')
-    } catch (failure) {
-      const nextProblems = Array.isArray(failure?.problems) ? failure.problems : []
-      setProblems(nextProblems)
-      if (nextProblems.length === 0) setError(errorText(failure, 'Could not save the ladder.'))
-    } finally {
-      setSaving(false)
-    }
   }
 
   if (!open) return null
@@ -825,14 +528,9 @@ export default function OrchestratorChat({
       className={`mr-orch${inline ? ' is-inline' : ''}`}
       aria-label="Orchestrator chat"
     >
-      {!inline || canAttach ? (
+      {!inline ? (
         <header className="mr-orch-head">
           <span className="mr-orch-title">Orchestrator</span>
-          {canAttach ? (
-            <button type="button" className="mr-orch-attach-open" onClick={openForm} disabled={saving}>
-              Attach
-            </button>
-          ) : null}
           {model ? <span className="mr-orch-model mono">{model}</span> : null}
           {projectLabel ? (
             <span className="mr-orch-project mr-orch-model mono" title={project}>
@@ -867,17 +565,6 @@ export default function OrchestratorChat({
                   <span className={`mr-orch-tab-dot is-${statusTone(tab.state)}`} aria-hidden="true" />
                   <span>{tab.label}</span>
                 </button>
-                {tab.sub ? (
-                  <button
-                    type="button"
-                    className="mr-orch-tab-detach"
-                    aria-label={`Detach ${tab.label}`}
-                    onClick={() => requestDetach(tab.id)}
-                    disabled={saving}
-                  >
-                    Detach
-                  </button>
-                ) : null}
               </div>
             )
           })}
@@ -889,44 +576,13 @@ export default function OrchestratorChat({
         <span>{status}</span>
       </p>
 
-      {problem || problems.length > 0 ? (
+      {problem ? (
         <div className="mr-orch-error" role="alert">
-          {problem ? <p>{problem}</p> : null}
-          {problems.length > 0 ? (
-            <>
-              <p>Fix these and save again.</p>
-              <ul className="mr-orch-problems">
-                {problems.map((entry, index) => (
-                  <li key={index}>{entry}</li>
-                ))}
-              </ul>
-            </>
-          ) : null}
+          <p>{problem}</p>
         </div>
       ) : null}
 
-      {form ? (
-        <AttachForm
-          form={form}
-          lanes={free}
-          idBase={formId}
-          disabled={saving}
-          onField={changeField}
-          onName={changeName}
-          onReview={reviewForm}
-          onCancel={cancelForm}
-        />
-      ) : confirmSub ? (
-        <AttachConfirm
-          sub={confirmSub}
-          saving={saving}
-          onSave={saveSub}
-          onCancel={() => setConfirmSub(null)}
-        />
-      ) : detach ? (
-        <DetachConfirm sub={detach} saving={saving} onDetach={saveDetach} onCancel={() => setDetach(null)} />
-      ) : (
-        <>
+      <>
           <div className="mr-orch-log" role="log" aria-live="polite" ref={logRef}>
             {lines.length === 0 ? (
               <p className="mr-orch-empty">
@@ -1255,8 +911,7 @@ export default function OrchestratorChat({
               </div>
             </form>
           )}
-        </>
-      )}
+      </>
 
       {unavailable ? <p className="mr-orch-note mono">The orchestrator is not connected.</p> : null}
     </aside>

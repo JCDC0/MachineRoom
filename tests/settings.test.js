@@ -41,6 +41,7 @@ describe('settings', () => {
       dockOpen: true,
       speed: 4,
       helpSeen: true,
+      sidebarTab: 'chat',
       sound: DEFAULT_SETTINGS.sound,
     })
     expect(JSON.parse(storage.getItem(SETTINGS_KEY))).toEqual(updated)
@@ -94,8 +95,15 @@ describe('settings', () => {
     })
   })
 
-  it('does not throw when storage getItem or setItem throws', () => {
-    const throwingStorage = {
+  it('keeps the sidebar tab to chat, projects or agents', () => {
+    const saved = makeStorage({ [SETTINGS_KEY]: JSON.stringify({ sidebarTab: 'agents' }) })
+    expect(loadSettings(saved).sidebarTab).toBe('agents')
+    const unknown = makeStorage({ [SETTINGS_KEY]: JSON.stringify({ sidebarTab: 'somewhere' }) })
+    expect(loadSettings(unknown).sidebarTab).toBe('chat')
+    expect(saveSettings(makeStorage(), { sidebarTab: 'projects' }).sidebarTab).toBe('projects')
+  })
+
+  it('does not throw when storage getItem or setItem throws', () => {    const throwingStorage = {
       getItem() {
         throw new Error('Storage is blocked')
       },

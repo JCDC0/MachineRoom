@@ -621,60 +621,10 @@ describe('OrchestratorChat panel', () => {
     expect(html.indexOf('>Main<')).toBeLessThan(html.indexOf('>Frontend<'))
     expect(html).toContain('class="mr-orch-tab-dot is-working"')
     expect(html).toContain('class="mr-orch-tab-dot is-paused"')
-    expect(html).toContain('aria-label="Detach Frontend"')
-    expect(html).toContain('aria-label="Detach Bridge"')
     expect(html).toContain('aria-pressed="true"')
-    expect(html).toContain('>Attach</button>')
+    expect(html).not.toContain('>Attach</button>')
+    expect(html).not.toContain('aria-label="Detach Frontend"')
     expect(html).toContain('Orchestrator is working')
-  })
-
-  it('draws the attach form with free lanes, scope and Restricted on', () => {
-    const list = [
-      {
-        id: 'orchestrator',
-        name: 'Orchestrator',
-        harness: 'claude',
-        model: 'opus',
-        state: 'idle',
-        lanes: ['opencode', 'opencode4'],
-        scope: [],
-        restricted: false,
-        setBy: 'owner',
-      },
-      {
-        id: 'frontend',
-        name: 'Frontend',
-        harness: 'opencode',
-        model: 'opencode-go/deepseek-v4.1-flash',
-        state: 'idle',
-        lanes: ['opencode2'],
-        scope: ['src/ui/**'],
-        restricted: true,
-        setBy: 'owner',
-      },
-    ]
-    const html = renderToString(
-      createElement(OrchestratorChat, {
-        open: true,
-        client: fakeClient(),
-        initialOrchestrators: list,
-        initialForm: { name: 'Bridge', id: 'bridge', harness: 'claude', model: 'sonnet', lanes: ['opencode'], scope: 'server/**', restricted: true },
-      })
-    )
-    expect(html).toContain('aria-label="Attach a sub orchestrator"')
-    expect(html).toContain('>Name</span>')
-    expect(html).toContain('>Id</span>')
-    expect(html).toContain('>Harness</span>')
-    expect(html).toContain('>Model</span>')
-    expect(html).toContain('>Lanes</legend>')
-    expect(html).toContain('>opencode</span>')
-    expect(html).toContain('>opencode4</span>')
-    expect(html).not.toContain('>opencode2</span>')
-    expect(html).toContain('>Scope, one glob per line</span>')
-    expect(html).toContain('>Restricted</span>')
-    expect(html).toContain('>Review</button>')
-    expect(html).toContain('>Cancel</button>')
-    expect(html).toContain('checked=""')
   })
 
   it('renders nothing when closed', () => {

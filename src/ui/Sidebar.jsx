@@ -1,9 +1,13 @@
 import { Fragment, useEffect, useState } from 'react'
 import FamilyTree from './FamilyTree.jsx'
+import LadderAttach from './LadderAttach.jsx'
+import SidebarTabs from './SidebarTabs.jsx'
+import { loadSettings, saveSettings } from './settings.js'
 import {
   ORCHESTRATOR_ID,
   SESSION_LIMIT,
   cleanText,
+  normalizeSidebarTab,
   previewLines,
   projectName,
   sessionAge,
@@ -38,7 +42,9 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
   const canProjects = typeof client?.projects === 'function'
   const canSessions = typeof client?.orchestratorSessions === 'function'
   const canFamily = typeof client?.family === 'function'
+  const canLadder = typeof client?.orchestrators === 'function' && typeof client?.setLadder === 'function'
   const available = connected && canProjects && canSessions
+  const [tab, setTab] = useState(() => normalizeSidebarTab(loadSettings().sidebarTab))
   const [projects, setProjects] = useState(null)
   const [sessions, setSessions] = useState(null)
   const [readError, setReadError] = useState('')
@@ -47,8 +53,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
   const [confirm, setConfirm] = useState(null)
   const [preview, setPreview] = useState(null)
   const [showAll, setShowAll] = useState(false)
-  const [collapsed, setCollapsed] = useState([])
-  const [opened, setOpened] = useState([])
   const [renaming, setRenaming] = useState(null)
 
   useEffect(() => {
@@ -98,6 +102,12 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     if (typeof client?.orchestratorSessions !== 'function') return
     const answer = await client.orchestratorSessions({ id: ORCHESTRATOR_ID })
     setSessions(answer)
+  }
+
+  function chooseTab(next) {
+    const value = normalizeSidebarTab(next)
+    setTab(value)
+    saveSettings(undefined, { sidebarTab: value })
   }
 
   function ask(config) {
@@ -282,7 +292,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     const path = cleanText(entry?.path)
     if (!path) return
     const label = projectName(entry)
-    if (path) setOpened((current) => (current.includes(path) ? current : [...current, path]))
     ask({
       text: `Open ${label}? The room restarts on that folder.`,
       label: 'Open project',
@@ -304,27 +313,12 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     window.dispatchEvent(new CustomEvent('machineroom:projects'))
   }
 
-  function toggleCollapsed(path) {
-    if (!path) return
-    setCollapsed((current) =>
-      current.includes(path) ? current.filter((item) => item !== path) : [...current, path]
-    )
-  }
-
-  function toggleOpened(path) {
-    if (!path) return
-    setOpened((current) =>
-      current.includes(path) ? current.filter((item) => item !== path) : [...current, path]
-    )
-  }
-
   const now = Date.now()
   const rows = sessionRows(sessions, { expanded: showAll })
   const fallbackName =
     cleanText(String(project ?? '').replace(/^\/+/, '')) || 'Project'
   const currentProject = projects?.current && typeof projects.current === 'object' ? projects.current : null
   const currentPath = cleanText(currentProject?.path)
-  const currentOpen = currentPath ? !collapsed.includes(currentPath) : true
   const recentProjects = (Array.isArray(projects?.recent) ? projects.recent : []).filter(
     (entry) => entry && typeof entry === 'object' && cleanText(entry.path)
   )
@@ -436,6 +430,63 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     })
   }
 
+  function renderNewButton() {
+    return (
+      <button
+        type="button"
+        className="hud-sessions-button mr-side-new is-rounded"
+        disabled={!available || typeof client?.newOrchestratorSession !== 'function'}
+        onClick={askNew}
+      >
+        <span className="mr-side-plus" aria-hidden="true">+</span>
+        <span>New conversation</span>
+      </button>
+    )
+  }
+
+  function renderChat() {
+    return (
+      <section className="mr-side-chat" aria-label="Conversations">
+        {renderNewButton()}
+        {available ? (
+          <>
+            <div className="mr-side-head">
+              <span className="mr-side-head-title mono" title={currentPath}>
+                {projectLabel}
+              </span>
+            </div>
+            <div className="mr-side-conversations">
+              {!sessions ? (
+                <p className="mr-side-note">Loading conversations...</p>
+              ) : rows.total === 0 ? (
+                <p className="mr-side-note">No conversations yet.</p>
+              ) : (
+                <>
+                  {renderSessionRows()}
+                  {rows.hidden > 0 ? (
+                    <button type="button" className="mr-side-more" onClick={() => setShowAll(true)}>
+                      {`See all (${rows.total})`}
+                    </button>
+                  ) : null}
+                  {showAll && rows.total > SESSION_LIMIT ? (
+                    <button type="button" className="mr-side-more" onClick={() => setShowAll(false)}>
+                      Show less
+                    </button>
+                  ) : null}
+                </>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="mr-side-offline">
+            <p className="mr-side-project-name">{projectLabel}</p>
+            <p className="mr-side-note">Projects and conversations appear when the room runs live.</p>
+          </div>
+        )}
+      </section>
+    )
+  }
+
   function renderProjectsHead() {
     return (
       <div className="mr-side-head">
@@ -454,103 +505,49 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
         {!projects ? (
           <p className="mr-side-note">{readError ? 'Projects are not available.' : 'Loading projects...'}</p>
         ) : null}
-        {currentProject ? (
+        {available ? (
           <>
-            <div className={`mr-side-project${currentOpen ? ' is-open' : ''}`}>
-              <button
-                type="button"
-                className="mr-side-twist"
-                aria-expanded={currentOpen}
-                aria-label={currentOpen ? `Close ${projectLabel}` : `Open ${projectLabel}`}
-                onClick={() => toggleCollapsed(currentPath)}
-              >
-                {currentOpen ? '-' : '+'}
-              </button>
-              <span className="mr-side-folder" aria-hidden="true" />
-              <button
-                type="button"
-                className="mr-side-project-name"
-                title={currentPath}
-                onClick={() => toggleCollapsed(currentPath)}
-              >
-                {projectLabel}
-              </button>
-            </div>
-            {currentOpen ? (
-              <div className="mr-side-conversations">
-                {!sessions ? (
-                  <p className="mr-side-note">Loading conversations...</p>
-                ) : rows.total === 0 ? (
-                  <p className="mr-side-note">No conversations yet.</p>
-                ) : (
-                  <>
-                    {renderSessionRows()}
-                    {rows.hidden > 0 ? (
-                      <button type="button" className="mr-side-more" onClick={() => setShowAll(true)}>
-                        {`See all (${rows.total})`}
-                      </button>
-                    ) : null}
-                    {showAll && rows.total > SESSION_LIMIT ? (
-                      <button type="button" className="mr-side-more" onClick={() => setShowAll(false)}>
-                        Show less
-                      </button>
-                    ) : null}
-                  </>
-                )}
+            {currentProject ? (
+              <div className="mr-side-project is-current" title={currentPath}>
+                <span className="mr-side-folder" aria-hidden="true" />
+                <span className="mr-side-project-name">{projectLabel}</span>
+                <span className="mr-side-current mono">Current</span>
               </div>
             ) : null}
-          </>
-        ) : null}
-        {recentProjects.map((entry) => {
-          const path = cleanText(entry.path)
-          const label = projectName(entry)
-          const isOpen = opened.includes(path)
-          const entrySessions = Array.isArray(entry.sessions) ? entry.sessions : []
-          return (
-            <Fragment key={path}>
-              <div className={`mr-side-project${isOpen ? ' is-open' : ''}`}>
+            {recentProjects.map((entry) => {
+              const path = cleanText(entry.path)
+              return (
                 <button
                   type="button"
-                  className="mr-side-twist"
-                  aria-expanded={isOpen}
-                  aria-label={isOpen ? `Close ${label}` : `Open ${label}`}
-                  onClick={() => toggleOpened(path)}
-                >
-                  {isOpen ? '-' : '+'}
-                </button>
-                <span className="mr-side-folder" aria-hidden="true" />
-                <button
-                  type="button"
-                  className="mr-side-project-name"
+                  className="mr-side-project is-button"
+                  key={path}
                   title={path}
                   onClick={() => askProject(entry)}
                 >
-                  {label}
+                  <span className="mr-side-folder" aria-hidden="true" />
+                  <span className="mr-side-project-name">{projectName(entry)}</span>
                 </button>
-              </div>
-              {isOpen ? (
-                <div className="mr-side-conversations">
-                  {entrySessions.length === 0 ? (
-                    <p className="mr-side-note">No conversations yet.</p>
-                  ) : (
-                    entrySessions.map((session, index) => (
-                      <button
-                        type="button"
-                        className="mr-side-row is-recent"
-                        key={session?.id ?? `${path}-${index}`}
-                        title={sessionTitle(session?.title)}
-                        onClick={() => askProject(entry)}
-                      >
-                        <span className="mr-side-title">{sessionTitle(session?.title)}</span>
-                        <span className="mr-side-age mono">{sessionAge(session, now)}</span>
-                      </button>
-                    ))
-                  )}
-                </div>
-              ) : null}
-            </Fragment>
-          )
-        })}
+              )
+            })}
+          </>
+        ) : (
+          <div className="mr-side-offline">
+            <p className="mr-side-project-name">{projectLabel}</p>
+            <p className="mr-side-note">Projects and conversations appear when the room runs live.</p>
+          </div>
+        )}
+      </section>
+    )
+  }
+
+  function renderAgents() {
+    return (
+      <section className="mr-side-agents" aria-label="Agents">
+        {connected && canFamily ? <FamilyTree client={client} /> : null}
+        {connected && canLadder ? <LadderAttach client={client} /> : null}
+        {!connected || (!canFamily && !canLadder) ? (
+          <p className="mr-side-note">Agents appear when the room runs live.</p>
+        ) : null}
       </section>
     )
   }
@@ -595,37 +592,14 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
   }
 
   return (
-    <aside className="mr-side" aria-label="Projects and conversations">
-      <button
-        type="button"
-        className="hud-sessions-button mr-side-new"
-        disabled={!available || typeof client?.newOrchestratorSession !== 'function'}
-        onClick={askNew}
-      >
-        <span className="mr-side-plus" aria-hidden="true">+</span>
-        <span>New conversation</span>
-      </button>
+    <aside className="mr-side" aria-label="Sidebar">
+      <SidebarTabs value={tab} onChange={chooseTab} />
       {readError ? <p className="mr-side-error mono">{readError}</p> : null}
       {actionError ? <p className="mr-side-error mono" role="alert">{actionError}</p> : null}
       <div className="mr-side-body">
-        {preview ? (
-          renderPreview()
-        ) : (
-          <>
-            {connected && canFamily ? <FamilyTree client={client} /> : null}
-            {available ? (
-              renderProjects()
-            ) : (
-              <section className="mr-side-projects" aria-label="Projects">
-                {renderProjectsHead()}
-                <div className="mr-side-offline">
-                  <p className="mr-side-project-name">{projectLabel}</p>
-                  <p className="mr-side-note">Projects and conversations appear when the room runs live.</p>
-                </div>
-              </section>
-            )}
-          </>
-        )}
+        {tab === 'chat' ? (preview ? renderPreview() : renderChat()) : null}
+        {tab === 'projects' ? renderProjects() : null}
+        {tab === 'agents' ? renderAgents() : null}
       </div>
       <footer className="mr-side-foot">
         <button type="button" className="hud-strip-settings" onClick={() => onOpenSettings?.()}>
