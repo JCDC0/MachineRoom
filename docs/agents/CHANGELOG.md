@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A project picker shows on the first visit to a live room that is not a git checkout, and whenever the `machineroom:projects` event fires: the current folder first, then recent projects and the folders beside it with a `git` tag, and a box for any absolute folder path; a pick opens the folder, waits for the bridge and reloads the page (task U36).
+
 - The menu row and the info strip no longer draw a straight line along the lens, so only the curved edges show (the owner's sketch).
 
 - MachineRoom's own lane worktrees moved from `C:\GitHub\MachineRoom-<lane>` into `.worktrees\<lane>` inside the checkout; `lanes.json` and its notes name the new paths, `.gitignore` lists `.worktrees/`, and the Vite dev server does not watch it.

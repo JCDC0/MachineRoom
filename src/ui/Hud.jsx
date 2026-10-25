@@ -7,6 +7,7 @@ import AgentDock from './AgentDock.jsx'
 import AgentStrip from './AgentStrip.jsx'
 import Assistant from './Assistant.jsx'
 import Guide from './Guide.jsx'
+import Launcher from './Launcher.jsx'
 import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
 import { agentForNumber, agentList } from './agentList.js'
@@ -773,6 +774,8 @@ export default function Hud({
       )}
 
       {guideOpen && <Guide onClose={closeGuide} />}
+
+      <Launcher client={client} live={mode === 'live'} />
 
       {!chatAvailable && (
         <Assistant
