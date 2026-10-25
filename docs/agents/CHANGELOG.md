@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The control drawer has a solid background, so the dock no longer shows through it, and the Team tab leaves out a lane's role when it has none instead of printing `NULL`.
+
 - The connect screen names `npm run serve -- up --root YOUR-PROJECT` instead of the old `npm run bridge`.
 
 - AGY, AGY 2 and AGY 3 are backend lanes on Flash, the OpenCode lanes may change App and Stage, and a lane prompt leaves out the forbidden paths line when the lane has none.

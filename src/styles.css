@@ -2670,7 +2670,7 @@ summary:focus-visible,
   bottom: calc(var(--space) * 11);
   width: 384px;
   max-width: calc(100vw - var(--space) * 4);
-  background: var(--corner-ticks), rgb(0 0 0 / 0.94);
+  background: var(--corner-ticks), #000;
   border: 1px solid var(--line);
   border-radius: 2px;
   display: flex;

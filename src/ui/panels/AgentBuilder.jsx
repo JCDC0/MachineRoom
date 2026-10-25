@@ -82,7 +82,7 @@ export default function AgentBuilder({
                   <span className="task-status mono">
                     {statusLabel(agent.status)}
                   </span>
-                  <span className="task-priority mono">{visibleText(agent.role)}</span>
+                  {agent.role ? <span className="task-priority mono">{visibleText(agent.role)}</span> : null}
                 </div>
                 <div className="task-assignee mono">
                   {visibleText(agent.adapterType)}
