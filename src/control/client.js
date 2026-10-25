@@ -276,6 +276,24 @@ export function createClient({
       return request('POST', '/api/control/runs', { lane, ...body, confirmed: true })
     },
 
+    lanes: () => request('GET', '/api/lanes'),
+
+    setActiveLanes: (optionsOrLanes, maybeConfirmed) => {
+      let lanes
+      let confirmed = true
+      if (Array.isArray(optionsOrLanes)) {
+        lanes = optionsOrLanes
+        if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+        else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+          confirmed = maybeConfirmed.confirmed
+        }
+      } else if (optionsOrLanes && typeof optionsOrLanes === 'object') {
+        lanes = optionsOrLanes.lanes
+        if (optionsOrLanes.confirmed !== undefined) confirmed = optionsOrLanes.confirmed
+      }
+      return request('POST', '/api/lanes/active', { lanes, confirmed })
+    },
+
     reviews: async () => {
       const data = await request('GET', '/api/control/reviews', undefined, REQUEST_LIMITS.reviews)
       return Array.isArray(data) ? data : data?.lanes ?? []

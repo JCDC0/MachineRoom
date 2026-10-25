@@ -177,7 +177,7 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '' }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : REPO_LANES
@@ -392,6 +392,18 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
+    const laneActive = typeof isLaneActive === 'function'
+      ? isLaneActive(lane)
+      : typeof activeLanes === 'function' && activeLanes()
+        ? activeLanes().isLaneActive(lane)
+        : activeLanes && typeof activeLanes.isLaneActive === 'function'
+          ? activeLanes.isLaneActive(lane)
+          : true
+    if (!laneActive) {
+      sendJson(req, res, 400, { error: `The lane ${lane} is not active. Add it in Agents first.` })
+      return true
+    }
+
     let startedBy = ''
     const registry = typeof orchestrators === 'function' ? orchestrators() : null
     const page = Boolean(req.headers.origin)
@@ -534,5 +546,5 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return true
   }
 
-  return { handle, stopAll }
+  return { handle, stopAll, isRunning: (lane) => running.has(lane) }
 }

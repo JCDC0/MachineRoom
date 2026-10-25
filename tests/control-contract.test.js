@@ -538,4 +538,18 @@ describe('the control client orchestrator routes', () => {
     expect(failure.message).toBe('The ladder has problems.')
     expect(failure.problems).toEqual(['Sub "x" has no scope.'])
   })
+
+  it('reads the lanes list and writes active lanes with confirmation', async () => {
+    const { calls, client } = recorder({ lanes: [], max: 0, chosen: false })
+    await client.lanes()
+    await client.setActiveLanes({ lanes: ['opencode'], confirmed: true })
+    expect(calls).toEqual([
+      { url: 'http://127.0.0.1:9/api/lanes', method: 'GET', body: undefined },
+      {
+        url: 'http://127.0.0.1:9/api/lanes/active',
+        method: 'POST',
+        body: JSON.stringify({ lanes: ['opencode'], confirmed: true }),
+      },
+    ])
+  })
 })

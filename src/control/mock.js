@@ -36,6 +36,8 @@ export const CLIENT_METHODS = [
   'setOrchestratorModel',
   'setLadder',
   'startRun',
+  'lanes',
+  'setActiveLanes',
   'reviews',
   'reviewDiff',
   'mergeReview',
@@ -263,6 +265,14 @@ function seed(at) {
       { id: 'agent-opencode3', key: 'opencode3', name: 'OpenCode 3', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
       { id: 'agent-opencode4', key: 'opencode4', name: 'OpenCode 4', adapterType: 'opencode_local', role: null, status: 'idle', model: 'opencode-go/deepseek-v4.1-flash', budgetMonthlyCents: 0, spentMonthlyCents: 0 },
     ],
+    lanes: [
+      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', active: true, working: false },
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: true },
+      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
+      { key: 'opencode3', name: 'OpenCode 3', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
+      { key: 'opencode4', name: 'OpenCode 4', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', active: true, working: false },
+    ],
+    chosenLanes: false,
     issues: [
       { id: 'issue-18', identifier: 'JC-18', title: 'Fix the typo in README.md', description: 'Change Teh to The and commit.', status: 'done', priority: 'medium', assigneeAgentId: 'agent-opencode', parentId: null, createdAt: iso(90), updatedAt: iso(88) },
       { id: 'issue-19', identifier: 'JC-19', title: 'Record a failing test scenario', description: 'Add a test that fails, then fix it.', status: 'in_progress', priority: 'high', assigneeAgentId: 'agent-opencode', parentId: null, createdAt: iso(40), updatedAt: iso(3) },
@@ -497,7 +507,14 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   }
 
   const client = {
-    agents: () => call('agents', () => state.agents),
+    agents: () =>
+      call('agents', () => {
+        if (!state.chosenLanes) return state.agents
+        const activeKeys = new Set(state.lanes.filter((lane) => lane.active).map((lane) => lane.key))
+        return state.agents.filter(
+          (agent) => agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-') || activeKeys.has(agent.key)
+        )
+      }),
 
     issues: ({ status } = {}) => call('issues', () => (status ? state.issues.filter((issue) => issue.status === status) : state.issues)),
 
@@ -792,6 +809,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const info = typeof lane === 'string' && Object.hasOwn(SAMPLE_LANES, lane) ? SAMPLE_LANES[lane] : null
         if (!info || typeof info !== 'object') throw new Error('Choose a lane from the list.')
         if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
+        if (state.chosenLanes && !state.lanes.some((l) => l.key === lane && l.active)) {
+          throw new Error(`The lane ${lane} is not active. Add it in Agents first.`)
+        }
         const projectRun = body.briefs === undefined
         const queue = body.tasks !== undefined
         const worktree = projectRun && body.worktree === true
@@ -860,6 +880,45 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           emit({ topic: 'runs' })
         }, runMs)
         return entry
+      }),
+
+    lanes: () =>
+      call('lanes', () => ({
+        lanes: clone(state.lanes),
+        max: state.lanes.length,
+        chosen: Boolean(state.chosenLanes),
+      })),
+
+    setActiveLanes: (optionsOrLanes, maybeConfirmed) =>
+      call('setActiveLanes', () => {
+        let lanes
+        let confirmed = true
+        if (Array.isArray(optionsOrLanes)) {
+          lanes = optionsOrLanes
+          if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+          else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+            confirmed = maybeConfirmed.confirmed
+          }
+        } else if (optionsOrLanes && typeof optionsOrLanes === 'object') {
+          lanes = optionsOrLanes.lanes
+          if (optionsOrLanes.confirmed !== undefined) confirmed = optionsOrLanes.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the active lanes first.')
+        if (!Array.isArray(lanes) || lanes.length === 0) throw new Error('Choose at least one lane.')
+        const seen = new Set()
+        for (const key of lanes) {
+          if (typeof key !== 'string' || !state.lanes.some((l) => l.key === key)) {
+            throw new Error(`The lane ${key} is not known.`)
+          }
+          if (seen.has(key)) throw new Error('A lane cannot be listed more than once.')
+          seen.add(key)
+        }
+        state.chosenLanes = true
+        for (const lane of state.lanes) {
+          lane.active = seen.has(lane.key)
+        }
+        emit({ topic: 'agents' })
+        return { ok: true, lanes: clone(lanes) }
       }),
 
     reviews: () => call('reviews', () => Object.values(reviewState)),
