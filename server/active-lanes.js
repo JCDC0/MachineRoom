@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readAllLanes } from './lanes-source.js'
 
 export const OWNER_ACTIVE_LANES_PROBLEM = 'A request with no Origin cannot set the active lanes.'
 export const CONFIRM_ACTIVE_LANES_PROBLEM = 'Confirm the active lanes first.'
@@ -63,6 +64,8 @@ export function eligibleLanes(lanesConfig = {}) {
       name: entry.name ?? key,
       harness: entry.cli.harness,
       model: entry.cli.model,
+      custom: entry.custom === true,
+      effort: entry.effort ?? null,
     })
   }
   return list
@@ -85,6 +88,8 @@ export function listActiveLanes({
     name: lane.name,
     harness: lane.harness,
     model: lane.model,
+    custom: lane.custom === true,
+    effort: lane.effort ?? null,
     active: chosen ? activeSet.has(lane.key) : true,
     working: typeof isWorking === 'function' ? Boolean(isWorking(lane.key)) : false,
   }))
@@ -105,20 +110,23 @@ export function createActiveLanesApi(options = {}) {
   const isWorking = options.isWorking
 
   function getLanesConfig() {
-    if (typeof options.lanes === 'function') return options.lanes()
-    if (options.lanes && typeof options.lanes === 'object') return options.lanes
-    if (options.lanesFile) {
+    let base = null
+    if (typeof options.lanes === 'function') base = options.lanes()
+    else if (options.lanes && typeof options.lanes === 'object') base = options.lanes
+    else if (options.lanesFile) {
       try {
-        return JSON.parse(readFileSync(options.lanesFile, 'utf8'))
+        base = JSON.parse(readFileSync(options.lanesFile, 'utf8'))
       } catch {
-        return {}
+        base = {}
+      }
+    } else {
+      try {
+        base = JSON.parse(readFileSync(join(REPO_ROOT, 'docs', 'agents', 'lanes.json'), 'utf8'))
+      } catch {
+        base = {}
       }
     }
-    try {
-      return JSON.parse(readFileSync(join(REPO_ROOT, 'docs', 'agents', 'lanes.json'), 'utf8'))
-    } catch {
-      return {}
-    }
+    return readAllLanes({ lanesJson: base, runsFolder })
   }
 
   function choiceFile() {
@@ -127,6 +135,28 @@ export function createActiveLanesApi(options = {}) {
 
   function isChosen() {
     return readActiveLanesChoice(choiceFile()) !== null
+  }
+
+  function addActiveLane(key) {
+    const file = choiceFile()
+    const saved = readActiveLanesChoice(file)
+    if (saved === null) return
+    if (!saved.includes(key)) {
+      saved.push(key)
+      mkdirSync(dirname(file), { recursive: true })
+      writeFileSync(file, `${JSON.stringify(saved, null, 2)}\n`)
+    }
+  }
+
+  function removeActiveLane(key) {
+    const file = choiceFile()
+    const saved = readActiveLanesChoice(file)
+    if (saved === null) return
+    const filtered = saved.filter((k) => k !== key)
+    if (filtered.length !== saved.length) {
+      mkdirSync(dirname(file), { recursive: true })
+      writeFileSync(file, `${JSON.stringify(filtered, null, 2)}\n`)
+    }
   }
 
   function activeKeySet() {
@@ -224,6 +254,8 @@ export function createActiveLanesApi(options = {}) {
     isChosen,
     isLaneActive,
     activeKeySet,
+    addActiveLane,
+    removeActiveLane,
     list: () =>
       listActiveLanes({
         lanesConfig: getLanesConfig(),
