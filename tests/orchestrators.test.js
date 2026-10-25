@@ -383,6 +383,11 @@ describe('branchChanges', () => {
 
     expect(branchChanges({ project: worktree }, {}, { project }).sort()).toEqual(['server/b.js', 'src/a.js'])
   })
+
+  it('reads a lane worktree only from the lane file own keys', () => {
+    const lanes = Object.create({ opencode: { worktree: join(REPO_ROOT, 'no-such-lane-worktree') } })
+    expect(branchChanges({ lane: 'opencode' }, lanes)).toEqual([])
+  })
 })
 
 describe('the orchestrator registry', () => {

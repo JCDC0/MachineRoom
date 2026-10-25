@@ -4,6 +4,8 @@
 
 - The end to end orchestrator test now covers a restricted sub: the owner's ladder attach, a lane started with `startedBy`, an outside scope file, the wake in the sub and the main chat, and the sub's reply as `sub:<id>` (task T22).
 
+- The scope check reads a lane worktree only from the lane file's own keys, so an inherited key cannot name a folder (task R13).
+- The scope check runs its diff with external diff and textconv off, so a configured diff program is not run (task R13).
 - History audit: on GitHub Actions the profile check is off, since the runner's user name (`runner`) is not the owner's and is a word the docs use.
 
 - The soak test reads the bridge history again after the run ends, since a page that joins mid-run gets the history and then live frames (CI failed on Ubuntu with 501 frames).
