@@ -311,6 +311,21 @@ export function createClient({
 
     backupNow: () => request('POST', '/api/backup', { confirmed: true }, REQUEST_LIMITS.backupNow),
 
+    projects: () => request('GET', '/api/projects'),
+
+    openProject: (pathOrOptions, options = {}) => {
+      let path
+      let confirmed = true
+      if (typeof pathOrOptions === 'object' && pathOrOptions !== null) {
+        path = pathOrOptions.path
+        if (pathOrOptions.confirmed !== undefined) confirmed = pathOrOptions.confirmed
+      } else {
+        path = pathOrOptions
+        if (options.confirmed !== undefined) confirmed = options.confirmed
+      }
+      return request('POST', '/api/projects/open', { path, confirmed })
+    },
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()

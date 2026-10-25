@@ -43,6 +43,8 @@ export const CLIENT_METHODS = [
   'plan',
   'acceptPlan',
   'decide',
+  'projects',
+  'openProject',
   'subscribe',
 ]
 
@@ -176,6 +178,35 @@ const SAMPLE_REVIEW_PATCH = [
 const SAMPLE_REVIEW_DIFF_FILES = [{ path: 'src/control/client.js', added: 2, deleted: 0 }]
 
 const SAMPLE_MERGE_COMMIT = '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a'
+
+export const MOCK_PROJECTS = {
+  current: {
+    path: '/mock/projects/machineroom',
+    name: 'machineroom',
+    git: true,
+  },
+  recent: [
+    {
+      path: '/mock/projects/paperclip',
+      name: 'paperclip',
+      openedAt: '2026-10-24T12:00:00.000Z',
+      sessions: [
+        { id: 'session-1', title: 'Fix token counts', endedAt: '2026-10-24T12:30:00.000Z' },
+      ],
+    },
+    {
+      path: '/mock/projects/airp',
+      name: 'airp',
+      openedAt: '2026-10-23T10:00:00.000Z',
+      sessions: [],
+    },
+  ],
+  folders: [
+    { path: '/mock/projects/alpha', name: 'alpha', git: true },
+    { path: '/mock/projects/beta', name: 'beta', git: false },
+    { path: '/mock/projects/gamma', name: 'gamma', git: true },
+  ],
+}
 
 const SAMPLE_REVIEWS = {
   hermes: {
@@ -970,6 +1001,29 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const named = questions !== null && typeof questions === 'object' && !Array.isArray(questions)
         if (!named || Object.keys(questions).length === 0) throw new Error('Send at least one question.')
         throw new Error('No key is set for the decision model.')
+      }),
+
+    projects: () =>
+      call('projects', () => ({
+        current: { ...MOCK_PROJECTS.current },
+        recent: MOCK_PROJECTS.recent.map((item) => ({ ...item, sessions: item.sessions.map((s) => ({ ...s })) })),
+        folders: MOCK_PROJECTS.folders.map((folder) => ({ ...folder })),
+      })),
+
+    openProject: (pathOrOptions, options = {}) =>
+      call('openProject', () => {
+        let path
+        let confirmed = true
+        if (typeof pathOrOptions === 'object' && pathOrOptions !== null) {
+          path = pathOrOptions.path
+          if (pathOrOptions.confirmed !== undefined) confirmed = pathOrOptions.confirmed
+        } else {
+          path = pathOrOptions
+          if (options.confirmed !== undefined) confirmed = options.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm opening the project first.')
+        if (typeof path !== 'string' || !path.trim()) throw new Error('Provide an absolute folder path.')
+        return { ok: true, restarting: true, path }
       }),
 
     subscribe(listener) {

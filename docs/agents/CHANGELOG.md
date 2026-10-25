@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Open another project from the page: keep recent projects and folder siblings, refuse runs while a turn runs, and restart on the new root (task O12).
+
 - The menu row and the info strip no longer draw a straight line along the lens, so only the curved edges show (the owner's sketch).
 
 - MachineRoom's own lane worktrees moved from `C:\GitHub\MachineRoom-<lane>` into `.worktrees\<lane>` inside the checkout; `lanes.json` and its notes name the new paths, `.gitignore` lists `.worktrees/`, and the Vite dev server does not watch it.

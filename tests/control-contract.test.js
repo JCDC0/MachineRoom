@@ -527,6 +527,30 @@ describe('the control client orchestrator routes', () => {
     ])
   })
 
+  it('reads projects and opens a project', async () => {
+    const { calls, client } = recorder({ ok: true, restarting: true, path: '/tmp/project' })
+    await client.projects()
+    await client.openProject({ path: '/tmp/project' })
+    expect(calls).toEqual([
+      { url: 'http://127.0.0.1:9/api/projects', method: 'GET', body: undefined },
+      {
+        url: 'http://127.0.0.1:9/api/projects/open',
+        method: 'POST',
+        body: JSON.stringify({ path: '/tmp/project', confirmed: true }),
+      },
+    ])
+  })
+
+  it('reads mock projects and opens a project on the mock', async () => {
+    const mock = createMockClient({ latencyMs: 0 })
+    const projects = await mock.projects()
+    expect(projects.current).toMatchObject({ name: 'machineroom', git: true })
+    expect(projects.recent).toHaveLength(2)
+    expect(projects.folders).toHaveLength(3)
+    const opened = await mock.openProject({ path: '/mock/projects/alpha' })
+    expect(opened).toEqual({ ok: true, restarting: true, path: '/mock/projects/alpha' })
+  })
+
   it('keeps the problems the bridge answers on the error', async () => {
     const client = createClient({
       fetchImpl: async () => ({

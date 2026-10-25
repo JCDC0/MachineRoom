@@ -15,6 +15,7 @@ import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
 import { createOrchestrators } from './orchestrators.js'
 import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
+import { createProjectsApi } from './projects.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
 import { createSessionsSource } from './sessions-source.js'
@@ -363,6 +364,16 @@ export function createBridge(options = {}) {
       readJsonBody,
     })
   }
+  const bridgeRunsFolder = resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder())
+  const projects = createProjectsApi({
+    projectRoot,
+    runsFolder: bridgeRunsFolder,
+    onOpenProject: options.onOpenProject,
+    orchestrators: () => orchestrators,
+    sendJson,
+    readJsonBody,
+    now: options.now,
+  })
   const treeSent = new WeakMap()
   const folderClients = new WeakSet()
   const treeClients = new WeakSet()
@@ -653,6 +664,7 @@ export function createBridge(options = {}) {
     if (await decideApi.handle(req, res, url)) return
 
     if (orchestrators && (await orchestrators.handle(req, res, url))) return
+    if (await projects.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {
@@ -771,6 +783,7 @@ export function createBridge(options = {}) {
     lanesSource?.start()
     sessionsSource?.start()
     await startWatcher()
+    projects.recordCurrent()
     if (stopped) throw new Error('The bridge stopped before it started.')
     return new Promise((resolveStart, rejectStart) => {
       server.once('error', rejectStart)

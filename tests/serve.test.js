@@ -307,6 +307,84 @@ describe('machine-room bin', () => {
     await waitForExit(first)
   }, 20000)
 
+  it('restarts on the same port with the new root when a project is opened', async () => {
+    const { base, dist } = makeDist()
+    const newProject = makeTempDir('machine-room-new-project-')
+    cleanups.push(() => rmSync(newProject, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }))
+
+    const child = spawn(process.execPath, [BIN, '--dist', dist, '--root', base, '--port', '0', '--lanes'], {
+      env: childEnv(base),
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    cleanups.push(() => {
+      if (child.exitCode === null && child.signalCode === null) child.kill()
+    })
+    const line = await waitForStartLine(child)
+    const openUrl = line.replace(/^machine-room: open /, '')
+    const url = new URL(openUrl).origin
+
+    let movedOutput = ''
+    child.stdout.on('data', (chunk) => {
+      movedOutput += chunk
+    })
+
+    const response = await fetch(`${url}/api/projects/open`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        Origin: url,
+      },
+      body: JSON.stringify({ path: newProject, confirmed: true }),
+    })
+    expect(response.status).toBe(200)
+    const answer = await response.json()
+    expect(answer).toEqual({ ok: true, restarting: true, path: resolve(newProject) })
+
+    await new Promise((resolveWait, rejectWait) => {
+      const deadline = Date.now() + 10000
+      const check = () => {
+        if (
+          movedOutput.includes(`MachineRoom moved to ${resolve(newProject)}.`) &&
+          movedOutput.includes(`machine-room: open ${url}/?live&bridge=${url}`)
+        ) {
+          resolveWait()
+        } else if (Date.now() > deadline) {
+          rejectWait(new Error(`Timed out waiting for MachineRoom moved to. Output: ${movedOutput}`))
+        } else {
+          setTimeout(check, 50)
+        }
+      }
+      check()
+    })
+    expect(movedOutput).toContain(`MachineRoom moved to ${resolve(newProject)}.`)
+    expect(movedOutput).toContain(`machine-room: open ${url}/?live&bridge=${url}`)
+
+    await new Promise((resolveWait, rejectWait) => {
+      const deadline = Date.now() + 10000
+      const check = async () => {
+        try {
+          const res = await fetch(`${url}/api/projects`)
+          if (res.ok) {
+            const body = await res.json()
+            if (body.current?.path === resolve(newProject)) {
+              resolveWait()
+              return
+            }
+          }
+        } catch {}
+        if (Date.now() > deadline) {
+          rejectWait(new Error('Timed out waiting for projects to reflect new root'))
+        } else {
+          setTimeout(check, 50)
+        }
+      }
+      check()
+    })
+
+    child.kill()
+    await waitForExit(child)
+  }, 25000)
+
   it('prints the help and exits cleanly', async () => {
     const child = spawn(process.execPath, [BIN, '--help'], { env: childEnv(), stdio: ['ignore', 'pipe', 'pipe'] })
     let output = ''
