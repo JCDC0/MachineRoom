@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import EndpointsPanel from './EndpointsPanel.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
 import { store } from '../storage.js'
 import { effectSettings, loadSoundSettings, saveSoundSettings } from './settings.js'
@@ -12,7 +13,7 @@ export const EFFECTS = [
   { key: 'dust', label: 'Fine dust', costly: false },
 ]
 
-export default function Settings({ effects, onChange, onClose }) {
+export default function Settings({ effects, onChange, onClose, client = null }) {
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
 
@@ -181,6 +182,8 @@ export default function Settings({ effects, onChange, onClose }) {
             <MusicPlayer />
           </div>
         </div>
+
+        <EndpointsPanel client={client} />
       </div>
     </section>
   )

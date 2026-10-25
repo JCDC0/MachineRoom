@@ -48,6 +48,11 @@ export const CLIENT_METHODS = [
   'startRun',
   'lanes',
   'harnesses',
+  'providers',
+  'endpoints',
+  'saveEndpoint',
+  'deleteEndpoint',
+  'endpointModels',
   'createLane',
   'updateLane',
   'deleteLane',
@@ -134,6 +139,27 @@ const SAMPLE_LANES = {
   opencode2: { name: 'OpenCode 2', harness: 'OpenCode', model: 'Gemini 4 Argon', worktree: 'C:\\GitHub\\MachineRoom-opencode2', role: 'You own the bridge.', forbidden: ['src/ui/**', 'src/engine/**', 'src/Stage.jsx'], notes: [], cli: { harness: 'opencode', bin: 'opencode.exe', model: 'opencode-go/mimo-v2.6-pro' } },
   agy: { name: 'agy', harness: 'agy', model: 'Gemini 3.8 Flash (High)', models: { C3e: 'Gemini 4 Argon' }, worktree: 'C:\\GitHub\\MachineRoom-agy', role: 'You own the HUD.', forbidden: ['server/**', 'src/engine/**', 'src/control/**'], notes: [] },
 }
+
+export const MOCK_PROVIDERS = [
+  { name: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
+  { name: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
+  { name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1' },
+  { name: 'NVIDIA', baseUrl: 'https://integrate.api.nvidia.com/v1' },
+  { name: 'Kimi (Moonshot)', baseUrl: 'https://api.moonshot.ai/v1' },
+  { name: 'Groq', baseUrl: 'https://api.groq.com/openai/v1' },
+  { name: 'Mistral', baseUrl: 'https://api.mistral.ai/v1' },
+  { name: 'Together', baseUrl: 'https://api.together.xyz/v1' },
+  { name: 'xAI', baseUrl: 'https://api.x.ai/v1' },
+  { name: 'Gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  { name: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1' },
+  { name: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1' },
+  { name: 'Custom', baseUrl: '' },
+]
+
+const SAMPLE_ENDPOINTS = [
+  { name: 'Local Ollama', provider: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', keyName: '', models: ['llama3.3', 'qwen3'] },
+  { name: 'OpenRouter Work', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'openrouter', models: ['deepseek/deepseek-v4.1-flash-1017'] },
+]
 
 const SAMPLE_RULES = {
   about: 'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
@@ -435,6 +461,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
+  let endpointState = clone(SAMPLE_ENDPOINTS)
   let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
   const subChats = new Map()
   const familyLabels = new Map()
@@ -1340,6 +1367,50 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           efforts: [],
         },
       ]),
+
+    providers: () => call('providers', () => clone(MOCK_PROVIDERS)),
+
+    endpoints: () => call('endpoints', () => clone(endpointState)),
+
+    saveEndpoint: (draft) =>
+      call('saveEndpoint', () => {
+        if (draft?.confirmed !== true) throw new Error('Confirm saving the endpoint first.')
+        const name = typeof draft?.name === 'string' ? draft.name.trim() : ''
+        if (!name || name.length > 40) throw new Error('The endpoint name must be 1 to 40 letters, digits, spaces, dashes or underscores.')
+        const endpoint = {
+          name,
+          provider: draft.provider,
+          baseUrl: draft.baseUrl,
+          keyName: typeof draft.keyName === 'string' ? draft.keyName : '',
+          models: Array.isArray(draft.models) ? [...draft.models] : [],
+        }
+        const index = endpointState.findIndex((entry) => entry.name === name)
+        if (index === -1) {
+          if (endpointState.length >= 20) throw new Error('At most 20 endpoints are allowed.')
+          endpointState.push(endpoint)
+        } else {
+          endpointState[index] = endpoint
+        }
+        emit({ topic: 'endpoints' })
+        return { endpoint: clone(endpoint), endpoints: clone(endpointState) }
+      }),
+
+    deleteEndpoint: ({ name, confirmed = true } = {}) =>
+      call('deleteEndpoint', () => {
+        if (confirmed !== true) throw new Error('Confirm deleting the endpoint first.')
+        const index = endpointState.findIndex((entry) => entry.name === name)
+        if (index === -1) throw new Error('The endpoint was not found.')
+        endpointState.splice(index, 1)
+        emit({ topic: 'endpoints' })
+        return { ok: true, deleted: name, endpoints: clone(endpointState) }
+      }),
+
+    endpointModels: (name) =>
+      call('endpointModels', () => {
+        const endpoint = endpointState.find((entry) => entry.name === name)
+        if (!endpoint) throw new Error('The endpoint was not found.')
+        return [...endpoint.models]
+      }),
 
     createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
       call('createLane', () => {

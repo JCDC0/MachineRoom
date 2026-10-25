@@ -380,6 +380,23 @@ export function createClient({
 
     harnesses: () => request('GET', '/api/harnesses'),
 
+    providers: () => request('GET', '/api/providers'),
+
+    endpoints: async () => {
+      const data = await request('GET', '/api/endpoints')
+      return Array.isArray(data) ? data : data?.endpoints ?? []
+    },
+
+    saveEndpoint: (draft) => request('POST', '/api/endpoints', draft ?? {}),
+
+    deleteEndpoint: ({ name, confirmed = true } = {}) =>
+      request('POST', `/api/endpoints/${encodeURIComponent(name ?? '')}/delete`, { confirmed }),
+
+    endpointModels: async (name) => {
+      const data = await request('GET', `/api/endpoints/${encodeURIComponent(name ?? '')}/models`)
+      return Array.isArray(data) ? data : data?.models ?? []
+    },
+
     createLane: ({ name, harness, model, effort, confirmed = true } = {}) =>
       request('POST', '/api/lanes/create', { name, harness, model, effort, confirmed }),
 

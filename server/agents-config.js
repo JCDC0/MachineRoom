@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { MODELS } from './models.js'
+import { readEndpoints } from './endpoints.js'
+import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
 
@@ -77,8 +78,9 @@ function isProgram(path) {
   }
 }
 
-export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, platform = process.platform } = {}) {
+export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, platform = process.platform, endpoints = [] } = {}) {
   if (harnessKey === 'machineroom') {
+    if (Array.isArray(endpoints) && endpoints.length > 0) return true
     const key = env?.MACHINEROOM_API_KEY
     const fallback = env?.OPENROUTER_API_KEY
     return (typeof key === 'string' && key.trim() !== '') || (typeof fallback === 'string' && fallback.trim() !== '')
@@ -112,12 +114,14 @@ export function isHarnessAvailable(harnessKey, { lanes = {}, env = process.env, 
   return false
 }
 
-export function listHarnesses({ lanes = {}, env = process.env, platform = process.platform } = {}) {
+export function listHarnesses({ lanes = {}, env = process.env, platform = process.platform, runsFolder = null } = {}) {
+  const endpoints = runsFolder ? readEndpoints(runsFolder) : []
+  const models = runsFolder ? modelsFor(runsFolder) : MODELS
   return HARNESS_KEYS.map((key) => ({
     key,
     name: HARNESS_NAMES[key] ?? key,
-    available: isHarnessAvailable(key, { lanes, env, platform }),
-    models: MODELS.filter((m) => m.harness === key).map(({ id, label }) => ({ id, label })),
+    available: isHarnessAvailable(key, { lanes, env, platform, endpoints }),
+    models: models.filter((m) => m.harness === key).map(({ id, label }) => ({ id, label })),
     efforts: [...(HARNESS_EFFORTS[key] ?? [])],
   }))
 }
@@ -185,6 +189,19 @@ export function nextFreeKey(harness, lanesJson = {}, existingAgents = []) {
   return `${prefix}${num}`
 }
 
+function endpointModelId(endpoint, model) {
+  const wanted = typeof model === 'string' ? model.trim() : ''
+  if (!endpoint || wanted === '') return ''
+  const prefix = `${endpoint.name}/`
+  if (wanted.startsWith(prefix)) return endpoint.models.includes(wanted.slice(prefix.length)) ? wanted : ''
+  return endpoint.models.includes(wanted) ? `${prefix}${wanted}` : ''
+}
+
+function laneEndpointProblem(harness, name) {
+  if (harness !== 'machineroom') return 'Only a MachineRoom lane can name an endpoint.'
+  return `The endpoint ${name} was not found.`
+}
+
 export function buildMadeLane(agent, lanesJson = {}) {
   let template = null
   for (const [laneKey, lane] of Object.entries(lanesJson ?? {})) {
@@ -201,6 +218,8 @@ export function buildMadeLane(agent, lanesJson = {}) {
   const cli = template?.cli
     ? { ...template.cli, model: agent.model }
     : { harness: agent.harness, bin: agent.harness, model: agent.model }
+  if (agent.endpoint) cli.endpoint = agent.endpoint
+  else delete cli.endpoint
 
   return {
     key: agent.key,
@@ -264,14 +283,29 @@ export function createAgentLane(body, {
 
   const harness = typeof body?.harness === 'string' ? body.harness.trim() : ''
   const baseLanes = typeof lanes === 'function' ? lanes() : (lanes ?? {})
-  const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env })
+  const runs = runsDir ?? runsFolder()
+  const endpoints = readEndpoints(runs)
+  let endpoint = null
+  if (body?.endpoint !== undefined && body?.endpoint !== null && String(body.endpoint).trim() !== '') {
+    const endpointName = String(body.endpoint).trim()
+    endpoint = harness === 'machineroom' ? endpoints.find((entry) => entry.name === endpointName) ?? null : null
+    if (!endpoint) {
+      return { ok: false, status: 400, error: laneEndpointProblem(harness, endpointName) }
+    }
+  }
+  const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env, endpoints })
   if (!available) {
     return { ok: false, status: 400, error: harnessUnavailableProblem(harness) }
   }
 
   const allowedModels = MODELS.filter((m) => m.harness === harness).map((m) => m.id)
-  const model = typeof body?.model === 'string' ? body.model.trim() : ''
-  if (!allowedModels.includes(model)) {
+  let model = typeof body?.model === 'string' ? body.model.trim() : ''
+  if (endpoint) {
+    model = endpointModelId(endpoint, model)
+    if (model === '') {
+      return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
+    }
+  } else if (!allowedModels.includes(model)) {
     return { ok: false, status: 400, error: modelUnavailableProblem(body?.model, harness) }
   }
 
@@ -285,7 +319,6 @@ export function createAgentLane(body, {
     effort = effortText
   }
 
-  const runs = runsDir ?? runsFolder()
   const { agents } = readAgentsConfig(runs)
   if (agents.length >= MAX_AGENTS) {
     return { ok: false, status: 400, error: MAX_AGENTS_PROBLEM }
@@ -298,6 +331,7 @@ export function createAgentLane(body, {
     harness,
     model,
     effort,
+    ...(endpoint ? { endpoint: endpoint.name } : {}),
     createdAt: new Date().toISOString(),
   }
 
@@ -339,7 +373,7 @@ export function createAgentsConfigApi(options = {}) {
         return true
       }
       const lanes = getBaseLanes()
-      const data = listHarnesses({ lanes, env })
+      const data = listHarnesses({ lanes, env, runsFolder: runsDir })
       sendJson(req, res, 200, data)
       return true
     }
@@ -413,14 +447,45 @@ export function createAgentsConfigApi(options = {}) {
         agent.name = name
       }
 
-      if (body.model !== undefined) {
+      const endpointChanged = body.endpoint !== undefined
+      const endpoints = readEndpoints(runsDir)
+      let endpoint = null
+      if (endpointChanged) {
+        const endpointName = body.endpoint === null ? '' : String(body.endpoint).trim()
+        if (endpointName !== '') {
+          if (agent.harness !== 'machineroom') {
+            sendJson(req, res, 400, { error: laneEndpointProblem(agent.harness, endpointName) })
+            return true
+          }
+          endpoint = endpoints.find((entry) => entry.name === endpointName) ?? null
+          if (!endpoint) {
+            sendJson(req, res, 400, { error: laneEndpointProblem(agent.harness, endpointName) })
+            return true
+          }
+        }
+      } else if (agent.endpoint) {
+        endpoint = endpoints.find((entry) => entry.name === agent.endpoint) ?? null
+      }
+
+      if (body.model !== undefined || endpointChanged) {
         const allowedModels = MODELS.filter((m) => m.harness === agent.harness).map((m) => m.id)
-        const model = typeof body.model === 'string' ? body.model.trim() : ''
-        if (!allowedModels.includes(model)) {
-          sendJson(req, res, 400, { error: modelUnavailableProblem(body.model, agent.harness) })
+        let model = typeof body.model === 'string' ? body.model.trim() : agent.model
+        if (endpoint) {
+          model = endpointModelId(endpoint, model)
+          if (model === '') {
+            sendJson(req, res, 400, { error: modelUnavailableProblem(body.model ?? agent.model, agent.harness) })
+            return true
+          }
+        } else if (!allowedModels.includes(model)) {
+          sendJson(req, res, 400, { error: modelUnavailableProblem(body.model ?? agent.model, agent.harness) })
           return true
         }
         agent.model = model
+      }
+
+      if (endpointChanged) {
+        if (endpoint) agent.endpoint = endpoint.name
+        else delete agent.endpoint
       }
 
       if (body.effort !== undefined) {

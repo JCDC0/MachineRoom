@@ -88,14 +88,17 @@ function startFakeApi(handler) {
   })
 }
 
-function runAgent({ folder, api = null, env = {}, model = 'test/model', prompt = 'Do the task.', seconds = 40 }) {
+function runAgent({ folder, api = null, env = {}, model = 'test/model', endpoint = '', prompt = 'Do the task.', seconds = 40 }) {
   return new Promise((done, fail) => {
     const childEnv = { ...baseEnvironment(), ...env }
     if (api) {
       childEnv.MACHINEROOM_API_URL = api.url
       childEnv.MACHINEROOM_API_KEY = 'test-key'
     }
-    const child = spawn(process.execPath, [SCRIPT, '--model', model, '--cwd', folder, prompt], {
+    const args = [SCRIPT, '--model', model, '--cwd', folder]
+    if (endpoint) args.push('--endpoint', endpoint)
+    args.push(prompt)
+    const child = spawn(process.execPath, args, {
       cwd: folder,
       env: childEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -211,6 +214,54 @@ describe('mr-agent', () => {
       'run_shell',
     ])
     expect(api.calls[1].body.messages.some((message) => message.role === 'tool' && message.tool_call_id === 'call_read')).toBe(true)
+  })
+
+  it('uses a saved endpoint and its key slot', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    const api = await startFakeApi(() => chatAnswer({ text: 'Done.' }))
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [
+          { name: 'Local', provider: 'Custom', baseUrl: api.url, keyName: 'local', models: ['test/model'] },
+        ],
+      }),
+    )
+    writeFileSync(join(runs, 'keys.json'), JSON.stringify({ local: 'slot-secret-value' }), 'utf8')
+    const result = await runAgent({
+      folder,
+      model: 'Local/test/model',
+      endpoint: 'Local',
+      env: {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+      },
+    })
+    expect(result.code).toBe(0)
+    expect(result.stdout).not.toContain('slot-secret-value')
+    expect(result.stderr).not.toContain('slot-secret-value')
+    expect(api.calls).toHaveLength(1)
+    expect(api.calls[0].headers.authorization).toBe('Bearer slot-secret-value')
+    expect(api.calls[0].body.model).toBe('test/model')
+  })
+
+  it('prints one sentence for an endpoint that is not saved', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    const result = await runAgent({
+      folder,
+      model: 'Local/test/model',
+      endpoint: 'Local',
+      env: {
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_API_KEY: '',
+        OPENROUTER_API_KEY: '',
+      },
+    })
+    expect(result.code).toBe(1)
+    expect(result.stderr.trim()).toBe('The endpoint Local was not found.')
   })
 
   it('cuts long shell output to 8000 characters', async () => {

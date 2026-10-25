@@ -875,6 +875,7 @@ export default function Hud({
               effects={effects}
               onChange={onSettingsChange}
               onClose={() => setSettingsOpen(false)}
+              client={client}
             />
           )}
           <div id="hud-dock-costs" className="hud-dock-costs" />
@@ -918,6 +919,7 @@ export default function Hud({
             effects={effects}
             onChange={onSettingsChange}
             onClose={() => setSettingsOpen(false)}
+            client={client}
           />
         </div>
       )}
