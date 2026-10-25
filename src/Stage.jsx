@@ -25,6 +25,8 @@ import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { OrchestratorActivity, orchestratorDoing } from './ui/orchestratorChat.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
 import { loadEffectSettings, loadSettings, loadSoundSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
+import { aberrationChannels, radialMapDataUrl } from './ui/aberration.js'
+import { startGrain } from './ui/grain.js'
 import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
 import { LiveBadgeContext } from './ui/Transport.jsx'
@@ -196,6 +198,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
   const [effects, setEffects] = useState(() => loadEffectSettings(store()))
+  const [chromaMap, setChromaMap] = useState('')
   const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensShare ?? null)
   const [zoom, setZoom] = useState({ share: 0, multiplier: 1 })
 
@@ -241,6 +244,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
   const framesRef = useRef([])
   const lastFrameRef = useRef(0)
+  const grainRef = useRef(null)
   const [fpsStats, setFpsStats] = useState(() => (fps ? { median: 0, p95: 0 } : null))
 
   function handleSettingsChange(next) {
@@ -414,6 +418,18 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     setFineDust(effects.dust)
     roomRef.current?.setOptions({ alwaysDepth: effects.alwaysDepth })
   }, [effects.alwaysDepth, effects.dust])
+
+  const grainOn = Boolean(effects.grain?.on && effects.grain.strength > 0)
+
+  useEffect(() => {
+    const node = grainRef.current
+    if (!node || !grainOn) return undefined
+    return startGrain(node)
+  }, [grainOn])
+
+  useEffect(() => {
+    setChromaMap(radialMapDataUrl())
+  }, [])
 
   useEffect(() => {
     if (!fps) return undefined
@@ -678,7 +694,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const orchestratorActivity = orchestratorDoing(snapshot.agents)
 
   const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
-  const chromaDx = chromaOn ? Number((effects.aberration.strength * 6).toFixed(2)) : 0
+  const chromaChannels = aberrationChannels(effects.aberration?.strength)
+  const chromaFilter = chromaOn && chromaMap ? 'url(#mr-screen-filter)' : undefined
 
   const lens = lensStatus(snapshot.agents, log)
   const project = lensProject(data.tree.rootName)
@@ -693,7 +710,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           <div className="lens-frame" ref={surfaceRef}>
             <div
               className="surface-layers"
-              style={chromaOn ? { filter: 'url(#mr-screen-filter)' } : undefined}
+              style={chromaFilter ? { filter: chromaFilter } : undefined}
             >
               <div className="layer" ref={cssRef} aria-hidden="true" />
               <div className="layer is-over" ref={glRef} aria-hidden="true" />
@@ -705,7 +722,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
               />
               <div
                 className="screen-grain"
-                style={{ opacity: effects.grain?.on ? effects.grain.strength * 0.25 : 0 }}
+                ref={grainRef}
+                style={{ opacity: grainOn ? effects.grain.strength : 0 }}
               />
             </div>
             <div className="lens-labels">
@@ -755,26 +773,42 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           />
           {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
         </div>
-        {chromaOn && (
+        {chromaFilter && (
           <svg
             className="screen-filter-defs"
             aria-hidden="true"
             style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none', overflow: 'hidden' }}
           >
             <defs>
-              <filter id="mr-screen-filter" x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
+              <filter id="mr-screen-filter" x="-6%" y="-6%" width="112%" height="112%" colorInterpolationFilters="sRGB">
+                <feImage href={chromaMap} preserveAspectRatio="none" result="radial" />
                 <feColorMatrix
                   in="SourceGraphic"
                   type="matrix"
                   result="red"
                   values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0"
                 />
-                <feOffset in="red" dx={chromaDx} dy="0" result="redShift" />
+                <feDisplacementMap
+                  in="red"
+                  in2="radial"
+                  scale={chromaChannels.red}
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                  result="redShift"
+                />
                 <feColorMatrix
                   in="SourceGraphic"
                   type="matrix"
                   result="green"
                   values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0"
+                />
+                <feDisplacementMap
+                  in="green"
+                  in2="radial"
+                  scale={chromaChannels.green}
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                  result="greenShift"
                 />
                 <feColorMatrix
                   in="SourceGraphic"
@@ -782,8 +816,15 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                   result="blue"
                   values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0"
                 />
-                <feOffset in="blue" dx={-chromaDx} dy="0" result="blueShift" />
-                <feBlend in="redShift" in2="green" mode="screen" result="rg" />
+                <feDisplacementMap
+                  in="blue"
+                  in2="radial"
+                  scale={chromaChannels.blue}
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                  result="blueShift"
+                />
+                <feBlend in="redShift" in2="greenShift" mode="screen" result="rg" />
                 <feBlend in="rg" in2="blueShift" mode="screen" result="chroma" />
               </filter>
             </defs>
