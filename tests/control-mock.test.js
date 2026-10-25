@@ -264,4 +264,27 @@ describe('mock orchestrators and the ladder', () => {
     expect(list[0].lanes).toContain('opencode2')
     await expect(client.orchestrator('frontend')).rejects.toThrow(/exist/i)
   })
+
+  it('manages active lanes and refuses inactive lane runs in mock', async () => {
+    const client = fast()
+    const initial = await client.lanes()
+    expect(initial.chosen).toBe(false)
+    expect(initial.lanes.every((l) => l.active)).toBe(true)
+
+    await client.setActiveLanes({ lanes: ['opencode', 'claude'], confirmed: true })
+    const after = await client.lanes()
+    expect(after.chosen).toBe(true)
+    expect(after.lanes.find((l) => l.key === 'opencode').active).toBe(true)
+    expect(after.lanes.find((l) => l.key === 'opencode2').active).toBe(false)
+
+    const agents = await client.agents()
+    const agentKeys = agents.map((a) => a.key)
+    expect(agentKeys).toContain('opencode')
+    expect(agentKeys).toContain('claude')
+    expect(agentKeys).not.toContain('opencode2')
+
+    await expect(client.startRun('opencode2', ['B6'])).rejects.toThrow(
+      'The lane opencode2 is not active. Add it in Agents first.'
+    )
+  })
 })

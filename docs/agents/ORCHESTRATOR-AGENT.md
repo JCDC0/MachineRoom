@@ -44,6 +44,7 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 - Run at most one run per lane. The lanes are `opencode`, `opencode2` to `opencode10`, and `claude`.
 - Start runs at least 3 seconds apart.
 - `curl -s {{BRIDGE}}/api/control/runs` lists the lanes that are running.
+- `curl -s {{BRIDGE}}/api/lanes` lists the lanes, and only the active ones may be started.
 - Do not wait for a run. End your turn after you start them.
 - Say what you started: the lane and one line on each task.
 - The room wakes you when each run ends. Do not poll.
