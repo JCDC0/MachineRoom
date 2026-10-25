@@ -10,9 +10,10 @@ export const INTERNET_LABEL = 'INTERNET'
 export const INTERNET_SEED = 20261025
 export const MORPH_SWING = 0.11
 export const MORPH_RATE = 0.8
-export const BASE_OPACITY = 0.3
-export const GLOW_OPACITY = 0.34
-export const HALO_OPACITY = 0.22
+export const BASE_OPACITY = 0.08
+export const GLOW_OPACITY = 0.62
+export const HALO_OPACITY = 0.35
+export const LABEL_REST = 0.3
 export const TURN_RATE = 0.05
 
 export function morphOffsets(seed, count, time, rate = MORPH_RATE) {
@@ -91,6 +92,7 @@ export function createInternet(scene, texture = null) {
     glow += ((active ? 1 : 0) - glow) * easeRate(step, 2.4, isStill)
     material.opacity = BASE_OPACITY + glow * GLOW_OPACITY
     if (halo) halo.material.opacity = glow * HALO_OPACITY
+    label.material.opacity = LABEL_REST + glow * (1 - LABEL_REST)
     if (isStill) {
       if (!frozen) {
         frozen = true

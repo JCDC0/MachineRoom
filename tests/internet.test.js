@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { ORCHESTRATOR_HOME } from '../src/engine/hub.js'
-import { INTERNET_HOME, MORPH_SWING, morphOffsets } from '../src/engine/internet.js'
+import { BASE_OPACITY, GLOW_OPACITY, INTERNET_HOME, MORPH_SWING, morphOffsets } from '../src/engine/internet.js'
 
 describe('morphOffsets', () => {
   it('gives the same offsets for the same seed, count and time', () => {
@@ -33,5 +33,12 @@ describe('the internet shape place', () => {
     expect(INTERNET_HOME.x).toBe(0)
     expect(INTERNET_HOME.z).toBe(0)
     expect(INTERNET_HOME.y).toBeGreaterThan(ORCHESTRATOR_HOME.y)
+  })
+})
+
+describe('the internet glow', () => {
+  it('rests dim and glows bright only while an agent is on the web', () => {
+    expect(BASE_OPACITY).toBeLessThan(0.15)
+    expect(BASE_OPACITY + GLOW_OPACITY).toBeGreaterThanOrEqual(0.6)
   })
 })

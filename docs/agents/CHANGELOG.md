@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The fine dust holds up to 12000 specks between 400 and 6000 units from the hub, so the room fills at full strength, and the internet shape rests dim (0.08) and glows bright, with its label, only while an agent searches or fetches.
 - The page loads again: the mock control client no longer reaches server code that reads files (a 0.1.386 regression that left a black page), the pure model list moved to `server/model-list.js`, and `tests/browser-imports.test.js` fails when the page entry reaches any Node module.
 - The owner saves up to 20 OpenAI-compatible endpoints from provider presets in Settings, each with a base URL, a key slot and up to 50 models, and a machineroom lane can run on one through `mr-agent --endpoint` (task H10).
 - The MachineRoom harness has `web_search` and `web_fetch` tools over SearXNG, Tavily, Brave or DuckDuckGo, with the provider saved in `<runs>/search.json`, address-checked page fetches capped at 1 MB and 20 seconds, a Web search section in Settings behind a confirm card, and the provider routes on the bridge (task H12).

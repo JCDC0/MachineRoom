@@ -5,9 +5,9 @@ export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
 const TICK = 50
 const DUST = 1800
-export const MOTES = 4000
+export const MOTES = 12000
 export const MOTE_INNER = 400
-export const MOTE_OUTER = 9000
+export const MOTE_OUTER = 6000
 export const SPECK_BANDS = [
   { size: 12, fade: 1 },
   { size: 22, fade: 0.7 },
