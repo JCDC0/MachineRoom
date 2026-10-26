@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import EndpointsPanel from './EndpointsPanel.jsx'
+import McpSettings from './McpSettings.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
 import SearchSettings from './SearchSettings.jsx'
 import { store } from '../storage.js'
@@ -14,7 +15,7 @@ export const EFFECTS = [
   { key: 'dust', label: 'Fine dust', costly: false },
 ]
 
-export default function Settings({ effects, onChange, onSettingsChange, onClose, client = null }) {
+export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null }) {
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
   const [recordDraft, setRecordDraft] = useState(() => String(loadSettings(store()).recordMinutes))
@@ -43,6 +44,8 @@ export default function Settings({ effects, onChange, onSettingsChange, onClose,
     const saved = saveSettings(store(), { recordMinutes: minutes })
     onSettingsChange?.({ ...current, recordMinutes: saved.recordMinutes })
   }
+
+  if (!open) return null
 
   return (
     <section
@@ -214,6 +217,7 @@ export default function Settings({ effects, onChange, onSettingsChange, onClose,
         </div>
 
         <EndpointsPanel client={client} />
+        <McpSettings client={client} />
         <SearchSettings />
       </div>
     </section>

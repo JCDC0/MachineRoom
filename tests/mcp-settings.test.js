@@ -1,0 +1,813 @@
+import { act, createElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { renderToString } from 'react-dom/server'
+import { describe, expect, it } from 'vitest'
+import McpSettings, {
+  MCP_ARGS_PROBLEM,
+  MCP_COMMAND_PROBLEM,
+  MCP_EMPTY_DRAFT,
+  MCP_NAME_PROBLEM,
+  MCP_SERVER_PROBLEM,
+  MCP_TOOL_PROBLEM,
+  MCP_TRANSPORT_PROBLEM,
+  MCP_UNAVAILABLE,
+  MCP_URL_PROBLEM,
+  mcpArguments,
+  mcpDraftProblem,
+  mcpResultText,
+  mcpServerList,
+  mcpServerTarget,
+  mcpTesterProblem,
+  mcpToolErrors,
+  mcpToolList,
+  saveMcpPayload,
+  splitArgs,
+  toggleMcpPayload,
+} from '../src/ui/McpSettings.jsx'
+import Settings from '../src/ui/Settings.jsx'
+
+const ELEMENT_NODE = 1
+const TEXT_NODE = 3
+const DOCUMENT_NODE = 9
+
+function selectorMatches(node, selector) {
+  if (!node || node.nodeType !== ELEMENT_NODE) return false
+  return String(selector)
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .some((part) => simpleSelectorMatches(node, part))
+}
+
+function simpleSelectorMatches(node, part) {
+  let matched = false
+  const id = part.match(/#([\w-]+)/)
+  if (id) {
+    if (node.id !== id[1]) return false
+    matched = true
+  }
+  for (const item of part.match(/\.([\w-]+)/g) ?? []) {
+    if (!String(node.className).split(/\s+/).includes(item.slice(1))) return false
+    matched = true
+  }
+  for (const item of part.match(/\[([\w-]+)(?:="([^"]*)")?\]/g) ?? []) {
+    const found = item.match(/\[([\w-]+)(?:="([^"]*)")?\]/)
+    const value = found ? node.getAttribute(found[1]) : null
+    if (value == null) return false
+    if (found[2] !== undefined && value !== found[2]) return false
+    matched = true
+  }
+  const tag = part.match(/^([a-zA-Z][\w-]*)/)
+  if (tag) {
+    if (String(node.tagName).toLowerCase() !== tag[1].toLowerCase()) return false
+    matched = true
+  }
+  return matched
+}
+
+function testStyle() {
+  const style = {}
+  Object.defineProperty(style, 'setProperty', {
+    value(name, value) {
+      style[name] = String(value)
+    },
+  })
+  Object.defineProperty(style, 'removeProperty', {
+    value(name) {
+      delete style[name]
+    },
+  })
+  return style
+}
+
+function createTestDom() {
+  const listeners = new WeakMap()
+
+  function addListener(node, type, fn) {
+    if (!listeners.has(node)) listeners.set(node, new Map())
+    const map = listeners.get(node)
+    if (!map.has(type)) map.set(type, [])
+    map.get(type).push(fn)
+  }
+
+  function removeListener(node, type, fn) {
+    const map = listeners.get(node)
+    const list = map && map.get(type)
+    if (!list) return
+    const index = list.indexOf(fn)
+    if (index !== -1) list.splice(index, 1)
+  }
+
+  function dispatch(node, event) {
+    event.target = node
+    event.bubbles = event.bubbles !== false
+    event.cancelable = event.cancelable !== false
+    event.defaultPrevented = false
+    event.isTrusted = true
+    event.timeStamp = Date.now()
+    event.preventDefault = () => {
+      event.defaultPrevented = true
+    }
+    event.stopPropagation = () => {
+      event.cancelBubble = true
+    }
+    event.persist = () => {}
+    event.composedPath = () => {
+      const path = []
+      let current = node
+      while (current) {
+        path.push(current)
+        current = current.parentNode
+      }
+      return path
+    }
+    let current = node
+    while (current) {
+      event.currentTarget = current
+      const list = listeners.get(current)?.get(event.type)
+      if (list) {
+        for (const fn of [...list]) {
+          if (event.cancelBubble) break
+          fn.call(current, event)
+        }
+      }
+      if (event.cancelBubble || !event.bubbles) break
+      current = current.parentNode
+    }
+    event.currentTarget = null
+    return !event.defaultPrevented
+  }
+
+  function createTextNode(data) {
+    const node = {
+      ownerDocument: doc,
+      nodeType: TEXT_NODE,
+      nodeName: '#text',
+      nodeValue: String(data),
+      parentNode: null,
+      childNodes: [],
+      addEventListener() {},
+      removeEventListener() {},
+    }
+    Object.defineProperty(node, 'data', {
+      get: () => node.nodeValue,
+      set: (value) => {
+        node.nodeValue = String(value)
+      },
+    })
+    Object.defineProperty(node, 'textContent', {
+      get: () => node.nodeValue,
+      set: (value) => {
+        node.nodeValue = String(value)
+      },
+    })
+    return node
+  }
+
+  function makeElement(tag) {
+    const node = {
+      ownerDocument: doc,
+      nodeType: ELEMENT_NODE,
+      nodeName: String(tag).toUpperCase(),
+      tagName: String(tag).toUpperCase(),
+      localName: String(tag).toLowerCase(),
+      namespaceURI: 'http://www.w3.org/1999/xhtml',
+      parentNode: null,
+      childNodes: [],
+      style: testStyle(),
+      attributes: Object.create(null),
+      id: '',
+      className: '',
+      hidden: false,
+      appendChild(child) {
+        if (child.parentNode) child.parentNode.removeChild(child)
+        node.childNodes.push(child)
+        child.parentNode = node
+        return child
+      },
+      insertBefore(child, before) {
+        if (before == null) return node.appendChild(child)
+        const index = node.childNodes.indexOf(before)
+        if (index === -1) throw new Error('reference node not found')
+        if (child.parentNode) child.parentNode.removeChild(child)
+        node.childNodes.splice(index, 0, child)
+        child.parentNode = node
+        return child
+      },
+      removeChild(child) {
+        const index = node.childNodes.indexOf(child)
+        if (index === -1) throw new Error('child not found')
+        node.childNodes.splice(index, 1)
+        child.parentNode = null
+        return child
+      },
+      setAttribute(name, value) {
+        const text = String(value)
+        node.attributes[name] = text
+        if (name === 'id') node.id = text
+        if (name === 'class') node.className = text
+      },
+      getAttribute(name) {
+        return Object.hasOwn(node.attributes, name) ? node.attributes[name] : null
+      },
+      hasAttribute(name) {
+        return Object.hasOwn(node.attributes, name)
+      },
+      removeAttribute(name) {
+        delete node.attributes[name]
+      },
+      addEventListener(type, fn) {
+        addListener(node, type, fn)
+      },
+      removeEventListener(type, fn) {
+        removeListener(node, type, fn)
+      },
+      dispatchEvent(event) {
+        return dispatch(node, event)
+      },
+      click() {
+        dispatch(node, { type: 'click', bubbles: true, cancelable: true })
+      },
+      focus() {
+        doc.activeElement = node
+      },
+      getBoundingClientRect() {
+        return { left: 0, top: 0, width: 0, height: 0, right: 0, bottom: 0 }
+      },
+      scrollIntoView() {},
+      contains(other) {
+        let current = other
+        while (current) {
+          if (current === node) return true
+          current = current.parentNode
+        }
+        return false
+      },
+      querySelectorAll(selector) {
+        const found = []
+        function walk(current) {
+          for (const child of current.childNodes) {
+            if (selectorMatches(child, selector)) found.push(child)
+            walk(child)
+          }
+        }
+        walk(node)
+        return found
+      },
+      querySelector(selector) {
+        return node.querySelectorAll(selector)[0] ?? null
+      },
+    }
+    if (String(tag).toLowerCase() === 'input') {
+      node.type = 'text'
+      node.checked = false
+      node.selectionStart = 0
+      node.selectionEnd = 0
+    }
+    Object.defineProperty(node, 'options', {
+      get: () => node.querySelectorAll('option'),
+    })
+    Object.defineProperty(node, 'firstChild', { get: () => node.childNodes[0] ?? null })
+    Object.defineProperty(node, 'nextSibling', {
+      get: () => {
+        const parent = node.parentNode
+        if (!parent) return null
+        return parent.childNodes[parent.childNodes.indexOf(node) + 1] ?? null
+      },
+    })
+    Object.defineProperty(node, 'children', {
+      get: () => node.childNodes.filter((child) => child.nodeType === ELEMENT_NODE),
+    })
+    Object.defineProperty(node, 'textContent', {
+      get: () => node.childNodes.map((child) => child.textContent ?? '').join(''),
+      set: (value) => {
+        for (const child of node.childNodes) child.parentNode = null
+        node.childNodes.length = 0
+        if (value !== '') node.appendChild(createTextNode(value))
+      },
+    })
+    return node
+  }
+
+  const doc = {
+    ownerDocument: null,
+    nodeType: DOCUMENT_NODE,
+    nodeName: '#document',
+    activeElement: null,
+    createElement: makeElement,
+    createElementNS(namespace, tag) {
+      return makeElement(tag)
+    },
+    createTextNode,
+    createComment(data) {
+      return createTextNode(data)
+    },
+    addEventListener(type, fn) {
+      addListener(doc, type, fn)
+    },
+    removeEventListener(type, fn) {
+      removeListener(doc, type, fn)
+    },
+    dispatchEvent(event) {
+      return dispatch(doc, event)
+    },
+    querySelectorAll(selector) {
+      return doc.documentElement.querySelectorAll(selector)
+    },
+    querySelector(selector) {
+      return doc.documentElement.querySelector(selector)
+    },
+  }
+
+  const html = makeElement('html')
+  const head = makeElement('head')
+  const body = makeElement('body')
+  html.appendChild(head)
+  html.appendChild(body)
+  doc.documentElement = html
+  doc.head = head
+  doc.body = body
+  doc.activeElement = body
+
+  const window = {
+    document: doc,
+    innerWidth: 1280,
+    innerHeight: 800,
+    location: { search: '', pathname: '/', assign() {} },
+    history: { replaceState() {} },
+    localStorage: {
+      values: new Map(),
+      getItem(key) {
+        return window.localStorage.values.has(key) ? window.localStorage.values.get(key) : null
+      },
+      setItem(key, value) {
+        window.localStorage.values.set(key, String(value))
+      },
+    },
+    addEventListener(type, fn) {
+      addListener(window, type, fn)
+    },
+    removeEventListener(type, fn) {
+      removeListener(window, type, fn)
+    },
+    dispatchEvent(event) {
+      return dispatch(window, event)
+    },
+    getComputedStyle(element) {
+      return element.style
+    },
+    setTimeout: globalThis.setTimeout,
+    clearTimeout: globalThis.clearTimeout,
+    requestAnimationFrame: (fn) => globalThis.setTimeout(() => fn(Date.now()), 16),
+    cancelAnimationFrame: (id) => globalThis.clearTimeout(id),
+  }
+  doc.defaultView = window
+  window.Element = function Element() {}
+  window.Node = function Node() {}
+  window.HTMLElement = window.Element
+  window.HTMLIFrameElement = function HTMLIFrameElement() {}
+  return { document: doc, window, html, body }
+}
+
+async function withDom(run) {
+  const saved = {
+    window: globalThis.window,
+    document: globalThis.document,
+    Element: globalThis.Element,
+    Node: globalThis.Node,
+    HTMLElement: globalThis.HTMLElement,
+    actEnvironment: globalThis.IS_REACT_ACT_ENVIRONMENT,
+  }
+  const dom = createTestDom()
+  globalThis.window = dom.window
+  globalThis.document = dom.document
+  globalThis.Element = dom.window.Element
+  globalThis.Node = dom.window.Node
+  globalThis.HTMLElement = dom.window.HTMLElement
+  globalThis.IS_REACT_ACT_ENVIRONMENT = true
+  const container = dom.document.createElement('div')
+  dom.body.appendChild(container)
+  const root = createRoot(container)
+  try {
+    await run({ container, dom, root })
+  } finally {
+    try {
+      await act(async () => root.unmount())
+    } finally {
+      for (const [key, value] of [
+        ['window', saved.window],
+        ['document', saved.document],
+        ['Element', saved.Element],
+        ['Node', saved.Node],
+        ['HTMLElement', saved.HTMLElement],
+      ]) {
+        if (value === undefined) delete globalThis[key]
+        else globalThis[key] = value
+      }
+      if (saved.actEnvironment === undefined) delete globalThis.IS_REACT_ACT_ENVIRONMENT
+      else globalThis.IS_REACT_ACT_ENVIRONMENT = saved.actEnvironment
+    }
+  }
+}
+
+const SERVERS = [
+  {
+    name: 'docs',
+    transport: 'stdio',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem'],
+    url: '',
+    enabled: true,
+  },
+  {
+    name: 'remote',
+    transport: 'http',
+    command: '',
+    args: [],
+    url: 'https://mcp.example/rpc',
+    enabled: false,
+  },
+]
+
+const TOOLS = [
+  { server: 'docs', name: 'read_file', description: 'Read a file from the project' },
+  { server: 'remote', name: 'search', description: '' },
+]
+
+function makeClient({ servers = SERVERS, tools = TOOLS, errors = [] } = {}) {
+  const calls = { save: [], remove: [], tools: 0, call: [] }
+  const client = {
+    mcpServers: async () => ({ ok: true, servers }),
+    saveMcpServer: async (payload) => {
+      calls.save.push(payload)
+      return { ok: true }
+    },
+    deleteMcpServer: async (payload) => {
+      calls.remove.push(payload)
+      return { ok: true }
+    },
+    mcpTools: async () => {
+      calls.tools += 1
+      return { ok: true, tools, errors }
+    },
+    callMcpTool: async (payload) => {
+      calls.call.push(payload)
+      return { ok: true, result: { content: 'ok' } }
+    },
+  }
+  return { client, calls }
+}
+
+async function mount(root, props) {
+  await act(async () => {
+    root.render(createElement(McpSettings, props))
+  })
+  await act(async () => {})
+}
+
+function buttonWithText(scope, text) {
+  return scope.querySelectorAll('button').find((button) => button.textContent.trim() === text) ?? null
+}
+
+async function click(root, node) {
+  await act(async () => {
+    node.click()
+  })
+}
+
+async function submit(root, node) {
+  await act(async () => {
+    node.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+  })
+}
+
+describe('the MCP settings helpers', () => {
+  it('reads the server list from an array or an answer and drops nameless rows', () => {
+    const rows = mcpServerList({
+      ok: true,
+      servers: [
+        { name: ' docs ', transport: 'stdio', command: 'npx', args: ['-y', 7], env: { A: '1' }, enabled: false },
+        { name: 'remote', transport: 'http', url: 'https://mcp.example/rpc' },
+        { transport: 'stdio' },
+        null,
+      ],
+    })
+    expect(rows).toEqual([
+      {
+        name: 'docs',
+        transport: 'stdio',
+        command: 'npx',
+        args: ['-y', '7'],
+        env: { A: '1' },
+        url: '',
+        enabled: false,
+      },
+      {
+        name: 'remote',
+        transport: 'http',
+        command: '',
+        args: [],
+        env: {},
+        url: 'https://mcp.example/rpc',
+        enabled: true,
+      },
+    ])
+    expect(mcpServerList([{ name: 'one', transport: 'sse' }])[0].transport).toBe('stdio')
+    expect(mcpServerList(null)).toEqual([])
+    expect(mcpServerList({ servers: 'nope' })).toEqual([])
+  })
+
+  it('reads the tool list and its errors', () => {
+    expect(mcpToolList({ tools: TOOLS })).toEqual([
+      { server: 'docs', name: 'read_file', description: 'Read a file from the project' },
+      { server: 'remote', name: 'search', description: '' },
+    ])
+    expect(mcpToolList([{ name: ' one ', server: 'docs' }, { description: 'no name' }])).toEqual([
+      { server: 'docs', name: 'one', description: '' },
+    ])
+    expect(mcpToolList(null)).toEqual([])
+    expect(mcpToolErrors({ errors: ['docs did not answer', '', { message: 'remote did not answer' }] })).toEqual([
+      'docs did not answer',
+      'remote did not answer',
+    ])
+    expect(mcpToolErrors(null)).toEqual([])
+  })
+
+  it('splits args on spaces and keeps quoted groups together', () => {
+    expect(splitArgs('')).toEqual([])
+    expect(splitArgs('   ')).toEqual([])
+    expect(splitArgs('-y @scope/server')).toEqual(['-y', '@scope/server'])
+    expect(splitArgs('"--a b" c')).toEqual(['--a b', 'c'])
+    expect(splitArgs("'one two' three")).toEqual(['one two', 'three'])
+    expect(splitArgs('a  b\tc')).toEqual(['a', 'b', 'c'])
+  })
+
+  it('checks the add form', () => {
+    expect(mcpDraftProblem(MCP_EMPTY_DRAFT)).toBe(MCP_NAME_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'bad/name', command: 'npx' })).toBe(MCP_NAME_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'a'.repeat(41), command: 'npx' })).toBe(MCP_NAME_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'docs', transport: 'sse', command: 'npx' })).toBe(MCP_TRANSPORT_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'docs', transport: 'stdio', command: ' ' })).toBe(MCP_COMMAND_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'docs', transport: 'stdio', command: 'npx' })).toBe('')
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'remote', transport: 'http', url: '' })).toBe(MCP_URL_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'remote', transport: 'http', url: 'ftp://mcp.example' })).toBe(MCP_URL_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'remote', transport: 'http', url: 'not a url' })).toBe(MCP_URL_PROBLEM)
+    expect(mcpDraftProblem({ ...MCP_EMPTY_DRAFT, name: 'remote', transport: 'http', url: 'https://mcp.example/rpc' })).toBe('')
+  })
+
+  it('builds the save body with the confirmation and the right fields', () => {
+    expect(saveMcpPayload({ name: ' docs ', transport: 'stdio', command: ' npx ', args: '-y @scope/server' })).toEqual({
+      name: 'docs',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y', '@scope/server'],
+      env: {},
+      url: '',
+      enabled: true,
+      confirmed: true,
+    })
+    expect(saveMcpPayload({ name: 'remote', transport: 'http', command: 'npx', args: 'x', url: ' https://mcp.example/rpc ' })).toEqual({
+      name: 'remote',
+      transport: 'http',
+      command: '',
+      args: [],
+      env: {},
+      url: 'https://mcp.example/rpc',
+      enabled: true,
+      confirmed: true,
+    })
+  })
+
+  it('turns a server on or off with its env kept and the confirmation set', () => {
+    const payload = toggleMcpPayload({
+      name: 'docs',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y'],
+      env: { TOKEN_NAME: 'local' },
+      enabled: true,
+    })
+    expect(payload).toEqual({
+      name: 'docs',
+      transport: 'stdio',
+      command: 'npx',
+      args: ['-y'],
+      env: { TOKEN_NAME: 'local' },
+      url: '',
+      enabled: false,
+      confirmed: true,
+    })
+    expect(toggleMcpPayload({ ...SERVERS[1] }).enabled).toBe(true)
+  })
+
+  it('shows either the command or the URL of a server', () => {
+    expect(mcpServerTarget(SERVERS[0])).toBe('npx -y @modelcontextprotocol/server-filesystem')
+    expect(mcpServerTarget(SERVERS[1])).toBe('https://mcp.example/rpc')
+    expect(mcpServerTarget({ transport: 'stdio', command: '', args: [] })).toBe('No command')
+    expect(mcpServerTarget({ transport: 'http', url: '' })).toBe('No URL')
+  })
+
+  it('reads the tool arguments as a JSON object', () => {
+    expect(mcpArguments('')).toEqual({ value: {}, problem: '' })
+    expect(mcpArguments('{"path":"a.md"}')).toEqual({ value: { path: 'a.md' }, problem: '' })
+    expect(mcpArguments('[]').problem).toBe(MCP_ARGS_PROBLEM)
+    expect(mcpArguments('null').problem).toBe(MCP_ARGS_PROBLEM)
+    expect(mcpArguments('{bad').problem).toBe(MCP_ARGS_PROBLEM)
+    expect(mcpArguments('"text"').problem).toBe(MCP_ARGS_PROBLEM)
+  })
+
+  it('checks the run tool tester', () => {
+    expect(mcpTesterProblem({ server: '', tool: 'read', arguments: '' })).toBe(MCP_SERVER_PROBLEM)
+    expect(mcpTesterProblem({ server: 'docs', tool: ' ', arguments: '' })).toBe(MCP_TOOL_PROBLEM)
+    expect(mcpTesterProblem({ server: 'docs', tool: 'read', arguments: '[]' })).toBe(MCP_ARGS_PROBLEM)
+    expect(mcpTesterProblem({ server: 'docs', tool: 'read', arguments: '{}' })).toBe('')
+  })
+
+  it('turns a tool answer into text', () => {
+    expect(mcpResultText({ ok: true, result: { content: 'ok' } })).toContain('"content": "ok"')
+    expect(mcpResultText({ ok: true, result: 'plain' })).toBe('plain')
+    expect(mcpResultText({ ok: false, problem: 'The server did not answer.' })).toBe('The server did not answer.')
+    expect(mcpResultText({ ok: false })).toBe('The tool call failed.')
+    expect(mcpResultText({ content: 'ok' })).toContain('"content": "ok"')
+    expect(mcpResultText(null)).toBe('')
+  })
+})
+
+describe('the MCP settings panel', () => {
+  it('lists each server with its transport, command or URL, switch and Remove', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+      const rows = container.querySelectorAll('.mr-mcp-server')
+      expect(rows).toHaveLength(2)
+      expect(rows[0].textContent).toContain('docs')
+      expect(rows[0].textContent).toContain('stdio')
+      expect(rows[0].textContent).toContain('npx -y @modelcontextprotocol/server-filesystem')
+      expect(rows[1].textContent).toContain('remote')
+      expect(rows[1].textContent).toContain('http')
+      expect(rows[1].textContent).toContain('https://mcp.example/rpc')
+      const switches = rows.map((row) => row.querySelector('[role="switch"]'))
+      expect(switches[0].getAttribute('aria-checked')).toBe('true')
+      expect(switches[0].textContent.trim()).toBe('On')
+      expect(switches[1].getAttribute('aria-checked')).toBe('false')
+      expect(switches[1].textContent.trim()).toBe('Off')
+      expect(buttonWithText(rows[0], 'Remove')).not.toBeNull()
+    })
+  })
+
+  it('turns a server off through saveMcpServer with the confirmation', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+      const row = container.querySelectorAll('.mr-mcp-server')[0]
+      await click(root, row.querySelector('[role="switch"]'))
+      expect(calls.save).toHaveLength(1)
+      expect(calls.save[0]).toMatchObject({ name: 'docs', transport: 'stdio', enabled: false, confirmed: true })
+      expect(container.textContent).toContain('docs is off.')
+    })
+  })
+
+  it('removes a server through deleteMcpServer with the confirmation', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+      const row = container.querySelectorAll('.mr-mcp-server')[0]
+      await click(root, buttonWithText(row, 'Remove'))
+      expect(calls.remove).toEqual([{ name: 'docs', confirmed: true }])
+    })
+  })
+
+  it('adds an MCP server with its command and args behind the confirmation', async () => {
+    const { client, calls } = makeClient({ servers: [] })
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        initialDraft: { name: 'files', transport: 'stdio', command: 'npx', args: '-y @scope/server' },
+      })
+      await submit(root, container.querySelector('.mr-mcp-form'))
+      expect(calls.save).toEqual([
+        {
+          name: 'files',
+          transport: 'stdio',
+          command: 'npx',
+          args: ['-y', '@scope/server'],
+          env: {},
+          url: '',
+          enabled: true,
+          confirmed: true,
+        },
+      ])
+      expect(container.textContent).toContain('Added files.')
+    })
+  })
+
+  it('refuses an add with no name and names the problem', async () => {
+    const { client, calls } = makeClient({ servers: [] })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+      await submit(root, container.querySelector('.mr-mcp-form'))
+      expect(calls.save).toEqual([])
+      expect(container.textContent).toContain(MCP_NAME_PROBLEM)
+    })
+  })
+
+  it('refreshes the tools and lists them under the Tools heading', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client })
+      expect(container.textContent).toContain('Refresh tools to list the tools each server offers.')
+      await click(root, buttonWithText(container, 'Refresh tools'))
+      expect(calls.tools).toBe(1)
+      const tools = container.querySelectorAll('.mr-mcp-tool')
+      expect(tools).toHaveLength(2)
+      expect(tools[0].textContent).toContain('read_file')
+      expect(tools[0].textContent).toContain('docs')
+      expect(tools[0].textContent).toContain('Read a file from the project')
+    })
+  })
+
+  it('runs a tool with JSON arguments and shows the result', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        initialTester: { server: 'docs', tool: 'read_file', arguments: '{"path":"README.md"}' },
+      })
+      await submit(root, container.querySelector('.mr-mcp-run'))
+      expect(calls.call).toEqual([
+        { server: 'docs', tool: 'read_file', arguments: { path: 'README.md' } },
+      ])
+      expect(container.querySelector('.mr-mcp-result').textContent).toContain('"content": "ok"')
+    })
+  })
+
+  it('refuses a tool call with arguments that are not a JSON object', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        initialTester: { server: 'docs', tool: 'read_file', arguments: '[]' },
+      })
+      await submit(root, container.querySelector('.mr-mcp-run'))
+      expect(calls.call).toEqual([])
+      expect(container.querySelector('.mr-mcp-result').textContent).toContain(MCP_ARGS_PROBLEM)
+    })
+  })
+
+  it('says a newer bridge is needed when the client has no MCP methods', async () => {
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client: {} })
+      expect(container.textContent).toContain('MCP tools')
+      expect(container.textContent).toContain(MCP_UNAVAILABLE)
+    })
+  })
+
+  it('renders the server form with Name, Transport, Command and Args', () => {
+    const html = renderToString(
+      createElement(McpSettings, {
+        client: makeClient().client,
+        initialServers: SERVERS,
+        initialTools: { ok: true, tools: TOOLS, errors: [] },
+      })
+    )
+    expect(html).toContain('MCP tools')
+    expect(html).toContain('Servers')
+    expect(html).toContain('Add MCP server')
+    expect(html).toContain('Name')
+    expect(html).toContain('Transport')
+    expect(html).toContain('Command')
+    expect(html).toContain('Args')
+    expect(html).toContain('id="mr-mcp-name"')
+    expect(html).toContain('id="mr-mcp-transport"')
+    expect(html).toContain('id="mr-mcp-command"')
+    expect(html).toContain('id="mr-mcp-args"')
+    expect(html).toContain('Tools')
+    expect(html).toContain('Refresh tools')
+    expect(html).toContain('Run tool')
+    expect(html).toContain('read_file')
+  })
+
+  it('shows URL instead of Command and Args for an http server', () => {
+    const html = renderToString(
+      createElement(McpSettings, {
+        initialDraft: { name: 'remote', transport: 'http', url: 'https://mcp.example/rpc' },
+        initialServers: [],
+      })
+    )
+    expect(html).toContain('id="mr-mcp-url"')
+    expect(html).not.toContain('id="mr-mcp-command"')
+    expect(html).not.toContain('id="mr-mcp-args"')
+  })
+
+  it('mounts the MCP section in Settings and can be closed', () => {
+    const open = renderToString(
+      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+    )
+    expect(open).toContain('MCP tools')
+    expect(open).toContain(MCP_UNAVAILABLE)
+    const closed = renderToString(
+      createElement(Settings, { open: false, effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+    )
+    expect(closed).toBe('')
+  })
+})
