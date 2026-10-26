@@ -898,6 +898,7 @@ export default function Hud({
           onToggle={onToggle}
           onSeek={onSeek}
           onSpeed={onSpeed}
+          onOverview={onOverview}
         />
       )}
 
@@ -910,6 +911,7 @@ export default function Hud({
           onToggle={onToggle}
           onSeek={onSeek}
           onSpeed={onSpeed}
+          onOverview={onOverview}
         />
       )}
 

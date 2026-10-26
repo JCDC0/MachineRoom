@@ -80,7 +80,7 @@ export function ContextRing({ orchestrator = null, onClick = () => {} }) {
   )
 }
 
-export default function Transport({ snapshot, speeds, markers = [], orchestrator = null, onToggle, onSeek, onSpeed }) {
+export default function Transport({ snapshot, speeds, markers = [], orchestrator = null, onToggle, onSeek, onSpeed, onOverview }) {
   const { position, duration, playing, speed } = snapshot
   const finished = position >= duration
   const main = orchestrator && typeof orchestrator === 'object' ? orchestrator : null
@@ -97,7 +97,15 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         <div className="transport is-live">
           <div className="transport-live-head">
             {badge}
-            <span className="mono">Live feed</span>
+            <button
+              type="button"
+              className="transport-center mono"
+              onClick={onOverview}
+              aria-label="Center camera"
+              title="Center camera"
+            >
+              Center
+            </button>
           </div>
           <span className="mono">{clock(position)} since opening</span>
         </div>
@@ -108,7 +116,15 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
       <div className="transport is-live has-orchestrator">
         <div className="transport-live-head">
           {badge}
-          <span className="mono">Live feed</span>
+          <button
+            type="button"
+            className="transport-center mono"
+            onClick={onOverview}
+            aria-label="Center camera"
+            title="Center camera"
+          >
+            Center
+          </button>
         </div>
         <button
           type="button"
