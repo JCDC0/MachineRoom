@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { createAgents } from './agents.js'
-import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget } from './camera.js'
+import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
@@ -658,6 +658,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     reset: sync,
     yaw: () => rig.yaw(),
     pitch: () => rig.pitch(),
+    parkScreen: () => projectPoint(camera, HUB_CENTER, width, height),
     zoomBy: (deltaY) => rig.zoomBy(deltaY),
     zoomShare: () => rig.zoomShare(),
     setZoomShare: (share) => rig.setZoomShare(share),

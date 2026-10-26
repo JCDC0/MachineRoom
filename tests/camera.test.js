@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { ANCHOR_DIST, CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, createCameraRig, fitView, minTextScale, viewBasis } from '../src/engine/camera.js'
+import { ANCHOR_DIST, CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, createCameraRig, fitView, minTextScale, projectPoint, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -184,6 +184,37 @@ describe('viewBasis', () => {
     const { right, up } = viewBasis(1.1, 0.5)
     expect(right.y).toBe(0)
     expect(up.y).toBeGreaterThan(0)
+  })
+})
+
+describe('projectPoint', () => {
+  it('lands a point at the target in the middle of the surface', () => {
+    const camera = new THREE.PerspectiveCamera(FOV, 1000 / 800, 1, 60000)
+    camera.position.set(0, 0, 2600)
+    camera.lookAt(0, 200, 0)
+
+    const point = projectPoint(camera, new THREE.Vector3(0, 200, 0), 1000, 800)
+    expect(point.x).toBeCloseTo(500, 5)
+    expect(point.y).toBeCloseTo(400, 5)
+  })
+
+  it('lands a point to the right of the middle', () => {
+    const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 60000)
+    camera.position.set(0, 0, 0)
+    camera.lookAt(0, 0, -1)
+
+    const point = projectPoint(camera, { x: 100, y: 0, z: -500 }, 800, 600)
+    expect(point.x).toBeGreaterThan(400)
+    expect(point.y).toBeCloseTo(300, 5)
+  })
+
+  it('answers null for a point behind the camera', () => {
+    const camera = new THREE.PerspectiveCamera(FOV, 1, 1, 60000)
+    camera.position.set(0, 0, 0)
+    camera.lookAt(0, 0, -1)
+
+    expect(projectPoint(camera, { x: 0, y: 0, z: 500 }, 800, 600)).toBeNull()
+    expect(projectPoint(camera, { x: 100, y: 20, z: 500 }, 800, 600)).toBeNull()
   })
 })
 

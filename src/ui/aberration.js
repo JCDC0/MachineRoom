@@ -32,6 +32,29 @@ export function radialMapPixels(size = RADIAL_MAP_SIZE) {
   return { size: side, data }
 }
 
+export function mapPlacement({ width = 0, height = 0, centerX = 0, centerY = 0 } = {}) {
+  const regionWidth = Number.isFinite(Number(width)) && Number(width) > 0 ? Number(width) : 0
+  const regionHeight = Number.isFinite(Number(height)) && Number(height) > 0 ? Number(height) : 0
+  const x = Number.isFinite(Number(centerX)) ? Number(centerX) : 0
+  const y = Number.isFinite(Number(centerY)) ? Number(centerY) : 0
+  if (!(regionWidth > 0) || !(regionHeight > 0)) {
+    return {
+      x: x - RADIAL_MAP_SIZE / 2,
+      y: y - RADIAL_MAP_SIZE / 2,
+      width: RADIAL_MAP_SIZE,
+      height: RADIAL_MAP_SIZE,
+    }
+  }
+  const far = Math.max(
+    Math.hypot(x, y),
+    Math.hypot(regionWidth - x, y),
+    Math.hypot(x, regionHeight - y),
+    Math.hypot(regionWidth - x, regionHeight - y)
+  )
+  const side = far * 2
+  return { x: x - side / 2, y: y - side / 2, width: side, height: side }
+}
+
 export function aberrationChannels(strength) {
   const amount = Math.min(1, Math.max(0, Number(strength) || 0))
   const scale = Math.round(amount * ABERRATION_MAX_PX * 10) / 10

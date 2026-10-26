@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   ABERRATION_MAX_PX,
+  RADIAL_MAP_SIZE,
   aberrationChannels,
+  mapPlacement,
   radialMapDataUrl,
   radialMapPixels,
   radialMapValue,
@@ -74,6 +76,56 @@ describe('radial aberration map', () => {
 
   it('needs a document to draw the map', () => {
     expect(radialMapDataUrl(null)).toBe('')
+  })
+})
+
+describe('aberration map placement', () => {
+  it('centres the map on the middle of the lens', () => {
+    const placed = mapPlacement({ width: 1280, height: 800, centerX: 640, centerY: 400 })
+    const side = 2 * Math.hypot(640, 400)
+
+    expect(placed.width).toBeCloseTo(side, 6)
+    expect(placed.height).toBeCloseTo(side, 6)
+    expect(placed.x + placed.width / 2).toBeCloseTo(640, 6)
+    expect(placed.y + placed.height / 2).toBeCloseTo(400, 6)
+  })
+
+  it('centres the map on a corner', () => {
+    const placed = mapPlacement({ width: 1280, height: 800, centerX: 0, centerY: 0 })
+    const side = 2 * Math.hypot(1280, 800)
+
+    expect(placed.width).toBeCloseTo(side, 6)
+    expect(placed.height).toBeCloseTo(side, 6)
+    expect(placed.x + placed.width / 2).toBeCloseTo(0, 6)
+    expect(placed.y + placed.height / 2).toBeCloseTo(0, 6)
+  })
+
+  it('grows the side to reach every corner of the lens', () => {
+    const placed = mapPlacement({ width: 740, height: 520, centerX: 690, centerY: 40 })
+    const side = 2 * Math.hypot(690, 480)
+
+    expect(placed.width).toBeCloseTo(side, 6)
+    expect(placed.x).toBeLessThanOrEqual(0)
+    expect(placed.y).toBeLessThanOrEqual(0)
+    expect(placed.x + placed.width).toBeGreaterThanOrEqual(740)
+    expect(placed.y + placed.height).toBeGreaterThanOrEqual(520)
+    expect(placed.x + placed.width / 2).toBeCloseTo(690, 6)
+    expect(placed.y + placed.height / 2).toBeCloseTo(40, 6)
+  })
+
+  it('answers the map size for a zero-size region', () => {
+    expect(mapPlacement({ width: 0, height: 0, centerX: 0, centerY: 0 })).toEqual({
+      x: -RADIAL_MAP_SIZE / 2,
+      y: -RADIAL_MAP_SIZE / 2,
+      width: RADIAL_MAP_SIZE,
+      height: RADIAL_MAP_SIZE,
+    })
+    expect(mapPlacement({ width: 0, height: 0, centerX: 120, centerY: 80 })).toEqual({
+      x: 120 - RADIAL_MAP_SIZE / 2,
+      y: 80 - RADIAL_MAP_SIZE / 2,
+      width: RADIAL_MAP_SIZE,
+      height: RADIAL_MAP_SIZE,
+    })
   })
 })
 
