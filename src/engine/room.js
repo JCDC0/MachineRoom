@@ -302,6 +302,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function sync(state) {
     timers.clear()
+    terminals.clearNotes()
     webCalls.clear()
     labels.clear()
     pulses.forEach((pulse) => {
@@ -472,6 +473,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function onActivity(activity) {
+    terminals.note(activity)
     const view = agentSet.views.get(activity.agent)
     if (!view) return
     trackWeb(activity)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- An agent that runs a command shows a cyan `CONSOLE` above its head with the last five log lines while its latest tool call is `shell` or `other`, holds for 6 seconds after the call ends, fades with the agent, and a click selects the agent (task U68).
+- The console's title is the first address in its lines and it carries `is-address`, and `consoleRows` and `addressIn` are pure and tested (task U68).
 - Folder cards stack up to three full folder blocks behind the face, each the face's size with a tab on its top edge, stepped 12 pixels left, and `backOffsets` places them the same way for the paint and the occluder (task V39).
 - A click on a folder card body holds the camera on that card, or its nearest drawn ancestor, at `ANCHOR_DIST` and turns agent follow off (task U67).
 - A double click on empty space, Escape with no panel open and the `0` key call `room.park()`, which drops the folder hold and returns to the park ring (task U67).
