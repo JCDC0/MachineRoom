@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import AutocompactInput from './AutocompactInput.jsx'
 import {
   DIRECT_HARNESS,
+  MAX_SUBS,
   childConfirmText,
   childDetail,
   childDraft,
@@ -19,7 +20,7 @@ import {
   labelProblem,
   stateWord,
 } from './family.js'
-import { changeSub, ladderFromOrchestrators } from './ladderForm.js'
+import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs } from './ladderForm.js'
 import { ModelSelect, useHarnessModels } from './ModelRefresh.jsx'
 import { withHarnessModels, withModelRows } from './modelRefresh.js'
 import { AGENT_NAME_MAX, agentCountLine, cleanText, laneChoice, laneSummary } from './sidebar.js'
@@ -30,6 +31,93 @@ function messageOf(error) {
 
 function lanesOf(answer) {
   return laneSummary(answer).lanes.map((lane) => lane.key)
+}
+
+function cleanLaneIds(value) {
+  const ids = []
+  for (const entry of Array.isArray(value) ? value : []) {
+    const id = cleanText(entry, 80)
+    if (!id || ids.includes(id)) continue
+    ids.push(id)
+  }
+  return ids
+}
+
+function subIdFor(taken, label) {
+  const base = idFromName(label) || 'sub'
+  let root = base.slice(0, 24).replace(/-+$/g, '') || 'sub'
+  if (root === 'orchestrator') root = 'orchestrator-sub'
+  let id = root
+  let number = 2
+  while (taken.has(id)) {
+    const suffix = `-${number}`
+    id = `${root.slice(0, 24 - suffix.length).replace(/-+$/g, '')}${suffix}`
+    number += 1
+  }
+  return id
+}
+
+function groupSubLadder(ladder, draft, laneIds, laneKeys = []) {
+  const subs = ladderSubs(ladder)
+  const picked = cleanLaneIds(laneIds)
+  const problem = labelProblem(draft?.label)
+  if (problem) return { problem, subs, sub: null }
+  if (picked.length === 0) return { problem: 'Select at least one code agent.', subs, sub: null }
+  if (subs.length >= MAX_SUBS) {
+    return { problem: `There are at most ${MAX_SUBS} sub orchestrators.`, subs, sub: null }
+  }
+  const next = []
+  for (const sub of subs) {
+    const before = cleanLaneIds(sub.lanes)
+    const lanes = before.filter((key) => !picked.includes(key))
+    if (before.length > 0 && lanes.length === 0) continue
+    next.push({ ...sub, lanes })
+  }
+  const taken = new Set(next.map((sub) => sub.id))
+  for (const key of [...laneKeys, ...picked]) {
+    const id = cleanText(key, 80)
+    if (id) taken.add(id)
+  }
+  const sub = {
+    id: subIdFor(taken, draft.label),
+    name: cleanText(draft.label, AGENT_NAME_MAX),
+    harness: cleanText(draft.harness, 40) || 'opencode',
+    model: cleanText(draft.model, 120),
+    lanes: picked,
+    scope: ['**'],
+    restricted: false,
+    setBy: 'owner',
+  }
+  return { problem: '', subs: [...next, sub], sub }
+}
+
+function removeSubLadder(ladder, subId) {
+  const subs = ladderSubs(ladder)
+  const next = subs.filter((sub) => sub.id !== subId)
+  if (next.length === subs.length) {
+    return { problem: 'Choose a sub orchestrator to remove.', subs }
+  }
+  return { problem: '', subs: next }
+}
+
+function assignSubLadder(ladder, subId, laneIds) {
+  const subs = ladderSubs(ladder)
+  if (!subs.some((sub) => sub.id === subId)) {
+    return { problem: 'This sub orchestrator is not in the ladder.', subs }
+  }
+  const picked = cleanLaneIds(laneIds)
+  if (picked.length === 0) {
+    return { problem: 'Select at least one code agent.', subs }
+  }
+  const next = subs.map((sub) => {
+    if (sub.id === subId) return { ...sub, lanes: picked }
+    return { ...sub, lanes: cleanLaneIds(sub.lanes).filter((key) => !picked.includes(key)) }
+  })
+  return { problem: '', subs: next }
+}
+
+function agentCount(count) {
+  return `${count} ${count === 1 ? 'agent' : 'agents'}`
 }
 
 export function FamilyTree({ client = null }) {
@@ -55,6 +143,10 @@ export function FamilyTree({ client = null }) {
   const [keyValue, setKeyValue] = useState('')
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [selectedLanes, setSelectedLanes] = useState([])
+  const [groupOpen, setGroupOpen] = useState(false)
+  const [subDraft, setSubDraft] = useState(null)
+  const [subProblem, setSubProblem] = useState('')
 
   useEffect(() => {
     if (!canFamily) return undefined
@@ -181,6 +273,22 @@ export function FamilyTree({ client = null }) {
     value: draft?.model ?? '',
   })
 
+  const subHarness = useMemo(() => {
+    if (!groupOpen) return null
+    return childHarnesses(harnesses, models).find((row) => row.key === subDraft?.harness) ?? null
+  }, [groupOpen, subDraft?.harness, harnesses, models])
+  const subFallback = useMemo(
+    () => (subHarness ? harnessModels(subHarness, models) : []),
+    [subHarness, models]
+  )
+  const subModels = useHarnessModels({
+    client,
+    harness: subHarness?.key ?? '',
+    open: groupOpen,
+    fallback: subFallback,
+    value: subDraft?.model ?? '',
+  })
+
   useEffect(() => {
     if (!editorHarness?.key || !editorModels.live || editorModels.live.length === 0) return
     setHarnesses((current) => withHarnessModels(current, editorHarness.key, editorModels.live))
@@ -192,6 +300,26 @@ export function FamilyTree({ client = null }) {
     setHarnesses((current) => withHarnessModels(current, childHarness.key, childModels.live))
     setModels((current) => withModelRows(current, childModels.live, childHarness.key))
   }, [childHarness?.key, childModels.live])
+
+  useEffect(() => {
+    if (!subHarness?.key || !subModels.live || subModels.live.length === 0) return
+    setHarnesses((current) => withHarnessModels(current, subHarness.key, subModels.live))
+    setModels((current) => withModelRows(current, subModels.live, subHarness.key))
+  }, [subHarness?.key, subModels.live])
+
+  useEffect(() => {
+    const lanesInTree = new Set(tree.nodes.filter((node) => node.kind === 'lane').map((node) => node.id))
+    setSelectedLanes((current) => {
+      const next = current.filter((id) => lanesInTree.has(id))
+      return next.length === current.length ? current : next
+    })
+  }, [tree])
+
+  useEffect(() => {
+    if (!groupOpen || selectedLanes.length > 0) return
+    setGroupOpen(false)
+    setSubDraft(null)
+  }, [groupOpen, selectedLanes])
 
   useEffect(() => {
     if (editing && !tree.nodes.some((node) => node.id === editing)) {
@@ -279,6 +407,10 @@ export function FamilyTree({ client = null }) {
       harness: node.harness,
       model: node.model,
       effort: node.effort,
+      lanes:
+        node.kind === 'sub'
+          ? tree.nodes.filter((row) => row.kind === 'lane' && row.parent === node.id).map((row) => row.id)
+          : [],
     })
     setChildFor(null)
     setDraft(null)
@@ -457,6 +589,180 @@ export function FamilyTree({ client = null }) {
     })
   }
 
+  function subDraftFor() {
+    const offered = childHarnesses(harnesses, models)
+    const harness = offered.find((row) => row.key === 'opencode') ?? offered[0] ?? null
+    return {
+      label: 'Sub orchestrator',
+      harness: harness?.key ?? 'opencode',
+      model: harness?.models?.[0]?.id ?? '',
+      effort: harness?.efforts?.[0] ?? '',
+    }
+  }
+
+  function openGroupForm(laneIds, fresh = false) {
+    const ids = cleanLaneIds(laneIds)
+    if (ids.length === 0) {
+      setActionError('Select at least one code agent.')
+      return
+    }
+    setActionError('')
+    closeEditor()
+    closeChild()
+    setSelectedLanes(ids)
+    setGroupOpen(true)
+    if (fresh || !subDraft) setSubDraft(subDraftFor())
+    setSubProblem('')
+  }
+
+  function clearSelection() {
+    setSelectedLanes([])
+    setGroupOpen(false)
+    setSubDraft(null)
+    setSubProblem('')
+  }
+
+  function closeGroupForm() {
+    setGroupOpen(false)
+    setSubDraft(null)
+    setSubProblem('')
+  }
+
+  function toggleSelected(node, on) {
+    if (!node || node.kind !== 'lane') return
+    setSubProblem('')
+    setSelectedLanes((current) => {
+      if (on) return current.includes(node.id) ? current : [...current, node.id]
+      return current.filter((id) => id !== node.id)
+    })
+  }
+
+  function chooseSubHarness(key) {
+    const harness = childHarnesses(harnesses, models).find((row) => row.key === key)
+    if (!harness) return
+    setSubProblem('')
+    setSubDraft((current) => ({
+      ...(current ?? subDraftFor()),
+      harness: harness.key,
+      model: harnessModels(harness, models)[0]?.id ?? '',
+      effort: harnessEfforts(harness)[0] ?? '',
+    }))
+  }
+
+  async function askGroupSub() {
+    if (!subDraft || busy) return
+    const problem = childFormProblem(subDraft, { harnesses, models })
+    if (problem) {
+      setSubProblem(problem)
+      return
+    }
+    if (selectedLanes.length === 0) {
+      setSubProblem('Select at least one code agent.')
+      return
+    }
+    if (typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function') {
+      setActionError('This bridge cannot change the ladder.')
+      return
+    }
+    setSubProblem('')
+    setActionError('')
+    let ladder
+    try {
+      ladder = await readLadder()
+    } catch (error) {
+      setActionError(messageOf(error))
+      return
+    }
+    const laneKeys = lanesOf(lanes)
+    for (const node of tree.nodes) {
+      if (node.kind === 'lane' && !laneKeys.includes(node.id)) laneKeys.push(node.id)
+    }
+    const plan = groupSubLadder(ladder, subDraft, selectedLanes, laneKeys)
+    if (plan.problem) {
+      setSubProblem(plan.problem)
+      return
+    }
+    ask({
+      text: `Add "${plan.sub.name}" to lead ${agentCount(plan.sub.lanes.length)}?`,
+      detail: childDetail(subDraft, harnesses, models),
+      label: 'Create',
+      busyText: 'Creating the sub orchestrator...',
+      run: async () => {
+        await client.setLadder({ subs: plan.subs })
+        clearSelection()
+        await refresh()
+      },
+    })
+  }
+
+  async function askSubLanes(node) {
+    if (!nodeDraft || busy) return
+    const picked = cleanLaneIds(nodeDraft.lanes)
+    if (picked.length === 0) {
+      setActionError('Select at least one code agent.')
+      return
+    }
+    if (typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function') {
+      setActionError('This bridge cannot change the ladder.')
+      return
+    }
+    setActionError('')
+    let ladder
+    try {
+      ladder = await readLadder()
+    } catch (error) {
+      setActionError(messageOf(error))
+      return
+    }
+    const plan = assignSubLadder(ladder, node.id, picked)
+    if (plan.problem) {
+      setActionError(plan.problem)
+      return
+    }
+    ask({
+      text: `Save the agents under "${node.label}"?`,
+      detail: agentCount(picked.length),
+      label: 'Save',
+      busyText: 'Saving the sub orchestrator...',
+      run: async () => {
+        await client.setLadder({ subs: plan.subs })
+        await refresh()
+      },
+    })
+  }
+
+  async function askRemoveSub(node) {
+    if (node.kind !== 'sub' || busy) return
+    if (typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function') {
+      setActionError('This bridge cannot remove a sub orchestrator.')
+      return
+    }
+    setActionError('')
+    let ladder
+    try {
+      ladder = await readLadder()
+    } catch (error) {
+      setActionError(messageOf(error))
+      return
+    }
+    const plan = removeSubLadder(ladder, node.id)
+    if (plan.problem) {
+      setActionError(plan.problem)
+      return
+    }
+    ask({
+      text: `Remove "${node.label}"? Its agents return to the orchestrator.`,
+      label: 'Remove',
+      tone: 'danger',
+      busyText: 'Removing the sub orchestrator...',
+      run: async () => {
+        await client.setLadder({ subs: plan.subs })
+        if (editing === node.id) closeEditor()
+        await refresh()
+      },
+    })
+  }
+
   async function toggleLane(node, on) {
     if (typeof client?.setActiveLanes !== 'function') {
       setActionError('This bridge cannot change the agents.')
@@ -511,6 +817,14 @@ export function FamilyTree({ client = null }) {
   }
 
   function toggleChild(node) {
+    if (node.kind === 'lane') {
+      if (groupOpen && selectedLanes.length === 1 && selectedLanes[0] === node.id) {
+        clearSelection()
+        return
+      }
+      openGroupForm([node.id], true)
+      return
+    }
     if (childFor === node.id) {
       closeChild()
       return
@@ -704,6 +1018,8 @@ export function FamilyTree({ client = null }) {
   function renderEditor(node, depth) {
     if (!nodeDraft) return null
     const lane = node.kind === 'lane'
+    const sub = node.kind === 'sub'
+    const laneNodes = tree.nodes.filter((row) => row.kind === 'lane')
     const options = lane ? [] : nodeHarnessOptions(node)
     const harness = lane
       ? findHarness(harnesses, node.harness)
@@ -869,7 +1185,67 @@ export function FamilyTree({ client = null }) {
               >
                 Save
               </button>
+              {sub ? (
+                <button
+                  type="button"
+                  className="mr-side-action is-danger"
+                  disabled={
+                    busy ||
+                    typeof client?.setLadder !== 'function' ||
+                    typeof client?.orchestrators !== 'function'
+                  }
+                  onClick={() => askRemoveSub(node)}
+                >
+                  Remove
+                </button>
+              ) : null}
             </div>
+            {sub ? (
+              <div className="mr-family-agents" role="group" aria-label={`Agents under ${node.label}`}>
+                <p className="mr-side-field-label mono">Agents</p>
+                {laneNodes.length === 0 ? (
+                  <p className="mr-side-note is-dim">No code agents are listed.</p>
+                ) : (
+                  laneNodes.map((row) => {
+                    const checked = cleanLaneIds(nodeDraft.lanes).includes(row.id)
+                    return (
+                      <label className="mr-family-agent" key={row.id}>
+                        <input
+                          type="checkbox"
+                          className="mr-family-agent-check"
+                          aria-label={`${row.label} under ${node.label}`}
+                          checked={checked}
+                          disabled={busy}
+                          onChange={(event) => {
+                            const picked = new Set(cleanLaneIds(nodeDraft.lanes))
+                            if (event.target.checked) picked.add(row.id)
+                            else picked.delete(row.id)
+                            const lanes = laneNodes.map((entry) => entry.id).filter((id) => picked.has(id))
+                            setNodeDraft({ ...nodeDraft, lanes })
+                          }}
+                        />
+                        <span className="mr-family-agent-label">{row.label}</span>
+                        <span className="mr-family-agent-id mono">{row.id}</span>
+                      </label>
+                    )
+                  })
+                )}
+                <div className="mr-side-form-actions">
+                  <button
+                    type="button"
+                    className="mr-side-primary"
+                    disabled={
+                      busy ||
+                      typeof client?.setLadder !== 'function' ||
+                      typeof client?.orchestrators !== 'function'
+                    }
+                    onClick={() => askSubLanes(node)}
+                  >
+                    Save agents
+                  </button>
+                </div>
+              </div>
+            ) : null}
             {orchLoaded && orchestrator ? (
               <AutocompactInput orchestrator={orchestrator} client={client} onSaved={refresh} />
             ) : null}
@@ -1046,9 +1422,122 @@ export function FamilyTree({ client = null }) {
     )
   }
 
+  function renderSubForm() {
+    if (!subDraft) return null
+    const offered = childHarnesses(harnesses, models)
+    const selected = offered.find((row) => row.key === subDraft.harness) ?? null
+    const efforts = selected ? harnessEfforts(selected) : []
+    const canGroup = typeof client?.setLadder === 'function' && typeof client?.orchestrators === 'function'
+    return (
+      <form
+        className="mr-family-sub-form"
+        aria-label="Add sub orchestrator"
+        onSubmit={(event) => {
+          event.preventDefault()
+          askGroupSub()
+        }}
+      >
+        <label className="mr-side-field">
+          <span className="mr-side-field-label mono">Label</span>
+          <input
+            className="mr-side-input mono"
+            value={subDraft.label}
+            maxLength={AGENT_NAME_MAX}
+            aria-label="Sub orchestrator label"
+            onChange={(event) => setSubDraft({ ...subDraft, label: event.target.value })}
+          />
+        </label>
+        <label className="mr-side-field">
+          <span className="mr-side-field-label mono">Harness</span>
+          <select
+            className="mr-side-select mono"
+            aria-label="Sub orchestrator harness"
+            value={subDraft.harness}
+            onChange={(event) => chooseSubHarness(event.target.value)}
+          >
+            {offered.map((row) => (
+              <option value={row.key} key={row.key}>
+                {row.key === DIRECT_HARNESS ? 'Direct API' : row.name || row.key}
+              </option>
+            ))}
+          </select>
+        </label>
+        {selected ? (
+          <ModelSelect
+            label="Model"
+            ariaLabel="Sub orchestrator model"
+            value={subDraft.model}
+            choices={subModels.choices}
+            onChange={(model) => setSubDraft({ ...subDraft, model })}
+            onRefresh={subModels.refresh}
+            loading={subModels.loading}
+            error={subModels.error}
+            canRefresh={subModels.canRefresh}
+          />
+        ) : null}
+        {selected && efforts.length > 0 ? (
+          <label className="mr-side-field">
+            <span className="mr-side-field-label mono">Effort</span>
+            <select
+              className="mr-side-select mono"
+              aria-label="Sub orchestrator effort"
+              value={subDraft.effort}
+              onChange={(event) => setSubDraft({ ...subDraft, effort: event.target.value })}
+            >
+              <option value="">default</option>
+              {efforts.map((level) => (
+                <option value={level} key={level}>
+                  {level}
+                </option>
+              ))}
+              {subDraft.effort && !efforts.includes(subDraft.effort) ? (
+                <option value={subDraft.effort}>{subDraft.effort}</option>
+              ) : null}
+            </select>
+          </label>
+        ) : null}
+        {subProblem ? <p className="mr-family-note is-error">{subProblem}</p> : null}
+        <div className="mr-side-form-actions">
+          <button type="submit" className="mr-side-primary" disabled={busy || !canGroup}>
+            Create
+          </button>
+          <button type="button" className="mr-side-action" disabled={busy} onClick={closeGroupForm}>
+            Cancel
+          </button>
+        </div>
+        {!canGroup ? <p className="mr-side-note is-dim">This bridge cannot change the ladder.</p> : null}
+      </form>
+    )
+  }
+
+  function renderSelection() {
+    if (selectedLanes.length === 0) return null
+    return (
+      <>
+        <div className="mr-family-selection" role="group" aria-label="Selected code agents">
+          <span className="mr-family-selection-count mono">{`${selectedLanes.length} selected`}</span>
+          <button
+            type="button"
+            className="mr-side-action mr-family-sub-open"
+            aria-expanded={groupOpen}
+            disabled={busy}
+            onClick={() => openGroupForm(selectedLanes)}
+          >
+            Add sub orchestrator
+          </button>
+          <button type="button" className="mr-side-action" disabled={busy} onClick={clearSelection}>
+            Clear
+          </button>
+        </div>
+        {groupOpen ? renderSubForm() : null}
+      </>
+    )
+  }
+
   function renderRow(row) {
     const node = row
     const state = stateWord(node)
+    const sub = node.kind === 'sub'
     return (
       <div className="mr-family-node" key={node.id} data-kind={node.kind} data-depth={row.depth}>
         <div className="mr-family-row">
@@ -1064,6 +1553,18 @@ export function FamilyTree({ client = null }) {
               <span className="mr-family-hline" style={{ left: `${(row.depth - 1) * 16 + 7}px` }} />
             ) : null}
           </span>
+          {node.kind === 'lane' ? (
+            <input
+              type="checkbox"
+              className="mr-family-check"
+              aria-label={`Select ${node.label}`}
+              checked={selectedLanes.includes(node.id)}
+              disabled={busy}
+              onChange={(event) => toggleSelected(node, event.target.checked)}
+            />
+          ) : (
+            <span className="mr-family-check-space" aria-hidden="true" />
+          )}
           <button
             type="button"
             className={`mr-family-open is-${node.kind}`}
@@ -1091,14 +1592,19 @@ export function FamilyTree({ client = null }) {
               <span className="mr-side-switch-knob" aria-hidden="true" />
             </button>
           ) : null}
-          {node.kind === 'lane' ? (
+          {node.kind === 'lane' || sub ? (
             <button
               type="button"
               className="mr-family-trash"
               aria-label={`Delete ${node.label}`}
               title={`Delete ${node.label}`}
-              disabled={busy || typeof client?.deleteLane !== 'function'}
-              onClick={() => askRemove(node)}
+              disabled={
+                busy ||
+                (sub
+                  ? typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function'
+                  : typeof client?.deleteLane !== 'function')
+              }
+              onClick={() => (sub ? askRemoveSub(node) : askRemove(node))}
             >
               <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
                 <path
@@ -1115,8 +1621,14 @@ export function FamilyTree({ client = null }) {
           <button
             type="button"
             className="mr-family-add"
-            aria-label={`Add child to ${node.label}`}
-            aria-expanded={childFor === node.id}
+            aria-label={
+              node.kind === 'lane'
+                ? `Add sub orchestrator for ${node.label}`
+                : `Add child to ${node.label}`
+            }
+            aria-expanded={
+              node.kind === 'lane' ? groupOpen && selectedLanes.includes(node.id) : childFor === node.id
+            }
             disabled={busy}
             onClick={() => toggleChild(node)}
           >
@@ -1158,6 +1670,7 @@ export function FamilyTree({ client = null }) {
           ) : (
             <>
               {renderRequests()}
+              {renderSelection()}
               {tree.rows.length === 0 ? <p className="mr-side-note">No agents are listed.</p> : null}
               {tree.rows.map(renderRow)}
             </>
