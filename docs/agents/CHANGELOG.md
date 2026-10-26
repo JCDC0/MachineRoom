@@ -14,6 +14,8 @@
 - `+` on a lane row opens the sub orchestrator form with that lane checked instead of creating a child (task U54).
 - A lane on the `agy` harness is left out of the eligible worker lanes, `/api/lanes` and the family tree, unless the lane is owner-made (task U55).
 - The mock control client lists no `agy` lane by default, checks a new ladder against every known lane key and sends an `orchestrator` and a `family` notice (task U55).
+- A sub orchestrator takes a custom label from `POST /api/family/label` before its ladder name and `Sub orchestrator`, and its family node carries `custom: true` while that label holds, so the owner renames it like a lane or the root (task U56).
+- The family tree groups lanes under a sub orchestrator through the ladder save and returns them to `orchestrator` when the sub is removed; both round trips are tested in `tests/family.test.js` (task U56).
 
 - The lens edges are a compass tape centred on the camera's heading, with a tick every 5 degrees at 6 pixels per degree, a taller tick and a label (`N 000`, `NE 045`, `015` ...) every 15 degrees, the `+` lubber mark and the corner brackets kept, and the heading read from the new `yaw()` on the camera rig and the room (task U50).
 - At its default and maximum height the lens fills the window from the menu to the transport, which sits at the bottom of the viewport with the lower half below the fold (task U50).

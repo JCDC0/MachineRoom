@@ -229,6 +229,96 @@ describe('GET /api/family and POST /api/family/label', () => {
   })
 })
 
+describe('sub orchestrator labels and the ladder round trip', () => {
+  const FRONTEND = {
+    id: 'frontend',
+    name: 'Frontend',
+    harness: 'opencode',
+    model: 'opencode-go/deepseek-v4.1-flash',
+    lanes: ['opencode', 'opencode2'],
+    scope: ['src/ui/**'],
+    restricted: false,
+    setBy: 'owner',
+  }
+
+  function setLadder(orchestrators, subs) {
+    const result = orchestrators.ladderChange({ confirmed: true, by: 'owner', ladder: { subs } }, true)
+    expect(result.status).toBe(200)
+  }
+
+  it('labels a sub from its custom label, then its name, then the default', () => {
+    const root = tempDir('mr-sub-')
+    const runs = tempDir('mr-sub-runs-')
+    const orchestrators = {
+      getLadder: () => ({
+        subs: [
+          { id: 'frontend', name: 'Frontend', lanes: ['opencode'] },
+          { id: 'plain', lanes: [] },
+        ],
+      }),
+    }
+
+    const nodes = buildFamilyNodes({ projectRoot: root, runsFolder: runs, lanesConfig: SAMPLE_LANES, orchestrators })
+    expect(nodes.find((node) => node.id === 'frontend')).toMatchObject({ label: 'Frontend', custom: false })
+    expect(nodes.find((node) => node.id === 'plain')).toMatchObject({ label: 'Sub orchestrator', custom: false })
+
+    writeFileSync(labelsFileFor(root, runs), JSON.stringify({ frontend: 'Interface Lead' }))
+
+    const labelled = buildFamilyNodes({ projectRoot: root, runsFolder: runs, lanesConfig: SAMPLE_LANES, orchestrators })
+    expect(labelled.find((node) => node.id === 'frontend')).toMatchObject({ label: 'Interface Lead', custom: true })
+    expect(labelled.find((node) => node.id === 'plain').custom).toBe(false)
+  })
+
+  it('renames a sub orchestrator through POST /api/family/label', async () => {
+    const { url, bridge } = await startBridge()
+    setLadder(bridge.orchestrators(), [FRONTEND])
+
+    const rename = await request(`${url}/api/family/label`, {
+      method: 'POST',
+      body: { id: 'frontend', label: 'Interface Lead', confirmed: true },
+    })
+    expect(rename.status).toBe(200)
+    expect(rename.body).toEqual({ ok: true, id: 'frontend', label: 'Interface Lead' })
+
+    const family = await request(`${url}/api/family`, { origin: '' })
+    const sub = family.body.nodes.find((node) => node.id === 'frontend')
+    expect(sub).toMatchObject({ kind: 'sub', label: 'Interface Lead', custom: true, parent: 'orchestrator' })
+    expect(family.body.nodes.find((node) => node.id === 'orchestrator').children).toContain('frontend')
+  })
+
+  it('groups existing opencode lanes under a sub orchestrator through ladderChange', async () => {
+    const { url, bridge } = await startBridge()
+    setLadder(bridge.orchestrators(), [FRONTEND])
+
+    const family = await request(`${url}/api/family`, { origin: '' })
+    const sub = family.body.nodes.find((node) => node.id === 'frontend')
+    expect(sub.kind).toBe('sub')
+    expect(sub.children).toEqual(['opencode', 'opencode2'])
+
+    const root = family.body.nodes.find((node) => node.id === 'orchestrator')
+    expect(root.children).toContain('frontend')
+    expect(root.children).not.toContain('opencode')
+    expect(family.body.nodes.find((node) => node.id === 'opencode').parent).toBe('frontend')
+    expect(family.body.nodes.find((node) => node.id === 'opencode2').parent).toBe('frontend')
+    expect(family.body.nodes.find((node) => node.id === 'claude').parent).toBe('orchestrator')
+  })
+
+  it('returns a removed sub orchestrator lanes to the orchestrator', async () => {
+    const { url, bridge } = await startBridge()
+    const orchs = bridge.orchestrators()
+    setLadder(orchs, [FRONTEND])
+    setLadder(orchs, [])
+
+    const family = await request(`${url}/api/family`, { origin: '' })
+    expect(family.body.nodes.some((node) => node.id === 'frontend')).toBe(false)
+
+    const root = family.body.nodes.find((node) => node.id === 'orchestrator')
+    expect(root.children).toEqual(expect.arrayContaining(['opencode', 'opencode2']))
+    expect(family.body.nodes.find((node) => node.id === 'opencode').parent).toBe('orchestrator')
+    expect(family.body.nodes.find((node) => node.id === 'opencode2').parent).toBe('orchestrator')
+  })
+})
+
 describe('Key slots: /api/keys, /api/keys/NAME/delete and readKey', () => {
   it('rejects writing key without page Origin or confirmation', async () => {
     const { url } = await startBridge()
