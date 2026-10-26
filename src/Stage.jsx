@@ -135,7 +135,11 @@ export function lensEdgeLabels(width = LENS_DEFAULT_WIDTH, yaw = 0, side = 'top'
     }))
 }
 
-function LensEdge({ side, yaw = 0, pitch = 0 }) {
+export function isBridgeDown(live, snapshot, health) {
+  return Boolean(live) && (['reconnecting', 'disconnected'].includes(snapshot?.status) || health?.ok === false)
+}
+
+function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
   const ref = useRef(null)
   const [width, setWidth] = useState(0)
   const top = side === 'top'
@@ -154,7 +158,7 @@ function LensEdge({ side, yaw = 0, pitch = 0 }) {
   }, [])
   const lineY = top ? 0.5 : LENS_EDGE_HEIGHT - 0.5
   return (
-    <div className={`lens-edge is-${side}`} ref={ref} aria-hidden="true">
+    <div className={`lens-edge is-${side}${disconnected ? ' is-disconnected' : ''}`} ref={ref} aria-hidden="true">
       <span className="lens-edge-corner is-left" />
       <span className="lens-edge-corner is-right" />
       <span className="lens-edge-cross">+</span>
@@ -755,6 +759,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   const idleSoFar = snapshot.agents.every((agent) => agent.runs === 0)
   const linkTrouble = ['connecting', 'reconnecting', 'disconnected'].includes(snapshot.status)
+  const bridgeDown = isBridgeDown(live, snapshot, health)
   const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
   const orchestratorActivity = orchestratorDoing(snapshot.agents)
 
@@ -768,10 +773,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
-      <div className="stage" style={lensShare === null ? undefined : { '--lens-h-user': lensHeightValue(lensShare) }}>
-        <div className="lens">
-          <LensEdge side="top" yaw={lensYaw} />
-          <LensEdge side="bottom" yaw={lensYaw} pitch={lensPitch} />
+      <div className={`stage${bridgeDown ? ' is-disconnected' : ''}`} style={lensShare === null ? undefined : { '--lens-h-user': lensHeightValue(lensShare) }}>
+        <div className={`lens${bridgeDown ? ' is-disconnected' : ''}`}>
+          <LensEdge side="top" yaw={lensYaw} disconnected={bridgeDown} />
+          <LensEdge side="bottom" yaw={lensYaw} pitch={lensPitch} disconnected={bridgeDown} />
           <div className="lens-frame" ref={surfaceRef}>
             <div
               className="surface-layers"

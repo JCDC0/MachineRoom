@@ -23,25 +23,23 @@ describe('healthNotice', () => {
     expect(healthNotice({ ok: true, lanes: true, unparsed: { total: 0 }, masked: { total: 0 } })).toBeNull()
   })
 
-  it('reports when the bridge is not answering', () => {
-    expect(healthNotice({ error: true })).toEqual({
-      tone: 'red',
-      title: 'The bridge is not answering',
-      lines: [],
-    })
+  it('returns null when the bridge is not answering', () => {
+    expect(healthNotice({ error: true })).toBeNull()
   })
 
-  it('reports a failed source', () => {
-    expect(healthNotice({ ok: false, lanes: false, sessions: true })).toEqual({
+  it('returns null when a source failed', () => {
+    expect(healthNotice({ ok: false, lanes: false, sessions: true })).toBeNull()
+    expect(healthNotice({ ok: false, error: 'The lane source stopped.' })).toBeNull()
+  })
+
+  it('warns when the runner looks stopped', () => {
+    expect(healthNotice({ ok: true, runner: { alive: false } })).toEqual({
       tone: 'red',
-      title: 'A source failed',
+      title: 'The runner looks stopped',
       lines: [],
     })
-    expect(healthNotice({ ok: false, error: 'The lane source stopped.' })).toEqual({
-      tone: 'red',
-      title: 'A source failed',
-      lines: ['The lane source stopped.'],
-    })
+    expect(healthNotice({ ok: true, runner: { alive: true } })).toBeNull()
+    expect(healthNotice({ ok: false, runner: { alive: false } })).toBeNull()
   })
 
   it('does not name Paperclip in any notice', () => {
@@ -144,7 +142,7 @@ describe('Hud health chip rendering', () => {
     expect(html).not.toContain('hud-health')
   })
 
-  it('renders the chip when the bridge is not answering', () => {
+  it('renders no chip when the bridge is not answering', () => {
     const html = renderToString(
       React.createElement(Hud, {
         snapshot,
@@ -154,12 +152,12 @@ describe('Hud health chip rendering', () => {
         health: { error: true },
       })
     )
-    expect(html).toContain('class="hud-health is-red"')
-    expect(html).toContain('The bridge is not answering')
+    expect(html).not.toContain('hud-health')
+    expect(html).not.toContain('The bridge is not answering')
     expect(html).not.toContain('Paperclip')
   })
 
-  it('renders the chip when a source failed', () => {
+  it('renders no chip when a source failed', () => {
     const html = renderToString(
       React.createElement(Hud, {
         snapshot,
@@ -169,8 +167,23 @@ describe('Hud health chip rendering', () => {
         health: { ok: false, lanes: false },
       })
     )
+    expect(html).not.toContain('hud-health')
+    expect(html).not.toContain('A source failed')
+    expect(html).not.toContain('Paperclip')
+  })
+
+  it('renders the chip when the runner looks stopped', () => {
+    const html = renderToString(
+      React.createElement(Hud, {
+        snapshot,
+        focused: null,
+        speeds: [1],
+        rootName: 'MachineRoom',
+        health: { ok: true, runner: { alive: false } },
+      })
+    )
     expect(html).toContain('class="hud-health is-red"')
-    expect(html).toContain('A source failed')
+    expect(html).toContain('The runner looks stopped')
     expect(html).not.toContain('Paperclip')
   })
 })
