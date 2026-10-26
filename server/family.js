@@ -180,10 +180,11 @@ export function buildFamilyNodes({
     const subInst = orchestrators?.find?.(sub.id) ?? null
     const subAnswer = subInst?.answer?.() ?? null
     const subWorking = subAnswer?.state === 'working' || (typeof isWorking === 'function' && isWorking(sub.id))
+    const subName = typeof sub.name === 'string' && sub.name.trim() ? sub.name : 'Sub orchestrator'
     const subNode = {
       id: sub.id,
       kind: 'sub',
-      label: typeof labels[sub.id] === 'string' ? labels[sub.id] : 'Sub orchestrator',
+      label: typeof labels[sub.id] === 'string' ? labels[sub.id] : subName,
       harness: subAnswer?.harness ?? sub.harness ?? 'opencode',
       model: subAnswer?.model ?? sub.model ?? 'opencode-go/deepseek-v4.1-flash',
       effort: subAnswer?.effort ?? null,
@@ -191,7 +192,7 @@ export function buildFamilyNodes({
       children: [],
       active: true,
       working: Boolean(subWorking),
-      custom: false,
+      custom: Boolean(labels[sub.id]),
     }
     subNodes.push(subNode)
     mainNode.children.push(sub.id)
