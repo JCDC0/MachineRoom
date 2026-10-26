@@ -5,7 +5,7 @@ import MusicPlayer from './MusicPlayer.jsx'
 import SearchSettings from './SearchSettings.jsx'
 import { store } from '../storage.js'
 import { RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../model/recordLimits.js'
-import { effectSettings, loadSettings, loadSoundSettings, saveSettings, saveSoundSettings } from './settings.js'
+import { effectSettings, clampFileLimit, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadSettings, loadSoundSettings, saveSettings, saveSoundSettings } from './settings.js'
 import { sound } from './sound.js'
 
 export const EFFECTS = [
@@ -28,6 +28,10 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
 
   function updateDepth(depth) {
     onChange?.({ ...current, alwaysDepth: depth })
+  }
+
+  function updateMaxFiles(maxFiles) {
+    onChange?.({ ...current, maxFiles: clampFileLimit(maxFiles) })
   }
 
   function updateEffect(key, patch) {
@@ -85,6 +89,26 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
               <span>1</span>
               <span>2</span>
               <span>3</span>
+            </div>
+          </div>
+          <div className="hud-settings-row">
+            <span className="hud-settings-label">Content files</span>
+            <span className="hud-settings-value mono">{current.maxFiles}</span>
+          </div>
+          <div className="hud-settings-control">
+            <input
+              type="range"
+              min={FILE_LIMIT_MIN}
+              max={FILE_LIMIT_MAX}
+              step="1"
+              value={current.maxFiles}
+              aria-label="Content files"
+              onChange={(event) => updateMaxFiles(Number(event.target.value))}
+            />
+            <div className="hud-settings-ticks mono">
+              <span>4</span>
+              <span>12</span>
+              <span>20</span>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Settings panel has a `Content files` range from 4 to 20, 6 by default, saved as `maxFiles` and passed to the room so a folder card can show more than three files (task U66).
 - Far dust and fine dust motes each drift, wander and pulse in their own three directions with no group rotation, and each mote breathes on its own phase and rate through its vertex colour (task V35).
 - A live room turns its borders red while the feed is reconnecting or disconnected or the health answer is `ok: false`: the stage and the HUD carry `is-disconnected`, so the lens edge lines, ticks, corners, cross and labels, the menu's bottom border, the transport border, the dock's top border and the sidebar's right border use `var(--red)` (task U61).
 - The menu no longer repeats `The bridge is not answering` or `A source failed` beside `LIVE // RECONNECTING` and `The live feed dropped`; `healthNotice` returns null for both and keeps `The runner looks stopped` for a stale runner when `health.ok !== false` (task U61).

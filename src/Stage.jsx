@@ -315,7 +315,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     const normalized = saveEffectSettings(store(), next)
     setEffects(normalized)
     setFineDust(normalized.dust)
-    roomRef.current?.setOptions({ alwaysDepth: normalized.alwaysDepth })
+    roomRef.current?.setOptions({ alwaysDepth: normalized.alwaysDepth, maxFiles: normalized.maxFiles })
   }
 
   function resetSoundFiles(tree = data.tree) {
@@ -379,7 +379,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       },
     })
     roomRef.current = room
-    room.setOptions({ alwaysDepth: effects.alwaysDepth })
+    room.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles })
     setFineDust(effects.dust)
     if (latestBoardRef.current) {
       room.setCosts(latestBoardRef.current)
@@ -484,8 +484,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     setFineDust(effects.dust)
-    roomRef.current?.setOptions({ alwaysDepth: effects.alwaysDepth })
-  }, [effects.alwaysDepth, effects.dust])
+    roomRef.current?.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles })
+  }, [effects.alwaysDepth, effects.maxFiles, effects.dust])
 
   const grainOn = Boolean(effects.grain?.on && effects.grain.strength > 0)
 
