@@ -4,15 +4,25 @@ import { WHITE, seeded, still, textSprite } from './sprites.js'
 export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
 const TICK = 50
-const DUST = 1800
+export const DUST = 1800
+export const DUST_INNER = 4500
+export const DUST_OUTER = 15500
 export const MOTES = 12000
 export const MOTE_INNER = 400
 export const MOTE_OUTER = 6000
+export const DRIFT_SPEED = 2.5
+export const DRIFT_WANDER = 3
 export const SPECK_BANDS = [
   { size: 12, fade: 1 },
   { size: 22, fade: 0.7 },
   { size: 38, fade: 0.45 },
 ]
+
+const DRIFT_RATE = 0.35
+const DRIFT_RATE_SPREAD = 0.25
+const DRIFT_PACE = 0.4
+const DRIFT_SEED = 7919
+const DRIFT_FRAMES = 2
 
 let fineDustOptions = { on: true, strength: 0.2, pulse: false }
 const fineDustMaterials = new Set()
@@ -48,10 +58,90 @@ export function motePoints(count = MOTES, seed = 1337, inner = MOTE_INNER, outer
   return points
 }
 
+export function dustPoints(count = DUST, seed = 9001, inner = DUST_INNER, outer = DUST_OUTER) {
+  const next = seeded(seed)
+  const points = []
+  for (let index = 0; index < count; index += 1) {
+    const direction = new THREE.Vector3(next() * 2 - 1, next() * 2 - 1, next() * 2 - 1)
+    if (direction.lengthSq() < 1e-6) direction.set(1, 0, 0)
+    direction.normalize()
+    points.push(direction.multiplyScalar(inner + next() * (outer - inner)))
+  }
+  return points
+}
+
 export function speckBands(points, bands = SPECK_BANDS.length) {
   const out = Array.from({ length: bands }, () => [])
   points.forEach((point, index) => out[index % bands].push(point))
   return out
+}
+
+export function driftSpecks(count, seed, { inner = MOTE_INNER, outer = MOTE_OUTER, speed = DRIFT_SPEED } = {}) {
+  const next = seeded(seed)
+  const specks = []
+  for (let index = 0; index < count; index += 1) {
+    const vx = next() * 2 - 1
+    const vy = next() * 2 - 1
+    const vz = next() * 2 - 1
+    const length = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1
+    const pace = speed * (DRIFT_PACE + (1 - DRIFT_PACE) * next())
+    const wx = next() * 2 - 1
+    const wy = next() * 2 - 1
+    const wz = next() * 2 - 1
+    const wanderLength = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1
+    specks.push({
+      vx: (vx / length) * pace,
+      vy: (vy / length) * pace,
+      vz: (vz / length) * pace,
+      wx: wx / wanderLength,
+      wy: wy / wanderLength,
+      wz: wz / wanderLength,
+      rate: DRIFT_RATE + next() * DRIFT_RATE_SPREAD,
+      wander: DRIFT_WANDER * (0.4 + 0.6 * next()),
+      inner,
+      outer,
+    })
+  }
+  return specks
+}
+
+export function bounceRadius(radius, inner, outer) {
+  const span = outer - inner
+  if (!(span > 0) || !Number.isFinite(radius)) return inner
+  if (radius >= inner && radius <= outer) return radius
+  const period = span * 2
+  let folded = (radius - inner) % period
+  if (folded < 0) folded += period
+  if (folded > span) folded = period - folded
+  return inner + folded
+}
+
+export function bouncePoint(x, y, z, inner, outer, out = [0, 0, 0], offset = 0) {
+  const radius = Math.sqrt(x * x + y * y + z * z)
+  if (!(radius > 1e-9)) {
+    out[offset] = inner
+    out[offset + 1] = 0
+    out[offset + 2] = 0
+    return out
+  }
+  const scale = bounceRadius(radius, inner, outer) / radius
+  out[offset] = x * scale
+  out[offset + 1] = y * scale
+  out[offset + 2] = z * scale
+  return out
+}
+
+export function driftPoint(base, index, drift, seconds, out = [0, 0, 0], offset = 0) {
+  const swing = Math.sin(drift.rate * seconds) * drift.wander
+  return bouncePoint(
+    base[index] + drift.vx * seconds + drift.wx * swing,
+    base[index + 1] + drift.vy * seconds + drift.wy * swing,
+    base[index + 2] + drift.vz * seconds + drift.wz * swing,
+    drift.inner,
+    drift.outer,
+    out,
+    offset
+  )
 }
 
 export function setFineDust(options = {}) {
@@ -129,22 +219,23 @@ export function createVoid(scene, texture) {
     group.add(label)
   }
 
-  const next = seeded(9001)
+  const dustGeometry = new THREE.BufferGeometry().setFromPoints(dustPoints())
+  dustGeometry.userData.base = new Float32Array(dustGeometry.attributes.position.array)
+  dustGeometry.userData.drift = driftSpecks(DUST, DRIFT_SEED + 9001, { inner: DUST_INNER, outer: DUST_OUTER })
   const dust = new THREE.Points(
-    new THREE.BufferGeometry().setFromPoints(
-      Array.from({ length: DUST }, () => {
-        const direction = new THREE.Vector3(next() * 2 - 1, next() * 2 - 1, next() * 2 - 1).normalize()
-        return direction.multiplyScalar(4500 + next() * 11000)
-      })
-    ),
+    dustGeometry,
     new THREE.PointsMaterial({ color: WHITE, size: 10, map: texture, transparent: true, opacity: 0.45, depthWrite: false })
   )
   group.add(dust)
 
   const fineDust = new THREE.Group()
   const fineGeometries = []
+  const motes = motePoints()
+  const fineDrift = speckBands(driftSpecks(motes.length, DRIFT_SEED + 1337))
   let elapsed = 0
-  const fineMaterials = speckBands(motePoints()).map((points, index) => {
+  let driftSeconds = 0
+  let frame = 0
+  const fineMaterials = speckBands(motes).map((points, index) => {
     const band = SPECK_BANDS[index]
     const material = new THREE.PointsMaterial({
       color: WHITE,
@@ -160,6 +251,8 @@ export function createVoid(scene, texture) {
     fineDustMaterials.add(material)
     const geometry = new THREE.BufferGeometry().setFromPoints(points)
     geometry.userData.total = points.length
+    geometry.userData.base = new Float32Array(geometry.attributes.position.array)
+    geometry.userData.drift = fineDrift[index]
     geometry.setDrawRange(0, moteCount(fineDustOptions, points.length))
     fineDustGeometries.add(geometry)
     fineGeometries.push(geometry)
@@ -170,18 +263,38 @@ export function createVoid(scene, texture) {
 
   scene.add(group)
 
+  function driftLayer(geometry) {
+    const attribute = geometry.attributes.position
+    const values = attribute.array
+    const base = geometry.userData.base
+    const drift = geometry.userData.drift
+    const drawn = Math.min(geometry.drawRange.count, drift.length)
+    for (let index = 0; index < drawn; index += 1) {
+      driftPoint(base, index * 3, drift[index], driftSeconds, values, index * 3)
+    }
+    attribute.needsUpdate = true
+  }
+
   function update(delta) {
-    if (!still()) {
-      dust.rotation.y += delta * 0.004
-      fineDust.rotation.y += delta * 0.002
-      fineDust.rotation.x += delta * 0.001
-      if (fineDustOptions.pulse) {
-        elapsed += delta
-        pulseLevel = dustPulse(elapsed)
+    if (still()) {
+      if (pulseLevel !== 1) {
+        pulseLevel = 1
         applyDustOpacity()
       }
-    } else if (pulseLevel !== 1) {
-      pulseLevel = 1
+      return
+    }
+    dust.rotation.y += delta * 0.004
+    fineDust.rotation.y += delta * 0.002
+    fineDust.rotation.x += delta * 0.001
+    driftSeconds += delta
+    frame += 1
+    if (frame % DRIFT_FRAMES === 0) {
+      driftLayer(dustGeometry)
+      for (const geometry of fineGeometries) driftLayer(geometry)
+    }
+    if (fineDustOptions.pulse) {
+      elapsed += delta
+      pulseLevel = dustPulse(elapsed)
       applyDustOpacity()
     }
   }
