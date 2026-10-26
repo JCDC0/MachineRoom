@@ -133,17 +133,17 @@ describe('the flat ring', () => {
     }
   })
 
-  it('puts the root inside the ring, in front of the hub and a little lower', () => {
+  it('puts the root beneath the hub circle at the centre', () => {
     const entries = topTree(12)
     const placed = layoutRing(entries)
     const root = placeOf(placed, '')
     const fromHub = Math.hypot(root.x - HUB_CENTER.x, root.z - HUB_CENTER.z)
-    expect(ROOT_AHEAD).toBe(340)
+    expect(ROOT_AHEAD).toBe(0)
     expect(ROOT_DROP).toBe(40)
-    expect(fromHub).toBeCloseTo(ROOT_AHEAD, 6)
-    expect(ROOT_AHEAD).toBeLessThan(TOP_MIN_RADIUS)
-    expect(fromHub).toBeLessThan(ringOf(placeOf(placed, 'top-000')).radius)
-    expect((root.x - HUB_CENTER.x) * RING_FRONT.x + (root.z - HUB_CENTER.z) * RING_FRONT.z).toBeCloseTo(ROOT_AHEAD, 6)
+    expect(fromHub).toBe(0)
+    expect(root.x).toBe(HUB_CENTER.x)
+    expect(root.z).toBe(HUB_CENTER.z)
+    expect((root.x - HUB_CENTER.x) * RING_FRONT.x + (root.z - HUB_CENTER.z) * RING_FRONT.z).toBe(0)
     expect(root.y + root.height / 2).toBeCloseTo(HUB_CENTER.y - ROOT_DROP, 6)
     expect(root.y).toBeLessThan(HUB_CENTER.y)
     expect(root.y).toBeGreaterThan(HUB_CENTER.y - HUB_RADIUS)

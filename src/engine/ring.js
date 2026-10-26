@@ -7,13 +7,13 @@ export const RING_YAW = OVERVIEW.yaw
 export const RING_BACK = { x: -Math.sin(RING_YAW), y: 0, z: -Math.cos(RING_YAW) }
 export const RING_RIGHT = { x: Math.cos(RING_YAW), y: 0, z: -Math.sin(RING_YAW) }
 export const RING_FRONT = { x: Math.sin(RING_YAW), y: 0, z: Math.cos(RING_YAW) }
-export const ROOT_AHEAD = 340
+export const ROOT_AHEAD = 0
 export const ROOT_DROP = 40
 const DEFAULT_CARD = { width: 248, height: 64 }
 export const ROOT_PLACE = {
-  x: RING_CENTER.x + RING_FRONT.x * ROOT_AHEAD,
+  x: 0,
   y: RING_CENTER.y - ROOT_DROP - DEFAULT_CARD.height / 2,
-  z: RING_CENTER.z + RING_FRONT.z * ROOT_AHEAD,
+  z: 0,
 }
 export const TOP_MIN_RADIUS = 900
 export const CHILD_STEP = 450
