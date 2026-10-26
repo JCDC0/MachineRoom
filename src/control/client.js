@@ -518,6 +518,27 @@ export function createClient({
     declineProposal: ({ id, confirmed = true } = {}) =>
       request('POST', `/api/family/proposals/${encodeURIComponent(id ?? '')}/decline`, { confirmed }),
 
+    mcpServers: () => request('GET', '/api/mcp/servers'),
+
+    saveMcpServer: ({
+      name,
+      transport = 'stdio',
+      command = '',
+      args = [],
+      env = {},
+      url = '',
+      enabled = true,
+      confirmed = false,
+    } = {}) => request('POST', '/api/mcp/servers', { name, transport, command, args, env, url, enabled, confirmed }),
+
+    deleteMcpServer: ({ name, confirmed = false } = {}) =>
+      request('POST', `/api/mcp/servers/${encodeURIComponent(name ?? '')}/delete`, { confirmed }),
+
+    mcpTools: () => request('GET', '/api/mcp/tools'),
+
+    callMcpTool: ({ server, tool, arguments: toolArgs = {} } = {}) =>
+      request('POST', '/api/mcp/call', { server, tool, arguments: toolArgs }),
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()

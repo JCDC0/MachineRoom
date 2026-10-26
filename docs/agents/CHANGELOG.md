@@ -13,6 +13,7 @@
 - `scripts/mr-agent.mjs` has `mcp_list_tools` and `mcp_call_tool` tools and writes a `path` or `file` argument as `path` in the tool use record (task H15).
 - `scripts/acp-run.mjs` sends the enabled MCP servers in `session/new.mcpServers` in place of an empty list (task H15).
 - The Claude and OpenCode parsers read `mcp__*`, `mcp_call_tool` and `mcp_list_tools` as tool `mcp`, and a `path` or `file` argument becomes a read touch (task H15).
+- The control client and its mock manage MCP servers and tools with `mcpServers`, `saveMcpServer`, `deleteMcpServer`, `mcpTools` and `callMcpTool`, and a server change sends an `mcp` notice (task U63).
 - A plain `?replay` plays the frames this page recorded while live, sized by `recordMinutes`, and says `Nothing recorded yet. Replay starts with the first conversation.` before the first one, while `?recording`, `?fixture`, `?tour` and `?scale` still load their fixtures (task V34).
 - The Settings Replay section has a `Record time` row in minutes, 1 to 240 and 10 by default, saved as `recordMinutes` in `machineroom.settings` (task V33).
 - `src/model/sessionRecorder.js` keeps a rolling log of live frames from the first run or conversation frame, back at most 1 to 240 minutes (10 by default), and `recorderToReplay` turns it into a replay with time from 0 (task V32).

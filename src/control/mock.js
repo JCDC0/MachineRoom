@@ -79,6 +79,11 @@ export const CLIENT_METHODS = [
   'deleteKey',
   'approveProposal',
   'declineProposal',
+  'mcpServers',
+  'saveMcpServer',
+  'deleteMcpServer',
+  'mcpTools',
+  'callMcpTool',
   'subscribe',
 ]
 
@@ -166,6 +171,53 @@ const SAMPLE_ENDPOINTS = [
   { name: 'Local Ollama', provider: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', keyName: '', models: ['llama3.3', 'qwen3'] },
   { name: 'OpenRouter Work', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'openrouter', models: ['deepseek/deepseek-v4.1-flash-1017'] },
 ]
+
+const SAMPLE_MCP_SERVERS = [
+  {
+    name: 'filesystem',
+    transport: 'stdio',
+    command: 'npx',
+    args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+    env: {},
+    url: '',
+    enabled: true,
+  },
+  {
+    name: 'docs',
+    transport: 'http',
+    command: '',
+    args: [],
+    env: {},
+    url: 'http://127.0.0.1:8787/mcp',
+    enabled: true,
+  },
+]
+
+const SAMPLE_MCP_TOOLS = [
+  {
+    server: 'filesystem',
+    name: 'read_file',
+    description: 'Read a text file from the project.',
+    inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+  },
+  {
+    server: 'filesystem',
+    name: 'list_directory',
+    description: 'List the files in a folder.',
+    inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+  },
+  {
+    server: 'docs',
+    name: 'search_docs',
+    description: 'Search the documentation index.',
+    inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+  },
+]
+
+const MCP_NAME_PROBLEM = 'The server name must be 1 to 40 letters, digits, dashes or underscores.'
+const MCP_TRANSPORT_PROBLEM = 'Choose stdio or http.'
+const MCP_COMMAND_PROBLEM = 'A stdio server needs a command.'
+const MCP_URL_PROBLEM = 'An http server needs an http or https address.'
 
 const SAMPLE_RULES = {
   about: 'MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room.',
@@ -468,6 +520,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
+  let mcpServerState = clone(SAMPLE_MCP_SERVERS)
   let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
   let searchChoice = { provider: '', url: '', keyName: '' }
   const subChats = new Map()
@@ -623,6 +676,32 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       throw new Error(message)
     }
     return clone(work())
+  }
+
+  function cleanMcpServer(draft) {
+    const name = typeof draft?.name === 'string' ? draft.name.trim() : ''
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(name)) throw new Error(MCP_NAME_PROBLEM)
+    const existing = mcpServerState.find((entry) => entry.name === name)
+    const merged = { ...(existing ?? {}), ...(draft ?? {}), name }
+    const transport = merged.transport ?? 'stdio'
+    if (transport !== 'stdio' && transport !== 'http') throw new Error(MCP_TRANSPORT_PROBLEM)
+    const command = typeof merged.command === 'string' ? merged.command.trim() : ''
+    const url = typeof merged.url === 'string' ? merged.url.trim() : ''
+    const args = Array.isArray(merged.args) ? merged.args.map((item) => String(item)) : []
+    const env =
+      merged.env && typeof merged.env === 'object' && !Array.isArray(merged.env) ? { ...merged.env } : {}
+    if (transport === 'stdio') {
+      if (!command) throw new Error(MCP_COMMAND_PROBLEM)
+      return { name, transport, command, args, env, url: '', enabled: merged.enabled !== false }
+    }
+    let parsed
+    try {
+      parsed = new URL(url)
+    } catch {
+      throw new Error(MCP_URL_PROBLEM)
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(MCP_URL_PROBLEM)
+    return { name, transport, command: '', args: [], env: {}, url, enabled: merged.enabled !== false }
   }
 
   const agentById = (id) => state.agents.find((agent) => agent.id === id)
@@ -1847,6 +1926,60 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         proposals.splice(index, 1)
         emit({ topic: 'family' })
         return { ok: true, declined: id }
+      }),
+
+    mcpServers: () => call('mcpServers', () => ({ ok: true, servers: mcpServerState })),
+
+    saveMcpServer: (draft = {}) =>
+      call('saveMcpServer', () => {
+        if (draft?.confirmed !== true) throw new Error('Confirm saving the MCP server first.')
+        const entry = cleanMcpServer(draft)
+        const index = mcpServerState.findIndex((item) => item.name === entry.name)
+        if (index === -1) {
+          if (mcpServerState.length >= 20) throw new Error('At most 20 MCP servers are allowed.')
+          mcpServerState.push(entry)
+        } else {
+          mcpServerState[index] = entry
+        }
+        emit({ topic: 'mcp' })
+        return { ok: true, server: clone(entry), servers: clone(mcpServerState) }
+      }),
+
+    deleteMcpServer: ({ name, confirmed = false } = {}) =>
+      call('deleteMcpServer', () => {
+        if (confirmed !== true) throw new Error('Confirm deleting the MCP server first.')
+        const index = mcpServerState.findIndex((entry) => entry.name === name)
+        if (index === -1) throw new Error('The MCP server was not found.')
+        mcpServerState.splice(index, 1)
+        emit({ topic: 'mcp' })
+        return { ok: true, deleted: name, servers: clone(mcpServerState) }
+      }),
+
+    mcpTools: () =>
+      call('mcpTools', () => {
+        const on = new Set(mcpServerState.filter((entry) => entry.enabled).map((entry) => entry.name))
+        return { ok: true, tools: SAMPLE_MCP_TOOLS.filter((tool) => on.has(tool.server)), errors: [] }
+      }),
+
+    callMcpTool: ({ server, tool, arguments: toolArgs = {} } = {}) =>
+      call('callMcpTool', () => {
+        const serverName = typeof server === 'string' ? server.trim() : ''
+        const toolName = typeof tool === 'string' ? tool.trim() : ''
+        if (!serverName || !toolName) throw new Error('Choose an MCP server and a tool.')
+        const entry = mcpServerState.find((item) => item.name === serverName)
+        if (!entry) return { ok: false, result: null, problem: `The MCP server ${serverName} is not saved.` }
+        if (!entry.enabled) return { ok: false, result: null, problem: `The MCP server ${serverName} is off.` }
+        const found = SAMPLE_MCP_TOOLS.find((item) => item.server === serverName && item.name === toolName)
+        if (!found) return { ok: false, result: null, problem: `The server ${serverName} has no tool ${toolName}.` }
+        const args = toolArgs && typeof toolArgs === 'object' && !Array.isArray(toolArgs) ? toolArgs : {}
+        return {
+          ok: true,
+          result: {
+            content: [{ type: 'text', text: `${toolName} on ${serverName} ran with ${Object.keys(args).length} arguments.` }],
+            isError: false,
+          },
+          problem: null,
+        }
       }),
 
     subscribe(listener) {
