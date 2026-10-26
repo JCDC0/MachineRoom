@@ -392,7 +392,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const park = roomRef.current?.parkScreen?.()
         if (park) {
           const last = parkRef.current
-          if (!last || Math.abs(park.x - last.x) >= 2 || Math.abs(park.y - last.y) >= 2) {
+          const radius = park.radius ?? 0
+          const moved =
+            !last ||
+            Math.abs(park.x - last.x) >= 2 ||
+            Math.abs(park.y - last.y) >= 2 ||
+            Math.abs(radius - (last.radius ?? 0)) >= 2
+          if (moved) {
             parkRef.current = park
             setParkCentre(park)
           }
@@ -818,6 +824,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         height: lensSize.height,
         centerX: parkCentre?.x ?? lensSize.width / 2,
         centerY: parkCentre?.y ?? lensSize.height / 2,
+        radius: parkCentre?.radius ?? 0,
       })
     : null
 

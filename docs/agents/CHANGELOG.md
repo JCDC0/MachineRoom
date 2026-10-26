@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The aberration map's square is sized from the park ring's projected radius with full strength at 2.5 ring radii, never smaller than the lens-covering square and never more than twice the lens diagonal, and its centre is pulled back toward the lens only as far as covering it needs, so the fringes keep their strength while a card or an agent holds the camera (task U70).
+- `parkScreen()` answers the ring's projected radius beside its centre, and `mapPlacement` takes it, so an anchored card gets a square at the 2,658 pixel cap for a 1,247 by 460 lens instead of growing without limit (task U70).
+- `src/Stage.jsx` passes the ring radius into `mapPlacement` and writes the park point again when the radius moves 2 pixels, as it does for the centre (task U70).
 - An agent that runs a command shows a cyan `CONSOLE` above its head with the last five log lines while its latest tool call is `shell` or `other`, holds for 6 seconds after the call ends, fades with the agent, and a click selects the agent (task U68).
 - The console's title is the first address in its lines and it carries `is-address`, and `consoleRows` and `addressIn` are pure and tested (task U68).
 - The screen filter's aberration map sits on the projected centre of the park ring, so its neutral centre stays on the ring while the camera orbits, zooms or follows an agent (task U69).
