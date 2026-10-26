@@ -17,6 +17,7 @@ const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_R
 const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
 const overviewCentre = new THREE.Vector3()
+const ringEdge = new THREE.Vector3()
 
 function workingMask(state) {
   const lit = new Set()
@@ -658,7 +659,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     reset: sync,
     yaw: () => rig.yaw(),
     pitch: () => rig.pitch(),
-    parkScreen: () => projectPoint(camera, HUB_CENTER, width, height),
+    parkScreen: () => {
+      const centre = projectPoint(camera, HUB_CENTER, width, height)
+      if (!centre) return null
+      const edge = projectPoint(camera, ringEdge.set(HUB_CENTER.x + HUB_RADIUS, HUB_CENTER.y, HUB_CENTER.z), width, height)
+      if (!edge) return null
+      return { x: centre.x, y: centre.y, radius: Math.hypot(edge.x - centre.x, edge.y - centre.y) }
+    },
     zoomBy: (deltaY) => rig.zoomBy(deltaY),
     zoomShare: () => rig.zoomShare(),
     setZoomShare: (share) => rig.setZoomShare(share),
