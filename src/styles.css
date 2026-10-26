@@ -9236,3 +9236,44 @@ body:has(#hud-orchestrator-chat) .waiting {
   line-height: 1.4;
   color: rgb(255 255 255 / 0.5);
 }
+
+/* U61: red borders and technical marks while the live bridge is down. */
+.stage.is-disconnected .lens-edge,
+.stage.is-disconnected .lens-edge-line,
+.stage.is-disconnected .lens-edge-tick,
+.stage.is-disconnected .lens-edge-corner,
+.stage.is-disconnected .lens-edge-cross,
+.stage.is-disconnected .lens-edge-cross::before,
+.stage.is-disconnected .lens-edge-cross::after,
+.stage.is-disconnected .lens-edge-label {
+  color: var(--red);
+}
+
+.stage.is-disconnected .lens-edge-line,
+.stage.is-disconnected .lens-edge-tick {
+  stroke: var(--red);
+}
+
+.stage.is-disconnected .lens-edge-label {
+  fill: var(--red);
+}
+
+.hud.is-disconnected .hud-menu {
+  border-bottom: 1px solid var(--red);
+}
+
+.hud.is-disconnected .transport {
+  border-color: var(--red);
+}
+
+.hud.is-disconnected .hud-dock {
+  border-top: 1px solid var(--red);
+}
+
+.hud.is-disconnected .mr-side {
+  border-right-color: var(--red);
+}
+
+.waiting.is-error .waiting-card {
+  border-color: var(--red);
+}

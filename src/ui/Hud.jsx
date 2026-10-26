@@ -246,6 +246,9 @@ export default function Hud({
   const helpOpen = controlledHelpOpen !== undefined ? Boolean(controlledHelpOpen) : internalHelpOpen
   const [healthOpen, setHealthOpen] = useState(false)
   const notice = healthNotice(health)
+  const bridgeDown =
+    mode === 'live' &&
+    (['reconnecting', 'disconnected'].includes(snapshot?.status) || health?.ok === false)
   const chatAvailable = orchestratorOn(health)
   const wide = wideLayout(viewportWidth)
   const floatingChat = !wide || mode === 'replay'
@@ -608,7 +611,7 @@ export default function Hud({
   }
 
   return (
-    <div className="hud">
+    <div className={`hud${bridgeDown ? ' is-disconnected' : ''}`}>
       <header className={`hud-menu${menuOpen ? ' is-open' : ''}`}>
         {wide ? (
           <div className="hud-band" role="group" aria-label="Project and conversation">

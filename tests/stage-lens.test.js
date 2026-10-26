@@ -1,17 +1,51 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import Stage, {
   compassBearingLabel,
   compassBottomHeading,
   compassBottomLabel,
   compassHeading,
+  isBridgeDown,
   lensEdgeLabels,
   lensEdgeTicks,
 } from '../src/Stage.jsx'
+import Hud from '../src/ui/Hud.jsx'
 import { makeTree } from '../src/model/paths.js'
 
-function stageHtml(extra = {}) {
+const liveStatus = vi.hoisted(() => ({ status: 'connecting' }))
+
+vi.mock('../src/live/livePlayer.js', () => ({
+  createLivePlayer: () => ({
+    live: true,
+    state: { files: new Map(), dirs: new Map(), agents: new Map() },
+    snapshot: () => ({
+      position: 0,
+      duration: 0,
+      playing: true,
+      speed: 1,
+      live: true,
+      status: liveStatus.status,
+      agents: [],
+    }),
+    play() {},
+    pause() {},
+    toggle() {},
+    setSpeed() {},
+    seek() {},
+    tick() {},
+    push() {},
+    addFiles() {},
+    setStatus(next) {
+      liveStatus.status = next
+    },
+    subscribe() {
+      return () => {}
+    },
+  }),
+}))
+
+function stageHtml(extra = {}, props = {}) {
   const tree = makeTree({ root: 'agent-sandbox', files: [], created: [] })
   return renderToString(
     createElement(Stage, {
@@ -22,6 +56,7 @@ function stageHtml(extra = {}) {
         live: { simulated: true, frames: [], speed: 1 },
         ...extra,
       },
+      ...props,
     })
   )
 }
@@ -64,6 +99,50 @@ describe('Stage lens labels', () => {
     expect(html).not.toContain('Live feed')
     expect(html).toContain('Demo // connecting')
     expect(html).not.toContain('class="stage-badge"')
+  })
+})
+
+describe('disconnected borders', () => {
+  it('marks the stage, the lens edges and the hud while the live feed reconnects', () => {
+    liveStatus.status = 'reconnecting'
+    try {
+      const html = stageHtml({}, { mode: 'live' })
+      expect(html).toContain('class="stage is-disconnected"')
+      expect(html).toContain('class="lens is-disconnected"')
+      expect(html).toContain('class="lens-edge is-top is-disconnected"')
+      expect(html).toContain('class="lens-edge is-bottom is-disconnected"')
+      expect(html).toContain('class="hud is-disconnected"')
+      expect(html).toContain('class="waiting is-error"')
+    } finally {
+      liveStatus.status = 'connecting'
+    }
+  })
+
+  it('leaves the borders alone on a connected live room and in a replay', () => {
+    const liveHtml = stageHtml({}, { mode: 'live' })
+    expect(liveHtml).toContain('class="stage"')
+    expect(liveHtml).toContain('class="lens"')
+    expect(liveHtml).toContain('class="lens-edge is-top"')
+    expect(liveHtml).toContain('class="hud"')
+
+    const replayHtml = renderToString(
+      createElement(Hud, {
+        mode: 'replay',
+        snapshot: { agents: [], position: 0, duration: 0, status: 'reconnecting' },
+        speeds: [1],
+      })
+    )
+    expect(replayHtml).toContain('class="hud"')
+    expect(replayHtml).not.toContain('is-disconnected')
+  })
+
+  it('needs a live room and a reconnecting, disconnected or failed bridge', () => {
+    expect(isBridgeDown({}, { status: 'reconnecting' }, null)).toBe(true)
+    expect(isBridgeDown({}, { status: 'disconnected' }, null)).toBe(true)
+    expect(isBridgeDown({}, { status: 'live' }, { ok: false })).toBe(true)
+    expect(isBridgeDown({}, { status: 'live' }, { ok: true })).toBe(false)
+    expect(isBridgeDown({}, { status: 'live' }, null)).toBe(false)
+    expect(isBridgeDown(null, { status: 'reconnecting' }, { ok: false })).toBe(false)
   })
 })
 

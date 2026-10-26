@@ -3,23 +3,11 @@ export function healthNotice(health) {
     return null
   }
 
-  if (health.error === true) {
+  if (health.ok !== false && health.runner?.alive === false) {
     return {
       tone: 'red',
-      title: 'The bridge is not answering',
+      title: 'The runner looks stopped',
       lines: [],
-    }
-  }
-
-  if (health.ok === false) {
-    const lines = []
-    if (typeof health.error === 'string' && health.error.trim() !== '') {
-      lines.push(health.error.trim())
-    }
-    return {
-      tone: 'red',
-      title: 'A source failed',
-      lines,
     }
   }
 
