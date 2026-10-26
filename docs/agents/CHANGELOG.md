@@ -12,6 +12,9 @@
 - Every lane row in the Agents family tree has a selection checkbox; one or more checked lanes show a compact bar with `N selected`, Add sub orchestrator and Clear, and the form saves a sub orchestrator over those lanes through the ladder without creating a lane (task U54).
 - A sub orchestrator row has a trash button and its editor has Remove, both behind `Remove "LABEL"? Its agents return to the orchestrator.`, and the sub editor lists every code agent in an Agents checklist saved through the ladder (task U54).
 - `+` on a lane row opens the sub orchestrator form with that lane checked instead of creating a child (task U54).
+- A lane on the `agy` harness is left out of the eligible worker lanes, `/api/lanes` and the family tree, unless the lane is owner-made (task U55).
+- The mock control client lists no `agy` lane by default, checks a new ladder against every known lane key and sends an `orchestrator` and a `family` notice (task U55).
+
 - The lens edges are a compass tape centred on the camera's heading, with a tick every 5 degrees at 6 pixels per degree, a taller tick and a label (`N 000`, `NE 045`, `015` ...) every 15 degrees, the `+` lubber mark and the corner brackets kept, and the heading read from the new `yaw()` on the camera rig and the room (task U50).
 - At its default and maximum height the lens fills the window from the menu to the transport, which sits at the bottom of the viewport with the lower half below the fold (task U50).
 - The compass heading, the bearing labels and the edge ticks and labels are pure and tested (task U50).

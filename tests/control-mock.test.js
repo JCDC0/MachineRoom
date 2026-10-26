@@ -162,7 +162,7 @@ describe('mock orchestrators and the ladder', () => {
       restricted: false,
       setBy: 'owner',
     })
-    expect(list[0].lanes).toEqual(['claude', 'hermes', 'opencode', 'opencode4', 'agy'])
+    expect(list[0].lanes).toEqual(['claude', 'hermes', 'opencode', 'opencode4'])
     expect(list[1]).toMatchObject({
       id: 'frontend',
       name: 'Frontend',
