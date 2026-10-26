@@ -243,18 +243,23 @@ describe('void under reduced motion', () => {
     globalThis.document = savedDoc
   })
 
-  it('stops dust rotation when still is true', () => {
+  it('holds the far dust still when still is true and drifts it again after', () => {
     const mql = { matches: true }
     globalThis.window = { matchMedia: () => mql }
     const scene = new THREE.Scene()
     const space = createVoid(scene, null)
     const dust = space.group.children.find((c) => c.isPoints)
+    const start = Array.from(dust.geometry.attributes.position.array)
     space.update(0.1)
+    space.update(0.1)
+    expect(Array.from(dust.geometry.attributes.position.array)).toEqual(start)
     expect(dust.rotation.y).toBe(0)
 
     mql.matches = false
     space.update(0.1)
-    expect(dust.rotation.y).toBeGreaterThan(0)
+    space.update(0.1)
+    expect(Array.from(dust.geometry.attributes.position.array)).not.toEqual(start)
+    expect(dust.rotation.y).toBe(0)
   })
 
   it('holds the fine dust near the camera still when still is true', () => {
@@ -264,15 +269,17 @@ describe('void under reduced motion', () => {
     const space = createVoid(scene, null)
     const dust = space.group.children.filter((c) => c.isPoints || (c.isGroup && c.children.some((k) => k.isPoints)))
     expect(dust).toHaveLength(2)
+    const fine = dust[1].children.filter((child) => child.isPoints)
+    const start = fine.map((layer) => Array.from(layer.geometry.attributes.position.array))
     space.update(0.1)
-    for (const layer of dust) {
-      expect(layer.rotation.x).toBe(0)
-      expect(layer.rotation.y).toBe(0)
-    }
+    space.update(0.1)
+    expect(fine.map((layer) => Array.from(layer.geometry.attributes.position.array))).toEqual(start)
 
     mql.matches = false
     space.update(0.1)
-    for (const layer of dust) expect(layer.rotation.y).toBeGreaterThan(0)
-    expect(dust[1].rotation.x).toBeGreaterThan(0)
+    space.update(0.1)
+    expect(fine.map((layer) => Array.from(layer.geometry.attributes.position.array))).not.toEqual(start)
+    expect(dust[1].rotation.y).toBe(0)
+    expect(dust[1].rotation.x).toBe(0)
   })
 })
