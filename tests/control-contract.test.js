@@ -709,3 +709,164 @@ describe('the control client orchestrator routes', () => {
     ])
   })
 })
+
+describe('the control client MCP routes', () => {
+  function recorder(answer = {}) {
+    const calls = []
+    const fetchImpl = async (url, options = {}) => {
+      calls.push({ url, method: options.method, body: options.body })
+      return { ok: true, json: async () => answer }
+    }
+    return { calls, client: createClient({ baseUrl: 'http://127.0.0.1:9', fetchImpl }) }
+  }
+
+  it('reads servers and tools and writes servers on the bridge routes', async () => {
+    const { calls, client } = recorder({ ok: true, servers: [], tools: [], errors: [] })
+    await client.mcpServers()
+    await client.saveMcpServer({
+      name: 'docs two',
+      transport: 'http',
+      url: 'http://127.0.0.1:8787/mcp',
+      confirmed: true,
+    })
+    await client.deleteMcpServer({ name: 'docs two', confirmed: true })
+    await client.mcpTools()
+    await client.callMcpTool({ server: 'docs', tool: 'search_docs', arguments: { query: 'room' } })
+    expect(calls).toEqual([
+      { url: 'http://127.0.0.1:9/api/mcp/servers', method: 'GET', body: undefined },
+      {
+        url: 'http://127.0.0.1:9/api/mcp/servers',
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'docs two',
+          transport: 'http',
+          command: '',
+          args: [],
+          env: {},
+          url: 'http://127.0.0.1:8787/mcp',
+          enabled: true,
+          confirmed: true,
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/mcp/servers/docs%20two/delete',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: true }),
+      },
+      { url: 'http://127.0.0.1:9/api/mcp/tools', method: 'GET', body: undefined },
+      {
+        url: 'http://127.0.0.1:9/api/mcp/call',
+        method: 'POST',
+        body: JSON.stringify({ server: 'docs', tool: 'search_docs', arguments: { query: 'room' } }),
+      },
+    ])
+  })
+
+  it('fills the stdio defaults and leaves the confirm off when it is not sent', async () => {
+    const { calls, client } = recorder()
+    await client.saveMcpServer({ name: 'notes', command: 'node' })
+    await client.deleteMcpServer({ name: 'notes' })
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9/api/mcp/servers',
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'notes',
+          transport: 'stdio',
+          command: 'node',
+          args: [],
+          env: {},
+          url: '',
+          enabled: true,
+          confirmed: false,
+        }),
+      },
+      {
+        url: 'http://127.0.0.1:9/api/mcp/servers/notes/delete',
+        method: 'POST',
+        body: JSON.stringify({ confirmed: false }),
+      },
+    ])
+  })
+
+  it('saves, lists and deletes MCP servers on the mock with an mcp notice', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const notices = []
+    const stop = client.subscribe((event) => notices.push(event))
+    const initial = await client.mcpServers()
+    expect(initial.ok).toBe(true)
+    expect(initial.servers.map((entry) => entry.name)).toEqual(['filesystem', 'docs'])
+
+    const saved = await client.saveMcpServer({ name: 'notes', command: 'node', args: ['notes.mjs'], confirmed: true })
+    expect(saved.server).toEqual({
+      name: 'notes',
+      transport: 'stdio',
+      command: 'node',
+      args: ['notes.mjs'],
+      env: {},
+      url: '',
+      enabled: true,
+    })
+    expect((await client.mcpServers()).servers.map((entry) => entry.name)).toEqual(['filesystem', 'docs', 'notes'])
+
+    const off = await client.saveMcpServer({ name: 'docs', enabled: false, confirmed: true })
+    expect(off.server).toMatchObject({ name: 'docs', transport: 'http', url: 'http://127.0.0.1:8787/mcp', enabled: false })
+    expect((await client.mcpTools()).tools.map((tool) => tool.server)).toEqual(['filesystem', 'filesystem'])
+
+    const deleted = await client.deleteMcpServer({ name: 'notes', confirmed: true })
+    expect(deleted).toMatchObject({ ok: true, deleted: 'notes' })
+    expect(deleted.servers.map((entry) => entry.name)).toEqual(['filesystem', 'docs'])
+    expect(notices).toEqual([{ topic: 'mcp' }, { topic: 'mcp' }, { topic: 'mcp' }])
+    stop()
+  })
+
+  it('lists the sample tools and runs one on the mock', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    const listed = await client.mcpTools()
+    expect(listed.ok).toBe(true)
+    expect(listed.errors).toEqual([])
+    expect(listed.tools).toEqual([
+      { server: 'filesystem', name: 'read_file', description: expect.any(String), inputSchema: expect.any(Object) },
+      { server: 'filesystem', name: 'list_directory', description: expect.any(String), inputSchema: expect.any(Object) },
+      { server: 'docs', name: 'search_docs', description: expect.any(String), inputSchema: expect.any(Object) },
+    ])
+
+    const answer = await client.callMcpTool({ server: 'filesystem', tool: 'read_file', arguments: { path: 'README.md' } })
+    expect(answer.ok).toBe(true)
+    expect(answer.problem).toBeNull()
+    expect(answer.result.content[0].text).toBe('read_file on filesystem ran with 1 arguments.')
+
+    expect(await client.callMcpTool({ server: 'nobody', tool: 'read_file' })).toEqual({
+      ok: false,
+      result: null,
+      problem: 'The MCP server nobody is not saved.',
+    })
+    expect(await client.callMcpTool({ server: 'docs', tool: 'read_file' })).toEqual({
+      ok: false,
+      result: null,
+      problem: 'The server docs has no tool read_file.',
+    })
+  })
+
+  it('refuses an MCP write or call in plain words on the mock', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    await expect(client.saveMcpServer({ name: 'notes', command: 'node' })).rejects.toThrow(
+      'Confirm saving the MCP server first.'
+    )
+    await expect(client.deleteMcpServer({ name: 'docs' })).rejects.toThrow('Confirm deleting the MCP server first.')
+    await expect(client.deleteMcpServer({ name: 'nobody', confirmed: true })).rejects.toThrow(
+      'The MCP server was not found.'
+    )
+    await expect(client.saveMcpServer({ name: 'bad name!', command: 'node', confirmed: true })).rejects.toThrow(
+      'The server name must be 1 to 40 letters, digits, dashes or underscores.'
+    )
+    await expect(client.saveMcpServer({ name: 'notes', transport: 'nope', command: 'node', confirmed: true })).rejects.toThrow(
+      'Choose stdio or http.'
+    )
+    await expect(client.saveMcpServer({ name: 'notes', confirmed: true })).rejects.toThrow('A stdio server needs a command.')
+    await expect(
+      client.saveMcpServer({ name: 'notes', transport: 'http', url: 'ftp://127.0.0.1/mcp', confirmed: true })
+    ).rejects.toThrow('An http server needs an http or https address.')
+    await expect(client.callMcpTool({ server: 'filesystem' })).rejects.toThrow('Choose an MCP server and a tool.')
+  })
+})
