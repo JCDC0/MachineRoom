@@ -4,6 +4,10 @@ import {
   CARD_NAME_MAX,
   CARD_SCALES,
   CARD_W,
+  FILE_LIMIT_DEFAULT,
+  FILE_LIMIT_MAX,
+  FILE_LIMIT_MIN,
+  ROW_H,
   cardHeight,
   cardMetaText,
   cardName,
@@ -11,6 +15,7 @@ import {
   cardRows,
   cardSize,
   cardTitle,
+  clampFileLimit,
   createCards,
   createRowFrameKey,
   fadeProgress,
@@ -172,6 +177,69 @@ describe('card size', () => {
     expect(cardSize({ path: long, state: 'closed' }).width).toBeGreaterThan(CARD_W)
     expect(cardSize({ path: long, state: 'open' }).width).toBeCloseTo(cardSize({ path: long, state: 'closed' }).width * CARD_SCALES.open, 6)
     expect(cardSize({ path: `${long}-more`, state: 'closed' }).width).toBe(cardSize({ path: long, state: 'closed' }).width)
+  })
+})
+
+describe('the file limit', () => {
+  it('clamps the row count to a whole number from 4 to 20, 6 by default', () => {
+    expect(FILE_LIMIT_MIN).toBe(4)
+    expect(FILE_LIMIT_MAX).toBe(20)
+    expect(FILE_LIMIT_DEFAULT).toBe(6)
+    expect(clampFileLimit(undefined)).toBe(6)
+    expect(clampFileLimit(null)).toBe(6)
+    expect(clampFileLimit(Number.NaN)).toBe(6)
+    expect(clampFileLimit('9')).toBe(9)
+    expect(clampFileLimit(2)).toBe(4)
+    expect(clampFileLimit(40)).toBe(20)
+    expect(clampFileLimit(6.6)).toBe(7)
+  })
+
+  it('caps the rows of a card at maxFiles and leaves a view without one uncapped', () => {
+    expect(cardRows({ ...view('files', 10, 6), maxFiles: 6 })).toBe(6)
+    expect(cardRows({ ...view('files', 3, 0), maxFiles: 6 })).toBe(3)
+    expect(cardRows({ ...view('files', 3, 2), maxFiles: 6 })).toBe(4)
+    expect(cardRows(view('files', 10, 6))).toBe(11)
+  })
+
+  it('gives every planned card the clamped limit and all of its items', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `root-${index}.js`)
+    const state = createState(makeTree({ root: 'demo', files }), [])
+    const layout = cardPlan(state, { alwaysDepth: 2, maxFiles: 50 })
+    const root = layout.drawn.get('')
+    expect(root.maxFiles).toBe(20)
+    expect(root.items).toHaveLength(12)
+    expect(root.hiddenItems).toBe(0)
+    expect(cardRows(root)).toBe(12)
+    expect(layout.plan.find((planned) => planned.path === '')?.items).toHaveLength(12)
+  })
+
+  it('takes a new file limit from setOptions and marks a long list scrollable', () => {
+    const files = Array.from({ length: 12 }, (_, index) => `root-${index}.js`)
+    const state = createState(makeTree({ root: 'demo', files }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2, maxFiles: 4 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const root = cards.cards.get('')
+    expect(root.items.style.maxHeight).toBe(`${4 * ROW_H}px`)
+    expect(root.items.className).toBe('mr-card-items is-scrollable')
+    expect(cards.setOptions({ maxFiles: 20 })).toBe(true)
+    cards.update(state, 0.016, camera())
+    expect(root.items.style.maxHeight).toBe(`${20 * ROW_H}px`)
+    expect(root.items.className).toBe('mr-card-items')
+    expect(cards.setOptions({ alwaysDepth: 2 })).toBe(false)
+    cards.dispose()
+  })
+  it('keeps the tunnel row of a file below the cap on the last visible row', () => {
+    const files = Array.from({ length: 10 }, (_, index) => `src/f${index}.js`)
+    const state = createState(makeTree({ root: 'demo', files }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 1, maxFiles: 4 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const last = cards.slotPosition('src', 'src/f3.js', new THREE.Vector3())
+    const past = cards.slotPosition('src', 'src/f9.js', new THREE.Vector3())
+    expect(past.equals(last)).toBe(true)
+    expect(cards.slotPosition('src', 'src/f0.js', new THREE.Vector3()).equals(last)).toBe(false)
+    cards.dispose()
   })
 })
 
@@ -505,7 +573,7 @@ describe('cardPlan', () => {
   it('keeps a root card with ten file rows below the hub plane', () => {
     const tree = makeTree({ root: 'demo', files: Array.from({ length: 10 }, (_, index) => `root-${index}.js`) })
     const state = createState(tree, [])
-    const layout = cardPlan(state, { alwaysDepth: 2 })
+    const layout = cardPlan(state, { alwaysDepth: 2, maxFiles: 10 })
     const root = layout.drawn.get('')
     expect(cardRows(root)).toBe(10)
     const size = cardSize(root)
