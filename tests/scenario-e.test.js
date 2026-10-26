@@ -82,4 +82,8 @@ describe('the replay digests', () => {
   it('lists fixtures/scenario-e', () => {
     expect([...results.keys()]).toContain('fixtures/scenario-e')
   })
+
+  it('keeps the scenario E layout digest', () => {
+    expect(results.get('fixtures/scenario-e')?.digest.layouts).toEqual('301533f9057e0c54')
+  })
 })
