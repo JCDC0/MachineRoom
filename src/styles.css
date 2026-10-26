@@ -9504,3 +9504,23 @@ body:has(#hud-orchestrator-chat) .waiting {
   color: var(--red);
   border-color: var(--red);
 }
+
+/* U65: close button at the right end of the waiting popup header. */
+.waiting-close {
+  margin-left: auto;
+  padding: 0 6px;
+  min-width: 20px;
+  height: 20px;
+  line-height: 18px;
+  font-size: 14px;
+  border: 1px solid rgb(0 0 0 / 0.35);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.waiting.is-error .waiting-close {
+  border-color: rgb(255 255 255 / 0.45);
+  color: var(--white);
+}

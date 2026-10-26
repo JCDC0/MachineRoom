@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { listsOrchestrator } from './orchestratorChat.js'
 
 const STATUS_COPY = {
@@ -27,7 +28,15 @@ const STATUS_COPY = {
   },
 }
 
-export default function Waiting({ agents = [], status = 'connecting', orchestrator, children }) {
+export default function Waiting({ agents = [], status = 'connecting', orchestrator, onClose, children }) {
+  const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    setDismissed(false)
+  }, [status])
+
+  if (dismissed) return null
+
   const copy = STATUS_COPY[status] ?? STATUS_COPY.connecting
   const hasOrchestrator = typeof orchestrator === 'boolean' ? orchestrator : listsOrchestrator(agents)
   const detail =
@@ -52,6 +61,7 @@ export default function Waiting({ agents = [], status = 'connecting', orchestrat
         <div className="waiting-header hud-header-strip">
           <span className="waiting-dot" aria-hidden="true" />
           <span className="waiting-badge mono">{copy.badge}</span>
+          <button type="button" className="waiting-close mono" aria-label="Close waiting notice" title="Close" onClick={() => { setDismissed(true); onClose?.() }}>×</button>
         </div>
         <div className="waiting-body">
           <h2 className="waiting-title">
