@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `AUDIT-2026-10-V8.md` audits the folder blocks and the camera hold at 0.1.389 and lists five findings, W1 to W5 (task A7).
 - Folder cards stack up to three full folder blocks behind the face, each the face's size with a tab on its top edge, stepped 12 pixels left, and `backOffsets` places them the same way for the paint and the occluder (task V39).
 - A click on a folder card body holds the camera on that card, or its nearest drawn ancestor, at `ANCHOR_DIST` and turns agent follow off (task U67).
 - A double click on empty space, Escape with no panel open and the `0` key call `room.park()`, which drops the folder hold and returns to the park ring (task U67).
