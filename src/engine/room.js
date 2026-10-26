@@ -581,6 +581,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     setBeat: (strength) => agentSet.beat(strength),
     reset: sync,
     yaw: () => rig.yaw(),
+    pitch: () => rig.pitch(),
     zoomBy: (deltaY) => rig.zoomBy(deltaY),
     zoomShare: () => rig.zoomShare(),
     setZoomShare: (share) => rig.setZoomShare(share),
