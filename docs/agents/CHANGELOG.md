@@ -7,6 +7,7 @@
 - The menu no longer repeats `The bridge is not answering` or `A source failed` beside `LIVE // RECONNECTING` and `The live feed dropped`; `healthNotice` returns null for both and keeps `The runner looks stopped` for a stale runner when `health.ok !== false` (task U61).
 - The empty replay notice offers `Back to live` and `Connection settings`, and Escape leaves it, so a page with nothing recorded is never stuck (task U62).
 - The base ring holds at most 12 top-level folders, and overflow and child folders spray outward in a square-like 2D shotgun grid that widens with each row (task V36).
+- A folder with unexpanded child folders shows one to three unexpanded folder outlines behind its top right, empty or holding files, and its card counts the hidden folders beside the items, as in `3 items  2 folders` (task V37).
 - A plain `?replay` plays the frames this page recorded while live, sized by `recordMinutes`, and says `Nothing recorded yet. Replay starts with the first conversation.` before the first one, while `?recording`, `?fixture`, `?tour` and `?scale` still load their fixtures (task V34).
 - The Settings Replay section has a `Record time` row in minutes, 1 to 240 and 10 by default, saved as `recordMinutes` in `machineroom.settings` (task V33).
 - `src/model/sessionRecorder.js` keeps a rolling log of live frames from the first run or conversation frame, back at most 1 to 240 minutes (10 by default), and `recorderToReplay` turns it into a replay with time from 0 (task V32).

@@ -5,6 +5,7 @@ import {
   CARD_SCALES,
   CARD_W,
   cardHeight,
+  cardMetaText,
   cardName,
   cardPlan,
   cardRows,
@@ -171,6 +172,33 @@ describe('card size', () => {
     expect(cardSize({ path: long, state: 'closed' }).width).toBeGreaterThan(CARD_W)
     expect(cardSize({ path: long, state: 'open' }).width).toBeCloseTo(cardSize({ path: long, state: 'closed' }).width * CARD_SCALES.open, 6)
     expect(cardSize({ path: `${long}-more`, state: 'closed' }).width).toBe(cardSize({ path: long, state: 'closed' }).width)
+  })
+})
+
+describe('card meta text', () => {
+  it('counts the listed items and the unexpanded folders behind the card', () => {
+    expect(cardMetaText({ state: 'files', items: [{}, {}], hiddenItems: 1, hiddenFolders: 2 })).toBe('3 items  2 folders')
+    expect(cardMetaText({ state: 'files', items: [{}], hiddenItems: 0, hiddenFolders: 1 })).toBe('1 items  1 folder')
+    expect(cardMetaText({ state: 'files', items: [{}, {}], hiddenItems: 0, hiddenFolders: 0 })).toBe('2 items')
+    expect(cardMetaText({ state: 'files', items: [{}], hiddenFolders: 0 })).toBe('1 items')
+  })
+
+  it('keeps the text of a folder card that is not listing files', () => {
+    expect(cardMetaText({ state: 'closed' })).toBe('')
+    expect(cardMetaText({ state: 'open', folders: [{}, {}], hiddenFolders: 3 })).toBe('5 folders')
+  })
+
+  it('shows the file and folder counts on the card', () => {
+    const tree = makeTree({
+      root: 'demo',
+      files: ['work/one.js', 'work/a/two.js', 'work/b/two.js'],
+    })
+    const state = createState(tree, [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 1 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    expect(cards.cards.get('work').meta.textContent).toBe('3 items  2 folders')
+    cards.dispose()
   })
 })
 
@@ -451,6 +479,16 @@ describe('the folders on the ring', () => {
 })
 
 describe('cardPlan', () => {
+  it('passes the unexpanded folder outlines through to the cards', () => {
+    const files = ['work/one.js', 'work/a/two.js', 'work/b/two.js', 'work/c/two.js', 'work/d/two.js']
+    const state = createState(makeTree({ root: 'demo', files }), [])
+    const layout = cardPlan(state, { alwaysDepth: 1 })
+    const work = layout.drawn.get('work')
+    expect(work.hiddenFolders).toBe(4)
+    expect(work.back).toBe(3)
+    expect(layout.drawn.get('').back).toBe(0)
+  })
+
   it('draws the whole plan and gives the cards the same keys', () => {
     const state = recentState()
     const layout = cardPlan(state, { alwaysDepth: 2 })
