@@ -8,6 +8,7 @@ const KINDS = [
   [/^(terminal|bash|shell)/i, 'shell'],
   [/^(glob|grep|search|find|ls|list)/i, 'search'],
   [/^(websearch|webfetch|web_search|web_fetch)/i, 'web'],
+  [/^mcp/i, 'mcp'],
 ]
 const FILE_NAME = /^(Read|Edit|MultiEdit|NotebookEdit|Write)\s+(.+)$/i
 const FILE_KINDS = new Set(['read', 'edit', 'write'])
@@ -15,6 +16,7 @@ const STREAM_FILES = new Set(['read', 'write', 'edit', 'multiedit', 'notebookedi
 const STREAM_FOLDERS = new Set(['glob', 'grep', 'ls'])
 const STREAM_TASKS = new Set(['task', 'agent'])
 const STREAM_WEB = new Set(['websearch', 'webfetch'])
+const MCP_TOOL = /^(mcp__|mcp_call_tool$|mcp_list_tools$)/
 const PROFILE_PATH = /(?:[A-Za-z]:[\\/]Users[\\/][^\\/\s"'<>|?*]+|\/(?:home|Users)\/[^/\s"'<>|?*]+)(?:[\\/][^\\/\s"'<>|?*]+)*/g
 const PROFILE_QUOTED = /(["'])((?:[A-Za-z]:[\\/]Users[\\/]|\/(?:home|Users)\/)[^"']*)\1/g
 
@@ -31,6 +33,33 @@ function commandLabel(command, fallback) {
 
 function kindOf(name) {
   return KINDS.find(([pattern]) => pattern.test(name))?.[1] ?? 'other'
+}
+
+function mcpPathOf(input) {
+  const direct = input?.path ?? input?.file ?? input?.file_path
+  if (typeof direct === 'string' && direct !== '') return direct
+  const nested = input?.arguments
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const value = nested.path ?? nested.file ?? nested.file_path
+    if (typeof value === 'string' && value !== '') return value
+  }
+  return ''
+}
+
+function mcpLabelOf(name, input) {
+  if (name === 'mcp_list_tools') {
+    const server = typeof input?.server === 'string' ? input.server.trim() : ''
+    return server === '' ? 'mcp list tools' : `mcp list tools ${server}`
+  }
+  let server = typeof input?.server === 'string' ? input.server.trim() : ''
+  let tool = typeof input?.tool === 'string' ? input.tool.trim() : ''
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__')
+    server = parts[1] ?? ''
+    tool = parts.slice(2).join('__')
+  }
+  const shown = [server, tool].filter((part) => part !== '').join(' ')
+  return shown === '' ? `mcp ${name}` : `mcp ${shown}`
 }
 
 export function createClaudeParser(ctx) {
@@ -53,6 +82,8 @@ export function createClaudeParser(ctx) {
     } else if (call.kind === 'shell') {
       touches = commandTouch(ctx, call.command ?? '')
       label = `$ ${shorten(call.command ?? 'terminal')}`
+    } else if (call.kind === 'mcp') {
+      label = mcpLabelOf(String(call.name ?? '').toLowerCase(), call.input ?? {})
     }
     out.push({ ...toolStart({ time, id: call.id, tool: call.kind, label, touches }), agent: call.owner ?? parentKey })
   }
@@ -120,6 +151,15 @@ export function createClaudeParser(ctx) {
       const url = typeof input.url === 'string' ? input.url.trim() : ''
       const shown = lower === 'webfetch' ? url : query
       label = shown ? `web ${lower === 'webfetch' ? 'fetch' : 'search'} ${shorten(shown)}` : `web ${lower === 'webfetch' ? 'fetch' : 'search'}`
+    } else if (MCP_TOOL.test(lower)) {
+      call.kind = 'mcp'
+      label = mcpLabelOf(lower, input)
+      const raw = mcpPathOf(input)
+      if (raw !== '') {
+        const found = fileTouch(ctx, raw, 'read')
+        touches = found.touches
+        label = `${label} ${found.relative === null ? basename(raw) : found.relative}`
+      }
     } else if (STREAM_TASKS.has(lower)) {
       const description = typeof input.description === 'string' ? input.description.trim() : ''
       if (input.run_in_background === true) call.background = true

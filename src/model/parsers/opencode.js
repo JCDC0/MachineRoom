@@ -1,6 +1,8 @@
+import { basename } from '../paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const TOOLS = { shell: 'shell', bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'search', grep: 'search', list: 'search', websearch: 'web', webfetch: 'web' }
+const MCP_TOOL = /^(mcp__|mcp_call_tool$|mcp_list_tools$)/
 const OUTPUT_PATH = /(?:Created file successfully|Edited|Wrote|Updated|Written)[:\s]+(\S+)/i
 const MASK = '***REDACTED***'
 const BROKEN_TOOL = /"tool"\s*:\s*"(shell|read|write|edit)"/
@@ -8,6 +10,33 @@ const BROKEN_STATUS = /"status"\s*:\s*"(completed|error|running)"/
 const BROKEN_ID = /"id"\s*:\s*"([^"\\]+)"/
 const BROKEN_COMMAND = /"input"\s*:\s*\{\s*"command"\s*:\s*"/
 const BROKEN_PATH = /"input"\s*:\s*\{\s*"(?:path|filePath)"\s*:\s*"([^"\\]*)"/
+
+function mcpPathOf(input) {
+  const direct = input?.path ?? input?.file ?? input?.filePath
+  if (typeof direct === 'string' && direct !== '') return direct
+  const nested = input?.arguments
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const value = nested.path ?? nested.file ?? nested.filePath
+    if (typeof value === 'string' && value !== '') return value
+  }
+  return ''
+}
+
+function mcpLabelOf(name, input) {
+  if (name === 'mcp_list_tools') {
+    const server = typeof input?.server === 'string' ? input.server.trim() : ''
+    return server === '' ? 'mcp list tools' : `mcp list tools ${server}`
+  }
+  let server = typeof input?.server === 'string' ? input.server.trim() : ''
+  let tool = typeof input?.tool === 'string' ? input.tool.trim() : ''
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__')
+    server = parts[1] ?? ''
+    tool = parts.slice(2).join('__')
+  }
+  const shown = [server, tool].filter((part) => part !== '').join(' ')
+  return shown === '' ? `mcp ${name}` : `mcp ${shown}`
+}
 
 function unescape(text) {
   return text.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (all, code) => {
@@ -64,11 +93,22 @@ export function createOpencodeParser(ctx) {
   })
 
   function report(name, input, status, output, id, time) {
-    const tool = Object.hasOwn(TOOLS, name) ? TOOLS[name] : 'other'
+    const lower = String(name ?? '').toLowerCase()
+    const mcp = MCP_TOOL.test(lower)
+    const tool = mcp ? 'mcp' : Object.hasOwn(TOOLS, name) ? TOOLS[name] : 'other'
     const callId = id ?? `opencode-${(counter += 1)}`
     let touches = []
     let label = `${name} ${shorten(JSON.stringify(input), 48)}`
-    if (tool === 'read' || tool === 'write' || tool === 'edit') {
+    if (tool === 'mcp') {
+      const shown = mcpLabelOf(lower, input)
+      const raw = mcpPathOf(input)
+      label = shown
+      if (raw !== '') {
+        const touched = fileTouch(ctx, raw, 'read')
+        touches = touched.touches
+        label = `${shown} ${touched.relative === null ? basename(raw) : touched.relative}`
+      }
+    } else if (tool === 'read' || tool === 'write' || tool === 'edit') {
       const raw = input.path ?? input.filePath ?? OUTPUT_PATH.exec(String(output ?? ''))?.[1]
       label = `${tool} file`
       if (raw) {
