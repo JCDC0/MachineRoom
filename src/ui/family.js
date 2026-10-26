@@ -9,6 +9,7 @@ export const MAX_SUBS = 5
 const KINDS = new Set(['orchestrator', 'sub', 'lane'])
 const DEFAULT_LABEL = { orchestrator: 'Orchestrator', sub: 'Sub orchestrator', lane: 'Code agent' }
 const KEY_NAME = /^[A-Za-z0-9 _-]+$/
+const OPENCODE_DEFAULT_MODEL = 'opencode-go/deepseek-v4.1-flash'
 
 export function labelProblem(value) {
   const text = cleanText(value)
@@ -265,12 +266,14 @@ export function childHarnesses(harnesses = null, models = null) {
 
 export function childDraft(harnesses = null, models = null) {
   const offered = childHarnesses(harnesses, models)
-  const first = offered[0] ?? null
+  const first = offered.find((row) => row.key === 'opencode') ?? offered[0] ?? null
+  const own = first?.key === 'opencode'
+  const preferredModel = own && first.models.some((row) => row.id === OPENCODE_DEFAULT_MODEL)
   return {
     label: '',
     harness: first?.key ?? '',
-    model: first?.models?.[0]?.id ?? '',
-    effort: first?.efforts?.[0] ?? '',
+    model: preferredModel ? OPENCODE_DEFAULT_MODEL : first?.models?.[0]?.id ?? '',
+    effort: own && first.efforts.includes('max') ? 'max' : first?.efforts?.[0] ?? '',
     key: '',
   }
 }
@@ -311,7 +314,25 @@ export function childDetail(draft, harnesses = null, models = null) {
   return [name, model, effort].join(' · ')
 }
 
-function freeSubId(taken, label, fallback) {
+function cleanLaneIds(value) {
+  const ids = []
+  for (const entry of Array.isArray(value) ? value : []) {
+    const id = cleanText(entry, 80)
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
+function freeSubId(label, currentSubs, laneKeys = [], fallback = '') {
+  const taken = new Set()
+  for (const sub of Array.isArray(currentSubs) ? currentSubs : []) {
+    const id = cleanText(sub?.id, 80)
+    if (id) taken.add(id)
+  }
+  for (const key of Array.isArray(laneKeys) ? laneKeys : []) {
+    const value = cleanText(key, 80)
+    if (value) taken.add(value)
+  }
   const base = idFromName(label) || idFromName(fallback) || 'sub'
   let root = base.slice(0, 24).replace(/-+$/g, '') || 'sub'
   if (root === 'orchestrator') root = 'orchestrator-sub'
@@ -335,12 +356,7 @@ export function convertPlan(ladder, node, childKey = '', laneKeys = []) {
   if (subs.length >= MAX_SUBS) {
     return { ...empty, problem: `There are at most ${MAX_SUBS} sub orchestrators.` }
   }
-  const taken = new Set(subs.map((sub) => sub.id))
-  for (const key of Array.isArray(laneKeys) ? laneKeys : []) {
-    const value = cleanText(key, 80)
-    if (value) taken.add(value)
-  }
-  const subId = freeSubId(taken, label, id)
+  const subId = freeSubId(label, subs, laneKeys, id)
   const sub = {
     id: subId,
     name: label,
@@ -357,4 +373,66 @@ export function convertPlan(ladder, node, childKey = '', laneKeys = []) {
     sub,
     inactive: [id],
   }
+}
+
+export function groupSubPlan(ladder, draft, laneIds, laneKeys = []) {
+  const currentSubs = ladderSubs(ladder)
+  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null }
+  const label = labelProblem(draft?.label)
+  if (label) return { ...unchanged, problem: label }
+  const selected = cleanLaneIds(laneIds)
+  if (selected.length === 0) return { ...unchanged, problem: 'Select at least one code agent.' }
+  if (currentSubs.length >= MAX_SUBS) {
+    return { ...unchanged, problem: `There are at most ${MAX_SUBS} sub orchestrators.` }
+  }
+  const claimed = new Set(selected)
+  const subs = []
+  for (const sub of currentSubs) {
+    const before = Array.isArray(sub.lanes) ? sub.lanes : []
+    const lanes = before.filter((lane) => !claimed.has(lane))
+    if (before.length > 0 && lanes.length === 0) continue
+    subs.push(lanes.length === before.length ? sub : { ...sub, lanes })
+  }
+  const sub = {
+    id: freeSubId(draft.label, currentSubs, laneKeys),
+    name: String(draft.label ?? '').trim(),
+    harness: draft.harness || 'opencode',
+    model: draft.model || '',
+    lanes: selected,
+    scope: ['**'],
+    restricted: false,
+    setBy: 'owner',
+  }
+  return { problem: '', ladder: { subs: [...subs, sub] }, sub }
+}
+
+export function removeSubPlan(ladder, subId) {
+  const subs = ladderSubs(ladder)
+  const id = cleanText(subId, 80)
+  const index = subs.findIndex((sub) => cleanText(sub?.id, 80) === id)
+  if (index === -1) return { problem: 'Choose a sub orchestrator to remove.', ladder, removed: null }
+  const removed = subs[index]
+  return {
+    problem: '',
+    ladder: { subs: subs.filter((_, at) => at !== index) },
+    removed,
+  }
+}
+
+export function assignSubLanesPlan(ladder, subId, laneIds) {
+  const currentSubs = ladderSubs(ladder)
+  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null }
+  const selected = cleanLaneIds(laneIds)
+  if (selected.length === 0) return { ...unchanged, problem: 'Select at least one code agent.' }
+  const id = cleanText(subId, 80)
+  const index = currentSubs.findIndex((sub) => cleanText(sub?.id, 80) === id)
+  if (index === -1) return { ...unchanged, problem: 'Choose a sub orchestrator.' }
+  const claimed = new Set(selected)
+  const subs = currentSubs.map((sub, at) => {
+    if (at === index) return { ...sub, lanes: selected }
+    const before = Array.isArray(sub.lanes) ? sub.lanes : []
+    const lanes = before.filter((lane) => !claimed.has(lane))
+    return lanes.length === before.length ? sub : { ...sub, lanes }
+  })
+  return { problem: '', ladder: { subs }, sub: subs[index] }
 }
