@@ -3,6 +3,8 @@
 ## Unreleased
 
 - `tests/camera.test.js` covers `rig.pitch()` beside `rig.yaw()`: the starting `OVERVIEW` angle, a pointer drag on both axes, pitch clamped to `[0.08, 1.45]` and the reset on `rig.overview()` (task U57).
+- The five other fixture `layouts` digests in `tests/scenario-e.test.js` follow the lower root card, while their activity and plan digests stay the same (task U59).
+- A root card with ten file rows keeps its top edge below the hub plane in `tests/cards.test.js` (task U59).
 - The sidebar has no Settings footer and no Attach sub orchestrator block, `LadderAttach.jsx` is gone, and the Agents tab holds only the family tree (task U51).
 - The root project folder card sits 340 units in front of the hub with its top edge 40 units below the hub plane, so a taller root grows downward and never reaches the hub circle (task V28).
 - `createCameraRig` and `createRoom` expose `pitch()` beside `yaw()`, read from the camera's current pitch (task U52).

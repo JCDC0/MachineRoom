@@ -18,6 +18,7 @@ import {
   viewInput,
   viewKey,
 } from '../src/engine/cards.js'
+import { HUB_CENTER } from '../src/engine/hub.js'
 import { makeTree } from '../src/model/paths.js'
 import { RECENT_KEEP_MS, apply, createState } from '../src/model/state.js'
 
@@ -461,6 +462,17 @@ describe('cardPlan', () => {
     expect([...cards.cards.keys()].sort()).toEqual([...layout.drawn.keys()].sort())
     expect(layout.drawn.get('lib').back).toBe(0)
     cards.dispose()
+  })
+
+  it('keeps a root card with ten file rows below the hub plane', () => {
+    const tree = makeTree({ root: 'demo', files: Array.from({ length: 10 }, (_, index) => `root-${index}.js`) })
+    const state = createState(tree, [])
+    const layout = cardPlan(state, { alwaysDepth: 2 })
+    const root = layout.drawn.get('')
+    expect(cardRows(root)).toBe(10)
+    const size = cardSize(root)
+    const center = layout.placed.get('')
+    expect(center.y + size.height / 2).toBeLessThan(HUB_CENTER.y)
   })
 })
 
