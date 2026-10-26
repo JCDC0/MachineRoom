@@ -5273,6 +5273,15 @@ body:has(#hud-orchestrator-chat) .waiting {
   line-height: 22px;
 }
 
+.mr-card-items.is-scrollable {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.35) transparent;
+}
+
 .mr-orch {
   position: fixed;
   right: calc(var(--space) * 2);

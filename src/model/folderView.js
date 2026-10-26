@@ -130,6 +130,7 @@ export function planFolderView({
   maxItems = DEFAULT_MAX_ITEMS,
   alwaysDepth = 0,
   maxAlways = DEFAULT_MAX_ALWAYS,
+  limitItems = true,
 } = {}) {
   const folderLimit = count(maxFolders)
   const itemLimit = count(maxItems)
@@ -217,15 +218,18 @@ export function planFolderView({
   return [...drawn].sort(byName).map((path) => {
     const all = itemsFor(path)
     const items = []
-    let folderCount = 0
-    all.forEach((item) => {
-      if (items.length >= itemLimit) return
-      if (item.kind === 'dir') {
-        if (folderCount >= folderLimit) return
-        folderCount += 1
-      }
-      items.push(item)
-    })
+    if (!limitItems) items.push(...all)
+    else {
+      let folderCount = 0
+      all.forEach((item) => {
+        if (items.length >= itemLimit) return
+        if (item.kind === 'dir') {
+          if (folderCount >= folderLimit) return
+          folderCount += 1
+        }
+        items.push(item)
+      })
+    }
     const hiddenKids = children.get(path).filter((child) => !drawn.has(child))
     const isPinned = pinned.has(path)
     const view = {
@@ -235,7 +239,7 @@ export function planFolderView({
       back: path === '' ? 0 : Math.min(3, hiddenKids.length),
       hiddenFolders: hiddenKids.length,
       items,
-      hiddenItems: all.length - items.length,
+      hiddenItems: limitItems ? all.length - items.length : 0,
     }
     if (isPinned) view.pinned = true
     return view

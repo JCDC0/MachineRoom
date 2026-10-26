@@ -21,6 +21,9 @@ export const CARD_TAB_TOP = -9
 export const CARD_SCALES = { closed: 1, open: 1.2, files: 1.8 }
 export const CARD_NAME_MAX = 24
 export const CARD_NAME_PAD = 28
+export const FILE_LIMIT_MIN = 4
+export const FILE_LIMIT_MAX = 20
+export const FILE_LIMIT_DEFAULT = 6
 const NAME_WIDE = new Set(['M', 'W'])
 const NAME_NARROW = new Set(['I', 'J'])
 const FLASH_MS = 1100
@@ -114,12 +117,22 @@ export function cardHeight(rows) {
   return HEAD_H + rows * ROW_H + CARD_PAD
 }
 
+export function clampFileLimit(value) {
+  if (value === null || value === undefined) return FILE_LIMIT_DEFAULT
+  const number = Number(value)
+  if (!Number.isFinite(number)) return FILE_LIMIT_DEFAULT
+  return Math.min(FILE_LIMIT_MAX, Math.max(FILE_LIMIT_MIN, Math.round(number)))
+}
+
 export function rowOffset(rows, index) {
   return cardHeight(rows) / 2 - (HEAD_H + (index + 0.5) * ROW_H)
 }
 
 export function cardRows(view) {
-  return view.state === 'files' ? view.items.length + (view.hiddenItems > 0 ? 1 : 0) : 0
+  if (view.state !== 'files') return 0
+  const total = view.items.length + (view.hiddenItems > 0 ? 1 : 0)
+  if (Number.isFinite(view.maxFiles)) return Math.min(total, clampFileLimit(view.maxFiles))
+  return total
 }
 
 export function cardMetaText(view) {
@@ -224,15 +237,15 @@ export function cardRadius(view) {
   return Math.hypot(width, height) / 2
 }
 
-export function cardPlan(state, { pinned = [], alwaysDepth = 2, previous = new Map(), sprayed = new Set(), rootName = 'root' } = {}) {
+export function cardPlan(state, { pinned = [], alwaysDepth = 2, maxFiles = FILE_LIMIT_DEFAULT, previous = new Map(), sprayed = new Set(), rootName = 'root' } = {}) {
   const pins = [...pinned]
   const sprays = [...sprayed]
   const input = viewInput(state, [...pins, ...sprays])
-  const plan = planFolderView({ ...input, alwaysDepth, expanded: sprays })
+  const plan = planFolderView({ ...input, alwaysDepth, expanded: sprays, limitItems: false })
+  const fileLimit = clampFileLimit(maxFiles)
   const drawn = new Map()
   for (const view of plan) {
-    if (view.path === '') drawn.set(view.path, { ...view, back: 0 })
-    else drawn.set(view.path, view)
+    drawn.set(view.path, { ...view, maxFiles: fileLimit, back: view.path === '' ? 0 : view.back })
   }
   const entries = [...drawn.values()].map((view) => ({ path: view.path, ...cardSize(view, rootName) }))
   const layoutKey = `${entries.map((entry) => `${entry.path}:${entry.width}:${entry.height}`).join(';')}|${sprays.sort().join(',')}`
@@ -303,7 +316,8 @@ function rowNote(file) {
   return parts.join(' · ') || 'not touched'
 }
 
-export function createCards(cssScene, { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2 } = {}) {
+export function createCards(cssScene, options = {}) {
+  const { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2 } = options
   const cards = new Map()
   const hider = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide })
   const homes = new Map()
@@ -314,6 +328,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   const rowFrame = createRowFrameKey()
   const initialDepth = Number(alwaysDepth)
   let alwaysLevel = Number.isFinite(initialDepth) ? Math.min(3, Math.max(0, Math.floor(initialDepth))) : 2
+  let maxFilesLevel = clampFileLimit(options.maxFiles)
   const right = new THREE.Vector3(1, 0, 0)
   const up = new THREE.Vector3(0, 1, 0)
   const back = new THREE.Vector3(0, 0, 1)
@@ -376,6 +391,13 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const meta = el('div', 'mr-card-meta')
     head.append(tab, name, meta)
     const items = el('div', 'mr-card-items')
+    items.addEventListener(
+      'wheel',
+      (event) => {
+        if (items.scrollHeight > items.clientHeight) event.stopPropagation()
+      },
+      { passive: true },
+    )
     const band = el('div', 'mr-card-band')
     const face = el('div', 'mr-card-face')
     face.append(head, items, band)
@@ -461,6 +483,13 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
 
   function paintRows(card, view) {
     const wanted = view.state === 'files' ? view.items : []
+    const limit = clampFileLimit(view.maxFiles ?? maxFilesLevel)
+    card.items.style.maxHeight = `${limit * ROW_H}px`
+    const itemsClass = wanted.length > limit ? 'mr-card-items is-scrollable' : 'mr-card-items'
+    if (card.itemsClass !== itemsClass) {
+      card.itemsClass = itemsClass
+      card.items.className = itemsClass
+    }
     const paths = wanted.map((item) => item.path)
     const hidden = view.state === 'files' ? view.hiddenItems : 0
     const key = `${paths.join('\n')}|${hidden}`
@@ -587,7 +616,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const planKeyNext = viewKey(state, [...pinned, ...sprayed])
     if (planKeyNext === planKey) return false
     planKey = planKeyNext
-    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, previous: homes, sprayed, rootName })
+    const layout = cardPlan(state, { pinned: [...pinned], alwaysDepth: alwaysLevel, maxFiles: maxFilesLevel, previous: homes, sprayed, rootName })
     const drawn = layout.drawn
     const focusPaths = new Set()
     for (const agent of state.agents.values()) for (const path of agent.focus ?? []) focusPaths.add(path)
@@ -699,7 +728,10 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
     const card = cards.get(dir)
     out.copy(center(dir))
     const index = card ? card.rowPaths.indexOf(file) : -1
-    if (index !== -1) out.addScaledVector(up, rowOffset(cardRows(card.view), index) * card.scale)
+    if (index !== -1) {
+      const row = Math.min(index, Math.max(0, cardRows(card.view) - 1))
+      out.addScaledVector(up, rowOffset(cardRows(card.view), row) * card.scale)
+    }
     return out
   }
 
@@ -730,12 +762,25 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   }
 
   function setOptions(options = {}) {
-    if (!Object.hasOwn(options, 'alwaysDepth')) return false
-    const raw = Number(options.alwaysDepth)
-    if (!Number.isFinite(raw)) return false
-    const value = Math.min(3, Math.max(0, Math.floor(raw)))
-    if (value === alwaysLevel) return false
-    alwaysLevel = value
+    let changed = false
+    if (Object.hasOwn(options, 'alwaysDepth')) {
+      const raw = Number(options.alwaysDepth)
+      if (Number.isFinite(raw)) {
+        const value = Math.min(3, Math.max(0, Math.floor(raw)))
+        if (value !== alwaysLevel) {
+          alwaysLevel = value
+          changed = true
+        }
+      }
+    }
+    if (Object.hasOwn(options, 'maxFiles')) {
+      const value = clampFileLimit(options.maxFiles)
+      if (value !== maxFilesLevel) {
+        maxFilesLevel = value
+        changed = true
+      }
+    }
+    if (!changed) return false
     pinnedVersion += 1
     planKey = ''
     layoutKey = ''

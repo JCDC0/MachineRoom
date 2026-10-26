@@ -136,6 +136,26 @@ describe('planFolderView', () => {
     expect(docs.hiddenItems).toBe(32)
   })
 
+  it('keeps every folder and file item when limitItems is false', () => {
+    const files = []
+    for (let i = 1; i <= 40; i += 1) files.push(`docs/doc${String(i).padStart(2, '0')}.md`)
+    for (const letter of ['a', 'b', 'c', 'd', 'e']) files.push(`docs/${letter}/one.md`)
+
+    const limited = planFolderView({ files, focus: ['docs/doc07.md'] })
+    const full = planFolderView({ files, focus: ['docs/doc07.md'], limitItems: false })
+    const capped = byPath(limited).get('docs')
+    const all = byPath(full).get('docs')
+
+    expect(capped.items).toHaveLength(10)
+    expect(capped.hiddenItems).toBeGreaterThan(0)
+    expect(all.items).toHaveLength(capped.items.length + capped.hiddenItems)
+    expect(all.items).toHaveLength(42)
+    expect(all.items.filter((item) => item.kind === 'dir')).toHaveLength(2)
+    expect(all.items.filter((item) => item.kind === 'file')).toHaveLength(40)
+    expect(all.hiddenItems).toBe(0)
+    for (const view of full) expect(view.hiddenItems).toBe(0)
+  })
+
   it('opens both branches when two agents work on two files', () => {
     const files = [
       'docs/notes.md',

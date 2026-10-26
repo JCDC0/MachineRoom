@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `planFolderView` takes `limitItems`, and with `false` a card keeps every folder and file item it holds with `hiddenItems: 0` (task V38).
+- Folder cards show up to `maxFiles` rows, 6 by default and 4 to 20, and scroll the rest of the list inside the card; a wheel over a scrollable list no longer zooms the camera (task V38).
+- `cardRows` counts the `maxFiles` cap, `cardPlan` and `createCards` take `maxFiles`, and the cards' `setOptions` accepts both `alwaysDepth` and `maxFiles` (task V38).
 - Far dust and fine dust motes each drift, wander and pulse in their own three directions with no group rotation, and each mote breathes on its own phase and rate through its vertex colour (task V35).
 - A live room turns its borders red while the feed is reconnecting or disconnected or the health answer is `ok: false`: the stage and the HUD carry `is-disconnected`, so the lens edge lines, ticks, corners, cross and labels, the menu's bottom border, the transport border, the dock's top border and the sidebar's right border use `var(--red)` (task U61).
 - The menu no longer repeats `The bridge is not answering` or `A source failed` beside `LIVE // RECONNECTING` and `The live feed dropped`; `healthNotice` returns null for both and keeps `The runner looks stopped` for a stale runner when `health.ok !== false` (task U61).
