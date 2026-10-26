@@ -30,36 +30,97 @@ const faces = [
   { x: 1100, y: -300, z: -500, r: Math.hypot(170, 60), rx: 170, ry: 60 },
 ]
 
-describe('camera rig yaw', () => {
-  it('reports the view yaw and follows a drag', () => {
-    const saved = globalThis.window
-    const listeners = {}
-    globalThis.window = {
-      matchMedia: () => ({ matches: false }),
-      addEventListener: (type, handler) => {
-        if (!listeners[type]) listeners[type] = []
-        listeners[type].push(handler)
-      },
-      removeEventListener: () => {},
-    }
+function openRig() {
+  const saved = globalThis.window
+  const listeners = {}
+  globalThis.window = {
+    matchMedia: () => ({ matches: false }),
+    addEventListener: (type, handler) => {
+      if (!listeners[type]) listeners[type] = []
+      listeners[type].push(handler)
+    },
+    removeEventListener: () => {},
+  }
+  const surfaceListeners = {}
+  const surface = {
+    addEventListener: (type, handler) => {
+      surfaceListeners[type] = handler
+    },
+    removeEventListener: () => {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 800 }),
+  }
+  const rig = createCameraRig(new THREE.PerspectiveCamera(), surface)
+  const drag = (dx, dy) => {
+    surfaceListeners.pointerdown({ clientX: 500, clientY: 400, target: { closest: () => null } })
+    for (const handler of listeners.pointermove ?? []) handler({ clientX: 500 + dx, clientY: 400 + dy })
+  }
+  const close = () => {
+    globalThis.window = saved
+  }
+  return { rig, drag, close }
+}
+
+describe('camera rig yaw and pitch', () => {
+  it('starts at the overview yaw and pitch', () => {
+    const { rig, close } = openRig()
     try {
-      const camera = new THREE.PerspectiveCamera()
-      const surfaceListeners = {}
-      const surface = {
-        addEventListener: (type, handler) => {
-          surfaceListeners[type] = handler
-        },
-        removeEventListener: () => {},
-        getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 800 }),
-      }
-      const rig = createCameraRig(camera, surface)
       expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw)
-      surfaceListeners.pointerdown({ clientX: 500, clientY: 400, target: { closest: () => null } })
-      for (const handler of listeners.pointermove ?? []) handler({ clientX: 400, clientY: 400 })
+      expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch)
+    } finally {
+      close()
+    }
+  })
+
+  it('follows a drag on both yaw and pitch', () => {
+    const { rig, drag, close } = openRig()
+    try {
+      drag(-100, 50)
       rig.snap()
       expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw + 0.5)
+      expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch + 0.2)
+      expect(rig.pitch()).not.toBeCloseTo(OVERVIEW.pitch)
+      drag(40, -25)
+      rig.snap()
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw + 0.3)
+      expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch + 0.1)
     } finally {
-      globalThis.window = saved
+      close()
+    }
+  })
+
+  it('clamps pitch to its lowest and highest angle', () => {
+    const { rig, drag, close } = openRig()
+    try {
+      drag(0, 2000)
+      rig.snap()
+      expect(rig.pitch()).toBe(1.45)
+      drag(0, -3000)
+      rig.snap()
+      expect(rig.pitch()).toBe(0.08)
+      for (let step = 0; step < 20; step += 1) drag(0, 200)
+      rig.snap()
+      expect(rig.pitch()).toBe(1.45)
+      for (let step = 0; step < 40; step += 1) drag(0, -200)
+      rig.snap()
+      expect(rig.pitch()).toBe(0.08)
+    } finally {
+      close()
+    }
+  })
+
+  it('returns to the overview yaw and pitch on overview()', () => {
+    const { rig, drag, close } = openRig()
+    try {
+      drag(-400, -20)
+      rig.snap()
+      expect(rig.yaw()).not.toBeCloseTo(OVERVIEW.yaw)
+      expect(rig.pitch()).not.toBeCloseTo(OVERVIEW.pitch)
+      rig.overview()
+      rig.snap()
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw)
+      expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch)
+    } finally {
+      close()
     }
   })
 })
