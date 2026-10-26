@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 import { childEnvironment } from '../src/briefs/run.js'
 import { killTree, treeSpawnOptions } from '../server/processTree.js'
+import { mcpServersForAcp } from './mcp-bridge.mjs'
 
 const DEFAULT_MINUTES = 100
 const PROMPT_LIMIT = 4 * 1024 * 1024
@@ -271,7 +272,8 @@ export async function runAcp(options, { log = process.stdout, error = process.st
     if (spawnError) throw spawnError
     if (initialized.result?.protocolVersion !== 1) throw new Error(`The ACP agent answered protocol version ${initialized.result?.protocolVersion}.`)
 
-    const created = await request('session/new', { cwd, mcpServers: [] })
+    const mcpServers = Array.isArray(options.mcpServers) ? options.mcpServers : mcpServersForAcp()
+    const created = await request('session/new', { cwd, mcpServers })
     if (created.timeout) throw new Error('The ACP agent did not answer session/new before the time limit.')
     if (created.closed) throw new Error(`The ACP agent stopped before session/new answered (exit code ${created.code === null ? 'none' : created.code}).`)
     if (created.error) throw new Error(created.error.message ?? 'session/new failed.')

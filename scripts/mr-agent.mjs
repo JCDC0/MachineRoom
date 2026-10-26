@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { SEARCH_OFF, fetchPage, readSearchChoice, searchWeb } from '../server/search.js'
+import { callMcpTool, listAllMcpTools, mcpResultText, mcpRunsDir } from './mcp-bridge.mjs'
 
 const DEFAULT_URL = 'https://openrouter.ai/api/v1'
 const FETCH_TIMEOUT_MS = 120000
@@ -13,11 +14,13 @@ const MAX_STEPS = 60
 const SEARCH_MATCH_LIMIT = 200
 const SEARCH_FILE_LIMIT = 2000000
 const MISSING_KEY = 'Set MACHINEROOM_API_KEY or OPENROUTER_API_KEY.'
+const MCP_TEXT_LIMIT = 20000
+const MCP_EMPTY = 'No MCP servers are configured.'
 
 const SYSTEM_PROMPT =
   'You are MachineRoom, a coding agent. Work only inside the working folder. Use the tools to read, write, edit, list, search and run commands. When the work is done, reply with plain text and no tool call.'
 
-const TOOLS = [
+const CORE_TOOLS = [
   {
     type: 'function',
     function: {
@@ -95,6 +98,35 @@ const TOOLS = [
     },
   },
 ]
+
+const MCP_TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'mcp_list_tools',
+      description: 'List the tools the configured MCP servers offer.',
+      parameters: { type: 'object', properties: { server: { type: 'string' } } },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'mcp_call_tool',
+      description: 'Call a tool on a configured MCP server.',
+      parameters: {
+        type: 'object',
+        properties: {
+          server: { type: 'string' },
+          tool: { type: 'string' },
+          arguments: { type: 'object' },
+        },
+        required: ['server', 'tool'],
+      },
+    },
+  },
+]
+
+const TOOLS = [...CORE_TOOLS, ...MCP_TOOLS]
 
 function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`)
@@ -318,6 +350,21 @@ function streamInput(name, args) {
   if (name === 'run_shell') return { command: typeof args.command === 'string' ? args.command : '' }
   if (name === 'web_search') return { query: typeof args.query === 'string' ? args.query : '' }
   if (name === 'web_fetch') return { url: typeof args.url === 'string' ? args.url : '' }
+  if (name === 'mcp_list_tools') {
+    const server = typeof args.server === 'string' ? args.server.trim() : ''
+    return server === '' ? {} : { server }
+  }
+  if (name === 'mcp_call_tool') {
+    const inner = args.arguments && typeof args.arguments === 'object' && !Array.isArray(args.arguments) ? args.arguments : {}
+    const input = {
+      server: typeof args.server === 'string' ? args.server : '',
+      tool: typeof args.tool === 'string' ? args.tool : '',
+      arguments: inner,
+    }
+    if (typeof inner.path === 'string' && inner.path !== '') input.path = inner.path
+    else if (typeof inner.file === 'string' && inner.file !== '') input.path = inner.file
+    return input
+  }
   return args
 }
 
@@ -511,6 +558,38 @@ async function webFetchTool(args) {
   return { text: page.error || page.text || 'The page was empty.', isError: Boolean(page.error) }
 }
 
+function mcpServerOf(args) {
+  return typeof args?.server === 'string' ? args.server.trim() : ''
+}
+
+async function mcpListTool(args) {
+  const server = mcpServerOf(args)
+  const outcome = await listAllMcpTools(mcpRunsDir(), { server })
+  const lines = outcome.tools.map((tool) => {
+    const description = String(tool.description ?? '').replace(/\s+/g, ' ').trim()
+    const shown = description.length > 100 ? `${description.slice(0, 99)}~` : description
+    return `${tool.server}: ${tool.name}${shown === '' ? '' : ` - ${shown}`}`
+  })
+  for (const failure of outcome.errors) lines.push(`${failure.server}: ${failure.error}`)
+  if (lines.length === 0) {
+    return { text: server === '' ? MCP_EMPTY : `The MCP server ${server} offers no tools.`, isError: false }
+  }
+  return { text: lines.join('\n'), isError: outcome.tools.length === 0 && outcome.errors.length > 0 }
+}
+
+async function mcpCallTool(args) {
+  const server = mcpServerOf(args)
+  const tool = typeof args?.tool === 'string' ? args.tool.trim() : ''
+  if (server === '') return { text: 'mcp_call_tool needs a server name.', isError: true }
+  if (tool === '') return { text: 'mcp_call_tool needs a tool name.', isError: true }
+  const toolArgs = args?.arguments && typeof args.arguments === 'object' && !Array.isArray(args.arguments) ? args.arguments : {}
+  const outcome = await callMcpTool(mcpRunsDir(), { server, tool, arguments: toolArgs })
+  if (!outcome.ok) return { text: outcome.problem, isError: true }
+  const text = mcpResultText(outcome.result)
+  const capped = text.length > MCP_TEXT_LIMIT ? `${text.slice(0, MCP_TEXT_LIMIT)}\n[result cut at ${MCP_TEXT_LIMIT} characters]` : text
+  return { text: capped === '' ? '(no result)' : capped, isError: outcome.result?.isError === true }
+}
+
 async function runTool(name, args, cwd, web) {
   try {
     if (name === 'read_file') return readTool(args, cwd)
@@ -521,6 +600,8 @@ async function runTool(name, args, cwd, web) {
     if (name === 'run_shell') return await shellTool(args, cwd)
     if (name === 'web_search') return await webSearchTool(args, web)
     if (name === 'web_fetch') return await webFetchTool(args)
+    if (name === 'mcp_list_tools') return await mcpListTool(args)
+    if (name === 'mcp_call_tool') return await mcpCallTool(args)
     return { text: `The tool ${name} is not known.`, isError: true }
   } catch (error) {
     return { text: String(error?.message ?? error), isError: true }
