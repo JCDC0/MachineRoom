@@ -36,6 +36,7 @@ import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, l
 
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
+const OPEN_PANEL = '.control-drawer, .hud-drawer:not([hidden]), .hud-settings, .hud-dropdown, .mr-side-overlay, .hud-help-backdrop, .hud-band-list, .hud-menu.is-open, .mr-assistant, .mr-guide-backdrop, .mr-launcher, .mr-setup-backdrop'
 const BADGE = {
   position: 'absolute',
   bottom: 96,
@@ -373,6 +374,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (beat > 0) roomRef.current?.setBeat(beat)
       },
       onPick: (key) => {
+        if (key === null || key === undefined) {
+          followRef.current = false
+          setFollowing(false)
+          setFocused(null)
+          return
+        }
         setFollow(false)
         room.focus(key)
         setFocused(key)
@@ -639,7 +646,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       if (hudKeyBlocked(event.target)) return
       if (event.target.closest('button') && (event.code === 'Space' || event.key === 'Enter')) return
       const room = roomRef.current
-      if (event.code === 'Space') {
+      if (event.key === 'Escape') {
+        if (document.querySelector(OPEN_PANEL)) return
+        parkRoom()
+      } else if (event.code === 'Space') {
         event.preventDefault()
         player.toggle()
       } else if (event.key === 'f' || event.key === 'F') {
@@ -647,9 +657,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       } else if (event.key === 't' || event.key === 'T') {
         setOpenChips(room?.toggleTerminal(room.focused()) ?? NONE)
       } else if (event.key === '0') {
-        setFollow(false)
-        room?.overview()
-        setFocused(null)
+        parkRoom()
       } else if (/^[1-9]$/.test(event.key)) {
         const agent = agents[Number(event.key) - 1]
         if (agent) {
@@ -693,10 +701,20 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     setOpenChips(roomRef.current?.openTerminalKeys() ?? NONE)
   }
 
-  function overview() {
+  function parkRoom() {
     setFollow(false)
-    roomRef.current?.overview()
+    roomRef.current?.park()
     setFocused(null)
+  }
+
+  function onEmptyDoubleClick(event) {
+    if (event.target?.closest?.('.mr-card, .mr-term, .mr-term-console, .mr-board')) return
+    if (roomRef.current?.agentAt?.(event)) return
+    parkRoom()
+  }
+
+  function overview() {
+    parkRoom()
   }
 
   function replay(op, value) {
@@ -777,7 +795,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         <div className={`lens${bridgeDown ? ' is-disconnected' : ''}`}>
           <LensEdge side="top" yaw={lensYaw} disconnected={bridgeDown} />
           <LensEdge side="bottom" yaw={lensYaw} pitch={lensPitch} disconnected={bridgeDown} />
-          <div className="lens-frame" ref={surfaceRef}>
+          <div className="lens-frame" ref={surfaceRef} onDoubleClick={onEmptyDoubleClick}>
             <div
               className="surface-layers"
               style={chromaFilter ? { filter: chromaFilter } : undefined}

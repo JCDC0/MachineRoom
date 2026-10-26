@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A click on a folder card body holds the camera on that card, or its nearest drawn ancestor, at `ANCHOR_DIST` and turns agent follow off (task U67).
+- A double click on empty space, Escape with no panel open and the `0` key call `room.park()`, which drops the folder hold and returns to the park ring (task U67).
+- Picking a wide agent frames the midpoint of the agent and the file or folder it last touched instead of its chip (task U67).
+- The wheel over a folder card scrolls its rows while they overflow, including over the card face beside the rows, without scrolling the page or zooming the camera (task U67).
 - The Settings panel has a `Content files` range from 4 to 20, 6 by default, saved as `maxFiles` and passed to the room so a folder card can show more than three files (task U66).
 - `planFolderView` takes `limitItems`, and with `false` a card keeps every folder and file item it holds with `hiddenItems: 0` (task V38).
 - Folder cards show up to `maxFiles` rows, 6 by default and 4 to 20, and scroll the rest of the list inside the card; a wheel over a scrollable list no longer zooms the camera (task V38).
