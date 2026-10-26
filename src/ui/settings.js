@@ -25,8 +25,20 @@ export const DEFAULT_SETTINGS = Object.freeze({
   }),
 })
 
+export const FILE_LIMIT_MIN = 4
+export const FILE_LIMIT_MAX = 20
+export const FILE_LIMIT_DEFAULT = 6
+
+export function clampFileLimit(value) {
+  if (value == null) return FILE_LIMIT_DEFAULT
+  const num = Number(value)
+  if (!Number.isFinite(num)) return FILE_LIMIT_DEFAULT
+  return Math.min(FILE_LIMIT_MAX, Math.max(FILE_LIMIT_MIN, Math.round(num)))
+}
+
 export const DEFAULT_EFFECTS = Object.freeze({
   alwaysDepth: 2,
+  maxFiles: FILE_LIMIT_DEFAULT,
   aberration: Object.freeze({ on: false, strength: 0.2 }),
   vignette: Object.freeze({ on: true, strength: 0.2 }),
   grain: Object.freeze({ on: false, strength: 0.2 }),
@@ -84,6 +96,7 @@ export function effectSettings(saved) {
   }
 
   const alwaysDepth = clampDepth(source.alwaysDepth ?? root.alwaysDepth)
+  const maxFiles = clampFileLimit(source.maxFiles ?? root.maxFiles)
   const aberration = clampEffect(source.aberration ?? source.chromaticAberration, false, 0.2)
   const vignette = clampEffect(source.vignette, true, 0.2)
   const grain = clampEffect(source.grain, false, 0.2)
@@ -92,6 +105,7 @@ export function effectSettings(saved) {
 
   return {
     alwaysDepth,
+    maxFiles,
     aberration,
     chromaticAberration: aberration,
     vignette,
@@ -131,6 +145,11 @@ function normalizeSettings(raw) {
     if (Number.isFinite(num)) {
       out.alwaysDepth = Math.min(3, Math.max(1, Math.round(num)))
     }
+  }
+
+  const maxFiles = raw.maxFiles ?? raw.effects?.maxFiles
+  if (maxFiles !== undefined) {
+    out.maxFiles = clampFileLimit(maxFiles)
   }
 
   if (raw.effects && typeof raw.effects === 'object') {
@@ -203,6 +222,7 @@ export function loadEffectSettings(storage = store()) {
   const settings = loadSettings(storage)
   return effectSettings({
     alwaysDepth: settings.alwaysDepth,
+    maxFiles: settings.maxFiles,
     ...(settings.effects ?? {}),
   })
 }
@@ -240,12 +260,15 @@ export function saveEffectSettings(storage = store(), partial) {
     }
   }
   const alwaysDepth = incoming.alwaysDepth !== undefined ? incoming.alwaysDepth : current.alwaysDepth
+  const maxFiles = incoming.maxFiles !== undefined ? incoming.maxFiles : current.maxFiles
   const merged = effectSettings({
     alwaysDepth,
+    maxFiles,
     ...mergedEffects,
   })
   saveSettings(storage, {
     alwaysDepth: merged.alwaysDepth,
+    maxFiles: merged.maxFiles,
     effects: {
       aberration: merged.aberration,
       vignette: merged.vignette,

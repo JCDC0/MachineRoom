@@ -5,7 +5,7 @@ import { validateBridgeUrl } from '../src/ui/Connect.jsx'
 import { readStorage, writeStorage } from '../src/storage.js'
 import Settings, { EFFECTS } from '../src/ui/Settings.jsx'
 import { RECORD_MINUTES_DEFAULT, RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../src/model/recordLimits.js'
-import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
+import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, clampFileLimit, effectSettings, FILE_LIMIT_DEFAULT, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -198,6 +198,73 @@ describe('the record time setting', () => {
     expect(html).toContain(`min="${RECORD_MINUTES_MIN}"`)
     expect(html).toContain(`max="${RECORD_MINUTES_MAX}"`)
     expect(html).toContain('value="10"')
+  })
+})
+
+describe('the content files setting', () => {
+  it('clamps a content file limit above 3 and inside 4 to 20', () => {
+    expect(FILE_LIMIT_MIN).toBe(4)
+    expect(FILE_LIMIT_MAX).toBe(20)
+    expect(FILE_LIMIT_DEFAULT).toBe(6)
+    expect(DEFAULT_EFFECTS.maxFiles).toBe(FILE_LIMIT_DEFAULT)
+
+    for (const value of [null, undefined, Number.NaN, Number.POSITIVE_INFINITY, 'soon']) {
+      expect(clampFileLimit(value)).toBe(FILE_LIMIT_DEFAULT)
+    }
+    expect(clampFileLimit(-20)).toBe(4)
+    expect(clampFileLimit(0)).toBe(4)
+    expect(clampFileLimit(1)).toBe(4)
+    expect(clampFileLimit(3)).toBe(4)
+    expect(clampFileLimit(4)).toBe(4)
+    expect(clampFileLimit(4.4)).toBe(4)
+    expect(clampFileLimit(4.6)).toBe(5)
+    expect(clampFileLimit('9')).toBe(9)
+    expect(clampFileLimit(12)).toBe(12)
+    expect(clampFileLimit(20)).toBe(20)
+    expect(clampFileLimit(21)).toBe(20)
+    expect(clampFileLimit(100)).toBe(20)
+    expect(clampFileLimit(3.9) > 3).toBe(true)
+  })
+
+  it('saves and loads the content file limit', () => {
+    const storage = makeStorage()
+    expect(loadEffectSettings(storage).maxFiles).toBe(FILE_LIMIT_DEFAULT)
+
+    const saved = saveEffectSettings(storage, { maxFiles: 9 })
+    expect(saved.maxFiles).toBe(9)
+    expect(loadEffectSettings(storage).maxFiles).toBe(9)
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).maxFiles).toBe(9)
+
+    expect(saveEffectSettings(storage, { maxFiles: 2 }).maxFiles).toBe(FILE_LIMIT_MIN)
+    expect(loadEffectSettings(storage).maxFiles).toBe(FILE_LIMIT_MIN)
+    expect(saveEffectSettings(storage, { maxFiles: 50 }).maxFiles).toBe(FILE_LIMIT_MAX)
+    expect(loadEffectSettings(storage).maxFiles).toBe(FILE_LIMIT_MAX)
+  })
+
+  it('reads a saved or nested content file limit and keeps a default', () => {
+    expect(effectSettings().maxFiles).toBe(FILE_LIMIT_DEFAULT)
+    expect(effectSettings({ maxFiles: 8 }).maxFiles).toBe(8)
+    expect(effectSettings({ effects: { maxFiles: 15 } }).maxFiles).toBe(15)
+    expect(effectSettings({ maxFiles: 1 }).maxFiles).toBe(FILE_LIMIT_MIN)
+
+    const flat = makeStorage({ [SETTINGS_KEY]: JSON.stringify({ maxFiles: 11 }) })
+    expect(loadEffectSettings(flat).maxFiles).toBe(11)
+    const nested = makeStorage({ [SETTINGS_KEY]: JSON.stringify({ effects: { maxFiles: 17 } }) })
+    expect(loadEffectSettings(nested).maxFiles).toBe(17)
+    expect(loadEffectSettings(makeStorage()).maxFiles).toBe(FILE_LIMIT_DEFAULT)
+  })
+
+  it('renders the Content files slider below Folder depth', () => {
+    const html = renderToString(
+      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+    )
+    expect(html).toContain('Content files')
+    expect(html).toContain('aria-label="Content files"')
+    expect(html).toContain(`min="${FILE_LIMIT_MIN}"`)
+    expect(html).toContain(`max="${FILE_LIMIT_MAX}"`)
+    expect(html).toContain('value="6"')
+    expect(html).toContain('<span>4</span><span>12</span><span>20</span>')
+    expect(html.indexOf('Content files')).toBeGreaterThan(html.indexOf('Folder depth'))
   })
 })
 
