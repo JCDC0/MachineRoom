@@ -55,10 +55,13 @@ function openRig({ still = false } = {}) {
     surfaceListeners.pointerdown({ clientX: 500, clientY: 400, target: { closest: () => null } })
     for (const handler of listeners.pointermove ?? []) handler({ clientX: 500 + dx, clientY: 400 + dy })
   }
+  const wheel = (deltaY) => {
+    surfaceListeners.wheel({ deltaY, target: { closest: () => null }, preventDefault() {} })
+  }
   const close = () => {
     globalThis.window = saved
   }
-  return { rig, drag, close, camera }
+  return { rig, drag, wheel, close, camera }
 }
 
 describe('camera rig yaw and pitch', () => {
@@ -165,6 +168,32 @@ describe('camera rig hold', () => {
       rig.update(0.016)
       expect(camera.position.distanceTo(point)).not.toBeCloseTo(ANCHOR_DIST, 0)
       expect(camera.position.distanceTo(new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z))).toBeCloseTo(OVERVIEW.dist, 5)
+    } finally {
+      close()
+    }
+  })
+
+  it('zooms while a card is held and keeps the held point', () => {
+    const { rig, camera, wheel, close } = openRig({ still: true })
+    try {
+      const point = new THREE.Vector3(700, 260, -500)
+      rig.hold(() => point, ANCHOR_DIST)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(point)).toBeCloseTo(ANCHOR_DIST, 5)
+
+      wheel(-600)
+      rig.update(0.016)
+      const zoomed = camera.position.distanceTo(point)
+      expect(zoomed).toBeLessThan(ANCHOR_DIST)
+      const facing = new THREE.Vector3()
+      camera.getWorldDirection(facing)
+      expect(facing.dot(point.clone().sub(camera.position).normalize())).toBeCloseTo(1, 5)
+
+      rig.setZoomShare(0.5)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(point)).not.toBeCloseTo(zoomed, 3)
+      camera.getWorldDirection(facing)
+      expect(facing.dot(point.clone().sub(camera.position).normalize())).toBeCloseTo(1, 5)
     } finally {
       close()
     }

@@ -169,7 +169,7 @@ export function cardTitle(path, rootName = 'root') {
   return visibleText(path === '' ? String(rootName) : path)
 }
 
-function cardBaseWidth(path, rootName) {
+export function cardBaseWidth(path, rootName) {
   const name = cardName(path, rootName)
   if (name === '') return CARD_W
   let text = 0
@@ -208,29 +208,30 @@ function backPlaces(count) {
   return backOffsets(backLayers(count)).slice(1)
 }
 
-export function occluderParts(view) {
+export function occluderParts(view, rootName = 'root') {
+  const width = cardBaseWidth(view?.path, rootName) + CARD_FACE_BORDER
   const height = cardHeight(cardRows(view)) + CARD_FACE_BORDER
   const tabLeft = CARD_TAB_LEFT + CARD_FACE_EDGE
   const tabTop = CARD_TAB_TOP + CARD_FACE_EDGE
-  const tabX = tabLeft + CARD_TAB_W / 2 - CARD_W / 2
+  const tabX = tabLeft + CARD_TAB_W / 2 - width / 2
   const tabY = height / 2 - tabTop - CARD_TAB_H / 2
   const parts = [
-    { width: CARD_W, height, x: 0, y: 0 },
+    { width, height, x: 0, y: 0 },
     { width: CARD_TAB_W, height: CARD_TAB_H, x: tabX, y: tabY },
   ]
   for (const offset of backPlaces(view?.back)) {
-    parts.push({ width: CARD_W, height, x: offset.x, y: offset.y })
+    parts.push({ width, height, x: offset.x, y: offset.y })
     parts.push({ width: CARD_TAB_W, height: CARD_TAB_H, x: offset.x + tabX, y: tabY })
   }
   return parts
 }
 
-export function occluderBox(view, scale = 1) {
+export function occluderBox(view, scale = 1, rootName = 'root') {
   let left = Infinity
   let right = -Infinity
   let bottom = Infinity
   let top = -Infinity
-  for (const part of occluderParts(view)) {
+  for (const part of occluderParts(view, rootName)) {
     left = Math.min(left, part.x - part.width / 2)
     right = Math.max(right, part.x + part.width / 2)
     bottom = Math.min(bottom, part.y - part.height / 2)
@@ -293,8 +294,8 @@ function el(tag, className, text) {
   return node
 }
 
-function occluderGeometry(view) {
-  const parts = occluderParts(view)
+function occluderGeometry(view, rootName = 'root') {
+  const parts = occluderParts(view, rootName)
   const positions = new Float32Array(parts.length * 18)
   for (let index = 0; index < parts.length; index += 1) {
     const part = parts[index]
@@ -483,7 +484,7 @@ export function createCards(cssScene, options = {}) {
 
   function paintOccluder(card, view) {
     card.occluder.geometry.dispose()
-    card.occluder.geometry = occluderGeometry(view)
+    card.occluder.geometry = occluderGeometry(view, card.rootName)
     card.occluderKey = `${card.height}|${backLayers(view.back)}`
   }
 

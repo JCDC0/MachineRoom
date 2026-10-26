@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { main, parseReviewArgs, removeReviewTree, reviewLane } from '../scripts/review-lane.mjs'
+import { main, parseReviewArgs, removeReviewTree, reviewLane, reviewTempBase } from '../scripts/review-lane.mjs'
 import {
   briefCheck,
   briefFiles,
@@ -36,7 +37,7 @@ const cleanups = []
 
 function systemReviewFolders() {
   return readdirSync(SYSTEM_TEMP, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && entry.name.startsWith('machineroom-review-'))
+    .filter((entry) => entry.isDirectory() && entry.name.toLowerCase().startsWith('machineroom-review-'))
     .map((entry) => entry.name)
 }
 
@@ -530,5 +531,25 @@ describe('the test temp folder', () => {
 
   it('gains no machineroom-review-* folder during this file', () => {
     expect(systemReviewFolders()).toEqual([])
+  })
+})
+
+describe('the review worktree folder', () => {
+  const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
+
+  const outsideTemp = (path) => {
+    const rel = relative(resolve(tmpdir()), resolve(path))
+    return rel === '' || rel.startsWith('..') || isAbsolute(rel)
+  }
+
+  it('sits beside the checkout, not in the OS temp folder', () => {
+    const base = reviewTempBase(REPO_ROOT)
+    expect(base).toBe(dirname(REPO_ROOT))
+    expect(outsideTemp(base)).toBe(true)
+    expect(outsideTemp(join(base, 'MachineRoom-review-test'))).toBe(true)
+  })
+
+  it('uses an explicit temp root when one is given', () => {
+    expect(reviewTempBase(REPO_ROOT, SYSTEM_TEMP)).toBe(SYSTEM_TEMP)
   })
 })

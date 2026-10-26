@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `sync` releases the camera hold and refits when the held card leaves the plan, so a seek or a tree change cannot leave the camera on a card that is gone, and `park()` still works (task U73, W1).
+- `refit` records the fresh fit while a card is held without moving the camera, so a resize or a Content files change leaves the park fit right (task U73, W2).
+- The wheel and the Zoom rail change the distance of a held card while its point stays the target (task U73, W3).
+- A focus on an agent the room has no view for stops the follow instead of tracking the last agent (task U73, W4).
+- `occluderParts` sizes the depth blocker from `cardBaseWidth` plus the face border, so it covers a card with a long name (task U73, W5).
+- `review-lane` puts its merged-result worktree in `MachineRoom-review-*` beside the checkout instead of the OS temp folder, so the temp-folder test passes in review (task U73).
 - The aberration map's square is sized from the park ring's projected radius with full strength at 2.5 ring radii, never smaller than the lens-covering square and never more than twice the lens diagonal, and its centre is pulled back toward the lens only as far as covering it needs, so the fringes keep their strength while a card or an agent holds the camera (task U70).
 - `parkScreen()` answers the ring's projected radius beside its centre, and `mapPlacement` takes it, so an anchored card gets a square at the 2,658 pixel cap for a 1,247 by 460 lens instead of growing without limit (task U70).
 - `src/Stage.jsx` passes the ring radius into `mapPlacement` and writes the park point again when the radius moves 2 pixels, as it does for the centre (task U70).
