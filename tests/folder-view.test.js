@@ -67,10 +67,39 @@ describe('planFolderView', () => {
     }
   })
 
+  it('stacks one outline behind an empty folder with an unexpanded child', () => {
+    const plan = planFolderView({ files: ['empty/kid/one.js'], alwaysDepth: 1 })
+    const folder = byPath(plan).get('empty')
+
+    expect(folder.items).toEqual([{ path: 'empty/kid', kind: 'dir' }])
+    expect(folder.hiddenItems).toBe(0)
+    expect(folder.hiddenFolders).toBe(1)
+    expect(folder.back).toBe(1)
+  })
+
+  it('stacks up to three outlines behind a folder that lists files', () => {
+    const files = ['work/one.js', 'work/a/two.js', 'work/b/two.js', 'work/c/two.js', 'work/d/two.js']
+    const plan = planFolderView({ files, alwaysDepth: 1 })
+    const folder = byPath(plan).get('work')
+
+    expect(folder.items.filter((item) => item.kind === 'file')).toEqual([{ path: 'work/one.js', kind: 'file' }])
+    expect(folder.hiddenFolders).toBe(4)
+    expect(folder.back).toBe(3)
+  })
+
+  it('leaves the root card without outlines', () => {
+    const plan = planFolderView({ files: ['one/two/three.js'], alwaysDepth: 0 })
+    const root = byPath(plan).get('')
+
+    expect(root.hiddenFolders).toBe(1)
+    expect(root.back).toBe(0)
+  })
+
   it('draws every child of a clicked folder and the first three of the others', () => {
     const files = ['lib/a/x.js', 'lib/b/x.js', 'lib/c/x.js', 'lib/d/x.js', 'lib/e/x.js']
     const plain = planFolderView({ files, focus: ['lib'] })
     expect(paths(plain)).toEqual(['', 'lib', 'lib/a', 'lib/b', 'lib/c'])
+    expect(byPath(plain).get('lib').back).toBe(2)
     const expanded = planFolderView({ files, focus: ['lib'], expanded: ['lib'] })
     expect(paths(expanded)).toEqual(['', 'lib', 'lib/a', 'lib/b', 'lib/c', 'lib/d', 'lib/e'])
     for (const view of expanded) {
@@ -102,7 +131,7 @@ describe('planFolderView', () => {
       { path: 'docs/doc08.md', kind: 'file' },
     ])
     expect(docs.folders).toEqual([])
-    expect(docs.back).toBe(0)
+    expect(docs.back).toBe(2)
     expect(docs.hiddenFolders).toBe(2)
     expect(docs.hiddenItems).toBe(32)
   })
@@ -280,7 +309,7 @@ describe('planFolderView', () => {
       for (const view of plan) {
         expect(view.state).toBe('files')
         expect(view.pinned).toBe(true)
-        expect(view.back).toBe(0)
+        expect(view.back).toBe(view.path === '' ? 0 : Math.min(3, view.hiddenFolders))
         expect(view.items.filter((item) => item.kind === 'file').map((item) => item.path)).toEqual(ownFiles[depth][view.path])
       }
     }
@@ -297,7 +326,7 @@ describe('planFolderView', () => {
     expect(folders.get('big').state).toBe('files')
     expect(folders.get('big').pinned).toBe(true)
     expect(folders.get('big').hiddenFolders).toBe(202)
-    expect(folders.get('big').back).toBe(0)
+    expect(folders.get('big').back).toBe(3)
     expect(folders.get('big').items).toEqual([
       { path: 'big/f298', kind: 'dir' },
       { path: 'big/f299', kind: 'dir' },
@@ -323,7 +352,7 @@ describe('planFolderView', () => {
 
     expect(kept).toEqual(['big/f000', 'big/f001', 'big/f100', 'big/f400', 'big/f401', 'big/f402', 'big/f403', 'big/f404'])
     expect(folders.get('big').hiddenFolders).toBe(492)
-    expect(folders.get('big').back).toBe(0)
+    expect(folders.get('big').back).toBe(3)
   })
 
   it('adds only the deep path an agent touches below the always depth', () => {

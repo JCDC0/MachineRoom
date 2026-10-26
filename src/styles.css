@@ -5158,25 +5158,26 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .mr-card-back {
   position: absolute;
-  inset: 0;
-  border: 1px solid rgb(255 255 255 / 0.18);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: auto;
+  height: 56px;
   border-radius: 2px;
-  background: rgb(0 0 0 / 0.7);
+  background: rgb(0 0 0 / 0.82);
+  border: 1px solid rgb(255 255 255 / 0.28);
 }
 
 .mr-card-back.is-back-1 {
-  transform: translate(12px, -12px);
-  opacity: 0.75;
+  transform: translate(10px, -8px);
 }
 
 .mr-card-back.is-back-2 {
-  transform: translate(24px, -24px);
-  opacity: 0.5;
+  transform: translate(20px, -16px);
 }
 
 .mr-card-back.is-back-3 {
-  transform: translate(36px, -36px);
-  opacity: 0.28;
+  transform: translate(30px, -24px);
 }
 
 .mr-item {

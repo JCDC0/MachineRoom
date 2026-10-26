@@ -232,7 +232,7 @@ export function planFolderView({
       path,
       state: 'files',
       folders: [],
-      back: 0,
+      back: path === '' ? 0 : Math.min(3, hiddenKids.length),
       hiddenFolders: hiddenKids.length,
       items,
       hiddenItems: all.length - items.length,

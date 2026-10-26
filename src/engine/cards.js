@@ -122,6 +122,17 @@ export function cardRows(view) {
   return view.state === 'files' ? view.items.length + (view.hiddenItems > 0 ? 1 : 0) : 0
 }
 
+export function cardMetaText(view) {
+  if (view.state === 'files') {
+    const items = view.items.length + (Number(view.hiddenItems) || 0)
+    const folders = Number(view.hiddenFolders) || 0
+    if (folders > 0) return `${items} items  ${folders} ${folders === 1 ? 'folder' : 'folders'}`
+    return `${items} items`
+  }
+  if (view.state === 'open') return `${view.folders.length + view.hiddenFolders} folders`
+  return ''
+}
+
 export function clipCardName(name, max = CARD_NAME_MAX) {
   const chars = Array.from(String(name ?? ''))
   const limit = Math.max(4, Math.floor(Number(max) || CARD_NAME_MAX))
@@ -513,9 +524,7 @@ export function createCards(cssScene, { glScene = null, rootName = 'root', onIns
   }
 
   function metaText(view) {
-    if (view.state === 'files') return `${view.items.length + view.hiddenItems} items`
-    if (view.state === 'open') return `${view.folders.length + view.hiddenFolders} folders`
-    return ''
+    return cardMetaText(view)
   }
 
   function isPinnedView(view) {
