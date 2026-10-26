@@ -12,10 +12,11 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 
 ## Where things stand
 
-- `main` is 0.1.331 (2026-10-25); GitHub has the same, pushed with CI green. The ulolTris and LowBeam milestones passed. Paperclip is gone from the app (Y1 to Y3). The room's orchestrator runs in the app (K1 to K3, R3 and R4: Claude Code or OpenCode), and the page is a lens over the room with a dock below (I1, I2).
+- `main` is 0.1.391 (2026-10-27). GitHub has 0.1.387 only: 0.1.388 to 0.1.391 are local and unpushed, and a push waits for the owner's yes. Paperclip is gone from the app (Y1 to Y3). The room's orchestrator runs in the app (K1 to K3, R3 and R4: Claude Code or OpenCode), and the page is a lens over the room with a dock below (I1, I2).
 - Ten OpenCode lanes (`opencode`, `opencode2` to `opencode10`) and `claude` are live, each with its own worktree. Hermes and AGY are retired.
-- In flight when the owner's machine shut down at 2:30 on 2026-10-25: Q12h and D9, each on the lane its brief names. Check each worktree's `git status` and its run log before you rerun or merge it; a run cut off by the shutdown has no record in `runs.jsonl`.
-- Next: Q6b and O5 after O2 (`HIERARCHY.md`), then the room checked by eye in the lens at 1280 by 800. Lanes run only related tests while they work and merges do the same; the full suite runs in CI.
+- Merged on 2026-10-27 with Antigravity's briefs and Hermes as the orchestrator: V39 (full folder blocks behind a card, merged 0.1.389), U67 (a selected folder holds the camera, empty space and Escape park, merged 0.1.389), U68 (cyan console above an agent that runs a command, 0.1.390), U69 and U70 (the aberration map on the park ring, bounded, 0.1.390 and 0.1.391), and the audits A8 (the harness for a first deployment, one High: the merge route trusted the body's `confirmed`) and A7 (the folder blocks and the camera hold, one Medium), both 0.1.391. Every one of those reviews reported `merged result` as a failure only because `review-lane` puts its worktree in the OS temp folder; U73 fixes that.
+- In flight when the owner paused the lanes at 00:52 on 2026-10-27: U71 (the bridge asks who is calling before it merges, spends or starts a program), U72 (a lane gets only the environment it needs, and its log is masked) and U73 (the A7 findings and the review worktree). All three were stopped mid-run, their branches were deleted and their partial edits are in `git stash list` (`U71 partial`, `U73 partial`). Rerun each brief from `main` before merging anything on those files.
+- Next: U71, U72 and U73, then D14 (the README, `ARCHITECTURE.md` and `PLAN.md` at the merged state), then the owner's judgement on whether the room is ready to run his own projects.
 
 ## Standing rules from the owner
 

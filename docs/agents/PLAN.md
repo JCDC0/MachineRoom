@@ -2,7 +2,7 @@
 
 ## Where we are
 
-Version 0.1.331. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
+Version 0.1.391. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
 
 What works:
 
