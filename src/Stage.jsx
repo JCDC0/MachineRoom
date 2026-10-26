@@ -25,7 +25,7 @@ import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { OrchestratorActivity, orchestratorDoing } from './ui/orchestratorChat.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
 import { loadEffectSettings, loadSettings, loadSoundSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
-import { aberrationChannels, radialMapDataUrl } from './ui/aberration.js'
+import { aberrationChannels, mapPlacement, radialMapDataUrl } from './ui/aberration.js'
 import { startGrain } from './ui/grain.js'
 import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
@@ -261,6 +261,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [controlTarget, setControlTarget] = useState(null)
   const [effects, setEffects] = useState(() => loadEffectSettings(store()))
   const [chromaMap, setChromaMap] = useState('')
+  const [lensSize, setLensSize] = useState({ width: 0, height: 0 })
+  const [parkCentre, setParkCentre] = useState(null)
+  const layersRef = useRef(null)
+  const parkRef = useRef(null)
   const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensShare ?? null)
   const [lensYaw, setLensYaw] = useState(0)
   const [lensPitch, setLensPitch] = useState(0)
@@ -280,6 +284,22 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   useEffect(() => {
     resetSoundFiles()
   }, [data.tree])
+
+  useEffect(() => {
+    const node = layersRef.current
+    if (!node) return undefined
+    const read = () => {
+      const rect = typeof node.getBoundingClientRect === 'function' ? node.getBoundingClientRect() : null
+      const width = Math.max(0, Math.round(Number(rect?.width) || 0))
+      const height = Math.max(0, Math.round(Number(rect?.height) || 0))
+      setLensSize((now) => (now.width === width && now.height === height ? now : { width, height }))
+    }
+    read()
+    if (typeof ResizeObserver !== 'function') return undefined
+    const observer = new ResizeObserver(read)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -369,6 +389,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (Number.isFinite(yaw)) setLensYaw((now) => (Math.abs(yaw - now) > 0.0005 ? yaw : now))
         const pitch = roomRef.current?.pitch?.()
         if (Number.isFinite(pitch)) setLensPitch((now) => (Math.abs(pitch - now) > 0.0005 ? pitch : now))
+        const park = roomRef.current?.parkScreen?.()
+        if (park) {
+          const last = parkRef.current
+          if (!last || Math.abs(park.x - last.x) >= 2 || Math.abs(park.y - last.y) >= 2) {
+            parkRef.current = park
+            setParkCentre(park)
+          }
+        }
         player.tick(ms)
         const beat = sound.beat()
         if (beat > 0) roomRef.current?.setBeat(beat)
@@ -784,6 +812,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
   const chromaChannels = aberrationChannels(effects.aberration?.strength)
   const chromaFilter = chromaOn && chromaMap ? 'url(#mr-screen-filter)' : undefined
+  const chromaPlacement = chromaOn
+    ? mapPlacement({
+        width: lensSize.width,
+        height: lensSize.height,
+        centerX: parkCentre?.x ?? lensSize.width / 2,
+        centerY: parkCentre?.y ?? lensSize.height / 2,
+      })
+    : null
 
   const lens = lensStatus(snapshot.agents, log)
   const project = lensProject(data.tree.rootName)
@@ -798,6 +834,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           <div className="lens-frame" ref={surfaceRef} onDoubleClick={onEmptyDoubleClick}>
             <div
               className="surface-layers"
+              ref={layersRef}
               style={chromaFilter ? { filter: chromaFilter } : undefined}
             >
               <div className="layer" ref={cssRef} aria-hidden="true" />
@@ -869,7 +906,15 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           >
             <defs>
               <filter id="mr-screen-filter" x="-6%" y="-6%" width="112%" height="112%" colorInterpolationFilters="sRGB">
-                <feImage href={chromaMap} preserveAspectRatio="none" result="radial" />
+                <feImage
+                  href={chromaMap}
+                  x={chromaPlacement.x}
+                  y={chromaPlacement.y}
+                  width={chromaPlacement.width}
+                  height={chromaPlacement.height}
+                  preserveAspectRatio="none"
+                  result="radial"
+                />
                 <feColorMatrix
                   in="SourceGraphic"
                   type="matrix"

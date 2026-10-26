@@ -20,6 +20,7 @@ const DRIFT_X = 60
 const DRIFT_Y = 36
 const driftRight = new THREE.Vector3()
 const driftUp = new THREE.Vector3()
+const projectedPoint = new THREE.Vector3()
 
 export function viewBasis(yaw, pitch) {
   const back = { x: Math.sin(yaw) * Math.cos(pitch), y: Math.sin(pitch), z: Math.cos(yaw) * Math.cos(pitch) }
@@ -90,6 +91,20 @@ export function minTextScale(screenScale, font = CARD_NAME_FONT, min = CARD_NAME
   const value = Number(screenScale)
   if (!Number.isFinite(value) || value <= 0 || !(font > 0) || !(min > 0)) return 1
   return Math.max(1, min / (font * value))
+}
+
+export function projectPoint(camera, point, width, height) {
+  if (!camera || !point) return null
+  const w = Number(width)
+  const h = Number(height)
+  if (!(w > 0) || !(h > 0)) return null
+  camera.updateMatrixWorld()
+  const inverse = camera.matrixWorldInverse.elements
+  const depth = inverse[2] * point.x + inverse[6] * point.y + inverse[10] * point.z + inverse[14]
+  if (!(depth < 0)) return null
+  projectedPoint.set(point.x, point.y, point.z).project(camera)
+  if (!Number.isFinite(projectedPoint.x) || !Number.isFinite(projectedPoint.y)) return null
+  return { x: (projectedPoint.x * 0.5 + 0.5) * w, y: (0.5 - projectedPoint.y * 0.5) * h }
 }
 
 function insideMiddle(frame) {
