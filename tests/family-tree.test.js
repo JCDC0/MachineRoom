@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DIRECT_HARNESS,
+  assignSubLanesPlan,
   childConfirmText,
   childDetail,
   childDraft,
@@ -9,6 +10,7 @@ import {
   convertPlan,
   familyMeta,
   familyTree,
+  groupSubPlan,
   harnessEfforts,
   harnessGroups,
   harnessModels,
@@ -16,6 +18,7 @@ import {
   keyNames,
   labelProblem,
   proposalRows,
+  removeSubPlan,
   stateWord,
 } from '../src/ui/family.js'
 
@@ -217,13 +220,41 @@ describe('the harness choices', () => {
     expect(listed.at(-1).models).toEqual([{ id: 'm1', label: 'm1' }])
   })
 
-  it('starts the form on the first harness that is here', () => {
+  it('starts the form on OpenCode when it is here', () => {
     expect(childDraft(HARNESSES, MODELS)).toMatchObject({
       label: '',
+      harness: 'opencode',
+      model: 'qwen',
+      effort: '',
+      key: '',
+    })
+  })
+
+  it('prefers the OpenCode default model and max effort', () => {
+    const preferred = {
+      harnesses: [
+        { key: 'claude', available: true, models: [{ id: 'sonnet' }], efforts: ['low'] },
+        {
+          key: 'opencode',
+          available: true,
+          models: [{ id: 'other' }, { id: 'opencode-go/deepseek-v4.1-flash' }],
+          efforts: ['low', 'max'],
+        },
+      ],
+    }
+    expect(childDraft(preferred, null)).toMatchObject({
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      effort: 'max',
+    })
+  })
+
+  it('falls back to the first available harness when OpenCode is missing', () => {
+    const fallback = { harnesses: [HARNESSES.harnesses[0]] }
+    expect(childDraft(fallback, null)).toMatchObject({
       harness: 'claude',
       model: 'sonnet',
       effort: 'low',
-      key: '',
     })
   })
 })
@@ -352,6 +383,123 @@ describe('turning a lane into a sub orchestrator', () => {
     expect(convertPlan(ladder, { id: '', label: 'Editor' }, 'opencode-2').problem).toBe(
       'The lane has no name.'
     )
+  })
+})
+
+describe('grouping code agents under a sub orchestrator', () => {
+  const ladder = {
+    subs: [
+      {
+        id: 'frontend',
+        name: 'Frontend',
+        harness: 'claude',
+        model: 'opus',
+        lanes: ['a', 'b'],
+        scope: ['src/**'],
+        restricted: true,
+        setBy: 'owner',
+      },
+      {
+        id: 'backend',
+        name: 'Backend',
+        harness: 'opencode',
+        model: 'qwen',
+        lanes: ['c'],
+        scope: ['**'],
+        restricted: false,
+        setBy: 'owner',
+      },
+    ],
+  }
+  const draft = { label: 'Platform', harness: 'opencode', model: 'qwen' }
+
+  it('adds the sub and moves the selected lanes off the other subs', () => {
+    const plan = groupSubPlan(ladder, draft, [' b ', 'c', 'b', ''])
+    expect(plan.problem).toBe('')
+    expect(plan.sub).toEqual({
+      id: 'platform',
+      name: 'Platform',
+      harness: 'opencode',
+      model: 'qwen',
+      lanes: ['b', 'c'],
+      scope: ['**'],
+      restricted: false,
+      setBy: 'owner',
+    })
+    expect(plan.ladder.subs).toHaveLength(2)
+    expect(plan.ladder.subs[0]).toMatchObject({ id: 'frontend', lanes: ['a'] })
+    expect(plan.ladder.subs[1]).toEqual(plan.sub)
+  })
+
+  it('drops a sub that loses its last lane and keeps one whose lanes do not change', () => {
+    const plan = groupSubPlan(ladder, draft, ['c'])
+    expect(plan.ladder.subs.map((sub) => sub.id)).toEqual(['frontend', 'platform'])
+    expect(plan.ladder.subs[0]).toBe(ladder.subs[0])
+  })
+
+  it('defaults the harness and model and frees the id from subs and lane keys', () => {
+    const plan = groupSubPlan(ladder, { label: 'Frontend' }, ['a'], ['frontend-2'])
+    expect(plan.sub).toMatchObject({
+      id: 'frontend-3',
+      name: 'Frontend',
+      harness: 'opencode',
+      model: '',
+    })
+  })
+
+  it('asks for a label, a lane and room under the limit', () => {
+    expect(groupSubPlan(ladder, { label: ' ' }, ['a']).problem).toBe('Write a label for the agent.')
+    expect(groupSubPlan(ladder, draft, ['', ' ']).problem).toBe('Select at least one code agent.')
+    const full = { subs: Array.from({ length: 5 }, (_, index) => ({ id: `sub-${index}`, lanes: [`lane-${index}`] })) }
+    expect(groupSubPlan(full, draft, ['a']).problem).toBe('There are at most 5 sub orchestrators.')
+  })
+})
+
+describe('removing a sub orchestrator', () => {
+  const ladder = {
+    subs: [
+      { id: 'frontend', name: 'Frontend', lanes: ['a'], scope: ['**'], restricted: false, setBy: 'owner' },
+      { id: 'backend', name: 'Backend', lanes: ['b', 'c'], scope: ['**'], restricted: false, setBy: 'owner' },
+    ],
+  }
+
+  it('returns its lanes to the orchestrator', () => {
+    const plan = removeSubPlan(ladder, 'backend')
+    expect(plan.problem).toBe('')
+    expect(plan.removed).toBe(ladder.subs[1])
+    expect(plan.ladder.subs.map((sub) => sub.id)).toEqual(['frontend'])
+    expect(plan.ladder.subs.flatMap((sub) => sub.lanes)).toEqual(['a'])
+  })
+
+  it('asks which sub to remove when it is not there', () => {
+    const plan = removeSubPlan(ladder, 'missing')
+    expect(plan.problem).toBe('Choose a sub orchestrator to remove.')
+    expect(plan.removed).toBeNull()
+    expect(plan.ladder).toBe(ladder)
+  })
+})
+
+describe('assigning lanes to a sub orchestrator', () => {
+  const ladder = {
+    subs: [
+      { id: 'frontend', name: 'Frontend', lanes: ['a', 'b'], scope: ['**'], restricted: false, setBy: 'owner' },
+      { id: 'backend', name: 'Backend', lanes: ['c', 'd'], scope: ['**'], restricted: false, setBy: 'owner' },
+    ],
+  }
+
+  it('sets the sub lanes and takes the same lanes off the other subs', () => {
+    const plan = assignSubLanesPlan(ladder, 'backend', [' a ', 'c', 'a'])
+    expect(plan.problem).toBe('')
+    expect(plan.sub).toEqual({ ...ladder.subs[1], lanes: ['a', 'c'] })
+    expect(plan.ladder.subs[0]).toMatchObject({ id: 'frontend', lanes: ['b'] })
+    expect(plan.ladder.subs[1]).toMatchObject({ id: 'backend', lanes: ['a', 'c'] })
+  })
+
+  it('needs a lane and a sub that is there', () => {
+    expect(assignSubLanesPlan(ladder, 'backend', []).problem).toBe('Select at least one code agent.')
+    const missing = assignSubLanesPlan(ladder, 'missing', ['a'])
+    expect(missing.problem).toBe('Choose a sub orchestrator.')
+    expect(missing.sub).toBeNull()
   })
 })
 
