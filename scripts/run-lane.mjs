@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, childEnvironment, commandFor, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -685,16 +685,21 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
   }
   const log = createWriteStream(logPath)
+  const laneLog = createLaneLog({ write: (text) => log.write(text), runId: name })
   const startedAt = Date.now()
   // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
   const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
-  const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnvironment(process.env, command.cwd), stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE']
+    .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
+  const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnvironment(process.env, command.cwd, { harness: lane.cli.harness, names: runnerNames }), stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
   if (spawnSpec.input && child.stdin) {
     child.stdin.on('error', () => {})
     child.stdin.end(prompt)
   }
-  child.stdout?.pipe(log, { end: false })
-  child.stderr?.pipe(log, { end: false })
+  child.stdout?.setEncoding('utf8')
+  child.stderr?.setEncoding('utf8')
+  child.stdout?.on('data', (text) => laneLog.push('stdout', text))
+  child.stderr?.on('data', (text) => laneLog.push('stderr', text))
 
   let killed = false
   const timer = setTimeout(() => {
@@ -708,6 +713,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     child.on('close', (code) => done({ code }))
   })
   clearTimeout(timer)
+  laneLog.flush()
   await new Promise((done) => log.end(done))
   const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
   const harness = lane.cli.harness
