@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
 import FamilyTree from './FamilyTree.jsx'
-import LadderAttach from './LadderAttach.jsx'
 import SidebarTabs from './SidebarTabs.jsx'
 import { loadSettings, saveSettings } from './settings.js'
 import {
@@ -22,27 +21,11 @@ function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
 }
 
-function Gear() {
-  return (
-    <svg className="mr-side-gear" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-      <circle cx="8" cy="8" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-      <path
-        d="M8 1v2.2M8 12.8V15M1 8h2.2M12.8 8H15M3 3l1.6 1.6M11.4 11.4L13 13M13 3l-1.6 1.6M4.6 11.4L3 13"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.2"
-        strokeLinecap="round"
-      />
-    </svg>
-  )
-}
-
-export function Sidebar({ client = null, live = false, onOpenSettings = () => {}, project = '' }) {
+export function Sidebar({ client = null, live = false, project = '' }) {
   const connected = live === true
   const canProjects = typeof client?.projects === 'function'
   const canSessions = typeof client?.orchestratorSessions === 'function'
   const canFamily = typeof client?.family === 'function'
-  const canLadder = typeof client?.orchestrators === 'function' && typeof client?.setLadder === 'function'
   const available = connected && canProjects && canSessions
   const [tab, setTab] = useState(() => normalizeSidebarTab(loadSettings().sidebarTab))
   const [projects, setProjects] = useState(null)
@@ -544,8 +527,7 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
     return (
       <section className="mr-side-agents" aria-label="Agents">
         {connected && canFamily ? <FamilyTree client={client} /> : null}
-        {connected && canLadder ? <LadderAttach client={client} /> : null}
-        {!connected || (!canFamily && !canLadder) ? (
+        {!connected || !canFamily ? (
           <p className="mr-side-note">Agents appear when the room runs live.</p>
         ) : null}
       </section>
@@ -601,12 +583,6 @@ export function Sidebar({ client = null, live = false, onOpenSettings = () => {}
         {tab === 'projects' ? renderProjects() : null}
         {tab === 'agents' ? renderAgents() : null}
       </div>
-      <footer className="mr-side-foot">
-        <button type="button" className="hud-strip-settings" onClick={() => onOpenSettings?.()}>
-          <Gear />
-          <span>Settings</span>
-        </button>
-      </footer>
       {confirm ? (
         <div className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
           <section className="mr-side-confirm-card">

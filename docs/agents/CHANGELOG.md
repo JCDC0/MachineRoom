@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The sidebar has no Settings footer and no Attach sub orchestrator block, `LadderAttach.jsx` is gone, and the Agents tab holds only the family tree (task U51).
 - The lens edges are a compass tape centred on the camera's heading, with a tick every 5 degrees at 6 pixels per degree, a taller tick and a label (`N 000`, `NE 045`, `015` ...) every 15 degrees, the `+` lubber mark and the corner brackets kept, and the heading read from the new `yaw()` on the camera rig and the room (task U50).
 - At its default and maximum height the lens fills the window from the menu to the transport, which sits at the bottom of the viewport with the lower half below the fold (task U50).
 - The compass heading, the bearing labels and the edge ticks and labels are pure and tested (task U50).

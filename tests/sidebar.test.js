@@ -217,14 +217,17 @@ function renderSidebar(tab, props) {
 }
 
 describe('Sidebar without bridge methods', () => {
-  it('shows the three tabs, New conversation, the project, the live note and Settings in Chat', () => {
+  it('shows the three tabs, New conversation, the project, the live note and no Settings footer in Chat', () => {
     const html = renderSidebar('chat', { client: null, live: false, project: '/MachineRoom' })
     expect(html).toContain('class="mr-side-tabs"')
     expect(html).toContain('class="hud-sessions-button mr-side-new is-rounded"')
     expect(html).toContain('New conversation')
     expect(html).toContain('MachineRoom')
     expect(html).toContain('Projects and conversations appear when the room runs live.')
-    expect(html).toContain('class="hud-strip-settings"')
+    expect(html).not.toContain('class="hud-strip-settings"')
+    expect(html).not.toContain('mr-side-foot')
+    expect(html).not.toContain('aria-label="Sub orchestrators"')
+    expect(html).not.toContain('>Attach</button>')
     expect(html).not.toContain('mr-family')
     expect(html).not.toContain('mr-side-projects')
   })
@@ -236,6 +239,8 @@ describe('Sidebar without bridge methods', () => {
     expect(html).toContain('MachineRoom')
     expect(html).toContain('Projects and conversations appear when the room runs live.')
     expect(html).not.toContain('New conversation')
+    expect(html).not.toContain('class="hud-strip-settings"')
+    expect(html).not.toContain('mr-side-foot')
   })
 })
 
@@ -251,15 +256,15 @@ describe('The family tree in a live sidebar', () => {
     setLadder: async () => ({ ladder: { subs: [] } }),
   }
 
-  it('puts the open Agents tree and the Attach form in the Agents tab', () => {
+  it('puts the open Agents tree in the Agents tab and no Attach form', () => {
     const html = renderSidebar('agents', { client, live: true, project: '/MachineRoom' })
-    const tree = html.indexOf('mr-family')
-    const attach = html.indexOf('aria-label="Sub orchestrators"')
-    expect(tree).toBeGreaterThan(-1)
-    expect(attach).toBeGreaterThan(tree)
+    expect(html.indexOf('mr-family')).toBeGreaterThan(-1)
     expect(html).toContain('Loading agents...')
-    expect(html).toContain('>Attach</button>')
-    expect(html).toContain('No sub orchestrators yet.')
+    expect(html).not.toContain('aria-label="Sub orchestrators"')
+    expect(html).not.toContain('>Attach</button>')
+    expect(html).not.toContain('No sub orchestrators yet.')
+    expect(html).not.toContain('class="hud-strip-settings"')
+    expect(html).not.toContain('mr-side-foot')
     expect(html).not.toContain('mr-side-projects')
     expect(html).not.toContain('New conversation')
   })
