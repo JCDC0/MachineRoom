@@ -3,7 +3,7 @@ import { PACKET_POOL, childPlace, packetSpots, stripPoints } from '../src/engine
 import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
 import { isOrchestrator } from '../src/engine/shapes.js'
-import { RING_CENTER, RING_FRONT, ROOT_AHEAD, ROOT_DROP } from '../src/engine/ring.js'
+import { RING_CENTER, RING_FRONT, RING_MAX_TOP, ROOT_AHEAD, ROOT_DROP, ringOf, ringRadius, shotgunOffset } from '../src/engine/ring.js'
 import { dirname } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
@@ -11,6 +11,10 @@ import { loadScenario } from './helpers.js'
 
 function distance(point) {
   return Math.hypot(point.x - RING_CENTER.x, point.y - RING_CENTER.y, point.z - RING_CENTER.z)
+}
+
+function turn(a, b) {
+  return Math.atan2(Math.sin(a - b), Math.cos(a - b))
 }
 
 function checkPoint(point, label) {
@@ -164,5 +168,40 @@ describe('the room, played from a recorded lane run', () => {
 
     const flood = Array.from({ length: PACKET_POOL * 3 }, (_, index) => first.state.latest - index * 4)
     expect(packetSpots(first.state.latest, flood)).toHaveLength(PACKET_POOL)
+  })
+
+  it('caps the base ring at twelve folders and sprays the rest outside it', () => {
+    const files = []
+    for (let index = 0; index < 16; index += 1) files.push(`top-${String(index).padStart(2, '0')}/file.js`)
+    for (let index = 0; index < 4; index += 1) files.push(`wide/kid-${index}/file.js`)
+    const state = createState({ files, dirs: [], created: [] }, [])
+    const layout = cardPlan(state, { alwaysDepth: 2 })
+    const tops = layout.entries.filter((entry) => entry.path !== '' && !entry.path.includes('/'))
+    expect(tops).toHaveLength(17)
+    const base = tops.slice(0, RING_MAX_TOP)
+    const overflow = tops.slice(RING_MAX_TOP)
+    const radius = ringRadius(RING_MAX_TOP, base)
+    expect(overflow).toHaveLength(5)
+    base.forEach((entry, index) => {
+      const spot = ringOf(layout.placed.get(entry.path))
+      expect(spot.radius, entry.path).toBeCloseTo(radius, 6)
+      expect(turn(spot.angle, (index / RING_MAX_TOP) * Math.PI * 2), entry.path).toBeCloseTo(0, 6)
+    })
+    overflow.forEach((entry, index) => {
+      const off = shotgunOffset(index, overflow.length)
+      const spot = ringOf(layout.placed.get(entry.path))
+      expect(spot.radius, entry.path).toBeCloseTo(radius + off.radiusStep, 6)
+      expect(turn(spot.angle, off.angleOffset), entry.path).toBeCloseTo(0, 6)
+    })
+    const parent = ringOf(layout.placed.get('wide'))
+    const kids = ['wide/kid-0', 'wide/kid-1', 'wide/kid-2', 'wide/kid-3']
+    kids.forEach((path, index) => {
+      const off = shotgunOffset(index, kids.length)
+      const spot = ringOf(layout.placed.get(path))
+      expect(spot.radius, path).toBeCloseTo(parent.radius + off.radiusStep, 6)
+      expect(turn(spot.angle, parent.angle + off.angleOffset), path).toBeCloseTo(0, 6)
+    })
+    expect(kids.map((_, index) => shotgunOffset(index, kids.length).cols)).toEqual([2, 2, 2, 2])
+    expect(kids.map((_, index) => shotgunOffset(index, kids.length).rows)).toEqual([2, 2, 2, 2])
   })
 })

@@ -6,21 +6,27 @@ import {
   CARD_GAP,
   CHILD_STEP,
   FAN_LIMIT,
+  FAN_STEP,
   RING_BACK,
   RING_CENTER,
   RING_FRONT,
+  RING_MAX_TOP,
   RING_RIGHT,
   ROOT_AHEAD,
   ROOT_DROP,
   ROOT_PLACE,
+  SHOTGUN_ROW_STEP,
   SPRAY_LIFT,
   TOP_MIN_RADIUS,
+  fanAngle,
   layoutRing,
   ringOf,
   ringRadius,
+  shotgunOffset,
 } from '../src/engine/ring.js'
 
 const EPS = 1e-6
+const stepFor = (count) => Math.min(0.38, FAN_STEP * (1 + Math.min(count, 20) * 0.035))
 const filesView = (items = 0) => ({
   path: 'card',
   state: 'files',
@@ -64,7 +70,7 @@ function overlap(a, b) {
 
 describe('the flat ring', () => {
   it('puts the first folder at twelve and the rest clockwise at equal angles', () => {
-    for (const count of [1, 3, 12, 30]) {
+    for (const count of [1, 3, 12]) {
       const entries = topTree(count)
       const placed = layoutRing(entries)
       const sizes = entries.filter((entry) => entry.path !== '')
@@ -81,6 +87,40 @@ describe('the flat ring', () => {
       expect(backOf(placeOf(placed, 'top-000'))).toBeCloseTo(radius, 6)
       expect(acrossOf(placeOf(placed, 'top-000'))).toBeCloseTo(0, 6)
     }
+  })
+
+  it('caps the base ring at twelve and sprays the extra folders behind it', () => {
+    const entries = topTree(17)
+    const placed = layoutRing(entries)
+    const tops = entries.filter((entry) => entry.path !== '')
+    const base = tops.slice(0, RING_MAX_TOP)
+    const overflow = tops.slice(RING_MAX_TOP)
+    const radius = ringRadius(RING_MAX_TOP, base)
+    expect(RING_MAX_TOP).toBe(12)
+    expect(overflow).toHaveLength(5)
+    base.forEach((entry, index) => {
+      const spot = ringOf(placeOf(placed, entry.path))
+      expect(spot.radius, entry.path).toBeCloseTo(radius, 6)
+      expect(turn(spot.angle, (index / RING_MAX_TOP) * Math.PI * 2), entry.path).toBeCloseTo(0, 6)
+    })
+    overflow.forEach((entry, index) => {
+      const off = shotgunOffset(index, overflow.length)
+      const spot = ringOf(placeOf(placed, entry.path))
+      expect(spot.radius, entry.path).toBeCloseTo(radius + off.radiusStep, 6)
+      expect(turn(spot.angle, off.angleOffset), entry.path).toBeCloseTo(0, 6)
+    })
+    const nearest = Math.min(...overflow.map((entry) => ringOf(placeOf(placed, entry.path)).radius))
+    expect(nearest).toBeGreaterThan(radius)
+  })
+
+  it('keeps the base ring still when the overflow grows', () => {
+    const before = layoutRing(topTree(13))
+    const after = layoutRing(topTree(16), { previous: before })
+    for (let index = 0; index < RING_MAX_TOP; index += 1) {
+      const path = topEntry(index).path
+      expect(spotOf(placeOf(after, path)), path).toEqual(spotOf(placeOf(before, path)))
+    }
+    expect(placeOf(after, topEntry(15).path)).toBeTruthy()
   })
 
   it('grows its radius with the count and never goes under 900 from the hub', () => {
@@ -170,6 +210,71 @@ describe('the flat ring', () => {
   })
 })
 
+describe('the shotgun spray', () => {
+  it('steps a lone folder outward on the parent line', () => {
+    for (const count of [0, 1]) {
+      expect(shotgunOffset(0, count)).toEqual({ angleOffset: 0, radiusStep: CHILD_STEP, row: 0, col: 0, cols: 1, rows: 1 })
+    }
+  })
+
+  it('arranges four folders in a two by two grid', () => {
+    const four = [0, 1, 2, 3].map((index) => shotgunOffset(index, 4))
+    const step = stepFor(4)
+    expect(four.map((off) => [off.row, off.col])).toEqual([
+      [0, 0],
+      [0, 1],
+      [1, 0],
+      [1, 1],
+    ])
+    expect(four.map((off) => off.cols)).toEqual([2, 2, 2, 2])
+    expect(four.map((off) => off.rows)).toEqual([2, 2, 2, 2])
+    expect(four.map((off) => off.angleOffset)).toEqual([-step / 2, step / 2, -step / 2, step / 2])
+    expect(four.map((off) => off.radiusStep)).toEqual([
+      CHILD_STEP,
+      CHILD_STEP,
+      CHILD_STEP + SHOTGUN_ROW_STEP,
+      CHILD_STEP + SHOTGUN_ROW_STEP,
+    ])
+  })
+
+  it('spreads wider and deeper as the folder count grows', () => {
+    expect(SHOTGUN_ROW_STEP).toBe(380)
+    const nine = shotgunOffset(8, 9)
+    expect([nine.cols, nine.rows, nine.row, nine.col]).toEqual([3, 3, 2, 2])
+    expect(nine.radiusStep).toBe(CHILD_STEP + 2 * SHOTGUN_ROW_STEP)
+    const twenty = shotgunOffset(19, 20)
+    expect([twenty.cols, twenty.rows, twenty.row, twenty.col]).toEqual([5, 4, 3, 4])
+    expect(twenty.radiusStep).toBe(CHILD_STEP + 3 * SHOTGUN_ROW_STEP)
+    expect(Math.abs(shotgunOffset(1, 20).angleOffset)).toBeGreaterThan(Math.abs(shotgunOffset(1, 2).angleOffset) / 2)
+    const step = shotgunOffset(1, 20).angleOffset - shotgunOffset(0, 20).angleOffset
+    expect(step).toBeCloseTo(Math.min(0.38, FAN_STEP * 1.7), 6)
+  })
+
+  it('keeps fanAngle as the shotgun angle', () => {
+    expect(fanAngle(0, 1)).toBe(0)
+    for (let index = 0; index < 7; index += 1) {
+      expect(fanAngle(index, 7)).toBeCloseTo(shotgunOffset(index, 7).angleOffset, 12)
+    }
+  })
+
+  it('places four child folders in a two by two grid', () => {
+    const entries = [rootEntry(), { path: 'src', ...FILES }]
+    for (const name of ['a', 'b', 'c', 'd']) entries.push({ path: `src/${name}`, ...FILES })
+    const placed = layoutRing(entries)
+    const parent = ringOf(placeOf(placed, 'src'))
+    const step = stepFor(4)
+    ;['a', 'b', 'c', 'd'].forEach((name, index) => {
+      const off = shotgunOffset(index, 4)
+      const spot = ringOf(placeOf(placed, `src/${name}`))
+      expect(spot.radius, name).toBeCloseTo(parent.radius + off.radiusStep, 6)
+      expect(turn(spot.angle, parent.angle + off.angleOffset), name).toBeCloseTo(0, 6)
+      expect(placeOf(placed, `src/${name}`).y, name).toBe(HUB_CENTER.y)
+    })
+    expect(turn(ringOf(placeOf(placed, 'src/a')).angle, parent.angle)).toBeCloseTo(-step / 2, 6)
+    expect(turn(ringOf(placeOf(placed, 'src/d')).angle, parent.angle)).toBeCloseTo(step / 2, 6)
+  })
+})
+
 describe('the folder levels', () => {
   const tree = () => {
     const entries = [rootEntry(), { path: 'src', ...FILES }]
@@ -189,33 +294,45 @@ describe('the folder levels', () => {
     expect(placeOf(placed, 'src/only').y).toBe(HUB_CENTER.y)
   })
 
-  it('fans several children a little to either side, all at the same step', () => {
+  it('sprays several children outward in rows', () => {
     const placed = layoutRing(tree())
     const parent = ringOf(placeOf(placed, 'src'))
-    const kids = ['src/a', 'src/b', 'src/c'].map((path) => ({ path, spot: ringOf(placeOf(placed, path)) }))
+    const kids = ['src/a', 'src/b', 'src/c'].map((path, index) => ({ path, index, spot: ringOf(placeOf(placed, path)) }))
     for (const kid of kids) {
-      expect(kid.spot.radius, kid.path).toBeCloseTo(parent.radius + CHILD_STEP, 6)
-      expect(Math.abs(turn(kid.spot.angle, parent.angle)), kid.path).toBeLessThanOrEqual(FAN_LIMIT + EPS)
+      const off = shotgunOffset(kid.index, 3)
+      expect(kid.spot.radius, kid.path).toBeCloseTo(parent.radius + off.radiusStep, 6)
+      expect(turn(kid.spot.angle, parent.angle), kid.path).toBeCloseTo(off.angleOffset, 6)
       expect(placeOf(placed, kid.path).y, kid.path).toBe(HUB_CENTER.y)
     }
     expect(turn(kids[0].spot.angle, parent.angle)).toBeLessThan(0)
-    expect(turn(kids[1].spot.angle, parent.angle)).toBeCloseTo(0, 6)
-    expect(turn(kids[2].spot.angle, parent.angle)).toBeGreaterThan(0)
+    expect(turn(kids[1].spot.angle, parent.angle)).toBeGreaterThan(0)
+    expect(turn(kids[2].spot.angle, parent.angle)).toBeCloseTo(0, 6)
+    expect(kids[2].spot.radius).toBeGreaterThan(kids[0].spot.radius)
   })
 
-  it('spreads many children without two of them on the same line', () => {
+  it('spreads many children into distinct rows and columns', () => {
     const entries = [rootEntry(), { path: 'src', ...FILES }]
     for (let index = 0; index < 12; index += 1) entries.push({ path: `src/c${String(index).padStart(2, '0')}`, ...FILES })
     const placed = layoutRing(entries)
     const parent = ringOf(placeOf(placed, 'src'))
-    const turns = entries
+    const kids = entries
       .filter((entry) => entry.path.startsWith('src/'))
-      .map((entry) => turn(ringOf(placeOf(placed, entry.path)).angle, parent.angle))
-      .sort((a, b) => a - b)
-    expect(new Set(turns.map((value) => value.toFixed(6))).size).toBe(12)
+      .map((entry) => ({ radius: ringOf(placeOf(placed, entry.path)).radius, turn: turn(ringOf(placeOf(placed, entry.path)).angle, parent.angle) }))
+    expect(new Set(kids.map((kid) => `${kid.radius.toFixed(6)}:${kid.turn.toFixed(6)}`)).size).toBe(12)
+    const radii = [...new Set(kids.map((kid) => kid.radius.toFixed(6)))].map(Number).sort((a, b) => a - b)
+    expect(radii).toHaveLength(3)
+    for (let index = 1; index < radii.length; index += 1) expect(radii[index] - radii[index - 1]).toBeCloseTo(SHOTGUN_ROW_STEP, 6)
+    for (const radius of radii) {
+      const turns = kids
+        .filter((kid) => kid.radius.toFixed(6) === radius.toFixed(6))
+        .map((kid) => kid.turn)
+        .sort((a, b) => a - b)
+      expect(turns).toHaveLength(4)
+      for (let index = 1; index < turns.length; index += 1) expect(turns[index] - turns[index - 1]).toBeGreaterThan(0.01)
+    }
+    const turns = kids.map((kid) => kid.turn).sort((a, b) => a - b)
     expect(turns[0]).toBeGreaterThanOrEqual(-FAN_LIMIT - EPS)
     expect(turns.at(-1)).toBeLessThanOrEqual(FAN_LIMIT + EPS)
-    for (let index = 1; index < turns.length; index += 1) expect(turns[index] - turns[index - 1]).toBeGreaterThan(0.01)
   })
 
   it('steps each deeper level one more step out', () => {

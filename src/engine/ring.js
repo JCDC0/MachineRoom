@@ -16,7 +16,9 @@ export const ROOT_PLACE = {
   z: 0,
 }
 export const TOP_MIN_RADIUS = 900
+export const RING_MAX_TOP = 12
 export const CHILD_STEP = 450
+export const SHOTGUN_ROW_STEP = 380
 export const FAN_STEP = 0.22
 export const FAN_LIMIT = 0.9
 export const CARD_GAP = 40
@@ -128,12 +130,25 @@ export function ringRadius(count, cards = []) {
   return radius
 }
 
-export function fanOffset(index, count) {
-  const total = Math.max(1, Math.floor(Number(count) || 0))
-  if (total < 2) return 0
-  const slot = clamp(Math.floor(Number(index) || 0), 0, total - 1)
-  const step = Math.min(FAN_STEP, (2 * FAN_LIMIT) / (total - 1))
-  return (slot - (total - 1) / 2) * step
+export function shotgunOffset(index, count) {
+  const total = Math.max(0, Math.floor(Number(count) || 0))
+  if (total <= 1) return { angleOffset: 0, radiusStep: CHILD_STEP, row: 0, col: 0, cols: 1, rows: 1 }
+  const cols = Math.max(1, Math.ceil(Math.sqrt(total)))
+  const rows = Math.max(1, Math.ceil(total / cols))
+  const slot = Math.max(0, Math.floor(Number(index) || 0))
+  const row = Math.floor(slot / cols)
+  const col = slot % cols
+  const colsInRow = row === rows - 1 ? total - row * cols : cols
+  const centered = col - (colsInRow - 1) / 2
+  const spreadFactor = 1 + Math.min(total, 20) * 0.035
+  const stepAngle = Math.min(0.38, FAN_STEP * spreadFactor)
+  const angleOffset = colsInRow <= 1 ? 0 : centered * stepAngle
+  const radiusStep = CHILD_STEP + row * SHOTGUN_ROW_STEP
+  return { angleOffset, radiusStep, row, col, cols, rows }
+}
+
+export function fanAngle(index, count) {
+  return shotgunOffset(index, count).angleOffset
 }
 
 function tagPosition(spot, node, slot) {
@@ -177,29 +192,40 @@ export function layoutRing(entries, options = {}) {
   positions.set('', tagPosition(rootSpot, root, 'root'))
 
   const tops = children.get('')
-  const radius = ringRadius(tops.length, tops.map((path) => nodes.get(path)))
+  const ringCount = Math.min(RING_MAX_TOP, tops.length)
+  const ringTops = tops.slice(0, ringCount)
+  const overflow = tops.slice(RING_MAX_TOP)
+  const radius = ringRadius(ringCount, ringTops.map((path) => nodes.get(path)))
   const ringSlot = `radius:${radius.toFixed(3)}`
-  tops.forEach((path, index) => {
+  ringTops.forEach((path, index) => {
     const node = nodes.get(path)
-    const slot = `${ringSlot}>${index}/${tops.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
-    const spot = tagPosition(ringPoint(radius, ringAngle(index, tops.length)), node, slot)
+    const slot = `${ringSlot}>${index}/${ringCount}${sprayedAt(sprayed, path) ? ':spray' : ''}`
+    const spot = tagPosition(ringPoint(radius, ringAngle(index, ringCount)), node, slot)
+    positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
+  })
+  overflow.forEach((path, index) => {
+    const node = nodes.get(path)
+    const off = shotgunOffset(index, overflow.length)
+    const slot = `${ringSlot}>spray>${index}/${overflow.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
+    const spot = tagPosition(ringPoint(radius + off.radiusStep, off.angleOffset), node, slot)
     positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
   })
 
   const queue = [...tops]
-  while (queue.length > 0) {
-    const parentPath = queue.shift()
+  function placeChildren(parentPath) {
     const parent = positions.get(parentPath)
     const parentSpot = ringOf(parent)
     const kids = children.get(parentPath) ?? []
     kids.forEach((path, index) => {
       const node = nodes.get(path)
+      const off = shotgunOffset(index, kids.length)
       const slot = `${parent.slot}>${index}/${kids.length}${sprayedAt(sprayed, path) ? ':spray' : ''}`
-      const angle = parentSpot.angle + fanOffset(index, kids.length)
-      const spot = tagPosition(ringPoint(parentSpot.radius + CHILD_STEP, angle), node, slot)
+      const angle = parentSpot.angle + off.angleOffset
+      const spot = tagPosition(ringPoint(parentSpot.radius + off.radiusStep, angle), node, slot)
       positions.set(path, keepPlace(previous, path, lifted(spot, sprayed, path)))
       queue.push(path)
     })
   }
+  while (queue.length > 0) placeChildren(queue.shift())
   return positions
 }
