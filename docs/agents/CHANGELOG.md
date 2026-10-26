@@ -4,6 +4,9 @@
 
 - The sidebar has no Settings footer and no Attach sub orchestrator block, `LadderAttach.jsx` is gone, and the Agents tab holds only the family tree (task U51).
 - The root project folder card sits 340 units in front of the hub with its top edge 40 units below the hub plane, so a taller root grows downward and never reaches the hub circle (task V28).
+- `createCameraRig` and `createRoom` expose `pitch()` beside `yaw()`, read from the camera's current pitch (task U52).
+- Both lens compasses update inside the room's `beforeFrame` callback when the yaw or the pitch moves more than 0.0005 radians, so they scroll at the camera's frame rate instead of the old 120 ms poll at about 8 fps (task U52).
+- The bottom lens edge is its own compass, opposite the top one: `compassBottomHeading(yaw)` centres the near rim on `S 180` when the top reads `N 000`, its ticks run the other way and its labels read `180 S`, `135 SE`, `165°` and `150°` (task U52).
 - The lens edges are a compass tape centred on the camera's heading, with a tick every 5 degrees at 6 pixels per degree, a taller tick and a label (`N 000`, `NE 045`, `015` ...) every 15 degrees, the `+` lubber mark and the corner brackets kept, and the heading read from the new `yaw()` on the camera rig and the room (task U50).
 - At its default and maximum height the lens fills the window from the menu to the transport, which sits at the bottom of the viewport with the lower half below the fold (task U50).
 - The compass heading, the bearing labels and the edge ticks and labels are pure and tested (task U50).

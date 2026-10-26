@@ -84,14 +84,36 @@ export function compassBearingLabel(bearing) {
   return cardinal ? `${cardinal} ${text}` : text
 }
 
-export function lensEdgeTicks(width = LENS_DEFAULT_WIDTH, yaw = 0) {
+export function compassBottomHeading(yaw = 0) {
+  return (compassHeading(yaw) + 180) % 360
+}
+
+export function compassBottomLabel(bearing, pitch = 0) {
+  const degrees = bearingDegrees(bearing)
+  const text = String(degrees).padStart(3, '0')
+  const cardinal = degrees % 45 === 0 ? LENS_CARDINALS[degrees / 45] : ''
+  return cardinal ? `${text} ${cardinal}` : `${text}°`
+}
+
+export function lensEdgeTicks(width = LENS_DEFAULT_WIDTH, yaw = 0, side = 'top') {
   const span = spanOf(width)
   if (span <= 0) return []
-  const heading = compassHeading(yaw)
+  const bottom = side === 'bottom'
+  const heading = bottom ? compassBottomHeading(yaw) : compassHeading(yaw)
   const half = span / 2 / LENS_PIXELS_PER_DEGREE
+  const ticks = []
+  if (bottom) {
+    const first = Math.floor((heading + half) / LENS_TICK_DEGREES) * LENS_TICK_DEGREES
+    const last = heading - half
+    for (let bearing = first; bearing >= last - 1e-9; bearing -= LENS_TICK_DEGREES) {
+      const normalized = bearingDegrees(bearing)
+      const x = Math.round((span / 2 - (bearing - heading) * LENS_PIXELS_PER_DEGREE) * 1000) / 1000
+      ticks.push({ x, tall: normalized % LENS_LABEL_DEGREES === 0, bearing: normalized })
+    }
+    return ticks
+  }
   const first = Math.ceil((heading - half) / LENS_TICK_DEGREES) * LENS_TICK_DEGREES
   const last = heading + half
-  const ticks = []
   for (let bearing = first; bearing <= last + 1e-9; bearing += LENS_TICK_DEGREES) {
     const normalized = bearingDegrees(bearing)
     const x = Math.round((span / 2 + (bearing - heading) * LENS_PIXELS_PER_DEGREE) * 1000) / 1000
@@ -100,19 +122,20 @@ export function lensEdgeTicks(width = LENS_DEFAULT_WIDTH, yaw = 0) {
   return ticks
 }
 
-export function lensEdgeLabels(width = LENS_DEFAULT_WIDTH, yaw = 0) {
+export function lensEdgeLabels(width = LENS_DEFAULT_WIDTH, yaw = 0, side = 'top', pitch = 0) {
   const span = spanOf(width)
-  return lensEdgeTicks(width, yaw)
+  const bottom = side === 'bottom'
+  return lensEdgeTicks(width, yaw, side)
     .filter((tick) => tick.tall && tick.x >= 24 && tick.x <= span - 24)
     .map((tick) => ({
       x: tick.x,
       bearing: tick.bearing,
       cardinal: tick.bearing % 45 === 0,
-      text: compassBearingLabel(tick.bearing),
+      text: bottom ? compassBottomLabel(tick.bearing, pitch) : compassBearingLabel(tick.bearing),
     }))
 }
 
-function LensEdge({ side, yaw = 0 }) {
+function LensEdge({ side, yaw = 0, pitch = 0 }) {
   const ref = useRef(null)
   const [width, setWidth] = useState(0)
   const top = side === 'top'
@@ -142,7 +165,7 @@ function LensEdge({ side, yaw = 0 }) {
         aria-hidden="true"
       >
         <line className="lens-edge-line" x1="0" x2="100%" y1={lineY} y2={lineY} />
-        {lensEdgeTicks(width, yaw).map((tick) => {
+        {lensEdgeTicks(width, yaw, side).map((tick) => {
           const length = tick.tall ? 11 : 5
           return (
             <line
@@ -155,7 +178,7 @@ function LensEdge({ side, yaw = 0 }) {
             />
           )
         })}
-        {lensEdgeLabels(width, yaw).map((label) => (
+        {lensEdgeLabels(width, yaw, side, pitch).map((label) => (
           <text
             key={`label-${label.x}`}
             className={`lens-edge-label${label.cardinal ? ' is-cardinal' : ''}`}
@@ -235,6 +258,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [chromaMap, setChromaMap] = useState('')
   const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensShare ?? null)
   const [lensYaw, setLensYaw] = useState(0)
+  const [lensPitch, setLensPitch] = useState(0)
   const [zoom, setZoom] = useState({ share: 0, multiplier: 1 })
 
   function changeLensShare(next, save = true) {
@@ -259,8 +283,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       const share = Math.round(room.zoomShare() * 200) / 200
       const multiplier = Math.round(room.zoomMultiplier() * 10) / 10
       setZoom((now) => (now.share === share && now.multiplier === multiplier ? now : { share, multiplier }))
-      const yaw = room.yaw?.()
-      if (Number.isFinite(yaw)) setLensYaw((now) => (Math.abs(yaw - now) > 0.002 ? yaw : now))
     }, 120)
     return () => clearInterval(timer)
   }, [])
@@ -337,6 +359,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           }
           lastFrameRef.current = now
         }
+        const yaw = roomRef.current?.yaw?.()
+        if (Number.isFinite(yaw)) setLensYaw((now) => (Math.abs(yaw - now) > 0.0005 ? yaw : now))
+        const pitch = roomRef.current?.pitch?.()
+        if (Number.isFinite(pitch)) setLensPitch((now) => (Math.abs(pitch - now) > 0.0005 ? pitch : now))
         player.tick(ms)
         const beat = sound.beat()
         if (beat > 0) roomRef.current?.setBeat(beat)
@@ -743,7 +769,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       <div className="stage" style={lensShare === null ? undefined : { '--lens-h-user': lensHeightValue(lensShare) }}>
         <div className="lens">
           <LensEdge side="top" yaw={lensYaw} />
-          <LensEdge side="bottom" yaw={lensYaw} />
+          <LensEdge side="bottom" yaw={lensYaw} pitch={lensPitch} />
           <div className="lens-frame" ref={surfaceRef}>
             <div
               className="surface-layers"
