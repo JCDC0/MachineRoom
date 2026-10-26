@@ -8,6 +8,7 @@ import {
   FILE_LIMIT_MAX,
   FILE_LIMIT_MIN,
   ROW_H,
+  backOffsets,
   cardHeight,
   cardMetaText,
   cardName,
@@ -177,6 +178,54 @@ describe('card size', () => {
     expect(cardSize({ path: long, state: 'closed' }).width).toBeGreaterThan(CARD_W)
     expect(cardSize({ path: long, state: 'open' }).width).toBeCloseTo(cardSize({ path: long, state: 'closed' }).width * CARD_SCALES.open, 6)
     expect(cardSize({ path: `${long}-more`, state: 'closed' }).width).toBe(cardSize({ path: long, state: 'closed' }).width)
+  })
+})
+
+describe('the folder blocks behind a card', () => {
+  it('starts every pile at the face and adds one place for each back', () => {
+    expect(backOffsets(0)).toEqual([{ x: 0, y: 0 }])
+    expect(backOffsets(1)).toEqual([
+      { x: 0, y: 0 },
+      { x: -12, y: 0 },
+    ])
+    expect(backOffsets(3)).toEqual([
+      { x: 0, y: 0 },
+      { x: -12, y: 0 },
+      { x: -24, y: 0 },
+      { x: -36, y: 0 },
+    ])
+  })
+
+  it('steps every back along one 270 degree line, straight left', () => {
+    const offsets = backOffsets(3, 20)
+    expect(offsets.map(({ x }) => x)).toEqual([0, -20, -40, -60])
+    expect(offsets.every(({ y }) => y === 0)).toBe(true)
+    for (let index = 1; index < offsets.length; index += 1) {
+      expect(offsets[index].x - offsets[index - 1].x).toBe(-20)
+      expect(offsets[index].y).toBe(offsets[index - 1].y)
+    }
+  })
+
+  it('paints one full back per hidden folder, each one step left and further from the camera', () => {
+    const files = ['work/one.js', 'work/a/two.js', 'work/b/two.js', 'work/c/two.js', 'work/d/two.js']
+    const state = createState(makeTree({ root: 'demo', files }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 1 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const work = cards.cards.get('work')
+    expect(work.view.back).toBe(3)
+    expect(work.backs.children.map((back) => back.className)).toEqual([
+      'mr-card-back is-back-1',
+      'mr-card-back is-back-2',
+      'mr-card-back is-back-3',
+    ])
+    expect(work.backs.children.map((back) => back.style.transform)).toEqual([
+      'translate3d(-12px, 0px, -6px)',
+      'translate3d(-24px, 0px, -12px)',
+      'translate3d(-36px, 0px, -18px)',
+    ])
+    expect(cards.cards.get('').backs.children).toHaveLength(0)
+    cards.dispose()
   })
 })
 

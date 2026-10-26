@@ -12,6 +12,7 @@ export const HEAD_H = 56
 export const ROW_H = 22
 export const CARD_PAD = 8
 export const BACK_STEP = 12
+export const BACK_DEPTH = 6
 export const CARD_FACE_EDGE = 1
 export const CARD_FACE_BORDER = 2
 export const CARD_TAB_W = 72
@@ -188,27 +189,38 @@ export function cardSize(view, rootName = 'root') {
   return { scale, width: (cardBaseWidth(view?.path, rootName) + back) * scale, height: (cardHeight(cardRows(view)) + back) * scale }
 }
 
-function backLayers(view) {
-  const raw = Number(view?.back)
+export function backOffsets(count, step = BACK_STEP) {
+  const layers = Math.max(0, Math.floor(Number(count) || 0))
+  const raw = Number(step)
+  const size = Number.isFinite(raw) && raw > 0 ? raw : BACK_STEP
+  const offsets = []
+  for (let index = 0; index <= layers; index += 1) offsets.push({ x: 0 - index * size, y: 0 })
+  return offsets
+}
+
+function backLayers(count) {
+  const raw = Number(count)
   if (!Number.isFinite(raw)) return 0
   return Math.min(3, Math.max(0, Math.floor(raw)))
+}
+
+function backPlaces(count) {
+  return backOffsets(backLayers(count)).slice(1)
 }
 
 export function occluderParts(view) {
   const height = cardHeight(cardRows(view)) + CARD_FACE_BORDER
   const tabLeft = CARD_TAB_LEFT + CARD_FACE_EDGE
   const tabTop = CARD_TAB_TOP + CARD_FACE_EDGE
+  const tabX = tabLeft + CARD_TAB_W / 2 - CARD_W / 2
+  const tabY = height / 2 - tabTop - CARD_TAB_H / 2
   const parts = [
     { width: CARD_W, height, x: 0, y: 0 },
-    {
-      width: CARD_TAB_W,
-      height: CARD_TAB_H,
-      x: tabLeft + CARD_TAB_W / 2 - CARD_W / 2,
-      y: height / 2 - tabTop - CARD_TAB_H / 2,
-    },
+    { width: CARD_TAB_W, height: CARD_TAB_H, x: tabX, y: tabY },
   ]
-  for (let layer = 1; layer <= backLayers(view); layer += 1) {
-    parts.push({ width: CARD_W, height, x: layer * BACK_STEP, y: layer * BACK_STEP })
+  for (const offset of backPlaces(view?.back)) {
+    parts.push({ width: CARD_W, height, x: offset.x, y: offset.y })
+    parts.push({ width: CARD_TAB_W, height: CARD_TAB_H, x: offset.x + tabX, y: tabY })
   }
   return parts
 }
@@ -472,13 +484,20 @@ export function createCards(cssScene, options = {}) {
   function paintOccluder(card, view) {
     card.occluder.geometry.dispose()
     card.occluder.geometry = occluderGeometry(view)
-    card.occluderKey = `${card.height}|${backLayers(view)}`
+    card.occluderKey = `${card.height}|${backLayers(view.back)}`
   }
 
   function paintBacks(card, count) {
-    if (card.backCount === count) return
-    card.backCount = count
-    card.backs.replaceChildren(...Array.from({ length: count }, (_, i) => el('div', `mr-card-back is-back-${i + 1}`)))
+    const layers = backLayers(count)
+    if (card.backCount === layers) return
+    card.backCount = layers
+    card.backs.replaceChildren(
+      ...backPlaces(layers).map((offset, index) => {
+        const back = el('div', `mr-card-back is-back-${index + 1}`)
+        back.style.transform = `translate3d(${offset.x}px, ${offset.y}px, ${-BACK_DEPTH * (index + 1)}px)`
+        return back
+      }),
+    )
   }
 
   function paintRows(card, view) {
@@ -676,7 +695,7 @@ export function createCards(cssScene, options = {}) {
       card.baseClass = `mr-card is-${view.state}`
       card.height = cardHeight(cardRows(view))
       paintBacks(card, view.back)
-      if (card.occluderKey !== `${card.height}|${backLayers(view)}`) paintOccluder(card, view)
+      if (card.occluderKey !== `${card.height}|${backLayers(view.back)}`) paintOccluder(card, view)
       paintRows(card, view)
       card.meta.textContent = metaText(view)
     }
