@@ -15,6 +15,8 @@ import {
   driftSpecks,
   dustPoints,
   motePoints,
+  setFineDust,
+  speckPulse,
 } from '../src/engine/void.js'
 
 function pointLayers(space) {
@@ -87,13 +89,54 @@ describe('driftSpecks', () => {
     expect(driftSpecks(5, 31)).not.toEqual(driftSpecks(5, 32))
   })
 
-  it('keeps every speed and wander within the slow bounds', () => {
+  it('keeps every speed, wander rate, phase and pulse within its bounds', () => {
     for (const speck of driftSpecks(200, 7)) {
-      expect(Math.hypot(speck.vx, speck.vy, speck.vz)).toBeLessThanOrEqual(DRIFT_SPEED + 1e-9)
-      expect(Math.hypot(speck.wx, speck.wy, speck.wz)).toBeCloseTo(1, 6)
+      const speed = Math.hypot(speck.vx, speck.vy, speck.vz)
+      expect(speed).toBeGreaterThan(0)
+      expect(speed).toBeLessThanOrEqual(DRIFT_SPEED * 1.3 + 1e-9)
+      for (const axis of ['rx', 'ry', 'rz']) {
+        expect(speck[axis]).toBeGreaterThanOrEqual(0.4)
+        expect(speck[axis]).toBeLessThanOrEqual(1.3 + 1e-9)
+      }
+      for (const axis of ['px', 'py', 'pz']) {
+        expect(speck[axis]).toBeGreaterThanOrEqual(0)
+        expect(speck[axis]).toBeLessThan(Math.PI * 2)
+      }
       expect(speck.wander).toBeGreaterThan(0)
       expect(speck.wander).toBeLessThanOrEqual(DRIFT_WANDER)
+      expect(speck.pulsePhase).toBeGreaterThanOrEqual(0)
+      expect(speck.pulsePhase).toBeLessThan(Math.PI * 2)
+      expect(speck.pulseRate).toBeGreaterThanOrEqual(0.6)
+      expect(speck.pulseRate).toBeLessThanOrEqual(2 + 1e-9)
     }
+  })
+
+  it('sends 200 specks in directions that cancel instead of one shared drift', () => {
+    const specks = driftSpecks(200, 7)
+    let x = 0
+    let y = 0
+    let z = 0
+    for (const speck of specks) {
+      const length = Math.hypot(speck.vx, speck.vy, speck.vz)
+      x += speck.vx / length
+      y += speck.vy / length
+      z += speck.vz / length
+    }
+    expect(Math.hypot(x, y, z) / specks.length).toBeLessThan(0.25)
+  })
+})
+
+describe('speckPulse', () => {
+  it('breathes between dim and full', () => {
+    const values = Array.from({ length: 60 }, (_, index) => speckPulse(index / 4))
+    expect(Math.min(...values)).toBeGreaterThanOrEqual(0.2)
+    expect(Math.max(...values)).toBeLessThanOrEqual(1)
+    expect(Math.max(...values) - Math.min(...values)).toBeGreaterThan(0.5)
+  })
+
+  it('gives two specks different brightness at the same moment', () => {
+    const [a, b] = driftSpecks(2, 7)
+    expect(speckPulse(1.7, a.pulsePhase, a.pulseRate)).not.toBeCloseTo(speckPulse(1.7, b.pulsePhase, b.pulseRate), 6)
   })
 })
 
@@ -106,16 +149,36 @@ describe('driftPoint', () => {
     expect(driftPoint(base, 0, speck, 4.2)).not.toEqual(driftPoint(base, 0, speck, 9.1))
   })
 
-  it('equals the start at zero seconds', () => {
-    expect(driftPoint(base, 0, speck, 0)).toEqual(base)
+  it('equals the start at zero seconds when its phases start at zero', () => {
+    const placed = { ...speck, px: 0, py: 0, pz: 0 }
+    expect(driftPoint(base, 0, placed, 0)).toEqual(base)
   })
 
-  it('moves slowly, a few units a second at most', () => {
+  it('wanders on all three axes as time runs', () => {
+    const placed = { ...speck, vx: 0, vy: 0, vz: 0 }
+    const atZero = driftPoint(base, 0, placed, 0)
+    const later = driftPoint(base, 0, placed, 1.5)
+    expect(later[0]).not.toBe(atZero[0])
+    expect(later[1]).not.toBe(atZero[1])
+    expect(later[2]).not.toBe(atZero[2])
+  })
+
+  it('moves every second', () => {
     const start = driftPoint(base, 0, speck, 0)
     const next = driftPoint(base, 0, speck, 1)
     const step = Math.hypot(next[0] - start[0], next[1] - start[1], next[2] - start[2])
     expect(step).toBeGreaterThan(0)
-    expect(step).toBeLessThanOrEqual(DRIFT_SPEED + DRIFT_WANDER * 0.6 + 1e-9)
+    expect(step).toBeLessThanOrEqual(DRIFT_SPEED * 1.3 + DRIFT_WANDER * 3 + 1e-9)
+  })
+
+  it('sends two specks from one point in different directions', () => {
+    const [a, b] = driftSpecks(2, 7)
+    const pa = driftPoint(base, 0, a, 1)
+    const pb = driftPoint(base, 0, b, 1)
+    const lengthA = Math.hypot(pa[0] - base[0], pa[1] - base[1], pa[2] - base[2])
+    const lengthB = Math.hypot(pb[0] - base[0], pb[1] - base[1], pb[2] - base[2])
+    const dot = ((pa[0] - base[0]) * (pb[0] - base[0]) + (pa[1] - base[1]) * (pb[1] - base[1]) + (pa[2] - base[2]) * (pb[2] - base[2])) / (lengthA * lengthB)
+    expect(dot).toBeLessThan(0.9)
   })
 
   it('keeps every mote inside the fine shell at any time', () => {
@@ -182,6 +245,7 @@ describe('void drift', () => {
   afterEach(() => {
     globalThis.document = savedDoc
     globalThis.window = savedWindow
+    setFineDust({ on: true, strength: 0.2, pulse: false })
   })
 
   it('does not move a speck while still is true', () => {
@@ -225,6 +289,58 @@ describe('void drift', () => {
     space.update(0.1)
     space.update(0.1)
     expect(snapshot(layers)).toEqual(frozen)
+    space.dispose()
+  })
+
+  it('does not turn the dust clouds as one group', () => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) }
+    const scene = new THREE.Scene()
+    const space = createVoid(scene, null)
+    const layers = pointLayers(space)
+    const farDust = layers.find((layer) => layer.geometry.attributes.position.count === DUST)
+    const fineDust = layers.find((layer) => layer.geometry.attributes.color)?.parent
+    expect(farDust).toBeTruthy()
+    expect(fineDust).toBeTruthy()
+    space.update(1)
+    expect(farDust.rotation.y).toBe(0)
+    expect(fineDust.rotation.y).toBe(0)
+    expect(fineDust.rotation.x).toBe(0)
+    space.dispose()
+  })
+
+  it('pulses each fine mote on its own colour when the pulse is on', () => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) }
+    setFineDust({ on: true, strength: 1, pulse: true })
+    const scene = new THREE.Scene()
+    const space = createVoid(scene, null)
+    const layers = pointLayers(space).filter((layer) => layer.geometry.attributes.color)
+    expect(layers).toHaveLength(3)
+    for (const layer of layers) expect(layer.material.vertexColors).toBe(true)
+    space.update(0.05)
+    space.update(0.05)
+    const colors = layers[0].geometry.attributes.color.array
+    const values = new Set(colors)
+    expect(values.size).toBeGreaterThan(1)
+    for (const value of values) {
+      expect(value).toBeGreaterThanOrEqual(0.2)
+      expect(value).toBeLessThanOrEqual(1)
+    }
+    expect(layers[0].geometry.attributes.color.version).toBeGreaterThan(0)
+    space.dispose()
+  })
+
+  it('drops the pulse colours back to full when the pulse turns off', () => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) }
+    setFineDust({ on: true, strength: 1, pulse: true })
+    const scene = new THREE.Scene()
+    const space = createVoid(scene, null)
+    const layers = pointLayers(space).filter((layer) => layer.geometry.attributes.color)
+    space.update(0.05)
+    space.update(0.05)
+    setFineDust({ pulse: false })
+    for (const layer of layers) {
+      expect(new Set(layer.geometry.attributes.color.array)).toEqual(new Set([1]))
+    }
     space.dispose()
   })
 

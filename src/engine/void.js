@@ -10,8 +10,8 @@ export const DUST_OUTER = 15500
 export const MOTES = 12000
 export const MOTE_INNER = 400
 export const MOTE_OUTER = 6000
-export const DRIFT_SPEED = 2.5
-export const DRIFT_WANDER = 3
+export const DRIFT_SPEED = 14
+export const DRIFT_WANDER = 18
 export const SPECK_BANDS = [
   { size: 12, fade: 1 },
   { size: 22, fade: 0.7 },
@@ -20,14 +20,13 @@ export const SPECK_BANDS = [
 
 const DRIFT_RATE = 0.35
 const DRIFT_RATE_SPREAD = 0.25
-const DRIFT_PACE = 0.4
 const DRIFT_SEED = 7919
 const DRIFT_FRAMES = 2
+const TAU = Math.PI * 2
 
 let fineDustOptions = { on: true, strength: 0.2, pulse: false }
 const fineDustMaterials = new Set()
 const fineDustGeometries = new Set()
-let pulseLevel = 1
 
 export function moteOpacity({ on, strength } = {}) {
   const value = Number(strength)
@@ -43,6 +42,10 @@ export function moteCount({ on, strength } = {}, total = MOTES) {
 
 export function dustPulse(seconds) {
   return 0.6 + 0.4 * Math.sin(seconds * 1.2)
+}
+
+export function speckPulse(seconds, phase = 0, rate = 1.2) {
+  return 0.2 + 0.8 * (0.5 + 0.5 * Math.sin((Number(seconds) || 0) * rate + phase))
 }
 
 export function motePoints(count = MOTES, seed = 1337, inner = MOTE_INNER, outer = MOTE_OUTER) {
@@ -84,20 +87,22 @@ export function driftSpecks(count, seed, { inner = MOTE_INNER, outer = MOTE_OUTE
     const vy = next() * 2 - 1
     const vz = next() * 2 - 1
     const length = Math.sqrt(vx * vx + vy * vy + vz * vz) || 1
-    const pace = speed * (DRIFT_PACE + (1 - DRIFT_PACE) * next())
-    const wx = next() * 2 - 1
-    const wy = next() * 2 - 1
-    const wz = next() * 2 - 1
-    const wanderLength = Math.sqrt(wx * wx + wy * wy + wz * wz) || 1
+    const pace = (0.5 + next() * 0.8) * speed
     specks.push({
       vx: (vx / length) * pace,
       vy: (vy / length) * pace,
       vz: (vz / length) * pace,
-      wx: wx / wanderLength,
-      wy: wy / wanderLength,
-      wz: wz / wanderLength,
+      rx: 0.4 + next() * 0.9,
+      ry: 0.4 + next() * 0.9,
+      rz: 0.4 + next() * 0.9,
+      px: next() * TAU,
+      py: next() * TAU,
+      pz: next() * TAU,
       rate: DRIFT_RATE + next() * DRIFT_RATE_SPREAD,
+      phase: next() * TAU,
       wander: DRIFT_WANDER * (0.4 + 0.6 * next()),
+      pulsePhase: next() * Math.PI * 2,
+      pulseRate: 0.6 + next() * 1.4,
       inner,
       outer,
     })
@@ -131,31 +136,42 @@ export function bouncePoint(x, y, z, inner, outer, out = [0, 0, 0], offset = 0) 
   return out
 }
 
-export function driftPoint(base, index, drift, seconds, out = [0, 0, 0], offset = 0) {
-  const swing = Math.sin(drift.rate * seconds) * drift.wander
+export function driftPoint(base, index, speck, seconds, out = [0, 0, 0], offset = 0) {
+  const t = Number(seconds) || 0
+  const wander = speck.wander ?? DRIFT_WANDER
+  const wx = Math.sin(t * (speck.rx ?? speck.rate ?? 0.5) + (speck.px ?? speck.phase ?? 0)) * wander
+  const wy = Math.sin(t * (speck.ry ?? (speck.rate ?? 0.5) * 0.8) + (speck.py ?? (speck.phase ?? 0) + 1.7)) * wander
+  const wz = Math.sin(t * (speck.rz ?? (speck.rate ?? 0.5) * 0.6) + (speck.pz ?? (speck.phase ?? 0) + 3.1)) * wander
   return bouncePoint(
-    base[index] + drift.vx * seconds + drift.wx * swing,
-    base[index + 1] + drift.vy * seconds + drift.wy * swing,
-    base[index + 2] + drift.vz * seconds + drift.wz * swing,
-    drift.inner,
-    drift.outer,
+    base[index] + speck.vx * t + wx,
+    base[index + 1] + speck.vy * t + wy,
+    base[index + 2] + speck.vz * t + wz,
+    speck.inner,
+    speck.outer,
     out,
     offset
   )
 }
 
+function resetLayerColor(layer) {
+  const colorAttr = layer.userData.colorAttr
+  if (!colorAttr) return
+  colorAttr.array.fill(1)
+  colorAttr.needsUpdate = true
+}
+
 export function setFineDust(options = {}) {
   fineDustOptions = { ...fineDustOptions, ...options }
-  if (!fineDustOptions.pulse) pulseLevel = 1
   for (const geometry of fineDustGeometries) {
     geometry.setDrawRange(0, moteCount(fineDustOptions, geometry.userData.total))
+    if (!fineDustOptions.pulse) resetLayerColor(geometry)
   }
   applyDustOpacity()
 }
 
 function applyDustOpacity() {
   for (const mat of fineDustMaterials) {
-    mat.opacity = moteOpacity(fineDustOptions) * (mat.userData.fade ?? 1) * pulseLevel
+    mat.opacity = moteOpacity(fineDustOptions) * (mat.userData.fade ?? 1)
     mat.visible = mat.opacity > 0
   }
 }
@@ -221,7 +237,7 @@ export function createVoid(scene, texture) {
 
   const dustGeometry = new THREE.BufferGeometry().setFromPoints(dustPoints())
   dustGeometry.userData.base = new Float32Array(dustGeometry.attributes.position.array)
-  dustGeometry.userData.drift = driftSpecks(DUST, DRIFT_SEED + 9001, { inner: DUST_INNER, outer: DUST_OUTER })
+  dustGeometry.userData.drift = driftSpecks(DUST, DRIFT_SEED + 9001, { inner: DUST_INNER, outer: DUST_OUTER, speed: 28 })
   const dust = new THREE.Points(
     dustGeometry,
     new THREE.PointsMaterial({ color: WHITE, size: 10, map: texture, transparent: true, opacity: 0.45, depthWrite: false })
@@ -232,9 +248,9 @@ export function createVoid(scene, texture) {
   const fineGeometries = []
   const motes = motePoints()
   const fineDrift = speckBands(driftSpecks(motes.length, DRIFT_SEED + 1337))
-  let elapsed = 0
   let driftSeconds = 0
   let frame = 0
+  let colorsPulsed = false
   const fineMaterials = speckBands(motes).map((points, index) => {
     const band = SPECK_BANDS[index]
     const material = new THREE.PointsMaterial({
@@ -245,6 +261,7 @@ export function createVoid(scene, texture) {
       transparent: true,
       opacity: moteOpacity(fineDustOptions) * band.fade,
       depthWrite: false,
+      vertexColors: true,
     })
     material.userData.fade = band.fade
     material.visible = material.opacity > 0
@@ -253,6 +270,8 @@ export function createVoid(scene, texture) {
     geometry.userData.total = points.length
     geometry.userData.base = new Float32Array(geometry.attributes.position.array)
     geometry.userData.drift = fineDrift[index]
+    geometry.userData.colorAttr = new THREE.Float32BufferAttribute(new Float32Array(points.length * 3).fill(1), 3)
+    geometry.setAttribute('color', geometry.userData.colorAttr)
     geometry.setDrawRange(0, moteCount(fineDustOptions, points.length))
     fineDustGeometries.add(geometry)
     fineGeometries.push(geometry)
@@ -263,39 +282,43 @@ export function createVoid(scene, texture) {
 
   scene.add(group)
 
-  function driftLayer(geometry) {
-    const attribute = geometry.attributes.position
+  function driftLayer(layer, seconds = driftSeconds) {
+    const attribute = layer.attributes.position
     const values = attribute.array
-    const base = geometry.userData.base
-    const drift = geometry.userData.drift
-    const drawn = Math.min(geometry.drawRange.count, drift.length)
+    const base = layer.userData.base
+    const drift = layer.userData.drift
+    const colorAttr = layer.userData.colorAttr
+    const colors = colorAttr?.array
+    const pulsing = Boolean(colors) && fineDustOptions.pulse && !still()
+    const drawn = Math.min(layer.drawRange.count, drift.length)
     for (let index = 0; index < drawn; index += 1) {
-      driftPoint(base, index * 3, drift[index], driftSeconds, values, index * 3)
+      const speck = drift[index]
+      driftPoint(base, index * 3, speck, seconds, values, index * 3)
+      if (colors) {
+        const b = pulsing ? speckPulse(seconds, speck.pulsePhase, speck.pulseRate) : 1
+        colors[index * 3] = b
+        colors[index * 3 + 1] = b
+        colors[index * 3 + 2] = b
+      }
     }
     attribute.needsUpdate = true
+    if (colorAttr) colorAttr.needsUpdate = true
+    if (colors) colorsPulsed = pulsing
   }
 
   function update(delta) {
     if (still()) {
-      if (pulseLevel !== 1) {
-        pulseLevel = 1
-        applyDustOpacity()
+      if (colorsPulsed) {
+        colorsPulsed = false
+        for (const geometry of fineGeometries) resetLayerColor(geometry)
       }
       return
     }
-    dust.rotation.y += delta * 0.004
-    fineDust.rotation.y += delta * 0.002
-    fineDust.rotation.x += delta * 0.001
     driftSeconds += delta
     frame += 1
     if (frame % DRIFT_FRAMES === 0) {
-      driftLayer(dustGeometry)
-      for (const geometry of fineGeometries) driftLayer(geometry)
-    }
-    if (fineDustOptions.pulse) {
-      elapsed += delta
-      pulseLevel = dustPulse(elapsed)
-      applyDustOpacity()
+      driftLayer(dustGeometry, driftSeconds)
+      for (const geometry of fineGeometries) driftLayer(geometry, driftSeconds)
     }
   }
 
