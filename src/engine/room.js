@@ -194,6 +194,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     edge: (dir, file, side, out) => cards.edgePoint(dir, file, side, out),
     side: (dir) => cards.sideOf(dir ?? ''),
     reach: (dir) => cards.halfWidth(dir ?? '') + CHIP_REACH,
+    mask: null,
+    links: [],
     get right() {
       return cards.vectors().right
     },
@@ -497,6 +499,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     }
     strings.update(centerOf, mask, delta)
     labels.update(delta)
+    world.mask = mask
+    world.links = mask.dimmed ? cards.visibleLinks() : []
     agentSet.update(state, delta, now, world, terminals)
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'

@@ -5,6 +5,7 @@
 - The Settings Replay section has a `Record time` row in minutes, 1 to 240 and 10 by default, saved as `recordMinutes` in `machineroom.settings` (task V33).
 - `src/model/sessionRecorder.js` keeps a rolling log of live frames from the first run or conversation frame, back at most 1 to 240 minutes (10 by default), and `recorderToReplay` turns it into a replay with time from 0 (task V32).
 - Far dust specks and fine dust motes drift on their own seeded slow paths and soft-bounce inside their shells, updated every second frame and frozen in place under reduced motion (task V31).
+- An agent's yellow strip and its specks run from the agent to the root card and down each lit folder link to the card holding the file, so a speck never cuts straight to the file and stays on the drawn line as cards move (task V30).
 - The root project folder card sits directly beneath the hub circle at 0, 0, with its top edge 40 units below the hub plane, so the folder strings start from the centre of the ring (task V29).
 - The live transport shows a `Center` button beside the live link tag in place of the `Live feed` text, and a click returns the camera to the overview (task U60).
 - `tests/camera.test.js` covers `rig.pitch()` beside `rig.yaw()`: the starting `OVERVIEW` angle, a pointer drag on both axes, pitch clamped to `[0.08, 1.45]` and the reset on `rig.overview()` (task U57).

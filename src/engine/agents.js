@@ -6,6 +6,7 @@ import { HUB_CENTER, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PA
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_SHAPE, PREFERRED, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
+import { linkOnPath } from './strings.js'
 
 const STYLE = {
   idle: { color: WHITE, opacity: 0.35, spin: 0.15 },
@@ -29,6 +30,7 @@ export const PACKET_INTERVAL = 90
 export const PACKET_BURST = 5
 const PACKET_BURST_GAP = 30
 const PACKET_SIZE = 3
+const MAX_CHAIN = 32
 export const CHILD_SCALE = 0.6
 export const CHILD_TURN = Math.PI / 5
 export const CHILD_GAP = 120
@@ -132,6 +134,119 @@ export function stripPoints(from, to, out = []) {
   return points
 }
 
+export function litChain(dir, links, mask, out = []) {
+  const chain = out ?? []
+  chain.length = 0
+  const target = typeof dir === 'string' ? dir : ''
+  if (!mask?.dimmed || !mask.lit || !mask.lit.has(target)) return chain
+  if (!links || links.length === 0) {
+    if (target === '') chain.push('')
+    return chain
+  }
+  const parents = new Map()
+  for (const link of links) {
+    if (!link || !linkOnPath(link, mask)) continue
+    if (!parents.has(link.to)) parents.set(link.to, link.from)
+  }
+  const back = []
+  let at = target
+  let steps = 0
+  while (at !== '') {
+    const up = parents.get(at)
+    if (up === undefined || steps >= MAX_CHAIN) {
+      chain.length = 0
+      return chain
+    }
+    back.push(at)
+    at = up
+    steps += 1
+  }
+  chain.push('')
+  for (let index = back.length - 1; index >= 0; index -= 1) chain.push(back[index])
+  return chain
+}
+
+export function speckPolyline(start, chain, centerOf, end, out = []) {
+  const points = out ?? []
+  let count = 0
+  let routed = Array.isArray(chain) && chain.length > 0
+  if (routed) {
+    for (let index = 0; index < chain.length; index += 1) {
+      const spot = typeof centerOf === 'function' ? centerOf(chain[index]) : null
+      if (!spot || !Number.isFinite(Number(spot.x)) || !Number.isFinite(Number(spot.y)) || !Number.isFinite(Number(spot.z))) {
+        routed = false
+        break
+      }
+    }
+  }
+  const write = (source) => {
+    const point = points[count] ?? { x: 0, y: 0, z: 0 }
+    point.x = source.x
+    point.y = source.y
+    point.z = source.z
+    points[count] = point
+    count += 1
+  }
+  write(start)
+  if (routed) {
+    for (let index = 0; index < chain.length; index += 1) write(centerOf(chain[index]))
+  }
+  write(end)
+  points.length = count
+  return points
+}
+
+function spanLength(a, b) {
+  return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
+}
+
+export function samplePolyline(points, t, out = {}) {
+  const point = out ?? {}
+  const list = Array.isArray(points) ? points : []
+  const count = list.length
+  const walk = Math.min(1, Math.max(0, Number.isFinite(Number(t)) ? Number(t) : 0))
+  if (count === 0) {
+    point.x = 0
+    point.y = 0
+    point.z = 0
+    return point
+  }
+  const first = list[0]
+  if (count === 1) {
+    point.x = first.x
+    point.y = first.y
+    point.z = first.z
+    return point
+  }
+  let total = 0
+  for (let index = 1; index < count; index += 1) total += spanLength(list[index - 1], list[index])
+  if (!(total > 0)) {
+    point.x = first.x
+    point.y = first.y
+    point.z = first.z
+    return point
+  }
+  let left = walk * total
+  for (let index = 1; index < count; index += 1) {
+    const a = list[index - 1]
+    const b = list[index]
+    const length = spanLength(a, b)
+    if (length > 0 && left <= length) {
+      const fraction = left / length
+      point.x = a.x + (b.x - a.x) * fraction
+      point.y = a.y + (b.y - a.y) * fraction
+      point.z = a.z + (b.z - a.z) * fraction
+      return point
+    }
+    left -= length
+  }
+  const last = list[count - 1]
+  point.x = last.x
+  point.y = last.y
+  point.z = last.z
+  return point
+}
+
 export function orchestratorLineEnds(from, to, out = []) {
   const points = out ?? []
   points.length = 2
@@ -209,6 +324,7 @@ function packetPoints() {
 const chipNear = new THREE.Vector3()
 const traceEnd = new THREE.Vector3()
 const stripStart = new THREE.Vector3()
+const packetPoint = new THREE.Vector3()
 const webEdgePoint = new THREE.Vector3()
 const webReturnPoint = new THREE.Vector3()
 const calloutPos = new THREE.Vector3()
@@ -264,6 +380,43 @@ function setEnds(line, a, b) {
   array[5] = b.z
   line.userData.ends = [a.x, a.y, a.z, b.x, b.y, b.z]
   line.geometry.attributes.position.needsUpdate = true
+  return true
+}
+
+function setPath(line, points) {
+  const count = points.length
+  const last = line.userData.path
+  if (last && last.length === count * 3) {
+    let same = true
+    for (let index = 0; index < count && same; index += 1) {
+      const point = points[index]
+      const base = index * 3
+      if (last[base] !== point.x || last[base + 1] !== point.y || last[base + 2] !== point.z) same = false
+    }
+    if (same) return false
+  }
+  let attr = line.geometry.getAttribute('position')
+  if (!attr || attr.count !== count) {
+    line.geometry.dispose()
+    const geometry = new THREE.BufferGeometry()
+    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3))
+    line.geometry = geometry
+    attr = geometry.getAttribute('position')
+  }
+  const array = attr.array
+  const flat = last && last.length === count * 3 ? last : new Array(count * 3)
+  for (let index = 0; index < count; index += 1) {
+    const point = points[index]
+    const base = index * 3
+    array[base] = point.x
+    array[base + 1] = point.y
+    array[base + 2] = point.z
+    flat[base] = point.x
+    flat[base + 1] = point.y
+    flat[base + 2] = point.z
+  }
+  line.userData.path = flat
+  attr.needsUpdate = true
   return true
 }
 
@@ -382,7 +535,7 @@ export function createAgents(scene, roster, cssScene = null) {
     view.packets.visible = spots.length > 0
   }
 
-  function updatePackets(view, now, fade, sending, from, to) {
+  function updatePackets(view, now, fade, sending, path) {
     if (sending && (view.packetNextAt === 0 || now >= view.packetNextAt)) {
       queuePacket(view, now)
       view.packetNextAt = now + PACKET_INTERVAL
@@ -391,15 +544,12 @@ export function createAgents(scene, roster, cssScene = null) {
     const geometry = view.packets.geometry
     const attr = geometry.getAttribute('position')
     const array = attr.array
-    const a = from
-    const b = to
-    const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z
     for (let i = 0; i < spots.length; i += 1) {
-      const t = spots[i]
+      const point = samplePolyline(path, spots[i], packetPoint)
       const base = i * 3
-      array[base] = a.x + dx * t
-      array[base + 1] = a.y + dy * t
-      array[base + 2] = a.z + dz * t
+      array[base] = point.x
+      array[base + 1] = point.y
+      array[base + 2] = point.z
     }
     geometry.setDrawRange(0, spots.length)
     attr.needsUpdate = true
@@ -467,7 +617,8 @@ export function createAgents(scene, roster, cssScene = null) {
       scale,
       fadeStart: 0,
       strip,
-      stripEnds: [{}, {}],
+      path: [],
+      chain: [],
       stripMaterial,
       packets,
       packetSends: [],
@@ -884,17 +1035,22 @@ export function createAgents(scene, roster, cssScene = null) {
       const stripEnd = webOn ? webEdgePoint : view.touch
       if (stripVisible) {
         stripStart.copy(view.group.position)
-        const [a, b] = stripPoints(stripStart, stripEnd, view.stripEnds)
-        setEnds(view.strip, a, b)
+        if (webOn) {
+          setPath(view.strip, stripPoints(stripStart, stripEnd, view.path))
+        } else if (pointer) {
+          const chain = litChain(pointer.dir, world.links, world.mask, view.chain)
+          setPath(view.strip, speckPolyline(stripStart, chain, world.center, stripEnd, view.path))
+        } else {
+          setPath(view.strip, stripPoints(stripStart, stripEnd, view.path))
+        }
         view.stripMaterial.color.setHex(view.stripColor)
         view.stripMaterial.opacity = view.stripOpacity * fade
       }
       if (returning) {
         drawReturnPackets(view, now, fade)
       } else if (stripVisible) {
-        const [a, b] = view.stripEnds
         if (!isStill) {
-          updatePackets(view, now, fade, status === 'working' && stripOn, a, b)
+          updatePackets(view, now, fade, status === 'working' && stripOn, view.path)
         } else {
           hidePackets(view)
         }
