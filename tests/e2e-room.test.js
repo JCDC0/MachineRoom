@@ -3,7 +3,7 @@ import { PACKET_POOL, childPlace, packetSpots, stripPoints } from '../src/engine
 import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
 import { isOrchestrator } from '../src/engine/shapes.js'
-import { RING_CENTER, RING_FRONT, ROOT_DROP } from '../src/engine/ring.js'
+import { RING_CENTER, RING_FRONT, ROOT_AHEAD, ROOT_DROP } from '../src/engine/ring.js'
 import { dirname } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
@@ -67,7 +67,7 @@ function runRoom(frames, agents, tree) {
 
     const root = placed.get('')
     expect(root, 'the root is drawn').toBeTruthy()
-    expect(root.y, 'the root sits just below the hub plane').toBe(HUB_CENTER.y - ROOT_DROP)
+    expect(root.y + root.height / 2, 'the root top edge sits below the hub plane').toBeCloseTo(HUB_CENTER.y - ROOT_DROP, 6)
     expect((root.x - HUB_CENTER.x) * RING_FRONT.x + (root.z - HUB_CENTER.z) * RING_FRONT.z).toBeGreaterThan(0)
 
     const drawnPaths = new Set(drawn.keys())
@@ -129,6 +129,8 @@ function runRoom(frames, agents, tree) {
 describe('the room, played from a recorded lane run', () => {
   it('lays out every activity and plays the same frames twice', () => {
     const { frames, agents, tree } = loadScenario('scenario-e')
+    expect(ROOT_AHEAD).toBe(340)
+    expect(ROOT_DROP).toBe(40)
     expect(agents.map((agent) => agent.key)).toEqual(['claude', 'hermes', 'opencode', 'orchestrator'])
     expect(tree.files.length).toBeGreaterThan(0)
 
