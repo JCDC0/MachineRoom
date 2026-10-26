@@ -8,6 +8,7 @@
 - An agent that runs a command shows a cyan `CONSOLE` above its head with the last five log lines while its latest tool call is `shell` or `other`, holds for 6 seconds after the call ends, fades with the agent, and a click selects the agent (task U68).
 - The console's title is the first address in its lines and it carries `is-address`, and `consoleRows` and `addressIn` are pure and tested (task U68).
 - The screen filter's aberration map sits on the projected centre of the park ring, so its neutral centre stays on the ring while the camera orbits, zooms or follows an agent (task U69).
+- `AUDIT-2026-10-V8.md` audits the folder blocks and the camera hold at 0.1.389 and lists five findings, W1 to W5 (task A7).
 - Folder cards stack up to three full folder blocks behind the face, each the face's size with a tab on its top edge, stepped 12 pixels left, and `backOffsets` places them the same way for the paint and the occluder (task V39).
 - A click on a folder card body holds the camera on that card, or its nearest drawn ancestor, at `ANCHOR_DIST` and turns agent follow off (task U67).
 - A double click on empty space, Escape with no panel open and the `0` key call `room.park()`, which drops the folder hold and returns to the park ring (task U67).
