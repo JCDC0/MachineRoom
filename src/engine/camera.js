@@ -11,6 +11,7 @@ export const CARD_NAME_FONT = 15
 export const CARD_NAME_MIN = 11
 export const FOLLOW_HOLD_MS = 4000
 export const FOLLOW_EASE_MS = 1200
+export const ANCHOR_DIST = 700
 const FOLLOW_WIDE_MIN = 900
 const FOLLOW_CLOSE_MIN = 620
 const MIDDLE_EDGE = 1 / 6
@@ -296,6 +297,10 @@ export function createCameraRig(camera, surface) {
       follow = () => ({ target: position(), dist })
       goal.dist = dist
       goal.pitch = pitch ?? Math.max(goal.pitch, 0.5)
+    },
+    hold(point, dist = ANCHOR_DIST) {
+      follow = () => ({ target: point(), dist })
+      startTransition()
     },
     followSpheres(spheres, mode = 'wide', duration = FOLLOW_EASE_MS) {
       follow = () => {

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it } from 'vitest'
-import { CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, createCameraRig, fitView, minTextScale, viewBasis } from '../src/engine/camera.js'
+import { ANCHOR_DIST, CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, createCameraRig, fitView, minTextScale, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -30,11 +30,11 @@ const faces = [
   { x: 1100, y: -300, z: -500, r: Math.hypot(170, 60), rx: 170, ry: 60 },
 ]
 
-function openRig() {
+function openRig({ still = false } = {}) {
   const saved = globalThis.window
   const listeners = {}
   globalThis.window = {
-    matchMedia: () => ({ matches: false }),
+    matchMedia: () => ({ matches: still }),
     addEventListener: (type, handler) => {
       if (!listeners[type]) listeners[type] = []
       listeners[type].push(handler)
@@ -49,7 +49,8 @@ function openRig() {
     removeEventListener: () => {},
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 800 }),
   }
-  const rig = createCameraRig(new THREE.PerspectiveCamera(), surface)
+  const camera = new THREE.PerspectiveCamera()
+  const rig = createCameraRig(camera, surface)
   const drag = (dx, dy) => {
     surfaceListeners.pointerdown({ clientX: 500, clientY: 400, target: { closest: () => null } })
     for (const handler of listeners.pointermove ?? []) handler({ clientX: 500 + dx, clientY: 400 + dy })
@@ -57,7 +58,7 @@ function openRig() {
   const close = () => {
     globalThis.window = saved
   }
-  return { rig, drag, close }
+  return { rig, drag, close, camera }
 }
 
 describe('camera rig yaw and pitch', () => {
@@ -119,6 +120,51 @@ describe('camera rig yaw and pitch', () => {
       rig.snap()
       expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw)
       expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch)
+    } finally {
+      close()
+    }
+  })
+})
+
+describe('camera rig hold', () => {
+  it('eases into a held point instead of jumping to it', () => {
+    const { rig, camera, close } = openRig()
+    try {
+      const point = new THREE.Vector3(700, 260, -500)
+      expect(rig.hold(() => point, ANCHOR_DIST)).toBeUndefined()
+      rig.update(0.016)
+      expect(camera.position.distanceTo(point)).toBeGreaterThan(ANCHOR_DIST)
+    } finally {
+      close()
+    }
+  })
+
+  it('keeps the held point at the anchor distance while it moves', () => {
+    const { rig, camera, close } = openRig({ still: true })
+    try {
+      const point = new THREE.Vector3(700, 260, -500)
+      expect(ANCHOR_DIST).toBeGreaterThan(0)
+      rig.hold(() => point, ANCHOR_DIST)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(point)).toBeCloseTo(ANCHOR_DIST, 5)
+      point.set(-300, 100, 400)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(point)).toBeCloseTo(ANCHOR_DIST, 5)
+    } finally {
+      close()
+    }
+  })
+
+  it('returns to the overview when overview() clears the hold', () => {
+    const { rig, camera, close } = openRig({ still: true })
+    try {
+      const point = new THREE.Vector3(700, 260, -500)
+      rig.hold(() => point, ANCHOR_DIST)
+      rig.update(0.016)
+      rig.overview()
+      rig.update(0.016)
+      expect(camera.position.distanceTo(point)).not.toBeCloseTo(ANCHOR_DIST, 0)
+      expect(camera.position.distanceTo(new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z))).toBeCloseTo(OVERVIEW.dist, 5)
     } finally {
       close()
     }

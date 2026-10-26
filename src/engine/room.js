@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { createAgents } from './agents.js'
-import { FOV, OVERVIEW, createCameraRig, fitView, followTarget } from './camera.js'
+import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
@@ -121,6 +121,15 @@ export function cardClickEndsFollow(target) {
   return Boolean(target?.closest?.('.mr-card-head, .mr-item'))
 }
 
+export function nearestDrawnPath(path, drawn) {
+  let at = typeof path === 'string' ? path : ''
+  while (at !== '') {
+    if (drawn.has(at)) return at
+    at = dirname(at)
+  }
+  return drawn.has('') ? '' : null
+}
+
 export function createLater(delay = 250) {
   const pending = new Set()
   function later(fn) {
@@ -187,6 +196,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   })
   let linkKey = ''
   let fitted = null
+  let heldPath = null
   const centerOf = (path) => cards.center(path ?? '')
   const world = {
     center: centerOf,
@@ -213,6 +223,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function refit(force = false) {
+    if (heldPath !== null) return
     const spheres = [HUB_SPHERE, ...cards.overviewSpheres()]
     const next = fitView(spheres, { width, height, center: HUB_CENTER })
     if (!force && fitted) {
@@ -251,21 +262,43 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const followFocus = createFollowFocus()
   const masks = createWorkingMaskCache()
 
-  rig.setClickHandler((event) => {
+  function agentAt(event) {
     const rect = gl.getBoundingClientRect()
+    if (!rect.width || !rect.height) return null
     pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
     raycaster.setFromCamera(pointer, camera)
     const hit = raycaster
       .intersectObjects(agentSet.pickables, false)
       .find((item) => agentSet.views.get(item.object.userData.key)?.group.visible !== false)
-    if (hit) onPick(hit.object.userData.key)
+    return hit ? hit.object.userData.key : null
+  }
+
+  rig.setClickHandler((event) => {
+    const key = agentAt(event)
+    if (key !== null) onPick(key)
     else endFollow()
   })
 
   function onCardClick(event) {
-    if (cardClickEndsFollow(event.target)) endFollow()
+    if (cardClickEndsFollow(event.target)) {
+      endFollow()
+      return
+    }
+    const card = event.target?.closest?.('.mr-card')
+    if (card) anchor(card.dataset.path ?? '')
   }
   cssRenderer.domElement.addEventListener('click', onCardClick, true)
+
+  function onCardWheel(event) {
+    const card = event.target?.closest?.('.mr-card')
+    if (!card) return
+    const items = card.querySelector('.mr-card-items')
+    if (!items || items.scrollHeight <= items.clientHeight) return
+    event.preventDefault()
+    event.stopPropagation()
+    items.scrollTop += event.deltaY
+  }
+  cssRenderer.domElement.addEventListener('wheel', onCardWheel, { passive: false })
 
   function sync(state) {
     timers.clear()
@@ -295,6 +328,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   let pendingFollow = null
   const timers = createLater()
 
+  function releaseHold() {
+    heldPath = null
+  }
+
   function endFollow() {
     if (!followFocus.end()) return
     followCard = null
@@ -303,13 +340,44 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     onPick(null)
   }
 
+  function anchor(path) {
+    const drawn = new Set()
+    for (const card of cards.cards.values()) {
+      if (card.view && !card.leaving) drawn.add(card.path)
+    }
+    const target = nearestDrawnPath(path, drawn)
+    if (target === null) return false
+    const card = cards.cards.get(target)
+    followFocus.setFollowing(false)
+    followFocus.clear()
+    followCard = null
+    pendingFollow = null
+    heldPath = target
+    rig.hold(() => card.object.position, ANCHOR_DIST)
+    onPick(null)
+    return true
+  }
+
+  function park() {
+    releaseHold()
+    followFocus.setFollowing(false)
+    followFocus.clear()
+    followCard = null
+    pendingFollow = null
+    rig.overview()
+    refit(true)
+  }
+
   function focusAgent(key, style = 'wide') {
+    releaseHold()
     const view = agentSet.views.get(key)
     followFocus.focus(key, Boolean(view))
     if (!view) return
     const middle = new THREE.Vector3()
     if (style === 'close') {
       rig.focus(() => middle.copy(view.group.position).lerp(view.touch, view.aim ? 0.5 : 0), 1500, 0.3)
+    } else if (view.touch.distanceToSquared(view.home) > 1) {
+      rig.focus(() => middle.copy(view.group.position).lerp(view.touch, 0.5), 2400, 0.3)
     } else {
       rig.focus(() => middle.copy(view.group.position).add(terminals.positionOf(key)).multiplyScalar(0.5), 2400, 0.3)
     }
@@ -543,6 +611,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const pathTarget = new THREE.Vector3()
 
   function focusTerminal(key) {
+    releaseHold()
     if (!terminals.terminals.has(key)) return false
     terminals.setOpen(key, true)
     followFocus.focus(key)
@@ -554,6 +623,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const state = getState()
     const isFile = state.files.has(path)
     if (!isFile && path !== '' && !state.dirs.has(path)) return false
+    releaseHold()
     endFollow()
     const dir = isFile ? dirname(path) : path
     followFocus.clear()
@@ -600,11 +670,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     },
     openTerminals: (open) => terminals.openAll(open),
     openTerminalKeys: () => terminals.openKeys(),
+    anchor,
+    park,
+    agentAt,
     overview() {
-      followFocus.clear()
-      rig.overview()
+      park()
     },
     setFollow(mode) {
+      releaseHold()
       followFocus.setFollowing(mode)
       followCard = null
       pendingFollow = null
@@ -662,6 +735,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       }
       texture.dispose()
       cssRenderer.domElement.removeEventListener('click', onCardClick, true)
+      cssRenderer.domElement.removeEventListener('wheel', onCardWheel)
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored)
       renderer.dispose()

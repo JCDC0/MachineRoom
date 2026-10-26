@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { PACKET_POOL, childPlace, packetSpots, stripPoints } from '../src/engine/agents.js'
 import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
+import { nearestDrawnPath } from '../src/engine/room.js'
 import { isOrchestrator } from '../src/engine/shapes.js'
 import { RING_CENTER, RING_FRONT, RING_MAX_TOP, ROOT_AHEAD, ROOT_DROP, ringOf, ringRadius, shotgunOffset } from '../src/engine/ring.js'
 import { dirname } from '../src/model/paths.js'
@@ -129,6 +130,18 @@ function runRoom(frames, agents, tree) {
   for (const activity of pipeline.flush()) step(activity)
   return { state, activities, layouts, largest }
 }
+
+describe('the nearest drawn card', () => {
+  it('takes the folder itself or the nearest drawn ancestor', () => {
+    const drawn = new Set(['', 'src', 'src/engine'])
+    expect(nearestDrawnPath('src/engine', drawn)).toBe('src/engine')
+    expect(nearestDrawnPath('src/engine/room.js', drawn)).toBe('src/engine')
+    expect(nearestDrawnPath('src/model/state.js', drawn)).toBe('src')
+    expect(nearestDrawnPath('docs/agents/TASKS.md', drawn)).toBe('')
+    expect(nearestDrawnPath(null, drawn)).toBe('')
+    expect(nearestDrawnPath('src/engine/room.js', new Set())).toBeNull()
+  })
+})
 
 describe('the room, played from a recorded lane run', () => {
   it('lays out every activity and plays the same frames twice', () => {
