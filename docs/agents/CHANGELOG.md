@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Folder cards stack up to three full folder blocks behind the face, each the face's size with a tab on its top edge, stepped 12 pixels left, and `backOffsets` places them the same way for the paint and the occluder (task V39).
 - The Settings panel has a `Content files` range from 4 to 20, 6 by default, saved as `maxFiles` and passed to the room so a folder card can show more than three files (task U66).
 - `planFolderView` takes `limitItems`, and with `false` a card keeps every folder and file item it holds with `hiddenItems: 0` (task V38).
 - Folder cards show up to `maxFiles` rows, 6 by default and 4 to 20, and scroll the rest of the list inside the card; a wheel over a scrollable list no longer zooms the camera (task V38).

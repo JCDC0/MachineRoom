@@ -4984,6 +4984,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   font-family: var(--mono);
   font-size: 12px;
   pointer-events: auto;
+  transform-style: preserve-3d;
 }
 
 .mr-card-bracket {
@@ -5154,30 +5155,30 @@ body:has(#hud-orchestrator-chat) .waiting {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  transform-style: preserve-3d;
 }
 
 .mr-card-back {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: auto;
-  height: 56px;
+  inset: 0;
+  border: 1px solid rgb(255 255 255 / 0.28);
   border-radius: 2px;
   background: rgb(0 0 0 / 0.82);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 0.35);
+  pointer-events: none;
+}
+
+.mr-card-back::before {
+  content: '';
+  position: absolute;
+  top: -9px;
+  left: -1px;
+  width: 72px;
+  height: 8px;
   border: 1px solid rgb(255 255 255 / 0.28);
-}
-
-.mr-card-back.is-back-1 {
-  transform: translate(10px, -8px);
-}
-
-.mr-card-back.is-back-2 {
-  transform: translate(20px, -16px);
-}
-
-.mr-card-back.is-back-3 {
-  transform: translate(30px, -24px);
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  background: rgb(0 0 0 / 0.82);
 }
 
 .mr-item {
