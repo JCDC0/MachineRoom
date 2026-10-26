@@ -1,4 +1,5 @@
 import { readStorage, store, writeStorage } from '../storage.js'
+import { RECORD_MINUTES_DEFAULT, clampRecordMinutes } from '../model/recordLimits.js'
 import { clampLensShare } from './lensResize.js'
 import { SIDEBAR_TAB_DEFAULT, normalizeSidebarTab } from './sidebar.js'
 
@@ -14,6 +15,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   speed: 1,
   helpSeen: false,
   sidebarTab: SIDEBAR_TAB_DEFAULT,
+  recordMinutes: RECORD_MINUTES_DEFAULT,
   sound: Object.freeze({
     on: true,
     volume: 0.3,
@@ -115,6 +117,7 @@ function normalizeSettings(raw) {
     speed: typeof raw.speed === 'number' && Number.isFinite(raw.speed) && raw.speed > 0 ? raw.speed : DEFAULT_SETTINGS.speed,
     helpSeen: typeof raw.helpSeen === 'boolean' ? raw.helpSeen : DEFAULT_SETTINGS.helpSeen,
     sidebarTab: normalizeSidebarTab(raw.sidebarTab),
+    recordMinutes: clampRecordMinutes(raw.recordMinutes),
     sound: soundSettings(raw.sound),
   }
 

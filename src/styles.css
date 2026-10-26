@@ -9228,3 +9228,11 @@ body:has(#hud-orchestrator-chat) .waiting {
   font-size: 8px;
   color: rgb(255 255 255 / 0.35);
 }
+
+/* V33: the Replay section hint under the record time row. */
+.hud-settings-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.5);
+}

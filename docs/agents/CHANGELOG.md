@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Settings Replay section has a `Record time` row in minutes, 1 to 240 and 10 by default, saved as `recordMinutes` in `machineroom.settings` (task V33).
 - The root project folder card sits directly beneath the hub circle at 0, 0, with its top edge 40 units below the hub plane, so the folder strings start from the centre of the ring (task V29).
 - The live transport shows a `Center` button beside the live link tag in place of the `Live feed` text, and a click returns the camera to the overview (task U60).
 - `tests/camera.test.js` covers `rig.pitch()` beside `rig.yaw()`: the starting `OVERVIEW` angle, a pointer drag on both axes, pitch clamped to `[0.08, 1.45]` and the reset on `rig.overview()` (task U57).

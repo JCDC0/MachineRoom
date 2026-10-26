@@ -1,7 +1,10 @@
+import { createElement } from 'react'
+import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { validateBridgeUrl } from '../src/ui/Connect.jsx'
 import { readStorage, writeStorage } from '../src/storage.js'
-import { EFFECTS } from '../src/ui/Settings.jsx'
+import Settings, { EFFECTS } from '../src/ui/Settings.jsx'
+import { RECORD_MINUTES_DEFAULT, RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../src/model/recordLimits.js'
 import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, effectSettings, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
 
 function makeStorage(initial = {}) {
@@ -42,6 +45,7 @@ describe('settings', () => {
       speed: 4,
       helpSeen: true,
       sidebarTab: 'chat',
+      recordMinutes: 10,
       sound: DEFAULT_SETTINGS.sound,
     })
     expect(JSON.parse(storage.getItem(SETTINGS_KEY))).toEqual(updated)
@@ -135,6 +139,65 @@ describe('settings', () => {
     const updated = saveSettings(storage, { speed: 4 })
     expect(updated.speed).toBe(4)
     expect(updated.assistantPosition).toEqual({ x: 240, y: 120 })
+  })
+})
+
+describe('the record time setting', () => {
+  it('saves 10 minutes by default and keeps a saved value', () => {
+    expect(DEFAULT_SETTINGS.recordMinutes).toBe(RECORD_MINUTES_DEFAULT)
+    expect(RECORD_MINUTES_DEFAULT).toBe(10)
+
+    const storage = makeStorage()
+    expect(loadSettings(storage).recordMinutes).toBe(10)
+    expect(saveSettings(storage, { speed: 2 }).recordMinutes).toBe(10)
+
+    const saved = saveSettings(storage, { recordMinutes: 45 })
+    expect(saved.recordMinutes).toBe(45)
+    expect(loadSettings(storage).recordMinutes).toBe(45)
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).recordMinutes).toBe(45)
+  })
+
+  it('clamps a bad or out of range record time', () => {
+    const saved = (value) =>
+      loadSettings(makeStorage({ [SETTINGS_KEY]: JSON.stringify({ recordMinutes: value }) })).recordMinutes
+
+    expect(saved(0)).toBe(RECORD_MINUTES_MIN)
+    expect(saved(-5)).toBe(1)
+    expect(saved(1)).toBe(1)
+    expect(saved(45.9)).toBe(45)
+    expect(saved('45')).toBe(45)
+    expect(saved(240)).toBe(RECORD_MINUTES_MAX)
+    expect(saved(241)).toBe(240)
+    expect(saved('soon')).toBe(10)
+    expect(saved(null)).toBe(10)
+
+    expect(clampRecordMinutes(0)).toBe(1)
+    expect(clampRecordMinutes(999)).toBe(240)
+  })
+
+  it('reads an old saved file with no record time as 10 minutes', () => {
+    const old = makeStorage({
+      [SETTINGS_KEY]: JSON.stringify({
+        source: 'bridge',
+        bridge: 'http://127.0.0.1:5174',
+        speed: 2,
+        effects: { vignette: { on: false, strength: 0 } },
+      }),
+    })
+    expect(loadSettings(old).recordMinutes).toBe(10)
+  })
+
+  it('renders the Replay section row with its hint and limits', () => {
+    const html = renderToString(
+      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+    )
+    expect(html).toContain('Replay')
+    expect(html).toContain('Record time')
+    expect(html).toContain('Replay keeps this many minutes, starting at the first conversation.')
+    expect(html).toContain('aria-label="Record time in minutes"')
+    expect(html).toContain(`min="${RECORD_MINUTES_MIN}"`)
+    expect(html).toContain(`max="${RECORD_MINUTES_MAX}"`)
+    expect(html).toContain('value="10"')
   })
 })
 

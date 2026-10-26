@@ -3,7 +3,8 @@ import EndpointsPanel from './EndpointsPanel.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
 import SearchSettings from './SearchSettings.jsx'
 import { store } from '../storage.js'
-import { effectSettings, loadSoundSettings, saveSoundSettings } from './settings.js'
+import { RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../model/recordLimits.js'
+import { effectSettings, loadSettings, loadSoundSettings, saveSettings, saveSoundSettings } from './settings.js'
 import { sound } from './sound.js'
 
 export const EFFECTS = [
@@ -13,9 +14,10 @@ export const EFFECTS = [
   { key: 'dust', label: 'Fine dust', costly: false },
 ]
 
-export default function Settings({ effects, onChange, onClose, client = null }) {
+export default function Settings({ effects, onChange, onSettingsChange, onClose, client = null }) {
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
+  const [recordDraft, setRecordDraft] = useState(() => String(loadSettings(store()).recordMinutes))
 
   function updateSound(patch) {
     const next = saveSoundSettings(store(), patch)
@@ -33,6 +35,13 @@ export default function Settings({ effects, onChange, onClose, client = null }) 
       ...current,
       [key]: { ...prev, ...patch },
     })
+  }
+
+  function commitRecordMinutes() {
+    const minutes = clampRecordMinutes(recordDraft)
+    setRecordDraft(String(minutes))
+    const saved = saveSettings(store(), { recordMinutes: minutes })
+    onSettingsChange?.({ ...current, recordMinutes: saved.recordMinutes })
   }
 
   return (
@@ -131,6 +140,27 @@ export default function Settings({ effects, onChange, onClose, client = null }) 
               )
             })}
           </div>
+        </div>
+
+        <div className="hud-settings-section">
+          <h3 className="hud-settings-section-title">Replay</h3>
+          <div className="hud-settings-row">
+            <span className="hud-settings-label">Record time</span>
+            <div className="hud-settings-actions">
+              <input
+                type="number"
+                min={RECORD_MINUTES_MIN}
+                max={RECORD_MINUTES_MAX}
+                step="1"
+                value={recordDraft}
+                aria-label="Record time in minutes"
+                onChange={(event) => setRecordDraft(event.target.value)}
+                onBlur={commitRecordMinutes}
+              />
+              <span className="hud-settings-value mono">min</span>
+            </div>
+          </div>
+          <p className="hud-settings-hint">Replay keeps this many minutes, starting at the first conversation.</p>
         </div>
 
         <div className="hud-settings-section">
