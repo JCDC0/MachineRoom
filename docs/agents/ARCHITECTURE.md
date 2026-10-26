@@ -66,6 +66,7 @@ src/model/        pure logic, no DOM, fully tested
   state.js          activities -> room state (agents, files, folders)
   player.js         replay clock, seek, speed, idle compression
   source.js         parse and prepare a recording
+  sessionRecorder.js createSessionRecorder (the last minutes of live frames, from the first run or conversation frame) and recorderToReplay, which builds the replay prepare would build, with time from 0
   costs.js          costBoard: the control client's costs joined with the room's agents (rows, shares, quota windows)
   fileIndex.js      indexFor: a set and a base name map per file or folder list, kept in a WeakMap and caught up with entries pushed later, so a shell command (commands.js) or a Hermes read (resolveKnown) costs the same at any repo size
   replay.js         fetch the recording from public/fixtures or public/recordings, and read public/recordings/index.json (parseRecordingIndex, loadRecordingIndex, describeRecording, filterRecordings)
@@ -150,6 +151,7 @@ tests/            vitest; tests/helpers/bridge.js starts a bridge on port 0 over
 2. `pipeline.js` turns frames into activities. `heartbeat.run.log` carries raw agent output in `payload.chunk`; the parser for that agent turns it into tool calls.
 3. `state.js` applies each activity to a mutable room state. `player.js` owns the clock and calls `onActivity` for each applied activity and `onReset` after a seek.
 4. `room.js` reads the state every frame and reacts to activities with short animations (pulses, flashes, folder opening). Animations run on wall time. State changes run on replay time.
+5. `src/model/sessionRecorder.js` keeps the frames a page receives as a rolling log: nothing until a frame starts a recording, then every frame back at most a set number of minutes (10 by default, 1 to 240). A frame starts it when its type begins `heartbeat.run.` or its payload names a `runId` or an `agentId`; the session readers open a run for each conversation, so a conversation's first frame starts the log. `recorderToReplay` builds the object `prepare` builds, with `createdAt` and `payload.ts` from 0 at the oldest kept frame, and answers null when nothing was kept. The recorder is pure and not wired into a page yet (V32).
 
 ## Live mode
 
