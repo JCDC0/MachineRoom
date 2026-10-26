@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DEFAULT_FIXTURE, describeRecording, filterRecordings, loadRecordingIndex, loadReplay, parseRecordingIndex, replayFiles } from '../src/model/replay.js'
+import { DEFAULT_FIXTURE, describeRecording, filterRecordings, loadRecordingIndex, loadReplay, parseRecordingIndex, recordedReplay, recordedReplayRequested, replayFiles } from '../src/model/replay.js'
+import { createSessionRecorder } from '../src/model/sessionRecorder.js'
 
 const READ_FAILED = 'The list of recordings could not be read.'
 const DEFAULT_FILES = {
@@ -387,5 +388,65 @@ describe('loadReplay', () => {
     vi.stubGlobal('fetch', async () => ({ ok: false, status: 404 }))
     await expect(loadReplay({ base: '/' })).rejects.toThrow('The fixture scenario-i could not be loaded.')
     await expect(loadReplay({ base: '/', fixture: 'sandbox' })).rejects.toThrow('The fixture sandbox could not be loaded.')
+  })
+})
+
+const RECORD_AGENTS = [
+  {
+    id: 'agent-1',
+    key: 'claude',
+    name: 'Claude Code',
+    adapterType: 'claude_local',
+    parser: 'claude',
+  },
+]
+const RECORD_TREE = { rootName: 'agent-sandbox', files: [], created: [] }
+
+function runFrame(id, type, createdAt, payload = {}) {
+  return {
+    id,
+    companyId: 'company-1',
+    type,
+    createdAt,
+    payload: { runId: 'run-1', agentId: 'agent-1', ...payload },
+  }
+}
+
+describe('recordedReplayRequested', () => {
+  it('plays the recorded session for a plain replay address', () => {
+    expect(recordedReplayRequested(new URLSearchParams(''))).toBe(true)
+    expect(recordedReplayRequested(new URLSearchParams('replay'))).toBe(true)
+    expect(recordedReplayRequested(new URLSearchParams('replay&speed=2'))).toBe(true)
+  })
+
+  it('keeps every explicit source on its fixture or recording', () => {
+    for (const query of ['recording=hermes-1', 'fixture=scenario-e', 'tour', 'scale=1000', 'replay&fixture=scenario-i&tour']) {
+      expect(recordedReplayRequested(new URLSearchParams(query)), query).toBe(false)
+    }
+  })
+
+  it('is false without parameters', () => {
+    expect(recordedReplayRequested(null)).toBe(false)
+    expect(recordedReplayRequested({})).toBe(false)
+  })
+})
+
+describe('recordedReplay', () => {
+  it('answers null before the first conversation', () => {
+    const recorder = createSessionRecorder()
+    expect(recordedReplay(recorder, { agents: RECORD_AGENTS, tree: RECORD_TREE })).toBeNull()
+    expect(recordedReplay(null, { agents: RECORD_AGENTS, tree: RECORD_TREE })).toBeNull()
+  })
+
+  it('builds the replay from the kept frames, agents and tree', () => {
+    const recorder = createSessionRecorder()
+    recorder.push(runFrame(1, 'heartbeat.run.queued', '2026-10-26T10:00:00.000Z'))
+    recorder.push(runFrame(2, 'heartbeat.run.status', '2026-10-26T10:00:02.000Z', { status: 'running' }))
+    const replay = recordedReplay(recorder, { agents: RECORD_AGENTS, tree: RECORD_TREE })
+    expect(replay.agents.map((agent) => agent.key)).toEqual(['claude'])
+    expect(replay.tree.rootName).toBe('agent-sandbox')
+    expect(replay.frames).toHaveLength(2)
+    expect(replay.frames[0].createdAt).toBe('1970-01-01T00:00:00.000Z')
+    expect(replay.activities.length).toBeGreaterThan(0)
   })
 })
