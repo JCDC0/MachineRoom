@@ -188,5 +188,14 @@ export default function App() {
     return <Stage data={source.data} mode={route.mode} liveAvailable={liveAvailable} onMode={switchMode} fps={fps} recorder={recorder} />
   }
   const failed = source.status === 'error'
-  return <Notice status={source.status} message={source.message} onRetry={failed ? () => setAttempt((count) => count + 1) : undefined} />
+  const canGoLive = Boolean(liveAvailable || route.connection?.bridge || route.connection?.source === 'demo')
+  return (
+    <Notice
+      status={source.status}
+      message={source.message}
+      onRetry={failed ? () => setAttempt((count) => count + 1) : undefined}
+      onLive={canGoLive ? () => switchMode('live') : undefined}
+      onConnect={() => switchMode('connect')}
+    />
+  )
 }
