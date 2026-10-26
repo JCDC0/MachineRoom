@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge keeps MCP servers in `<runs>/mcp.json`, lists and calls their tools over JSON-RPC on stdio or http, and serves `/api/mcp/servers`, `/api/mcp/tools` and `/api/mcp/call` (task H14).
 - A plain `?replay` plays the frames this page recorded while live, sized by `recordMinutes`, and says `Nothing recorded yet. Replay starts with the first conversation.` before the first one, while `?recording`, `?fixture`, `?tour` and `?scale` still load their fixtures (task V34).
 - The Settings Replay section has a `Record time` row in minutes, 1 to 240 and 10 by default, saved as `recordMinutes` in `machineroom.settings` (task V33).
 - `src/model/sessionRecorder.js` keeps a rolling log of live frames from the first run or conversation frame, back at most 1 to 240 minutes (10 by default), and `recorderToReplay` turns it into a replay with time from 0 (task V32).
