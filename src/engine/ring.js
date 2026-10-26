@@ -7,11 +7,12 @@ export const RING_YAW = OVERVIEW.yaw
 export const RING_BACK = { x: -Math.sin(RING_YAW), y: 0, z: -Math.cos(RING_YAW) }
 export const RING_RIGHT = { x: Math.cos(RING_YAW), y: 0, z: -Math.sin(RING_YAW) }
 export const RING_FRONT = { x: Math.sin(RING_YAW), y: 0, z: Math.cos(RING_YAW) }
-export const ROOT_AHEAD = 480
-export const ROOT_DROP = 90
+export const ROOT_AHEAD = 340
+export const ROOT_DROP = 40
+const DEFAULT_CARD = { width: 248, height: 64 }
 export const ROOT_PLACE = {
   x: RING_CENTER.x + RING_FRONT.x * ROOT_AHEAD,
-  y: RING_CENTER.y - ROOT_DROP,
+  y: RING_CENTER.y - ROOT_DROP - DEFAULT_CARD.height / 2,
   z: RING_CENTER.z + RING_FRONT.z * ROOT_AHEAD,
 }
 export const TOP_MIN_RADIUS = 900
@@ -21,7 +22,6 @@ export const FAN_LIMIT = 0.9
 export const CARD_GAP = 40
 export const SPRAY_LIFT = 140
 
-const DEFAULT_CARD = { width: 248, height: 64 }
 const TURNS = Math.PI * 2
 
 const clamp = (value, low, high) => Math.min(high, Math.max(low, value))
@@ -164,11 +164,17 @@ function lifted(spot, sprayed, path) {
   return { ...spot, y: spot.y + SPRAY_LIFT }
 }
 
-export function layoutRing(entries, { previous, sprayed } = {}) {
+export function layoutRing(entries, options = {}) {
+  const { previous, sprayed } = options
   const model = buildModel(entries)
   const { nodes, children, root } = model
   const positions = new Map()
-  positions.set('', keepPlace(previous, '', tagPosition(ROOT_PLACE, root, 'root')))
+  const rootSpot = {
+    x: ROOT_PLACE.x,
+    y: RING_CENTER.y - ROOT_DROP - root.height / 2,
+    z: ROOT_PLACE.z,
+  }
+  positions.set('', tagPosition(rootSpot, root, 'root'))
 
   const tops = children.get('')
   const radius = ringRadius(tops.length, tops.map((path) => nodes.get(path)))
