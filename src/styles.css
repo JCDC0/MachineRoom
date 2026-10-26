@@ -9113,3 +9113,97 @@ body:has(#hud-orchestrator-chat) .waiting {
 .mr-family .mr-family-trash:disabled {
   color: rgb(255 255 255 / 0.18);
 }
+
+/* U54: lane multi-select, the sub orchestrator form and sub delete. */
+.mr-family .mr-family-check {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin: 6px 0 0;
+  accent-color: var(--yellow);
+  cursor: pointer;
+}
+
+.mr-family .mr-family-check:disabled {
+  cursor: default;
+}
+
+.mr-family-check-space {
+  flex: 0 0 auto;
+  width: 12px;
+}
+
+.mr-family-selection {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0 4px;
+  padding: 4px 6px;
+  border: 1px solid rgb(229 255 0 / 0.35);
+  border-radius: 3px;
+  background: rgb(229 255 0 / 0.06);
+}
+
+.mr-family-selection-count {
+  flex: 1 1 auto;
+  min-width: 60px;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  color: var(--yellow);
+}
+
+.mr-family .mr-family-sub-open {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.mr-family-sub-form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 6px;
+  padding: 6px;
+  border: 1px dashed rgb(229 255 0 / 0.3);
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.mr-family-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 3px;
+}
+
+.mr-family-agent {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: rgb(255 255 255 / 0.75);
+}
+
+.mr-family-agent-check {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  accent-color: var(--yellow);
+}
+
+.mr-family-agent-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-family-agent-id {
+  flex: 0 0 auto;
+  font-size: 8px;
+  color: rgb(255 255 255 / 0.35);
+}

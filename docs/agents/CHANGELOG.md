@@ -9,6 +9,9 @@
 - The bottom lens edge is its own compass, opposite the top one: `compassBottomHeading(yaw)` centres the near rim on `S 180` when the top reads `N 000`, its ticks run the other way and its labels read `180 S`, `135 SE`, `165°` and `150°` (task U52).
 - The add agent and sub orchestrator form starts on OpenCode, with `opencode-go/deepseek-v4.1-flash` as its model and `max` as its effort when the harness lists them (task U53).
 - Grouping code agents under a new sub orchestrator, removing a sub orchestrator and moving agents onto one are pure plans in `family.js`: the chosen agents leave any other sub, an emptied sub is dropped, and a removed sub's agents return to the root (task U53).
+- Every lane row in the Agents family tree has a selection checkbox; one or more checked lanes show a compact bar with `N selected`, Add sub orchestrator and Clear, and the form saves a sub orchestrator over those lanes through the ladder without creating a lane (task U54).
+- A sub orchestrator row has a trash button and its editor has Remove, both behind `Remove "LABEL"? Its agents return to the orchestrator.`, and the sub editor lists every code agent in an Agents checklist saved through the ladder (task U54).
+- `+` on a lane row opens the sub orchestrator form with that lane checked instead of creating a child (task U54).
 - The lens edges are a compass tape centred on the camera's heading, with a tick every 5 degrees at 6 pixels per degree, a taller tick and a label (`N 000`, `NE 045`, `015` ...) every 15 degrees, the `+` lubber mark and the corner brackets kept, and the heading read from the new `yaw()` on the camera rig and the room (task U50).
 - At its default and maximum height the lens fills the window from the menu to the transport, which sits at the bottom of the viewport with the lower half below the fold (task U50).
 - The compass heading, the bearing labels and the edge ticks and labels are pure and tested (task U50).
