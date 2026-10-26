@@ -5,6 +5,8 @@
   --green: #2aff80;
   --red: #ff2a2a;
   --line: rgb(255 255 255 / 0.36);
+  --text: #ffffff;
+  --text-dim: rgb(255 255 255 / 0.55);
   --space: 8px;
   --menu-h: 52px;
   --transport-h: 56px;
@@ -8963,6 +8965,25 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .transport-badge.is-down {
   color: var(--red);
+}
+
+/* U60: the Center button sits beside the live link tag in the transport head */
+.transport .transport-center {
+  padding: 0 6px;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.transport .transport-center:hover,
+.transport .transport-center:focus-visible {
+  color: var(--text);
+  border-color: rgb(255 255 255 / 0.5);
 }
 
 /* U47: one refresh button and one search field for every model picker. */

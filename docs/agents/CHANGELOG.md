@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The live transport shows a `Center` button beside the live link tag in place of the `Live feed` text, and a click returns the camera to the overview (task U60).
 - `tests/camera.test.js` covers `rig.pitch()` beside `rig.yaw()`: the starting `OVERVIEW` angle, a pointer drag on both axes, pitch clamped to `[0.08, 1.45]` and the reset on `rig.overview()` (task U57).
 - The five other fixture `layouts` digests in `tests/scenario-e.test.js` follow the lower root card, while their activity and plan digests stay the same (task U59).
 - A root card with ten file rows keeps its top edge below the hub plane in `tests/cards.test.js` (task U59).

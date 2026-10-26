@@ -52,14 +52,16 @@ describe('Stage lens labels', () => {
     expect(html).not.toContain('lens-brackets')
   })
 
-  it('puts the live link tag in the transport beside Live feed', () => {
+  it('puts the live link tag in the transport beside the Center button', () => {
     const html = stageHtml()
     const transport = html.indexOf('class="transport')
     const badge = html.indexOf('class="transport-badge is-down"')
-    const feed = html.indexOf('Live feed')
+    const center = html.indexOf('class="transport-center mono"')
 
     expect(badge).toBeGreaterThan(transport)
-    expect(badge).toBeLessThan(feed)
+    expect(center).toBeGreaterThan(badge)
+    expect(html).toContain('>Center<')
+    expect(html).not.toContain('Live feed')
     expect(html).toContain('Demo // connecting')
     expect(html).not.toContain('class="stage-badge"')
   })
