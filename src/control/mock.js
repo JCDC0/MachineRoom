@@ -82,7 +82,7 @@ export const CLIENT_METHODS = [
   'subscribe',
 ]
 
-export const MOCK_LANE_KEYS = ['claude', 'hermes', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'agy']
+export const MOCK_LANE_KEYS = ['claude', 'hermes', 'opencode', 'opencode2', 'opencode3', 'opencode4']
 
 const SAMPLE_LADDER = {
   subs: [
@@ -593,7 +593,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   }
 
   function replaceLadder(next) {
-    const result = readLadder(next, { lanes: MOCK_LANE_KEYS })
+    const knownLanes = [...new Set([...MOCK_LANE_KEYS, ...state.lanes.map((lane) => lane.key)])]
+    const result = readLadder(next, { lanes: knownLanes })
     if (result.problems.length > 0) {
       const error = new Error(result.problems.join(' '))
       error.problems = [...result.problems]
@@ -606,6 +607,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     for (const sub of result.ladder.subs) ensureSubChat(sub)
     ladder = result.ladder
     emit({ topic: 'orchestrator' })
+    emit({ topic: 'family' })
     return { ladder: clone(ladder) }
   }
 

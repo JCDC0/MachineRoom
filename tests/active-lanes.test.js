@@ -7,12 +7,14 @@ import {
   OWNER_ACTIVE_LANES_PROBLEM,
   REPEATED_ACTIVE_LANE_PROBLEM,
   activeLanesFileFor,
+  eligibleLanes,
   projectHash,
   readActiveLanesChoice,
   writeActiveLanes,
 } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
+import { MOCK_LANE_KEYS, createMockClient } from '../src/control/mock.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
@@ -60,6 +62,11 @@ const SAMPLE_LANES = {
     name: 'Claude Code',
     harness: 'Claude Code',
     cli: { harness: 'claude', model: 'sonnet' },
+  },
+  agy: {
+    name: 'AGY',
+    harness: 'agy',
+    cli: { harness: 'agy', model: 'gemini-3.8-flash-high' },
   },
 }
 
@@ -137,6 +144,23 @@ describe('active lanes file and hash', () => {
   })
 })
 
+describe('eligible lanes', () => {
+  it('leaves out an agy lane unless the owner made it', () => {
+    const lanes = {
+      orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', model: 'opus' } },
+      opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+      opencode2: { name: 'OpenCode 2', harness: 'OpenCode', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+      claude: { name: 'Claude Code', harness: 'Claude Code', cli: { harness: 'claude', model: 'sonnet' } },
+      agy: { name: 'AGY', harness: 'agy', cli: { harness: 'agy', model: 'gemini-3.8-flash-high' } },
+      agy2: { name: 'AGY 2', harness: 'agy', cli: { harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' } },
+      agy3: { name: 'AGY 3', cli: { harness: 'agy', model: 'gemini-3.8-flash-high' } },
+      'agy-1': { name: 'AGY Custom', harness: 'agy', custom: true, cli: { harness: 'agy', model: 'gemini-3.8-flash-high' } },
+    }
+    const keys = eligibleLanes(lanes).map((lane) => lane.key)
+    expect(keys).toEqual(['opencode', 'opencode2', 'claude', 'agy-1'])
+  })
+})
+
 describe('active lanes route', () => {
   it('answers every eligible lane in order with chosen false before saving', async () => {
     const { url } = await startTestBridge()
@@ -149,6 +173,22 @@ describe('active lanes route', () => {
       { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
       { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: true, working: false },
     ])
+    expect(body.lanes.map((lane) => lane.key)).not.toContain('agy')
+  })
+
+  it('keeps a custom lane on the agy harness eligible', async () => {
+    const { url } = await startTestBridge({
+      lanes: {
+        orchestrator: SAMPLE_LANES.orchestrator,
+        opencode: SAMPLE_LANES.opencode,
+        agy: SAMPLE_LANES.agy,
+        'agy-1': { name: 'AGY Custom', harness: 'agy', custom: true, cli: { harness: 'agy', model: 'gemini-3.8-flash-high' } },
+      },
+    })
+    const { status, body } = await getJson(`${url}/api/lanes`)
+    expect(status).toBe(200)
+    expect(body.max).toBe(2)
+    expect(body.lanes.map((lane) => lane.key)).toEqual(['opencode', 'agy-1'])
   })
 
   it('refuses POST without page Origin with 403', async () => {
@@ -243,6 +283,10 @@ describe('active lanes route', () => {
     const res3 = await post(['orchestrator'])
     expect(res3.status).toBe(400)
     expect(res3.body.error).toBe('The lane orchestrator is not known.')
+
+    const res4 = await post(['agy'])
+    expect(res4.status).toBe(400)
+    expect(res4.body.error).toBe('The lane agy is not known.')
   })
 
   it('saves active lanes choice, sets chosen true, and updates GET /api/lanes', async () => {
@@ -353,5 +397,35 @@ describe('client and mock integration', () => {
     expect(updated.chosen).toBe(true)
     expect(updated.lanes.find((l) => l.key === 'opencode').active).toBe(true)
     expect(updated.lanes.find((l) => l.key === 'opencode2').active).toBe(false)
+  })
+
+  it('lists no agy lane by default and writes the ladder against owner-made lane keys', async () => {
+    expect(MOCK_LANE_KEYS).not.toContain('agy')
+    const client = createMockClient({ latencyMs: 0 })
+    const topics = []
+    client.subscribe((event) => topics.push(event.topic))
+    const created = await client.createLane({
+      name: 'Extra',
+      harness: 'opencode',
+      model: 'opencode/deepseek-v4.1-flash-free',
+      confirmed: true,
+    })
+    const saved = await client.setLadder({
+      subs: [
+        {
+          id: 'extra',
+          name: 'Extra',
+          harness: 'opencode',
+          model: 'opencode-go/deepseek-v4.1-flash',
+          lanes: [created.key],
+          scope: ['src/**'],
+          restricted: true,
+          setBy: 'owner',
+        },
+      ],
+    })
+    expect(saved.ladder.subs.map((sub) => sub.lanes)).toEqual([[created.key]])
+    expect(topics).toContain('orchestrator')
+    expect(topics).toContain('family')
   })
 })

@@ -65,6 +65,7 @@ export function eligibleLanes(lanesConfig = {}) {
     if (key === 'orchestrator') continue
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
     if (entry.retired === true) continue
+    if (entry.custom !== true && (entry.cli?.harness === 'agy' || entry.harness === 'agy')) continue
     if (!entry.cli || typeof entry.cli !== 'object') continue
     list.push({
       key,
