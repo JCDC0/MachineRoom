@@ -1,8 +1,10 @@
 import { name, tagline } from './brand.js'
 
+export const NOTHING_RECORDED = 'Nothing recorded yet. Replay starts with the first conversation.'
+
 const COPY = {
   loading: ['Loading room', 'Reading the agent feed and project files.'],
-  empty: ['Nothing recorded yet', 'This run has no agent activity to show yet.'],
+  empty: ['Nothing to replay', NOTHING_RECORDED],
   error: ['Could not load the room', 'The agent feed could not be read. Check the connection and try again.'],
 }
 

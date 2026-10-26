@@ -1,12 +1,29 @@
 import { RECORDING_NAME } from '../startup.js'
+import { recorderToReplay } from './sessionRecorder.js'
 import { parseFrames, prepare } from './source.js'
 
 const INDEX_LIMIT = 50
 const READ_FAILED = 'The list of recordings could not be read.'
 const FIXTURE_NAME = /^scenario-[a-z]$/
 const SANDBOX_FIXTURE = 'sandbox'
+const EXPLICIT_REPLAY = ['recording', 'fixture', 'tour', 'scale']
 
 export const DEFAULT_FIXTURE = 'scenario-i'
+
+export function recordedReplayRequested(params) {
+  if (!params || typeof params.has !== 'function') return false
+  return !EXPLICIT_REPLAY.some((key) => params.has(key))
+}
+
+export function recordedReplay(recorder, source = null) {
+  const known = source !== null && typeof source === 'object' ? source : {}
+  const agents = Array.isArray(known.agents) ? known.agents : []
+  const tree = known.tree && Array.isArray(known.tree.files) ? known.tree : null
+  const treeFile = tree
+    ? { root: tree.rootName ?? tree.root ?? 'room', files: tree.files, created: tree.created ?? [] }
+    : { root: 'room', files: [], created: [] }
+  return recorderToReplay(recorder, { agentsFile: { agents }, treeFile })
+}
 
 async function fetchOk(url) {
   const response = await fetch(url)

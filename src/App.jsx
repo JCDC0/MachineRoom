@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { discoverBridge, probeLive } from './live/bridge.js'
 import { loadDemo, simulatedSpeed } from './live/simulated.js'
 import { makeTree } from './model/paths.js'
-import { loadReplay } from './model/replay.js'
+import { loadReplay, recordedReplay, recordedReplayRequested } from './model/replay.js'
 import { createScaleReplay } from './model/scaleTree.js'
+import { createSessionRecorder } from './model/sessionRecorder.js'
 import { chooseRoute, fpsEnabled, recordingName, scaleSize } from './startup.js'
 import { store } from './storage.js'
 import Stage from './Stage.jsx'
@@ -29,6 +30,11 @@ async function loadLive(connection, params) {
   if (connection.source === 'demo') return loadSimulated(params)
   if (!connection.bridge) throw new Error('No bridge address is saved.')
   return loadBridge(params, connection.bridge)
+}
+
+function loadRecorded(recorder, source) {
+  recorder.setMinutes(loadSettings(store()).recordMinutes)
+  return recordedReplay(recorder, source)
 }
 
 function hasSaved() {
@@ -68,6 +74,8 @@ export default function App() {
   const [attempt, setAttempt] = useState(0)
   const [liveAvailable, setLiveAvailable] = useState(false)
   const [pageBridge, setPageBridge] = useState(null)
+  const [recorder] = useState(() => createSessionRecorder({ minutes: loadSettings(store()).recordMinutes }))
+  const liveSourceRef = useRef(null)
 
   useEffect(() => {
     if (route.mode !== 'connect') return undefined
@@ -87,14 +95,23 @@ export default function App() {
     setSource({ status: 'loading' })
     const params = new URLSearchParams(window.location.search)
     const scale = route.mode === 'replay' ? scaleSize(params) : null
+    const recorded = route.mode === 'replay' && recordedReplayRequested(params)
     const wanted = route.mode === 'live'
       ? loadLive(route.connection, params)
       : scale !== null
         ? Promise.resolve(createScaleReplay(scale))
-        : loadReplay({ recording: recordingName(params), fixture: params.get('fixture') })
+        : recorded
+          ? Promise.resolve(loadRecorded(recorder, liveSourceRef.current))
+          : loadReplay({ recording: recordingName(params), fixture: params.get('fixture') })
     wanted
       .then((data) => {
-        if (current) setSource({ status: data.live || data.activities.length > 0 ? 'ready' : 'empty', data })
+        if (!current) return
+        if (!data) {
+          setSource({ status: 'empty' })
+          return
+        }
+        if (route.mode === 'live') liveSourceRef.current = { agents: data.agents, tree: data.tree }
+        setSource({ status: data.live || data.activities.length > 0 ? 'ready' : 'empty', data })
       })
       .catch((error) => {
         if (!current) return
@@ -168,7 +185,7 @@ export default function App() {
 
   if (source.status === 'ready') {
     const fps = fpsEnabled(new URLSearchParams(window.location.search))
-    return <Stage data={source.data} mode={route.mode} liveAvailable={liveAvailable} onMode={switchMode} fps={fps} />
+    return <Stage data={source.data} mode={route.mode} liveAvailable={liveAvailable} onMode={switchMode} fps={fps} recorder={recorder} />
   }
   const failed = source.status === 'error'
   return <Notice status={source.status} message={source.message} onRetry={failed ? () => setAttempt((count) => count + 1) : undefined} />

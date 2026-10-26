@@ -193,7 +193,7 @@ function LensEdge({ side, yaw = 0, pitch = 0 }) {
   )
 }
 
-export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode, fps = false }) {
+export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode, fps = false, recorder = null }) {
   const surfaceRef = useRef(null)
   const glRef = useRef(null)
   const cssRef = useRef(null)
@@ -307,6 +307,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [fpsStats, setFpsStats] = useState(() => (fps ? { median: 0, p95: 0 } : null))
 
   function handleSettingsChange(next) {
+    if (next && next.recordMinutes !== undefined) recorder?.setMinutes(next.recordMinutes)
     const normalized = saveEffectSettings(store(), next)
     setEffects(normalized)
     setFineDust(normalized.dust)
@@ -603,6 +604,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     const handlers = {
       onStatus: (status) => player.setStatus(status),
       onFrame: (frame) => {
+        recorder?.push(frame)
         const activities = pipeline.push(frame)
         player.push(activities)
         learned()
