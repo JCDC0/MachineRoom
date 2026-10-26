@@ -472,6 +472,8 @@ describe('cardPlan', () => {
     expect(cardRows(root)).toBe(10)
     const size = cardSize(root)
     const center = layout.placed.get('')
+    expect(center.x).toBe(0)
+    expect(center.z).toBe(0)
     expect(center.y + size.height / 2).toBeLessThan(HUB_CENTER.y)
   })
 })
