@@ -21,7 +21,7 @@ function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
 }
 
-export function Sidebar({ client = null, live = false, project = '' }) {
+export function Sidebar({ client = null, live = false, project = '', tasks = null }) {
   const connected = live === true
   const canProjects = typeof client?.projects === 'function'
   const canSessions = typeof client?.orchestratorSessions === 'function'
@@ -526,7 +526,7 @@ export function Sidebar({ client = null, live = false, project = '' }) {
   function renderAgents() {
     return (
       <section className="mr-side-agents" aria-label="Agents">
-        {connected && canFamily ? <FamilyTree client={client} /> : null}
+        {connected && canFamily ? <FamilyTree client={client} tasks={tasks} /> : null}
         {!connected || !canFamily ? (
           <p className="mr-side-note">Agents appear when the room runs live.</p>
         ) : null}

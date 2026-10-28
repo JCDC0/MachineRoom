@@ -8364,6 +8364,31 @@ body:has(#hud-orchestrator-chat) .waiting {
   border: 1px solid rgb(255 255 255 / 0.25);
 }
 
+.mr-family-dot.is-paused {
+  background: var(--red);
+  box-shadow: 0 0 6px rgb(255 42 42 / 0.5);
+}
+
+.mr-family-state {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 74px;
+  overflow: hidden;
+  font-size: 8px;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 0.42);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-family-state.is-working {
+  color: var(--yellow);
+}
+
+.mr-family-state.is-paused {
+  color: var(--red);
+}
+
 .mr-family-row .mr-side-switch {
   margin-top: 5px;
 }
@@ -8384,6 +8409,24 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .mr-family .mr-family-add:hover:not(:disabled),
 .mr-family .mr-family-add[aria-expanded='true'] {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.mr-family .mr-family-chat {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: rgb(255 255 255 / 0.4);
+}
+
+.mr-family .mr-family-chat:hover:not(:disabled) {
   border-color: var(--yellow);
   color: var(--yellow);
 }

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The family tree shows the main and each sub orchestrator's state word and a chat button that opens its chat, and a working lane shows its short task (task U82).
 - The retired lane dry-run test passes `LOCALAPPDATA` to the runner, so the Hermes lane's `%LOCALAPPDATA%` program path expands on a Linux CI runner (task Q13).
 - `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
 - `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).
