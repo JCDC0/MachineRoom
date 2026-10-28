@@ -102,6 +102,25 @@ function parentChain(byPid, pid) {
   return chain
 }
 
+export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, excludePids = [] } = {}) {
+  const list = (Array.isArray(processes) ? processes : [])
+    .filter((item) => Number.isInteger(item?.pid) && item.pid > 0 && Number.isInteger(item?.ppid))
+  const byPid = new Map(list.map((item) => [item.pid, item]))
+  const root = Number.isInteger(rootPid) && rootPid > 0 ? rootPid : 0
+  if (root === 0) return []
+  const excluded = ownPid > 0 ? parentChain(byPid, ownPid) : new Set()
+  for (const pid of Array.isArray(excludePids) ? excludePids : []) {
+    if (Number.isInteger(pid) && pid > 0) excluded.add(pid)
+  }
+  const found = []
+  for (const item of list) {
+    if (item.pid === root) continue
+    if (excluded.has(item.pid)) continue
+    if (parentChain(byPid, item.ppid).has(root)) found.push(item)
+  }
+  return found.sort((left, right) => left.pid - right.pid)
+}
+
 export function leftoverProcesses(processes, { childPid = 0, worktree = '', ownPid = 0, excludePids = [], platform = process.platform } = {}) {
   const list = (Array.isArray(processes) ? processes : [])
     .filter((item) => Number.isInteger(item?.pid) && item.pid > 0 && Number.isInteger(item?.ppid))

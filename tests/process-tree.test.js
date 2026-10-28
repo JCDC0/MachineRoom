@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, treeSpawnOptions } from '../server/processTree.js'
+import { descendantProcesses, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, treeSpawnOptions } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const PARENT = [
@@ -109,6 +109,33 @@ describe('leftoverProcesses', () => {
   it('leaves out the pids the caller stops itself', () => {
     expect(leftoverProcesses(rows, { worktree: 'C:\\work\\lane', platform: 'win32', excludePids: [4] }).map((item) => item.pid)).toEqual([])
     expect(leftoverProcesses(rows, { worktree: '', childPid: 2, excludePids: [3] }).map((item) => item.pid)).toEqual([])
+  })
+})
+
+describe('descendantProcesses', () => {
+  const rows = [
+    { pid: 1, ppid: 0, command: 'init' },
+    { pid: 2, ppid: 1, command: 'node harness' },
+    { pid: 3, ppid: 2, command: 'node helper' },
+    { pid: 4, ppid: 3, command: 'node late' },
+    { pid: 5, ppid: 1, command: 'node other' },
+  ]
+
+  it('takes every descendant of the root and leaves the root out', () => {
+    expect(descendantProcesses(rows, { rootPid: 2 }).map((item) => item.pid)).toEqual([3, 4])
+    expect(descendantProcesses(rows, { rootPid: 1 }).map((item) => item.pid)).toEqual([2, 3, 4, 5])
+    expect(descendantProcesses(rows, { rootPid: 3 }).map((item) => item.pid)).toEqual([4])
+  })
+
+  it('leaves out the process asking and the pids it excludes', () => {
+    expect(descendantProcesses(rows, { rootPid: 1, ownPid: 5 }).map((item) => item.pid)).toEqual([2, 3, 4])
+    expect(descendantProcesses(rows, { rootPid: 2, excludePids: [3] }).map((item) => item.pid)).toEqual([4])
+  })
+
+  it('handles junk rows and a missing root', () => {
+    expect(descendantProcesses(null, { rootPid: 2 })).toEqual([])
+    expect(descendantProcesses(rows, {})).toEqual([])
+    expect(descendantProcesses([null, {}, { pid: 0, ppid: 0, command: 'x' }], { rootPid: 2 })).toEqual([])
   })
 })
 

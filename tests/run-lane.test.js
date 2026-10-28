@@ -1212,6 +1212,25 @@ const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const TASKS_MARKDOWN = readFileSync(new URL('../docs/agents/TASKS.md', import.meta.url), 'utf8')
 
+function checkoutRoot() {
+  const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true })
+  if (found.status !== 0) throw new Error(String(found.stderr ?? '').trim() || 'git rev-parse failed.')
+  return realpathSync.native(dirname(resolve(REPO_ROOT, String(found.stdout ?? '').trim())))
+}
+
+function lanesFileUnderWorktrees(folder) {
+  const worktrees = join(checkoutRoot(), '.worktrees')
+  const copy = JSON.parse(JSON.stringify(lanes))
+  for (const [key, lane] of Object.entries(copy)) {
+    if (!lane || typeof lane !== 'object') continue
+    if (typeof lane.worktree !== 'string' || lane.worktree.trim() === '') continue
+    lane.worktree = join(worktrees, `q13-${key}-${process.pid}`)
+  }
+  const path = join(folder, 'lanes.json')
+  writeFileSync(path, `${JSON.stringify(copy, null, 2)}\n`)
+  return path
+}
+
 function runLane(args, env = {}) {
   return new Promise((resolveRun, rejectRun) => {
     const child = spawn(process.execPath, [RUN_LANE_SCRIPT, ...args], {
@@ -1298,33 +1317,48 @@ describe('scripts/run-lane.mjs', () => {
       (brief) => brief.done && Array.isArray(brief.owners) && brief.owners.includes('opencode')
     )
     expect(merged).toBeTruthy()
-    const result = await runLane(['opencode', merged.id, '--dry-run'])
-    expect(result.code).toBe(1)
-    expect(result.stdout).toContain(`Brief ${merged.id} is marked ${merged.ownerText}.`)
-    expect(result.stdout).not.toContain('args:')
-    expect(result.stdout).not.toContain('cwd:')
+    const folder = makeTempDir('machine-room-merged-brief-')
+    try {
+      const result = await runLane(['opencode', merged.id, '--dry-run'], {
+        MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
+        MACHINEROOM_RUNS: join(folder, 'runs'),
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain(`Brief ${merged.id} is marked ${merged.ownerText}.`)
+      expect(result.stdout).not.toContain('args:')
+      expect(result.stdout).not.toContain('cwd:')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
   })
 
   it('refuses a retired lane before anything starts, and runs it with --force', async () => {
-    const refused = await runLane(['hermes', 'S2a', '--dry-run'])
-    expect(refused.code).toBe(1)
-    expect(refused.stdout).toContain('The hermes lane is retired.')
-    expect(refused.stdout).not.toContain('args:')
-    expect(refused.stdout).not.toContain('cwd:')
+    const folder = makeTempDir('machine-room-retired-lane-')
+    try {
+      const runEnv = {
+        MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
+        MACHINEROOM_RUNS: join(folder, 'runs'),
+      }
+      const refused = await runLane(['hermes', 'S2a', '--dry-run'], runEnv)
+      expect(refused.code).toBe(1)
+      expect(refused.stdout).toContain('The hermes lane is retired.')
+      expect(refused.stdout).not.toContain('args:')
+      expect(refused.stdout).not.toContain('cwd:')
 
-    const forced = await runLane(['hermes', 'S2a', '--dry-run', '--force'], env)
-    expect(forced.code).toBe(0)
-    expect(forced.stdout).toContain('file:')
-    expect(forced.stdout).toContain('args:')
-    expect(forced.stdout).toContain('cwd:')
+      const forced = await runLane(['hermes', 'S2a', '--dry-run', '--force'], runEnv)
+      expect(forced.code).toBe(0)
+      expect(forced.stdout).toContain('file:')
+      expect(forced.stdout).toContain('args:')
+      expect(forced.stdout).toContain('cwd:')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
   })
 
   it('refuses a dry run whose lane worktree is the main checkout', async () => {
     const folder = makeTempDir('machine-room-brief-worktree-')
     try {
-      const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true })
-      expect(found.status).toBe(0)
-      const checkout = realpathSync.native(dirname(resolve(REPO_ROOT, String(found.stdout ?? '').trim())))
+      const checkout = checkoutRoot()
       const lanesFile = join(folder, 'lanes.json')
       writeFileSync(lanesFile, JSON.stringify({
         opencode: {
