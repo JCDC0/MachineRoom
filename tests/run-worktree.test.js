@@ -328,7 +328,7 @@ describe('the worktree project lock', () => {
     mkdirSync(runs)
     const lock = takeProjectLock(runs, project)
     try {
-      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'], { TEMP: base })
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'], { TEMP: base, MACHINEROOM_RUNS: runs })
       expect(result.code).toBe(1)
       expect(result.stderr).toContain(`The worktree ${path} has uncommitted changes.`)
       expect(result.stderr).not.toContain('Another run is already going on')
@@ -345,7 +345,7 @@ describe('the worktree project lock', () => {
     mkdirSync(runs)
     const lock = takeProjectLock(runs, path)
     try {
-      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'], { TEMP: base })
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.', '--worktree'], { TEMP: base, MACHINEROOM_RUNS: runs })
       expect(result.code).toBe(1)
       expect(result.stderr).toContain(`Another run is already going on ${path};`)
       expect(result.stdout).not.toContain('exit code:')

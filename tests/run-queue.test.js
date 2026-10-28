@@ -485,7 +485,7 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       writeFileSync(file, 'One task.\n')
       const lock = takeProjectLock(runs, repo)
       try {
-        const result = await runLane(['opencode', '--project', repo, '--queue', file], { TEMP: parent })
+        const result = await runLane(['opencode', '--project', repo, '--queue', file], { TEMP: parent, MACHINEROOM_RUNS: runs })
         expect(result.code).toBe(1)
         expect(result.stderr).toContain(`Another run is already going on ${repo};`)
         expect(git(repo, ['branch', '--show-current']).trim()).toBe('main')

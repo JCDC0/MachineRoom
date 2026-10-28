@@ -329,7 +329,7 @@ describe('scripts/run-lane.mjs on another project', () => {
 
     const runs = join(base, 'machineroom-runs')
     mkdirSync(runs, { recursive: true })
-    const atRuns = await runLane(['opencode', '--project', runs, '--task', 'Fix it.', '--dry-run'], { TEMP: base })
+    const atRuns = await runLane(['opencode', '--project', runs, '--task', 'Fix it.', '--dry-run'], { TEMP: base, MACHINEROOM_RUNS: runs })
     expect(atRuns.code).toBe(1)
     expect(atRuns.stdout).toContain('is the runs folder or inside it')
     expect(atRuns.stdout).not.toContain('cwd:')
@@ -398,7 +398,7 @@ describe('the project lock', () => {
     const runs = folderIn(base, 'machineroom-runs')
     const lock = takeProjectLock(runs, project)
     try {
-      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.'], { TEMP: base })
+      const result = await runLane(['opencode', '--project', project, '--task', 'Fix it.'], { TEMP: base, MACHINEROOM_RUNS: runs })
       expect(result.code).toBe(1)
       expect(result.stderr).toContain(`Another run is already going on ${project};`)
       expect(result.stdout).not.toContain('exit code:')
@@ -492,12 +492,12 @@ describe('the record of a project run', () => {
     })
     appendFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify(record)}\n`)
 
-    const list = await runLane(['--list'], { TEMP: base })
+    const list = await runLane(['--list'], { TEMP: base, MACHINEROOM_RUNS: runs })
     expect(list.code).toBe(0)
     expect(list.stdout).toContain('opencode')
     expect(list.stdout).toContain('none')
 
-    const stats = await runLane(['--stats'], { TEMP: base })
+    const stats = await runLane(['--stats'], { TEMP: base, MACHINEROOM_RUNS: runs })
     expect(stats.code).toBe(0)
     expect(stats.stdout).toContain('opencode | opencode-go/deepseek-v4.1-flash | 1 run')
   })

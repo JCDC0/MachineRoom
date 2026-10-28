@@ -1273,11 +1273,11 @@ describe('scripts/run-lane.mjs', () => {
       ].join('\n'))
       writeFileSync(join(runsFolder, 'outcomes.jsonl'), `${JSON.stringify({ branch: 'feat/a', outcome: 'merged', fixes: 1 })}\n`)
 
-      const all = await runLane(['--outcomes'], { TEMP: folder })
+      const all = await runLane(['--outcomes'], { TEMP: folder, MACHINEROOM_RUNS: runsFolder })
       expect(all.code).toBe(0)
       expect(all.stdout.trim()).toBe('hermes  deepseek/x  runs 3, merged 1, rejected 0, pending 2, merge rate 100%, fixes 1, $0.50 a merge')
 
-      const since = await runLane(['--outcomes', '--since', '2026-10-19'], { TEMP: folder })
+      const since = await runLane(['--outcomes', '--since', '2026-10-19'], { TEMP: folder, MACHINEROOM_RUNS: runsFolder })
       expect(since.code).toBe(0)
       expect(since.stdout.trim()).toBe('hermes  deepseek/x  runs 2, merged 1, rejected 0, pending 1, merge rate 100%, fixes 1, $0.50 a merge')
 

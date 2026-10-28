@@ -677,6 +677,7 @@ describe('the runs folder', () => {
     process.env.MACHINEROOM_RUNS = runs
     try {
       expect(runsFolder({ MACHINEROOM_RUNS: runs, TEMP: join(base, 'temp') })).toBe(resolve(runs))
+      expect(runsFolder({ TEMP: join(base, 'temp') })).toBe(join(base, 'temp', 'machineroom-runs'))
       source = createLanesSource({
         lanes,
         repoRoot: base,
