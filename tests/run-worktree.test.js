@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
@@ -11,6 +11,7 @@ import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
+const FAKE_LANE = fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url))
 const cleanups = []
 let repoTemplate = ''
 let repoTemplateRoot = ''
@@ -200,7 +201,7 @@ describe('the worktree on a real repository', () => {
 })
 
 describe('run-lane --worktree --dry-run', () => {
-  it('prints the path and that it would be made, and creates nothing', async () => {
+  it('prints the worktree, the queue branch and the task, and creates nothing', async () => {
     const base = tempDir()
     const project = initRepo(base)
     const path = worktreeFor(project, 'opencode')
@@ -208,7 +209,9 @@ describe('run-lane --worktree --dry-run', () => {
     expect(result.code).toBe(0)
     expect(result.stdout).toContain(`worktree: ${path}`)
     expect(result.stdout).toContain('worktree: would be made')
-    expect(result.stdout).toContain(`cwd: ${path}`)
+    expect(result.stdout).toContain('branch: machineroom/queue-opencode-')
+    expect(result.stdout).toContain('1. Fix it.')
+    expect(result.stdout).not.toContain('cwd:')
     expect(existsSync(path)).toBe(false)
     expect(git(project, ['branch', '--show-current']).trim()).toBe('main')
     expect(git(project, ['status', '--porcelain']).trim()).toBe('')
@@ -267,6 +270,49 @@ describe('run-lane --worktree --dry-run', () => {
     expect(result.code).toBe(1)
     expect(result.stderr).toContain(path)
     expect(result.stderr).toContain('has uncommitted changes')
+  })
+})
+
+describe('run-lane --worktree with one task', { timeout: 30000 }, () => {
+  it('commits the task on a queue branch and writes that branch to the record', async () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    copyFileSync(FAKE_LANE, join(project, 'run'))
+    writeFileSync(join(project, 'package.json'), `${JSON.stringify({ scripts: { test: 'node --version' } })}\n`)
+    git(project, ['add', '-A'])
+    git(project, ['commit', '-q', '-m', 'Add the fake lane'])
+    const head = git(project, ['rev-parse', 'HEAD']).trim()
+    const runs = join(base, 'machineroom-runs')
+    mkdirSync(runs)
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, `${JSON.stringify({
+      opencode: {
+        name: 'Fake lane',
+        harness: 'OpenCode',
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      },
+    }, null, 2)}\n`)
+
+    const result = await runLane(
+      ['opencode', '--project', project, '--task', 'Write the lane note.', '--worktree'],
+      { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanesFile }
+    )
+    expect(result.code).toBe(0)
+    const path = worktreeFor(project, 'opencode')
+    const branch = git(path, ['branch', '--show-current']).trim()
+    expect(branch.startsWith('machineroom/queue-opencode-')).toBe(true)
+    expect(git(path, ['rev-list', '--count', `${head}..HEAD`]).trim()).toBe('1')
+    expect(git(path, ['status', '--porcelain']).trim()).toBe('')
+    expect(git(path, ['show', '--format=', '--name-only', 'HEAD']).trim()).toBe('lane-note.txt')
+    expect(result.stdout).toContain(`The worktree ${path} stays on ${branch}.`)
+    expect(git(project, ['branch', '--show-current']).trim()).toBe('main')
+
+    const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
+    expect(record.branch).toBe(branch)
+    expect(record.queue).toBe(branch)
+    expect(record.queueIndex).toBe(1)
+    expect(cleanPath(record.project)).toBe(cleanPath(path))
+    expect(record.task).toBe('Write the lane note.')
   })
 })
 

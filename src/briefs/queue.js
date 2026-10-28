@@ -147,13 +147,17 @@ export async function runQueue({ tasks, runTask, runTests, git } = {}) {
   return { branch, results }
 }
 
-export function formatQueueSummary({ branch, results, tests } = {}) {
-  const lines = [`branch: ${String(branch ?? '')}`]
+export function formatQueueSummary({ branch, results, tests, worktree } = {}) {
+  const name = String(branch ?? '')
+  const folder = String(worktree ?? '').trim()
+  const lines = [`branch: ${name}`]
   for (const result of Array.isArray(results) ? results : []) {
     const sha = result?.sha ? ` ${String(result.sha)}` : ''
     lines.push(`${result?.number}. ${result?.status}${sha}`)
   }
   lines.push(`tests: ${tests ? String(tests) : 'none, the project has no tests'}`)
-  lines.push(`The project stays on ${String(branch ?? '')}. Run git switch - to go back.`)
+  lines.push(folder
+    ? `The worktree ${folder} stays on ${name}.`
+    : `The project stays on ${name}. Run git switch - to go back.`)
   return lines
 }

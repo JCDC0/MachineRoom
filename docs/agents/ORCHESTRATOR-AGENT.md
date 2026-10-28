@@ -38,7 +38,7 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 ```
 
 - A 202 answer means the lane started on a new branch in its own worktree of the project. Any other answer says why in `error`; fix that and try again.
-- Always send `tasks`, even for one task. A queue of one makes a branch and commits the task when the project's tests pass. A single `task` makes no branch and no commit, and leaves its work uncommitted in a detached worktree where the next run of that lane loses it.
+- Always send `tasks`, even for one task. A queue of one makes a branch and commits the task when the project's tests pass. A single `task` with `worktree: true` runs the same way, as a queue of one. A single `task` without `worktree` runs in the project folder, makes no branch and no commit.
 - `tasks` holds one to twenty tasks for that lane. They run one after another, each committed when the project's tests pass.
 - If the project has no `.git` folder, send the run without `worktree` and keep the work in one tree. The bridge refuses `worktree: true` there.
 - Run at most one run per lane. The lanes are `opencode`, `opencode2` to `opencode10`, and `claude`.
@@ -87,7 +87,7 @@ To add an agent, post a proposal with your token and a reason, tell the owner in
 
 - Read its record in `{{RUNS}}/runs.jsonl` and its log.
 - The record's project is the worktree. Its path is `.worktrees/<lane>` inside {{PROJECT}}.
-- The record's `queue` field names the branch the queue made.
+- The record's `branch` field names the branch the queue made, and `queue` holds the same branch.
 - On a project with no `.git`, there is no worktree and no branch to rebase or merge. Read what changed in the project folder, run the tests there, and report it.
 - Check the branch in that worktree:
   - read the diff

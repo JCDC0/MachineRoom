@@ -99,7 +99,7 @@ A lane is one agent on one harness. Press `C` or click CONTROL, then open Dispat
 - With Own worktree off, one task runs in your project folder itself. The runner then makes no branch, writes no recording, and does not run your tests.
 - For several tasks, put a line with only `---` between them. The button reads `Run N tasks in order`. A queue needs a clean git folder: commit or stash first.
 - To give several tasks to different lanes, turn on `One lane per task`. The button reads `Run N tasks on N lanes`. The confirm card lists each task with the idle lane it goes to, and each run starts in its own worktree. The button refuses when there are fewer idle lanes than tasks.
-- A queue makes the branch `machineroom/queue-<lane>-<stamp>`. It runs your project's tests after each task, using `npm test` when `package.json` has a test script. It commits each task that passes and stops at the first failed task or test. It never touches your current branch and never pushes. It leaves the folder on the queue branch. `git switch -` goes back.
+- A queue makes the branch `machineroom/queue-<lane>-<stamp>`. It runs your project's tests after each task, using `npm test` when `package.json` has a test script. It commits each task that passes and stops at the first failed task or test. It never touches your current branch and never pushes. It leaves the folder on the queue branch. `git switch -` goes back. With Own worktree on, the worktree stays on the queue branch and your project folder stays where it was.
 
 The Runs list in the panel shows the running and recent runs with their last lines.
 
@@ -116,10 +116,10 @@ The Runs list in the panel shows the running and recent runs with their last lin
 Every lane run writes its log to `%TEMP%\machineroom-runs` on Windows, or the system temp folder elsewhere.
 
 - `<lane>-<briefs>-<stamp>.log` for a run on briefs.
-- `<lane>-project-<stamp>.log` for one task on a project.
-- `<lane>-queue-<stamp>-<number>.log` for a task in a queue.
+- `<lane>-project-<stamp>.log` for one task on a project without `--worktree`.
+- `<lane>-queue-<stamp>-<number>.log` for a task in a queue, and for one task with `--worktree`.
 - `<log name>.meta.json` beside a run on a project, with the lane, the project folder and the session id, and the queue branch when there is one.
-- `runs.jsonl` has one record for each run: lane, model, start, minutes, exit code, cost, tokens, log and branch.
+- `runs.jsonl` has one record for each run: lane, model, start, minutes, exit code, cost, tokens, log and branch. A queue run puts its queue branch in `branch` and in `queue`.
 - `outcomes.jsonl` has the outcomes you record with `npm run outcome`.
 - The orchestrator's chat and session live in `orchestrator-<hash>.json`, and each turn writes `orchestrator-chat-<stamp>.log`.
 
@@ -242,7 +242,7 @@ The drawer needs a control client. It is there in replay, the demo and a live ro
 A lane is one agent. On this repository, each lane has its own worktree and branch, listed in `docs/agents/lanes.json`. Ten OpenCode lanes (`opencode` and `opencode2` to `opencode10`) and the `claude` lane are live. `hermes` and `agy` are retired, so `npm run run-lane` refuses them. Remove `"retired": true` from a lane entry to bring it back. The drawer can start a local lane run on an open brief and show the result.
 
 - Start a lane run. Press `C`, open Dispatch, pick a brief, then Run now. The confirm card names the lane, model and brief and says it spends money. Confirm starts the lane in its own worktree. The Runs list shows its last lines and its record.
-- Start one from a terminal. `npm run run-lane -- opencode <brief>` starts a lane on the open brief you name. The `claude` lane runs Claude Code, and `npm run run-lane -- claude --project <folder> --task "Fix the failing test."` starts it on another folder. `--dry-run` prints the command, `--list` shows the last 10 runs, and `--stats` shows runs, minutes and cost per lane and model.
+- Start one from a terminal. `npm run run-lane -- opencode <brief>` starts a lane on the open brief you name. The `claude` lane runs Claude Code, and `npm run run-lane -- claude --project <folder> --task "Fix the failing test."` starts it on another folder. A task with `--worktree` runs as a queue of one, so it makes a branch and commits the work when the project's tests pass. `--dry-run` prints the command, `--list` shows the last 10 runs, and `--stats` shows runs, minutes and cost per lane and model.
 - Record an outcome. `npm run outcome -- <branch> merged --grade A-` records how a lane run ended. `npm run run-lane -- --outcomes [--since YYYY-MM-DD]` prints the merge table.
 - See it in the room. With `--lanes`, the room draws a run live as its log grows, with its reads and writes on the project's cards, and turns the lane green or red when the run ends. A run on a brief also writes a recording under `public/recordings/` and prints `room: /?recording=<name>`.
 - Try a lane's build beside the stable room. `npm run candidate -- <lane>` builds that worktree and serves it on port 5175, with its own bridge. Leave the stable room running and compare the two. It refuses a lane with no worktree, a worktree with uncommitted changes, and a port in use. See `docs/agents/CANDIDATE.md`.
@@ -258,11 +258,11 @@ npm run run-lane -- opencode --project <folder> --task "Fix the failing test."
 npm run run-lane -- opencode --project <folder> --task-file task.md
 ```
 
-Add `--dry-run` to print the program, its arguments and the folder, and start nothing.
+Add `--dry-run` to print the program, its arguments and the folder, or the worktree and the queue branch when `--worktree` is on, and start nothing.
 
-The runner refuses the MachineRoom checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. It runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
+The runner refuses the MachineRoom checkout, a lane worktree and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. Without `--worktree` it runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
 
-Add `--worktree` to run in a git worktree of the project instead of the project itself. The runner puts the worktree inside the project at `<project>/.worktrees/<lane>` and adds `/.worktrees/` to the project's `.git/info/exclude`, so git, the project's own files and the room's file tree leave it out and nothing in the project's tracked files changes. It makes the worktree from the project's HEAD when it is missing, and reuses it when it is there and clean. It refuses a worktree with uncommitted changes and names its path. When the project has `node_modules`, the worktree gets a junction to it on Windows or a symlink elsewhere. A queue with `--worktree` makes its branch in the worktree. The run's record names the worktree as the project, so a room started on the project still shows the run. `--dry-run` prints the worktree path and whether it would be made.
+Add `--worktree` to run in a git worktree of the project instead of the project itself. The runner puts the worktree inside the project at `<project>/.worktrees/<lane>` and adds `/.worktrees/` to the project's `.git/info/exclude`, so git, the project's own files and the room's file tree leave it out and nothing in the project's tracked files changes. It makes the worktree from the project's HEAD when it is missing, and reuses it when it is there and clean. It refuses a worktree with uncommitted changes and names its path. When the project has `node_modules`, the worktree gets a junction to it on Windows or a symlink elsewhere. A task with `--worktree` runs as a queue of one. It makes the branch `machineroom/queue-<lane>-<stamp>` in the worktree, runs the project's tests and commits the task when they pass. A queue with `--worktree` makes its branch in the worktree too. The run's record names the worktree as the project, so a room started on the project still shows the run.
 
 To run a queue of tasks on that folder, write them in a plain text file with a line that holds only `---` between them, then:
 
@@ -270,7 +270,7 @@ To run a queue of tasks on that folder, write them in a plain text file with a l
 npm run run-lane -- opencode --project <folder> --queue queue.txt --test "npm test"
 ```
 
-A queue needs a clean git folder, so keep the queue file outside it or commit it first. Before the first task the runner makes the branch `machineroom/queue-<lane>-<stamp>` from the folder's current HEAD. Each task runs as its own run, then the test command runs. A task that ends well and passes its tests is committed on that branch with its first line as the subject; a task with no change is noted and the queue goes on. The first failed task or failed test stops the queue and leaves that task's changes uncommitted for you to look at. `--test` defaults to `npm test` when the folder's `package.json` has a test script, and to none otherwise, so a task then passes on the exit code alone. `--minutes` limits each task. The queue never pushes and never touches the main branch. It leaves the folder on the queue branch and prints the branch and one line per task; `git switch -` goes back.
+A queue needs a clean git folder, so keep the queue file outside it or commit it first. Before the first task the runner makes the branch `machineroom/queue-<lane>-<stamp>` from the folder's current HEAD. Each task runs as its own run, then the test command runs. A task that ends well and passes its tests is committed on that branch with its first line as the subject; a task with no change is noted and the queue goes on. The first failed task or failed test stops the queue and leaves that task's changes uncommitted for you to look at. `--test` defaults to `npm test` when the folder's `package.json` has a test script, and to none otherwise, so a task then passes on the exit code alone. `--minutes` limits each task. The queue never pushes and never touches the main branch. It leaves the folder on the queue branch and prints the branch and one line per task; without `--worktree`, `git switch -` goes back. With `--worktree`, the worktree stays on the queue branch and your project folder stays where it was.
 
 With `--lanes`, the Dispatch panel can start the same kind of run on the room's own folder: pick a lane, write one task or several separated by a line of `---`, and turn on `Allow uncommitted changes` when the folder has them and you run a single task. A queue needs a clean folder, so that switch is off then.
 

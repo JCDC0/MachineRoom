@@ -387,6 +387,13 @@ describe('formatQueueSummary', () => {
   it('says the project has no tests when there is no test command', () => {
     expect(formatQueueSummary({ branch: QUEUE_BRANCH, results: [] }).at(-2)).toBe('tests: none, the project has no tests')
   })
+
+  it('names the worktree and its branch when the branch is in a worktree', () => {
+    const worktree = join('C:\\work', 'Other', '.worktrees', 'opencode')
+    const lines = formatQueueSummary({ branch: QUEUE_BRANCH, results: [], tests: 'npm test', worktree })
+    expect(lines.at(-1)).toBe(`The worktree ${worktree} stays on ${QUEUE_BRANCH}.`)
+    expect(lines.join('\n')).not.toContain('git switch -')
+  })
 })
 
 describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
