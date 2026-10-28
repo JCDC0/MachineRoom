@@ -9,7 +9,7 @@ import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
-import { killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
+import { killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { acpRunCommand } from './acp-run.mjs'
@@ -51,6 +51,25 @@ function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids
   return found.length
 }
 
+function harnessDescendants(childPid, { excludePids = [], processes = null } = {}) {
+  if (!Number.isInteger(childPid) || childPid <= 0) return []
+  return descendantProcesses(processes ?? listProcesses(), { rootPid: childPid, ownPid: process.pid, excludePids })
+}
+
+function stopDescendants(descendants, label = 'leftover') {
+  let stopped = 0
+  for (const item of Array.isArray(descendants) ? descendants : []) {
+    const killed = killTree({ pid: item.pid })
+    if (killed || !processAlive(item.pid)) {
+      console.log(`${label}: stopped ${item.pid}`)
+      stopped += 1
+    } else {
+      console.log(`${label}: could not stop ${item.pid}`)
+    }
+  }
+  return stopped
+}
+
 function refuseRunningLane(laneKey, worktree, folder = runsFolder()) {
   const lock = join(folder, `${laneKey}.lock`)
   const holder = readLaneLock(lock)
@@ -88,7 +107,9 @@ function stopLane(laneKey) {
     lane = null
   }
   const worktree = holder.folder || (typeof lane?.worktree === 'string' ? lane.worktree : '')
-  const leftovers = stopLeftovers({ worktree, childPid: holder.child ?? 0, excludePids: [holder.pid ?? 0] })
+  const processes = listProcesses()
+  const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
+  const descendants = harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
   let stopped = 0
   for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
@@ -97,7 +118,9 @@ function stopLane(laneKey) {
       stopped += 1
     }
   }
-  if (stopped === 0 && leftovers === 0) console.log(`Nothing was running for the ${laneKey} lane.`)
+  const stoppedDescendants = stopDescendants(descendants)
+  const leftovers = stopLeftovers({ worktree, excludePids: [holder.pid ?? 0] })
+  if (stopped === 0 && leftovers === 0 && stoppedDescendants === 0) console.log(`Nothing was running for the ${laneKey} lane.`)
   rmSync(path, { force: true })
   return 0
 }
@@ -847,7 +870,9 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     if (!child.pid || child.exitCode !== null || child.signalCode !== null) return
     killed = true
     if (stopNote === '') stopNote = note
+    const descendants = harnessDescendants(child.pid)
     killTree(child)
+    stopDescendants(descendants)
   }
   const onInt = () => stopChild('stopped by SIGINT')
   const onTerm = () => stopChild('stopped by SIGTERM')

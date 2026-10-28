@@ -58,6 +58,8 @@ function git(folder, args) {
 function initRepo(parent, name = 'Other') {
   const folder = join(parent, name)
   cpSync(repoTemplate, folder, { recursive: true })
+  git(folder, ['config', 'user.name', 'MachineRoom Worktree'])
+  git(folder, ['config', 'user.email', 'worktree@example.com'])
   return folder
 }
 

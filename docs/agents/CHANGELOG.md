@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
+- `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).
+- The two `run-lane` dry-run tests use a temp `MACHINEROOM_LANES_FILE` whose lanes sit under the checkout's own `.worktrees`, so they no longer depend on where the checkout lives (task Q13).
+- The queue branch test gives its temp project a git identity in its own config, so the queue's commit works on a CI runner with no global `user.name` (task Q13).
+- The `--stop` test accepts a null exit code for a run killed by a signal (task Q13).
 - A single `--task` with `--worktree` runs as a queue of one, so its work is committed on the queue branch when the project's tests pass instead of left in a detached worktree, and `ORCHESTRATOR-AGENT.md` says so (task U78, A6).
 - A queue run writes its branch to `branch` as well as `queue` in `runs.jsonl`, so `--list` and `npm run outcome` find it (task U78, A9).
 - `formatQueueSummary` names the worktree and its branch when `--worktree` is on, and keeps the `git switch -` line for a project run (task U78, A12).

@@ -134,7 +134,8 @@ describe('a stopped lane stays stopped', () => {
     expect(stopped.stdout).toContain(`stopped: ${lock.pid} (the run)`)
     expect(stopped.stdout).toContain('leftover: stopped')
     expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
-    expect(await run).toMatchObject({ code: expect.any(Number) })
+    const finished = await run
+    expect(finished.code === null || Number.isInteger(finished.code)).toBe(true)
     await sleep(6600)
     expect(existsSync(mark)).toBe(false)
   }, 40000)
