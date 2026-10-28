@@ -29,7 +29,8 @@ import { aberrationChannels, mapPlacement, radialMapDataUrl } from './ui/aberrat
 import { startGrain } from './ui/grain.js'
 import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
-import { LiveBadgeContext } from './ui/Transport.jsx'
+import { LiveBadgeContext, OrchestratorsContext } from './ui/Transport.jsx'
+import { orchestratorAnswerList } from './ui/transportOrchestrators.js'
 import Waiting from './ui/Waiting.jsx'
 import LensRail from './ui/LensRail.jsx'
 import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, lensShareAfterWheel, lensShareFromRail, multiplierText } from './ui/lensResize.js'
@@ -312,6 +313,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     return () => clearInterval(timer)
   }, [])
   const [ladder, setLadder] = useState(null)
+  const [orchestrators, setOrchestrators] = useState(NONE)
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const [dockCosts, setDockCosts] = useState(null)
@@ -454,16 +456,19 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
     if (demoLadder) {
       apply(demoLadder)
+      setOrchestrators(NONE)
       roomRef.current?.setLadder(demoLadder)
       return undefined
     }
     if (!live) {
       apply(null)
+      setOrchestrators(NONE)
       roomRef.current?.setLadder(null)
       return undefined
     }
     if (!client || typeof client.orchestrators !== 'function') {
       apply(null)
+      setOrchestrators(NONE)
       roomRef.current?.setLadder(null)
       return undefined
     }
@@ -477,10 +482,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (!active || !isLatest()) return
         const next = ladderFromAnswer(answer)
         apply(next)
+        setOrchestrators(orchestratorAnswerList(answer))
         roomRef.current?.setLadder(next)
       } catch {
         if (!active || !isLatest()) return
         apply(null)
+        setOrchestrators(NONE)
         roomRef.current?.setLadder(null)
       }
     }
@@ -982,37 +989,39 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         )}
         <OrchestratorActivity.Provider value={orchestratorActivity}>
           <CostsModeContext.Provider value={costMode}>
-            <Hud
-              snapshot={snapshot}
-              project={project}
-              focused={focused}
-              speeds={SPEEDS}
-              fpsStats={fpsStats}
-              mode={mode}
-              client={client}
-              assistantPaths={assistantPaths}
-              onAssistantAction={runAssistant}
-              controlTarget={controlTarget}
-              markers={timeline?.markers ?? NONE}
-              log={log}
-              costs={dockCosts}
-              liveRuns={dockRuns}
-              tasks={dockTasks}
-              liveAvailable={liveAvailable}
-              onMode={onMode}
-              onToggle={() => player.toggle()}
-              onSeek={(value) => player.seek(value)}
-              onSpeed={changeSpeed}
-              onFocus={focus}
-              onOverview={overview}
-              openTerminals={openChips}
-              onToggleTerminal={toggleTerminal}
-              onShowTerminals={showTerminals}
-              health={health}
-              ladder={ladder}
-              effects={effects}
-              onSettingsChange={handleSettingsChange}
-            />
+            <OrchestratorsContext.Provider value={orchestrators}>
+              <Hud
+                snapshot={snapshot}
+                project={project}
+                focused={focused}
+                speeds={SPEEDS}
+                fpsStats={fpsStats}
+                mode={mode}
+                client={client}
+                assistantPaths={assistantPaths}
+                onAssistantAction={runAssistant}
+                controlTarget={controlTarget}
+                markers={timeline?.markers ?? NONE}
+                log={log}
+                costs={dockCosts}
+                liveRuns={dockRuns}
+                tasks={dockTasks}
+                liveAvailable={liveAvailable}
+                onMode={onMode}
+                onToggle={() => player.toggle()}
+                onSeek={(value) => player.seek(value)}
+                onSpeed={changeSpeed}
+                onFocus={focus}
+                onOverview={overview}
+                openTerminals={openChips}
+                onToggleTerminal={toggleTerminal}
+                onShowTerminals={showTerminals}
+                health={health}
+                ladder={ladder}
+                effects={effects}
+                onSettingsChange={handleSettingsChange}
+              />
+            </OrchestratorsContext.Provider>
           </CostsModeContext.Provider>
         </OrchestratorActivity.Provider>
       </div>

@@ -6,8 +6,10 @@ import {
   contextTone,
   orchestratorStateWord,
 } from './contextRing.js'
+import { OPEN_CHAT_EVENT, orchestratorChips } from './transportOrchestrators.js'
 
 export const LiveBadgeContext = createContext('live')
+export const OrchestratorsContext = createContext([])
 
 export function liveBadgeText(status, kind = 'live') {
   const state = status === 'live' ? 'connected' : status || 'connecting'
@@ -37,6 +39,17 @@ function openConversation() {
   }
   const input = document.querySelector('.mr-orch-input')
   if (input && typeof input.focus === 'function') input.focus({ preventScroll: true })
+}
+
+function openOrchestratorChat(id) {
+  const canDispatch =
+    typeof window !== 'undefined' &&
+    typeof window.dispatchEvent === 'function' &&
+    typeof window.CustomEvent === 'function'
+  if (canDispatch) {
+    window.dispatchEvent(new window.CustomEvent(OPEN_CHAT_EVENT, { detail: { id } }))
+  }
+  openConversation()
 }
 
 export function ContextRing({ orchestrator = null, onClick = () => {} }) {
@@ -85,6 +98,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
   const finished = position >= duration
   const main = orchestrator && typeof orchestrator === 'object' ? orchestrator : null
   const badgeKind = useContext(LiveBadgeContext)
+  const orchestrators = useContext(OrchestratorsContext)
   const badge = (
     <span className={`transport-badge is-${snapshot.status === 'live' ? 'live' : 'down'}`} role="status">
       {liveBadgeText(snapshot.status, badgeKind)}
@@ -112,6 +126,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
       )
     }
     const state = orchestratorStateWord(main.state)
+    const { chips, more } = orchestratorChips(orchestrators)
     return (
       <div className="transport is-live has-orchestrator">
         <div className="transport-live-head">
@@ -126,15 +141,35 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             Center
           </button>
         </div>
-        <button
-          type="button"
-          className="transport-orchestrator"
-          aria-label={`Orchestrator ${state}. Open the conversation`}
-          onClick={openConversation}
-        >
-          <span className="transport-orchestrator-title mono">Orchestrator</span>
-          <span className="transport-orchestrator-state mono">{state}</span>
-        </button>
+        <div className="transport-orchestrators">
+          <button
+            type="button"
+            className="transport-orchestrator"
+            aria-label={`Orchestrator ${state}. Open the conversation`}
+            onClick={openConversation}
+          >
+            <span className="transport-orchestrator-title mono">Orchestrator</span>
+            <span className="transport-orchestrator-state mono">{state}</span>
+          </button>
+          {chips.map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              className={`transport-chip is-${chip.tone} mono`}
+              aria-label={`${chip.name}. Open the conversation`}
+              title={`${chip.name} ${chip.tone}`}
+              onClick={() => openOrchestratorChat(chip.id)}
+            >
+              <span className="transport-chip-dot" aria-hidden="true" />
+              <span className="transport-chip-name">{chip.name}</span>
+            </button>
+          ))}
+          {more > 0 ? (
+            <span className="transport-chip-overflow mono" title={`${more} more`}>
+              +{more}
+            </span>
+          ) : null}
+        </div>
         <div className="transport-tail">
           <ContextRing orchestrator={main} onClick={openConversation} />
           <span className="mono">{clock(position)} since opening</span>
