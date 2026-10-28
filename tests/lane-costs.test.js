@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { laneCosts, readLaneCosts } from '../server/lane-costs.js'
 import { boardLines } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
@@ -114,6 +115,7 @@ describe('the lane costs routes', () => {
     const base = tempDir()
     const runs = join(base, 'machineroom-runs')
     useTemp(base)
+    writeActiveLanes(activeLanesFileFor(base, runs), Object.keys(LANES))
     writeRuns(join(runs, 'runs.jsonl'), [
       record('opencode', new Date().toISOString(), 0.5, { inputTokens: 1200, outputTokens: 300 }),
       record('opencode', new Date().toISOString(), 0.1, { project: 'C:\\GitHub\\Other', inputTokens: 800, outputTokens: 200 }),

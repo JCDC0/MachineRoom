@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { AGENT_REFUSAL } from '../server/control.js'
 import { LANE_TASK_REFUSAL } from '../server/lane-tasks.js'
 import { PLAN_REFUSAL } from '../server/plans.js'
@@ -186,6 +187,7 @@ async function makeHarness({ records = [] } = {}) {
   writeFileSync(runnerPath, TINY_RUNNER)
   useTemp(base)
   const lanes = JSON.parse(readFileSync(join(shared.repo, 'docs', 'agents', 'lanes.json'), 'utf8'))
+  writeActiveLanes(activeLanesFileFor(RUN_ROOM, runs), Object.keys(lanes).filter((k) => k !== 'orchestrator'))
   const bridge = createBridge({
     projectRoot: RUN_ROOM,
     briefsDir: join(shared.repo, 'docs', 'agents'),

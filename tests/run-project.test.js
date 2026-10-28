@@ -6,6 +6,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
+import { projectHash } from '../server/active-lanes.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { laneRunRecord, laneStartProblem, laneWorktreeStart, projectLockName, takeProjectLock } from '../scripts/run-lane.mjs'
@@ -633,6 +634,11 @@ describe('the lane source on another project', () => {
     const projectRoot = folderIn(base, 'NoLanes')
     const source = createLanesSource({ folder: runs, projectRoot, pollMs: 20 })
     cleanups.push(() => source.stop())
+    expect(source.agents.map((agent) => agent.key)).toEqual(['orchestrator'])
+    writeFileSync(
+      join(runs, `active-lanes-${projectHash(projectRoot)}.json`),
+      JSON.stringify(Object.keys(realLanes).filter((k) => k !== 'orchestrator'))
+    )
     expect(source.agents.map((agent) => agent.key)).toEqual(laneAgents(realLanes).map((agent) => agent.key))
     expect(source.agents.length).toBeGreaterThan(0)
   })

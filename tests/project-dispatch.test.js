@@ -4,6 +4,8 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi } from '../server/runs.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -88,6 +90,9 @@ function readArgs(out) {
 }
 
 async function startBridge({ projectRoot, runnerPath }) {
+  const runs = runsFolder()
+  mkdirSync(runs, { recursive: true })
+  writeActiveLanes(activeLanesFileFor(projectRoot, runs), ['opencode', 'opencode2'])
   const bridge = createBridge({
     paperclipUrl: 'http://127.0.0.1:3999',
     companyId: 'comp-1',

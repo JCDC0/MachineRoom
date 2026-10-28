@@ -155,7 +155,7 @@ describe('buildFamilyNodes pure helper', () => {
       kind: 'lane',
       label: 'Code agent',
       parent: 'orchestrator',
-      active: true,
+      active: false,
       custom: false,
     })
   })

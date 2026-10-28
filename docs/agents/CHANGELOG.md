@@ -6,6 +6,8 @@
 
 - Vitest setup file `tests/helpers/isolate.js` isolates `MACHINEROOM_RUNS` under the test temp root so tests never write the owner runs folder (task T25).
 
+- A project with no active lane choice starts with every lane off, `/api/lanes` answers `chosen: false`, `/api/agents` lists no worker lanes, and `POST /api/control/runs` refuses a lane run until lanes are picked (task O19).
+
 - `subPrompt` lists a sub's sibling subs by id and name and says to ask the parent to pass a message to another sub, while its lanes report when their run ends (task O18).
 - The bridge passes the ladder to `subPrompt`, so each sub's instructions name its siblings (task O18).
 - `ORCHESTRATOR-AGENT.md` has a `Talking to your subs` part, and `HIERARCHY.md` has a `Who talks to whom` table (task O18).
