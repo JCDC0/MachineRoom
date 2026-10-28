@@ -47,7 +47,7 @@ function lanesFile() {
 
 function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [] } = {}) {
   const folder = String(worktree ?? '').trim()
-  if (!folder) return 0
+  if (!folder && !(childPid > 0)) return 0
   const found = leftoverProcesses(listProcesses(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
   for (const item of found) {
     if (killTree({ pid: item.pid })) console.log(`${label}: stopped ${item.pid}`)
@@ -640,11 +640,11 @@ async function runQueueProject({ options, lane, lanes }) {
   const folder = runsFolder()
   mkdirSync(folder, { recursive: true })
   const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
-  refuseRunningLane(options.lane, lockTarget, folder)
+  refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
   let lock
   try {
-    lock = takeLaneLock(folder, options.lane, { worktree: lockTarget })
+    lock = takeLaneLock(folder, options.lane, { worktree: options.worktree ? lockTarget : '' })
   } catch (error) {
     releaseLaneLock(projectLock)
     throw error
@@ -724,11 +724,11 @@ async function main() {
 
     mkdirSync(folder, { recursive: true })
     const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
-    refuseRunningLane(options.lane, lockTarget, folder)
+    refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
     const projectLock = takeProjectLock(folder, lockTarget)
     let lock
     try {
-      lock = takeLaneLock(folder, options.lane, { worktree: lockTarget })
+      lock = takeLaneLock(folder, options.lane, { worktree: options.worktree ? lockTarget : '' })
     } catch (error) {
       releaseLaneLock(projectLock)
       throw error
@@ -858,7 +858,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
   process.removeListener('SIGTERM', onTerm)
   process.removeListener('SIGHUP', onHup)
   process.removeListener('exit', onExit)
-  const stoppedLeftovers = stopLeftovers({ worktree: project || lane.worktree, childPid: child.pid ?? 0 })
+  const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 })
   laneLog.flush()
   await new Promise((done) => log.end(done))
   const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10

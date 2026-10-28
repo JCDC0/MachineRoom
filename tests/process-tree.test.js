@@ -95,6 +95,17 @@ describe('leftoverProcesses', () => {
     expect(leftoverProcesses(rows, {})).toEqual([])
   })
 
+  it('does not take a sibling worktree whose name starts with the lane folder', () => {
+    const lanes = [
+      { pid: 10, ppid: 1, command: 'node C:\\repo\\.worktrees\\opencode2\\node_modules\\vitest.mjs' },
+      { pid: 11, ppid: 1, command: 'node C:\\repo\\.worktrees\\opencode10' },
+      { pid: 12, ppid: 1, command: 'node "C:\\repo\\.worktrees\\opencode"' },
+      { pid: 13, ppid: 1, command: 'node C:\\repo\\.worktrees\\opencode\\x.js' },
+      { pid: 14, ppid: 1, command: 'node C:\\repo\\.worktrees\\opencode' },
+    ]
+    expect(leftoverProcesses(lanes, { worktree: 'C:\\repo\\.worktrees\\opencode', platform: 'win32' }).map((item) => item.pid)).toEqual([12, 13, 14])
+  })
+
   it('leaves out the pids the caller stops itself', () => {
     expect(leftoverProcesses(rows, { worktree: 'C:\\work\\lane', platform: 'win32', excludePids: [4] }).map((item) => item.pid)).toEqual([])
     expect(leftoverProcesses(rows, { worktree: '', childPid: 2, excludePids: [3] }).map((item) => item.pid)).toEqual([])

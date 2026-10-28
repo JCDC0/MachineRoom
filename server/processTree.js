@@ -81,6 +81,17 @@ function folderKey(folder, platform) {
   return platform === 'win32' ? text.toLowerCase() : text
 }
 
+function namesFolder(command, folder) {
+  if (folder === '') return false
+  let at = command.indexOf(folder)
+  while (at !== -1) {
+    const next = command[at + folder.length]
+    if (next === undefined || next === '/' || next === '"' || next === "'" || /\s/.test(next)) return true
+    at = command.indexOf(folder, at + 1)
+  }
+  return false
+}
+
 function parentChain(byPid, pid) {
   const chain = new Set()
   let current = pid
@@ -106,7 +117,7 @@ export function leftoverProcesses(processes, { childPid = 0, worktree = '', ownP
     if (item.pid === child) continue
     if (excluded.has(item.pid)) continue
     const related = child > 0 && parentChain(byPid, item.ppid).has(child)
-    const named = folder !== '' && processKey(item.command, platform).includes(folder)
+    const named = namesFolder(processKey(item.command, platform), folder)
     if (related || named) found.push(item)
   }
   return found.sort((left, right) => left.pid - right.pid)

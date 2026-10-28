@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A leftover's command line counts only when it names the lane worktree as a whole folder, so stopping `opencode` leaves `opencode2` to `opencode10` alone, and a project run without its own worktree finds leftovers by the harness's process tree only, so an editor or a bridge open on that project is never stopped (task U75, review fix).
 - `run-lane` writes the harness child's pid into the lane lock beside its own as one JSON line, and an old plain pid lock is still read (task U75).
 - The lane source and `npm run worktrees` read the new lane lock and an old plain pid lock (task U75).
 - `run-lane` stops the harness tree on SIGINT, SIGTERM, SIGHUP, the time limit and its own exit (task U75).

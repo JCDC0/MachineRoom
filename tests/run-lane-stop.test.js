@@ -126,7 +126,7 @@ describe('a stopped lane stays stopped', () => {
     const lock = readLaneLock(join(runs, 'fake.lock'))
     expect(lock.pid).toBeGreaterThan(0)
     expect(lock.child).toBeGreaterThan(0)
-    expect(lock.folder).toBe(project)
+    expect(lock.folder).toBe('')
 
     const stopped = await runLane(['--stop', 'fake'], env)
     expect(stopped.code).toBe(0)
@@ -183,9 +183,9 @@ describe('a stopped lane stays stopped', () => {
     expect(result.stdout).not.toContain('exit code:')
   }, 30000)
 
-  it('refuses a new run while a process still names the worktree', async () => {
+  it('refuses a new run while a process still names the worktree the lock recorded', async () => {
     const { project, runs, env } = setup('mr-run-leftover-')
-    writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: DEAD_PID }))
+    writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: DEAD_PID, folder: project }))
     const leftover = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', project], {
       stdio: 'ignore',
       windowsHide: true,
@@ -195,5 +195,19 @@ describe('a stopped lane stays stopped', () => {
     expect(result.code).toBe(1)
     expect(result.stderr).toContain(`The fake lane still has leftover process ${leftover.pid}; stop it with npm run run-lane -- --stop fake.`)
     expect(result.stdout).not.toContain('exit code:')
+  }, 30000)
+
+  it('does not take a process that names a project run without its own worktree', async () => {
+    const { project, runs, env } = setup('mr-run-editor-')
+    writeFileSync(join(runs, 'fake.lock'), laneLockText({ pid: DEAD_PID }))
+    const editor = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)', project], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    cleanups.push(() => killTree(editor))
+    const result = await runLane(['fake', '--project', project, '--task', 'Do it.'], env)
+    expect(result.stderr).not.toContain('leftover process')
+    expect(result.stdout).not.toContain(`leftover: stopped ${editor.pid}`)
+    expect(editor.exitCode).toBe(null)
   }, 30000)
 })
