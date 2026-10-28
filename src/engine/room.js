@@ -8,6 +8,7 @@ import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
 import { createInternet } from './internet.js'
 import { createLabels } from './labels.js'
+import { createMessages } from './messages.js'
 import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, createTerminals } from './terminals.js'
@@ -181,6 +182,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const roster = agents.map(roomAgent)
   const hub = createHub(scene, roster)
   const agentSet = createAgents(scene, roster, cssScene)
+  const messages = createMessages(scene, {
+    viewOf: (key) => agentSet.views.get(key)?.group.position ?? null,
+  })
   const internet = createInternet(scene, texture)
   const terminals = createTerminals(cssScene, roster, { onPick })
   const board = createCostBoard(surface, { onPick })
@@ -491,6 +495,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function onActivity(activity) {
     terminals.note(activity)
+    messages.note(activity)
     const view = agentSet.views.get(activity.agent)
     if (!view) return
     trackWeb(activity)
@@ -587,6 +592,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     }
     strings.update(centerOf, mask, delta)
     labels.update(delta)
+    messages.update(now)
     world.mask = mask
     world.links = mask.dimmed ? cards.visibleLinks() : []
     agentSet.update(state, delta, now, world, terminals)
@@ -749,6 +755,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       observer.disconnect()
       rig.dispose()
       agentSet.dispose()
+      messages.dispose()
       terminals.dispose()
       internet.dispose()
       board.dispose()
