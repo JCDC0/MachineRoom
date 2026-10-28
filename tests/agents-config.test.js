@@ -16,6 +16,7 @@ import {
   saveAgentsConfig,
 } from '../server/agents-config.js'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { gitPath } from '../server/programPath.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -115,6 +116,7 @@ async function startBridgeRig({
   runnerPath,
 } = {}) {
   mkdirSync(runsFolder, { recursive: true })
+  writeActiveLanes(activeLanesFileFor(projectRoot, runsFolder), Object.keys(lanes))
   const lanesFile = join(projectRoot, 'docs', 'agents', 'lanes.json')
 
   const runnerCommand = runnerPath

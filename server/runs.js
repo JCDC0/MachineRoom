@@ -9,6 +9,7 @@ import { outcomeTable } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
 import { readAllLanes } from './lanes-source.js'
+import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
@@ -409,13 +410,22 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
+    const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+    const chosen = activeHelper && typeof activeHelper.isChosen === 'function'
+      ? activeHelper.isChosen()
+      : runsFolder
+        ? readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder)) !== null
+        : true
+    if (!chosen) {
+      sendJson(req, res, 400, { error: 'Pick the lanes for this project first.' })
+      return true
+    }
+
     const laneActive = typeof isLaneActive === 'function'
       ? isLaneActive(lane)
-      : typeof activeLanes === 'function' && activeLanes()
-        ? activeLanes().isLaneActive(lane)
-        : activeLanes && typeof activeLanes.isLaneActive === 'function'
-          ? activeLanes.isLaneActive(lane)
-          : true
+      : activeHelper && typeof activeHelper.isLaneActive === 'function'
+        ? activeHelper.isLaneActive(lane)
+        : true
     if (!laneActive) {
       sendJson(req, res, 400, { error: `The lane ${lane} is not active. Add it in Agents first.` })
       return true

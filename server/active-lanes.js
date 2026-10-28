@@ -9,6 +9,7 @@ export const CONFIRM_ACTIVE_LANES_PROBLEM = 'Confirm the active lanes first.'
 export const EMPTY_ACTIVE_LANES_PROBLEM = 'Choose at least one lane.'
 export const REPEATED_ACTIVE_LANE_PROBLEM = 'A lane cannot be listed more than once.'
 export const METHOD_NOT_ALLOWED_PROBLEM = 'Method not allowed.'
+export const NO_ACTIVE_CHOICE_PROBLEM = 'Pick the lanes for this project first.'
 
 export function unknownLaneProblem(lane) {
   return `The lane ${lane} is not known.`
@@ -98,7 +99,7 @@ export function listActiveLanes({
     model: lane.model,
     custom: lane.custom === true,
     effort: lane.effort ?? null,
-    active: chosen ? activeSet.has(lane.key) : true,
+    active: chosen ? activeSet.has(lane.key) : false,
     working: typeof isWorking === 'function' ? Boolean(isWorking(lane.key)) : false,
   }))
 
@@ -173,7 +174,7 @@ export function createActiveLanesApi(options = {}) {
 
   function isLaneActive(key) {
     const set = activeKeySet()
-    if (set === null) return true
+    if (set === null) return false
     return set.has(key)
   }
 

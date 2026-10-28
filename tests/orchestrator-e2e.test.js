@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { worktreeFor } from '../src/briefs/run.js'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { getJson, waitFor } from './helpers/bridge.js'
@@ -176,6 +177,7 @@ async function makeRig() {
   mkdirSync(runs, { recursive: true })
   const project = makeProject(base, join(FIXTURES, 'fake-lane.cjs'))
   const lanes = writeLanes(base)
+  writeActiveLanes(activeLanesFileFor(project, runs), Object.keys(lanes.lanes).filter((k) => k !== 'orchestrator'))
   const callsFile = join(base, 'claude-calls.jsonl')
   const children = new Set()
   const bridge = createBridge({

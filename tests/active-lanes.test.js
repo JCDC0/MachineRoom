@@ -169,9 +169,9 @@ describe('active lanes route', () => {
     expect(body.chosen).toBe(false)
     expect(body.max).toBe(3)
     expect(body.lanes).toEqual([
-      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
-      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: true, working: false },
-      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: true, working: false },
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: false, working: false },
+      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: false, working: false },
+      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: false, working: false },
     ])
     expect(body.lanes.map((lane) => lane.key)).not.toContain('agy')
   })
@@ -320,10 +320,7 @@ describe('agents list filtering and run refusal', () => {
     const before = await getJson(`${url}/api/agents`)
     expect(before.status).toBe(200)
     const beforeKeys = before.body.map((agent) => agent.key)
-    expect(beforeKeys).toContain('orchestrator')
-    expect(beforeKeys).toContain('opencode')
-    expect(beforeKeys).toContain('opencode2')
-    expect(beforeKeys).toContain('claude')
+    expect(beforeKeys).toEqual(['orchestrator'])
 
     await getJson(`${url}/api/lanes/active`, {
       method: 'POST',
@@ -338,6 +335,18 @@ describe('agents list filtering and run refusal', () => {
     expect(afterKeys).toContain('opencode')
     expect(afterKeys).not.toContain('opencode2')
     expect(afterKeys).not.toContain('claude')
+  })
+
+  it('refuses POST /api/control/runs on a project with no choice with 400', async () => {
+    const { url } = await startTestBridge()
+
+    const res = await getJson(`${url}/api/control/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lane: 'opencode', task: 'Do work', allowDirty: true, confirmed: true }),
+    })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe('Pick the lanes for this project first.')
   })
 
   it('refuses POST /api/control/runs for an inactive lane with 400', async () => {

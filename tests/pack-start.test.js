@@ -106,7 +106,7 @@ describe('a pack starts the room', () => {
 
         const agents = await fetch(`${base}/api/agents`)
         expect(agents.status).toBe(200)
-        expect((await agents.json()).map((agent) => agent.key)).toContain('opencode')
+        expect((await agents.json()).map((agent) => agent.key)).toEqual(['orchestrator'])
 
         const orchestrator = await fetch(`${base}/api/orchestrator`)
         expect(orchestrator.status).toBe(200)

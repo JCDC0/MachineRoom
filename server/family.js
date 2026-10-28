@@ -208,13 +208,13 @@ export function buildFamilyNodes({
   if (activeLanes) {
     const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
     if (activeHelper && typeof activeHelper.isChosen === 'function') {
-      activeChecker = (key) => (activeHelper.isChosen() ? activeHelper.isLaneActive(key) : true)
+      activeChecker = (key) => (activeHelper.isChosen() ? activeHelper.isLaneActive(key) : false)
     }
   }
   if (!activeChecker) {
     const activeFile = activeLanesFileFor(projectRoot, runsFolder)
     const saved = readActiveLanesChoice(activeFile)
-    activeChecker = (key) => (saved !== null ? saved.includes(key) : true)
+    activeChecker = (key) => (saved !== null ? saved.includes(key) : false)
   }
 
   const laneNodes = []

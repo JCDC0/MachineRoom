@@ -6,6 +6,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
 import { laneLockPids } from '../src/briefs/run.js'
+import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
 import { readAllLanes } from './agents-config.js'
 import { gitPath } from './programPath.js'
 
@@ -285,7 +286,7 @@ export function createLanesSource(options = {}) {
     } catch {}
   }
 
-  function agentsNow() {
+  function allAgents() {
     const list = laneAgents(currentLanes())
     let subs = []
     try {
@@ -296,6 +297,15 @@ export function createLanesSource(options = {}) {
     for (const sub of Array.isArray(subs) ? subs : []) {
       const agent = subOrchestratorAgent(sub, currentLanes())
       if (agent && !list.some((item) => item.key === agent.key)) list.push(agent)
+    }
+    return list
+  }
+
+  function agentsNow() {
+    const list = allAgents()
+    const choiceFile = activeLanesFileFor(roomRoot, folder)
+    if (readActiveLanesChoice(choiceFile) === null) {
+      return list.filter((agent) => agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-'))
     }
     return list
   }
@@ -352,7 +362,7 @@ export function createLanesSource(options = {}) {
     } catch {
       return
     }
-    const map = new Map(agentsNow().map((agent) => [agent.key, agent]))
+    const map = new Map(allAgents().map((agent) => [agent.key, agent]))
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.log')) continue
       const path = join(folder, entry.name)

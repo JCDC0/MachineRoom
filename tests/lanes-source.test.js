@@ -222,13 +222,10 @@ describe('the live lane source', () => {
     expect(endFrame(frames).payload).toMatchObject({ status: 'succeeded', error: null })
 
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
-    const lane = agents.find((agent) => agent.id === 'agent-opencode')
-    expect(lane).toMatchObject({ key: 'opencode', name: 'OpenCode', parser: 'opencode' })
-    expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
-    expect(agents.find((agent) => agent.key === 'agy')).toMatchObject({ parser: 'agy', adapterType: 'process' })
+    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator'])
 
     const tree = makeTree({ root: basename(projectRoot), files: [] })
-    const activities = buildActivities(frames, { agents, tree })
+    const activities = buildActivities(frames, { agents: laneAgents(lanes), tree })
     const starts = activities.filter((activity) => activity.type === 'tool.start')
     expect(starts.map((activity) => activity.agent)).toEqual(['opencode', 'opencode'])
     expect(starts.map((activity) => activity.touches)).toEqual([
@@ -652,6 +649,15 @@ describe('the V5 audit fixes in the lane source', () => {
     })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
+
+    const beforeAgents = await fetch(`${url}/api/agents`).then((response) => response.json())
+    expect(beforeAgents.some((agent) => agent.key === 'opencode')).toBe(false)
+
+    await fetch(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lanes: ['opencode'], confirmed: true }),
+    })
 
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
     expect(agents.some((agent) => agent.key === 'opencode')).toBe(true)

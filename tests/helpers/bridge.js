@@ -2,6 +2,8 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createBridge } from '../../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../../server/active-lanes.js'
+import { readLanes } from '../../server/lanes-source.js'
 import { makeTree } from '../../src/model/paths.js'
 import { createPipeline } from '../../src/model/pipeline.js'
 import { apply, createState } from '../../src/model/state.js'
@@ -35,6 +37,7 @@ export async function startLaneBridge({
   lanesSource = {},
 } = {}) {
   mkdirSync(runsDir, { recursive: true })
+  writeActiveLanes(activeLanesFileFor(projectRoot, runsDir), Array.from(new Set([...Object.keys(lanes), ...Object.keys(readLanes())])))
   const started = createBridge({
     projectRoot,
     port: 0,

@@ -2,6 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { AGENT_REFUSAL } from '../server/control.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { createLanesSource, readLanes } from '../server/lanes-source.js'
 import {
@@ -82,6 +83,7 @@ async function startLaneBridge({ lanes = true } = {}) {
   const base = tempDir()
   const runs = join(base, 'machineroom-runs')
   mkdirSync(runs, { recursive: true })
+  writeActiveLanes(activeLanesFileFor(base, runs), Object.keys(LANES))
   useTemp(base)
   const bridge = createBridge({
     projectRoot: base,

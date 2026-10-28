@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource } from '../server/lanes-source.js'
 import { chatFileFor, CONFIRM_HARNESS_PROBLEM } from '../server/orchestrator.js'
 import { branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
@@ -210,6 +211,7 @@ function bridgeOptions(files, extra = {}) {
 }
 
 async function makeBridge(files, extra = {}) {
+  writeActiveLanes(activeLanesFileFor(files.projectRoot, files.runs), Object.keys(LANES).filter((k) => k !== 'orchestrator'))
   const bridge = createBridge(bridgeOptions(files, extra))
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
