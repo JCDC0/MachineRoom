@@ -1,9 +1,10 @@
-import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { spawn, spawnSync } from 'node:child_process'
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { gitPath } from '../server/programPath.js'
+import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -283,6 +284,138 @@ describe('briefProblems', () => {
 
   it('compares the lane without case', () => {
     expect(briefProblems({ briefs: [openB6], ids: ['B6'], laneKey: 'OpenCode', branchExists: () => false })).toEqual([])
+  })
+
+  it('lets a relative Files: list through', () => {
+    const brief = sampleBrief('F1', 'Files check', 'OpenCode', {
+      owners: ['opencode'],
+      text: 'Files: `src/briefs/run.js`, `src/briefs/briefs.js`, `scripts/run-lane.mjs` (the call only), their tests, `docs/agents/CHANGELOG.md`.',
+    })
+    expect(briefProblems({ briefs: [brief], ids: ['F1'], laneKey: 'opencode', forbidden: [], branchExists: () => false })).toEqual([])
+  })
+
+  it('refuses an absolute path in the Files: list and names the entry', () => {
+    const brief = sampleBrief('F2', 'Absolute file', 'OpenCode', {
+      owners: ['opencode'],
+      text: 'Files: C:\\work\\outside.txt and /etc/passwd.',
+    })
+    expect(briefProblems({ briefs: [brief], ids: ['F2'], laneKey: 'opencode', forbidden: [], branchExists: () => false })).toEqual([
+      'Brief F2 lists the absolute path C:\\work\\outside.txt, and a brief names only paths inside the repository.',
+      'Brief F2 lists the absolute path /etc/passwd, and a brief names only paths inside the repository.',
+    ])
+  })
+
+  it('refuses a Files: entry that holds ..', () => {
+    const brief = sampleBrief('F3', 'Climbing file', 'OpenCode', {
+      owners: ['opencode'],
+      text: 'Files: `src/../server/index.js`, `..\\outside.txt`.',
+    })
+    expect(briefProblems({ briefs: [brief], ids: ['F3'], laneKey: 'opencode', forbidden: [], branchExists: () => false })).toEqual([
+      'Brief F3 lists src/../server/index.js, which holds .. and climbs out of the repository.',
+      'Brief F3 lists ..\\outside.txt, which holds .. and climbs out of the repository.',
+    ])
+  })
+
+  it('refuses a Files: entry the lane may not touch', () => {
+    const brief = sampleBrief('F4', 'Forbidden file', 'Hermes', {
+      owners: ['hermes'],
+      text: 'Files: `server/index.js`, `docs/agents/CHANGELOG.md`.',
+    })
+    expect(briefProblems({
+      briefs: [brief],
+      ids: ['F4'],
+      laneKey: 'hermes',
+      forbidden: ['server/**'],
+      branchExists: () => false,
+    })).toEqual(['Brief F4 lists server/index.js, which lanes.json forbids for hermes.'])
+  })
+
+  it('catches the files in a plain Files: list without backticks', () => {
+    const brief = sampleBrief('F5', 'Plain files', 'Hermes', {
+      owners: ['hermes'],
+      text: 'Files: server/index.js and ..\\..\\outside.txt',
+    })
+    expect(briefProblems({
+      briefs: [brief],
+      ids: ['F5'],
+      laneKey: 'hermes',
+      forbidden: ['server/**'],
+      branchExists: () => false,
+    })).toEqual([
+      'Brief F5 lists server/index.js, which lanes.json forbids for hermes.',
+      'Brief F5 lists ..\\..\\outside.txt, which holds .. and climbs out of the repository.',
+    ])
+  })
+
+  it('checks the Files: list even with force', () => {
+    const brief = sampleBrief('F6', 'Forced file', 'Hermes', {
+      owners: ['opencode'],
+      done: true,
+      ownerText: 'OpenCode, merged as 0.1.1',
+      text: 'Files: `server/index.js`.',
+    })
+    expect(briefProblems({
+      briefs: [brief],
+      ids: ['F6'],
+      laneKey: 'hermes',
+      forbidden: ['server/**'],
+      branchExists: () => false,
+      force: true,
+    })).toEqual(['Brief F6 lists server/index.js, which lanes.json forbids for hermes.'])
+  })
+})
+
+describe('briefWorktreeProblems', () => {
+  const base = 'C:\\GitHub'
+  const main = `${base}\\MachineRoom`
+  const lanes = {
+    opencode: { worktree: `${main}\\.worktrees\\opencode` },
+    opencode4: { worktree: `${main}\\.worktrees\\opencode4` },
+  }
+  const data = { laneKey: 'opencode4', mainCheckout: main, lanes }
+
+  it('lets this lane worktree through', () => {
+    expect(briefWorktreeProblems({ ...data, worktree: `${main}\\.worktrees\\opencode4` })).toEqual([])
+  })
+
+  it('lets a folder under .worktrees through when no lane names it', () => {
+    expect(briefWorktreeProblems({ ...data, worktree: `${main}\\.worktrees\\scratch` })).toEqual([])
+  })
+
+  it('refuses the main checkout', () => {
+    expect(briefWorktreeProblems({ ...data, worktree: main }))
+      .toEqual([`The lane worktree ${main} is the main checkout, so the runner will not start there.`])
+  })
+
+  it('refuses another lane worktree', () => {
+    expect(briefWorktreeProblems({ ...data, worktree: `${main}\\.worktrees\\opencode` }))
+      .toEqual([`The lane worktree ${main}\\.worktrees\\opencode is the opencode lane worktree, not this lane's.`])
+  })
+
+  it('refuses the user profile, the OS temp folder and the runs folder', () => {
+    const home = 'C:\\Users\\me'
+    const temp = `${home}\\AppData\\Local\\Temp`
+    const runs = `${temp}\\machineroom-runs`
+    const places = { ...data, home, temp, runs }
+    expect(briefWorktreeProblems({ ...places, worktree: home }))
+      .toEqual([`The lane worktree ${home} is the user profile, so the runner will not start there.`])
+    expect(briefWorktreeProblems({ ...places, worktree: temp }))
+      .toEqual([`The lane worktree ${temp} is the OS temp folder, so the runner will not start there.`])
+    expect(briefWorktreeProblems({ ...places, worktree: runs }))
+      .toEqual([`The lane worktree ${runs} is the runs folder or inside it, so the runner will not start there.`])
+    expect(briefWorktreeProblems({ ...places, worktree: `${runs}\\run-1` }))
+      .toEqual([`The lane worktree ${runs}\\run-1 is the runs folder or inside it, so the runner will not start there.`])
+  })
+
+  it('refuses a folder outside .worktrees of this repository', () => {
+    expect(briefWorktreeProblems({ ...data, worktree: `${base}\\Other` }))
+      .toEqual([`The lane worktree ${base}\\Other is not under .worktrees of this repository.`])
+    expect(briefWorktreeProblems({ ...data, worktree: `${main}\\.worktrees` }))
+      .toEqual([`The lane worktree ${main}\\.worktrees is not under .worktrees of this repository.`])
+  })
+
+  it('lets a lane with no worktree through so the command builder names it', () => {
+    expect(briefWorktreeProblems({ ...data, worktree: '' })).toEqual([])
   })
 })
 
@@ -1034,6 +1167,7 @@ describe('scripts/test.mjs', () => {
 })
 
 const RUN_LANE_SCRIPT = fileURLToPath(new URL('../scripts/run-lane.mjs', import.meta.url))
+const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
 const TASKS_MARKDOWN = readFileSync(new URL('../docs/agents/TASKS.md', import.meta.url), 'utf8')
 
 function runLane(args, env = {}) {
@@ -1141,5 +1275,32 @@ describe('scripts/run-lane.mjs', () => {
     expect(forced.stdout).toContain('file:')
     expect(forced.stdout).toContain('args:')
     expect(forced.stdout).toContain('cwd:')
+  })
+
+  it('refuses a dry run whose lane worktree is the main checkout', async () => {
+    const folder = makeTempDir('machine-room-brief-worktree-')
+    try {
+      const found = spawnSync(gitPath(), ['rev-parse', '--git-common-dir'], { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true })
+      expect(found.status).toBe(0)
+      const checkout = realpathSync.native(dirname(resolve(REPO_ROOT, String(found.stdout ?? '').trim())))
+      const lanesFile = join(folder, 'lanes.json')
+      writeFileSync(lanesFile, JSON.stringify({
+        opencode: {
+          name: 'OpenCode',
+          worktree: checkout,
+          cli: { harness: 'opencode', bin: 'opencode' },
+        },
+      }))
+      const result = await runLane(['opencode', 'U77', '--force', '--dry-run'], {
+        MACHINEROOM_LANES_FILE: lanesFile,
+        MACHINEROOM_RUNS: join(folder, 'runs'),
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain(`The lane worktree ${checkout} is the main checkout`)
+      expect(result.stdout).not.toContain('args:')
+      expect(result.stdout).not.toContain('cwd:')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
   })
 })

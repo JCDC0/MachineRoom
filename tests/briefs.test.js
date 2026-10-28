@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { branchFor, buildPrompt, modelFor, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
+import { branchFor, briefFileList, buildPrompt, modelFor, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 
 const read = (name) => readFileSync(new URL(`../docs/agents/${name}`, import.meta.url), 'utf8')
 const briefs = parseBriefs(read('TASKS.md'))
@@ -45,6 +45,38 @@ describe('parseBriefs', () => {
 
   it('ignores an empty file', () => {
     expect(parseBriefs('')).toEqual([])
+  })
+})
+
+describe('briefFileList', () => {
+  it('reads a backticked Files: list', () => {
+    expect(briefFileList('Files: `src/a.js`, `tests/a.test.js` and `docs/agents/CHANGELOG.md`.')).toEqual([
+      'src/a.js', 'tests/a.test.js', 'docs/agents/CHANGELOG.md',
+    ])
+  })
+
+  it('reads a plain Files: list without backticks', () => {
+    expect(briefFileList('Files: server/index.js and ..\\..\\outside.txt')).toEqual(['server/index.js', '..\\..\\outside.txt'])
+  })
+
+  it('strips a parenthetical note and ignores prose after the entry', () => {
+    expect(briefFileList('Files: `scripts/run-lane.mjs` (the call only), `docs/agents/CONTROL-CLIENT.md` only if it describes `/api/health`.')).toEqual([
+      'scripts/run-lane.mjs', 'docs/agents/CONTROL-CLIENT.md',
+    ])
+  })
+
+  it('keeps each entry once and reads the real U77 brief', () => {
+    expect(briefFileList('Files: `src/a.js`, `src/a.js`.')).toEqual(['src/a.js'])
+    expect(briefFileList(byId('U77').text)).toEqual([
+      'src/briefs/run.js', 'src/briefs/briefs.js', 'scripts/run-lane.mjs', 'docs/agents/CHANGELOG.md',
+    ])
+  })
+
+  it('answers an empty list for no marker, none or a reference to another brief', () => {
+    expect(briefFileList('No list here.')).toEqual([])
+    expect(briefFileList('Files: none.')).toEqual([])
+    expect(briefFileList('Files: as R3.')).toEqual([])
+    expect(briefFileList('')).toEqual([])
   })
 })
 
