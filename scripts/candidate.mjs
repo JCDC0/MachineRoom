@@ -31,6 +31,10 @@ const OPTION_NAMES = {
   '--root': 'projectRoot',
 }
 
+function portProblem(port) {
+  return `Port ${port} is in use. Pass --port.`
+}
+
 function checkPort(port) {
   const number = Number(port)
   if (!Number.isInteger(number) || number < 1 || number > 65535) throw new Error(BAD_PORT)
@@ -285,7 +289,7 @@ export async function runCandidate({
     log(USAGE)
     return 0
   }
-  if (!(await portIsFree(options.port))) throw new Error(`Port ${options.port} is in use. Pass --port.`)
+  if (!(await portIsFree(options.port))) throw new Error(portProblem(options.port))
   const lanes = readLanes(cwd)
   const plan = candidatePlan({ lanes, lane: options.lane, port: options.port })
   const state = await worktreeState(plan.worktree, env)
@@ -298,6 +302,7 @@ export async function runCandidate({
     for (const line of built.lines) error(line)
     return 1
   }
+  if (!(await portIsFree(options.port))) throw new Error(portProblem(options.port))
   const child = startCandidate({ plan, options, env: childEnv, stdio })
   if (onChild) onChild(child)
   log(candidateLine(plan, state))

@@ -3,7 +3,7 @@ import { existsSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { openBrowser, openCommand, runDoctor, upArgs, upBlock } from '../server/doctor.js'
+import { doctorSettings, openBrowser, openCommand, runDoctor, upArgs, upBlock } from '../server/doctor.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -117,6 +117,17 @@ describe('machine-room doctor', () => {
     expect(result.lines[3]).toContain('The OpenCode lane starts from')
     expect(result.lines[4]).toContain('The Claude Code lane starts from')
     expect(statSync(runs).isDirectory()).toBe(true)
+  })
+
+  it('checks the runs folder MACHINEROOM_RUNS names', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const runs = join(makeFolder('machine-room-doctor-runs-'), 'named-runs')
+    const lanes = writeLanes({})
+    const env = { ...process.env, MACHINEROOM_RUNS: runs }
+
+    expect(doctorSettings({}, env).runsFolder).toBe(resolve(runs))
+    const result = runDoctor({ projectRoot: project, lanesFile: lanes, env })
+    expect(result.lines).toContain(`ok The runs folder ${runs} is ready.`)
   })
 
   it('fails a project folder that does not exist', () => {

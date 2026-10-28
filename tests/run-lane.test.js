@@ -1096,6 +1096,27 @@ describe('scripts/run-lane.mjs', () => {
     }
   })
 
+  it('reads its records from the runs folder MACHINEROOM_RUNS names', async () => {
+    const folder = makeTempDir('machine-room-env-runs-')
+    try {
+      const runsFolder = join(folder, 'named-runs')
+      mkdirSync(runsFolder, { recursive: true })
+      writeFileSync(
+        join(runsFolder, 'runs.jsonl'),
+        `${JSON.stringify({ lane: 'hermes', model: 'deepseek/x', branch: 'feat/a', costUsd: 0.2, startedAt: '2026-10-19T10:00:00.000Z' })}\n`
+      )
+      writeFileSync(join(runsFolder, 'outcomes.jsonl'), `${JSON.stringify({ branch: 'feat/a', outcome: 'merged', fixes: 0 })}\n`)
+      const emptyTemp = join(folder, 'empty')
+      mkdirSync(emptyTemp, { recursive: true })
+
+      const result = await runLane(['--outcomes'], { TEMP: emptyTemp, MACHINEROOM_RUNS: runsFolder })
+      expect(result.code).toBe(0)
+      expect(result.stdout.trim()).toContain('hermes  deepseek/x  runs 1, merged 1, rejected 0, pending 0, merge rate 100%')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
   it('refuses a merged brief before it prints the dry run', async () => {
     const merged = parseBriefs(TASKS_MARKDOWN).find(
       (brief) => brief.done && Array.isArray(brief.owners) && brief.owners.includes('opencode')

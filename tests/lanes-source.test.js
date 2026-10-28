@@ -4,7 +4,7 @@ import { createServer } from 'node:http'
 import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readLanes, subOrchestratorAgent } from '../server/lanes-source.js'
+import { createLanesSource, createRecordsCache, laneAgents, mainCheckoutOf, readLanes, runsFolder, subOrchestratorAgent } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTree } from '../src/model/paths.js'
@@ -662,5 +662,36 @@ describe('the V5 audit fixes in the lane source', () => {
     expect(frames).toHaveLength(3)
     await sleep(300)
     expect(requests).toEqual([])
+  })
+})
+
+describe('the runs folder', () => {
+  it('follows MACHINEROOM_RUNS the way run-lane writes it', async () => {
+    const base = tempDir('mr-lanes-env-')
+    const runs = join(base, 'named-runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const previous = process.env.MACHINEROOM_RUNS
+    const frames = []
+    let source = null
+    process.env.MACHINEROOM_RUNS = runs
+    try {
+      expect(runsFolder({ MACHINEROOM_RUNS: runs, TEMP: join(base, 'temp') })).toBe(resolve(runs))
+      source = createLanesSource({
+        lanes,
+        repoRoot: base,
+        quietMs: 60000,
+        pollMs: 20,
+        onFrame: (frame) => frames.push(frame),
+      })
+      cleanups.push(() => source.stop())
+      source.start()
+      writeFileSync(join(runs, 'opencode-S6a-20261028-120000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
+      await waitFor(() => logFrames(frames).length === 1, { what: 'the log in the named runs folder' })
+    } finally {
+      if (previous === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previous
+    }
+    expect(frames[0].type).toBe('heartbeat.run.queued')
   })
 })

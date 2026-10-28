@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runsFolder } from './lanes-source.js'
 import { programPath } from './programPath.js'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -11,7 +11,7 @@ const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 export function doctorSettings(options = {}, env = process.env, cwd = process.cwd()) {
   return {
     projectRoot: options.projectRoot ?? env.PROJECT_ROOT ?? cwd,
-    runsFolder: options.runsFolder ?? join(env.TEMP || tmpdir(), 'machineroom-runs'),
+    runsFolder: options.runsFolder ?? runsFolder(env),
     lanesFile: options.lanesFile ?? join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
   }
 }
