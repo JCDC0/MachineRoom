@@ -24,6 +24,14 @@ describe('createLogger', () => {
     expect(entryFor({ ...base, type: 'tool.end', id: 'a', ok: true })).toBeNull()
   })
 
+  it('gives one dim line when one agent talks to another', () => {
+    expect(entryFor({ ...base, type: 'agent.message', to: 'sub-front', kind: 'order' })).toEqual({
+      agent: 'Claude Code',
+      text: 'claude > sub-front: order',
+      tone: 'dim',
+    })
+  })
+
   it('names the call that failed', () => {
     entryFor({ ...base, type: 'tool.start', id: 'b', label: 'npm test' })
     expect(entryFor({ ...base, type: 'tool.end', id: 'b', ok: false })).toMatchObject({ text: 'failed npm test', tone: 'error' })

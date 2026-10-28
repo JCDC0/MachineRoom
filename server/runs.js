@@ -178,7 +178,7 @@ export function readOutcomeRecords(file) {
   return readJsonLines(file)
 }
 
-export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null }) {
+export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand, sendJson, readJsonBody, notify = () => {}, orchestrators = () => null, lanesFile = '', runsFolder = '', activeLanes = null, isLaneActive = null, onMessage = () => {} }) {
   const resolvedRoot = projectRoot ? realPath(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const laneFile = lanesFile ? resolve(lanesFile) : REPO_LANES
@@ -285,6 +285,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     child.stderr?.on('data', take)
     child.on('error', () => finish(item))
     child.on('close', () => finish(item))
+    if (startedBy) {
+      try {
+        onMessage({ from: startedBy === 'orchestrator' ? 'orchestrator' : `sub-${startedBy}`, to: lane, kind: 'dispatch' })
+      } catch {}
+    }
     return entry
   }
 

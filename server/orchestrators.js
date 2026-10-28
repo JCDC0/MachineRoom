@@ -174,6 +174,7 @@ export function createOrchestrators({
   readJsonBody,
   changedFiles = branchChanges,
   onMasked,
+  onMessage = () => {},
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -181,6 +182,22 @@ export function createOrchestrators({
   const instances = new Map()
   const configs = new Map()
   let stopped = false
+
+  function agentKey(id) {
+    const key = typeof id === 'string' ? id.trim() : ''
+    if (!key) return ''
+    return key === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub-${key}`
+  }
+
+  function announce(from, to, kind) {
+    if (stopped) return
+    const sender = typeof from === 'string' ? from.trim() : ''
+    const receiver = typeof to === 'string' ? to.trim() : ''
+    if (!sender || !receiver || !kind) return
+    try {
+      onMessage({ from: sender, to: receiver, kind })
+    } catch {}
+  }
 
   function currentLaneKeys() {
     const all = readAllLanes({ runsFolder: folder, lanesJson: typeof lanes === 'function' ? lanes() : (lanes ?? {}) })
@@ -199,6 +216,7 @@ export function createOrchestrators({
     bridgeUrl,
     onNotice,
     onMasked,
+    onMessage: (message) => announce(message?.from, message?.to, message?.kind),
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -256,12 +274,15 @@ export function createOrchestrators({
       contextWindow: config.contextWindow,
       onNotice,
       onMasked,
+      onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind),
       extraInstructions: subPrompt(sub, ORCHESTRATOR_KEY, readSaved().ladder),
       onReply: (text) => {
         if (stopped) return
         if (!instances.has(config.id)) return
         const parent = instances.get(ORCHESTRATOR_KEY)
-        if (parent) parent.deliver(`sub:${config.id}`, text)
+        if (!parent) return
+        const delivered = parent.deliver(`sub:${config.id}`, text)
+        if (delivered) announce(agentKey(config.id), ORCHESTRATOR_KEY, 'report')
       },
       outsideFiles: (record) => {
         if (sub.restricted !== true) return []
@@ -424,6 +445,7 @@ export function createOrchestrators({
         return { status: 400, body: { error: MESSAGE_PROBLEM } }
       }
       const sent = instance.deliver('orchestrator', text)
+      if (sent) announce(ORCHESTRATOR_KEY, agentKey(id), 'order')
       return { status: 202, body: { id: sent?.id ?? null } }
     }
     if (from !== 'owner') return { status: 400, body: { error: MESSAGE_FROM_PROBLEM } }

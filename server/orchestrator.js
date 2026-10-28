@@ -388,6 +388,7 @@ export function createOrchestrator({
   extraInstructions = '',
   onReply = null,
   onMasked = () => {},
+  onMessage = () => {},
   outsideFiles = null,
   onOutsideScope = null,
   contextWindow: contextWindowOption = 0,
@@ -1349,6 +1350,9 @@ export function createOrchestrator({
     const startedBy = typeof record?.startedBy === 'string' && record.startedBy ? record.startedBy : ORCHESTRATOR_KEY
     if (startedBy !== key) return
     if (!sessionId || state === 'paused') return
+    try {
+      onMessage({ from: laneKey, to: key, kind: 'wake' })
+    } catch {}
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
     const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
     let text = record ? `${first}\n${recordLine(record)}` : first

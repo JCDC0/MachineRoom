@@ -19,6 +19,7 @@ export function makeContext(tree) {
 }
 
 const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
+const MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
 export const SEEN_LIMIT = 20000
 export const ENDED_LIMIT = 1000
 
@@ -58,6 +59,15 @@ export function createPipeline({ agents, tree }) {
     }
 
     const payload = frame.payload
+    if (frame.type === 'orchestrator.message') {
+      const from = typeof payload?.from === 'string' ? payload.from.trim() : ''
+      const to = typeof payload?.to === 'string' ? payload.to.trim() : ''
+      const kind = typeof payload?.kind === 'string' ? payload.kind.trim() : ''
+      if (!from || !to || !MESSAGE_KINDS.has(kind)) return []
+      const parsed = typeof payload.ts === 'string' ? Date.parse(payload.ts) : payload.ts
+      const ts = typeof parsed === 'number' && Number.isFinite(parsed) ? parsed : Date.parse(frame.createdAt)
+      return finalise([{ time: ts, type: 'agent.message', agent: from, runId: null, to, kind, order: (order += 1) }])
+    }
     const agent = byId.get(payload?.agentId)
     if (!agent) return []
     const runId = payload.runId ?? null

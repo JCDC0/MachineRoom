@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
-import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM } from '../server/runs.js'
+import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi } from '../server/runs.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   PROJECT_CONFIRM_LIMIT,
@@ -268,6 +268,41 @@ describe('the runs route with a task', () => {
     expect(res.status).toBe(400)
     expect(res.body).toEqual({ error: BRIEF_PROJECT_PROBLEM })
     expect(readArgs(out)).toBeNull()
+  })
+})
+
+describe('the runs route with a starter', () => {
+  it('calls onMessage once with the dispatch from the starter to the lane', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const messages = []
+    let answer = null
+    const api = createRunsApi({
+      projectRoot: project,
+      briefsDir: join(REPO_ROOT, 'docs', 'agents'),
+      runnerCommand: { file: process.execPath, args: [writeRunner(runnerDir, out)] },
+      sendJson: (req, res, status, body) => {
+        answer = { status, body }
+      },
+      readJsonBody: async () => ({ lane: 'opencode', task: 'Fix it.', startedBy: 'frontend', confirmed: true }),
+      orchestrators: () => ({
+        idForToken: () => null,
+        sector: (id) => (id === 'frontend' ? { id, name: 'Frontend', lanes: ['opencode'] } : null),
+      }),
+      onMessage: (message) => messages.push(message),
+    })
+    cleanups.push(() => api.stopAll())
+
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/control/runs')
+    )
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(202)
+    expect(messages).toEqual([{ from: 'sub-frontend', to: 'opencode', kind: 'dispatch' }])
+    await waitFor(() => readArgs(out), { what: 'the runner arguments' })
   })
 })
 

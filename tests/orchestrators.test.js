@@ -9,7 +9,7 @@ import { chatFileFor, CONFIRM_HARNESS_PROBLEM } from '../server/orchestrator.js'
 import { branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
-import { getJson, postJson } from './helpers/bridge.js'
+import { getJson, postJson, readFrames } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -182,7 +182,7 @@ function makeBase({ ladder = null, branch = '' } = {}) {
   return files
 }
 
-function makeRig(files) {
+function makeRig(files, extra = {}) {
   const registry = createOrchestrators({
     projectRoot: files.projectRoot,
     runsFolder: files.runs,
@@ -191,6 +191,7 @@ function makeRig(files) {
     promptFile: files.promptFile,
     bridgeUrl: () => 'http://127.0.0.1:5999',
     onNotice: () => {},
+    ...extra,
   })
   cleanups.push(() => registry.close())
   return { ...files, registry }
@@ -985,6 +986,45 @@ describe('the orchestrator registry', () => {
     expect(sent.status).toBe(202)
     expect(rig.chat('frontend').messages.some((message) => message.from === 'orchestrator' && message.text === 'Do the goal')).toBe(true)
   })
+
+  it('sends one order frame for a main message to a sub and one report frame for its reply', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    writeFileSync(
+      chatFileFor(files.projectRoot, files.runs, 'frontend'),
+      `${JSON.stringify({ project: files.projectRoot, sessionId: 'sub-session', state: 'idle', messages: [] })}\n`
+    )
+    const rig = await makeBridge(files)
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+    const sent = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
+      id: 'frontend',
+      text: 'Do the goal',
+      from: 'orchestrator',
+      confirmed: true,
+    }, mainToken)
+    expect(sent.status).toBe(202)
+    await waitFor(
+      async () => (await getJson(`${rig.url}/api/orchestrator`)).body.messages.some((message) => message.from === 'sub:frontend'),
+      15000,
+      'the sub report'
+    )
+
+    const frames = (
+      await readFrames(
+        rig.url,
+        (list) => list.some((frame) => frame.payload?.kind === 'order') && list.some((frame) => frame.payload?.kind === 'report')
+      )
+    ).filter((frame) => frame.type === 'orchestrator.message')
+    const orders = frames.filter((frame) => frame.payload.kind === 'order')
+    const reports = frames.filter((frame) => frame.payload.kind === 'report')
+    expect(orders).toHaveLength(1)
+    expect(reports).toHaveLength(1)
+    expect(orders[0].payload).toEqual({ from: 'orchestrator', to: 'sub-frontend', kind: 'order', ts: expect.any(String) })
+    expect(reports[0].payload).toEqual({ from: 'sub-frontend', to: 'orchestrator', kind: 'report', ts: expect.any(String) })
+    for (const frame of frames) {
+      expect(frame.companyId).toBe('company-orchestrator')
+      expect(Number.isFinite(Date.parse(frame.createdAt))).toBe(true)
+    }
+  })
 })
 
 describe('starting lanes from a sub orchestrator', () => {
@@ -1054,6 +1094,56 @@ describe('starting lanes from a sub orchestrator', () => {
     expect(main.status).toBe(202)
     await waitFor(() => readLines(runnerCalls).length === 2)
     expect(readLines(runnerCalls)[1].slice(-2)).toEqual(['--started-by', 'orchestrator'])
+  })
+
+  it('sends one dispatch frame from the starter to the lane it starts', async () => {
+    const files = makeBase()
+    const runner = join(files.base, 'runner.mjs')
+    writeFileSync(runner, RUNNER)
+    const runnerCalls = join(files.base, 'runner-calls.jsonl')
+    const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
+    await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true })
+
+    const inside = await pagePost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      startedBy: 'frontend',
+      confirmed: true,
+    })
+    expect(inside.status).toBe(202)
+
+    const frames = (
+      await readFrames(rig.url, (list) => list.some((frame) => frame.payload?.kind === 'dispatch'))
+    ).filter((frame) => frame.type === 'orchestrator.message' && frame.payload.kind === 'dispatch')
+    expect(frames).toHaveLength(1)
+    expect(frames[0].payload).toEqual({ from: 'sub-frontend', to: 'opencode', kind: 'dispatch', ts: expect.any(String) })
+    await waitFor(() => readLines(runnerCalls).length === 1)
+  })
+
+  it('sends one wake frame from the lane to the orchestrator it wakes', async () => {
+    const seen = []
+    const rig = makeRig(makeBase({ ladder: { subs: [FRONTEND] } }), { onMessage: (message) => seen.push(message) })
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Do the work', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+    await waitIdle(rig.registry, 'orchestrator', 2)
+    seen.length = 0
+
+    appendRecord(rig, { logName: 'opencode-K9-20261025-150000', startedBy: 'frontend' })
+    rig.registry.onFrame(frame('opencode-K9-20261025-150000'))
+    await waitFor(() => messagesOf(rig.registry, 'frontend').some((message) => message.from === 'room' && message.text.includes('opencode-K9-20261025-150000')))
+    expect(seen.filter((message) => message.kind === 'wake')).toEqual([{ from: 'opencode', to: 'sub-frontend', kind: 'wake' }])
+
+    appendRecord(rig, { logName: 'opencode-K9-20261025-150500' })
+    rig.registry.onFrame(frame('opencode-K9-20261025-150500'))
+    await waitFor(() =>
+      messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text.includes('opencode-K9-20261025-150500'))
+    )
+    expect(seen.filter((message) => message.kind === 'wake')).toEqual([
+      { from: 'opencode', to: 'sub-frontend', kind: 'wake' },
+      { from: 'opencode', to: 'orchestrator', kind: 'wake' },
+    ])
   })
 
   it('refuses no-Origin requests without valid tokens and lets pages start runs', async () => {

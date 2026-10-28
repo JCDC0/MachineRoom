@@ -31,6 +31,8 @@ export function createLogger(agents) {
       }
       case 'error':
         return { agent, text: shorten(activity.text, TEXT_LIMIT), tone: 'error' }
+      case 'agent.message':
+        return { agent, text: `${activity.agent} > ${activity.to}: ${activity.kind}`, tone: 'dim' }
       case 'run.end':
         return activity.ok
           ? { agent, text: 'finished', tone: 'done' }

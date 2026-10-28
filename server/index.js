@@ -70,6 +70,7 @@ const TREE_MAX_BUFFER = 64 * 1024 * 1024
 const TREE_TIMEOUT_MS = 20000
 const IGNORED_WATCH = /(^|[/\\])(\.git|node_modules|\.worktrees)([/\\]|$)/
 const RUN_END_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
+const AGENT_MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
 const gzipAsync = promisify(gzipCallback)
 
 function walkFiles(listDir, currentDir, prefix = '', out = []) {
@@ -282,6 +283,7 @@ export function createBridge(options = {}) {
     readJsonBody,
     orchestrators: () => orchestrators,
     activeLanes: () => activeLanes,
+    onMessage: sendAgentMessage,
     notify: (event) => {
       for (const client of clients) writeSseChange(client, event)
     },
@@ -418,6 +420,7 @@ export function createBridge(options = {}) {
       onMasked: (count) => {
         maskedTotal += count
       },
+      onMessage: sendAgentMessage,
       sendJson,
       readJsonBody,
     })
@@ -719,6 +722,20 @@ export function createBridge(options = {}) {
   function accept(parsed) {
     countUnreadable(parsed)
     release(masker.push(parsed, Date.now()))
+  }
+
+  function sendAgentMessage(message) {
+    const from = typeof message?.from === 'string' ? message.from.trim() : ''
+    const to = typeof message?.to === 'string' ? message.to.trim() : ''
+    const kind = message?.kind
+    if (!from || !to || !AGENT_MESSAGE_KINDS.has(kind)) return
+    const ts = new Date().toISOString()
+    accept({
+      type: 'orchestrator.message',
+      companyId: 'company-orchestrator',
+      createdAt: ts,
+      payload: { from, to, kind, ts },
+    })
   }
 
   const heartbeatTimer = setInterval(() => {
