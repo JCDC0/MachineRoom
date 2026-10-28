@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import FamilyTeam from './FamilyTeam.jsx'
 import FamilyTree from './FamilyTree.jsx'
 import SidebarTabs from './SidebarTabs.jsx'
 import { loadSettings, saveSettings } from './settings.js'
@@ -526,6 +527,7 @@ export function Sidebar({ client = null, live = false, project = '' }) {
   function renderAgents() {
     return (
       <section className="mr-side-agents" aria-label="Agents">
+        {connected && canFamily ? <FamilyTeam client={client} /> : null}
         {connected && canFamily ? <FamilyTree client={client} /> : null}
         {!connected || !canFamily ? (
           <p className="mr-side-note">Agents appear when the room runs live.</p>
