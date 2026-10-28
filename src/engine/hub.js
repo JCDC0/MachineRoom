@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { sectorArcs } from '../model/hierarchy.js'
+import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { minTextScale } from './camera.js'
 import { isOrchestrator, isSubOrchestrator } from './shapes.js'
 import { WHITE, lineMaterial, still, textSprite } from './sprites.js'
@@ -24,6 +24,7 @@ export const SECTOR_LABEL_SPREAD = 60
 export const SECTOR_LABEL_DROP = 180
 export const SECTOR_LABEL_OPACITY = 0.45
 export const SECTOR_LABEL_COLOR = `rgba(255,255,255,${SECTOR_LABEL_OPACITY})`
+export const SECTOR_GLOW_MS = 1000
 
 const TICKS = 120
 const DASHES = 72
@@ -118,6 +119,15 @@ function laneKeys(roster) {
   return keys
 }
 
+export function sectorLaneAngles(arc) {
+  const lanes = Array.isArray(arc?.lanes) ? arc.lanes : []
+  const start = Number(arc?.start)
+  const end = Number(arc?.end)
+  if (lanes.length === 0 || !Number.isFinite(start) || !Number.isFinite(end) || !(end > start)) return []
+  const span = end - start
+  return lanes.map((_, index) => start + ((index + 0.5) / lanes.length) * span)
+}
+
 export function sectorSlotAngles(ladder, roster) {
   const keys = laneKeys(roster)
   const angles = new Map()
@@ -126,13 +136,25 @@ export function sectorSlotAngles(ladder, roster) {
     return angles
   }
   for (const arc of sectorArcs(ladder, keys)) {
-    const span = arc.end - arc.start
-    const count = arc.lanes.length
-    arc.lanes.forEach((key, index) => {
-      angles.set(key, count > 0 ? arc.start + ((index + 0.5) / count) * span : (arc.start + arc.end) / 2)
-    })
+    const laneAngles = sectorLaneAngles(arc)
+    arc.lanes.forEach((key, index) => angles.set(key, laneAngles[index]))
   }
   return angles
+}
+
+export function sectorIdForKey(key, ladder) {
+  const text = typeof key === 'string' ? key : ''
+  if (text.startsWith('sub-')) return text.slice(4)
+  if (text === '' || text === 'orchestrator') return 'orchestrator'
+  return ownerOf(ladder, text)
+}
+
+export function sectorGlow(level, working, delta, reduced = false) {
+  if (working) return 1
+  if (reduced) return 0
+  const current = Math.max(0, Math.min(1, Number(level) || 0))
+  const step = (Math.max(0, Number(delta) || 0) * 1000) / SECTOR_GLOW_MS
+  return Math.max(0, current - step)
 }
 
 function ringPoints(radius, steps, y = 0) {
@@ -188,7 +210,8 @@ function buildSlots(angles) {
 function buildSectors(ladder, parkedKeys, group) {
   const lines = []
   const labels = []
-  if (!ladder) return { lines, labels }
+  const groups = []
+  if (!ladder) return { lines, labels, groups }
   const arcs = sectorArcs(ladder, parkedKeys)
   for (const arc of arcs) {
     const span = arc.end - arc.start
@@ -198,6 +221,7 @@ function buildSectors(ladder, parkedKeys, group) {
     const tone = sectorArcTone(main)
     const sector = new THREE.Group()
     sector.name = `sector:${arc.id}`
+    sector.userData.id = arc.id
     sectorArcRadii().forEach((radius, index) => {
       const points = []
       for (let i = 0; i <= ARC_STEPS; i++) {
@@ -207,6 +231,7 @@ function buildSectors(ladder, parkedKeys, group) {
       const opacity = index === 1 ? tone.center : tone.edge
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMaterial(WHITE, opacity))
       line.userData.baseOpacity = opacity
+      line.userData.sector = arc.id
       sector.add(line)
       lines.push(line)
     })
@@ -217,9 +242,10 @@ function buildSectors(ladder, parkedKeys, group) {
     label.userData.factor = 1
     sector.add(label)
     labels.push(label)
+    groups.push(sector)
     group.add(sector)
   }
-  return { lines, labels }
+  return { lines, labels, groups }
 }
 
 export function createHub(scene, agentsOrCount, ladder = null) {
@@ -252,6 +278,9 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let slots = []
   let sectorLines = []
   let sectorLabels = []
+  let sectorGroups = []
+  let sectorLevels = new Map()
+  let workingKeys = new Set()
   let ringLines = [main]
   let boost = 0
 
@@ -293,6 +322,8 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     const built = buildSectors(currentLadder, parkedKeys, sectorGroup)
     sectorLines = built.lines
     sectorLabels = built.labels
+    sectorGroups = built.groups
+    sectorLevels = new Map(sectorGroups.map((sector) => [sector.userData.id, 0]))
     main.visible = !currentLadder
     ringLines = currentLadder ? sectorLines : [main]
     for (const line of ringLines) {
@@ -314,6 +345,12 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     rebuild()
   }
 
+  function setWorking(keys) {
+    workingKeys = new Set(
+      (Array.isArray(keys) ? keys : []).filter((key) => typeof key === 'string' && key !== '')
+    )
+  }
+
   function pulse(color, amount) {
     for (const line of ringLines) line.material.color.setHex(color)
     boost = Math.max(boost, amount)
@@ -329,10 +366,16 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   function update(time, delta, camera = null, viewportHeight = 0) {
     const isStill = still()
     boost = Math.max(0, boost - delta * 1.2)
+    const workingSectors = new Set()
+    for (const key of workingKeys) workingSectors.add(sectorIdForKey(key, currentLadder))
+    for (const [id, level] of sectorLevels) {
+      sectorLevels.set(id, sectorGlow(level, workingSectors.has(id), delta, isStill))
+    }
     for (const line of ringLines) {
       const base = line.userData.baseOpacity ?? RING_OPACITY
-      line.material.opacity = Math.min(1, base + boost * 0.5)
-      if (boost <= 0.01) line.material.color.setHex(WHITE)
+      const level = line.userData.sector ? sectorLevels.get(line.userData.sector) ?? 0 : 0
+      line.material.opacity = Math.min(1, base + boost * 0.5 + (1 - base) * level)
+      if (level > 0 || boost <= 0.01) line.material.color.setHex(WHITE)
     }
     if (camera && viewportHeight > 0) {
       const focal = viewportHeight / 2 / Math.tan(((camera.fov || 50) * Math.PI) / 360)
@@ -360,5 +403,5 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   if (currentLadder) rebuild()
 
-  return { group, pulse, setSlot, setLadder, setRoster, parkedKeys: () => [...parkedKeys], update, dispose }
+  return { group, pulse, setSlot, setLadder, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, dispose }
 }
