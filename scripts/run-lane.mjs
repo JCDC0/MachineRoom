@@ -11,7 +11,7 @@ import { briefProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MIN
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
-import { readAllLanes } from '../server/lanes-source.js'
+import { readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { acpRunCommand } from './acp-run.mjs'
 import { releaseLaneLock, takeLaneLock } from './lane-lock.mjs'
 import { writeRecording } from './recording-files.mjs'
@@ -24,11 +24,6 @@ const read = (name) => readFileSync(join(docs, name), 'utf8')
 function stamp(date = new Date()) {
   const pad = (value) => String(value).padStart(2, '0')
   return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`
-}
-
-function runsFolder() {
-  const given = process.env.MACHINEROOM_RUNS
-  return given ? resolve(given) : join(process.env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
 function runsFile() {

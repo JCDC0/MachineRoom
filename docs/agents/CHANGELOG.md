@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `run-lane`, the lane source and `doctor` read the runs folder through one helper in `server/lanes-source.js`, so `MACHINEROOM_RUNS` moves the room and the doctor to the folder the runner writes (task U76, A11).
+- `candidate` checks the port again after the build and stops with `Port N is in use. Pass --port.` when another program took it while the build ran (task U76, A10).
+- README says MachineRoom prints no key and puts none in the repository or `lanes.json`, that the Settings key slots are saved in `<runs>/keys.json` outside the repository with mode 0o600, and keeps the sentence about the masked lane log (task U76, A8).
 - A lane started by `run-lane` gets only an allow-list of the shell's names, so `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN` and other secrets no longer reach it; the MachineRoom harness receives its own key names and Hermes receives `OPENROUTER_API_KEY` (task U72).
 - The runner writes a lane's log through the bridge's split-key masker, so a key in the output, split across chunks or not, is `[key]` in the file under the runs folder (task U72).
 - `tests/lane-env.test.js` covers the allow-list, the harness key exception, the masked log, a real `--dry-run` and the real OpenCode start; `scripts/mr-agent.mjs` gives its shell tool the same allow-list, and `scripts/acp-run.mjs` passes the environment it was given to its agent (task U72).

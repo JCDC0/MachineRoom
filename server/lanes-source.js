@@ -18,8 +18,9 @@ const MAX_PARTIAL = 1024 * 1024
 const QUIET_KEPT = 50
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
-export function runsFolder() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+export function runsFolder(env = process.env) {
+  const given = env.MACHINEROOM_RUNS
+  return given ? resolve(given) : join(env.TEMP || tmpdir(), 'machineroom-runs')
 }
 
 export function readLanes(folder = REPO_ROOT) {

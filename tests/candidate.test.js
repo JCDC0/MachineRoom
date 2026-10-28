@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { buildCommand, candidatePlan, laneEnv, parseCandidateArgs, runCandidate } from '../scripts/candidate.mjs'
+import { killTree } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const NO_GIT_CONFIG = join(tmpdir(), 'machineroom-candidate-no-git-config')
@@ -235,6 +236,55 @@ describe('runCandidate', () => {
       })).rejects.toThrow(`Port ${port} is in use. Pass --port.`)
     } finally {
       await new Promise((settle) => server.close(settle))
+    }
+  })
+
+  it('checks the port again after the build and refuses one it lost meanwhile', async () => {
+    const { base, worktree } = makeLaneRepo()
+    writeLanes(base, worktree)
+    const port = await freePort()
+    const holder = join(base, 'holder.mjs')
+    const starter = join(base, 'start-holder.mjs')
+    const pidFile = join(base, 'holder.pid')
+    writeFileSync(holder, [
+      "import { createServer } from 'node:net'",
+      'const server = createServer()',
+      `server.listen(${port}, '127.0.0.1', () => process.stdout.write('held\\n'))`,
+      'setInterval(() => {}, 1000)',
+    ].join('\n'))
+    writeFileSync(starter, [
+      "import { spawn } from 'node:child_process'",
+      "import { writeFileSync } from 'node:fs'",
+      "import { connect } from 'node:net'",
+      `const child = spawn(process.execPath, [${JSON.stringify(holder)}], { detached: true, stdio: 'ignore', windowsHide: true })`,
+      `writeFileSync(${JSON.stringify(pidFile)}, String(child.pid))`,
+      'child.unref()',
+      'const deadline = Date.now() + 10000',
+      'const poll = () => {',
+      `  const socket = connect(${port}, '127.0.0.1')`,
+      "  socket.once('connect', () => { socket.destroy(); process.exit(0) })",
+      "  socket.once('error', () => { socket.destroy(); if (Date.now() > deadline) process.exit(1); setTimeout(poll, 50) })",
+      '}',
+      'poll()',
+    ].join('\n'))
+    const logged = []
+    let child = null
+    try {
+      await expect(runCandidate({
+        argv: ['lane', '--port', String(port)],
+        cwd: base,
+        env: buildEnv([process.execPath, starter]),
+        log: (line) => logged.push(line),
+        error: () => {},
+        onChild: (started) => {
+          child = started
+        },
+      })).rejects.toThrow(`Port ${port} is in use. Pass --port.`)
+      expect(child).toBeNull()
+      expect(logged).toEqual([])
+    } finally {
+      if (child && child.exitCode === null && child.signalCode === null) child.kill()
+      if (existsSync(pidFile)) killTree({ pid: Number(readFileSync(pidFile, 'utf8')) })
     }
   })
 
