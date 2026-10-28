@@ -757,7 +757,7 @@ describe('the control client MCP routes', () => {
       {
         url: 'http://127.0.0.1:9/api/mcp/call',
         method: 'POST',
-        body: JSON.stringify({ server: 'docs', tool: 'search_docs', arguments: { query: 'room' } }),
+        body: JSON.stringify({ server: 'docs', tool: 'search_docs', arguments: { query: 'room' }, confirmed: true }),
       },
     ])
   })

@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   MCP_ARGS_PROBLEM,
+  MCP_CALL_CONFIRM_PROBLEM,
   MCP_CALL_TIMEOUT_MS,
   MCP_COMMAND_PROBLEM,
   MCP_DELETE_CONFIRM_PROBLEM,
@@ -29,6 +30,7 @@ import {
   MCP_TOOLS_PROBLEM,
   MCP_TRANSPORT_PROBLEM,
   MCP_URL_PROBLEM,
+  OWNER_MCP_PROBLEM,
   callMcpServerTool,
   callMcpTool,
   cleanMcpServer,
@@ -41,7 +43,7 @@ import {
   upsertMcpServer,
   writeMcpServers,
 } from '../server/mcp.js'
-import { getJson, postJson, startLaneBridge } from './helpers/bridge.js'
+import { getJson, startLaneBridge } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
@@ -309,6 +311,18 @@ async function startMcpBridge() {
   const started = await startLaneBridge({ runsDir, projectRoot })
   cleanups.push(() => started.stop())
   return started
+}
+
+function pageGet(url, path, headers = {}) {
+  return getJson(`${url}${path}`, { headers: { origin: new URL(url).origin, ...headers } })
+}
+
+function pagePost(url, path, body, headers = {}) {
+  return getJson(`${url}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: new URL(url).origin, ...headers },
+    body: JSON.stringify(body),
+  })
 }
 
 async function readNextChange(url, action) {
@@ -822,14 +836,53 @@ describe('listAllMcpTools and callMcpTool', () => {
 describe('/api/mcp routes', () => {
   it('answers an empty server list', async () => {
     const { url } = await startMcpBridge()
-    const answer = await getJson(`${url}/api/mcp/servers`)
+    const answer = await pageGet(url, '/api/mcp/servers')
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual({ ok: true, servers: [] })
   })
 
+  it('refuses every MCP route with no Origin', async () => {
+    const { url, runsDir } = await startMcpBridge()
+    writeMcpServers(runsDir, [{ name: 'web', transport: 'http', url: 'http://127.0.0.1:1/mcp', enabled: true }])
+    const asks = [
+      { method: 'GET', path: '/api/mcp/servers' },
+      { method: 'POST', path: '/api/mcp/servers', body: { confirmed: true } },
+      { method: 'POST', path: '/api/mcp/servers/web/delete', body: { confirmed: true } },
+      { method: 'GET', path: '/api/mcp/tools' },
+      { method: 'POST', path: '/api/mcp/call', body: { confirmed: true } },
+    ]
+    for (const ask of asks) {
+      const res = await getJson(`${url}${ask.path}`, {
+        method: ask.method,
+        headers: { 'content-type': 'application/json' },
+        body: ask.body ? JSON.stringify(ask.body) : undefined,
+      })
+      expect(res.status, `${ask.method} ${ask.path}`).toBe(403)
+      expect(res.body).toEqual({ error: OWNER_MCP_PROBLEM })
+    }
+    expect(readMcpServers(runsDir)).toHaveLength(1)
+  })
+
+  it('takes a same-origin page GET with no Origin header', async () => {
+    const { url } = await startMcpBridge()
+    for (const path of ['/api/mcp/servers', '/api/mcp/tools']) {
+      const answer = await getJson(`${url}${path}`, { headers: { 'sec-fetch-site': 'same-origin' } })
+      expect(answer.status, path).toBe(200)
+    }
+    const servers = await getJson(`${url}/api/mcp/servers`, { headers: { 'sec-fetch-site': 'same-origin' } })
+    expect(servers.body).toEqual({ ok: true, servers: [] })
+  })
+
+  it('refuses a tool call without the owner confirm', async () => {
+    const { url } = await startMcpBridge()
+    const res = await pagePost(url, '/api/mcp/call', { server: 'local', tool: 'echo' })
+    expect(res.status).toBe(400)
+    expect(res.body).toEqual({ error: MCP_CALL_CONFIRM_PROBLEM })
+  })
+
   it('refuses a save without confirmation and saves a valid server with it', async () => {
     const { url, runsDir } = await startMcpBridge()
-    const unconfirmed = await postJson(`${url}/api/mcp/servers`, {
+    const unconfirmed = await pagePost(url, '/api/mcp/servers', {
       name: 'files',
       transport: 'stdio',
       command: 'node',
@@ -839,7 +892,7 @@ describe('/api/mcp routes', () => {
     expect(unconfirmed.body.error).toBe(MCP_SAVE_CONFIRM_PROBLEM)
     expect(readMcpServers(runsDir)).toEqual([])
 
-    const saved = await postJson(`${url}/api/mcp/servers`, {
+    const saved = await pagePost(url, '/api/mcp/servers', {
       name: 'files',
       transport: 'stdio',
       command: 'node',
@@ -861,13 +914,13 @@ describe('/api/mcp routes', () => {
     })
     expect(saved.body.servers).toEqual([saved.body.server])
     expect(readMcpServers(runsDir)).toEqual([saved.body.server])
-    const listed = await getJson(`${url}/api/mcp/servers`)
+    const listed = await pageGet(url, '/api/mcp/servers')
     expect(listed.body).toEqual({ ok: true, servers: [saved.body.server] })
   })
 
   it('refuses an invalid server and keeps the saved list', async () => {
     const { url, runsDir } = await startMcpBridge()
-    const refused = await postJson(`${url}/api/mcp/servers`, {
+    const refused = await pagePost(url, '/api/mcp/servers', {
       name: 'bad name',
       transport: 'stdio',
       command: 'node',
@@ -875,7 +928,7 @@ describe('/api/mcp routes', () => {
     })
     expect(refused.status).toBe(400)
     expect(refused.body.error).toBe(MCP_NAME_PROBLEM)
-    const noCommand = await postJson(`${url}/api/mcp/servers`, {
+    const noCommand = await pagePost(url, '/api/mcp/servers', {
       name: 'files',
       transport: 'stdio',
       command: ' ',
@@ -883,7 +936,7 @@ describe('/api/mcp routes', () => {
     })
     expect(noCommand.status).toBe(400)
     expect(noCommand.body.error).toBe(MCP_COMMAND_PROBLEM)
-    const badUrl = await postJson(`${url}/api/mcp/servers`, {
+    const badUrl = await pagePost(url, '/api/mcp/servers', {
       name: 'files',
       transport: 'http',
       url: 'ftp://example.com/mcp',
@@ -896,14 +949,14 @@ describe('/api/mcp routes', () => {
 
   it('replaces a server by name and keeps one copy', async () => {
     const { url, runsDir } = await startMcpBridge()
-    await postJson(`${url}/api/mcp/servers`, {
+    await pagePost(url, '/api/mcp/servers', {
       name: 'files',
       transport: 'stdio',
       command: 'node',
       enabled: true,
       confirmed: true,
     })
-    const changed = await postJson(`${url}/api/mcp/servers`, {
+    const changed = await pagePost(url, '/api/mcp/servers', {
       name: 'files',
       transport: 'stdio',
       command: 'node',
@@ -918,29 +971,29 @@ describe('/api/mcp routes', () => {
 
   it('deletes a server behind a confirmation and answers 404 for one that is gone', async () => {
     const { url, runsDir } = await startMcpBridge()
-    await postJson(`${url}/api/mcp/servers`, {
+    await pagePost(url, '/api/mcp/servers', {
       name: 'files',
       transport: 'stdio',
       command: 'node',
       confirmed: true,
     })
-    const unconfirmed = await postJson(`${url}/api/mcp/servers/files/delete`, {})
+    const unconfirmed = await pagePost(url, '/api/mcp/servers/files/delete', {})
     expect(unconfirmed.status).toBe(400)
     expect(unconfirmed.body.error).toBe(MCP_DELETE_CONFIRM_PROBLEM)
-    const missing = await postJson(`${url}/api/mcp/servers/gone/delete`, { confirmed: true })
+    const missing = await pagePost(url, '/api/mcp/servers/gone/delete', { confirmed: true })
     expect(missing.status).toBe(404)
     expect(missing.body.error).toBe(MCP_NOT_FOUND_PROBLEM)
-    const deleted = await postJson(`${url}/api/mcp/servers/files/delete`, { confirmed: true })
+    const deleted = await pagePost(url, '/api/mcp/servers/files/delete', { confirmed: true })
     expect(deleted.status).toBe(200)
     expect(deleted.body).toEqual({ ok: true, deleted: 'files', servers: [] })
     expect(readMcpServers(runsDir)).toEqual([])
-    expect((await getJson(`${url}/api/mcp/servers`)).body.servers).toEqual([])
+    expect((await pageGet(url, '/api/mcp/servers')).body.servers).toEqual([])
   })
 
   it('broadcasts an mcp notice when a server is saved and deleted', async () => {
     const { url } = await startMcpBridge()
     const saved = await readNextChange(url, () =>
-      postJson(`${url}/api/mcp/servers`, {
+      pagePost(url, '/api/mcp/servers', {
         name: 'files',
         transport: 'stdio',
         command: 'node',
@@ -948,25 +1001,25 @@ describe('/api/mcp routes', () => {
       })
     )
     expect(saved).toEqual({ topic: 'mcp' })
-    const deleted = await readNextChange(url, () => postJson(`${url}/api/mcp/servers/files/delete`, { confirmed: true }))
+    const deleted = await readNextChange(url, () => pagePost(url, '/api/mcp/servers/files/delete', { confirmed: true }))
     expect(deleted).toEqual({ topic: 'mcp' })
   })
 
   it('answers no tools when nothing is saved and uses 405 for another method', async () => {
     const { url } = await startMcpBridge()
-    const tools = await getJson(`${url}/api/mcp/tools`)
+    const tools = await pageGet(url, '/api/mcp/tools')
     expect(tools.status).toBe(200)
     expect(tools.body).toEqual({ ok: true, tools: [], errors: [] })
-    const wrong = await postJson(`${url}/api/mcp/tools`, {})
+    const wrong = await pagePost(url, '/api/mcp/tools', {})
     expect(wrong.status).toBe(405)
-    const callWrong = await getJson(`${url}/api/mcp/call`)
+    const callWrong = await pageGet(url, '/api/mcp/call')
     expect(callWrong.status).toBe(405)
   })
 
   it('lists and calls tools on a saved http server', async () => {
     const { url, runsDir } = await startMcpBridge()
     const mcpUrl = await startLocalMcpServer()
-    const saved = await postJson(`${url}/api/mcp/servers`, {
+    const saved = await pagePost(url, '/api/mcp/servers', {
       name: 'local',
       transport: 'http',
       url: mcpUrl,
@@ -975,7 +1028,7 @@ describe('/api/mcp routes', () => {
     })
     expect(saved.status).toBe(200)
 
-    const tools = await getJson(`${url}/api/mcp/tools`)
+    const tools = await pageGet(url, '/api/mcp/tools')
     expect(tools.status).toBe(200)
     expect(tools.body).toEqual({
       ok: true,
@@ -983,10 +1036,11 @@ describe('/api/mcp routes', () => {
       errors: [],
     })
 
-    const called = await postJson(`${url}/api/mcp/call`, {
+    const called = await pagePost(url, '/api/mcp/call', {
       server: 'local',
       tool: 'echo',
       arguments: { text: 'hello bridge' },
+      confirmed: true,
     })
     expect(called.status).toBe(200)
     expect(called.body).toEqual({
@@ -999,7 +1053,7 @@ describe('/api/mcp routes', () => {
 
   it('lists and calls tools on a saved stdio server', async () => {
     const { url } = await startMcpBridge()
-    const saved = await postJson(`${url}/api/mcp/servers`, {
+    const saved = await pagePost(url, '/api/mcp/servers', {
       name: 'real',
       transport: 'stdio',
       command: process.execPath,
@@ -1008,11 +1062,16 @@ describe('/api/mcp routes', () => {
       confirmed: true,
     })
     expect(saved.status).toBe(200)
-    const tools = await getJson(`${url}/api/mcp/tools`)
+    const tools = await pageGet(url, '/api/mcp/tools')
     expect(tools.body.ok).toBe(true)
     expect(tools.body.tools.map((tool) => tool.name)).toEqual(['echo'])
     expect(tools.body.errors).toEqual([])
-    const called = await postJson(`${url}/api/mcp/call`, { server: 'real', tool: 'echo', arguments: { text: 'stdio room' } })
+    const called = await pagePost(url, '/api/mcp/call', {
+      server: 'real',
+      tool: 'echo',
+      arguments: { text: 'stdio room' },
+      confirmed: true,
+    })
     expect(called.body).toEqual({
       ok: true,
       result: { content: [{ type: 'text', text: 'stdio room' }] },
@@ -1022,24 +1081,24 @@ describe('/api/mcp routes', () => {
 
   it('answers a call to a missing server or with bad arguments as a problem', async () => {
     const { url } = await startMcpBridge()
-    const missing = await postJson(`${url}/api/mcp/call`, { server: 'gone', tool: 'echo' })
+    const missing = await pagePost(url, '/api/mcp/call', { server: 'gone', tool: 'echo', confirmed: true })
     expect(missing.status).toBe(200)
     expect(missing.body).toEqual({ ok: false, result: null, problem: MCP_NOT_FOUND_PROBLEM })
-    await postJson(`${url}/api/mcp/servers`, {
+    await pagePost(url, '/api/mcp/servers', {
       name: 'local',
       transport: 'http',
       url: 'http://127.0.0.1:1/mcp',
       enabled: true,
       confirmed: true,
     })
-    const badArgs = await postJson(`${url}/api/mcp/call`, { server: 'local', tool: 'echo', arguments: [1] })
+    const badArgs = await pagePost(url, '/api/mcp/call', { server: 'local', tool: 'echo', arguments: [1], confirmed: true })
     expect(badArgs.body).toEqual({ ok: false, result: null, problem: MCP_TOOL_ARGS_PROBLEM })
   })
 
   it('leaves a turned-off server out of the tool list', async () => {
     const { url, runsDir } = await startMcpBridge()
     writeMcpServers(runsDir, [{ name: 'off', transport: 'http', url: 'http://127.0.0.1:1/mcp', enabled: false }])
-    const tools = await getJson(`${url}/api/mcp/tools`)
+    const tools = await pageGet(url, '/api/mcp/tools')
     expect(tools.body).toEqual({ ok: true, tools: [], errors: [] })
   })
 })

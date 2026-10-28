@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
+import { createReviewsApi, NOT_OWNER_PROBLEM } from '../server/reviews.js'
 import { requestJson } from './helpers/httpJson.js'
 import { makeTempDir as makeTempRoot, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
@@ -134,10 +135,10 @@ async function startReviewsBridge(lanes, { patchLimit, withFiles = true, project
   return { url, dir }
 }
 
-function mergeRequest(url, lane, body) {
+function mergeRequest(url, lane, body, headers = { origin: new URL(url).origin }) {
   return requestJson(`${url}/api/control/reviews/${encodeURIComponent(lane)}/merge`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...headers },
     body: JSON.stringify(body),
     timeoutMs: 30000,
   })
@@ -349,6 +350,39 @@ describe('review routes', () => {
 })
 
 describe('merge route', { timeout: 30000 }, () => {
+  it('refuses a merge with no Origin and no orchestrator token', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const oldMain = git(repo, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+
+    const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' }, {})
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: NOT_OWNER_PROBLEM })
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(oldMain)
+    expect(git(repo, ['status', '--porcelain'])).toBe('')
+  })
+
+  it('takes a valid orchestrator token with no Origin and refuses a wrong one', async () => {
+    const answers = []
+    const api = createReviewsApi({
+      projectRoot: makeTempDir(),
+      sendJson: (req, res, status, body) => {
+        answers.push({ status, body })
+      },
+      readJsonBody: async () => ({ confirmed: true, head: '0'.repeat(40), message: 'Merge the lane' }),
+      orchestrators: () => ({ idForToken: (value) => (value === 'main-token' ? 'orchestrator' : null) }),
+    })
+    const path = new URL('http://127.0.0.1/api/control/reviews/opencode/merge')
+
+    expect(await api.handle({ method: 'POST', headers: { 'x-machineroom-orchestrator': 'main-token' } }, {}, path)).toBe(true)
+    expect(answers[0]).toEqual({ status: 404, body: { error: 'The lane file is missing.' } })
+
+    answers.length = 0
+    await api.handle({ method: 'POST', headers: { 'x-machineroom-orchestrator': 'wrong-token' } }, {}, path)
+    expect(answers[0]).toEqual({ status: 403, body: { error: NOT_OWNER_PROBLEM } })
+  })
+
   it('merges the checked head into main and answers the new commit', async () => {
     const { repo, worktree } = makeLaneRepo()
     const head = git(worktree, ['rev-parse', 'HEAD']).trim()

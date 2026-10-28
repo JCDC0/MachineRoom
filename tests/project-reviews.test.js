@@ -138,7 +138,7 @@ async function startBridge({ projectRoot, briefsDir }) {
 function mergeRequest(url, lane, body) {
   return fetch(`${url}/api/control/reviews/${encodeURIComponent(lane)}/merge`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', origin: new URL(url).origin },
     body: JSON.stringify(body),
   })
 }

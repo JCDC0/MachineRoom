@@ -12,6 +12,11 @@
 - A focus on an agent the room has no view for stops the follow instead of tracking the last agent (task U73, W4).
 - `occluderParts` sizes the depth blocker from `cardBaseWidth` plus the face border, so it covers a card with a long name (task U73, W5).
 - `review-lane` puts its merged-result worktree in `MachineRoom-review-*` beside the checkout instead of the OS temp folder, so the temp-folder test passes in review (task U73).
+- `POST /api/control/reviews/LANE/merge` needs the page's `Origin` or a valid `X-MachineRoom-Orchestrator` token, and answers 403 `The caller is not the owner, so the lane was not merged.` otherwise (task U71).
+- Every `/api/mcp` route needs the page's `Origin`, and `POST /api/mcp/call` needs `confirmed: true`, answering `The owner must confirm the tool call first.` without it (task U71).
+- `POST /api/assistant`, `POST /api/decide` and `GET /api/harnesses/KEY/models` need the page's `Origin`, and the assistant and decide routes also need `confirmed: true`, with a sentence naming the owner's confirm (task U71).
+- A page GET with no `Origin` passes the new gates only when it carries `Sec-Fetch-Site: same-origin`, because a browser sends no `Origin` on a GET, so the built room's model refresh and MCP tool list still work on one port (task U71).
+- The control client's `callMcpTool` and `decide` send `confirmed: true`, so the Settings tool tester and the decide client keep working (task U71).
 - The aberration map's square is sized from the park ring's projected radius with full strength at 2.5 ring radii, never smaller than the lens-covering square and never more than twice the lens diagonal, and its centre is pulled back toward the lens only as far as covering it needs, so the fringes keep their strength while a card or an agent holds the camera (task U70).
 - `parkScreen()` answers the ring's projected radius beside its centre, and `mapPlacement` takes it, so an anchored card gets a square at the 2,658 pixel cap for a 1,247 by 460 lens instead of growing without limit (task U70).
 - `src/Stage.jsx` passes the ring radius into `mapPlacement` and writes the park point again when the radius moves 2 pixels, as it does for the centre (task U70).
