@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A single `--task` with `--worktree` runs as a queue of one, so its work is committed on the queue branch when the project's tests pass instead of left in a detached worktree, and `ORCHESTRATOR-AGENT.md` says so (task U78, A6).
+- A queue run writes its branch to `branch` as well as `queue` in `runs.jsonl`, so `--list` and `npm run outcome` find it (task U78, A9).
+- `formatQueueSummary` names the worktree and its branch when `--worktree` is on, and keeps the `git switch -` line for a project run (task U78, A12).
 - `run-lane`, the lane source and `doctor` read the runs folder through one helper in `server/lanes-source.js`, so `MACHINEROOM_RUNS` moves the room and the doctor to the folder the runner writes (task U76, A11).
 - `candidate` checks the port again after the build and stops with `Port N is in use. Pass --port.` when another program took it while the build ran (task U76, A10).
 - README says MachineRoom prints no key and puts none in the repository or `lanes.json`, that the Settings key slots are saved in `<runs>/keys.json` outside the repository with mode 0o600, and keeps the sentence about the masked lane log (task U76, A8).

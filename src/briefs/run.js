@@ -789,7 +789,7 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy, stoppedLeftovers } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy, stoppedLeftovers, queue } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -805,6 +805,12 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     log: log ? String(log) : null,
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],
+  }
+  const queueBranch = typeof queue?.branch === 'string' ? queue.branch.trim() : ''
+  if (queueBranch !== '') {
+    record.branch = queueBranch
+    record.queue = queueBranch
+    if (Number.isInteger(queue?.index)) record.queueIndex = queue.index
   }
   if (Number.isInteger(stoppedLeftovers) && stoppedLeftovers > 0) record.stoppedLeftovers = stoppedLeftovers
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()

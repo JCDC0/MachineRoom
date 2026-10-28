@@ -449,6 +449,22 @@ describe('the record of a project run', () => {
     expect(laneStats([written]).rows[0]).toMatchObject({ lane: 'opencode', runs: 1 })
   })
 
+  it('writes the queue branch to branch as well as queue', () => {
+    const branch = 'machineroom/queue-opencode-20261024-120000'
+    const record = runRecord({
+      lane: 'opencode',
+      briefs: [],
+      model: 'opencode-go/deepseek-v4.1-flash',
+      exitCode: 0,
+      branch: '',
+      queue: { branch, index: 2 },
+    })
+    expect(record.branch).toBe(branch)
+    expect(record.queue).toBe(branch)
+    expect(record.queueIndex).toBe(2)
+    expect(runListLine(record)).toContain(branch)
+  })
+
   it('masks a key in the task before it stores it', () => {
     const key = `sk-${'a'.repeat(32)}`
     const record = runRecord({ lane: 'opencode', briefs: [], task: `Use OPENROUTER_API_KEY=${key} and report.` })

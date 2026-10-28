@@ -605,20 +605,25 @@ function projectRefusals(project, lanes, allowDirty) {
 async function runQueueProject({ options, lane, lanes }) {
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${project} is not a git folder. A queue needs one.`)
-  const problems = projectRefusals(project, lanes, false)
+  const problems = projectRefusals(project, lanes, options.allowDirty === true)
   if (problems.length > 0) {
     problems.forEach((sentence) => console.log(sentence))
     return 1
   }
-  const file = resolve(options.queue)
-  let text
-  try {
-    text = readFileSync(file, 'utf8')
-  } catch {
-    throw new Error(`The queue file ${file} could not be read.`)
+  let tasks
+  if (options.queue) {
+    const file = resolve(options.queue)
+    let text
+    try {
+      text = readFileSync(file, 'utf8')
+    } catch {
+      throw new Error(`The queue file ${file} could not be read.`)
+    }
+    tasks = parseQueue(text)
+    if (tasks.length === 0) throw new Error('The queue file has no tasks.')
+  } else {
+    tasks = [readTask(options)]
   }
-  const tasks = parseQueue(text)
-  if (tasks.length === 0) throw new Error('The queue file has no tasks.')
   const queueStamp = stamp()
   const branch = `machineroom/queue-${options.lane}-${queueStamp}`
   if (options.dryRun) {
@@ -665,7 +670,7 @@ async function runQueueProject({ options, lane, lanes }) {
       },
       runTests: test ? async () => runTestCommand(test, target.path, options.minutes) : null,
     })
-    formatQueueSummary({ branch: result.branch, results: result.results, tests: test }).forEach((line) => console.log(line))
+    formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? target.path : '' }).forEach((line) => console.log(line))
     return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
   } finally {
     releaseLaneLock(lock)
@@ -696,6 +701,10 @@ async function main() {
     return 1
   }
   if (options.queue) return await runQueueProject({ options, lane, lanes })
+  if (options.project && options.worktree) {
+    return await runQueueProject({ options, lane, lanes })
+  }
+
   if (options.project) {
     const project = projectFolder(options.project)
     const problems = projectRefusals(project, lanes, options.allowDirty === true)
@@ -711,27 +720,22 @@ async function main() {
     const usageFile = join(folder, `${name}.usage.json`)
 
     if (options.dryRun) {
-      const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
-      if (options.worktree) printWorktree(plan)
-      printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: plan.path }), prompt)
+      printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project }), prompt)
       return 0
     }
 
     mkdirSync(folder, { recursive: true })
-    const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
-    refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
-    const projectLock = takeProjectLock(folder, lockTarget)
+    refuseRunningLane(options.lane, '', folder)
+    const projectLock = takeProjectLock(folder, project)
     let lock
     try {
-      lock = takeLaneLock(folder, options.lane, { worktree: options.worktree ? lockTarget : '' })
+      lock = takeLaneLock(folder, options.lane, { worktree: '' })
     } catch (error) {
       releaseLaneLock(projectLock)
       throw error
     }
     try {
-      const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
-      const target = options.worktree ? prepareWorktree(project, options.lane) : plan
-      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project: target.path, task, lockPath: lock })
+      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project, task, lockPath: lock })
       return run.code
     } finally {
       releaseLaneLock(lock)
@@ -915,11 +919,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     ...(start ? { startBranch: start.startBranch } : {}),
     ...(options.startedBy ? { startedBy: options.startedBy } : {}),
     ...(project ? { project, task } : {}),
+    ...(queue ? { queue } : {}),
   })
-  if (queue) {
-    record.queue = queue.branch
-    record.queueIndex = queue.index
-  }
   appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
   console.log(`record: ${runsFile()}`)
   if (project) return { code: result.code ?? 1, killed }
