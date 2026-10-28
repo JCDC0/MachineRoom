@@ -349,6 +349,52 @@ function gitFolder(cwd) {
   }
 }
 
+export const LANE_START_BRANCH = 'main'
+const START_REF = 'refs/heads/main'
+
+export function laneStartProblem({ worktree, branch, count, commits } = {}) {
+  const ahead = Number.isInteger(count) && count > 0 ? count : 0
+  if (ahead === 0) return ''
+  const list = (Array.isArray(commits) ? commits : []).filter((commit) => String(commit ?? '').trim() !== '').join(', ')
+  const where = typeof branch === 'string' && branch.trim() !== '' ? `the branch ${branch.trim()}` : 'a detached HEAD'
+  const noun = ahead === 1 ? 'commit' : 'commits'
+  const named = list ? ` (${list})` : ''
+  return `The worktree ${worktree} is on ${where} with ${ahead} ${noun} that ${START_REF} does not have${named}, so merge it or move the worktree to ${START_REF} first.`
+}
+
+export function laneWorktreeStart({ worktree, move = false } = {}) {
+  const folder = String(worktree ?? '').trim()
+  if (!folder) throw new Error('The lane has no worktree to start from.')
+  const branch = gitRead(folder, ['branch', '--show-current'])
+  if (branch === null) throw new Error(`The branch of the worktree ${folder} could not be read.`)
+  const counted = gitRead(folder, ['rev-list', '--count', `${START_REF}..HEAD`])
+  const count = counted === null ? null : Number(counted)
+  if (count === null || !Number.isInteger(count) || count < 0) {
+    throw new Error(`The commits ahead of ${START_REF} in ${folder} could not be read.`)
+  }
+  let commits = []
+  if (count > 0) {
+    const listed = gitRead(folder, ['log', '--oneline', `${START_REF}..HEAD`])
+    if (listed === null) throw new Error(`The commits ahead of ${START_REF} in ${folder} could not be read.`)
+    commits = listed.split(/\r?\n/).filter(Boolean)
+  }
+  const problem = laneStartProblem({ worktree: folder, branch, count, commits })
+  if (problem) throw new Error(problem)
+  if (move) {
+    const moved = spawnSync(gitPath(), ['checkout', '--detach', START_REF], { cwd: folder, encoding: 'utf8', windowsHide: true })
+    if (moved.error) throw new Error(`git checkout did not run in ${folder}.`)
+    if (moved.status !== 0) throw new Error(`The worktree ${folder} could not be moved to ${START_REF}: ${String(moved.stderr ?? '').trim()}`)
+  }
+  return { from: branch, startBranch: LANE_START_BRANCH, moved: branch !== '' }
+}
+
+export function laneRunRecord(input = {}) {
+  const record = runRecord(input)
+  const startBranch = typeof input?.startBranch === 'string' ? input.startBranch.trim() : ''
+  if (startBranch !== '') record.startBranch = startBranch
+  return record
+}
+
 function gitCommonDir(cwd) {
   return gitFolder(cwd).commonDir
 }
@@ -654,7 +700,12 @@ async function main() {
   const usageFile = join(folder, `${name}.usage.json`)
 
   if (options.dryRun) {
+    const start = gitCheckout(lane.worktree) ? laneWorktreeStart({ worktree: lane.worktree }) : null
     printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name }), prompt)
+    if (start) {
+      const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
+      console.log(`start branch: ${start.startBranch}${from}`)
+    }
     return 0
   }
 
@@ -669,9 +720,11 @@ async function main() {
 }
 
 async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null }) {
+  let start = null
   if (!project) {
     const status = gitStatus(lane.worktree)
     if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
+    start = laneWorktreeStart({ worktree: lane.worktree, move: true })
   }
 
   const sessionId = randomUUID()
@@ -719,6 +772,10 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   const harness = lane.cli.harness
 
   if (result.error) console.log(`start failed: ${result.error.message}`)
+  if (start) {
+    const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
+    console.log(`start branch: ${start.startBranch}${from}`)
+  }
   console.log(`exit code: ${result.code === null ? 'none' : result.code}${killed ? ' (killed after the time limit)' : ''}`)
   console.log(`minutes: ${minutes}`)
   console.log(`log: ${logPath}`)
@@ -736,7 +793,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
 
   const branch = project ? '' : gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
   const commitsText = project ? '' : gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
-  const record = runRecord({
+  const record = laneRunRecord({
     lane: options.lane,
     briefs: project ? [] : wanted.map((brief) => brief.id),
     model: lane.cli.model,
@@ -751,6 +808,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     log: logPath,
     branch,
     commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
+    ...(start ? { startBranch: start.startBranch } : {}),
     ...(options.startedBy ? { startedBy: options.startedBy } : {}),
     ...(project ? { project, task } : {}),
   })
