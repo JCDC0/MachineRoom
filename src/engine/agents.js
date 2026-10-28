@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
-import { sectorArcs } from '../model/hierarchy.js'
+import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
 import { HUB_CENTER, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
@@ -259,6 +259,12 @@ export function orchestratorLineEnds(from, to, out = []) {
   points[1].y = to.y
   points[1].z = to.z
   return points
+}
+
+export function lineParentKey(key, ladder) {
+  if (typeof key !== 'string' || key === '' || key === 'orchestrator' || key.startsWith('sub-')) return 'orchestrator'
+  const owner = ownerOf(ladder, key)
+  return owner === 'orchestrator' ? 'orchestrator' : `sub-${owner}`
 }
 
 export function webTunnelEnd(agentPlace, internetPlace, radius = INTERNET_RADIUS, out = {}) {
@@ -832,6 +838,15 @@ export function createAgents(scene, roster, cssScene = null) {
     return { dir: path, file: null }
   }
 
+  function aimOrchestratorLine(view, mainView) {
+    if (!view.orchestratorLink) return
+    const mainAt = mainView ? mainView.group.position : ORCHESTRATOR_HOME
+    const parentKey = lineParentKey(view.key, currentLadder)
+    const parentView = parentKey === 'orchestrator' ? null : views.get(parentKey)
+    const [start, end] = orchestratorLineEnds(parentView ? parentView.group.position : mainAt, view.group.position, view.orchestratorEnds)
+    setEnds(view.orchestratorLink, start, end)
+  }
+
   function beat(strength) {
     const value = Math.min(1, Math.max(0, Number(strength) || 0))
     if (!(value > 0) || still()) return
@@ -998,9 +1013,7 @@ export function createAgents(scene, roster, cssScene = null) {
         }
       }
       if (view.orchestratorLink) {
-        const mainAt = mainView ? mainView.group.position : ORCHESTRATOR_HOME
-        const [start, end] = orchestratorLineEnds(mainAt, view.group.position, view.orchestratorEnds)
-        setEnds(view.orchestratorLink, start, end)
+        aimOrchestratorLine(view, mainView)
         view.orchestratorLink.material.color.setHex(WHITE)
         view.orchestratorLink.material.opacity = view.subOrchestrator ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY
         view.orchestratorLink.visible = true
@@ -1103,6 +1116,14 @@ export function createAgents(scene, roster, cssScene = null) {
         if (!view.parentKey) view.group.position.copy(view.home)
       }
     }
+    let mainView = null
+    for (const view of views.values()) {
+      if (view.orchestrator) {
+        mainView = view
+        break
+      }
+    }
+    for (const view of views.values()) aimOrchestratorLine(view, mainView)
   }
 
   function dispose() {

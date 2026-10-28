@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A lane's faint grey line runs to its sub orchestrator when the ladder puts the lane in one, and `lineParentKey` picks that parent and falls back to the main, while `setLadder` re-aims the lines in place (task V40).
 - The retired lane dry-run test passes `LOCALAPPDATA` to the runner, so the Hermes lane's `%LOCALAPPDATA%` program path expands on a Linux CI runner (task Q13).
 - `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
 - `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).
