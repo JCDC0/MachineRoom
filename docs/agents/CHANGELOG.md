@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A brief run refuses a lane worktree that is the main checkout, another lane's worktree, the user profile, the OS temp folder, the runs folder or a folder outside `.worktrees` of this repository, and `--dry-run` refuses the same way (task U77, A4).
+- `briefProblems` reads the brief's `Files:` list and refuses an absolute entry, one that holds `..` or one the lane's `forbidden` globs match, naming the entry (task U77, A7).
+- `briefFileList` reads a backticked or plain `Files:` list, and `tests/briefs.test.js` and `tests/run-lane.test.js` cover both helpers and a real dry run with a temp lanes file whose lane points at the checkout (task U77).
 - A lane started by `run-lane` gets only an allow-list of the shell's names, so `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN` and other secrets no longer reach it; the MachineRoom harness receives its own key names and Hermes receives `OPENROUTER_API_KEY` (task U72).
 - The runner writes a lane's log through the bridge's split-key masker, so a key in the output, split across chunks or not, is `[key]` in the file under the runs folder (task U72).
 - `tests/lane-env.test.js` covers the allow-list, the harness key exception, the masked log, a real `--dry-run` and the real OpenCode start; `scripts/mr-agent.mjs` gives its shell tool the same allow-list, and `scripts/acp-run.mjs` passes the environment it was given to its agent (task U72).

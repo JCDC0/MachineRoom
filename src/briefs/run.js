@@ -2,7 +2,8 @@ import { basename } from '../model/paths.js'
 import { finiteNumber, summaryOf } from '../harnesses/common.js'
 import { harnessByKey } from '../harnesses/index.js'
 import { createSplitMasker, maskKeys } from './audit.js'
-import { branchFor } from './briefs.js'
+import { branchFor, briefFileList } from './briefs.js'
+import { pathAllowed } from './plan.js'
 
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
 
@@ -191,11 +192,28 @@ export function formatOutcomes(rows) {
   })
 }
 
-export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}) {
+const FILE_ABSOLUTE = /^(?:[A-Za-z]:|[\\/])/
+
+function fileProblem(entry, id, rules, laneKey) {
+  if (FILE_ABSOLUTE.test(entry)) {
+    return `Brief ${id} lists the absolute path ${entry}, and a brief names only paths inside the repository.`
+  }
+  if (entry.replace(/\\/g, '/').split('/').includes('..')) {
+    return `Brief ${id} lists ${entry}, which holds .. and climbs out of the repository.`
+  }
+  if (rules.length > 0 && !pathAllowed(entry, rules)) {
+    return `Brief ${id} lists ${entry}, which lanes.json forbids for ${laneKey}.`
+  }
+  return ''
+}
+
+export function briefProblems({ briefs, ids, laneKey, forbidden, branchExists, force } = {}) {
   const list = Array.isArray(briefs) ? briefs : []
   const lane = String(laneKey ?? '').trim().toLowerCase().replace(/\d+$/, '')
   if (lane === 'orchestrator') return [ORCHESTRATOR_LANE_PROBLEM]
   const exists = typeof branchExists === 'function' ? branchExists : () => false
+  const rules = Array.isArray(forbidden) ? forbidden : []
+  const who = String(laneKey ?? '').trim() || 'this lane'
   const asked = []
   const seen = new Set()
   for (const value of Array.isArray(ids) ? ids : []) {
@@ -211,6 +229,7 @@ export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}
   const done = []
   const owner = []
   const branch = []
+  const files = []
   for (const askedId of asked) {
     const key = askedId.toLowerCase()
     const matches = list.filter((brief) => String(brief?.id ?? '').trim().toLowerCase() === key)
@@ -236,8 +255,12 @@ export function briefProblems({ briefs, ids, laneKey, branchExists, force } = {}
     }
     const name = branchFor(brief)
     if (exists(name) === true) branch.push(`The branch ${name} already exists. Rename or delete it first, or pick another brief.`)
+    for (const entry of briefFileList(brief.text)) {
+      const problem = fileProblem(entry, id, rules, who)
+      if (problem) files.push(problem)
+    }
   }
-  return [...missing, ...repeated, ...done, ...owner, ...branch]
+  return [...missing, ...repeated, ...done, ...owner, ...branch, ...files]
 }
 
 export function worktreeFor(project, lane) {
@@ -550,6 +573,38 @@ export function projectProblems({
     problems.push(`The project folder ${folder} has uncommitted changes. Commit or discard them, or pass --allow-dirty.`)
   }
   return problems
+}
+
+export function briefWorktreeProblems({ worktree, laneKey, mainCheckout, lanes, home, temp, runs } = {}) {
+  const folder = String(worktree ?? '').trim()
+  if (!folder) return []
+  const key = String(laneKey ?? '').trim().toLowerCase()
+  const checkout = knownPath(mainCheckout) ? String(mainCheckout).trim() : ''
+  if (checkout && samePath(folder, checkout)) {
+    return [`The lane worktree ${folder} is the main checkout, so the runner will not start there.`]
+  }
+  for (const [name, lane] of Object.entries(lanes ?? {})) {
+    if (!lane || typeof lane !== 'object') continue
+    if (String(name).trim().toLowerCase() === key) continue
+    if (typeof lane.worktree !== 'string' || lane.worktree.trim() === '') continue
+    if (samePath(folder, lane.worktree)) {
+      return [`The lane worktree ${folder} is the ${name} lane worktree, not this lane's.`]
+    }
+  }
+  if (knownPath(home) && samePath(folder, home)) {
+    return [`The lane worktree ${folder} is the user profile, so the runner will not start there.`]
+  }
+  if (knownPath(temp) && samePath(folder, temp)) {
+    return [`The lane worktree ${folder} is the OS temp folder, so the runner will not start there.`]
+  }
+  if (knownPath(runs) && pathInside(folder, runs)) {
+    return [`The lane worktree ${folder} is the runs folder or inside it, so the runner will not start there.`]
+  }
+  const worktrees = checkout ? `${checkout.replace(/[\\/]+$/, '')}/.worktrees` : ''
+  if (!worktrees || !pathInside(folder, worktrees) || samePath(folder, worktrees)) {
+    return [`The lane worktree ${folder} is not under .worktrees of this repository.`]
+  }
+  return []
 }
 
 function toolArguments(value) {

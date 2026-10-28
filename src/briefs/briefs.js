@@ -3,6 +3,11 @@ import { OWNER_ORDER } from '../harnesses/index.js'
 const BRIEF_LINE = /^\*\*([A-Z]\d+[a-z]?)\. (.+?)\.\*\*\s*(.*)$/
 const OWNER_TAIL = /^(.*?)\s*\(([^()]*)\)$/
 const DONE_MARKER = /\b(merged as|built as|done)\b/i
+const FILES_MARKER = /\bFiles:/g
+
+function pathLike(value) {
+  return /^[A-Za-z]:/.test(value) || value.includes('/') || value.includes('\\') || /\.[A-Za-z0-9]+$/.test(value)
+}
 
 export function parseBriefs(markdown) {
   const briefs = []
@@ -31,6 +36,21 @@ export function parseBriefs(markdown) {
     })
   }
   return briefs
+}
+
+export function briefFileList(text) {
+  const source = String(text ?? '')
+  const marker = [...source.matchAll(FILES_MARKER)].pop()
+  if (!marker) return []
+  const rest = source.slice(marker.index + marker[0].length).replace(/\([^()]*\)/g, ' ')
+  const files = []
+  for (const part of rest.split(/,|;|\band\b/i)) {
+    const first = part.trim().split(/\s+/)[0] ?? ''
+    const entry = first.replace(/^`+/, '').replace(/[`.,;:]+$/, '')
+    if (!entry || !pathLike(entry) || files.includes(entry)) continue
+    files.push(entry)
+  }
+  return files
 }
 
 export function parseRules(markdown) {

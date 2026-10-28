@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -632,11 +632,26 @@ async function main() {
     return 1
   }
 
+  const folderProblems = briefWorktreeProblems({
+    worktree: typeof lane.worktree === 'string' && lane.worktree.trim() !== '' ? realPath(lane.worktree) : '',
+    laneKey: options.lane,
+    mainCheckout: realPath(mainCheckout()),
+    lanes: resolvedLanes(lanes),
+    home: realPath(homedir()),
+    temp: realPath(process.env.TEMP || tmpdir()),
+    runs: realPath(runsFolder()),
+  })
+  if (folderProblems.length > 0) {
+    folderProblems.forEach((sentence) => console.log(sentence))
+    return 1
+  }
+
   const briefs = parseBriefs(read('TASKS.md'))
   const problems = briefProblems({
     briefs,
     ids: options.briefs,
     laneKey: options.lane,
+    forbidden: lane.forbidden,
     branchExists,
     force: options.force === true,
   })
