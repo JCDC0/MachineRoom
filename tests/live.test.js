@@ -384,6 +384,31 @@ describe('incremental pipeline', () => {
     expect(live).toEqual(batch)
   })
 
+  it('reads one orchestrator message frame as one agent.message activity', () => {
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const at = '2026-10-20T00:00:00.000Z'
+    const frame = {
+      id: 'message-1',
+      companyId: 'company-orchestrator',
+      type: 'orchestrator.message',
+      createdAt: at,
+      payload: { from: 'orchestrator', to: 'sub-front', kind: 'order', ts: at },
+    }
+    const activities = pipeline.push(frame)
+    expect(activities).toHaveLength(1)
+    expect(activities[0]).toMatchObject({
+      type: 'agent.message',
+      agent: 'orchestrator',
+      to: 'sub-front',
+      kind: 'order',
+      runId: null,
+      time: Date.parse(at),
+    })
+    expect(Number.isInteger(activities[0].order)).toBe(true)
+    expect(pipeline.push(frame)).toEqual([])
+    expect(pipeline.push({ ...frame, id: 'message-2', payload: { ...frame.payload, kind: 'talk' } })).toEqual([])
+  })
+
   it('gives a frame with a time that does not parse the time before it, so the replay keeps going', () => {
     const frames = recording.frames.map((frame) => ({ ...frame, payload: { ...frame.payload } }))
     const bad = frames.findIndex((frame, index) => index > 0 && frame.type === 'heartbeat.run.status' && frame.payload.status === 'running')

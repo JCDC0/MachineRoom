@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The bridge sends an `orchestrator.message` frame when the main orchestrator orders a sub, a sub reports back, an orchestrator dispatches a lane run or a run end wakes an orchestrator, and the room reads it as one dim `agent.message` log line (task O17).
 - The retired lane dry-run test passes `LOCALAPPDATA` to the runner, so the Hermes lane's `%LOCALAPPDATA%` program path expands on a Linux CI runner (task Q13).
 - `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
 - `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).
