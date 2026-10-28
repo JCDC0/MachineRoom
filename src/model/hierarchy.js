@@ -257,7 +257,7 @@ export function sectorArcs(ladder, roster) {
   })
 }
 
-export function subPrompt(sub, parent) {
+export function subPrompt(sub, parent, ladder) {
   const value = isObject(sub) ? sub : {}
   const id = typeof value.id === 'string' && value.id ? value.id : 'sub'
   const name = typeof value.name === 'string' && value.name.trim() ? value.name.trim() : id
@@ -268,7 +268,17 @@ export function subPrompt(sub, parent) {
   if (typeof parent === 'string' && parent) parentKey = parent
   else if (isObject(parent) && typeof parent.id === 'string' && parent.id) parentKey = parent.id
 
+  const siblings = []
+  const subs = isObject(ladder) && Array.isArray(ladder.subs) ? ladder.subs : []
+  for (const entry of subs) {
+    if (!isObject(entry) || typeof entry.id !== 'string' || !entry.id || entry.id === id) continue
+    if (siblings.some((sibling) => sibling.id === entry.id)) continue
+    const siblingName = typeof entry.name === 'string' && entry.name.trim() ? entry.name.trim() : entry.id
+    siblings.push({ id: entry.id, name: siblingName })
+  }
+
   const laneLine = lanes.length ? lanes.map((lane) => `\`${lane}\``).join(', ') : 'none'
+  const siblingLine = siblings.length ? siblings.map((sibling) => `\`${sibling.id}\` (${sibling.name})`).join(', ') : 'none'
   const scopeLine = scope.length ? scope.map((entry) => `\`${entry}\``).join(', ') : 'none'
   const ruleLine = restricted
     ? 'Your scope is restricted. Your lanes may change files only in that scope.'
@@ -280,6 +290,9 @@ export function subPrompt(sub, parent) {
     `You are a sub orchestrator in the room's ladder. Your id is \`${id}\` and your name is ${name}.`,
     `Your parent is \`${parentKey}\`.`,
     `Your lanes: ${laneLine}.`,
+    'Your lanes do not talk. They report when their run ends.',
+    `Your siblings: ${siblingLine}.`,
+    'To message another sub, ask your parent to pass it on.',
     `Your scope: ${scopeLine}.`,
     ruleLine,
     `Your sector branch is \`machineroom/sector-${id}\`.`,

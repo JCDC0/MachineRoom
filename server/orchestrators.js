@@ -256,7 +256,7 @@ export function createOrchestrators({
       contextWindow: config.contextWindow,
       onNotice,
       onMasked,
-      extraInstructions: subPrompt(sub, ORCHESTRATOR_KEY),
+      extraInstructions: subPrompt(sub, ORCHESTRATOR_KEY, readSaved().ladder),
       onReply: (text) => {
         if (stopped) return
         if (!instances.has(config.id)) return

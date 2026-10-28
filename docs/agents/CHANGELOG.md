@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `subPrompt` lists a sub's sibling subs by id and name and says to ask the parent to pass a message to another sub, while its lanes report when their run ends (task O18).
+- The bridge passes the ladder to `subPrompt`, so each sub's instructions name its siblings (task O18).
+- `ORCHESTRATOR-AGENT.md` has a `Talking to your subs` part, and `HIERARCHY.md` has a `Who talks to whom` table (task O18).
 - The retired lane dry-run test passes `LOCALAPPDATA` to the runner, so the Hermes lane's `%LOCALAPPDATA%` program path expands on a Linux CI runner (task Q13).
 - `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
 - `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).

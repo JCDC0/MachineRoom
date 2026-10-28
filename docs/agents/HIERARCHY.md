@@ -53,6 +53,18 @@ Rules, all checked by `src/model/hierarchy.js`:
 - A sub orchestrator reports to its parent by a message in the parent's chat from `sub:<id>`, which wakes the parent like a room message.
 - The owner can talk to any orchestrator from the chat (a tab per orchestrator). Attach, detach, scope and restriction are confirmed writes.
 
+## Who talks to whom
+
+| Who | Can send | To |
+| --- | --- | --- |
+| Owner | a chat message, a ladder change, a run start | the main orchestrator or any sub, from the chat tabs; any lane |
+| Main | a chat reply, a goal message, a ladder change, a run start | the owner; any sub; any lane |
+| Sub | its turn's answer, as `sub:<id>` | its parent only |
+| Lane | one report when its run ends | the orchestrator named by `startedBy`, else the main |
+| Harness subagent | its result as a tool result | the harness turn that started it |
+
+A sub cannot message another sub. It asks its parent to pass the message on, and the main relays it in its own name. A sub's answer is its only message to its parent.
+
 ## How it looks
 
 - The hub ring splits into one arc per sub orchestrator, plus the main orchestrator's own arc for lanes in no sub. Each arc has a thin gap at its ends and a small label with the sub's name.
