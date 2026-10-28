@@ -25,6 +25,8 @@
 - A run record carries `stoppedLeftovers` with the count when the cleanup found any (task U75).
 - `npm run run-lane -- --stop LANE` stops the run, its harness and the worktree leftovers, prints what it stopped and removes the lock; a new run refuses a live harness child or leftover with a sentence that names `--stop` (task U75).
 - `ORCHESTRATOR.md` names `--stop` as the way to pause a lane, and `ARCHITECTURE.md` documents the lock, the leftovers and the record field (task U75).
+- A sector with one lane parks it at the middle of its arc under its sub, and two or more lanes spread evenly inside the arc with the same gap at each end; `sectorLaneAngles` is pure with tests for one lane, three lanes and an empty sector (task V43).
+- The hub's `setWorking` brightens a sector's arc to full white while its sub or one of its lanes works and returns it over 1 second when none does, at once under reduced motion, and leaves the rest of the ring as it is (task V43).
 
 - A lane started by `run-lane` gets only an allow-list of the shell's names, so `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN` and other secrets no longer reach it; the MachineRoom harness receives its own key names and Hermes receives `OPENROUTER_API_KEY` (task U72).
 - The runner writes a lane's log through the bridge's split-key masker, so a key in the output, split across chunks or not, is `[key]` in the file under the runs folder (task U72).
