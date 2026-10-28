@@ -13,6 +13,7 @@ export default defineConfig({
     testTimeout: 20000,
     hookTimeout: 20000,
     globalSetup: ['./tests/helpers/cleanTemp.js'],
+    setupFiles: ['./tests/helpers/isolate.js'],
     include: ['tests/**/*.test.js'],
   },
 })

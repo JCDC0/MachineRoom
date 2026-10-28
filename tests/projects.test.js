@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -15,7 +16,7 @@ import {
   readProjectsFile,
   recordProject,
 } from '../server/projects.js'
-import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
+import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
 
@@ -361,5 +362,33 @@ describe('projects api', () => {
     const file = join(env.runs, 'projects.json')
     const stored = readProjectsFile(file)
     expect(stored.recent[0].path).toBe(resolve(env.siblingGit))
+  })
+
+  it('records projects.json under the test temp root and not under %TEMP%\\machineroom-runs when runsFolder is unset', async () => {
+    const env = createEnvironment()
+    const bridge = createBridge({
+      projectRoot: env.root,
+      port: 0,
+      env: {},
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const rootDir = processTempRoot()
+    const runsDir = process.env.MACHINEROOM_RUNS
+    expect(runsDir).toBeTruthy()
+    expect(resolve(runsDir).startsWith(resolve(rootDir))).toBe(true)
+
+    const testProjectsFile = join(runsDir, 'projects.json')
+    expect(existsSync(testProjectsFile)).toBe(true)
+    const stored = readProjectsFile(testProjectsFile)
+    expect(stored.recent[0].path).toBe(resolve(env.root))
+
+    const realRuns = join(process.env.TEMP || tmpdir(), 'machineroom-runs')
+    const realProjectsFile = join(realRuns, 'projects.json')
+    if (existsSync(realProjectsFile)) {
+      const realStored = readProjectsFile(realProjectsFile)
+      expect(realStored.recent.some((entry) => entry.path === resolve(env.root))).toBe(false)
+    }
   })
 })

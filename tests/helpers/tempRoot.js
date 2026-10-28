@@ -15,6 +15,15 @@ export function processTempRoot(pid = process.pid, root = TEMP_ROOT) {
   return dir
 }
 
+export function testRunsFolder(pid = process.pid, root = TEMP_ROOT) {
+  const dir = join(processTempRoot(pid, root), 'runs')
+  if (!made.has(dir)) {
+    mkdirSync(dir, { recursive: true })
+    made.add(dir)
+  }
+  return dir
+}
+
 export function makeTempDir(prefix, root = TEMP_ROOT) {
   // A runner's TEMP can be an 8.3 short path; the code under test resolves the long one.
   return realpathSync.native(mkdtempSync(join(processTempRoot(process.pid, root), prefix)))

@@ -59,6 +59,7 @@ function childEnv(temp) {
   delete env.PORT
   delete env.MACHINEROOM_LANES
   delete env.MACHINEROOM_SESSIONS
+  delete env.MACHINEROOM_RUNS
   env.TEMP = temp
   return withLanePrograms(env, temp)
 }
