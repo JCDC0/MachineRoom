@@ -8154,24 +8154,33 @@ body:has(#hud-orchestrator-chat) .waiting {
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   }
 
+  .transport-orchestrators {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    justify-self: center;
+    min-width: 0;
+  }
+
   .hud-lower-main {
     scroll-margin-top: var(--menu-h);
   }
 
-  .transport.is-live > .transport-orchestrator {
+  .transport-orchestrators > .transport-orchestrator {
     display: inline-flex;
     align-items: baseline;
     gap: 10px;
-    justify-self: center;
     padding: 0;
     border: 0;
     background: none;
     color: rgb(255 255 255 / 0.6);
+    text-transform: uppercase;
     cursor: pointer;
+    white-space: nowrap;
   }
 
-  .transport.is-live > .transport-orchestrator:hover,
-  .transport.is-live > .transport-orchestrator:focus-visible {
+  .transport-orchestrators > .transport-orchestrator:hover,
+  .transport-orchestrators > .transport-orchestrator:focus-visible {
     color: var(--white);
     background: none;
     border: 0;
@@ -8187,6 +8196,63 @@ body:has(#hud-orchestrator-chat) .waiting {
     letter-spacing: 0.04em;
     color: var(--white);
     text-transform: none;
+  }
+
+  .transport-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    max-width: 88px;
+    padding: 1px 7px;
+    border: 1px solid rgb(255 255 255 / 0.24);
+    border-radius: 2px;
+    background: transparent;
+    color: rgb(255 255 255 / 0.72);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .transport-chip:hover,
+  .transport-chip:focus-visible {
+    color: var(--white);
+    border-color: rgb(255 255 255 / 0.5);
+    background: transparent;
+  }
+
+  .transport-chip-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .transport-chip-dot {
+    flex: none;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.3);
+  }
+
+  .transport-chip.is-working .transport-chip-dot {
+    background: var(--yellow);
+  }
+
+  .transport-chip.is-paused .transport-chip-dot,
+  .transport-chip.is-failed .transport-chip-dot {
+    background: var(--red);
+  }
+
+  .transport-chip-overflow {
+    color: rgb(255 255 255 / 0.5);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
   }
 
   .transport-tail {

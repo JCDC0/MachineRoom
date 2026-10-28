@@ -29,6 +29,7 @@ import {
   statusDetail,
   statusTone,
 } from './orchestratorChat.js'
+import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
 
 function InlineSpans({ spans }) {
   return spans.map((span, index) =>
@@ -346,6 +347,19 @@ export default function OrchestratorChat({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, confirm, onClose])
+
+  useEffect(() => {
+    function onOpenChat(event) {
+      const id = event && event.detail ? event.detail.id : ''
+      if (typeof id !== 'string' || !id) return
+      changeSelected(id)
+      setConfirm(null)
+      setError(null)
+      setReadError(null)
+    }
+    window.addEventListener(OPEN_CHAT_EVENT, onOpenChat)
+    return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpenChat)
+  }, [controlled, onSelect])
 
   useEffect(() => {
     if (selected === 'orchestrator' || list.length === 0) return
