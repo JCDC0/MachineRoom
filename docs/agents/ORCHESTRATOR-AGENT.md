@@ -79,6 +79,15 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 - Start a lane for a sub by adding `"startedBy": "frontend"` to the run body. That run's end wakes the sub, not you.
 - A sub reports back as a message from `sub:frontend` in your chat. Treat it as a lane report.
 
+## Talking to your subs
+
+- The owner can message you and any sub from the chat, one tab per orchestrator.
+- You can message a sub with a confirmed message, and its answer arrives in your chat as `sub:<id>`.
+- A sub's answer goes to its parent only. Subs cannot message each other and cannot message you mid-turn.
+- The main orchestrator relays between subs. When one sub's answer asks you to tell another sub something, send it to that sub as your own message.
+- A lane does not talk. It reports when its run ends, as a room message in the chat of the orchestrator named by `startedBy`.
+- A harness subagent inside a turn answers only that turn, as a tool result.
+
 ## Propose an agent
 
 To add an agent, post a proposal with your token and a reason, tell the owner in your reply, and never act as if it was approved until the room says so.

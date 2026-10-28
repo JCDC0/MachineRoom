@@ -395,4 +395,25 @@ describe('subPrompt', () => {
     expect(subPrompt(sub(), null)).toContain('Your parent is `orchestrator`.')
     expect(subPrompt(sub(), { name: 'Main' })).toContain('Your parent is `orchestrator`.')
   })
+
+  it('says there are no siblings when the ladder holds no other sub', () => {
+    expect(text).toContain('Your siblings: none.')
+    expect(subPrompt(ladder.subs[0], 'orchestrator', ladder)).toContain('Your siblings: none.')
+    expect(text).toContain('To message another sub, ask your parent to pass it on.')
+    expect(text).toContain('Your lanes do not talk. They report when their run ends.')
+  })
+
+  it('names the two sibling subs by id and name and leaves itself out', () => {
+    const three = read(
+      sub(),
+      sub({ id: 'backend', name: 'Backend', lanes: ['opencode3'], scope: ['server/**'] }),
+      sub({ id: 'data', name: 'Data', lanes: ['opencode4'], scope: ['docs/**'] }),
+    )
+    const first = subPrompt(three.ladder.subs[0], 'orchestrator', three.ladder)
+    expect(first).toContain('Your siblings: `backend` (Backend), `data` (Data).')
+    expect(first).not.toContain('`frontend` (Frontend)')
+    const last = subPrompt(three.ladder.subs[2], 'orchestrator', three.ladder)
+    expect(last).toContain('Your siblings: `frontend` (Frontend), `backend` (Backend).')
+    expect(last).not.toContain('`data` (Data)')
+  })
 })
