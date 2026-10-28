@@ -113,6 +113,19 @@ export function stateWord(node) {
   return 'idle'
 }
 
+export function rowStateWord(node, state = '') {
+  const word = typeof state === 'string' ? state.trim().toLowerCase() : ''
+  if (word === 'working' || node?.working === true) return 'working'
+  if (word === 'paused') return 'paused'
+  return 'waiting'
+}
+
+export function rowText(node, state = '', task = '') {
+  if (!node || typeof node !== 'object') return ''
+  if (node.kind === 'lane') return node.working === true ? cleanText(task, 40) : ''
+  return rowStateWord(node, state)
+}
+
 export function proposalRows(value) {
   const rows = []
   const seen = new Set()

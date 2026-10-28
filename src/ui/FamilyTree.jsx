@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
+import { toAgents } from '../live/source.js'
+import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
 import {
   DIRECT_HARNESS,
@@ -18,6 +20,7 @@ import {
   keyFormProblem,
   keyNames,
   labelProblem,
+  rowText,
   stateWord,
 } from './family.js'
 import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs } from './ladderForm.js'
@@ -31,6 +34,22 @@ function messageOf(error) {
 
 function lanesOf(answer) {
   return laneSummary(answer).lanes.map((lane) => lane.key)
+}
+
+function openChat(id) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  const detail = { id }
+  const event =
+    typeof window.CustomEvent === 'function'
+      ? new window.CustomEvent('machineroom:open-chat', { detail })
+      : { type: 'machineroom:open-chat', detail }
+  window.dispatchEvent(event)
+}
+
+function taskFor(tasks, id) {
+  if (tasks instanceof Map) return tasks.get(id) ?? ''
+  if (tasks && typeof tasks === 'object') return tasks[id] ?? ''
+  return ''
 }
 
 function cleanLaneIds(value) {
@@ -120,7 +139,7 @@ function agentCount(count) {
   return `${count} ${count === 1 ? 'agent' : 'agents'}`
 }
 
-export function FamilyTree({ client = null }) {
+export function FamilyTree({ client = null, tasks = null }) {
   const canFamily = typeof client?.family === 'function'
   const [family, setFamily] = useState(null)
   const [lanes, setLanes] = useState(null)
@@ -147,6 +166,8 @@ export function FamilyTree({ client = null }) {
   const [groupOpen, setGroupOpen] = useState(false)
   const [subDraft, setSubDraft] = useState(null)
   const [subProblem, setSubProblem] = useState('')
+  const [orchestrators, setOrchestrators] = useState(null)
+  const [liveTaskMap, setLiveTaskMap] = useState(null)
 
   useEffect(() => {
     if (!canFamily) return undefined
@@ -158,6 +179,7 @@ export function FamilyTree({ client = null }) {
       ['harnesses', () => client.harnesses?.()],
       ['models', () => client.models?.()],
       ['keys', () => client.keys?.()],
+      ['orchestrators', () => client.orchestrators?.()],
     ]
     const promises = jobs.map(([, read]) => {
       try {
@@ -178,6 +200,7 @@ export function FamilyTree({ client = null }) {
       if (values.models) setModels(values.models)
       if (values.keys) setKeys(keyNames(values.keys))
       else if (values.family) setKeys(keyNames(values.family.keys))
+      if (values.orchestrators) setOrchestrators(values.orchestrators)
       const failed = results.find((result) => result.status === 'rejected')
       if (failed) setReadError(messageOf(failed.reason))
     })
@@ -209,18 +232,83 @@ export function FamilyTree({ client = null }) {
         })
       )
     }
+    if (typeof client?.orchestrators === 'function') {
+      jobs.push(
+        Promise.resolve(client.orchestrators()).then((answer) => {
+          if (answer) setOrchestrators(answer)
+        })
+      )
+    }
     const results = await Promise.allSettled(jobs)
     const failed = results.find((result) => result.status === 'rejected')
     if (failed) setActionError(messageOf(failed.reason))
   }
 
+  async function readOrchestrators() {
+    if (typeof client?.orchestrators !== 'function') return
+    try {
+      const answer = await client.orchestrators()
+      if (answer) setOrchestrators(answer)
+    } catch {
+      setOrchestrators(null)
+    }
+  }
+
   useEffect(() => {
     if (typeof client?.subscribe !== 'function') return undefined
     return client.subscribe((notice) => {
-      if (!notice || (notice.topic !== 'family' && notice.topic !== 'agents')) return
-      refresh()
+      if (!notice) return
+      if (notice.topic === 'orchestrator') readOrchestrators()
+      else if (notice.topic === 'family' || notice.topic === 'agents') refresh()
     })
   }, [client])
+
+  useEffect(() => {
+    if (tasks || !canFamily) {
+      setLiveTaskMap(null)
+      return undefined
+    }
+    if (
+      typeof client?.agents !== 'function' ||
+      typeof client?.issues !== 'function' ||
+      typeof client?.liveRuns !== 'function'
+    ) {
+      setLiveTaskMap(null)
+      return undefined
+    }
+    let active = true
+    async function readTasks() {
+      try {
+        const [agentsRaw, issuesRaw, liveRunsRaw] = await Promise.all([
+          client.agents(),
+          client.issues(),
+          client.liveRuns(),
+        ])
+        if (!active) return
+        setLiveTaskMap(
+          agentTasks(
+            Array.isArray(liveRunsRaw) ? liveRunsRaw : [],
+            Array.isArray(issuesRaw) ? issuesRaw : [],
+            toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
+          )
+        )
+      } catch {
+        if (active) setLiveTaskMap(null)
+      }
+    }
+    readTasks()
+    const unsubscribe =
+      typeof client.subscribe === 'function'
+        ? client.subscribe((notice) => {
+            if (!notice) return
+            if (notice.topic === 'agents' || notice.topic === 'issues' || notice.topic === 'liveRuns') readTasks()
+          })
+        : null
+    return () => {
+      active = false
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [client, canFamily, tasks])
 
   useEffect(() => {
     if (!confirm) return undefined
@@ -235,6 +323,21 @@ export function FamilyTree({ client = null }) {
   }, [confirm, busy])
 
   const tree = useMemo(() => familyTree(family), [family])
+  const orchestratorStates = useMemo(() => {
+    const map = new Map()
+    const list = Array.isArray(orchestrators)
+      ? orchestrators
+      : Array.isArray(orchestrators?.orchestrators)
+        ? orchestrators.orchestrators
+        : []
+    for (const entry of list) {
+      if (!entry || typeof entry !== 'object') continue
+      const id = cleanText(entry.id, 80)
+      if (id) map.set(id, typeof entry.state === 'string' ? entry.state : '')
+    }
+    return map
+  }, [orchestrators])
+  const taskMap = tasks instanceof Map ? tasks : liveTaskMap
   const summary = laneSummary(lanes)
   const countLine = lanes ? agentCountLine(summary.active.length, summary.max) : 'Loading agents...'
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
@@ -1537,6 +1640,9 @@ export function FamilyTree({ client = null }) {
   function renderRow(row) {
     const node = row
     const state = stateWord(node)
+    const text = rowText(node, orchestratorStates.get(node.id) ?? '', taskFor(taskMap, node.id))
+    const dotState =
+      node.kind === 'lane' ? state : text === 'working' ? 'working' : text === 'paused' ? 'paused' : 'idle'
     const sub = node.kind === 'sub'
     return (
       <div className="mr-family-node" key={node.id} data-kind={node.kind} data-depth={row.depth}>
@@ -1573,8 +1679,9 @@ export function FamilyTree({ client = null }) {
             onClick={() => openNode(node)}
           >
             <span className="mr-family-top">
-              <span className={`mr-family-dot is-${state}`} aria-hidden="true" />
+              <span className={`mr-family-dot is-${dotState}`} aria-hidden="true" />
               <span className="mr-family-label">{node.label}</span>
+              {text ? <span className={`mr-family-state is-${dotState} mono`}>{text}</span> : null}
               <span className="mr-family-kind mono">{node.kind === 'lane' ? 'lane' : node.kind}</span>
             </span>
             <span className="mr-family-meta mono">{familyMeta(node)}</span>
@@ -1634,6 +1741,25 @@ export function FamilyTree({ client = null }) {
           >
             +
           </button>
+          {node.kind === 'lane' ? null : (
+            <button
+              type="button"
+              className="mr-family-chat"
+              aria-label={`Open chat with ${node.label}`}
+              title={`Open chat with ${node.label}`}
+              onClick={() => openChat(node.id)}
+            >
+              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+                <path
+                  d="M2 2.5h8v5.5H6L3.5 10V8H2z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
         </div>
         {editing === node.id ? renderEditor(node, row.depth) : null}
         {childFor === node.id ? renderChildForm(node, row.depth) : null}

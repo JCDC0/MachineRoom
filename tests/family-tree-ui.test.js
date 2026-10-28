@@ -526,9 +526,9 @@ function makeClient() {
   return { client, calls, added }
 }
 
-async function mount(root, client) {
+async function mount(root, client, props = {}) {
   await act(async () => {
-    root.render(createElement(FamilyTree, { client }))
+    root.render(createElement(FamilyTree, { client, ...props }))
   })
   await act(async () => {})
 }
@@ -607,6 +607,78 @@ describe('FamilyTree rows', () => {
 
       const sub = rowByLabel(container, 'Frontend')
       expect(classesOf(sub.querySelector('.mr-family-dot'))).toContain('is-idle')
+    })
+  })
+
+  it('shows each orchestrator state word beside its dot', async () => {
+    const { client } = makeClient()
+    client.orchestrators = async () => [
+      { id: 'orchestrator', state: 'paused' },
+      { id: 'frontend', state: 'working' },
+    ]
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const main = rowByLabel(container, 'Orchestrator')
+      expect(main.querySelector('.mr-family-state').textContent).toBe('paused')
+      expect(classesOf(main.querySelector('.mr-family-dot'))).toContain('is-paused')
+      const sub = rowByLabel(container, 'Frontend')
+      expect(sub.querySelector('.mr-family-state').textContent).toBe('working')
+      expect(classesOf(sub.querySelector('.mr-family-dot'))).toContain('is-working')
+    })
+  })
+
+  it('shows the task of a working lane and none for an idle lane', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client, {
+        tasks: new Map([
+          ['opencode', 'JC-19'],
+          ['claude', 'JC-20'],
+        ]),
+      })
+      expect(rowByLabel(container, 'OpenCode').querySelector('.mr-family-state').textContent).toBe('JC-19')
+      expect(rowByLabel(container, 'Claude').querySelector('.mr-family-state')).toBeNull()
+    })
+  })
+
+  it('reads lane tasks from the bridge when no task map is passed', async () => {
+    const { client } = makeClient()
+    client.agents = async () => [
+      { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode' },
+    ]
+    client.issues = async () => [{ id: 'issue-1', identifier: 'JC-19' }]
+    client.liveRuns = async () => [
+      {
+        id: 'run-1',
+        status: 'running',
+        agentId: 'agent-opencode',
+        issueId: 'issue-1',
+        startedAt: 1,
+      },
+    ]
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(rowByLabel(container, 'OpenCode').querySelector('.mr-family-state').textContent).toBe('JC-19')
+    })
+  })
+
+  it('opens the main and sub chats from their chat buttons', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, dom, root }) => {
+      await mount(root, client)
+      const seen = []
+      function onOpen(event) {
+        seen.push(event.detail)
+      }
+      dom.window.addEventListener('machineroom:open-chat', onOpen)
+      try {
+        expect(container.querySelectorAll('.mr-family-chat')).toHaveLength(2)
+        await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-chat'))
+        await click(root, rowByLabel(container, 'Frontend').querySelector('.mr-family-chat'))
+        expect(seen).toEqual([{ id: 'orchestrator' }, { id: 'frontend' }])
+      } finally {
+        dom.window.removeEventListener('machineroom:open-chat', onOpen)
+      }
     })
   })
 

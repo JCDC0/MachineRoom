@@ -19,6 +19,7 @@ import {
   labelProblem,
   proposalRows,
   removeSubPlan,
+  rowText,
   stateWord,
 } from '../src/ui/family.js'
 
@@ -160,6 +161,16 @@ describe('a node line', () => {
     expect(labelProblem(' Writer ')).toBe('')
     expect(labelProblem('')).toBe('Write a label for the agent.')
     expect(labelProblem('x'.repeat(41))).toBe('Keep the label to 40 characters.')
+  })
+
+  it('names an orchestrator state and a working lane task', () => {
+    expect(rowText({ kind: 'orchestrator', working: false }, 'working')).toBe('working')
+    expect(rowText({ kind: 'sub', working: false }, 'paused')).toBe('paused')
+    expect(rowText({ kind: 'orchestrator', working: false }, 'idle')).toBe('waiting')
+    expect(rowText({ kind: 'sub', working: true }, 'paused')).toBe('working')
+    expect(rowText({ kind: 'lane', working: true }, '', ' JC-19 ')).toBe('JC-19')
+    expect(rowText({ kind: 'lane', working: false }, '', 'JC-19')).toBe('')
+    expect(rowText(null)).toBe('')
   })
 })
 
