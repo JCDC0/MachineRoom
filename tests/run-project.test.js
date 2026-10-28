@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createLanesSource, laneAgents } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
-import { projectLockName, takeProjectLock } from '../scripts/run-lane.mjs'
+import { laneRunRecord, laneStartProblem, laneWorktreeStart, projectLockName, takeProjectLock } from '../scripts/run-lane.mjs'
 import {
   childEnvironment,
   commandFor,
@@ -82,6 +82,26 @@ function runLane(args, extra = {}) {
       done({ code, stdout, stderr })
     })
   })
+}
+
+function gitIn(cwd, args) {
+  const result = spawnSync(gitPath(), args, { cwd, encoding: 'utf8', windowsHide: true })
+  if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${cwd}: ${String(result.stderr ?? '').trim()}`)
+  return String(result.stdout ?? '').trim()
+}
+
+function scratchRepo(base) {
+  const worktree = folderIn(base, 'lane')
+  gitIn(worktree, ['init'])
+  gitIn(worktree, ['config', 'user.name', 'Lane'])
+  gitIn(worktree, ['config', 'user.email', 'lane@example.com'])
+  gitIn(worktree, ['config', 'commit.gpgsign', 'false'])
+  writeFileSync(join(worktree, 'notes.txt'), 'base\n')
+  gitIn(worktree, ['add', 'notes.txt'])
+  gitIn(worktree, ['commit', '-m', 'Base commit'])
+  gitIn(worktree, ['branch', '-M', 'main'])
+  gitIn(worktree, ['branch', 'stale'])
+  return worktree
 }
 
 function laneLine(path, id = 'call-1') {
@@ -463,6 +483,68 @@ describe('the record of a project run', () => {
     const stats = await runLane(['--stats'], { TEMP: base })
     expect(stats.code).toBe(0)
     expect(stats.stdout).toContain('opencode | opencode-go/deepseek-v4.1-flash | 1 run')
+  })
+})
+
+describe('a lane starts from the default branch', () => {
+  it('moves a worktree on a stale branch with no commits ahead to main before a run uses it', () => {
+    const worktree = scratchRepo(tempDir())
+    const mainHead = gitIn(worktree, ['rev-parse', 'refs/heads/main'])
+    gitIn(worktree, ['switch', 'stale'])
+
+    const start = laneWorktreeStart({ worktree, move: true })
+
+    expect(start).toEqual({ from: 'stale', startBranch: 'main', moved: true })
+    expect(gitIn(worktree, ['branch', '--show-current'])).toBe('')
+    expect(gitIn(worktree, ['rev-parse', 'HEAD'])).toBe(mainHead)
+    expect(gitIn(worktree, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('HEAD')
+  })
+
+  it('refuses a worktree on a branch one commit ahead and leaves that work alone', () => {
+    const worktree = scratchRepo(tempDir())
+    gitIn(worktree, ['switch', '-c', 'feat/another-lane'])
+    writeFileSync(join(worktree, 'another.txt'), 'another lane\n')
+    gitIn(worktree, ['add', 'another.txt'])
+    gitIn(worktree, ['commit', '-m', 'Another lane work'])
+    const commit = gitIn(worktree, ['log', '--oneline', 'refs/heads/main..HEAD'])
+
+    let message = ''
+    try {
+      laneWorktreeStart({ worktree, move: true })
+    } catch (error) {
+      message = String(error?.message ?? error)
+    }
+    expect(message).toBe(`The worktree ${worktree} is on the branch feat/another-lane with 1 commit that refs/heads/main does not have (${commit}), so merge it or move the worktree to refs/heads/main first.`)
+    expect(gitIn(worktree, ['branch', '--show-current'])).toBe('feat/another-lane')
+    expect(gitIn(worktree, ['rev-parse', '--short', 'HEAD'])).toBe(commit.split(' ')[0])
+  })
+
+  it('names the branch and the commits in the refusal', () => {
+    expect(laneStartProblem({ worktree: 'C:\\lane', branch: 'feat/x', count: 1, commits: ['abc1234 Keep this work'] }))
+      .toBe('The worktree C:\\lane is on the branch feat/x with 1 commit that refs/heads/main does not have (abc1234 Keep this work), so merge it or move the worktree to refs/heads/main first.')
+    expect(laneStartProblem({ worktree: 'C:\\lane', branch: '', count: 2, commits: ['abc1234 One', 'def5678 Two'] }))
+      .toBe('The worktree C:\\lane is on a detached HEAD with 2 commits that refs/heads/main does not have (abc1234 One, def5678 Two), so merge it or move the worktree to refs/heads/main first.')
+    expect(laneStartProblem({ worktree: 'C:\\lane', branch: 'feat/x', count: 0, commits: [] })).toBe('')
+  })
+
+  it('carries the starting branch in the record, beside the branch the run ended on', () => {
+    const record = laneRunRecord({
+      lane: 'opencode',
+      briefs: ['U74'],
+      model: 'opencode-go/deepseek-v4.1-flash',
+      startedAt: '2026-10-28T10:00:00.000Z',
+      minutes: 1,
+      exitCode: 0,
+      killed: false,
+      log: null,
+      branch: 'feat/u74-a-lane-starts',
+      commits: ['abc1234 Start from main'],
+      startBranch: 'main',
+    })
+    expect(record.startBranch).toBe('main')
+    expect(record.branch).toBe('feat/u74-a-lane-starts')
+    expect(runListLine(record)).toContain('feat/u74-a-lane-starts')
+    expect(laneRunRecord({ lane: 'opencode', briefs: [] })).not.toHaveProperty('startBranch')
   })
 })
 
