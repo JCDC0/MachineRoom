@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The terminal chip title, the callout title and the HUD agent list show the owner's family labels, with a sub's `sub-ID` key, and a child chip keeps `PARENT > NAME` with the parent's label (task V42).
 - The retired lane dry-run test passes `LOCALAPPDATA` to the runner, so the Hermes lane's `%LOCALAPPDATA%` program path expands on a Linux CI runner (task Q13).
 - `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
 - `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).

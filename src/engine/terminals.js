@@ -32,6 +32,14 @@ export function consoleRows(lines, limit = CONSOLE_ROWS) {
   return lines.slice(-count)
 }
 
+function labelFor(key, labels) {
+  if (!labels) return null
+  let value
+  if (labels instanceof Map) value = labels.get(key)
+  else if (typeof labels === 'object' && Object.hasOwn(labels, key)) value = labels[key]
+  return typeof value === 'string' && value ? value : null
+}
+
 const WEB_ADDRESS = /https?:\/\/[^\s<>"'`]+/gi
 const LOCAL_ADDRESS = /(?:localhost|127\.0\.0\.1|\[::1\]):\d{1,5}/gi
 const BARE_PORT = /:(\d{2,5})\b/g
@@ -94,6 +102,7 @@ export function addressIn(text) {
 export function createTerminals(cssScene, roster, { onPick = null } = {}) {
   const terminals = new Map()
   const notes = new Map()
+  let currentLabels = null
 
   function addTerminal(key, name) {
     const element = document.createElement('div')
@@ -253,6 +262,10 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     if (term) term.open = open
   }
 
+  function setLabels(labels) {
+    currentLabels = labels instanceof Map || (labels && typeof labels === 'object') ? labels : null
+  }
+
   function update(state, now, camera, focusKey, anchorOf, delta, sideOf = () => 1) {
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
@@ -281,8 +294,12 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
         continue
       }
       if (entry.parent) {
-        const parentName = state.agents.get(entry.parent)?.name ?? entry.parent
+        const parentLabel = labelFor(entry.parent, currentLabels)
+        const parentName = parentLabel ?? state.agents.get(entry.parent)?.name ?? entry.parent
         const name = `${parentName} > ${entry.name}`
+        if (term.name !== name) term.name = name
+      } else {
+        const name = currentLabels ? labelFor(entry.key, currentLabels) ?? entry.key : entry.name ?? term.key
         if (term.name !== name) term.name = name
       }
       if (entry.version !== term.version) render(term, entry, now)
@@ -344,6 +361,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     note,
     clearNotes,
     setOpen,
+    setLabels,
     setVisible,
     setFade,
     toggle: (key) => setOpen(key, !terminals.get(key)?.open),

@@ -733,6 +733,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       hub.setLadder(ladder)
       agentSet.setLadder(ladder)
     },
+    setLabels(labels) {
+      terminals.setLabels(labels)
+      agentSet.setLabels(labels)
+    },
     setRoster(next) {
       const list = (Array.isArray(next) ? next : []).map(roomAgent)
       hub.setRoster(list)

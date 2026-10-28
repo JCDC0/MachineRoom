@@ -201,3 +201,42 @@ describe('setEnds through a still agent', () => {
     agents.dispose()
   })
 })
+
+describe('owner labels', () => {
+  it('titles the chip and the callout with the label', () => {
+    const cssScene = new THREE.Scene()
+    const roster = [{ key: 'a', name: 'Alpha', shape: 'claude' }]
+    const agents = createAgents(new THREE.Scene(), roster, cssScene)
+    const terminals = createTerminals(cssScene, roster)
+    const state = createState({ files: [], dirs: [], created: [] }, roster)
+    const world = {
+      right: new THREE.Vector3(1, 0, 0),
+      back: new THREE.Vector3(0, 0, 1),
+      side: () => 1,
+      edge: (dir, file, side, out) => out.set(500, 400, 0),
+    }
+    const labels = new Map([['a', 'Bridge Coder']])
+    agents.setLabels(labels)
+    terminals.setLabels(labels)
+    agents.update(state, 0.016, 1000, world, terminals)
+    terminals.update(state, 1000, new THREE.PerspectiveCamera(), null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
+    expect(agents.views.get('a').callout.title.textContent).toBe('BRIDGE CODER')
+    expect(terminals.terminals.get('a').title.textContent).toBe('Bridge Coder')
+
+    agents.setLabels(new Map([['other', 'Other']]))
+    terminals.setLabels(new Map([['other', 'Other']]))
+    agents.update(state, 0.016, 1008, world, terminals)
+    terminals.update(state, 1008, new THREE.PerspectiveCamera(), null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
+    expect(agents.views.get('a').callout.title.textContent).toBe('A')
+    expect(terminals.terminals.get('a').title.textContent).toBe('a')
+
+    agents.setLabels(null)
+    terminals.setLabels(null)
+    agents.update(state, 0.016, 1016, world, terminals)
+    terminals.update(state, 1016, new THREE.PerspectiveCamera(), null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
+    expect(agents.views.get('a').callout.title.textContent).toBe('ALPHA')
+    expect(terminals.terminals.get('a').title.textContent).toBe('Alpha')
+    agents.dispose()
+    terminals.dispose()
+  })
+})

@@ -87,6 +87,14 @@ export function nameLabel(name) {
   return label.length > 32 ? `${label.slice(0, 31)}~` : label
 }
 
+function labelFor(key, labels) {
+  if (!labels) return null
+  let value
+  if (labels instanceof Map) value = labels.get(key)
+  else if (typeof labels === 'object' && Object.hasOwn(labels, key)) value = labels[key]
+  return typeof value === 'string' && value ? value : null
+}
+
 export function showsNameLabel(agent, sector) {
   if (!isSubOrchestrator(agent)) return true
   const name = typeof agent?.name === 'string' ? agent.name.trim() : ''
@@ -442,6 +450,7 @@ export function createAgents(scene, roster, cssScene = null) {
   const retired = new Map()
   const pendingChipRemovals = new Set()
   let currentLadder = null
+  let currentLabels = null
   let sectorList = []
   let slotAngles = sectorSlotAngles(null, parkedKeys)
 
@@ -584,7 +593,7 @@ export function createAgents(scene, roster, cssScene = null) {
       : null
     if (orchestratorLink) orchestratorLink.renderOrder = -1
 
-    const callout = makeCallout(agent.name)
+    const callout = makeCallout(currentLabels && parentKey === null ? labelFor(agent.key, currentLabels) ?? agent.key : agent.name)
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
     calloutLine.visible = false
 
@@ -812,6 +821,14 @@ export function createAgents(scene, roster, cssScene = null) {
 
   function setTasks(tasksMap) {
     currentTasks = tasksMap instanceof Map ? tasksMap : null
+  }
+
+  function setLabels(labels) {
+    currentLabels = labels instanceof Map || (labels && typeof labels === 'object') ? labels : null
+    for (const view of views.values()) {
+      const name = currentLabels && !view.parentKey ? labelFor(view.key, currentLabels) ?? view.key : view.name
+      view.callout.title.textContent = name.toUpperCase()
+    }
   }
 
   function aimAt(key, dir, file, now) {
@@ -1112,5 +1129,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setRoster, dispose, beat, webStart, webEnd, webActive, hubCenter: HUB_CENTER }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, dispose, beat, webStart, webEnd, webActive, hubCenter: HUB_CENTER }
 }

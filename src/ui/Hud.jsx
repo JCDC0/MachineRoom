@@ -11,7 +11,7 @@ import OrchestratorChat from './OrchestratorChat.jsx'
 import Settings from './Settings.jsx'
 import SetupCard from './SetupCard.jsx'
 import Sidebar from './Sidebar.jsx'
-import { agentForNumber, agentList } from './agentList.js'
+import { agentForNumber, agentList, displayName } from './agentList.js'
 import { wideLayout } from './agentStrip.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
@@ -208,6 +208,7 @@ export default function Hud({
   onShowTerminals = () => {},
   health = null,
   ladder = null,
+  labels = null,
   helpOpen: controlledHelpOpen,
   initialHelpOpen = false,
   assistantOpen = false,
@@ -558,7 +559,7 @@ export default function Hud({
         >
           <span className="agent-head">
             <span className="dot" aria-hidden="true" />
-            <span className="agent-name">{agent.name}</span>
+            <span className="agent-name">{labels ? displayName(agent.key, labels) : agent.name}</span>
             {number !== null && <span className="agent-key mono">{number}</span>}
           </span>
           <span className="agent-subtags mono">
