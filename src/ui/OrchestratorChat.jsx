@@ -12,10 +12,12 @@ import {
 } from './agentStrip.js'
 import {
   ORCH_MAX_CHARS,
+  ORCH_MAX_LINES,
   ORCH_REFRESH_MS,
   ORCH_START_CONFIRM,
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
+  TEAM_TAB,
   canSend,
   charCount,
   chatBlocks,
@@ -28,6 +30,7 @@ import {
   projectBaseName,
   statusDetail,
   statusTone,
+  teamLines,
 } from './orchestratorChat.js'
 import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
 
@@ -115,6 +118,7 @@ export default function OrchestratorChat({
   const [ownSelected, setOwnSelected] = useState(() =>
     typeof initialSelected === 'string' && initialSelected ? initialSelected : 'orchestrator'
   )
+  const [teamOpen, setTeamOpen] = useState(false)
   const controlled = typeof selectedTab === 'string' && selectedTab !== ''
   const selected = controlled ? selectedTab : ownSelected
   const [loadedIds, setLoadedIds] = useState(() => (initialChat ? { orchestrator: true } : {}))
@@ -156,16 +160,17 @@ export default function OrchestratorChat({
   const roomActivity = useContext(OrchestratorActivity)
 
   const subs = list.filter((entry) => entry.id !== 'orchestrator')
+  const teamSelected = teamOpen || selected === TEAM_TAB
   const current = list.find((entry) => entry.id === selected) ?? null
   const chat = chats[selected] ?? normalizeChat(null)
   const loaded = Boolean(loadedIds[selected])
   const state = loaded ? chat.state : current?.state ?? chat.state
   const doing = selected === 'orchestrator' ? activity || roomActivity : ''
-  const status = statusDetail(state, doing)
-  const tone = statusTone(state)
+  const status = teamSelected ? "Every orchestrator's messages" : statusDetail(state, doing)
+  const tone = teamSelected ? 'waiting' : statusTone(state)
   const count = charCount(draft)
   const working = state === 'working'
-  const model = chat.model || (typeof current?.model === 'string' ? current.model : '')
+  const model = teamSelected ? '' : chat.model || (typeof current?.model === 'string' ? current.model : '')
   const harness = typeof current?.harness === 'string' ? current.harness : ''
   const shownModel = modelSaved || model || 'not reported'
   const shownEffort = effortSaved || effortLabel(orchestratorEffort(list, selected), harness)
@@ -191,9 +196,20 @@ export default function OrchestratorChat({
   const canSetEffort = inline && typeof client?.setOrchestratorEffort === 'function'
   const canReadModels =
     typeof client?.models === 'function' || typeof client?.harnessModels === 'function'
-  const project = chat.project
+  const project = teamSelected ? chats.orchestrator?.project ?? '' : chat.project
   const projectLabel = projectBaseName(project)
-  const lines = chatLines(chat)
+  const lines = teamSelected ? [] : chatLines(chat, ORCH_MAX_LINES, { id: selected })
+  const teamKey = subs.map((entry) => entry.id).join('\n')
+  const teamEntries = [
+    { id: 'orchestrator', name: 'Main', chat: chats.orchestrator },
+    ...subs.map((entry) => ({
+      id: entry.id,
+      name: entry.name || entry.id,
+      chat: chats[entry.id],
+    })),
+  ]
+  const teamRows = teamSelected ? teamLines(teamEntries) : []
+  const teamReady = Boolean(loadedIds.orchestrator) && subs.every((entry) => loadedIds[entry.id])
   const problem = error ?? readError
   const tabs = [
     {
@@ -206,6 +222,7 @@ export default function OrchestratorChat({
       label: entry.name || entry.id,
       state: entry.state ?? chats[entry.id]?.state ?? 'idle',
     })),
+    { id: TEAM_TAB, label: 'Team' },
   ]
   const startText =
     selected === 'orchestrator'
@@ -245,7 +262,7 @@ export default function OrchestratorChat({
   }, [open, client])
 
   useEffect(() => {
-    if (!open) return undefined
+    if (!open || selected === TEAM_TAB) return undefined
     if (!client || typeof client.orchestrator !== 'function') {
       setUnavailable(true)
       return undefined
@@ -294,6 +311,54 @@ export default function OrchestratorChat({
   }, [open, client, selected])
 
   useEffect(() => {
+    if (!open || !teamSelected) return undefined
+    if (!client || typeof client.orchestrator !== 'function') {
+      setUnavailable(true)
+      return undefined
+    }
+    setUnavailable(false)
+    let stopped = false
+    const allIds = ['orchestrator', ...teamKey.split('\n').filter(Boolean)]
+    const ids = selected === TEAM_TAB ? allIds : allIds.filter((id) => id !== selected)
+
+    async function readTeam() {
+      const answers = await Promise.allSettled(
+        ids.map((id) => client.orchestrator(id === 'orchestrator' ? undefined : id))
+      )
+      if (stopped) return
+      const nextChats = {}
+      const nextLoaded = {}
+      ids.forEach((id, index) => {
+        nextLoaded[id] = true
+        const answer = answers[index]
+        if (answer.status === 'fulfilled') nextChats[id] = normalizeChat(answer.value)
+      })
+      setChats((currentChats) => ({ ...currentChats, ...nextChats }))
+      setLoadedIds((currentLoaded) => ({ ...currentLoaded, ...nextLoaded }))
+      setList((currentList) =>
+        currentList.map((entry) =>
+          nextChats[entry.id] ? { ...entry, state: nextChats[entry.id].state } : entry
+        )
+      )
+    }
+
+    readTeam()
+    const timer = setInterval(readTeam, ORCH_REFRESH_MS)
+    let unsubscribe = null
+    if (typeof client.subscribe === 'function') {
+      unsubscribe = client.subscribe((notice) => {
+        if (notice && notice.topic === 'orchestrator') readTeam()
+      })
+    }
+
+    return () => {
+      stopped = true
+      clearInterval(timer)
+      unsubscribe?.()
+    }
+  }, [open, client, selected, teamKey, teamSelected])
+
+  useEffect(() => {
     if (!open || inline) return undefined
     const timer = setTimeout(() => inputRef.current?.focus(), 20)
     return () => clearTimeout(timer)
@@ -306,6 +371,10 @@ export default function OrchestratorChat({
     focusAtRef.current = next
     inputRef.current?.focus()
   }, [inline, focusRequest])
+
+  useEffect(() => {
+    setTeamOpen(false)
+  }, [selected])
 
   useEffect(() => {
     setModelsOpen(false)
@@ -332,7 +401,7 @@ export default function OrchestratorChat({
     if (open && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight
     }
-  }, [open, selected, lines.length])
+  }, [open, selected, lines.length, teamRows.length])
 
   useEffect(() => {
     if (!open) return undefined
@@ -362,7 +431,12 @@ export default function OrchestratorChat({
   }, [controlled, onSelect])
 
   useEffect(() => {
-    if (selected === 'orchestrator' || list.length === 0) return
+    if (list.length === 0) return
+    if (selected === TEAM_TAB) {
+      if (!list.some((entry) => entry.id !== 'orchestrator')) changeSelected('orchestrator')
+      return
+    }
+    if (selected === 'orchestrator') return
     if (!list.some((entry) => entry.id === selected)) changeSelected('orchestrator')
   }, [list, selected])
 
@@ -572,6 +646,14 @@ export default function OrchestratorChat({
   }
 
   function selectTab(id) {
+    if (id === TEAM_TAB) {
+      setTeamOpen(true)
+      setConfirm(null)
+      setError(null)
+      setReadError(null)
+      return
+    }
+    setTeamOpen(false)
     if (id === selected) return
     changeSelected(id)
     setConfirm(null)
@@ -612,7 +694,7 @@ export default function OrchestratorChat({
       {subs.length > 0 ? (
         <div className="mr-orch-tabs" aria-label="Orchestrators">
           {tabs.map((tab) => {
-            const active = selected === tab.id
+            const active = tab.id === TEAM_TAB ? teamSelected : selected === tab.id && !teamSelected
             return (
               <div key={tab.id} className={`mr-orch-tab-wrap${active ? ' is-active' : ''}`}>
                 <button
@@ -621,7 +703,9 @@ export default function OrchestratorChat({
                   aria-pressed={active}
                   onClick={() => selectTab(tab.id)}
                 >
-                  <span className={`mr-orch-tab-dot is-${statusTone(tab.state)}`} aria-hidden="true" />
+                  {tab.id === TEAM_TAB ? null : (
+                    <span className={`mr-orch-tab-dot is-${statusTone(tab.state)}`} aria-hidden="true" />
+                  )}
                   <span>{tab.label}</span>
                 </button>
               </div>
@@ -641,7 +725,32 @@ export default function OrchestratorChat({
         </div>
       ) : null}
 
-      <>
+      {teamSelected ? (
+        <div className="mr-orch-log is-team" role="log" aria-live="polite" ref={logRef}>
+          {teamRows.length === 0 ? (
+            <p className="mr-orch-empty">
+              {teamReady ? 'Nothing said yet.' : 'Reading the team.'}
+            </p>
+          ) : (
+            teamRows.map((line) => (
+              <button
+                type="button"
+                key={line.id}
+                className={`mr-orch-team-row is-${line.from}`}
+                title={line.at ? `${line.where} at ${line.at}` : line.where}
+                onClick={() => selectTab(line.chatId)}
+              >
+                <span className="mr-orch-team-meta mono">
+                  <span className="mr-orch-team-where">{line.where}</span>
+                  <span className="mr-orch-team-who">{line.who}</span>
+                </span>
+                <span className="mr-orch-team-text">{line.text}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : (
+        <>
           <div className="mr-orch-log" role="log" aria-live="polite" ref={logRef}>
             {lines.length === 0 ? (
               <p className="mr-orch-empty">
@@ -651,6 +760,7 @@ export default function OrchestratorChat({
               lines.map((line) => (
                 <div key={line.id} className={`mr-orch-line is-${line.from}`}>
                   {line.from === 'room' ? <span className="mr-orch-who mono">room</span> : null}
+                  {line.fromMain ? <span className="mr-orch-who mono">from main</span> : null}
                   {line.from === 'owner' ? (
                     <span className="mr-orch-text">{line.text}</span>
                   ) : (
@@ -987,7 +1097,8 @@ export default function OrchestratorChat({
               </div>
             </form>
           )}
-      </>
+        </>
+      )}
 
       {unavailable ? <p className="mr-orch-note mono">The orchestrator is not connected.</p> : null}
     </aside>

@@ -13,6 +13,7 @@ export const ORCH_MAX_CHARS = 8000
 export const ORCH_COUNT_FROM = 7000
 export const ORCH_REFRESH_MS = 10000
 export const ORCH_MAX_LINES = 200
+export const TEAM_TAB = 'team'
 
 export const ORCH_START_CONFIRM =
   'The orchestrator runs Claude Code (Opus) on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.'
@@ -92,15 +93,33 @@ export function orchestratorDoing(agents) {
   return ''
 }
 
-function subLabel(value) {
-  const id = visibleChatText(String(value ?? ''))
+function cleanLabel(value) {
+  return visibleChatText(String(value ?? ''))
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function subLabel(value) {
+  const id = cleanLabel(value)
   return id ? `Sub ${id}` : ''
 }
 
-export function chatLines(chat, limit = ORCH_MAX_LINES) {
+function sourceTags(source, names) {
+  if (source === 'owner' || source === 'orchestrator' || source === 'room') {
+    return { from: source, who: source }
+  }
+  if (source === 'main') return { from: 'orchestrator', who: 'orchestrator' }
+  if (source.startsWith('sub:')) {
+    const id = cleanLabel(source.slice(4))
+    if (!id) return { from: 'orchestrator', who: 'orchestrator' }
+    return { from: 'sub', who: names.get(id) || subLabel(id) }
+  }
+  return { from: 'orchestrator', who: 'orchestrator' }
+}
+
+export function chatLines(chat, limit = ORCH_MAX_LINES, options = {}) {
   const list = chat && Array.isArray(chat.messages) ? chat.messages : []
+  const id = typeof options?.id === 'string' && options.id ? options.id : 'orchestrator'
   const lines = []
   for (const message of list) {
     if (!message || typeof message !== 'object') continue
@@ -113,12 +132,67 @@ export function chatLines(chat, limit = ORCH_MAX_LINES) {
     lines.push({
       id: String(message.id ?? `${from}-${lines.length}`),
       from,
+      fromMain: id !== 'orchestrator' && (source === 'orchestrator' || source === 'main'),
       text: label ? `${label}\n\n${text}` : text,
       at: message.at ?? null,
     })
   }
   const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : ORCH_MAX_LINES
   return lines.slice(-cap)
+}
+
+export function teamLines(entries, limit = ORCH_MAX_LINES) {
+  const list = Array.isArray(entries) ? entries : []
+  const names = new Map()
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    if (typeof entry.id !== 'string' || !entry.id) continue
+    const name = cleanLabel(entry.name)
+    if (name) names.set(entry.id, name)
+  }
+  const rows = []
+  let order = 0
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const id = typeof entry.id === 'string' ? entry.id : ''
+    if (!id) continue
+    const where = id === 'orchestrator' ? 'main' : names.get(id) || subLabel(id)
+    const messages = entry.chat && Array.isArray(entry.chat.messages) ? entry.chat.messages : []
+    messages.forEach((message, index) => {
+      if (!message || typeof message !== 'object') return
+      const text = visibleChatText(typeof message.text === 'string' ? message.text : '').trim()
+      if (!text) return
+      const source = typeof message.from === 'string' ? message.from : ''
+      const tags = sourceTags(source, names)
+      const at = typeof message.at === 'string' && message.at ? message.at : null
+      const time = at ? Date.parse(at) : Number.NaN
+      rows.push({
+        id: `${id}:${String(message.id ?? 'line')}:${index}`,
+        chatId: id,
+        where,
+        who: tags.who,
+        from: tags.from,
+        fromMain: id !== 'orchestrator' && (source === 'orchestrator' || source === 'main'),
+        text,
+        at,
+        time: Number.isFinite(time) ? time : 0,
+        order,
+      })
+      order += 1
+    })
+  }
+  rows.sort((left, right) => left.time - right.time || left.order - right.order)
+  const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : ORCH_MAX_LINES
+  return rows.slice(-cap).map((row) => ({
+    id: row.id,
+    chatId: row.chatId,
+    where: row.where,
+    who: row.who,
+    from: row.from,
+    fromMain: row.fromMain,
+    text: row.text,
+    at: row.at,
+  }))
 }
 
 function findCodeClose(text, from, run) {

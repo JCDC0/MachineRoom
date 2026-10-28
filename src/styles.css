@@ -5505,6 +5505,69 @@ body:has(#hud-orchestrator-chat) .waiting {
   color: rgb(255 255 255 / 0.45);
 }
 
+.mr-orch-team-row {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-left: 2px solid rgb(255 255 255 / 0.18);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mr-orch-team-row:hover:not(:disabled) {
+  border-left-color: rgb(255 255 255 / 0.5);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.mr-orch-team-row:focus-visible {
+  outline: 1px solid var(--yellow);
+  outline-offset: 1px;
+}
+
+.mr-orch-team-row.is-owner {
+  border-left-color: rgb(255 255 255 / 0.4);
+}
+
+.mr-orch-team-row.is-room {
+  border-left-color: rgb(255 255 255 / 0.08);
+}
+
+.mr-orch-team-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.mr-orch-team-where,
+.mr-orch-team-who {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mr-orch-team-where {
+  color: rgb(255 255 255 / 0.45);
+}
+
+.mr-orch-team-who {
+  color: var(--yellow);
+}
+
+.mr-orch-team-text {
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .mr-orch-error {
   padding: 6px var(--space);
   border: 1px solid rgb(255 42 42 / 0.6);
