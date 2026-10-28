@@ -605,7 +605,7 @@ function projectRefusals(project, lanes, allowDirty) {
 async function runQueueProject({ options, lane, lanes }) {
   const project = projectFolder(options.project)
   if (!gitCheckout(project)) throw new Error(`The project folder ${project} is not a git folder. A queue needs one.`)
-  const problems = projectRefusals(project, lanes, options.allowDirty === true)
+  const problems = projectRefusals(project, lanes, options.allowDirty === true && !options.queue)
   if (problems.length > 0) {
     problems.forEach((sentence) => console.log(sentence))
     return 1
