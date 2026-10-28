@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A lane started by `run-lane` gets only an allow-list of the shell's names, so `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN` and other secrets no longer reach it; the MachineRoom harness receives its own key names and Hermes receives `OPENROUTER_API_KEY` (task U72).
+- The runner writes a lane's log through the bridge's split-key masker, so a key in the output, split across chunks or not, is `[key]` in the file under the runs folder (task U72).
+- `tests/lane-env.test.js` covers the allow-list, the harness key exception, the masked log, a real `--dry-run` and the real OpenCode start; `scripts/mr-agent.mjs` gives its shell tool the same allow-list, and `scripts/acp-run.mjs` passes the environment it was given to its agent (task U72).
+- README says which names a lane sees and which key each harness may get (task U72).
 - The aberration map's square is sized from the park ring's projected radius with full strength at 2.5 ring radii, never smaller than the lens-covering square and never more than twice the lens diagonal, and its centre is pulled back toward the lens only as far as covering it needs, so the fringes keep their strength while a card or an agent holds the camera (task U70).
 - `parkScreen()` answers the ring's projected radius beside its centre, and `mapPlacement` takes it, so an anchored card gets a square at the 2,658 pixel cap for a 1,247 by 460 lens instead of growing without limit (task U70).
 - `src/Stage.jsx` passes the ring radius into `mapPlacement` and writes the park point again when the radius moves 2 pixels, as it does for the centre (task U70).

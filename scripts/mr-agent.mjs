@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { SEARCH_OFF, fetchPage, readSearchChoice, searchWeb } from '../server/search.js'
+import { childEnvironment } from '../src/briefs/run.js'
 import { callMcpTool, listAllMcpTools, mcpResultText, mcpRunsDir } from './mcp-bridge.mjs'
 
 const DEFAULT_URL = 'https://openrouter.ai/api/v1'
@@ -495,9 +496,7 @@ function searchTool(args, cwd) {
 function shellTool(args, cwd) {
   const command = typeof args.command === 'string' ? args.command : ''
   if (command.trim() === '') return Promise.resolve({ text: 'run_shell needs a command.', isError: true })
-  const env = { ...process.env }
-  delete env.MACHINEROOM_API_KEY
-  delete env.OPENROUTER_API_KEY
+  const env = childEnvironment(process.env, cwd)
   return new Promise((done) => {
     exec(
       command,

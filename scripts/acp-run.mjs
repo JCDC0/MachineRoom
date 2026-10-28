@@ -4,7 +4,6 @@ import { once } from 'node:events'
 import { createInterface } from 'node:readline'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
-import { childEnvironment } from '../src/briefs/run.js'
 import { killTree, treeSpawnOptions } from '../server/processTree.js'
 import { mcpServersForAcp } from './mcp-bridge.mjs'
 
@@ -109,7 +108,7 @@ export async function runAcp(options, { log = process.stdout, error = process.st
   const cwd = resolve(options.cwd || process.cwd())
   const child = spawn(options.file, options.args, {
     cwd,
-    env: childEnvironment(process.env, cwd),
+    env: { ...process.env, PWD: cwd },
     stdio: ['pipe', 'pipe', 'pipe'],
     windowsHide: true,
     ...treeSpawnOptions(),

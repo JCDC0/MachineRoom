@@ -1,7 +1,7 @@
 import { basename } from '../model/paths.js'
 import { finiteNumber, summaryOf } from '../harnesses/common.js'
 import { harnessByKey } from '../harnesses/index.js'
-import { maskKeys } from './audit.js'
+import { createSplitMasker, maskKeys } from './audit.js'
 import { branchFor } from './briefs.js'
 
 export const UNATTENDED_NOTE = 'You are running unattended in a one-shot command started for the owner, who may be away. Nobody can answer a question. If something blocks you, stop, leave the branch as it is, and say why in your report.'
@@ -415,13 +415,87 @@ export function pathInside(child, parent) {
   return one.startsWith(two.endsWith('/') ? two : `${two}/`)
 }
 
-export function childEnvironment(env, cwd) {
-  const next = { ...(env ?? {}) }
-  delete next.PWD
-  delete next.OLDPWD
-  delete next.INIT_CWD
+export const LANE_ENV_NAMES = [
+  'PATH', 'Path', 'PATHEXT', 'SystemRoot', 'WINDIR', 'COMSPEC', 'TEMP', 'TMP',
+  'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA',
+  'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMDATA', 'NUMBER_OF_PROCESSORS',
+  'OS', 'PROCESSOR_ARCHITECTURE', 'LANG', 'LC_ALL', 'TERM', 'HOME', 'SHELL',
+]
+
+export const HARNESS_KEY_NAMES = {
+  hermes: ['OPENROUTER_API_KEY'],
+  machineroom: ['MACHINEROOM_API_KEY', 'OPENROUTER_API_KEY', 'MACHINEROOM_API_URL'],
+}
+
+const LANE_ENV_SET = new Set(LANE_ENV_NAMES.map((name) => name.toLowerCase()))
+
+export function harnessKeyNames(harness) {
+  const key = typeof harness === 'string' ? harness : ''
+  return Object.hasOwn(HARNESS_KEY_NAMES, key) ? HARNESS_KEY_NAMES[key] : []
+}
+
+export function childEnvironment(env, cwd, { harness = '', names = [] } = {}) {
+  const allowed = new Set(LANE_ENV_SET)
+  for (const name of harnessKeyNames(harness)) allowed.add(name.toLowerCase())
+  for (const name of Array.isArray(names) ? names : []) {
+    if (typeof name === 'string' && name !== '') allowed.add(name.toLowerCase())
+  }
+  const next = {}
+  const source = env && typeof env === 'object' ? env : {}
+  for (const [name, value] of Object.entries(source)) {
+    if (!allowed.has(name.toLowerCase())) continue
+    if (typeof value !== 'string') continue
+    next[name] = value
+  }
   if (typeof cwd === 'string' && cwd.trim() !== '') next.PWD = cwd
   return next
+}
+
+export function createLaneLog({ write, runId = 'lane', holdMs } = {}) {
+  if (typeof write !== 'function') throw new Error('The lane log needs a writer.')
+  const masker = createSplitMasker(holdMs === undefined ? {} : { holdMs })
+  const seqs = new Map()
+  const timers = new Set()
+
+  function emit(result) {
+    for (const frame of result.frames) {
+      const chunk = frame?.payload?.chunk
+      if (typeof chunk === 'string' && chunk !== '') write(chunk)
+    }
+  }
+
+  function due() {
+    emit(masker.due(Date.now()))
+  }
+
+  function schedule() {
+    const at = masker.nextDue()
+    if (at === null) return
+    const timer = setTimeout(() => {
+      timers.delete(timer)
+      due()
+      schedule()
+    }, Math.max(0, at - Date.now()))
+    if (typeof timer.unref === 'function') timer.unref()
+    timers.add(timer)
+  }
+
+  return {
+    push(stream, chunk) {
+      if (typeof chunk !== 'string' || chunk === '') return
+      const key = `${runId}:${stream}`
+      const seq = (seqs.get(key) ?? 0) + 1
+      seqs.set(key, seq)
+      const frame = { type: 'heartbeat.run.log', payload: { runId: key, stream, seq, chunk } }
+      emit(masker.push(frame, Date.now()))
+      schedule()
+    },
+    flush() {
+      for (const timer of timers) clearTimeout(timer)
+      timers.clear()
+      emit(masker.flush())
+    },
+  }
 }
 
 function knownPath(value) {
