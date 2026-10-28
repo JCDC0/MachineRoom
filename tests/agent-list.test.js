@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentForNumber, agentList, agentRows } from '../src/ui/agentList.js'
+import { agentForNumber, agentList, agentRows, displayName } from '../src/ui/agentList.js'
 
 const orchestrator = { key: 'orchestrator', name: 'Orchestrator', status: 'idle' }
 const alpha = { key: 'alpha', name: 'Alpha', status: 'idle' }
@@ -98,5 +98,29 @@ describe('agentList', () => {
       ['a~1', 1, null],
       ['b', 0, 2],
     ])
+  })
+})
+
+describe('displayName', () => {
+  it('shows the label when one is set', () => {
+    expect(displayName('opencode', new Map([['opencode', 'Bridge Coder']]))).toBe('Bridge Coder')
+    expect(displayName('opencode', { opencode: 'Bridge Coder' })).toBe('Bridge Coder')
+  })
+
+  it('shows the key when the label is missing, empty or no map is given', () => {
+    expect(displayName('opencode', new Map())).toBe('opencode')
+    expect(displayName('opencode', new Map([['claude', 'Lead']]))).toBe('opencode')
+    expect(displayName('opencode', { opencode: '' })).toBe('opencode')
+    expect(displayName('opencode', null)).toBe('opencode')
+  })
+
+  it('does not read a prototype name as a label', () => {
+    expect(displayName('toString', {})).toBe('toString')
+    expect(displayName('orchestrator', Object.create({ orchestrator: 'Borrowed' }))).toBe('orchestrator')
+  })
+
+  it('answers empty text for no key', () => {
+    expect(displayName(null, new Map([['orchestrator', 'Lead']]))).toBe('')
+    expect(displayName(undefined, null)).toBe('')
   })
 })

@@ -219,6 +219,15 @@ describe('a child view', () => {
     terminals.update(state, 1000, camera, null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
     const term = terminals.terminals.get('a~1')
     expect(term.title.textContent).toBe('Alpha > Scout')
+
+    terminals.setLabels(new Map([['a', 'Bridge Coder']]))
+    terminals.update(state, 1016, camera, null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
+    expect(term.title.textContent).toBe('Bridge Coder > Scout')
+
+    terminals.setLabels(null)
+    terminals.update(state, 1032, camera, null, () => new THREE.Vector3(0, 290, 300), 0.016, () => 1)
+    expect(term.title.textContent).toBe('Alpha > Scout')
+
     terminals.setFade('a~1', 0.5)
     expect(term.element.style.opacity).toBe('0.5')
     terminals.setVisible('a~1', false)
@@ -291,5 +300,18 @@ describe('the HUD agent list', () => {
     expect(html.indexOf('Alpha')).toBeLessThan(html.indexOf('Scout'))
     expect(html.indexOf('Scout')).toBeLessThan(html.indexOf('Deep'))
     expect(html.indexOf('Deep')).toBeLessThan(html.indexOf('Beta'))
+  })
+
+  it('shows a family label in a row and the key when the row has none', () => {
+    const html = renderToString(
+      createElement(Hud, {
+        mode: 'live',
+        snapshot: { agents: [agents[0], agents[3]], speeds: [1] },
+        speeds: [1],
+        labels: new Map([['a', 'Bridge Coder']]),
+      })
+    )
+    expect(html).toContain('class="agent-name">Bridge Coder</span>')
+    expect(html).toContain('class="agent-name">b</span>')
   })
 })

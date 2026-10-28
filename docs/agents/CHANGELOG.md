@@ -9,6 +9,7 @@
 - The sidebar's Agents tab has `Build a team`, which previews `Team 1`, `Team 2` and their lanes, then saves the ladder and each new label after a confirm card (task U81).
 - Packets fly in a straight line between two agents when one talks to another, white for orders, reports and wakes and yellow for a dispatch (task V41).
 - The transport shows a compact chip per sub orchestrator after the main state word, with its name and a state dot, four at most and then `+N`, and a click opens that sub's chat tab in the conversation through the `machineroom:open-chat` window event (task U80).
+- The terminal chip title, the callout title and the HUD agent list show the owner's family labels, with a sub's `sub-ID` key, and a child chip keeps `PARENT > NAME` with the parent's label (task V42).
 - The retired lane dry-run test passes `LOCALAPPDATA` to the runner, so the Hermes lane's `%LOCALAPPDATA%` program path expands on a Linux CI runner (task Q13).
 - `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
 - `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).

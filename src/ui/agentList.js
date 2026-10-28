@@ -11,6 +11,19 @@ export function isActiveAgent(agent) {
   return Boolean(agent && ACTIVE_STATUSES.has(agent.status))
 }
 
+export function displayName(key, labels) {
+  const name = key == null ? '' : String(key)
+  if (!name || !labels) return name
+  if (labels instanceof Map) {
+    const value = labels.get(name)
+    return typeof value === 'string' && value ? value : name
+  }
+  if (typeof labels !== 'object') return name
+  if (!Object.hasOwn(labels, name)) return name
+  const value = labels[name]
+  return typeof value === 'string' && value ? value : name
+}
+
 function arrange(agents) {
   const list = Array.isArray(agents) ? agents : []
   const known = new Set(list.map((agent) => agent?.key))

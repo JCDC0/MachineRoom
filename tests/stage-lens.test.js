@@ -7,6 +7,7 @@ import Stage, {
   compassBottomLabel,
   compassHeading,
   isBridgeDown,
+  labelsFromFamily,
   lensEdgeLabels,
   lensEdgeTicks,
 } from '../src/Stage.jsx'
@@ -143,6 +144,30 @@ describe('disconnected borders', () => {
     expect(isBridgeDown({}, { status: 'live' }, { ok: true })).toBe(false)
     expect(isBridgeDown({}, { status: 'live' }, null)).toBe(false)
     expect(isBridgeDown(null, { status: 'reconnecting' }, { ok: false })).toBe(false)
+  })
+})
+
+describe('family labels', () => {
+  it('maps the main and lane ids as they are and a sub as sub-ID', () => {
+    const labels = labelsFromFamily({
+      nodes: [
+        { id: 'orchestrator', kind: 'orchestrator', label: 'The Owner' },
+        { id: 'frontend', kind: 'sub', label: 'Front' },
+        { id: 'opencode', kind: 'lane', label: 'Bridge Coder' },
+      ],
+    })
+    expect(labels).toEqual(
+      new Map([
+        ['orchestrator', 'The Owner'],
+        ['sub-frontend', 'Front'],
+        ['opencode', 'Bridge Coder'],
+      ])
+    )
+  })
+
+  it('asks for no labels without nodes', () => {
+    expect(labelsFromFamily(null)).toBeNull()
+    expect(labelsFromFamily({ nodes: [] })).toBeNull()
   })
 })
 

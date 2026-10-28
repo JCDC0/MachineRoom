@@ -55,6 +55,19 @@ const DEMO_SUBS = [
   { id: 'backend', name: 'Backend', lanes: ['claude'], scope: ['server/**'], restricted: true, setBy: 'owner' },
 ]
 
+export function labelsFromFamily(answer) {
+  const nodes = Array.isArray(answer?.nodes) ? answer.nodes : []
+  if (nodes.length === 0) return null
+  const labels = new Map()
+  for (const node of nodes) {
+    if (!node || typeof node.id !== 'string' || !node.id) continue
+    if (typeof node.label !== 'string' || !node.label) continue
+    const key = node.kind === 'sub' ? `sub-${node.id}` : node.id
+    labels.set(key, node.label)
+  }
+  return labels
+}
+
 export const LENS_EDGE_HEIGHT = 24
 export const LENS_DEFAULT_WIDTH = 1440
 export const LENS_PIXELS_PER_DEGREE = 6
@@ -314,6 +327,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }, [])
   const [ladder, setLadder] = useState(null)
   const [orchestrators, setOrchestrators] = useState(NONE)
+  const [labels, setLabels] = useState(null)
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const [dockCosts, setDockCosts] = useState(null)
@@ -323,6 +337,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
   const latestLadderRef = useRef(null)
+  const latestLabelsRef = useRef(null)
   const knownSoundRef = useRef(null)
   if (knownSoundRef.current === null) {
     const missing = new Set(data.tree?.created ?? [])
@@ -433,6 +448,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (latestLadderRef.current) {
       room.setLadder(latestLadderRef.current)
     }
+    if (latestLabelsRef.current) {
+      room.setLabels(latestLabelsRef.current)
+    }
     setOpenChips(NONE)
     if (!live) {
       const saved = loadSettings(store()).speed
@@ -502,6 +520,45 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       unsubscribe()
     }
   }, [client, demoLadder, live])
+
+  useEffect(() => {
+    function apply(next) {
+      latestLabelsRef.current = next
+      setLabels(next)
+    }
+    if (!live || !client || typeof client.family !== 'function') {
+      apply(null)
+      roomRef.current?.setLabels(null)
+      return undefined
+    }
+    let active = true
+    const latest = latestOnly()
+
+    async function updateLabels() {
+      const isLatest = latest()
+      try {
+        const answer = await client.family()
+        if (!active || !isLatest()) return
+        const next = labelsFromFamily(answer)
+        apply(next)
+        roomRef.current?.setLabels(next)
+      } catch {
+        if (!active || !isLatest()) return
+        apply(null)
+        roomRef.current?.setLabels(null)
+      }
+    }
+
+    updateLabels()
+    const timer = setInterval(updateLabels, 60000)
+    const unsubscribe = subscribeToNotices(client, ['family'], updateLabels)
+
+    return () => {
+      active = false
+      clearInterval(timer)
+      unsubscribe()
+    }
+  }, [client, live])
 
   useEffect(() => {
     if (!live || live.simulated || !live.bridge) return undefined
@@ -1018,6 +1075,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                 onShowTerminals={showTerminals}
                 health={health}
                 ladder={ladder}
+                labels={labels}
                 effects={effects}
                 onSettingsChange={handleSettingsChange}
               />
