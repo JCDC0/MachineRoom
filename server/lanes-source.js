@@ -305,7 +305,8 @@ export function createLanesSource(options = {}) {
     const list = allAgents()
     const choiceFile = activeLanesFileFor(roomRoot, folder)
     if (readActiveLanesChoice(choiceFile) === null) {
-      return list.filter((agent) => agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-'))
+      const running = new Set([...active.values()].map((run) => run.agent.key))
+      return list.filter((agent) => agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-') || running.has(agent.key))
     }
     return list
   }

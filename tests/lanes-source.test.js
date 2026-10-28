@@ -173,6 +173,35 @@ describe('the live lane source', () => {
     })
   })
 
+  it('lists a lane with an open run on a project with no lane choice', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'MachineRoom')
+    mkdirSync(projectRoot, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const bridge = createBridge({
+      paperclipUrl: DEAD_PAPERCLIP,
+      companyId: 'comp-lanes',
+      projectRoot,
+      port: 0,
+      env: {},
+      surfaceEveryMs: 0,
+      reconnectMinMs: 60000,
+      reconnectMaxMs: 60000,
+      lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
+    })
+    cleanups.push(() => bridge.stop())
+    const { url } = await bridge.start()
+
+    const logPath = join(runs, 'opencode-S6a-20261024-120000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\briefs\\recording.js`, { at: Date.now(), id: 'call-1' })}\n`)
+    await readFrames(url, (list) => list.some((frame) => frame.payload?.status === 'running'))
+
+    const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
+    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode'])
+  })
+
   it('sends a growing log to /events in order, under the lane key, and ends on its record', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')
