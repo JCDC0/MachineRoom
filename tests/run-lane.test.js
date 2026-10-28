@@ -1338,6 +1338,7 @@ describe('scripts/run-lane.mjs', () => {
       const runEnv = {
         MACHINEROOM_LANES_FILE: lanesFileUnderWorktrees(folder),
         MACHINEROOM_RUNS: join(folder, 'runs'),
+        LOCALAPPDATA: process.env.LOCALAPPDATA ?? folder,
       }
       const refused = await runLane(['hermes', 'S2a', '--dry-run'], runEnv)
       expect(refused.code).toBe(1)
