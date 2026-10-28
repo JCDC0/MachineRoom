@@ -1,6 +1,6 @@
 # Orchestrators in a ladder (built)
 
-Status: built. The plan was written on 2026-10-24 at the owner's request. O1 to O7 are merged, and each step below gives its version. V23 made the sectors readable, V25 grouped the dock's agent list, V26 named each sector once, and S10 added the demo replay (`?replay&fixture=scenario-i`). One point from the version 7 audit waits for the owner: X3, where the scope check reads only committed work. X1 is fixed: each orchestrator has its own in-memory token and the sector gate is enforced (O8). Briefs O1 to O8 in `TASKS.md`.
+Status: built. The plan was written on 2026-10-24 at the owner's request. O1 to O7 are merged, O8 added each orchestrator's own token (merged as 0.1.356), and each step below gives its version. V23 made the sectors readable, V25 grouped the dock's agent list, V26 named each sector once, and S10 added the demo replay (`?replay&fixture=scenario-i`). The version 7 audit's X1 and X3 are fixed: the actor comes from the request and the sector gate uses each orchestrator's token, and the scope check reads uncommitted work as well as commits. Briefs O1 to O8 in `TASKS.md`.
 
 ## What the owner asked for
 
@@ -48,8 +48,8 @@ Rules, all checked by `src/model/hierarchy.js`:
 - The bridge reads the actor from the request, not from the body: an Origin is the owner and no Origin is an orchestrator. A request with no Origin that says `by: "owner"` or `from: "owner"` is refused with 403, and so is one that starts a run with `startedBy: "orchestrator"`. A page that says `by: "orchestrator"` or `from: "orchestrator"` is refused by the page rule, as before.
 - Each orchestrator is one instance of what `server/orchestrator.js` does today: its own session, chat, state, turn limit and wake budget. The sub's instructions are `ORCHESTRATOR-AGENT.md` plus a short section that names its id, lanes, scope, whether it is restricted, its sector branch `machineroom/sector-<id>` and its parent.
 - A lane run started by an orchestrator records `startedBy` (its id). The run's end wakes only that orchestrator.
-- A sub orchestrator's run route refuses a lane outside its sector. The sector gate stops a sub from starting another sector's lane when it names itself, but a sub can still start another sub's lane by claiming to be the main orchestrator until each sub gets its own token, so the gate is advisory until then.
-- Restricted scope is checked twice: the sub's task text names the scope, and the merge check refuses a lane branch whose `git diff --name-only` names a file outside the scope, with a room message saying which files. X3 leaves uncommitted work out of that check.
+- A sub orchestrator's run route refuses a lane outside its sector. Each orchestrator sends its own token in `X-MachineRoom-Orchestrator`, and a no-Origin request with a sub's token acts as that sub, so the sector gate stops a sub from starting another sector's lane (O8).
+- Restricted scope is checked twice: the sub's task text names the scope, and the merge check refuses a lane branch whose commits or uncommitted work name a file outside the scope, with a room message saying which files (`branchChanges` reads `git status --porcelain --untracked-files=all` too).
 - A sub orchestrator reports to its parent by a message in the parent's chat from `sub:<id>`, which wakes the parent like a room message.
 - The owner can talk to any orchestrator from the chat (a tab per orchestrator). Attach, detach, scope and restriction are confirmed writes.
 
@@ -57,7 +57,7 @@ Rules, all checked by `src/model/hierarchy.js`:
 
 - The hub ring splits into one arc per sub orchestrator, plus the main orchestrator's own arc for lanes in no sub. Each arc has a thin gap at its ends and a small label with the sub's name.
 - A sub orchestrator floats above the middle of its arc, smaller than the main orchestrator, with the same armillary shape family. A thin white line joins it to the main orchestrator.
-- Its lanes park on its arc. When it works, its tunnel runs to the folder card of its scope's top folder.
+- Its lanes park on its arc. Its own turns show in the room as `sub-<id>`.
 
 ## Context and autocompact
 
@@ -82,8 +82,4 @@ The next briefs made the ladder easier to see and use:
 - V26. Each sector is named once (0.1.318).
 - S10. The demo replay where the subs and their lanes work (0.1.314). Open `?replay&fixture=scenario-i`.
 
-One point waits for the owner:
-
-- X3. The scope check reads only committed work, so uncommitted edits are not listed. See `AUDIT-2026-10-V7.md`.
-
-X1 is fixed: each orchestrator gets its own in-memory token, required in X-MachineRoom-Orchestrator, and the sector gate is enforced (O8, 0.1.342).
+Both version 7 audit points are fixed: X1 by the actor rule and O8's token, and X3 by the scope check that reads uncommitted work. Each orchestrator gets its own in-memory token, required in X-MachineRoom-Orchestrator, and the sector gate is enforced (O8, merged as 0.1.356). See `AUDIT-2026-10-V7.md`.

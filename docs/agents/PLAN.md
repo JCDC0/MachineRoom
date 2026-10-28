@@ -2,19 +2,22 @@
 
 ## Where we are
 
-Version 0.1.391. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
+Version 0.1.398. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
 
 What works:
 
 - Live lane runs with `--lanes`: OpenCode and Claude Code, on a brief or on another project (`run-lane --project`), with one run per project and lanes in their own worktrees side by side.
-- Task queues with `run-lane --queue` and Dispatch: one commit per task on a `machineroom/queue-<lane>-<stamp>` branch, tests after each task, and a stop at the first failure. The Dispatch project section can give each of several tasks its own idle lane and worktree.
+- Task queues with `run-lane --queue` and Dispatch: one commit per task on a `machineroom/queue-<lane>-<stamp>` branch, tests after each task, and a stop at the first failure. The Dispatch project section can give each of several tasks its own idle lane and worktree. A single task with `--worktree` runs as a queue of one, and the record carries the queue branch in `branch` and `queue` (U78).
+- A lane stop that is real: `npm run run-lane -- --stop LANE` stops the run, its harness and every process left in its worktree, and a new run refuses a live child or leftover (U75).
+- A brief starts only in its own lane worktree under `.worktrees`, and its `Files:` list is checked before anything starts (U77). The runs folder, the room and the doctor follow `MACHINEROOM_RUNS` (U76).
 - The owner's own Claude Code and OpenCode sessions with `--sessions`, read only, tool calls and results only.
 - The orchestrator chat on `/` or ORCHESTRATOR: Claude Code or OpenCode, confirm cards for Start and Stop, recovery after a restart, Markdown replies, the project folder named, a tab per orchestrator, and its context use with an Autocompact switch that summarises a session at 80 percent.
 - Sub orchestrators: `readLadder` and the ladder routes, ring sectors and sub shapes, chat tabs and Attach, and the live ladder from `client.orchestrators()`. Lanes in no sector stay with the main orchestrator. `?replay&fixture=scenario-i` plays two subs and their lanes working.
-- The page: the lens with its corner labels, the scrolling dock with the agent list, the selected agent's context and the settings above the cost board, the guide, and a short agent list with one idle row. With a ladder the list groups by sector.
+- The page: the lens with its corner labels, the lower half with the sidebar, the conversation and the Overview card, the dock below 900 pixels with the agent list, the selected agent's context and the settings above the cost board, the guide, and a short agent list with one idle row. With a ladder the list groups by sector.
+- The room's latest pass: a cyan `CONSOLE` above an agent that runs a command, up to three folder backs behind a card, a click on a card that holds the camera and a park on `Escape`, `0` or a double click, and an aberration map centred on the park ring (U67 to U70).
 - Reviews and merges from the drawer, including lanes that work in worktrees beside another project.
 - `npm run worktrees` lists the lane worktrees a project leaves and cleans only the clean merged ones.
-- The harness registry: steps H1 to H4 are merged as H5, H6, H7 and H8, so a harness brings a browser descriptor and, when it has sessions, a Node reader. The `acp` harness runs any Agent Client Protocol agent through `scripts/acp-run.mjs`. Hermes and AGY stay supported and retired in `lanes.json`.
+- The harness registry: steps H1 to H4 are merged as H5, H6, H7 and H8, so a harness brings a browser descriptor and, when it has sessions, a Node reader. The `acp` harness runs any Agent Client Protocol agent through `scripts/acp-run.mjs`. Hermes stays supported and retired in `lanes.json`; AGY is a supported backend lane and its lanes stay out of the active list unless the owner makes one.
 - Replays and recordings, and a test suite that is about 40 percent faster than before T1.
 
 What was checked live:
