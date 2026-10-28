@@ -436,3 +436,118 @@ export function assignSubLanesPlan(ladder, subId, laneIds) {
   })
   return { problem: '', ladder: { subs }, sub: subs[index] }
 }
+
+export const TEAM_ORCHESTRATORS_MAX = 4
+export const TEAM_CODERS_MAX = 3
+
+function teamLaneRows(value) {
+  const list = Array.isArray(value) ? value : Array.isArray(value?.lanes) ? value.lanes : []
+  const seen = new Set()
+  const rows = []
+  for (const entry of list) {
+    if (!entry || (typeof entry !== 'object' && typeof entry !== 'string')) continue
+    const key = cleanText(typeof entry === 'string' ? entry : entry.key, 80)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    const name = cleanText(typeof entry === 'string' ? '' : entry.name, AGENT_NAME_MAX) || key
+    rows.push({ key, name, active: typeof entry === 'string' || entry.active !== false })
+  }
+  return rows
+}
+
+export function teamLanePool(lanes, ladder) {
+  const claimed = new Set()
+  for (const sub of ladderSubs(ladder)) {
+    for (const lane of Array.isArray(sub.lanes) ? sub.lanes : []) {
+      const key = cleanText(lane, 80)
+      if (key) claimed.add(key)
+    }
+  }
+  const rows = teamLaneRows(lanes).filter((row) => !claimed.has(row.key))
+  return [...rows.filter((row) => row.active), ...rows.filter((row) => !row.active)]
+}
+
+export function teamDraft(harnesses = null, models = null) {
+  if (harnessList(harnesses).length === 0) {
+    return { orchestrators: 1, coders: 1, harness: '', model: '' }
+  }
+  const base = childDraft(harnesses, models)
+  return {
+    orchestrators: 1,
+    coders: 1,
+    harness: base.harness,
+    model: base.model,
+  }
+}
+
+export function teamHarnesses(harnesses = null, models = null) {
+  const offered = childHarnesses(harnesses, models)
+  return [
+    ...offered.filter((row) => row.key === 'opencode'),
+    ...offered.filter((row) => row.key !== 'opencode'),
+  ]
+}
+
+export function teamPlan({
+  lanes = null,
+  ladder = null,
+  orchestrators = 1,
+  coders = 1,
+  harness = '',
+  model = '',
+} = {}) {
+  const existing = ladderSubs(ladder)
+  const unchanged = { problem: '', subs: [...existing], teams: [], needed: 0, available: 0, missing: 0 }
+  const count = Number(orchestrators)
+  if (!Number.isInteger(count) || count < 1 || count > TEAM_ORCHESTRATORS_MAX) {
+    return { ...unchanged, problem: `Choose 1 to ${TEAM_ORCHESTRATORS_MAX} orchestrators.` }
+  }
+  const each = Number(coders)
+  if (!Number.isInteger(each) || each < 1 || each > TEAM_CODERS_MAX) {
+    return { ...unchanged, problem: `Choose 1 to ${TEAM_CODERS_MAX} coders for each orchestrator.` }
+  }
+  if (existing.length + count > MAX_SUBS) {
+    return { ...unchanged, problem: `There are at most ${MAX_SUBS} sub orchestrators.` }
+  }
+  const pool = teamLanePool(lanes, ladder)
+  const needed = count * each
+  const available = pool.length
+  const missing = Math.max(0, needed - available)
+  const takenNames = new Set()
+  for (const sub of existing) {
+    const name = cleanText(sub.name, AGENT_NAME_MAX)
+    if (name) takenNames.add(name)
+  }
+  const laneKeys = pool.map((row) => row.key)
+  const subs = [...existing]
+  const teams = []
+  let number = 1
+  for (let index = 0; index < count; index += 1) {
+    while (takenNames.has(`Team ${number}`)) number += 1
+    const name = `Team ${number}`
+    takenNames.add(name)
+    const id = freeSubId(name, subs, laneKeys)
+    const laneRows = pool.slice(index * each, index * each + each)
+    const sub = {
+      id,
+      name,
+      harness: cleanText(harness, 40) || 'opencode',
+      model: cleanText(model, 120),
+      lanes: laneRows.map((row) => row.key),
+      scope: ['**'],
+      restricted: false,
+      setBy: 'owner',
+    }
+    subs.push(sub)
+    teams.push({
+      id,
+      name,
+      lanes: [...sub.lanes],
+      laneNames: laneRows.map((row) => row.name),
+    })
+    number += 1
+  }
+  const problem =
+    missing > 0 ? `Turn on ${missing} more ${missing === 1 ? 'lane' : 'lanes'} first.` : ''
+  return { problem, subs, teams, needed, available, missing }
+}

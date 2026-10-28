@@ -1,6 +1,7 @@
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it } from 'vitest'
+import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import FamilyTree from '../src/ui/FamilyTree.jsx'
 
 const ELEMENT_NODE = 1
@@ -716,6 +717,59 @@ describe('FamilyTree rows', () => {
       expect(writer).not.toBeNull()
       expect(writer.getAttribute('data-kind')).toBe('lane')
       expect(writer.querySelector('.mr-family-meta').textContent).toContain('opencode')
+    })
+  })
+})
+
+describe('FamilyTeam', () => {
+  it('previews Team 1 with the first free lane and saves the ladder and its label', async () => {
+    const { client, calls } = makeClient()
+    const labels = []
+    client.setAgentLabel = async (payload) => {
+      labels.push(payload)
+      return { ok: true }
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(FamilyTeam, { client }))
+      })
+      await act(async () => {})
+
+      const head = container.querySelector('.mr-team').querySelector('.mr-side-head')
+      expect(head.textContent).toContain('Build a team')
+      await click(root, head)
+
+      const form = container.querySelector('.mr-team-form')
+      expect(form).not.toBeNull()
+      expect(container.querySelector('.mr-team-preview-name').textContent).toBe('Team 1')
+      expect(container.querySelector('.mr-team-preview-lanes').textContent).toBe('OpenCode')
+      expect(buttonWithText(form, 'Save')).not.toBeNull()
+
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Build 1 sub orchestrator?')
+      expect(card.textContent).toContain('Team 1')
+      expect(card.textContent).toContain('OpenCode')
+      await click(root, buttonWithText(card, 'Build the team'))
+
+      expect(calls.setLadder).toHaveLength(1)
+      expect(calls.setLadder[0].subs).toEqual([
+        expect.objectContaining({ id: 'frontend', lanes: ['opencode2'] }),
+        expect.objectContaining({
+          id: 'team-1',
+          name: 'Team 1',
+          harness: 'opencode',
+          model: 'opencode-go/deepseek-v4.1-flash',
+          lanes: ['opencode'],
+          scope: ['**'],
+          restricted: false,
+          setBy: 'owner',
+        }),
+      ])
+      expect(labels).toEqual([{ id: 'team-1', label: 'Team 1', confirmed: true }])
+      expect(container.querySelector('.mr-team-form')).toBeNull()
     })
   })
 })

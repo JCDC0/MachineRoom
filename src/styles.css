@@ -8247,6 +8247,91 @@ body:has(#hud-orchestrator-chat) .waiting {
   }
 }
 
+/* U81: Build a team at the top of the Agents tab */
+.mr-team {
+  flex: 0 0 auto;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-side-agents .mr-team {
+  border-bottom: 0;
+}
+
+.mr-team-form {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 2px 0 6px;
+  padding: 6px;
+  border: 1px dashed rgb(229 255 0 / 0.3);
+  border-radius: 3px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.mr-team-counts {
+  display: flex;
+  gap: 6px;
+}
+
+.mr-team-counts .mr-side-field {
+  flex: 1 1 0;
+}
+
+.mr-team-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 3px;
+}
+
+.mr-team-preview-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.mr-team-preview-name {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--yellow);
+}
+
+.mr-team-preview-lanes {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.55);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-team-confirm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.mr-team-confirm-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 10px;
+}
+
+.mr-team-confirm-row .mono {
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.5);
+}
+
 /* U43: the family tree at the top of the sidebar */
 .mr-family {
   flex: 0 0 auto;
