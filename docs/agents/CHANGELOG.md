@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- `run-lane` writes the harness child's pid into the lane lock beside its own as one JSON line, and an old plain pid lock is still read (task U75).
+- The lane source and `npm run worktrees` read the new lane lock and an old plain pid lock (task U75).
+- `run-lane` stops the harness tree on SIGINT, SIGTERM, SIGHUP, the time limit and its own exit (task U75).
+- After the harness closes, `run-lane` lists the processes whose parent chain reaches it or whose command line names its worktree, stops each with `killTree`, and prints one line per process (task U75).
+- A run record carries `stoppedLeftovers` with the count when the cleanup found any (task U75).
+- `npm run run-lane -- --stop LANE` stops the run, its harness and the worktree leftovers, prints what it stopped and removes the lock; a new run refuses a live harness child or leftover with a sentence that names `--stop` (task U75).
+- `ORCHESTRATOR.md` names `--stop` as the way to pause a lane, and `ARCHITECTURE.md` documents the lock, the leftovers and the record field (task U75).
+
 - A lane started by `run-lane` gets only an allow-list of the shell's names, so `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN` and other secrets no longer reach it; the MachineRoom harness receives its own key names and Hermes receives `OPENROUTER_API_KEY` (task U72).
 - The runner writes a lane's log through the bridge's split-key masker, so a key in the output, split across chunks or not, is `[key]` in the file under the runs folder (task U72).
 - `tests/lane-env.test.js` covers the allow-list, the harness key exception, the masked log, a real `--dry-run` and the real OpenCode start; `scripts/mr-agent.mjs` gives its shell tool the same allow-list, and `scripts/acp-run.mjs` passes the environment it was given to its agent (task U72).

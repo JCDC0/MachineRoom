@@ -386,6 +386,43 @@ export function parseRunArgs(argv) {
   return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}) }
 }
 
+export function laneLockText({ pid, child, folder } = {}) {
+  const own = Number.isInteger(pid) && pid > 0 ? pid : 0
+  if (own === 0) return ''
+  const entry = { pid: own }
+  if (Number.isInteger(child) && child > 0) entry.child = child
+  const name = typeof folder === 'string' ? folder.trim() : ''
+  if (name !== '') entry.folder = name
+  return `${JSON.stringify(entry)}\n`
+}
+
+export function laneLockPids(text) {
+  const raw = String(text ?? '').trim()
+  if (raw === '') return { pid: null, child: null, folder: '' }
+  if (!raw.startsWith('{')) {
+    const match = /^\s*(\d+)\s*$/.exec(raw)
+    return { pid: match ? Number(match[1]) : null, child: null, folder: '' }
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(raw)
+  } catch {
+    return { pid: null, child: null, folder: '' }
+  }
+  const pid = Number.isInteger(parsed?.pid) && parsed.pid > 0 ? parsed.pid : null
+  const child = Number.isInteger(parsed?.child) && parsed.child > 0 ? parsed.child : null
+  const folder = typeof parsed?.folder === 'string' ? parsed.folder : ''
+  return { pid, child, folder }
+}
+
+export function laneStopProblem({ lane, pid, leftover = false } = {}) {
+  const name = String(lane ?? '').trim()
+  const holder = Number.isInteger(pid) && pid > 0 ? pid : 0
+  if (!name || holder === 0) return ''
+  const noun = leftover === true ? 'leftover process' : 'harness process'
+  return `The ${name} lane still has ${noun} ${holder}; stop it with npm run run-lane -- --stop ${name}.`
+}
+
 export function laneWithOverrides(lane, { model, reasoning } = {}) {
   if (!lane?.cli) return lane
   const next = { ...lane, cli: { ...lane.cli } }
@@ -697,7 +734,7 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy, stoppedLeftovers } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -714,6 +751,7 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     branch: branch ? String(branch) : '',
     commits: Array.isArray(commits) ? commits.map(String) : [],
   }
+  if (Number.isInteger(stoppedLeftovers) && stoppedLeftovers > 0) record.stoppedLeftovers = stoppedLeftovers
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project
   if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, 200)

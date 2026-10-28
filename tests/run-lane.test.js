@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -646,6 +646,38 @@ describe('sessionToolLines', () => {
   })
 })
 
+describe('laneLockText and laneLockPids', () => {
+  it('writes one JSON line with the run, the harness and the worktree', () => {
+    expect(laneLockText({ pid: 12, child: 34, folder: 'C:\\work\\lane' })).toBe('{"pid":12,"child":34,"folder":"C:\\\\work\\\\lane"}\n')
+    expect(laneLockText({ pid: 12, folder: '' })).toBe('{"pid":12}\n')
+    expect(laneLockText({ pid: 12, child: 0 })).toBe('{"pid":12}\n')
+    expect(laneLockText({ pid: 0, child: 34 })).toBe('')
+    expect(laneLockText()).toBe('')
+  })
+
+  it('reads the new line and the old plain pid', () => {
+    expect(laneLockPids('{"pid":12,"child":34,"folder":"C:\\\\work\\\\lane"}')).toEqual({ pid: 12, child: 34, folder: 'C:\\work\\lane' })
+    expect(laneLockPids('{"pid":12}')).toEqual({ pid: 12, child: null, folder: '' })
+    expect(laneLockPids('12')).toEqual({ pid: 12, child: null, folder: '' })
+    expect(laneLockPids('12\r\n')).toEqual({ pid: 12, child: null, folder: '' })
+    expect(laneLockPids('')).toEqual({ pid: null, child: null, folder: '' })
+    expect(laneLockPids('{"pid":-1,"child":"x"}')).toEqual({ pid: null, child: null, folder: '' })
+    expect(laneLockPids('{ broken')).toEqual({ pid: null, child: null, folder: '' })
+    expect(laneLockPids(null)).toEqual({ pid: null, child: null, folder: '' })
+  })
+})
+
+describe('laneStopProblem', () => {
+  it('names the pid and the stop command in one sentence', () => {
+    expect(laneStopProblem({ lane: 'opencode2', pid: 4242 }))
+      .toBe('The opencode2 lane still has harness process 4242; stop it with npm run run-lane -- --stop opencode2.')
+    expect(laneStopProblem({ lane: 'opencode2', pid: 4242, leftover: true }))
+      .toBe('The opencode2 lane still has leftover process 4242; stop it with npm run run-lane -- --stop opencode2.')
+    expect(laneStopProblem({ lane: '', pid: 4242 })).toBe('')
+    expect(laneStopProblem({ lane: 'opencode2', pid: 0 })).toBe('')
+  })
+})
+
 describe('runRecord', () => {
   it('builds the record in the documented order', () => {
     const record = runRecord({
@@ -683,6 +715,16 @@ describe('runRecord', () => {
     expect(Object.keys(record)).toEqual([
       'lane', 'briefs', 'model', 'reasoning', 'startedAt', 'minutes', 'exitCode', 'killed', 'costUsd', 'inputTokens', 'outputTokens', 'log', 'branch', 'commits',
     ])
+  })
+
+  it('writes the count of stopped leftovers only when there were some', () => {
+    const record = runRecord({ lane: 'opencode2', briefs: ['U75'], stoppedLeftovers: 3 })
+    expect(record.stoppedLeftovers).toBe(3)
+    expect(Object.keys(record).slice(-1)).toEqual(['stoppedLeftovers'])
+    expect(runRecord({ lane: 'opencode2', briefs: [] })).not.toHaveProperty('stoppedLeftovers')
+    expect(runRecord({ lane: 'opencode2', briefs: [], stoppedLeftovers: 0 })).not.toHaveProperty('stoppedLeftovers')
+    expect(runRecord({ lane: 'opencode2', briefs: [], stoppedLeftovers: -2 })).not.toHaveProperty('stoppedLeftovers')
+    expect(runRecord({ lane: 'opencode2', briefs: [], stoppedLeftovers: '2' })).not.toHaveProperty('stoppedLeftovers')
   })
 
   it('writes nulls where the run reported nothing', () => {

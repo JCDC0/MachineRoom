@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
+import { laneLockPids } from '../src/briefs/run.js'
 import { readAllLanes } from './agents-config.js'
 import { gitPath } from './programPath.js'
 
@@ -118,7 +119,7 @@ function processAlive(pid) {
 
 function laneLockAlive(folder, lane) {
   try {
-    return processAlive(Number.parseInt(readFileSync(join(folder, `${lane}.lock`), 'utf8'), 10))
+    return processAlive(laneLockPids(readFileSync(join(folder, `${lane}.lock`), 'utf8')).pid)
   } catch {
     return false
   }

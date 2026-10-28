@@ -4,7 +4,7 @@ import { lstatSync, readFileSync, rmdirSync, unlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { WORKTREES_FOLDER, laneLockPids } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 
 export const USAGE = 'Use: npm run worktrees -- --project FOLDER [--clean] [--json]'
@@ -119,9 +119,7 @@ export function statusChanges(text) {
 }
 
 export function lockHolder(text) {
-  const match = /^\s*(\d+)\s*$/.exec(String(text ?? ''))
-  if (!match) return null
-  const pid = Number(match[1])
+  const pid = laneLockPids(text).pid
   return Number.isInteger(pid) && pid > 0 ? pid : null
 }
 

@@ -12,6 +12,7 @@ import { laneRunRecord, laneStartProblem, laneWorktreeStart, projectLockName, ta
 import {
   childEnvironment,
   commandFor,
+  laneLockPids,
   laneStats,
   parseRunArgs,
   pathInside,
@@ -384,7 +385,7 @@ describe('the project lock', () => {
     try {
       expect(projectLockName(project)).toBe(`project-${hash}`)
       expect(lock).toBe(join(runs, `project-${hash}.lock`))
-      expect(readFileSync(lock, 'utf8')).toBe(String(process.pid))
+      expect(laneLockPids(readFileSync(lock, 'utf8')).pid).toBe(process.pid)
     } finally {
       releaseLaneLock(lock)
     }
