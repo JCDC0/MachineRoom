@@ -18,6 +18,7 @@ const MAIN_BASE = { ref: MAIN_REF, name: 'main' }
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const ROOM_BRIEFS = join(REPO_ROOT, 'docs', 'agents')
 export const DEFAULT_PATCH_LIMIT = 400 * 1024
+export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
 let codeCheckoutPath = null
 
 function codeCheckout() {
@@ -157,7 +158,14 @@ function laneWorktree(lanes, lane) {
   return worktree
 }
 
-export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit = DEFAULT_PATCH_LIMIT, sendJson, readJsonBody }) {
+export function createReviewsApi({
+  projectRoot = '',
+  briefsDir = '',
+  patchLimit = DEFAULT_PATCH_LIMIT,
+  sendJson,
+  readJsonBody,
+  orchestrators,
+}) {
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
   const limit = Number.isInteger(patchLimit) && patchLimit > 0 ? patchLimit : DEFAULT_PATCH_LIMIT
@@ -173,6 +181,16 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
   const lanesCheckout = lanesFolder ? mainCheckoutOf(lanesFolder) : ''
   const onProject = Boolean(roomCheckout && lanesCheckout && pathKey(roomCheckout) !== pathKey(lanesCheckout))
   let merging = false
+
+  function ownerRequest(req) {
+    const headers = req.headers ?? {}
+    if (headers.origin) return true
+    const registry = typeof orchestrators === 'function' ? orchestrators() : null
+    if (!registry || typeof registry.idForToken !== 'function') return false
+    const header = headers['x-machineroom-orchestrator']
+    const token = typeof header === 'string' ? header.trim() : Array.isArray(header) ? header[0].trim() : ''
+    return Boolean(registry.idForToken(token))
+  }
 
   function readLanes() {
     const text = lanesFolder ? readText(join(lanesFolder, 'lanes.json')) : null
@@ -381,6 +399,10 @@ export function createReviewsApi({ projectRoot = '', briefsDir = '', patchLimit 
     if (mergeRoute) {
       if (method !== 'POST') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      if (!ownerRequest(req)) {
+        sendJson(req, res, 403, { error: NOT_OWNER_PROBLEM })
         return true
       }
     } else if (method !== 'GET') {

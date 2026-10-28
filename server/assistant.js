@@ -6,8 +6,14 @@ import { programPath } from './programPath.js'
 export const DEFAULT_ASSISTANT_MODEL = 'opencode/deepseek-v4.1-flash-free'
 export const PROMPT_LIMIT = 2000
 export const ASSISTANT_TIMEOUT_MS = 8000
+export const OWNER_ASSISTANT_PROBLEM = 'Only the owner can run the assistant.'
+export const CONFIRM_ASSISTANT_PROBLEM = 'The owner must confirm the assistant run first.'
 
 const OFF = new Set(['', 'none', 'off', 'false', 'no'])
+
+function ownerRequest(req) {
+  return Boolean(req.headers?.origin)
+}
 
 export function resolveAssistantModel({ env = {}, settings = {} } = {}) {
   const raw = env.ASSISTANT_MODEL !== undefined ? env.ASSISTANT_MODEL : settings.assistantModel !== undefined ? settings.assistantModel : DEFAULT_ASSISTANT_MODEL
@@ -106,8 +112,16 @@ export function createAssistantApi(options) {
       sendJson(req, res, 405, { error: 'Use POST for the assistant.' })
       return true
     }
+    if (!ownerRequest(req)) {
+      sendJson(req, res, 403, { error: OWNER_ASSISTANT_PROBLEM })
+      return true
+    }
     const body = await readJsonBody(req, res)
     if (body === null) return true
+    if (body.confirmed !== true) {
+      sendJson(req, res, 400, { error: CONFIRM_ASSISTANT_PROBLEM })
+      return true
+    }
     const prompt = body?.prompt
     if (typeof prompt !== 'string' || !prompt.trim()) {
       sendJson(req, res, 400, { error: 'Write a prompt first.' })

@@ -469,11 +469,11 @@ export function createClient({
     acceptPlan: (issueId, ids, planId) =>
       request('POST', `/api/control/plans/${encodeURIComponent(issueId ?? '')}/accept`, { ids, planId, confirmed: true }),
 
-    decide: ({ state, questions, model } = {}) =>
+    decide: ({ state, questions, model, confirmed = true } = {}) =>
       request(
         'POST',
         '/api/decide',
-        model === undefined ? { state, questions } : { state, questions, model },
+        model === undefined ? { state, questions, confirmed } : { state, questions, model, confirmed },
         REQUEST_LIMITS.decide
       ),
 
@@ -536,8 +536,8 @@ export function createClient({
 
     mcpTools: () => request('GET', '/api/mcp/tools'),
 
-    callMcpTool: ({ server, tool, arguments: toolArgs = {} } = {}) =>
-      request('POST', '/api/mcp/call', { server, tool, arguments: toolArgs }),
+    callMcpTool: ({ server, tool, arguments: toolArgs = {}, confirmed = true } = {}) =>
+      request('POST', '/api/mcp/call', { server, tool, arguments: toolArgs, confirmed }),
 
     subscribe(listener) {
       listeners.add(listener)

@@ -510,7 +510,11 @@ describe('the assistant route', () => {
         assistantModel: 'opencode/deepseek-v4.1-flash-free',
       },
     })
-    const answer = await postJson(`${url}/api/assistant`, { prompt: 'Where is the room?' })
+    const answer = await getJson(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: new URL(url).origin },
+      body: JSON.stringify({ prompt: 'Where is the room?', confirmed: true }),
+    })
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual({ text: 'You asked: Where is the room?' })
   })

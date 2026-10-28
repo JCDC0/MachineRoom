@@ -2,6 +2,12 @@ import { decide } from '../src/decider/decide.js'
 
 export const DEFAULT_DECISION_MODEL = 'typesafe/jev-1.14'
 export const DECIDE_BODY_LIMIT = 32 * 1024
+export const OWNER_DECIDE_PROBLEM = 'Only the owner can spend on a decision.'
+export const CONFIRM_DECIDE_PROBLEM = 'The owner must confirm the decision first.'
+
+function ownerRequest(req) {
+  return Boolean(req.headers?.origin)
+}
 
 function validState(state) {
   return typeof state === 'string' || (state !== null && typeof state === 'object')
@@ -37,8 +43,16 @@ export function createDecideApi({ sendJson, readJsonBody, env = process.env, dec
       sendJson(req, res, 405, { error: 'Use POST for a decision.' })
       return true
     }
+    if (!ownerRequest(req)) {
+      sendJson(req, res, 403, { error: OWNER_DECIDE_PROBLEM })
+      return true
+    }
     const body = await readJsonBody(req, res, DECIDE_BODY_LIMIT)
     if (body === null) return true
+    if (body.confirmed !== true) {
+      sendJson(req, res, 400, { error: CONFIRM_DECIDE_PROBLEM })
+      return true
+    }
     if (!validState(body.state)) {
       sendJson(req, res, 400, { error: 'Send a state as text or an object.' })
       return true

@@ -17,6 +17,8 @@ export const MCP_ENV_PROBLEM = 'The MCP server environment must map names to tex
 export const MCP_ENABLED_PROBLEM = 'The MCP server switch must be on or off.'
 export const MCP_SAVE_CONFIRM_PROBLEM = 'Confirm saving the MCP server first.'
 export const MCP_DELETE_CONFIRM_PROBLEM = 'Confirm deleting the MCP server first.'
+export const MCP_CALL_CONFIRM_PROBLEM = 'The owner must confirm the tool call first.'
+export const OWNER_MCP_PROBLEM = 'Only the owner can use the MCP servers.'
 export const MCP_NOT_FOUND_PROBLEM = 'The MCP server was not found.'
 export const MCP_SERVER_PROBLEM = 'Choose an MCP server.'
 export const MCP_OFF_PROBLEM = 'The MCP server is turned off.'
@@ -33,6 +35,13 @@ export const MCP_RPC_PROBLEM = 'The MCP server answered with an error:'
 export const MCP_TOOLS_PROBLEM = 'The MCP server tools list was not a list.'
 
 const MAX_DETAIL = 200
+
+function pageRequest(req) {
+  const headers = req.headers ?? {}
+  if (headers.origin) return true
+  if ((req.method ?? 'GET') !== 'GET') return false
+  return headers['sec-fetch-site'] === 'same-origin'
+}
 
 class McpError extends Error {}
 
@@ -505,6 +514,13 @@ export function createMcpApi(options = {}) {
   async function handle(req, res, url) {
     const path = url.pathname
     const method = req.method ?? 'GET'
+    const deleteMatch = /^\/api\/mcp\/servers\/([^/]+)\/delete$/.exec(path)
+    const known = path === '/api/mcp/servers' || path === '/api/mcp/tools' || path === '/api/mcp/call' || Boolean(deleteMatch)
+    if (!known) return false
+    if (!pageRequest(req)) {
+      sendJson(req, res, 403, { error: OWNER_MCP_PROBLEM })
+      return true
+    }
 
     if (path === '/api/mcp/servers') {
       if (method === 'GET') {
@@ -531,7 +547,6 @@ export function createMcpApi(options = {}) {
       return true
     }
 
-    const deleteMatch = /^\/api\/mcp\/servers\/([^/]+)\/delete$/.exec(path)
     if (deleteMatch) {
       if (method !== 'POST') {
         sendJson(req, res, 405, { error: 'Method not allowed.' })
@@ -575,6 +590,10 @@ export function createMcpApi(options = {}) {
       }
       const body = await readJsonBody(req, res)
       if (body === null) return true
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: MCP_CALL_CONFIRM_PROBLEM })
+        return true
+      }
       const answer = await callMcpTool(runsDir, body)
       sendJson(req, res, 200, { ok: answer.ok === true, result: answer.result ?? null, problem: answer.problem ?? null })
       return true

@@ -43,6 +43,14 @@ describe('the assistant route', () => {
     return { url: started.url }
   }
 
+  function assistantPost(url, body, headers = {}) {
+    return fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { Origin: new URL(url).origin, 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify({ confirmed: true, ...body }),
+    })
+  }
+
   it('calls the runner with the default model and 8s timeout and returns the text', async () => {
     const calls = []
     const { url } = await startAssistantBridge({
@@ -53,11 +61,7 @@ describe('the assistant route', () => {
       },
     })
 
-    const res = await fetch(`${url}/api/assistant`, {
-      method: 'POST',
-      headers: { Origin: 'http://localhost:5173', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'show the whole room' }),
-    })
+    const res = await assistantPost(url, { prompt: 'show the whole room' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ text: '{"type":"overview","say":"Going to overview."}' })
     expect(calls).toEqual([
@@ -69,17 +73,36 @@ describe('the assistant route', () => {
     ])
   })
 
+  it('refuses a request with no Origin and with no owner confirm', async () => {
+    const { url } = await startAssistantBridge({
+      env: {},
+      assistantRunner: async () => 'ok',
+    })
+
+    const noOrigin = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hello', confirmed: true }),
+    })
+    expect(noOrigin.status).toBe(403)
+    expect(await noOrigin.json()).toEqual({ error: 'Only the owner can run the assistant.' })
+
+    const noConfirm = await fetch(`${url}/api/assistant`, {
+      method: 'POST',
+      headers: { Origin: new URL(url).origin, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: 'hello' }),
+    })
+    expect(noConfirm.status).toBe(400)
+    expect(await noConfirm.json()).toEqual({ error: 'The owner must confirm the assistant run first.' })
+  })
+
   it('accepts application/json with a charset parameter', async () => {
     const { url } = await startAssistantBridge({
       env: {},
       assistantRunner: async () => 'ok',
     })
 
-    const res = await fetch(`${url}/api/assistant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ prompt: 'hello' }),
-    })
+    const res = await assistantPost(url, { prompt: 'hello' }, { 'Content-Type': 'application/json; charset=utf-8' })
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ text: 'ok' })
   })
@@ -90,11 +113,7 @@ describe('the assistant route', () => {
       assistantRunner: async () => 'should not run',
     })
 
-    const res = await fetch(`${url}/api/assistant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain; x=application/json' },
-      body: JSON.stringify({ prompt: 'hello' }),
-    })
+    const res = await assistantPost(url, { prompt: 'hello' }, { 'Content-Type': 'text/plain; x=application/json' })
     expect(res.status).toBe(415)
     expect(await res.json()).toEqual({ error: 'Send JSON.' })
   })
@@ -120,7 +139,7 @@ describe('the assistant route', () => {
       socket.on('connect', resolveOpen)
       socket.on('error', rejectOpen)
     })
-    socket.write(`POST /api/assistant HTTP/1.1\r\nHost: ${target.host}\r\nContent-Type: application/json\r\nConnection: keep-alive\r\nContent-Length: ${body.length}\r\n\r\n`)
+    socket.write(`POST /api/assistant HTTP/1.1\r\nHost: ${target.host}\r\nOrigin: ${target.origin}\r\nContent-Type: application/json\r\nConnection: keep-alive\r\nContent-Length: ${body.length}\r\n\r\n`)
     socket.write(first)
     await closed
 
@@ -146,11 +165,7 @@ describe('the assistant route', () => {
       },
     })
 
-    const fileRes = await fetch(`${fromFileUrl}/api/assistant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'hello' }),
-    })
+    const fileRes = await assistantPost(fromFileUrl, { prompt: 'hello' })
     expect(fileRes.status).toBe(200)
     expect(seenModels).toEqual(['opencode/glm-5.3-flash-free'])
 
@@ -158,11 +173,7 @@ describe('the assistant route', () => {
       env: { ASSISTANT_MODEL: 'none' },
       assistantRunner: async () => 'should not run',
     })
-    const offRes = await fetch(`${disabledUrl}/api/assistant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'hello' }),
-    })
+    const offRes = await assistantPost(disabledUrl, { prompt: 'hello' })
     expect(offRes.status).toBe(404)
     const offBody = await offRes.json()
     expect(offBody.error).toMatch(/no assistant model/i)
@@ -186,26 +197,14 @@ describe('the assistant route', () => {
     const getRes = await fetch(`${url}/api/assistant`)
     expect(getRes.status).toBe(405)
 
-    const emptyRes = await fetch(`${url}/api/assistant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: '   ' }),
-    })
+    const emptyRes = await assistantPost(url, { prompt: '   ' })
     expect(emptyRes.status).toBe(400)
 
-    const longRes = await fetch(`${url}/api/assistant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'a'.repeat(2001) }),
-    })
+    const longRes = await assistantPost(url, { prompt: 'a'.repeat(2001) })
     expect(longRes.status).toBe(400)
     expect((await longRes.json()).error).toMatch(/2000/)
 
-    const failRes = await fetch(`${url}/api/assistant`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: 'valid prompt' }),
-    })
+    const failRes = await assistantPost(url, { prompt: 'valid prompt' })
     expect(failRes.status).toBe(502)
     expect(await failRes.json()).toEqual({ error: 'The helper model is not reachable.' })
   })
@@ -793,6 +792,14 @@ describe('the decide route', () => {
     return { body: { model: body.model, answers: ANSWERS, usage: RAW_USAGE } }
   }
 
+  function postDecide(url, body, headers = {}) {
+    return getJson(`${url}/api/decide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: new URL(url).origin, ...headers },
+      body: JSON.stringify({ confirmed: true, ...body }),
+    })
+  }
+
   async function startDecideBridge({ env = { OPENROUTER_API_KEY: DECISION_KEY }, decideUrl, decideTimeoutMs } = {}) {
     const started = await laneBridge({ projectRoot: tempDir(), bridge: { env, decideUrl, decideTimeoutMs } })
     return { url: started.url }
@@ -831,9 +838,30 @@ describe('the decide route', () => {
     })
   }
 
+  it('refuses a decision with no Origin and with no owner confirm', async () => {
+    const { fake, url } = await startFakeDecisionBridge()
+
+    const noOrigin = await getJson(`${url}/api/decide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ state: 'Task x', questions: QUESTIONS, confirmed: true }),
+    })
+    expect(noOrigin.status).toBe(403)
+    expect(noOrigin.body).toEqual({ error: 'Only the owner can spend on a decision.' })
+
+    const noConfirm = await getJson(`${url}/api/decide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: new URL(url).origin },
+      body: JSON.stringify({ state: 'Task x', questions: QUESTIONS }),
+    })
+    expect(noConfirm.status).toBe(400)
+    expect(noConfirm.body).toEqual({ error: 'The owner must confirm the decision first.' })
+    expect(fake.seen).toHaveLength(0)
+  })
+
   it('answers a good call with its model, answers, usage, milliseconds and attempts', async () => {
     const { fake, url } = await startFakeDecisionBridge()
-    const res = await postJson(`${url}/api/decide`, { state: 'Task x', questions: QUESTIONS })
+    const res = await postDecide(url, { state: 'Task x', questions: QUESTIONS })
     expect(res.status).toBe(200)
     expect(res.body).toMatchObject({
       ok: true,
@@ -857,20 +885,20 @@ describe('the decide route', () => {
     })
     const plain = await startDecideBridge({ decideUrl: fake.url })
 
-    const body = await postJson(`${fromEnv.url}/api/decide`, {
+    const body = await postDecide(fromEnv.url, {
       state: 'Task x',
       questions: QUESTIONS,
       model: 'body/model',
     }).then((res) => res.body)
     expect(body.model).toBe('body/model')
 
-    const fromEnvironment = await postJson(`${fromEnv.url}/api/decide`, {
+    const fromEnvironment = await postDecide(fromEnv.url, {
       state: 'Task x',
       questions: QUESTIONS,
     }).then((res) => res.body)
     expect(fromEnvironment.model).toBe('env/model')
 
-    const fallback = await postJson(`${plain.url}/api/decide`, {
+    const fallback = await postDecide(plain.url, {
       state: 'Task x',
       questions: QUESTIONS,
     }).then((res) => res.body)
@@ -881,7 +909,7 @@ describe('the decide route', () => {
 
   it('answers 404 when no key is set and calls nothing', async () => {
     const { fake, url } = await startFakeDecisionBridge({ env: {} })
-    const res = await postJson(`${url}/api/decide`, { state: 'Task x', questions: QUESTIONS })
+    const res = await postDecide(url, { state: 'Task x', questions: QUESTIONS })
     expect(res.status).toBe(404)
     expect(res.body).toEqual({ error: 'No key is set for the decision model.' })
     expect(fake.seen).toHaveLength(0)
@@ -889,7 +917,7 @@ describe('the decide route', () => {
 
   it('answers 413 for a body over 32 KB', async () => {
     const { fake, url } = await startFakeDecisionBridge()
-    const res = await postJson(`${url}/api/decide`, { state: 'x'.repeat(33 * 1024), questions: QUESTIONS })
+    const res = await postDecide(url, { state: 'x'.repeat(33 * 1024), questions: QUESTIONS })
     expect(res.status).toBe(413)
     expect(res.body).toEqual({ error: 'That request is too large.' })
     expect(fake.seen).toHaveLength(0)
@@ -898,19 +926,19 @@ describe('the decide route', () => {
   it('answers 400 without a state or a question', async () => {
     const { fake, url } = await startFakeDecisionBridge()
 
-    const noState = await postJson(`${url}/api/decide`, { questions: QUESTIONS })
+    const noState = await postDecide(url, { questions: QUESTIONS })
     expect(noState.status).toBe(400)
     expect(noState.body).toEqual({ error: 'Send a state as text or an object.' })
 
-    const badState = await postJson(`${url}/api/decide`, { state: 42, questions: QUESTIONS })
+    const badState = await postDecide(url, { state: 42, questions: QUESTIONS })
     expect(badState.status).toBe(400)
     expect(badState.body).toEqual({ error: 'Send a state as text or an object.' })
 
-    const noQuestions = await postJson(`${url}/api/decide`, { state: 'Task x', questions: {} })
+    const noQuestions = await postDecide(url, { state: 'Task x', questions: {} })
     expect(noQuestions.status).toBe(400)
     expect(noQuestions.body).toEqual({ error: 'Send at least one question.' })
 
-    const listQuestions = await postJson(`${url}/api/decide`, { state: 'Task x', questions: [] })
+    const listQuestions = await postDecide(url, { state: 'Task x', questions: [] })
     expect(listQuestions.status).toBe(400)
     expect(listQuestions.body).toEqual({ error: 'Send at least one question.' })
     expect(fake.seen).toHaveLength(0)
@@ -919,7 +947,7 @@ describe('the decide route', () => {
   it('answers 400 for a model or a question name that could not be a name, before the model is called', async () => {
     const { fake, url } = await startFakeDecisionBridge()
     for (const model of ['jev\ndecide fake ok 1ms', ' ', '-m', 'x'.repeat(121)]) {
-      const res = await postJson(`${url}/api/decide`, { state: 'Task x', questions: QUESTIONS, model })
+      const res = await postDecide(url, { state: 'Task x', questions: QUESTIONS, model })
       expect(res.status).toBe(400)
       expect(res.body).toEqual({ error: 'The model must be a name.' })
     }
@@ -929,7 +957,7 @@ describe('the decide route', () => {
       { tier: { ...QUESTIONS.tier, type: 'constructor' } },
       { tier: null },
     ]) {
-      const res = await postJson(`${url}/api/decide`, { state: 'Task x', questions })
+      const res = await postDecide(url, { state: 'Task x', questions })
       expect(res.status).toBe(400)
       expect(res.body).toEqual(sentence)
     }
@@ -940,7 +968,7 @@ describe('the decide route', () => {
     const { fake, url } = await startFakeDecisionBridge({
       answer: () => ({ status: 429, body: { error: { message: 'slow down' } } }),
     })
-    const res = await postJson(`${url}/api/decide`, { state: 'Task x', questions: QUESTIONS })
+    const res = await postDecide(url, { state: 'Task x', questions: QUESTIONS })
     expect(res.status).toBe(429)
     expect(res.body).toEqual({ error: 'Too many requests. Try again in a moment.' })
     expect(fake.seen).toHaveLength(2)
@@ -950,7 +978,7 @@ describe('the decide route', () => {
     const { fake, url } = await startFakeDecisionBridge({
       answer: () => ({ status: 500, body: { error: { message: 'boom' } } }),
     })
-    const res = await postJson(`${url}/api/decide`, { state: 'Task x', questions: QUESTIONS })
+    const res = await postDecide(url, { state: 'Task x', questions: QUESTIONS })
     expect(res.status).toBe(502)
     expect(res.body).toEqual({ error: 'The service failed: boom' })
     expect(fake.seen).toHaveLength(2)
@@ -960,7 +988,7 @@ describe('the decide route', () => {
     const stalled = await startStalledDecisions()
     cleanups.push(() => stalled.close())
     const { url } = await startDecideBridge({ decideUrl: stalled.url, decideTimeoutMs: 50 })
-    const res = await postJson(`${url}/api/decide`, { state: 'Task x', questions: QUESTIONS })
+    const res = await postDecide(url, { state: 'Task x', questions: QUESTIONS })
     expect(res.status).toBe(502)
     expect(res.body).toEqual({ error: 'The decision model did not answer in time.' })
     expect(stalled.requests).toHaveLength(2)
@@ -978,9 +1006,9 @@ describe('the decide route', () => {
     })
     const state = 'SECRET STATE TEXT'
 
-    const first = await postJson(`${url}/api/decide`, { state, questions: QUESTIONS })
+    const first = await postDecide(url, { state, questions: QUESTIONS })
     const firstText = JSON.stringify(first.body)
-    const second = await postJson(`${url}/api/decide`, { state, questions: QUESTIONS })
+    const second = await postDecide(url, { state, questions: QUESTIONS })
     const secondText = JSON.stringify(second.body)
 
     expect(firstText).not.toContain(DECISION_KEY)
@@ -1000,7 +1028,10 @@ describe('the decide route', () => {
 
   it('calls the decide route through the control client', async () => {
     const { url } = await startFakeDecisionBridge()
-    const client = createClient({ baseUrl: url })
+    const client = createClient({
+      baseUrl: url,
+      fetchImpl: (target, init = {}) => fetch(target, { ...init, headers: { ...(init.headers ?? {}), origin: url } }),
+    })
     const answer = await client.decide({ state: 'Task x', questions: QUESTIONS })
     expect(answer).toMatchObject({
       ok: true,

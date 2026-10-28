@@ -60,11 +60,11 @@ describe('assistant route prompt checks', () => {
     const replies = []
     const api = createAssistantApi({
       sendJson: (req, res, status, body) => replies.push({ status, body }),
-      readJsonBody: async () => ({ prompt }),
+      readJsonBody: async () => ({ prompt, confirmed: true }),
       runner: async () => 'ok',
       model: 'fake/model',
     })
-    await api.handle({ method: 'POST' }, {}, new URL('http://127.0.0.1/api/assistant'))
+    await api.handle({ method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } }, {}, new URL('http://127.0.0.1/api/assistant'))
     return replies[0]
   }
 

@@ -292,6 +292,7 @@ export function createBridge(options = {}) {
     patchLimit: options.patchLimit,
     sendJson,
     readJsonBody,
+    orchestrators: () => orchestrators,
   })
   const control = createControlApi({
     sendJson,

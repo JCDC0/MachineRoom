@@ -13,8 +13,15 @@ export const CACHE_TTL_MS = 6 * 60 * 60 * 1000
 export const COMMAND_TIMEOUT_MS = 30000
 export const MAX_OUTPUT_BYTES = 1024 * 1024
 export const KNOWN_HARNESSES = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
+export const OWNER_MODELS_PROBLEM = 'Only the owner can refresh the model list.'
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
+
+function pageRequest(req) {
+  const headers = req.headers ?? {}
+  if (headers.origin) return true
+  return headers['sec-fetch-site'] === 'same-origin'
+}
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -492,6 +499,10 @@ export function createHarnessModelsApi(options = {}) {
     const method = req.method ?? 'GET'
     if (method !== 'GET') {
       sendJson(req, res, 405, { error: 'Method not allowed.' })
+      return true
+    }
+    if (!pageRequest(req)) {
+      sendJson(req, res, 403, { error: OWNER_MODELS_PROBLEM })
       return true
     }
 

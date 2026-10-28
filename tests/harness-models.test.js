@@ -252,7 +252,11 @@ describe('harness models bridge route and client', () => {
     const started = await bridge.start()
     cleanups.push(() => bridge.stop())
 
-    const client = createClient({ baseUrl: `http://127.0.0.1:${started.port}` })
+    const baseUrl = `http://127.0.0.1:${started.port}`
+    const client = createClient({
+      baseUrl,
+      fetchImpl: (url, init = {}) => fetch(url, { ...init, headers: { ...(init.headers ?? {}), origin: baseUrl } }),
+    })
 
     const res1 = await client.harnessModels({ harness: 'agy' })
     expect(res1.harness).toBe('agy')
@@ -270,6 +274,51 @@ describe('harness models bridge route and client', () => {
     expect(mockRes.source).toBe('list')
     expect(mockRes.harness).toBe('opencode')
     expect(mockRes.models.length).toBeGreaterThan(0)
+  })
+
+  it('refuses the models route with no Origin and takes the page Origin', async () => {
+    const runs = tempDir('bridge-guard-')
+    const bridge = createBridge({
+      port: 0,
+      runsFolder: runs,
+      lanesFile: null,
+      lanesSource: {
+        folder: runs,
+        lanes: {},
+        pollMs: 50,
+      },
+    })
+    const started = await bridge.start()
+    cleanups.push(() => bridge.stop())
+    const baseUrl = `http://127.0.0.1:${started.port}`
+    const res = await fetch(`${baseUrl}/api/harnesses/agy/models`)
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'Only the owner can refresh the model list.' })
+
+    const page = await fetch(`${baseUrl}/api/harnesses/agy/models`, { headers: { origin: baseUrl } })
+    expect(page.status).toBe(200)
+    expect((await page.json()).harness).toBe('agy')
+  })
+
+  it('takes a same-origin GET with no Origin from the page', async () => {
+    const runs = tempDir('bridge-guard-')
+    const bridge = createBridge({
+      port: 0,
+      runsFolder: runs,
+      lanesFile: null,
+      lanesSource: {
+        folder: runs,
+        lanes: {},
+        pollMs: 50,
+      },
+    })
+    const started = await bridge.start()
+    cleanups.push(() => bridge.stop())
+    const res = await fetch(`http://127.0.0.1:${started.port}/api/harnesses/agy/models`, {
+      headers: { 'sec-fetch-site': 'same-origin' },
+    })
+    expect(res.status).toBe(200)
+    expect((await res.json()).harness).toBe('agy')
   })
 
   it('includes cached live models in GET /api/harnesses', async () => {
