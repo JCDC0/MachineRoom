@@ -84,7 +84,7 @@ function writeFakeHarness(project, mark, started, { stay = true } = {}) {
   const late = join(project, 'late.cjs')
   writeFileSync(late, [
     "const { writeFileSync } = require('node:fs')",
-    `setTimeout(() => writeFileSync(${JSON.stringify(mark)}, 'late'), 2000)`,
+    `setTimeout(() => writeFileSync(${JSON.stringify(mark)}, 'late'), 6000)`,
     '',
   ].join('\n'))
   const script = join(project, 'run')
@@ -135,7 +135,7 @@ describe('a stopped lane stays stopped', () => {
     expect(stopped.stdout).toContain('leftover: stopped')
     expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
     expect(await run).toMatchObject({ code: expect.any(Number) })
-    await sleep(2600)
+    await sleep(6600)
     expect(existsSync(mark)).toBe(false)
   }, 40000)
 
@@ -162,7 +162,7 @@ describe('a stopped lane stays stopped', () => {
         lockPath: lock,
       })
       expect(run.killed).toBe(true)
-      await sleep(2600)
+      await sleep(6600)
       expect(existsSync(mark)).toBe(false)
       const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
       expect(record.lane).toBe('fake')
