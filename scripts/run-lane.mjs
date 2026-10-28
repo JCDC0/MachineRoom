@@ -1,19 +1,19 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, createWriteStream, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
-import { killTree } from '../server/processTree.js'
+import { killTree, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { acpRunCommand } from './acp-run.mjs'
-import { releaseLaneLock, takeLaneLock } from './lane-lock.mjs'
+import { processAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from './lane-lock.mjs'
 import { writeRecording } from './recording-files.mjs'
 
 const entry = fileURLToPath(import.meta.url)
@@ -32,6 +32,74 @@ function runsFile() {
 
 function outcomesFile() {
   return join(runsFolder(), 'outcomes.jsonl')
+}
+
+function lanesFile() {
+  return process.env.MACHINEROOM_LANES_FILE
+    ? resolve(process.env.MACHINEROOM_LANES_FILE)
+    : join(docs, 'lanes.json')
+}
+
+function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [] } = {}) {
+  const folder = String(worktree ?? '').trim()
+  if (!folder && !(childPid > 0)) return 0
+  const found = leftoverProcesses(listProcesses(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
+  for (const item of found) {
+    if (killTree({ pid: item.pid })) console.log(`${label}: stopped ${item.pid}`)
+    else console.log(`${label}: could not stop ${item.pid}`)
+  }
+  return found.length
+}
+
+function refuseRunningLane(laneKey, worktree, folder = runsFolder()) {
+  const lock = join(folder, `${laneKey}.lock`)
+  const holder = readLaneLock(lock)
+  if (processAlive(holder.child)) throw new Error(laneStopProblem({ lane: laneKey, pid: holder.child }))
+  const folders = []
+  for (const value of [worktree, holder.folder]) {
+    const name = String(value ?? '').trim()
+    if (name !== '' && !folders.includes(name)) folders.push(name)
+  }
+  for (const name of folders) {
+    const found = leftoverProcesses(listProcesses(), { worktree: name, ownPid: process.pid })
+    if (found.length > 0) throw new Error(laneStopProblem({ lane: laneKey, pid: found[0].pid, leftover: true }))
+  }
+}
+
+function stopArgument(argv) {
+  const index = argv.findIndex((arg) => arg === '--stop' || arg.startsWith('--stop='))
+  if (index === -1) return ''
+  const arg = argv[index]
+  const value = arg === '--stop' ? argv[index + 1] : arg.slice('--stop='.length)
+  if (typeof value !== 'string' || value.trim() === '' || value.startsWith('-')) throw new Error('--stop needs a lane name.')
+  const lane = value.trim()
+  if (!/^[A-Za-z0-9_-]+$/.test(lane)) throw new Error('--stop needs a lane name.')
+  return lane
+}
+
+function stopLane(laneKey) {
+  const folder = runsFolder()
+  const path = join(folder, `${laneKey}.lock`)
+  const holder = readLaneLock(path)
+  let lane = null
+  try {
+    lane = JSON.parse(readFileSync(lanesFile(), 'utf8'))?.[laneKey] ?? null
+  } catch {
+    lane = null
+  }
+  const worktree = holder.folder || (typeof lane?.worktree === 'string' ? lane.worktree : '')
+  const leftovers = stopLeftovers({ worktree, childPid: holder.child ?? 0, excludePids: [holder.pid ?? 0] })
+  let stopped = 0
+  for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
+    if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
+    if (killTree({ pid })) {
+      console.log(`stopped: ${pid} (${name})`)
+      stopped += 1
+    }
+  }
+  if (stopped === 0 && leftovers === 0) console.log(`Nothing was running for the ${laneKey} lane.`)
+  rmSync(path, { force: true })
+  return 0
 }
 
 function gitStatus(cwd) {
@@ -567,10 +635,11 @@ async function runQueueProject({ options, lane, lanes }) {
   const folder = runsFolder()
   mkdirSync(folder, { recursive: true })
   const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
+  refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
   let lock
   try {
-    lock = takeLaneLock(folder, options.lane)
+    lock = takeLaneLock(folder, options.lane, { worktree: options.worktree ? lockTarget : '' })
   } catch (error) {
     releaseLaneLock(projectLock)
     throw error
@@ -590,7 +659,7 @@ async function runQueueProject({ options, lane, lanes }) {
         const usageFile = join(folder, `${name}.usage.json`)
         const run = await startLane({
           options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
-          project: target.path, task, queue: { branch, index: number },
+          project: target.path, task, queue: { branch, index: number }, lockPath: lock,
         })
         return { code: run.code, killed: run.killed }
       },
@@ -605,13 +674,14 @@ async function runQueueProject({ options, lane, lanes }) {
 }
 
 async function main() {
-  const options = runOptions(process.argv.slice(2))
+  const argv = process.argv.slice(2)
+  const stop = stopArgument(argv)
+  if (stop) return stopLane(stop)
+  const options = runOptions(argv)
   if (options.list) return listRuns()
   if (options.stats) return statsRuns(options)
   if (options.outcomes) return outcomeRuns(options)
-  const lanesPath = process.env.MACHINEROOM_LANES_FILE
-    ? resolve(process.env.MACHINEROOM_LANES_FILE)
-    : join(docs, 'lanes.json')
+  const lanesPath = lanesFile()
   const lanesJson = JSON.parse(readFileSync(lanesPath, 'utf8'))
   const lanes = readAllLanes({ lanesJson, runsFolder: runsFolder() })
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
@@ -649,10 +719,11 @@ async function main() {
 
     mkdirSync(folder, { recursive: true })
     const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
+    refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
     const projectLock = takeProjectLock(folder, lockTarget)
     let lock
     try {
-      lock = takeLaneLock(folder, options.lane)
+      lock = takeLaneLock(folder, options.lane, { worktree: options.worktree ? lockTarget : '' })
     } catch (error) {
       releaseLaneLock(projectLock)
       throw error
@@ -660,7 +731,7 @@ async function main() {
     try {
       const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
       const target = options.worktree ? prepareWorktree(project, options.lane) : plan
-      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project: target.path, task })
+      const run = await startLane({ options, lane, lanes, wanted: [], prompt, logPath, usageFile, name, project: target.path, task, lockPath: lock })
       return run.code
     } finally {
       releaseLaneLock(lock)
@@ -720,16 +791,17 @@ async function main() {
   }
 
   mkdirSync(folder, { recursive: true })
-  const lock = takeLaneLock(folder, options.lane)
+  refuseRunningLane(options.lane, lane.worktree, folder)
+  const lock = takeLaneLock(folder, options.lane, { worktree: lane.worktree })
   try {
-    const run = await startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name })
+    const run = await startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, lockPath: lock })
     return run.code
   } finally {
     releaseLaneLock(lock)
   }
 }
 
-async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '' }) {
   let start = null
   if (!project) {
     const status = gitStatus(lane.worktree)
@@ -755,6 +827,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE']
     .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
   const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnvironment(process.env, command.cwd, { harness: lane.cli.harness, names: runnerNames }), stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  if (lockPath) writeLaneChild(lockPath, child.pid)
   if (spawnSpec.input && child.stdin) {
     child.stdin.on('error', () => {})
     child.stdin.end(prompt)
@@ -765,10 +838,25 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
   child.stderr?.on('data', (text) => laneLog.push('stderr', text))
 
   let killed = false
-  const timer = setTimeout(() => {
-    if (!child.pid) return
+  let stopNote = ''
+  const stopChild = (note) => {
+    if (!child.pid || child.exitCode !== null || child.signalCode !== null) return
     killed = true
+    if (stopNote === '') stopNote = note
     killTree(child)
+  }
+  const onInt = () => stopChild('stopped by SIGINT')
+  const onTerm = () => stopChild('stopped by SIGTERM')
+  const onHup = () => stopChild('stopped by SIGHUP')
+  const onExit = () => {
+    if (child.exitCode === null && child.signalCode === null) killTree(child)
+  }
+  process.on('SIGINT', onInt)
+  process.on('SIGTERM', onTerm)
+  process.on('SIGHUP', onHup)
+  process.on('exit', onExit)
+  const timer = setTimeout(() => {
+    stopChild('killed after the time limit')
   }, options.minutes * 60 * 1000)
 
   const result = await new Promise((done) => {
@@ -776,6 +864,11 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     child.on('close', (code) => done({ code }))
   })
   clearTimeout(timer)
+  process.removeListener('SIGINT', onInt)
+  process.removeListener('SIGTERM', onTerm)
+  process.removeListener('SIGHUP', onHup)
+  process.removeListener('exit', onExit)
+  const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 })
   laneLog.flush()
   await new Promise((done) => log.end(done))
   const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
@@ -786,7 +879,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
     console.log(`start branch: ${start.startBranch}${from}`)
   }
-  console.log(`exit code: ${result.code === null ? 'none' : result.code}${killed ? ' (killed after the time limit)' : ''}`)
+  console.log(`exit code: ${result.code === null ? 'none' : result.code}${stopNote ? ` (${stopNote})` : ''}`)
   console.log(`minutes: ${minutes}`)
   console.log(`log: ${logPath}`)
   const report = harness === 'hermes' ? readUsage(usageFile) : null
@@ -818,6 +911,7 @@ async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageF
     log: logPath,
     branch,
     commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
+    stoppedLeftovers,
     ...(start ? { startBranch: start.startBranch } : {}),
     ...(options.startedBy ? { startedBy: options.startedBy } : {}),
     ...(project ? { project, task } : {}),
