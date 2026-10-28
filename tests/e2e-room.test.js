@@ -1,14 +1,216 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { PACKET_POOL, childPlace, packetSpots, stripPoints } from '../src/engine/agents.js'
 import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
 import { nearestDrawnPath } from '../src/engine/room.js'
 import { isOrchestrator } from '../src/engine/shapes.js'
 import { RING_CENTER, RING_FRONT, RING_MAX_TOP, ROOT_AHEAD, ROOT_DROP, ringOf, ringRadius, shotgunOffset } from '../src/engine/ring.js'
-import { dirname } from '../src/model/paths.js'
+import { dirname, makeTree } from '../src/model/paths.js'
 import { createPipeline } from '../src/model/pipeline.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadScenario } from './helpers.js'
+
+const context2d = {
+  font: '',
+  textAlign: '',
+  textBaseline: '',
+  fillStyle: '',
+  strokeStyle: '',
+  globalAlpha: 1,
+  letterSpacing: '',
+  measureText: (text) => ({ width: String(text).length * 10 }),
+  createRadialGradient: () => ({ addColorStop() {} }),
+  createLinearGradient: () => ({ addColorStop() {} }),
+  clearRect() {},
+  fillRect() {},
+  strokeRect() {},
+  fillText() {},
+  beginPath() {},
+  moveTo() {},
+  lineTo() {},
+  stroke() {},
+  arc() {},
+  closePath() {},
+}
+
+function fakeElement(tag = 'div') {
+  const listeners = new Map()
+  const node = {
+    tagName: String(tag).toUpperCase(),
+    className: '',
+    style: {},
+    dataset: {},
+    title: '',
+    children: [],
+    parentNode: null,
+    parentElement: null,
+    clientWidth: 0,
+    clientHeight: 0,
+    scrollHeight: 0,
+    scrollTop: 0,
+    textContent: '',
+    ownerDocument: { defaultView: { Element: function Element() {} } },
+    append(...items) {
+      node.children.push(...items)
+    },
+    appendChild(child) {
+      node.children.push(child)
+      return child
+    },
+    replaceChildren(...items) {
+      node.children.length = 0
+      node.children.push(...items)
+    },
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, [])
+      listeners.get(type).push(fn)
+    },
+    removeEventListener(type, fn) {
+      const list = listeners.get(type)
+      if (!list) return
+      const index = list.indexOf(fn)
+      if (index !== -1) list.splice(index, 1)
+    },
+    remove() {
+      node.removed = true
+    },
+    removeChild(child) {
+      const index = node.children.indexOf(child)
+      if (index !== -1) node.children.splice(index, 1)
+    },
+    setAttribute(name, value) {
+      node[name] = value
+    },
+    cloneNode() {
+      return fakeElement(tag)
+    },
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    closest: () => null,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: node.clientWidth || 1200, height: node.clientHeight || 800 }),
+    classList: { add() {}, remove() {}, contains: () => false },
+  }
+  return node
+}
+
+function fakeCanvas() {
+  const node = fakeElement('canvas')
+  node.width = 0
+  node.height = 0
+  node.getContext = () => context2d
+  return node
+}
+
+vi.mock('three', async (importOriginal) => {
+  const actual = await importOriginal()
+  class FakeWebGLRenderer {
+    constructor() {
+      this.domElement = fakeCanvas()
+    }
+    setClearColor() {}
+    setPixelRatio() {}
+    setSize() {}
+    render() {}
+    dispose() {}
+    forceContextLoss() {}
+  }
+  return { ...actual, WebGLRenderer: FakeWebGLRenderer }
+})
+
+vi.mock('three/addons/renderers/CSS3DRenderer.js', async (importOriginal) => {
+  const actual = await importOriginal()
+  class FakeCSS3DRenderer {
+    constructor() {
+      this.domElement = fakeElement('div')
+    }
+    setSize() {}
+    render() {}
+  }
+  return { ...actual, CSS3DRenderer: FakeCSS3DRenderer }
+})
+
+let savedWindow
+let savedDocument
+let savedRaf
+let savedCancel
+let savedResize
+let roomFrame = null
+let roomSurface
+let roomGl
+let roomCss
+
+beforeAll(() => {
+  savedWindow = globalThis.window
+  savedDocument = globalThis.document
+  savedRaf = globalThis.requestAnimationFrame
+  savedCancel = globalThis.cancelAnimationFrame
+  savedResize = globalThis.ResizeObserver
+
+  globalThis.window = {
+    innerWidth: 1200,
+    innerHeight: 800,
+    devicePixelRatio: 1,
+    matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
+    addEventListener() {},
+    removeEventListener() {},
+  }
+  globalThis.document = {
+    createElement: (tag) => (tag === 'canvas' ? fakeCanvas() : fakeElement(tag)),
+    querySelectorAll: () => [],
+    body: fakeElement('body'),
+  }
+  globalThis.requestAnimationFrame = (fn) => {
+    roomFrame = fn
+    return 1
+  }
+  globalThis.cancelAnimationFrame = () => {
+    roomFrame = null
+  }
+  globalThis.ResizeObserver = class {
+    observe() {}
+    disconnect() {}
+  }
+  roomSurface = fakeElement('div')
+  roomSurface.clientWidth = 1200
+  roomSurface.clientHeight = 800
+  roomGl = fakeElement('div')
+  roomGl.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1200, height: 800 })
+  roomCss = fakeElement('div')
+})
+
+afterAll(() => {
+  globalThis.window = savedWindow
+  globalThis.document = savedDocument
+  globalThis.requestAnimationFrame = savedRaf
+  globalThis.cancelAnimationFrame = savedCancel
+  globalThis.ResizeObserver = savedResize
+})
+
+async function makeRoom(files, agents) {
+  const { createRoom } = await import('../src/engine/room.js')
+  const roster = agents.map((key) => ({ key, name: key }))
+  const state = createState(makeTree({ root: 'demo', files }), roster)
+  let current = state
+  const room = createRoom({
+    surface: roomSurface,
+    gl: roomGl,
+    css: roomCss,
+    rootName: 'demo',
+    agents: roster,
+    getState: () => current,
+  })
+  return {
+    room,
+    state,
+    setState(next) {
+      current = next
+    },
+  }
+}
+
+function tickRoom(times = 1) {
+  for (let index = 0; index < times; index += 1) roomFrame?.(performance.now())
+}
 
 function distance(point) {
   return Math.hypot(point.x - RING_CENTER.x, point.y - RING_CENTER.y, point.z - RING_CENTER.z)
@@ -216,5 +418,65 @@ describe('the room, played from a recorded lane run', () => {
     })
     expect(kids.map((_, index) => shotgunOffset(index, kids.length).cols)).toEqual([2, 2, 2, 2])
     expect(kids.map((_, index) => shotgunOffset(index, kids.length).rows)).toEqual([2, 2, 2, 2])
+  })
+})
+
+describe('the camera hold on a live room', () => {
+  it('releases the hold and refits when the held card leaves the plan', async () => {
+    const first = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
+    expect(first.room.anchor('src')).toBe(true)
+    tickRoom(2)
+    expect(first.room.holding()).toBe('src')
+    expect(first.room.soundAt('src').distance).toBeCloseTo(700, 0)
+    const heldFit = first.room.soundAt('').overviewDistance
+
+    const files = Array.from({ length: 9 }, (_, index) => `top-${index}/f.js`)
+    const next = createState(makeTree({ root: 'demo', files }), [{ key: 'claude', name: 'claude' }])
+    first.setState(next)
+    first.room.reset(next)
+
+    expect(first.room.holding()).toBe(null)
+    expect(first.room.soundAt('src').x).toBe(-1)
+    expect(first.room.soundAt('').overviewDistance).toBeGreaterThan(heldFit)
+    first.room.park()
+    const parked = first.room.soundAt('').overviewDistance
+    first.room.dispose()
+
+    const fresh = await makeRoom(files, ['claude'])
+    expect(fresh.room.soundAt('').overviewDistance).toBeCloseTo(parked, 6)
+    fresh.room.dispose()
+  })
+
+  it('records the fresh fit while a card is held', async () => {
+    const files = []
+    for (let index = 0; index < 10; index += 1) files.push(`src/file-${index}.js`)
+    files.push('docs/b.md')
+    const { room } = await makeRoom(files, ['claude'])
+    expect(room.anchor('src')).toBe(true)
+    tickRoom(2)
+    const held = room.soundAt('').overviewDistance
+    room.setOptions({ maxFiles: 20 })
+    expect(room.holding()).toBe('src')
+    expect(room.soundAt('').overviewDistance).not.toBe(held)
+    expect(room.soundAt('src').distance).toBeCloseTo(700, 0)
+    room.park()
+    expect(room.holding()).toBe(null)
+    room.dispose()
+  })
+
+  it('stops following when a focus names no agent view', async () => {
+    const { room } = await makeRoom(['src/a.js'], ['claude', 'hermes'])
+    room.focus('claude')
+    tickRoom(2)
+    const before = room.soundAt('').distance
+    room.focus('ghost')
+    expect(room.focused()).toBe(null)
+    room.setRoster([
+      { key: 'hermes', name: 'hermes' },
+      { key: 'claude', name: 'claude' },
+    ])
+    tickRoom(3)
+    expect(room.soundAt('').distance).toBeCloseTo(before, 3)
+    room.dispose()
   })
 })

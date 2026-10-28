@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
@@ -175,13 +174,17 @@ export function removeReviewTree({ root, temp, tree }) {
   return !existsSync(temp)
 }
 
-async function mergedResult({ root, branch, keep, env, execPath, onStep, tempRoot = tmpdir() }) {
+export function reviewTempBase(root, tempRoot = null) {
+  return tempRoot ?? dirname(resolve(root))
+}
+
+async function mergedResult({ root, branch, keep, env, execPath, onStep, tempRoot = null }) {
   const name = 'merged result'
   const modules = join(root, 'node_modules')
   if (!existsSync(modules)) return check(name, 'FAIL', 'The main checkout has no node_modules. Run npm install there first.')
   const npmCli = npmCliPath(env, execPath)
   if (!npmCli) return check(name, 'FAIL', 'npm-cli.js was not found beside Node, so npm test could not start.')
-  const temp = mkdtempSync(join(tempRoot, 'machineroom-review-'))
+  const temp = mkdtempSync(join(reviewTempBase(root, tempRoot), 'MachineRoom-review-'))
   const hooks = join(temp, 'hooks')
   const tree = join(temp, 'main')
   mkdirSync(hooks)
@@ -247,7 +250,7 @@ function branchProblem(branch) {
   return null
 }
 
-export async function reviewLane({ root, lane, keep = false, env = process.env, runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = tmpdir() }) {
+export async function reviewLane({ root, lane, keep = false, env = process.env, runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = null }) {
   const docs = join(root, 'docs', 'agents')
   let lanes
   try {
@@ -334,7 +337,7 @@ export async function reviewLane({ root, lane, keep = false, env = process.env, 
   return report
 }
 
-export async function main(argv, { root, log = console.log, error = console.error, env = process.env, runsPath = runsFile(), tempRoot = tmpdir() } = {}) {
+export async function main(argv, { root, log = console.log, error = console.error, env = process.env, runsPath = runsFile(), tempRoot = null } = {}) {
   let options
   try {
     options = parseReviewArgs(argv)

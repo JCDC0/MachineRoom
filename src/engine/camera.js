@@ -160,6 +160,7 @@ export function createCameraRig(camera, surface) {
   const goal = { target: view.target.clone(), yaw: view.yaw, pitch: view.pitch, dist: view.dist }
   const drag = { active: false, moved: 0, x: 0, y: 0 }
   let follow = null
+  let heldDist = null
   let transition = null
   let onClick = () => {}
   let overviewDist = OVERVIEW.dist
@@ -203,6 +204,7 @@ export function createCameraRig(camera, surface) {
   function zoomBy(deltaY) {
     adjusted = true
     goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(deltaY * 0.001), MIN_DIST, MAX_DIST)
+    if (heldDist !== null) heldDist = goal.dist
   }
 
   function wheel(event) {
@@ -219,6 +221,7 @@ export function createCameraRig(camera, surface) {
 
   function reset() {
     follow = null
+    heldDist = null
     transition = null
     adjusted = false
     goal.target.copy(overviewTarget)
@@ -302,6 +305,7 @@ export function createCameraRig(camera, surface) {
     setZoomShare(share) {
       adjusted = true
       goal.dist = distanceFromShare(share)
+      if (heldDist !== null) heldDist = goal.dist
     },
     zoomMultiplier: () => overviewDist / goal.dist,
     setClickHandler(handler) {
@@ -309,15 +313,18 @@ export function createCameraRig(camera, surface) {
     },
     focus(position, dist = 1500, pitch = null) {
       transition = null
+      heldDist = null
       follow = () => ({ target: position(), dist })
       goal.dist = dist
       goal.pitch = pitch ?? Math.max(goal.pitch, 0.5)
     },
     hold(point, dist = ANCHOR_DIST) {
-      follow = () => ({ target: point(), dist })
+      heldDist = dist
+      follow = () => ({ target: point(), dist: heldDist })
       startTransition()
     },
     followSpheres(spheres, mode = 'wide', duration = FOLLOW_EASE_MS) {
+      heldDist = null
       follow = () => {
         const next = fitView(spheres(), {
           yaw: view.yaw,
@@ -332,6 +339,7 @@ export function createCameraRig(camera, surface) {
     },
     stopFollow() {
       follow = null
+      heldDist = null
       transition = null
       goal.target.copy(view.target)
       goal.dist = view.dist
@@ -348,6 +356,7 @@ export function createCameraRig(camera, surface) {
     },
     overview() {
       follow = null
+      heldDist = null
       transition = null
       adjusted = false
       goal.target.copy(overviewTarget)

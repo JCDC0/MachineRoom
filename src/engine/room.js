@@ -224,9 +224,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function refit(force = false) {
-    if (heldPath !== null) return
     const spheres = [HUB_SPHERE, ...cards.overviewSpheres()]
     const next = fitView(spheres, { width, height, center: HUB_CENTER })
+    if (heldPath !== null) {
+      fitted = next
+      return
+    }
     if (!force && fitted) {
       const shift = Math.hypot(next.target.x - fitted.target.x, next.target.y - fitted.target.y, next.target.z - fitted.target.z)
       if (shift < REFIT_SHIFT && Math.abs(next.dist - fitted.dist) < fitted.dist * REFIT_RATIO) return
@@ -311,6 +314,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       pulse.sprite.material.opacity = 0
     })
     cards.sync(state)
+    const holdLost = releaseLostHold()
     const follow = followAfterSeek(state, followFocus.following())
     followCard = follow.followCard
     pendingFollow = follow.pendingFollow
@@ -322,7 +326,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       }
     }
     relink()
-    refit()
+    refit(holdLost)
     agentSet.snap(state, world)
   }
 
@@ -332,6 +336,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function releaseHold() {
     heldPath = null
+  }
+
+  function releaseLostHold() {
+    if (heldPath === null) return false
+    const card = cards.cards.get(heldPath)
+    if (card?.view && !card.leaving) return false
+    releaseHold()
+    rig.overview()
+    return true
   }
 
   function endFollow() {
@@ -374,7 +387,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     releaseHold()
     const view = agentSet.views.get(key)
     followFocus.focus(key, Boolean(view))
-    if (!view) return
+    if (!view) {
+      rig.stopFollow()
+      return
+    }
     const middle = new THREE.Vector3()
     if (style === 'close') {
       rig.focus(() => middle.copy(view.group.position).lerp(view.touch, view.aim ? 0.5 : 0), 1500, 0.3)
@@ -560,8 +576,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     hub.update(now / 1000, delta, camera, height)
     internet.update(delta, agentSet.webActive() > 0)
     if (cards.update(state, delta, camera, mask)) {
+      const holdLost = releaseLostHold()
       relink()
-      refit()
+      refit(holdLost)
     }
     if (followFocus.following() && pendingFollow !== null) {
       const path = pendingFollow
@@ -682,6 +699,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     openTerminalKeys: () => terminals.openKeys(),
     anchor,
     park,
+    holding: () => heldPath,
     agentAt,
     overview() {
       park()
