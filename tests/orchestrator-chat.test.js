@@ -7,6 +7,7 @@ import Waiting from '../src/ui/Waiting.jsx'
 import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
+  TEAM_TAB,
   canSend,
   charCount,
   chatBlocks,
@@ -21,6 +22,7 @@ import {
   statusDetail,
   statusText,
   statusTone,
+  teamLines,
 } from '../src/ui/orchestratorChat.js'
 
 function textOf(spans) {
@@ -104,6 +106,23 @@ describe('orchestratorChat helpers', () => {
     expect(lines).toHaveLength(2)
     expect(lines[0]).toMatchObject({ id: 's1', from: 'sub', text: 'Sub frontend\n\nDone.' })
     expect(lines[1]).toMatchObject({ id: 's2', from: 'orchestrator', text: 'No id.' })
+  })
+
+  it('marks a sub chat message from the main without marking the main tab', () => {
+    const chat = {
+      messages: [
+        { id: 's1', from: 'orchestrator', text: 'Write the header.' },
+        { id: 's2', from: 'main', text: 'Then the footer.' },
+        { id: 's3', from: 'owner', text: 'Keep going.' },
+      ],
+    }
+    const sub = chatLines(chat, undefined, { id: 'frontend' })
+    expect(sub.map((line) => line.fromMain)).toEqual([true, true, false])
+    expect(sub[0].from).toBe('orchestrator')
+    expect(sub[1].from).toBe('orchestrator')
+    const main = chatLines(chat, undefined, { id: 'orchestrator' })
+    expect(main.map((line) => line.fromMain)).toEqual([false, false, false])
+    expect(chatLines(chat).map((line) => line.fromMain)).toEqual([false, false, false])
   })
 
   it('shows the newest lines only, up to the requested limit', () => {
@@ -212,6 +231,109 @@ describe('orchestratorChat helpers', () => {
     expect(orchestratorDoing([{ key: 'opencode', status: 'working', label: 'npm test' }])).toBe('')
     expect(orchestratorDoing([])).toBe('')
     expect(orchestratorDoing(null)).toBe('')
+  })
+})
+
+describe('teamLines', () => {
+  function entries() {
+    return [
+      {
+        id: 'orchestrator',
+        name: 'Orchestrator',
+        chat: {
+          messages: [
+            { id: 'm3', from: 'room', text: 'Run ended.', at: '2026-10-29T10:00:05.000Z' },
+            { id: 'm1', from: 'owner', text: 'Build the page.', at: '2026-10-29T10:00:01.000Z' },
+            { id: 'm5', from: 'sub:frontend', text: 'Header done.', at: '2026-10-29T10:00:07.000Z' },
+          ],
+        },
+      },
+      {
+        id: 'frontend',
+        name: 'Frontend',
+        chat: {
+          messages: [
+            { id: 's1', from: 'orchestrator', text: 'Build the header.', at: '2026-10-29T10:00:03.000Z' },
+            { id: 's2', from: 'owner', text: 'Go on.', at: '2026-10-29T10:00:06.000Z' },
+          ],
+        },
+      },
+    ]
+  }
+
+  it('merges every orchestrator by time and tags where and who', () => {
+    const rows = teamLines(entries())
+    expect(rows.map((row) => row.text)).toEqual([
+      'Build the page.',
+      'Build the header.',
+      'Run ended.',
+      'Go on.',
+      'Header done.',
+    ])
+    expect(rows.map((row) => row.where)).toEqual(['main', 'Frontend', 'main', 'Frontend', 'main'])
+    expect(rows.map((row) => row.who)).toEqual(['owner', 'orchestrator', 'room', 'owner', 'Frontend'])
+    expect(rows.map((row) => row.chatId)).toEqual([
+      'orchestrator',
+      'frontend',
+      'orchestrator',
+      'frontend',
+      'orchestrator',
+    ])
+    expect(rows[1].fromMain).toBe(true)
+    expect(rows[4]).toMatchObject({ from: 'sub', fromMain: false })
+    expect(rows[0].fromMain).toBe(false)
+  })
+
+  it('falls back to the sub id, masks hidden text and keeps ids unique', () => {
+    const rows = teamLines([
+      {
+        id: 'orchestrator',
+        name: 'Orchestrator',
+        chat: {
+          messages: [
+            { id: 'a', from: 'sub:qa', text: 'Report \u202Enow' },
+            { id: 'b', from: 'sub:', text: 'No id.' },
+            { id: 'c', from: 'owner', text: '   ' },
+            null,
+          ],
+        },
+      },
+    ])
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({
+      where: 'main',
+      who: 'Sub qa',
+      from: 'sub',
+      text: 'Report [U+202E]now',
+    })
+    expect(rows[1]).toMatchObject({
+      where: 'main',
+      who: 'orchestrator',
+      from: 'orchestrator',
+      text: 'No id.',
+    })
+    expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length)
+  })
+
+  it('shows the newest rows only and keeps their order when times are missing', () => {
+    const rows = teamLines(
+      [
+        {
+          id: 'orchestrator',
+          name: 'Main',
+          chat: { messages: [{ id: 'a', from: 'owner', text: 'one' }, { id: 'b', from: 'owner', text: 'two' }] },
+        },
+        {
+          id: 'frontend',
+          name: 'Frontend',
+          chat: { messages: [{ id: 'c', from: 'owner', text: 'three' }] },
+        },
+      ],
+      2
+    )
+    expect(rows.map((row) => row.text)).toEqual(['two', 'three'])
+    expect(teamLines(null)).toEqual([])
+    expect(teamLines([null, { id: '' }])).toEqual([])
   })
 })
 
@@ -340,6 +462,7 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('Enter sends. Shift+Enter adds a line.')
     expect(html).toContain('>Send</button>')
     expect(html).toContain('>Stop</button>')
+    expect(html).not.toContain('>Team</span>')
   })
 
   it('renders the inline chat with the model, effort and Compact controls under the input', () => {
@@ -627,6 +750,45 @@ describe('OrchestratorChat panel', () => {
     expect(html).not.toContain('>Attach</button>')
     expect(html).not.toContain('aria-label="Detach Frontend"')
     expect(html).toContain('Orchestrator is working')
+  })
+
+  it('adds a read-only Team view after the sub tabs', () => {
+    const list = [
+      { id: 'orchestrator', name: 'Orchestrator', state: 'idle', lanes: [] },
+      { id: 'frontend', name: 'Frontend', state: 'idle', lanes: ['opencode'] },
+      { id: 'bridge', name: 'Bridge', state: 'paused', lanes: ['opencode2'] },
+    ]
+    const chat = {
+      state: 'idle',
+      messages: [
+        { id: 'm1', from: 'owner', text: 'Build it.', at: '2026-10-29T10:00:01.000Z' },
+        { id: 'm2', from: 'room', text: 'Run ended.', at: '2026-10-29T10:00:02.000Z' },
+        { id: 'm3', from: 'sub:frontend', text: 'Header done.', at: '2026-10-29T10:00:03.000Z' },
+      ],
+    }
+    const html = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient(chat),
+        initialChat: chat,
+        initialOrchestrators: list,
+        selected: TEAM_TAB,
+      })
+    )
+    expect(html).toContain('>Team</span>')
+    expect(html.indexOf('>Team<')).toBeGreaterThan(html.indexOf('>Bridge<'))
+    expect(html).toContain('Every orchestrator')
+    expect(html).toContain('<button type="button" class="mr-orch-team-row is-owner"')
+    expect(html).toContain('<button type="button" class="mr-orch-team-row is-room"')
+    expect(html).toContain('<button type="button" class="mr-orch-team-row is-sub"')
+    expect(html).toContain('>main</span>')
+    expect(html).toContain('>owner</span>')
+    expect(html).toContain('>room</span>')
+    expect(html).toContain('>Frontend</span>')
+    expect(html).toContain('Header done.')
+    expect(html).not.toContain('<textarea')
+    expect(html).not.toContain('class="mr-orch-form')
+    expect(html).not.toContain('Ask the orchestrator anything')
   })
 
   it('renders nothing when closed', () => {
