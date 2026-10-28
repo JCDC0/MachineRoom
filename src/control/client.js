@@ -496,6 +496,19 @@ export function createClient({
       return request('POST', '/api/projects/open', { path, confirmed })
     },
 
+    forgetProject: (pathOrOptions, options = {}) => {
+      let path
+      let confirmed = true
+      if (typeof pathOrOptions === 'object' && pathOrOptions !== null) {
+        path = pathOrOptions.path
+        if (pathOrOptions.confirmed !== undefined) confirmed = pathOrOptions.confirmed
+      } else {
+        path = pathOrOptions
+        if (options.confirmed !== undefined) confirmed = options.confirmed
+      }
+      return request('POST', '/api/projects/forget', { path, confirmed })
+    },
+
     family: () => request('GET', '/api/family'),
 
     setAgentLabel: ({ id, label, confirmed = true } = {}) =>

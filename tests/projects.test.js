@@ -1,25 +1,34 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { projectHash } from '../server/orchestrator.js'
 import {
+  CONFIRM_FORGET_PROBLEM,
   CONFIRM_OPEN_PROBLEM,
   NOT_ABSOLUTE_PROBLEM,
   NOT_FOLDER_PROBLEM,
   NOT_FOUND_PROBLEM,
+  NOT_IN_LIST_PROBLEM,
   NOT_SUPPORTED_PROBLEM,
+  ORIGIN_FORGET_PROBLEM,
   ORIGIN_PROBLEM,
   TURN_RUNNING_PROBLEM,
   createProjectsApi,
   readProjectsFile,
+  recentProjects,
   recordProject,
+  resetPruneCache,
+  shouldSkipProject,
 } from '../server/projects.js'
+import { createClient } from '../src/control/client.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []
 
 afterEach(async () => {
+  resetPruneCache()
   while (cleanups.length > 0) {
     const fn = cleanups.pop()
     try {
@@ -50,6 +59,16 @@ function createEnvironment() {
   const base = makeTempDir('mr-projects-test-')
   cleanups.push(() => removeTempDir(base))
 
+  const systemTemp = join(base, 'system-temp')
+  mkdirSync(systemTemp, { recursive: true })
+
+  const oldTemp = process.env.MACHINEROOM_TEMP
+  process.env.MACHINEROOM_TEMP = systemTemp
+  cleanups.push(() => {
+    if (oldTemp === undefined) delete process.env.MACHINEROOM_TEMP
+    else process.env.MACHINEROOM_TEMP = oldTemp
+  })
+
   const root = join(base, 'current-repo')
   mkdirSync(join(root, '.git'), { recursive: true })
 
@@ -76,6 +95,7 @@ function createEnvironment() {
 
   return {
     base,
+    systemTemp,
     root,
     siblingGit,
     siblingPlain,
@@ -176,6 +196,217 @@ describe('projects api', () => {
     const updated = readProjectsFile(file)
     expect(updated.recent[0].path).toBe(resolve(join(env.base, 'proj-6')))
     expect(updated.recent).toHaveLength(20)
+  })
+
+  it('skips a temp folder, a worktree and a runs folder when recording', () => {
+    const env = createEnvironment()
+    const file = join(env.runs, 'projects.json')
+
+    const tempScratch = join(env.systemTemp, 'scratch-repo')
+    mkdirSync(tempScratch, { recursive: true })
+    recordProject(file, tempScratch)
+
+    delete process.env.MACHINEROOM_TEMP
+    try {
+      const osTemp = join(tmpdir(), 'mr-test-scratch-skip')
+      recordProject(file, osTemp)
+    } finally {
+      process.env.MACHINEROOM_TEMP = env.systemTemp
+    }
+
+    const worktreeFolder = join(env.base, '.worktrees', 'lane-alpha')
+    mkdirSync(worktreeFolder, { recursive: true })
+    recordProject(file, worktreeFolder)
+
+    recordProject(file, 'C:\\GitHub\\MachineRoom\\.worktrees\\hermes')
+
+    const runsDir = join(env.base, 'test-runs-dir')
+    mkdirSync(runsDir, { recursive: true })
+    writeFileSync(join(runsDir, 'runs.jsonl'), '{"type":"heartbeat"}\n')
+    recordProject(file, runsDir)
+
+    const stored = readProjectsFile(file)
+    expect(stored.recent).toHaveLength(0)
+
+    recordProject(file, env.outsideRepo)
+    const storedAfter = readProjectsFile(file)
+    expect(storedAfter.recent).toHaveLength(1)
+    expect(storedAfter.recent[0].path).toBe(resolve(env.outsideRepo))
+  })
+
+  it('does not record a temp folder or worktree when bridge starts on it', async () => {
+    const env = createEnvironment()
+    const tempProject = join(env.systemTemp, 'temp-proj')
+    mkdirSync(join(tempProject, '.git'), { recursive: true })
+
+    const bridge = createBridge({
+      projectRoot: tempProject,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const file = join(env.runs, 'projects.json')
+    const stored = readProjectsFile(file)
+    expect(stored.recent).toHaveLength(0)
+  })
+
+  it('drops missing folders from projects.json when recentProjects is read at most once a minute', () => {
+    const env = createEnvironment()
+    const file = join(env.runs, 'projects.json')
+
+    const realA = join(env.base, 'real-a')
+    mkdirSync(realA, { recursive: true })
+    const realB = join(env.base, 'real-b')
+    mkdirSync(realB, { recursive: true })
+    const missing = join(env.base, 'gone-project')
+
+    recordProject(file, realA)
+    recordProject(file, missing)
+    recordProject(file, realB)
+
+    let stored = readProjectsFile(file)
+    expect(stored.recent.map((r) => r.path)).toEqual([
+      resolve(realB),
+      resolve(missing),
+      resolve(realA),
+    ])
+
+    const list1 = recentProjects(file, env.runs, null, () => 1000)
+    expect(list1.map((r) => r.path)).toEqual([resolve(realB), resolve(realA)])
+
+    stored = readProjectsFile(file)
+    expect(stored.recent.map((r) => r.path)).toEqual([resolve(realB), resolve(realA)])
+
+    writeFileSync(
+      file,
+      JSON.stringify({
+        recent: [
+          { path: resolve(realB), openedAt: '2026-10-25T10:00:00.000Z' },
+          { path: resolve(missing), openedAt: '2026-10-25T09:00:00.000Z' },
+        ],
+      })
+    )
+
+    const list2 = recentProjects(file, env.runs, null, () => 30000)
+    expect(list2.map((r) => r.path)).toEqual([resolve(realB)])
+
+    stored = readProjectsFile(file)
+    expect(stored.recent.map((r) => r.path)).toContain(resolve(missing))
+
+    const list3 = recentProjects(file, env.runs, null, () => 62000)
+    expect(list3.map((r) => r.path)).toEqual([resolve(realB)])
+
+    stored = readProjectsFile(file)
+    expect(stored.recent.map((r) => r.path)).not.toContain(resolve(missing))
+  })
+
+  it('refuses POST /api/projects/forget without a page Origin with 403', async () => {
+    const env = createEnvironment()
+    const bridge = createBridge({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const res = await postJson(`${info.url}/api/projects/forget`, {
+      path: env.siblingGit,
+      confirmed: true,
+    })
+    expect(res.status).toBe(403)
+    expect(res.body.error).toBe(ORIGIN_FORGET_PROBLEM)
+  })
+
+  it('refuses unconfirmed POST /api/projects/forget with 400', async () => {
+    const env = createEnvironment()
+    const bridge = createBridge({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const res = await postJson(
+      `${info.url}/api/projects/forget`,
+      { path: env.siblingGit },
+      { headers: { Origin: info.url } }
+    )
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe(CONFIRM_FORGET_PROBLEM)
+  })
+
+  it('refuses POST /api/projects/forget for a path not in the list with 400', async () => {
+    const env = createEnvironment()
+    const bridge = createBridge({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const res = await postJson(
+      `${info.url}/api/projects/forget`,
+      { path: env.siblingGit, confirmed: true },
+      { headers: { Origin: info.url } }
+    )
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe(NOT_IN_LIST_PROBLEM)
+  })
+
+  it('removes one entry via POST /api/projects/forget and answers new list', async () => {
+    const env = createEnvironment()
+    const file = join(env.runs, 'projects.json')
+    recordProject(file, env.siblingGit)
+    recordProject(file, env.outsideRepo)
+
+    const bridge = createBridge({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+    })
+    const info = await bridge.start()
+    cleanups.push(() => bridge.stop())
+
+    const res = await postJson(
+      `${info.url}/api/projects/forget`,
+      { path: env.siblingGit, confirmed: true },
+      { headers: { Origin: info.url } }
+    )
+    expect(res.status).toBe(200)
+    expect(res.body.current).toEqual({
+      path: resolve(env.root),
+      name: basename(env.root),
+      git: true,
+    })
+    expect(res.body.recent).toHaveLength(1)
+    expect(res.body.recent[0].path).toBe(resolve(env.outsideRepo))
+
+    const stored = readProjectsFile(file)
+    expect(stored.recent).toHaveLength(2)
+    expect(stored.recent.map((r) => r.path)).toContain(resolve(env.outsideRepo))
+    expect(stored.recent.map((r) => r.path)).not.toContain(resolve(env.siblingGit))
+
+    const client = createClient({
+      baseUrl: info.url,
+      fetchImpl: (input, init) =>
+        fetch(input, { ...init, headers: { ...init?.headers, origin: info.url } }),
+    })
+    const clientRes = await client.forgetProject({ path: env.outsideRepo, confirmed: true })
+    expect(clientRes.recent).toHaveLength(0)
+
+    const storedAfterClient = readProjectsFile(file)
+    expect(storedAfterClient.recent).toHaveLength(1)
+    expect(storedAfterClient.recent[0].path).toBe(resolve(env.root))
   })
 
   it('refuses POST /api/projects/open without a page Origin with 403', async () => {
