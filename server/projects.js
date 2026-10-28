@@ -1,24 +1,108 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { projectHash } from './orchestrator.js'
 
 export const MAX_RECENT = 20
 export const MAX_FOLDERS = 200
 export const MAX_SESSIONS = 6
+export const PRUNE_INTERVAL_MS = 60000
 
 export const ORIGIN_PROBLEM = 'A request to open a project needs a page Origin.'
+export const ORIGIN_FORGET_PROBLEM = 'A request to forget a project needs a page Origin.'
 export const CONFIRM_OPEN_PROBLEM = 'Confirm opening the project first.'
+export const CONFIRM_FORGET_PROBLEM = 'Confirm forgetting the project first.'
 export const NOT_ABSOLUTE_PROBLEM = 'Provide an absolute folder path.'
 export const NOT_FOUND_PROBLEM = 'That folder does not exist.'
 export const NOT_FOLDER_PROBLEM = 'That path is not a folder.'
+export const NOT_IN_LIST_PROBLEM = 'That project is not in the recent projects list.'
 export const TURN_RUNNING_PROBLEM = 'An orchestrator turn is running. Stop it or wait, then open the project.'
 export const NOT_SUPPORTED_PROBLEM = 'Open another project with machineroom FOLDER.'
+
+const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
+const lastPruneByFile = new Map()
+
+export function resetPruneCache() {
+  lastPruneByFile.clear()
+}
 
 function samePath(a, b) {
   if (!a || !b) return false
   const left = resolve(a)
   const right = resolve(b)
   return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
+}
+
+function isInside(child, parent) {
+  if (!child || !parent) return false
+  const c = resolve(child)
+  const p = resolve(parent)
+  const normC = process.platform === 'win32' ? c.toLowerCase() : c
+  const normP = process.platform === 'win32' ? p.toLowerCase() : p
+  if (normC === normP) return true
+  const rel = relative(normP, normC)
+  return !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+export function isTempFolder(projectPath, env = process.env) {
+  if (!projectPath) return false
+  const target = resolve(projectPath)
+  const candidates = []
+  if (env.MACHINEROOM_TEMP) {
+    candidates.push(resolve(env.MACHINEROOM_TEMP))
+  } else {
+    try {
+      const td = tmpdir()
+      if (td) candidates.push(resolve(td))
+    } catch {}
+    if (env.TEMP) candidates.push(resolve(env.TEMP))
+  }
+  for (const root of candidates) {
+    if (isInside(target, root)) return true
+  }
+  return false
+}
+
+export function hasWorktreesFolder(projectPath) {
+  if (!projectPath) return false
+  const parts = resolve(projectPath).split(/[\\/]/)
+  return parts.includes('.worktrees')
+}
+
+export function isConfiguredLaneWorktree(projectPath) {
+  if (!projectPath) return false
+  try {
+    const lanesFile = join(REPO_ROOT, 'docs', 'agents', 'lanes.json')
+    if (!existsSync(lanesFile)) return false
+    const raw = JSON.parse(readFileSync(lanesFile, 'utf8'))
+    if (!raw || typeof raw !== 'object') return false
+    for (const lane of Object.values(raw)) {
+      if (lane && typeof lane.worktree === 'string' && lane.worktree.trim()) {
+        if (samePath(lane.worktree, projectPath) || isInside(projectPath, lane.worktree)) return true
+      }
+    }
+  } catch {}
+  return false
+}
+
+export function isRunsFolder(projectPath) {
+  if (!projectPath) return false
+  try {
+    return existsSync(join(projectPath, 'runs.jsonl'))
+  } catch {
+    return false
+  }
+}
+
+export function shouldSkipProject(projectPath, env = process.env) {
+  if (!projectPath || typeof projectPath !== 'string' || !projectPath.trim()) return true
+  const resolved = resolve(projectPath)
+  if (isTempFolder(resolved, env)) return true
+  if (hasWorktreesFolder(resolved)) return true
+  if (isConfiguredLaneWorktree(resolved)) return true
+  if (isRunsFolder(resolved)) return true
+  return false
 }
 
 export function readProjectsFile(file) {
@@ -37,9 +121,24 @@ export function readProjectsFile(file) {
   }
 }
 
+function saveProjectsFile(projectsFile, recent) {
+  try {
+    mkdirSync(dirname(projectsFile), { recursive: true })
+    const temporary = `${projectsFile}.tmp`
+    const content = `${JSON.stringify({ recent }, null, 2)}\n`
+    writeFileSync(temporary, content, 'utf8')
+    try {
+      renameSync(temporary, projectsFile)
+    } catch {
+      writeFileSync(projectsFile, content, 'utf8')
+    }
+  } catch {}
+}
+
 export function recordProject(projectsFile, projectPath, now = Date.now) {
   if (!projectPath) return
   const resolved = resolve(projectPath)
+  if (shouldSkipProject(resolved)) return
   try {
     mkdirSync(dirname(projectsFile), { recursive: true })
     const { recent } = readProjectsFile(projectsFile)
@@ -47,14 +146,7 @@ export function recordProject(projectsFile, projectPath, now = Date.now) {
     const stamp = typeof now === 'function' ? now() : now
     const openedAt = new Date(stamp).toISOString()
     const updated = [{ path: resolved, openedAt }, ...filtered].slice(0, MAX_RECENT)
-    const temporary = `${projectsFile}.tmp`
-    const content = `${JSON.stringify({ recent: updated }, null, 2)}\n`
-    writeFileSync(temporary, content, 'utf8')
-    try {
-      renameSync(temporary, projectsFile)
-    } catch {
-      writeFileSync(projectsFile, content, 'utf8')
-    }
+    saveProjectsFile(projectsFile, updated)
   } catch {}
 }
 
@@ -121,18 +213,41 @@ export function siblingFolders(projectRoot) {
   return folders.slice(0, MAX_FOLDERS)
 }
 
-export function recentProjects(projectsFile, runsFolder, currentRoot) {
+export function recentProjects(projectsFile, runsFolder, currentRoot, now = Date.now) {
   const { recent } = readProjectsFile(projectsFile)
-  const result = []
+  const currentTime = typeof now === 'function' ? now() : (now ?? Date.now())
+  const fileKey = projectsFile ? resolve(projectsFile).toLowerCase() : ''
+  const lastPrune = lastPruneByFile.get(fileKey) ?? 0
+
+  const shouldPrune = Boolean(fileKey && (lastPrune === 0 || currentTime - lastPrune >= PRUNE_INTERVAL_MS))
+
+  const existing = []
+  let missingFound = false
+
   for (const item of recent) {
-    if (currentRoot && samePath(item.path, currentRoot)) continue
     let isDir = false
     try {
       isDir = statSync(item.path).isDirectory()
     } catch {
       isDir = false
     }
-    if (!isDir) continue
+    if (isDir) {
+      existing.push(item)
+    } else {
+      missingFound = true
+    }
+  }
+
+  if (shouldPrune) {
+    lastPruneByFile.set(fileKey, currentTime)
+    if (missingFound) {
+      saveProjectsFile(projectsFile, existing)
+    }
+  }
+
+  const result = []
+  for (const item of existing) {
+    if (currentRoot && samePath(item.path, currentRoot)) continue
     result.push({
       path: item.path,
       name: basename(item.path),
@@ -167,7 +282,7 @@ export function createProjectsApi({
         return true
       }
       const current = currentProject(projectRoot)
-      const recent = recentProjects(projectsFile, runsFolder, projectRoot)
+      const recent = recentProjects(projectsFile, runsFolder, projectRoot, now)
       const folders = siblingFolders(projectRoot)
       sendJson(req, res, 200, { current, recent, folders })
       return true
@@ -237,6 +352,49 @@ export function createProjectsApi({
         })
       if (res.writableFinished) reopen()
       else res.once('finish', reopen)
+      return true
+    }
+
+    if (url.pathname === '/api/projects/forget') {
+      if ((req.method ?? 'GET') !== 'POST') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+
+      const page = Boolean(req.headers.origin)
+      if (!page) {
+        sendJson(req, res, 403, { error: ORIGIN_FORGET_PROBLEM })
+        return true
+      }
+
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: CONFIRM_FORGET_PROBLEM })
+        return true
+      }
+
+      if (typeof body.path !== 'string' || !body.path.trim()) {
+        sendJson(req, res, 400, { error: NOT_IN_LIST_PROBLEM })
+        return true
+      }
+
+      const target = resolve(body.path)
+      const { recent } = readProjectsFile(projectsFile)
+      const existsInList = recent.some((item) => samePath(item.path, target))
+      if (!existsInList) {
+        sendJson(req, res, 400, { error: NOT_IN_LIST_PROBLEM })
+        return true
+      }
+
+      const updated = recent.filter((item) => !samePath(item.path, target))
+      saveProjectsFile(projectsFile, updated)
+
+      const current = currentProject(projectRoot)
+      const nextRecent = recentProjects(projectsFile, runsFolder, projectRoot, now)
+      const folders = siblingFolders(projectRoot)
+      sendJson(req, res, 200, { current, recent: nextRecent, folders })
       return true
     }
 
