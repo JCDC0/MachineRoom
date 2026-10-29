@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `opencode4` to `opencode10` are retired in `docs/agents/lanes.json`: the owner cut OpenCode to three lanes to spend less.
+
 - A project run records the folder's branch when it ended on another branch and the commits made during the run, from `git log --oneline START..HEAD`, and a queue task's record is written after its commit so the room names it (task L5).
 
 - A failed turn with no reply says why and a failed lane run wake adds Error: MESSAGE when its log has one, from the pure failure helper on the OpenCode and Claude Code descriptors (task O22).

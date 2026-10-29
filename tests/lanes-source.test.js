@@ -85,7 +85,7 @@ function git(cwd, args) {
 describe('lane agents', () => {
   it('lists one agent per lane with a command line and leaves retired lanes out', () => {
     const agents = laneAgents(realLanes)
-    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'opencode4', 'opencode5', 'opencode6', 'opencode7', 'opencode8', 'opencode9', 'opencode10', 'agy', 'agy2', 'agy3', 'claude'])
+    expect(agents.map((agent) => agent.key)).toEqual(['orchestrator', 'opencode', 'opencode2', 'opencode3', 'agy', 'agy2', 'agy3', 'claude'])
     expect(agents.filter((agent) => !agent.key.startsWith('agy') && agent.key !== 'claude' && agent.key !== 'orchestrator').every((agent) => agent.parser === 'opencode' && agent.adapterType === 'opencode_local')).toBe(true)
     expect(agents.find((agent) => agent.key === 'opencode2').name).toBe('OpenCode 2')
     expect(agents.find((agent) => agent.key === 'claude')).toMatchObject({ name: 'Claude Code', parser: 'claude', adapterType: 'claude_local' })
@@ -95,6 +95,7 @@ describe('lane agents', () => {
       model: 'opencode-go/deepseek-v4.1-flash',
     })
     expect(agents.some((agent) => agent.key === 'hermes')).toBe(false)
+    expect(agents.some((agent) => agent.key === 'opencode4' || agent.key === 'opencode10')).toBe(false)
     expect(agents.find((agent) => agent.key === 'agy3')).toMatchObject({ parser: 'agy', adapterType: 'process' })
   })
 
