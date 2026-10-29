@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- An orchestrator's turn fills `{{SCRATCH}}` with `<runs>/scratch-<id>` and makes that folder before the turn, so its task, run, ladder and goal files no longer pile up beside `runs.jsonl` (task O23).
+
+- A sub orchestrator's instructions say its reply is its report, ended with its turn, and never a POST to `/api/orchestrator/messages` (task O23).
+
+- The orchestrator guide reads lanes from `{{BRIDGE}}/api/lanes`, starts only the active ones, and sends each goal to a sub once (task O23).
+
 - `opencode4` to `opencode10` are retired in `docs/agents/lanes.json`: the owner cut OpenCode to three lanes to spend less.
 
 - A project run records the folder's branch when it ended on another branch and the commits made during the run, from `git log --oneline START..HEAD`, and a queue task's record is written after its commit so the room names it (task L5).

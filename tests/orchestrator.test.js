@@ -466,6 +466,26 @@ describe('one orchestrator turn', () => {
     expect(instruction.split(/\.\s+/)).toHaveLength(4)
   })
 
+  it('fills the scratch folder in the guide and makes it before the turn', async () => {
+    const guide = readFileSync(new URL('../docs/agents/ORCHESTRATOR-AGENT.md', import.meta.url), 'utf8')
+    const rig = makeRig({ prompt: guide })
+    const scratch = join(rig.runs, 'scratch-orchestrator')
+    expect(existsSync(scratch)).toBe(false)
+
+    rig.send('Plan the work.')
+    await waitFor(() => existsSync(scratch), 15000, 'the scratch folder')
+    await waitIdle(rig, 1)
+
+    const instruction = valueAfter(rig.calls()[0].args, '--append-system-prompt')
+    expect(instruction).toContain(scratch)
+    expect(instruction).toContain(`${rig.runs}/runs.jsonl`)
+    expect(instruction).not.toContain('{{RUNS}}/start-')
+    expect(instruction).not.toContain('{{SCRATCH}}')
+    expect(instruction).toContain('Read the lanes from http://127.0.0.1:5999/api/lanes; start only the active ones.')
+    expect(instruction).not.toContain('opencode10')
+    expect(existsSync(scratch)).toBe(true)
+  })
+
   it('passes enabled MCP servers to Claude turns and removes the config file when the turn ends', async () => {
     const rig = makeRig()
     writeFileSync(join(rig.runs, 'mcp.json'), JSON.stringify({
@@ -1718,6 +1738,16 @@ describe('the lane source and the orchestrator turn', () => {
       expect(rig.spawned).toHaveLength(0)
       rig.orchestrator.deliver('orchestrator', 'Add slugify to src/text.js.')
       await waitFor(() => rig.spawned.length === 1, 15000, 'the sub turn to spawn')
+    })
+
+    it('fills the scratch folder from its own id for a sub', async () => {
+      const guide = readFileSync(new URL('../docs/agents/ORCHESTRATOR-AGENT.md', import.meta.url), 'utf8')
+      const rig = makeRig({ id: 'frontend', prompt: guide })
+      rig.orchestrator.deliver('orchestrator', 'Add a button.')
+      await waitFor(() => rig.spawned.length === 1, 15000, 'the sub turn to spawn')
+      const instruction = valueAfter(rig.spawned[0].args, '--append-system-prompt')
+      expect(instruction).toContain(join(rig.runs, 'scratch-frontend'))
+      expect(existsSync(join(rig.runs, 'scratch-frontend'))).toBe(true)
     })
 
     it('runs the program of its new harness after a harness change', async () => {

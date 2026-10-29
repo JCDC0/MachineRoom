@@ -298,5 +298,6 @@ export function subPrompt(sub, parent, ladder) {
     `Your sector branch is \`machineroom/sector-${id}\`.`,
     'Plan for your lanes, start them, review their work and merge it into your sector branch.',
     `Then report to your parent as \`sub:${id}\`.`,
+    'Your reply is your report. End your turn with it. Never send it to /api/orchestrator/messages.',
   ].join('\n')
 }
