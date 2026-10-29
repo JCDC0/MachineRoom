@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Below 1100 pixels the lower half's right column narrows to `clamp(200px, calc(40vw - 160px), 280px)`, from 200 pixels at 900 to 280 at 1100, while the sidebar keeps its U84 width, so the conversation keeps its room (task U86).
+
+- At 900 pixels and wider a log line's text breaks only at a `/` or a space and the agent column fits `CLAUDE CODE`, so a file name and an agent name stay whole (task U86).
+
 - Between 641 and 899 pixels wide the lens is `max(360px, 58vh)` again, so on a 768 by 1024 tablet the dock gets its rows and the transport sits inside the window; 0.1.388 had set the root `--lens-h` to fill the window for 900 pixels and wider, and narrower screens took it too, leaving the dock 32 pixels with the transport half off screen (found in the eye check).
 
 - A run record takes its cost from the harness whenever the harness reports one, so a Direct API lane records the `total_cost_usd` its result line carries instead of nothing; the report total stays the fallback (found in the mixed team test).

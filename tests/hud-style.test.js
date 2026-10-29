@@ -323,4 +323,16 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('--lens-h: var(--lens-h-user, calc(100vh - var(--menu-h) - var(--transport-h)))')
     expect(css).toContain('.hud-dock[hidden]')
   })
+
+  it('narrows the right column below 1100 pixels and keeps a log path whole', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    expect(css).toContain('@media (min-width: 900px) and (max-width: 1099px)')
+    expect(css).toContain(
+      'grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) clamp(200px, calc(40vw - 160px), 280px)'
+    )
+    expect(css).toMatch(
+      /@media \(min-width: 900px\) \{\s+\.log-agent \{\s+width: calc\(var\(--space\) \* 12\);\s+\}\s+\.log-text \{\s+overflow-wrap: normal;\s+word-break: normal;\s+\}/
+    )
+    expect(css).toMatch(/\.log-text \{[^}]*word-break: break-word;/)
+  })
 })
