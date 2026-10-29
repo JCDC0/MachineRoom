@@ -415,7 +415,14 @@ export function createOrchestrator({
   const lane = laneEntry?.cli ? laneEntry : DEFAULT_LANE
   let harness = harnessOption || String(lane.cli.harness ?? 'claude')
   let model = modelOption ? String(modelOption) : String(lane.cli.model ?? (harness === 'opencode' ? DEFAULT_OPENCODE_MODEL : 'opus'))
-  const bin = binOption ? String(binOption) : String(lane.cli.bin ?? (harness === 'opencode' ? 'opencode' : 'claude'))
+  function binFor(name) {
+    if (binOption) return String(binOption)
+    if (lane.cli.harness === name && lane.cli.bin) return String(lane.cli.bin)
+    for (const entry of Object.values(lanes ?? {})) {
+      if (entry?.cli?.harness === name && entry.cli.bin) return String(entry.cli.bin)
+    }
+    return name
+  }
   const windowOption = Number.isFinite(contextWindowOption) && contextWindowOption > 0
     ? Math.round(contextWindowOption)
     : Number.isFinite(lane.cli.contextWindow) && lane.cli.contextWindow > 0
@@ -791,7 +798,7 @@ export function createOrchestrator({
       token
     )
     const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
-    let program = bin
+    let program = binFor(harness)
     let args
     if (harness === 'opencode') {
       const modelArg = effort ? `${model}#${effort}` : model
@@ -835,7 +842,7 @@ export function createOrchestrator({
         ...harnessCli,
         harness,
         model,
-        bin: binOption || harnessCli?.bin || bin || harness,
+        bin: binFor(harness),
       }
       const firstNewIndex = turnMessages.length > 0 ? messages.findIndex((m) => m.id === turnMessages[0].id) : messages.length
       const prior = messages.slice(0, firstNewIndex === -1 ? messages.length : firstNewIndex).slice(-20)

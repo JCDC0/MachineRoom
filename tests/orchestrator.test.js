@@ -1594,6 +1594,20 @@ describe('the lane source and the orchestrator turn', () => {
       expect(rigDefault.answer().contextWindow).toBe(200000)
     })
 
+    it('runs the program of its new harness after a harness change', async () => {
+      const rig = makeRig({
+        lanes: {
+          orchestrator: { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude-program', model: 'opus' } },
+          opencode: { name: 'OpenCode', harness: 'OpenCode', cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/qwen3.8-flash' } },
+        },
+      })
+      expect(rig.orchestrator.setHarness({ harness: 'opencode', model: 'opencode-go/qwen3.8-flash', confirmed: true }).status).toBe(200)
+      rig.send('Hello')
+      await waitFor(() => rig.spawned.length === 1, 15000, 'the turn to spawn')
+      expect(rig.spawned[0].file).toBe(process.execPath)
+      expect(rig.spawned[0].args[0]).toBe('run')
+    })
+
     it('changes the window when the model changes', () => {
       const rig = makeRig({
         model: 'opus',
