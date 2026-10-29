@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import {
   createHarnessModelsApi,
+  DIRECT_API_KEY_PROBLEM,
   getHarnessModels,
   modelAllowed,
   parseAgyModels,
@@ -12,6 +13,7 @@ import {
   readHarnessModelsCache,
   saveCachedHarnessModels,
 } from '../server/harness-models.js'
+import { saveEndpoints } from '../server/endpoints.js'
 import { MODELS } from '../server/model-list.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -197,6 +199,42 @@ describe('harness models discovery and caching', () => {
       const expected = MODELS.filter((m) => m.harness === harness).map(({ id, label }) => ({ id, label }))
       expect(result.models).toEqual(expected)
     }
+  })
+
+  it('lists only the endpoint models for machineroom once an endpoint exists', async () => {
+    const runs = tempDir('runs-direct-')
+    saveEndpoints(runs, [
+      {
+        name: 'Work',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['alpha', 'beta'],
+      },
+    ])
+    const result = await getHarnessModels('machineroom', { runsFolder: runs, env: { OPENROUTER_API_KEY: 'placeholder' } })
+    expect(result.error).toBeUndefined()
+    expect(result.models).toEqual([
+      { id: 'Work/alpha', label: 'alpha (Work)' },
+      { id: 'Work/beta', label: 'beta (Work)' },
+    ])
+    expect(result.models.some((model) => model.id === 'xiaomi/mimo-v2.6-pro')).toBe(false)
+    expect(modelAllowed('machineroom', 'Work/alpha', runs, { OPENROUTER_API_KEY: 'placeholder' })).toBe(true)
+    expect(modelAllowed('machineroom', 'xiaomi/mimo-v2.6-pro', runs, { OPENROUTER_API_KEY: 'placeholder' })).toBe(false)
+  })
+
+  it('offers the built-in machineroom models only with a key and no endpoint', async () => {
+    const runs = tempDir('runs-direct-empty-')
+    const empty = await getHarnessModels('machineroom', { runsFolder: runs, env: {} })
+    expect(empty.models).toEqual([])
+    expect(empty.error).toBe(DIRECT_API_KEY_PROBLEM)
+    expect(modelAllowed('machineroom', 'xiaomi/mimo-v2.6-pro', runs, {})).toBe(false)
+
+    const withKey = await getHarnessModels('machineroom', { runsFolder: runs, env: { MACHINEROOM_API_KEY: 'test' } })
+    const expected = MODELS.filter((model) => model.harness === 'machineroom').map(({ id, label }) => ({ id, label }))
+    expect(withKey.models).toEqual(expected)
+    expect(withKey.error).toBeUndefined()
+    expect(modelAllowed('machineroom', 'xiaomi/mimo-v2.6-pro', runs, { MACHINEROOM_API_KEY: 'test' })).toBe(true)
   })
 })
 

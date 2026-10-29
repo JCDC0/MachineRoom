@@ -47,6 +47,7 @@ export function resolveContextWindow(modelId, harnessKey = '', fallbackWindow = 
 }
 
 export function harnessUnavailableProblem(harness) {
+  if (harness === 'machineroom') return 'Add a Direct API key in Settings first.'
   return `The harness ${harness} is not available on this computer.`
 }
 

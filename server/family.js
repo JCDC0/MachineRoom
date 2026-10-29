@@ -13,6 +13,7 @@ import {
   readAllLanes,
 } from './agents-config.js'
 import { activeLanesFileFor, eligibleLanes, projectHash, readActiveLanesChoice } from './active-lanes.js'
+import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import { ORCHESTRATOR_KEY } from './orchestrator.js'
 import { NO_TOKEN_PROBLEM } from './orchestrators.js'
@@ -105,6 +106,12 @@ export function readKey(runsFolder, name) {
   if (!name || typeof name !== 'string') return null
   const keys = readKeys(runsFolder)
   return typeof keys[name] === 'string' ? keys[name] : null
+}
+
+export function writeKey(runsFolder, name, value) {
+  const keys = readKeys(runsFolder)
+  keys[name] = value
+  saveKeys(runsFolder, keys)
 }
 
 export function proposalsFileFor(runsFolder) {
@@ -357,9 +364,7 @@ export function createFamilyApi(options = {}) {
           return true
         }
 
-        const keys = readKeys(runsDir)
-        keys[name] = value
-        saveKeys(runsDir, keys)
+        writeKey(runsDir, name, value)
 
         if (typeof notify === 'function') {
           notify({ topic: 'family' })
@@ -440,14 +445,14 @@ export function createFamilyApi(options = {}) {
 
       const harness = typeof body.harness === 'string' ? body.harness.trim() : ''
       const baseLanes = getBaseLanes()
-      const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env })
+      const available = HARNESS_KEYS.includes(harness) && isHarnessAvailable(harness, { lanes: baseLanes, env, endpoints: readEndpoints(runsDir) })
       if (!available) {
         sendJson(req, res, 400, { error: harnessUnavailableProblem(harness) })
         return true
       }
 
       const model = typeof body.model === 'string' ? body.model.trim() : ''
-      if (!modelAllowed(harness, model, runsDir)) {
+      if (!modelAllowed(harness, model, runsDir, env)) {
         sendJson(req, res, 400, { error: modelUnavailableProblem(body.model, harness) })
         return true
       }
