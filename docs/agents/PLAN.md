@@ -45,7 +45,7 @@ Not checked live yet:
 
 In order:
 
-1. The gaps the live check of the family tree found: V44 (a sector lights while its team works), V45 (a sub's chip does not cover the hub), O21 (the main orchestrator lists only the lanes it leads) and U84 (the sidebar has room for the family tree).
+1. Done: the gaps the live check of the family tree found, V44 (a sector lights while its team works), V45 (a sub's chip does not cover the hub), O21 (the main orchestrator lists only the lanes it leads) and U84 (the sidebar has room for the family tree).
 2. A real team on the test project: two subs with one OpenCode lane each, one task through the main orchestrator, watched for orders, dispatches, reports and wakes in the room.
 3. The room checked by eye at 1280 by 800, 900 by 700, 768 by 1024 and a phone.
 
