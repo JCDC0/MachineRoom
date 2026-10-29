@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Between 641 and 899 pixels wide the lens is `max(360px, 58vh)` again, so on a 768 by 1024 tablet the dock gets its rows and the transport sits inside the window; 0.1.388 had set the root `--lens-h` to fill the window for 900 pixels and wider, and narrower screens took it too, leaving the dock 32 pixels with the transport half off screen (found in the eye check).
+
 - A run record takes its cost from the harness whenever the harness reports one, so a Direct API lane records the `total_cost_usd` its result line carries instead of nothing; the report total stays the fallback (found in the mixed team test).
 
 - A failed orchestrator turn with no reply now says `The orchestrator stopped: LINE` with the last non-empty line of the turn's stderr when the harness error finds none, masked with `maskKeys` and cut to 300 characters, instead of only `exit N`; the last 4 KB of stderr stay in memory and nothing more is stored, so a Direct API turn that could not reach its endpoint names it (O25).

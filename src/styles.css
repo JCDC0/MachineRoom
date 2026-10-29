@@ -12,7 +12,7 @@
   --menu-h: 52px;
   --transport-h: 56px;
   --strip-h: 72px;
-  --lens-h: calc(100vh - var(--menu-h) - var(--transport-h));
+  --lens-h: max(360px, 58vh);
   --sans: 'Jost', system-ui, sans-serif;
   --mono: 'Space Mono', ui-monospace, monospace;
   --corner-ticks:

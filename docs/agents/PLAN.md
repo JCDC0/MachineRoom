@@ -43,7 +43,7 @@ Not checked live yet:
 - The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
 - The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
 - A real ACP agent. The harness is tested on recorded `opencode acp` updates and a fake agent, and no lane uses it yet.
-- The room by eye after the lens and the sectors: V23 and V24 are merged and say what they saw, but the owner has not looked at the built room at 1280 by 800, 900 by 700, 768 by 1024 or a phone.
+- The room by eye: checked on 2026-10-30 at 1280 by 800, 900 by 700, 768 by 1024 and 375 by 812 on the demo ladder replay; a live room at those sizes is still to see.
 
 ## Next
 
@@ -51,7 +51,7 @@ In order:
 
 1. Done: the gaps the live check of the family tree found, V44 (a sector lights while its team works), V45 (a sub's chip does not cover the hub), O21 (the main orchestrator lists only the lanes it leads) and U84 (the sidebar has room for the family tree).
 2. Done: a real OpenCode team, AGY team, Claude Code team, Direct API team and a mixed team of all four on a scratch project.
-3. The room checked by eye at 1280 by 800, 900 by 700, 768 by 1024 and a phone.
+3. Done 2026-10-30: the room checked by eye at 1280 by 800, 900 by 700, 768 by 1024 and a phone. The tablet lens was fixed at once; U86 (the narrow conversation column at 900 pixels) and V46 (card names pile up on a phone) are briefed.
 
 After that the owner decides the licence and the public release (P4).
 
