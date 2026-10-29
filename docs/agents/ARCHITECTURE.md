@@ -21,6 +21,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-10-V6.md`: history. The audit of the orchestrator and the worktree runs.
 - `AUDIT-2026-10-V7.md`: history. The audit of the ladder, the dock and the harness registry.
 - `AUDIT-2026-10-V8.md`: history. The audit of the folder blocks and the camera hold.
+- `AUDIT-2026-10-V9.md`: history. The audit of the Direct API keys and the orchestrator wake rules, with Q15a and Q15b as its fixes.
 - `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
 - `CHANGELOG.md`: history. One line per change under the version it shipped in.
 - `CONTROL-PLANE.md`: plan. The control plane design from the Paperclip era; parts are replaced by the lane records.
