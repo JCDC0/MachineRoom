@@ -2,7 +2,7 @@
 
 ## Where we are
 
-Version 0.1.398. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
+Version 0.1.401. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
 
 What works:
 
@@ -18,6 +18,9 @@ What works:
 - Reviews and merges from the drawer, including lanes that work in worktrees beside another project.
 - `npm run worktrees` lists the lane worktrees a project leaves and cleans only the clean merged ones.
 - The harness registry: steps H1 to H4 are merged as H5, H6, H7 and H8, so a harness brings a browser descriptor and, when it has sessions, a Node reader. The `acp` harness runs any Agent Client Protocol agent through `scripts/acp-run.mjs`. Hermes stays supported and retired in `lanes.json`; AGY is a supported backend lane and its lanes stay out of the active list unless the owner makes one.
+- The family tree in the Agents tab: Build a team makes 1 to 4 sub orchestrators with 1 to 3 coders each in one step, a row per node with its state and a chat button, and the owner's labels on the chips (U79 to U82, V42). The orchestrators know each other (O18), and when one talks to another the room sends packets between them (O17, V41). Each lane has its line to the orchestrator that leads it (V40).
+- A project starts with no lanes on, and the recent projects list holds only real projects (O19, O20). Tests never write the owner's runs folder (T25).
+- Claude Code and OpenCode lanes and the orchestrator turns get the MCP servers the owner turns on in Settings (H16), and the console's address opens in a new tab (U83).
 - Replays and recordings, and a test suite that is about 40 percent faster than before T1.
 
 What was checked live:
@@ -31,7 +34,8 @@ What was checked live:
 
 Not checked live yet:
 
-- A real sub orchestrator ladder. The routes, the room and the chat are tested, and `?replay&fixture=scenario-i` plays two subs and their lanes, but nobody has attached one to a running room yet.
+- A real sub orchestrator at work. On 2026-10-29 Build a team attached two subs to a live bridge on the test project, and the room drew them, their lines, the chips, the Team tab and the labels, but no sub has run a turn, dispatched a lane or reported back yet.
+- A lane using an MCP server, a browser one above all. H16 passes the servers, and none has been added yet.
 - The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
 - The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
 - A real ACP agent. The harness is tested on recorded `opencode acp` updates and a fake agent, and no lane uses it yet.
@@ -41,10 +45,11 @@ Not checked live yet:
 
 In order:
 
-1. Q12h, the last of the version 7 audit fixes.
-2. The room checked by eye at 1280 by 800, 900 by 700, 768 by 1024 and a phone, with V23's sector labels, V24's narrow layout, V25's grouped agent list and V26's single sector names now in.
+1. The gaps the live check of the family tree found: V44 (a sector lights while its team works), V45 (a sub's chip does not cover the hub), O21 (the main orchestrator lists only the lanes it leads) and U84 (the sidebar has room for the family tree).
+2. A real team on the test project: two subs with one OpenCode lane each, one task through the main orchestrator, watched for orders, dispatches, reports and wakes in the room.
+3. The room checked by eye at 1280 by 800, 900 by 700, 768 by 1024 and a phone.
 
-After that the owner decides the licence and the public release.
+After that the owner decides the licence and the public release (P4).
 
 ## History: the plan from 0.1.37
 
