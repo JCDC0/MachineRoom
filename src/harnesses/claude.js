@@ -43,8 +43,9 @@ export const claudeHarness = {
   name: 'Claude Code',
   adapterType: 'claude_local',
   createParser: createClaudeParser,
-  command({ cli, prompt, env = {}, folder, sessionId } = {}) {
+  command({ cli, prompt, env = {}, folder, sessionId, mcpConfig } = {}) {
     const args = ['-p', prompt, '--output-format', 'stream-json', '--verbose', '--model', cli.model, '--dangerously-skip-permissions']
+    if (typeof mcpConfig === 'string' && mcpConfig.trim() !== '') args.push('--mcp-config', mcpConfig.trim())
     if (typeof sessionId === 'string' && sessionId !== '') args.push('--session-id', sessionId)
     return { file: expandBin(cli.bin, env), args, cwd: folder }
   },

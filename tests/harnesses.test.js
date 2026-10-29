@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { AGENT_ORDER, HARNESSES, OWNER_ORDER, harnessByAdapter, harnessByKey } from '../src/harnesses/index.js'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { createRunLineReader } from '../src/briefs/recording.js'
+import { mcpConfigForClaude, mcpConfigForOpencode } from '../src/briefs/run.js'
 import { createParser } from '../src/model/parsers/index.js'
 
 const ctx = { rootName: '', files: [], dirs: [] }
@@ -220,5 +221,63 @@ describe('harness reports and usage', () => {
 
   it('gives an empty report for an empty log', () => {
     for (const harness of HARNESSES) expect(harness.report('')).toEqual([])
+  })
+})
+
+describe('harness MCP configuration', () => {
+  it('builds Claude command with and without mcpConfig', () => {
+    const cli = { bin: 'claude', model: 'opus' }
+    const withoutConfig = harnessByKey.claude.command({ cli, prompt: 'Fix it.', folder: 'C:\\work' })
+    expect(withoutConfig.args).not.toContain('--mcp-config')
+    expect(withoutConfig.args).not.toContain('--strict-mcp-config')
+
+    const withConfig = harnessByKey.claude.command({ cli, prompt: 'Fix it.', folder: 'C:\\work', mcpConfig: 'C:\\runs\\lane.mcp.json' })
+    expect(withConfig.args).toContain('--mcp-config')
+    expect(withConfig.args).toContain('C:\\runs\\lane.mcp.json')
+    expect(withConfig.args).not.toContain('--strict-mcp-config')
+  })
+
+  it('builds OpenCode command with and without mcpConfig', () => {
+    const cli = { bin: 'opencode', model: 'flash' }
+    const withoutConfig = harnessByKey.opencode.command({ cli, prompt: 'Fix it.', folder: 'C:\\work', title: 't1' })
+    expect(withoutConfig.env).toBeUndefined()
+
+    const withConfig = harnessByKey.opencode.command({ cli, prompt: 'Fix it.', folder: 'C:\\work', title: 't1', mcpConfig: 'C:\\runs\\lane.mcp.json' })
+    expect(withConfig.env).toEqual({ OPENCODE_CONFIG: 'C:\\runs\\lane.mcp.json' })
+  })
+
+  it('shapes MCP config files for stdio and http servers', () => {
+    const servers = [
+      { name: 'local_tool', transport: 'stdio', command: 'node', args: ['server.js', '--port', '8080'], env: { TOKEN: 'secret' } },
+      { name: 'remote_tool', transport: 'http', url: 'https://example.com/mcp' },
+    ]
+    expect(mcpConfigForClaude(servers)).toEqual({
+      mcpServers: {
+        local_tool: {
+          command: 'node',
+          args: ['server.js', '--port', '8080'],
+          env: { TOKEN: 'secret' },
+        },
+        remote_tool: {
+          type: 'http',
+          url: 'https://example.com/mcp',
+        },
+      },
+    })
+    expect(mcpConfigForOpencode(servers)).toEqual({
+      mcp: {
+        local_tool: {
+          type: 'local',
+          command: ['node', 'server.js', '--port', '8080'],
+          environment: { TOKEN: 'secret' },
+          enabled: true,
+        },
+        remote_tool: {
+          type: 'remote',
+          url: 'https://example.com/mcp',
+          enabled: true,
+        },
+      },
+    })
   })
 })

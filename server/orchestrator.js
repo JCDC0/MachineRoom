@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
-import { childEnvironment, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
+import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
 import { modelAllowed } from './harness-models.js'
@@ -212,6 +212,16 @@ function fallbackPrompt(projectRoot, runsFolder) {
     "Read the project's agent guide before you plan, split the work into tasks for the lane runner, and check each branch before you merge it.",
     `Never push, never print a key, and keep your task files in ${runsFolder}.`,
   ].join(' ')
+}
+
+function enabledMcpServersFor(runsFolder) {
+  let parsed
+  try {
+    parsed = JSON.parse(readFileSync(join(runsFolder, 'mcp.json'), 'utf8'))
+  } catch {
+    return []
+  }
+  return normalizeMcpServers(parsed).filter((entry) => entry.enabled)
 }
 
 function instructionFor(file, projectRoot, runsFolder, bridgeUrl, token = '') {
@@ -743,13 +753,30 @@ export function createOrchestrator({
     const logName = `${logPrefix}-chat-${stamp(startedAt)}`
     const logPath = join(folder, `${logName}.log`)
     const metaPath = join(folder, `${logName}.meta.json`)
-    const turn = { startedAt, logPath, metaPath, killed: false, done: false, child: null, timer: null, compacting: compaction }
+    const enabledServers = enabledMcpServersFor(folder)
+    const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
+    const mcpConfigPath = needsMcp ? join(folder, `${logName}.mcp.json`) : ''
+    let mcpEnv = null
+    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction }
     running = turn
     setState('working')
     try {
       mkdirSync(folder, { recursive: true })
       writeFileSync(metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
+      if (needsMcp) {
+        if (harness === 'claude') {
+          writeFileSync(mcpConfigPath, `${JSON.stringify(mcpConfigForClaude(enabledServers), null, 2)}\n`, { mode: 0o600 })
+        } else if (harness === 'opencode') {
+          writeFileSync(mcpConfigPath, `${JSON.stringify(mcpConfigForOpencode(enabledServers), null, 2)}\n`, { mode: 0o600 })
+          mcpEnv = { OPENCODE_CONFIG: mcpConfigPath }
+        }
+      }
     } catch {
+      if (mcpConfigPath) {
+        try {
+          rmSync(mcpConfigPath, { force: true })
+        } catch {}
+      }
       running = null
       addMessage('orchestrator', STOPPED_REPLY)
       setState('idle')
@@ -787,6 +814,7 @@ export function createOrchestrator({
         '--append-system-prompt',
         instruction,
       ]
+      if (mcpConfigPath) args.push('--mcp-config', mcpConfigPath)
       if (effort) args.push('--effort', effort)
     } else {
       const descriptor = (harnesses && harnesses[harness]) || harnessByKey[harness]
@@ -824,9 +852,13 @@ export function createOrchestrator({
         folder: root,
         cwd: root,
         title: logName,
+        mcpConfig: mcpConfigPath,
       })
       program = cmd.file
       args = cmd.args
+      if (cmd?.env && typeof cmd.env === 'object') {
+        mcpEnv = { ...(mcpEnv || {}), ...cmd.env }
+      }
     }
     const stream = createWriteStream(logPath)
     stream.on('error', () => {})
@@ -846,7 +878,7 @@ export function createOrchestrator({
       child = spawnChild(spawnChild === spawn ? programFor(program) : program, args, {
         cwd: root,
         shell: false,
-        env: childEnvironment(process.env, root),
+        env: childEnvironment(process.env, root, { harness, extra: mcpEnv }),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       })
@@ -865,6 +897,11 @@ export function createOrchestrator({
     if (turn.done) return
     turn.done = true
     if (turn.timer) clearTimeout(turn.timer)
+    if (turn.mcpConfigPath) {
+      try {
+        rmSync(turn.mcpConfigPath, { force: true })
+      } catch {}
+    }
     const logText = readText(turn.logPath)
     let runStats
     let report

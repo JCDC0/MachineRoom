@@ -166,7 +166,11 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
   const behaviour = { mode }
   const spawned = []
   const spawnFake = (file, args, options) => {
-    spawned.push({ file, args: [...args], shell: options.shell, cwd: options.cwd })
+    const mcpArg = args.indexOf('--mcp-config')
+    const mcpPath = mcpArg !== -1 ? args[mcpArg + 1] : (options.env?.OPENCODE_CONFIG || '')
+    const mcpExistedDuringTurn = mcpPath ? existsSync(mcpPath) : false
+    const mcpContentDuringTurn = mcpExistedDuringTurn ? readFileSync(mcpPath, 'utf8') : null
+    spawned.push({ file, args: [...args], shell: options.shell, cwd: options.cwd, env: options.env, mcpPath, mcpExistedDuringTurn, mcpContentDuringTurn })
     const env = {
       ...(options.env ?? process.env),
       MR_CALLS: callsFile,
@@ -441,6 +445,79 @@ describe('one orchestrator turn', () => {
     expect(instruction).toContain('Never push')
     expect(instruction).toContain(`Send the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token}`)
     expect(instruction.split(/\.\s+/)).toHaveLength(4)
+  })
+
+  it('passes enabled MCP servers to Claude turns and removes the config file when the turn ends', async () => {
+    const rig = makeRig()
+    writeFileSync(join(rig.runs, 'mcp.json'), JSON.stringify({
+      servers: [
+        { name: 'browser', transport: 'http', url: 'https://example.com/mcp', enabled: true },
+        { name: 'db', transport: 'stdio', command: 'node', args: ['db.js'], env: { SECRET_KEY: 'topsecret' }, enabled: true },
+        { name: 'disabled_srv', transport: 'stdio', command: 'node', enabled: false },
+      ],
+    }))
+
+    rig.send('Use MCP')
+    await waitIdle(rig, 1)
+
+    const call = rig.calls()[0]
+    expect(call.args).toContain('--mcp-config')
+    expect(call.args).not.toContain('--strict-mcp-config')
+    const configPath = valueAfter(call.args, '--mcp-config')
+    expect(configPath).toMatch(/\.mcp\.json$/)
+    expect(rig.spawned[0].mcpExistedDuringTurn).toBe(true)
+    expect(JSON.parse(rig.spawned[0].mcpContentDuringTurn)).toEqual({
+      mcpServers: {
+        browser: { type: 'http', url: 'https://example.com/mcp' },
+        db: { command: 'node', args: ['db.js'], env: { SECRET_KEY: 'topsecret' } },
+      },
+    })
+    expect(existsSync(configPath)).toBe(false)
+  })
+
+  it('passes enabled MCP servers to OpenCode turns in env and removes the config file when the turn ends', async () => {
+    const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
+    writeFileSync(join(rig.runs, 'mcp.json'), JSON.stringify({
+      servers: [
+        { name: 'browser', transport: 'http', url: 'https://example.com/mcp', enabled: true },
+        { name: 'db', transport: 'stdio', command: 'node', args: ['db.js'], env: { SECRET_KEY: 'topsecret' }, enabled: true },
+      ],
+    }))
+
+    rig.send('Use OpenCode MCP')
+    await waitIdle(rig, 1)
+
+    const spawnedEnv = rig.spawned[0].env
+    expect(spawnedEnv).toBeDefined()
+    expect(spawnedEnv.OPENCODE_CONFIG).toBeDefined()
+    const configPath = spawnedEnv.OPENCODE_CONFIG
+    expect(configPath).toMatch(/\.mcp\.json$/)
+    expect(rig.spawned[0].mcpExistedDuringTurn).toBe(true)
+    expect(JSON.parse(rig.spawned[0].mcpContentDuringTurn)).toEqual({
+      mcp: {
+        browser: { type: 'remote', url: 'https://example.com/mcp', enabled: true },
+        db: { type: 'local', command: ['node', 'db.js'], environment: { SECRET_KEY: 'topsecret' }, enabled: true },
+      },
+    })
+    expect(existsSync(configPath)).toBe(false)
+  })
+
+  it('writes no MCP config when no servers are enabled', async () => {
+    const rig = makeRig()
+    writeFileSync(join(rig.runs, 'mcp.json'), JSON.stringify({
+      servers: [
+        { name: 'disabled_srv', transport: 'stdio', command: 'node', enabled: false },
+      ],
+    }))
+
+    rig.send('No MCP')
+    await waitIdle(rig, 1)
+
+    const call = rig.calls()[0]
+    expect(call.args).not.toContain('--mcp-config')
+    const spawnedEnv = rig.spawned[0].env
+    expect(spawnedEnv?.OPENCODE_CONFIG).toBeUndefined()
+    expect(rig.spawned[0].mcpExistedDuringTurn).toBe(false)
   })
 })
 

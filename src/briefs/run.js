@@ -25,7 +25,7 @@ export function unattendedPrompt(prompt) {
   return `${prompt}\n\n${UNATTENDED_NOTE}`
 }
 
-export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sessionId } = {}) {
+export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sessionId, mcpConfig } = {}) {
   if (!lane || typeof lane !== 'object') throw new Error('There is no lane to run.')
   const cli = lane.cli
   if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
@@ -33,7 +33,7 @@ export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sess
   if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The runner does not know the ${harness} command line.`)
   const folder = typeof cwd === 'string' && cwd.trim() !== '' ? cwd : lane.worktree
   if (typeof folder !== 'string' || folder.trim() === '') throw new Error(`The lane ${lane.name ?? 'this one'} has no worktree, so the runner cannot start it.`)
-  const command = harnessByKey[harness].command({ cli, prompt, env, usageFile, title, folder, reasoning: lane.reasoning, sessionId })
+  const command = harnessByKey[harness].command({ cli, prompt, env, usageFile, title, folder, reasoning: lane.reasoning, sessionId, mcpConfig })
   const endpoint = typeof cli.endpoint === 'string' ? cli.endpoint.trim() : ''
   if (harness !== 'machineroom' || endpoint === '') return command
   const args = [...command.args]
@@ -494,7 +494,7 @@ export function harnessKeyNames(harness) {
   return Object.hasOwn(HARNESS_KEY_NAMES, key) ? HARNESS_KEY_NAMES[key] : []
 }
 
-export function childEnvironment(env, cwd, { harness = '', names = [] } = {}) {
+export function childEnvironment(env, cwd, { harness = '', names = [], extra = {} } = {}) {
   const allowed = new Set(LANE_ENV_SET)
   for (const name of harnessKeyNames(harness)) allowed.add(name.toLowerCase())
   for (const name of Array.isArray(names) ? names : []) {
@@ -507,8 +507,95 @@ export function childEnvironment(env, cwd, { harness = '', names = [] } = {}) {
     if (typeof value !== 'string') continue
     next[name] = value
   }
+  if (extra && typeof extra === 'object' && !Array.isArray(extra)) {
+    for (const [name, value] of Object.entries(extra)) {
+      if (typeof value === 'string') next[name] = value
+    }
+  }
   if (typeof cwd === 'string' && cwd.trim() !== '') next.PWD = cwd
   return next
+}
+
+function stringMap(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const out = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (typeof item === 'string') out[key] = item
+  }
+  return out
+}
+
+export function normalizeServer(entry) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
+  const name = typeof entry.name === 'string' ? entry.name.trim() : ''
+  if (name === '') return null
+  const command = typeof entry.command === 'string' ? entry.command.trim() : ''
+  const url = typeof entry.url === 'string' ? entry.url.trim() : ''
+  const transport = entry.transport === 'http' || (entry.transport !== 'stdio' && url !== '' && command === '') ? 'http' : 'stdio'
+  const enabled = entry.enabled !== false
+  if (transport === 'http') {
+    if (!/^https?:\/\//i.test(url)) return null
+    return { name, transport, url, enabled }
+  }
+  if (command === '') return null
+  return {
+    name,
+    transport,
+    command,
+    args: Array.isArray(entry.args) ? entry.args.map((item) => String(item)) : [],
+    env: stringMap(entry.env),
+    enabled,
+  }
+}
+
+export function normalizeMcpServers(parsed) {
+  const raw = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(parsed?.servers)
+      ? parsed.servers
+      : Array.isArray(parsed?.mcpServers)
+        ? parsed.mcpServers
+        : parsed?.mcpServers && typeof parsed.mcpServers === 'object'
+          ? Object.entries(parsed.mcpServers).map(([name, value]) => ({ name, ...value }))
+          : []
+  return raw.map(normalizeServer).filter(Boolean)
+}
+
+export function mcpConfigForClaude(servers) {
+  const mcpServers = {}
+  for (const raw of Array.isArray(servers) ? servers : []) {
+    const entry = normalizeServer(raw)
+    if (!entry) continue
+    if (entry.transport === 'http') {
+      mcpServers[entry.name] = { type: 'http', url: entry.url }
+    } else {
+      mcpServers[entry.name] = {
+        command: entry.command,
+        args: entry.args,
+        env: entry.env,
+      }
+    }
+  }
+  return { mcpServers }
+}
+
+export function mcpConfigForOpencode(servers) {
+  const mcp = {}
+  for (const raw of Array.isArray(servers) ? servers : []) {
+    const entry = normalizeServer(raw)
+    if (!entry) continue
+    if (entry.transport === 'http') {
+      mcp[entry.name] = { type: 'remote', url: entry.url, enabled: true }
+    } else {
+      mcp[entry.name] = {
+        type: 'local',
+        command: [entry.command, ...entry.args],
+        environment: entry.env,
+        enabled: true,
+      }
+    }
+  }
+  return { mcp }
 }
 
 export function createLaneLog({ write, runId = 'lane', holdMs } = {}) {
