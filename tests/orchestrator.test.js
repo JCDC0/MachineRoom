@@ -867,6 +867,27 @@ describe('autocompact', () => {
 })
 
 describe('waking the orchestrator', () => {
+  it('wakes a sub with no goal yet for a run credited to it by name, and not the main for an unnamed run', async () => {
+    const write = (rig, name, startedBy) => {
+      const log = join(rig.runs, `${name}.log`)
+      writeFileSync(log, 'a log\n')
+      appendFileSync(
+        join(rig.runs, 'runs.jsonl'),
+        `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-29T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log, ...(startedBy ? { startedBy } : {}) })}\n`
+      )
+    }
+    const sub = makeRig({ id: 'team-1' })
+    write(sub, 'opencode7-queue-20261029-120000-1', 'team-1')
+    sub.orchestrator.onFrame(frame('run-opencode7-queue-20261029-120000-1', 'succeeded'))
+    await waitFor(() => sub.calls().length === 1, 15000, 'the sub turn to start')
+
+    const main = makeRig()
+    write(main, 'opencode7-queue-20261029-120001-1', '')
+    main.orchestrator.onFrame(frame('run-opencode7-queue-20261029-120001-1', 'succeeded'))
+    await sleep(300)
+    expect(main.calls()).toHaveLength(0)
+  })
+
   it('adds a room message with the run record and starts a turn', async () => {
     const rig = makeRig()
     rig.send('Hello')

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A lane run whose record names an orchestrator in `startedBy` wakes that orchestrator even before it has a goal, so a sub whose lane the main started (O24) still reviews and merges it; a run with no `startedBy` still waits for an orchestrator that has been given work. Found in the Direct API team test, where both subs stayed silent after their lanes committed.
+
 - An orchestrator turn passes `MACHINEROOM_RUNS` with its own runs folder to its child, since `childEnvironment` drops it, so a Direct API turn finds the endpoints and keys of a room whose runs folder is not the default one.
 
 - `scripts/mr-agent.mjs` uses the saved endpoint its model id names (`NAME/MODEL`) when no `--endpoint` is given, so an orchestrator turn on the Direct API reaches its endpoint and key; the first Direct API team turn stopped at once with `exit 1` because only lane runs passed `--endpoint`.

@@ -445,6 +445,7 @@ export function createOrchestrator({
   const roomTurns = []
   let ladder = null
   let sessionId = null
+  let ownsRun = false
   let tokenSent = false
   let state = 'idle'
   let running = null
@@ -757,7 +758,7 @@ export function createOrchestrator({
   }
 
   function givenWork() {
-    if (sessionId) return true
+    if (sessionId || ownsRun) return true
     return messages.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
   }
 
@@ -1420,7 +1421,9 @@ export function createOrchestrator({
     if (!record && laneKey.startsWith('sub-')) return
     const startedBy = typeof record?.startedBy === 'string' && record.startedBy ? record.startedBy : ORCHESTRATOR_KEY
     if (startedBy !== key) return
-    if (!givenWork() || state === 'paused') return
+    const named = typeof record?.startedBy === 'string' && record.startedBy === key
+    if ((!named && !givenWork()) || state === 'paused') return
+    if (named) ownsRun = true
     try {
       onMessage({ from: laneKey, to: key, kind: 'wake' })
     } catch {}
