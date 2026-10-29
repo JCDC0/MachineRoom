@@ -20,6 +20,8 @@ import {
   AUTOCOMPACT_PERCENT_PROBLEM,
   AUTOCOMPACT_TOKENS_PROBLEM,
   AUTOCOMPACT_RULES_PROBLEM,
+  NO_NEW_REPORT,
+  NO_REPORT,
   RESTART_MESSAGE,
 } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
@@ -70,7 +72,7 @@ const FAKE_CLAUDE = [
   '  }',
   '}',
   "const keyReply = 'I read OPENROUTER_API_KEY=' + 'sk-or-v1-' + 'q'.repeat(24) + ' in the file.'",
-  "const reply = mode === 'empty' ? '' : mode === 'fail' ? 'You have hit your session limit.' : mode === 'key' ? keyReply : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "const reply = mode === 'empty' ? '' : mode === 'no_report' ? 'NO_REPORT' : mode === 'fail' ? 'You have hit your session limit.' : mode === 'key' ? keyReply : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "const input = Number(process.env.MR_INPUT ?? 12)",
   "const cacheRead = Number(process.env.MR_CACHE_READ ?? 0)",
   "const cacheWrite = Number(process.env.MR_CACHE_WRITE ?? 0)",
@@ -99,7 +101,7 @@ const FAKE_OPENCODE = [
   '  }',
   '}',
   "console.log(JSON.stringify({ type: 'text', timestamp: 3, sessionID: sessionId, part: { type: 'text', text: 'Working.' } }))",
-  "const reply = mode === 'fail' ? '' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "const reply = mode === 'fail' ? '' : mode === 'no_report' ? 'NO_REPORT' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "console.log(JSON.stringify({ type: 'text', timestamp: 4, sessionID: sessionId, part: { type: 'text', text: reply } }))",
   "const input = Number(process.env.MR_INPUT ?? 12)",
   "const cacheRead = Number(process.env.MR_CACHE_READ ?? 0)",
@@ -450,6 +452,16 @@ describe('one orchestrator turn', () => {
     rig.send('Fail now')
     await waitIdle(rig, 2)
     expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: You have hit your session limit.')
+  })
+
+  it('shows "No new report." and starts nothing when the reply is NO_REPORT', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'no_report'
+    rig.send('Any work left')
+    await waitIdle(rig, 1)
+    expect(rig.answer().messages.at(-1).text).toBe(NO_NEW_REPORT)
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer().state).toBe('idle')
   })
 
   it('shows the quota error message for a failed OpenCode turn', async () => {

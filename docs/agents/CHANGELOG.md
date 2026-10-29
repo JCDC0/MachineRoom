@@ -4,6 +4,8 @@
 
 - OpenCode lane runs and orchestrator turns pass `--standalone` so their private server stops with the process tree when killed (task H18).
 
+- A sub or main orchestrator reply of NO_REPORT shows in its chat as No new report., and a sub reply skips posting to the parent and waking it (task O26).
+
 - Below 1100 pixels the lower half's right column narrows to `clamp(200px, calc(40vw - 160px), 280px)`, from 200 pixels at 900 to 280 at 1100, while the sidebar keeps its U84 width, so the conversation keeps its room (task U86).
 
 - At 900 pixels and wider a log line moves a file path to its own line before it breaks it, breaks a longer path after a `/` (a `<wbr>` after each slash in `EventLogBody`), and the agent column fits `CLAUDE CODE`, so a file name and an agent name stay whole (task U86).

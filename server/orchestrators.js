@@ -15,6 +15,8 @@ import {
   DEFAULT_AUTOCOMPACT_VALUE,
   DEFAULT_CONTEXT_WINDOW,
   MESSAGE_PROBLEM,
+  NO_NEW_REPORT,
+  NO_REPORT,
   ORCHESTRATOR_KEY,
   ORCHESTRATOR_MESSAGE_LIMIT,
 } from './orchestrator.js'
@@ -294,6 +296,8 @@ export function createOrchestrators({
       onReply: (text) => {
         if (stopped) return
         if (!instances.has(config.id)) return
+        const trimmed = typeof text === 'string' ? text.trim() : ''
+        if (trimmed === NO_REPORT || trimmed === NO_NEW_REPORT) return
         const parent = instances.get(ORCHESTRATOR_KEY)
         if (!parent) return
         const delivered = parent.deliver(`sub:${config.id}`, text)
