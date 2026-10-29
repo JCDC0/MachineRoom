@@ -153,7 +153,11 @@ const FAKE_AGENT_SCRIPT = [
   "if (calls) appendFileSync(calls, JSON.stringify({ pid: process.pid, args, cwd: process.cwd() }) + '\\n')",
   "const at = args.indexOf('--prompt')",
   "const prompt = at === -1 ? '' : String(args[at + 1] ?? '')",
-  "console.log('Fake reply for: ' + prompt.slice(-40).split('\\n').join(' '))",
+  "const stderrLine = String(process.env.MR_STDERR ?? '')",
+  "if (stderrLine) process.stderr.write(stderrLine + '\\n')",
+  "if (String(process.env.MR_MODE ?? 'reply') !== 'quiet') console.log('Fake reply for: ' + prompt.slice(-40).split('\\n').join(' '))",
+  "const exitCode = Number(process.env.MR_EXIT ?? 0)",
+  'if (exitCode !== 0) process.exitCode = exitCode',
 ].join('\n')
 
 function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined } = {}) {
@@ -171,7 +175,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
   if (prompt !== null) writeFileSync(promptFile, prompt)
   const callsFile = join(base, 'calls.jsonl')
   const releaseFile = join(base, 'release')
-  const behaviour = { mode }
+  const behaviour = { mode, stderr: '', exit: 0 }
   const spawned = []
   const spawnFake = (file, args, options) => {
     const mcpArg = args.indexOf('--mcp-config')
@@ -187,6 +191,8 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
       MR_INPUT: String(behaviour.input ?? 12),
       MR_CACHE_READ: String(behaviour.cacheRead ?? 0),
       MR_CACHE_WRITE: String(behaviour.cacheWrite ?? 0),
+      MR_STDERR: String(behaviour.stderr ?? ''),
+      MR_EXIT: String(behaviour.exit ?? 0),
     }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
@@ -1817,6 +1823,30 @@ describe('the lane source and the orchestrator turn', () => {
   })
 
   describe('a fresh turn through a fake harness', () => {
+    const silentHarness = {
+      key: 'fake',
+      name: 'Fake',
+      command({ cli, prompt }) {
+        return { file: cli.bin, args: ['--prompt', prompt], cwd: process.cwd() }
+      },
+      createParser() {
+        return { push() { return [] }, flush() { return [] } }
+      },
+    }
+
+    function makeNoReplyRig(stderr = '', exit = 1) {
+      const rig = makeRig({
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: silentHarness },
+        lanes: { orchestrator: { name: 'Orchestrator', harness: 'Fake', cli: { harness: 'fake', bin: process.execPath, model: 'fake-model' } } },
+      })
+      rig.behaviour.mode = 'quiet'
+      rig.behaviour.stderr = stderr
+      rig.behaviour.exit = exit
+      return rig
+    }
+
     it('gives the turn the room runs folder', async () => {
       const rig = makeRig({ project: true })
       rig.send('Hello')
@@ -1912,6 +1942,27 @@ describe('the lane source and the orchestrator turn', () => {
       expect(secondPrompt).toContain('Second question')
       expect(rig.calls()[1].args).not.toContain('--resume')
       expect(rig.calls()[1].args).not.toContain('--session')
+    })
+
+    it('says the last stderr line of a failed turn with no reply', async () => {
+      const rig = makeNoReplyRig('A warning line.\nThe endpoint TestRun1 was not found.\n\n', 1)
+      rig.send('Build the room')
+      await waitIdle(rig, 1)
+      expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: The endpoint TestRun1 was not found.')
+    })
+
+    it('masks a key in the last stderr line of a failed turn', async () => {
+      const rig = makeNoReplyRig(`The key sk-or-v1-${'q'.repeat(24)} was rejected.`, 1)
+      rig.send('Build the room')
+      await waitIdle(rig, 1)
+      expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: The key [key] was rejected.')
+    })
+
+    it('still says exit 1 when a failed turn wrote nothing to stderr', async () => {
+      const rig = makeNoReplyRig('', 1)
+      rig.send('Build the room')
+      await waitIdle(rig, 1)
+      expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: exit 1.')
     })
   })
 })

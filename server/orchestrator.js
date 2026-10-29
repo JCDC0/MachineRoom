@@ -80,6 +80,7 @@ const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const PROMPT_FILE = join(REPO_ROOT, 'docs', 'agents', 'ORCHESTRATOR-AGENT.md')
 const PROMPT_LIMIT = 20000
 const RECORD_COMMITS = 10
+const TURN_STDERR_LIMIT = 4 * 1024
 const TURN_LOG = /-chat-\d{8}-\d{6}-\d{3}\.log$/i
 const DEFAULT_LANE = { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } }
 const DEFAULT_OPENCODE_MODEL = 'opencode/deepseek-v4.1-flash-free'
@@ -121,6 +122,21 @@ function cleanFailure(raw) {
   const safe = maskKeys(raw).text.trim()
   if (!safe) return null
   return safe.length > 300 ? safe.slice(0, 300) : safe
+}
+
+function lastStderrLine(text) {
+  const lines = String(text ?? '').split(/\r?\n/)
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index].trim()
+    if (line) return line
+  }
+  return ''
+}
+
+function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage }) {
+  const reason = (!killed && report) || failureMessage || stderrMessage
+  if (reason) return `The orchestrator stopped: ${reason}`
+  return Number.isInteger(code) ? `The orchestrator stopped: exit ${code}.` : STOPPED_REPLY
 }
 
 export function projectHash(projectRoot) {
@@ -782,7 +798,7 @@ export function createOrchestrator({
     const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
     const mcpConfigPath = needsMcp ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
-    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction }
+    const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction, stderr: '' }
     running = turn
     setState('working')
     try {
@@ -917,7 +933,13 @@ export function createOrchestrator({
     }
     turn.child = child
     child.stdout?.pipe(stream, { end: false })
-    child.stderr?.on('data', () => {})
+    let stderrTail = Buffer.alloc(0)
+    child.stderr?.on('data', (chunk) => {
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8')
+      const tail = Buffer.concat([stderrTail, bytes])
+      stderrTail = Buffer.from(tail.subarray(-TURN_STDERR_LIMIT))
+      turn.stderr = stderrTail.toString('utf8')
+    })
     child.once('error', (error) => finish(null, error))
     child.once('close', (code) => finish(code, null))
   }
@@ -976,17 +998,10 @@ export function createOrchestrator({
     }
     const failureRaw = descriptor?.failure ? descriptor.failure(logText) : null
     const failureMessage = cleanFailure(failureRaw)
+    const stderrMessage = report ? null : cleanFailure(lastStderrLine(turn.stderr))
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const text = failed
-      ? Number.isInteger(code)
-        ? report && !turn.killed
-          ? `The orchestrator stopped: ${report}`
-          : failureMessage
-            ? `The orchestrator stopped: ${failureMessage}`
-            : `The orchestrator stopped: exit ${code}.`
-        : failureMessage
-          ? `The orchestrator stopped: ${failureMessage}`
-          : STOPPED_REPLY
+      ? stoppedTurnText({ code, report, killed: turn.killed, failureMessage, stderrMessage })
       : report || EMPTY_REPLY
     const record = runRecord({
       lane: logPrefix,

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A failed orchestrator turn with no reply now says `The orchestrator stopped: LINE` with the last non-empty line of the turn's stderr when the harness error finds none, masked with `maskKeys` and cut to 300 characters, instead of only `exit N`; the last 4 KB of stderr stay in memory and nothing more is stored, so a Direct API turn that could not reach its endpoint names it (O25).
+
 - A lane run whose record names an orchestrator in `startedBy` wakes that orchestrator even before it has a goal, so a sub whose lane the main started (O24) still reviews and merges it; a run with no `startedBy` still waits for an orchestrator that has been given work. Found in the Direct API team test, where both subs stayed silent after their lanes committed.
 
 - An orchestrator turn passes `MACHINEROOM_RUNS` with its own runs folder to its child, since `childEnvironment` drops it, so a Direct API turn finds the endpoints and keys of a room whose runs folder is not the default one.
