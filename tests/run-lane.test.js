@@ -1538,7 +1538,15 @@ describe('the record of a project run on a git project', { timeout: 30000 }, () 
     return {
       project,
       runs,
-      env: { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanesFile },
+      env: {
+        TEMP: base,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanesFile,
+        GIT_AUTHOR_NAME: 'MachineRoom Test',
+        GIT_AUTHOR_EMAIL: 'test@example.invalid',
+        GIT_COMMITTER_NAME: 'MachineRoom Test',
+        GIT_COMMITTER_EMAIL: 'test@example.invalid',
+      },
     }
   }
 
