@@ -6,6 +6,8 @@
 
 - The main orchestrator's and each sub's terminal chip sits on the side away from the hub centre on screen, with a small dead band, while lanes keep their side (task V45).
 
+- The lower half gives the sidebar `clamp(280px, 22vw, 340px)`, so a family tree label has its own first line above the state word and `harness · model · effort` (task U84).
+
 - The cyan console above an agent shows its address as a link in its label that opens in a new tab and leaves the agent unselected, and the dock offers `Open ADDRESS` when the console has one (task U83).
 
 - Enabled MCP servers pass to Claude Code and OpenCode lane runs and orchestrator turns through temporary config files (task H16).
