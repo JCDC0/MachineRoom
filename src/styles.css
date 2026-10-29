@@ -7518,6 +7518,24 @@ body:has(#hud-orchestrator-chat) .waiting {
   }
 }
 
+@media (min-width: 900px) {
+  .log-agent {
+    width: calc(var(--space) * 12);
+  }
+
+  .log-text {
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+}
+
+@media (min-width: 900px) and (max-width: 1099px) {
+  .hud-lower,
+  .hud-lower.has-drawer {
+    grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) clamp(200px, calc(40vw - 160px), 280px);
+  }
+}
+
 /* The sidebar inside the lower half */
 .hud-lower-left .mr-side {
   width: 100%;
