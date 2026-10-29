@@ -3,6 +3,7 @@ import { exec } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
+import { keyFromFile } from '../server/family.js'
 import { SEARCH_OFF, fetchPage, readSearchChoice, searchWeb } from '../server/search.js'
 import { childEnvironment } from '../src/briefs/run.js'
 import { callMcpTool, listAllMcpTools, mcpResultText, mcpRunsDir } from './mcp-bridge.mjs'
@@ -208,40 +209,7 @@ function readEndpoint(runsFolder, name) {
   return list.find((entry) => entry && entry.name === name) ?? null
 }
 
-function keyFromFile(runsFolder, name) {
-  let parsed
-  try {
-    parsed = JSON.parse(readFileSync(join(runsFolder, 'keys.json'), 'utf8'))
-  } catch {
-    return ''
-  }
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    if (Object.hasOwn(parsed, name) && typeof parsed[name] === 'string') return parsed[name]
-    const map = parsed.keys
-    if (map && typeof map === 'object' && !Array.isArray(map) && Object.hasOwn(map, name) && typeof map[name] === 'string') return map[name]
-  }
-  const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.keys) ? parsed.keys : []
-  for (const entry of list) {
-    if (entry && entry.name === name && typeof entry.value === 'string') return entry.value
-  }
-  return ''
-}
-
 async function keyForSlot(runsFolder, name) {
-  let family = null
-  try {
-    family = await import('../server/family.js')
-  } catch {
-    family = null
-  }
-  if (family && typeof family.readKey === 'function') {
-    try {
-      const value = await family.readKey(runsFolder, name)
-      return typeof value === 'string' ? value : ''
-    } catch {
-      return ''
-    }
-  }
   return keyFromFile(runsFolder, name)
 }
 

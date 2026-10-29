@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Endpoints lock preset providers to their base URL, quick endpoints repoint when their key slot is shared, and family readKeys reads both map and list shapes through a shared key reader (task Q15a).
+
 - OpenCode lane runs and orchestrator turns pass `--standalone` so their private server stops with the process tree when killed (task H18).
 
 - A sub or main orchestrator reply of NO_REPORT shows in its chat as No new report., and a sub reply skips posting to the parent and waking it (task O26).

@@ -1,5 +1,8 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { keyFromFile, writeKey } from './family.js'
+
+export { keyFromFile }
 
 export const MAX_ENDPOINTS = 20
 export const MAX_ENDPOINT_MODELS = 1000
@@ -76,9 +79,17 @@ export function endpointProblem(draft) {
   const name = typeof draft.name === 'string' ? draft.name.trim() : ''
   if (!ENDPOINT_NAME_PATTERN.test(name)) return NAME_PROBLEM
   const provider = typeof draft.provider === 'string' ? draft.provider.trim() : ''
-  if (!PROVIDERS.some((item) => item.name === provider)) return PROVIDER_PROBLEM
+  const preset = PROVIDERS.find((item) => item.name === provider)
+  if (!preset) return PROVIDER_PROBLEM
   const parsed = parseBaseUrl(draft.baseUrl)
   if (parsed.problem) return parsed.problem
+  if (preset.name !== 'Custom') {
+    const normalized = parsed.url.toString().replace(/\/+$/, '')
+    const presetBase = preset.baseUrl.replace(/\/+$/, '')
+    if (normalized !== presetBase) {
+      return `The ${preset.name} preset uses its own address. Pick Custom for another one.`
+    }
+  }
   const keyName = typeof draft.keyName === 'string' ? draft.keyName.trim() : ''
   if (keyName !== '' && !ENDPOINT_NAME_PATTERN.test(keyName)) return KEY_NAME_PROBLEM
   if (keyName === '' && !parsed.local) return KEY_REQUIRED_PROBLEM
@@ -99,10 +110,15 @@ export function cleanEndpoint(draft) {
     seen.add(id)
     models.push(id)
   }
+  const provider = draft.provider.trim()
+  const preset = PROVIDERS.find((item) => item.name === provider)
+  const baseUrl = preset && preset.name !== 'Custom'
+    ? preset.baseUrl
+    : parseBaseUrl(draft.baseUrl).url.toString().replace(/\/+$/, '')
   return {
     name: draft.name.trim(),
-    provider: draft.provider.trim(),
-    baseUrl: parseBaseUrl(draft.baseUrl).url.toString().replace(/\/+$/, ''),
+    provider,
+    baseUrl,
     keyName: typeof draft.keyName === 'string' ? draft.keyName.trim() : '',
     models,
   }
@@ -146,57 +162,17 @@ export function resolveEndpoint(runsFolder, name) {
   return readEndpoints(runsFolder).find((entry) => entry.name === wanted) ?? null
 }
 
-function keyFromFile(runsFolder, name) {
-  let parsed
-  try {
-    parsed = JSON.parse(readFileSync(join(runsFolder, 'keys.json'), 'utf8'))
-  } catch {
-    return ''
-  }
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    if (Object.hasOwn(parsed, name) && typeof parsed[name] === 'string') return parsed[name]
-    const map = parsed.keys
-    if (map && typeof map === 'object' && !Array.isArray(map) && Object.hasOwn(map, name) && typeof map[name] === 'string') return map[name]
-  }
-  const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.keys) ? parsed.keys : []
-  for (const entry of list) {
-    if (entry && entry.name === name && typeof entry.value === 'string') return entry.value
-  }
-  return ''
-}
-
 export async function readEndpointKey(runsFolder, keyName) {
   const name = typeof keyName === 'string' ? keyName.trim() : ''
   if (name === '') return ''
-  let family = null
-  try {
-    family = await import('./family.js')
-  } catch {
-    family = null
-  }
-  if (family && typeof family.readKey === 'function') {
-    try {
-      const value = await family.readKey(runsFolder, name)
-      return typeof value === 'string' ? value : ''
-    } catch {
-      return ''
-    }
-  }
   return keyFromFile(runsFolder, name)
 }
 
 export async function writeEndpointKey(runsFolder, keyName, value) {
   const name = typeof keyName === 'string' ? keyName.trim() : ''
   if (name === '') return false
-  let family = null
   try {
-    family = await import('./family.js')
-  } catch {
-    family = null
-  }
-  if (!family || typeof family.writeKey !== 'function') return false
-  try {
-    family.writeKey(runsFolder, name, value)
+    writeKey(runsFolder, name, value)
     return true
   } catch {
     return false
@@ -347,7 +323,15 @@ export function createEndpointsApi(options = {}) {
         return true
       }
       const existing = index === -1 ? null : endpoints[index]
-      const keyName = existing && existing.keyName !== '' ? existing.keyName : name
+      const providerSlot = name
+      let keyName = providerSlot
+      if (existing && typeof existing.keyName === 'string' && existing.keyName.trim() !== '') {
+        const slot = existing.keyName.trim()
+        const isSlotShared = endpoints.some((entry) => entry.name !== existing.name && entry.keyName === slot)
+        if (!isSlotShared) {
+          keyName = slot
+        }
+      }
       const draft = {
         name,
         provider: providerName,

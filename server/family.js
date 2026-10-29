@@ -74,16 +74,42 @@ export function keysFileFor(runsFolder) {
   return join(runsFolder, 'keys.json')
 }
 
+export function parseKeyMap(parsed) {
+  const map = {}
+  if (!parsed) return map
+  if (Array.isArray(parsed)) {
+    for (const entry of parsed) {
+      if (entry && typeof entry.name === 'string' && typeof entry.value === 'string') {
+        map[entry.name] = entry.value
+      }
+    }
+    return map
+  }
+  if (typeof parsed === 'object') {
+    if (Array.isArray(parsed.keys)) {
+      for (const entry of parsed.keys) {
+        if (entry && typeof entry.name === 'string' && typeof entry.value === 'string') {
+          map[entry.name] = entry.value
+        }
+      }
+      return map
+    }
+    const source = parsed.keys && typeof parsed.keys === 'object' && !Array.isArray(parsed.keys) ? parsed.keys : parsed
+    for (const [key, value] of Object.entries(source)) {
+      if (typeof value === 'string') {
+        map[key] = value
+      }
+    }
+  }
+  return map
+}
+
 export function readKeys(runsFolder) {
   const file = keysFileFor(runsFolder)
   try {
     if (!existsSync(file)) return {}
     const text = readFileSync(file, 'utf8')
-    const parsed = JSON.parse(text)
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed.keys && typeof parsed.keys === 'object' ? parsed.keys : parsed
-    }
-    return {}
+    return parseKeyMap(JSON.parse(text))
   } catch {
     return {}
   }
@@ -106,6 +132,12 @@ export function readKey(runsFolder, name) {
   if (!name || typeof name !== 'string') return null
   const keys = readKeys(runsFolder)
   return typeof keys[name] === 'string' ? keys[name] : null
+}
+
+export function keyFromFile(runsFolder, name) {
+  if (!name || typeof name !== 'string') return ''
+  const value = readKey(runsFolder, name)
+  return typeof value === 'string' ? value : ''
 }
 
 export function writeKey(runsFolder, name, value) {
