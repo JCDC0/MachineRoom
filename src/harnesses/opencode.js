@@ -78,7 +78,7 @@ export const opencodeHarness = {
   createParser: createOpencodeParser,
   command({ cli, prompt, env = {}, folder, title, reasoning, mcpConfig } = {}) {
     const model = reasoning ? `${cli.model}#${reasoning}` : cli.model
-    const result = { file: expandBin(cli.bin, env), args: ['run', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: folder }
+    const result = { file: expandBin(cli.bin, env), args: ['run', '--standalone', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: folder }
     if (typeof mcpConfig === 'string' && mcpConfig.trim() !== '') {
       result.env = { OPENCODE_CONFIG: mcpConfig.trim() }
     }

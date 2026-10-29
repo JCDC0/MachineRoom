@@ -268,9 +268,12 @@ describe('harness MCP configuration', () => {
     const cli = { bin: 'opencode', model: 'flash' }
     const withoutConfig = harnessByKey.opencode.command({ cli, prompt: 'Fix it.', folder: 'C:\\work', title: 't1' })
     expect(withoutConfig.env).toBeUndefined()
+    expect(withoutConfig.args).toContain('--standalone')
+    expect(withoutConfig.args.slice(0, 4)).toEqual(['run', '--standalone', '--format', 'json'])
 
     const withConfig = harnessByKey.opencode.command({ cli, prompt: 'Fix it.', folder: 'C:\\work', title: 't1', mcpConfig: 'C:\\runs\\lane.mcp.json' })
     expect(withConfig.env).toEqual({ OPENCODE_CONFIG: 'C:\\runs\\lane.mcp.json' })
+    expect(withConfig.args).toContain('--standalone')
   })
 
   it('shapes MCP config files for stdio and http servers', () => {
