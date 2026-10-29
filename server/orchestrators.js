@@ -19,6 +19,7 @@ import {
 } from './orchestrator.js'
 import { gitPath } from './programPath.js'
 import { readAllLanes } from './agents-config.js'
+import { activeEligibleLaneKeys, eligibleLanes } from './active-lanes.js'
 
 export const CONFIRM_LADDER_PROBLEM = 'Confirm the ladder first.'
 export const NO_ORCHESTRATOR_PROBLEM = 'There is no orchestrator with that id.'
@@ -175,6 +176,7 @@ export function createOrchestrators({
   changedFiles = branchChanges,
   onMasked,
   onMessage = () => {},
+  activeLanes,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -199,9 +201,19 @@ export function createOrchestrators({
     } catch {}
   }
 
+  function eligibleLaneKeys() {
+    const all = readAllLanes({ folder: root, runsFolder: folder, lanesJson: typeof lanes === 'function' ? lanes() : (lanes ?? {}) })
+    return eligibleLanes(all).map((lane) => lane.key)
+  }
+
   function currentLaneKeys() {
-    const all = readAllLanes({ runsFolder: folder, lanesJson: typeof lanes === 'function' ? lanes() : (lanes ?? {}) })
-    return Object.keys(all).filter((key) => key !== ORCHESTRATOR_KEY)
+    const all = readAllLanes({ folder: root, runsFolder: folder, lanesJson: typeof lanes === 'function' ? lanes() : (lanes ?? {}) })
+    return activeEligibleLaneKeys({
+      lanesConfig: all,
+      projectRoot: root,
+      runsFolder: folder,
+      activeLanes,
+    })
   }
 
   const main = createOrchestrator({
@@ -223,7 +235,7 @@ export function createOrchestrators({
   function readSaved() {
     const raw = main.getLadder()
     if (!raw) return { ladder: { subs: [] }, problems: [] }
-    return readLadder(raw, { lanes: currentLaneKeys() })
+    return readLadder(raw, { lanes: eligibleLaneKeys() })
   }
 
   function laneDefaults(harness) {
@@ -468,7 +480,7 @@ export function createOrchestrators({
     if (by !== 'owner' && by !== 'orchestrator') return { status: 400, body: { error: LADDER_BY_PROBLEM } }
     if (by === 'owner' && !page) return { status: 403, body: { error: OWNER_LADDER_PROBLEM } }
     if (by === 'orchestrator' && page) return { status: 403, body: { error: PAGE_LADDER_PROBLEM } }
-    const next = readLadder(body.ladder, { lanes: currentLaneKeys() })
+    const next = readLadder(body.ladder, { lanes: eligibleLaneKeys() })
     if (next.problems.length > 0) {
       return { status: 400, body: { error: next.problems.join(' '), problems: next.problems } }
     }
