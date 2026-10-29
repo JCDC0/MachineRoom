@@ -63,9 +63,13 @@ async function startRouteBridge({ policy = JSON.stringify(POLICY), costs = [] } 
   const base = tempDir()
   if (costs.length > 0) writeRuns(base, costs)
   const previousTemp = process.env.TEMP
+  const previousRuns = process.env.MACHINEROOM_RUNS
   process.env.TEMP = base
+  process.env.MACHINEROOM_RUNS = join(base, 'machineroom-runs')
   cleanups.push(() => {
     process.env.TEMP = previousTemp
+    if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+    else process.env.MACHINEROOM_RUNS = previousRuns
   })
   const bridge = createBridge({
     projectRoot: '',
