@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { describe, expect, it } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import FamilyTree from '../src/ui/FamilyTree.jsx'
+import { DIRECT_KEY_PROBLEM } from '../src/ui/family.js'
 
 const ELEMENT_NODE = 1
 const TEXT_NODE = 3
@@ -488,10 +489,15 @@ const ORCHESTRATORS = [
 function makeClient() {
   const calls = { createLane: [], deleteLane: [], setLadder: [], setActiveLanes: [] }
   const added = []
+  const directModels = []
   const client = {
     family: async () => ({ ...FAMILY, nodes: [...FAMILY.nodes, ...added] }),
     lanes: async () => LANES,
     harnesses: async () => HARNESSES,
+    harnessModels: async (options = {}) => {
+      const harness = typeof options === 'string' ? options : options.harness ?? ''
+      return { harness, models: harness === 'machineroom' ? [...directModels] : [] }
+    },
     models: async () => ({ models: [] }),
     keys: async () => ({ keys: [] }),
     orchestrators: async () => ORCHESTRATORS,
@@ -524,7 +530,7 @@ function makeClient() {
       return { ok: true }
     },
   }
-  return { client, calls, added }
+  return { client, calls, added, directModels }
 }
 
 async function mount(root, client, props = {}) {
@@ -558,6 +564,12 @@ function buttonWithText(scope, text) {
 async function click(root, node) {
   await act(async () => {
     node.click()
+  })
+}
+
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
   })
 }
 
@@ -838,6 +850,58 @@ describe('FamilyTree rows', () => {
       expect(writer).not.toBeNull()
       expect(writer.getAttribute('data-kind')).toBe('lane')
       expect(writer.querySelector('.mr-family-meta').textContent).toContain('opencode')
+    })
+  })
+
+  it('lists the Direct API endpoint models and drops the key slot in Add child', async () => {
+    const { client, directModels } = makeClient()
+    directModels.push({ id: 'OpenRouter/flash', label: 'flash (OpenRouter)' })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+      const form = container.querySelector('.mr-family-child')
+      const direct = form
+        .querySelectorAll('.mr-side-harness')
+        .find((button) => button.textContent.trim() === 'Direct API')
+      await click(root, direct)
+      await settle()
+
+      expect(form.textContent).not.toContain('Key slot')
+      expect(buttonWithText(form, 'Add key')).toBeNull()
+      const select = form.querySelector('select[aria-label="New agent model"]')
+      expect(select).not.toBeNull()
+      const option = select.querySelectorAll('option').find((row) => row.getAttribute('value') === 'OpenRouter/flash')
+      expect(option.textContent).toContain('flash (OpenRouter)')
+      expect(buttonWithText(form, 'Create').getAttribute('disabled')).toBeNull()
+    })
+  })
+
+  it('says to add a Direct API key and opens Settings when there is no endpoint', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, dom, root }) => {
+      const seen = []
+      function onOpen() {
+        seen.push('settings')
+      }
+      dom.window.addEventListener('machineroom:open-settings', onOpen)
+      try {
+        await mount(root, client)
+        await click(root, rowByLabel(container, 'Orchestrator').querySelector('.mr-family-add'))
+        const form = container.querySelector('.mr-family-child')
+        const direct = form
+          .querySelectorAll('.mr-side-harness')
+          .find((button) => button.textContent.trim() === 'Direct API')
+        await click(root, direct)
+        await settle()
+
+        expect(form.textContent).toContain(DIRECT_KEY_PROBLEM)
+        expect(buttonWithText(form, 'Refresh models')).not.toBeNull()
+        expect(buttonWithText(form, 'Create').getAttribute('disabled')).not.toBeNull()
+        await click(root, buttonWithText(form, 'Open Settings'))
+        expect(seen).toEqual(['settings'])
+      } finally {
+        dom.window.removeEventListener('machineroom:open-settings', onOpen)
+      }
     })
   })
 })

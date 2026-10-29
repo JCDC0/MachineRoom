@@ -26,6 +26,16 @@ export function providerLabel(provider) {
   return SEARCH_PROVIDERS.find((item) => item.key === provider)?.label ?? 'Off'
 }
 
+export function keySlotName(provider) {
+  return provider === 'tavily' || provider === 'brave' ? providerLabel(provider) : ''
+}
+
+export function keySaveProblem(value) {
+  if (typeof value !== 'string' || value.length === 0) return 'Write the key.'
+  if (value.length > 500) return 'Keep the key to 500 characters.'
+  return ''
+}
+
 export function keyNamesFrom(answer) {
   const list = Array.isArray(answer) ? answer : Array.isArray(answer?.keys) ? answer.keys : []
   const names = []
@@ -86,12 +96,13 @@ export default function SearchSettings({ client: givenClient = null }) {
   const [client] = useState(() => givenClient ?? makeClient())
   const [form, setForm] = useState({ ...SEARCH_EMPTY })
   const [savedChoice, setSavedChoice] = useState({ ...SEARCH_EMPTY })
-  const [keys, setKeys] = useState([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [failed, setFailed] = useState('')
   const [notice, setNotice] = useState({ text: '', error: false })
   const [confirm, setConfirm] = useState(false)
+  const [keyValue, setKeyValue] = useState('')
+  const [keyConfirm, setKeyConfirm] = useState(false)
 
   useEffect(() => {
     if (!client || typeof client.searchProvider !== 'function') {
@@ -115,16 +126,6 @@ export default function SearchSettings({ client: givenClient = null }) {
         setLoading(false)
         setFailed(String(error?.message ?? 'Could not read the web search provider.'))
       })
-    if (typeof client.keys === 'function') {
-      client
-        .keys()
-        .then((answer) => {
-          if (active) setKeys(keyNamesFrom(answer))
-        })
-        .catch(() => {
-          if (active) setKeys([])
-        })
-    }
     return () => {
       active = false
     }
@@ -133,12 +134,53 @@ export default function SearchSettings({ client: givenClient = null }) {
   const problem = searchChoiceProblem(form)
   const needsUrl = form.provider === 'searxng'
   const needsKey = form.provider === 'tavily' || form.provider === 'brave'
-  const slotOptions = form.keyName !== '' && !keys.includes(form.keyName) ? [...keys, form.keyName] : keys
+  const keySlot = keySlotName(form.provider)
 
   function choose(patch) {
-    setForm((current) => ({ ...current, ...patch }))
+    setForm((current) => {
+      const next = { ...current, ...patch }
+      if (Object.hasOwn(patch, 'provider') && patch.provider !== current.provider) next.keyName = ''
+      return next
+    })
+    setKeyValue('')
+    setKeyConfirm(false)
     setNotice({ text: '', error: false })
     setConfirm(false)
+  }
+
+  function askKey() {
+    const keyProblem = keySaveProblem(keyValue)
+    if (keyProblem) {
+      setNotice({ text: keyProblem, error: true })
+      return
+    }
+    setKeyConfirm(true)
+  }
+
+  async function saveKey() {
+    if (!client || typeof client.setKey !== 'function') {
+      setNotice({ text: 'Web search settings need a newer bridge.', error: true })
+      setKeyConfirm(false)
+      return
+    }
+    const name = keySlot
+    if (!name) {
+      setNotice({ text: 'Pick Tavily or Brave first.', error: true })
+      setKeyConfirm(false)
+      return
+    }
+    setBusy(true)
+    setNotice({ text: '', error: false })
+    try {
+      await client.setKey({ name, value: keyValue, confirmed: true })
+      setForm((current) => ({ ...current, keyName: name }))
+      setKeyValue('')
+      setNotice({ text: `Saved ${name} key.`, error: false })
+    } catch (error) {
+      setNotice({ text: String(error?.message ?? error), error: true })
+    }
+    setBusy(false)
+    setKeyConfirm(false)
   }
 
   async function save() {
@@ -198,37 +240,31 @@ export default function SearchSettings({ client: givenClient = null }) {
 
       {needsKey && (
         <div className="mr-search-row is-stack">
-          {slotOptions.length > 0 ? (
-            <>
-              <label className="hud-settings-label" htmlFor="mr-search-slot">Key slot</label>
-              <select
-                id="mr-search-slot"
-                className="mr-search-select mono"
-                value={form.keyName}
-                disabled={loading || busy}
-                onChange={(event) => choose({ keyName: event.target.value })}
-              >
-                <option value="">No key</option>
-                {slotOptions.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            </>
-          ) : (
-            <>
-              <label className="hud-settings-label" htmlFor="mr-search-slot">Key slot</label>
-              <input
-                id="mr-search-slot"
-                className="mr-search-input mono"
-                type="text"
-                value={form.keyName}
-                placeholder="TAVILY_API_KEY"
-                disabled={loading || busy}
-                onChange={(event) => choose({ keyName: event.target.value })}
-              />
-              <p className="mr-search-hint">No key slots yet. Add one under Agents.</p>
-            </>
-          )}
+          <label className="hud-settings-label" htmlFor="mr-search-key">{providerLabel(form.provider)} API key</label>
+          <input
+            id="mr-search-key"
+            className="mr-search-input mono"
+            type="password"
+            autoComplete="off"
+            maxLength={500}
+            value={keyValue}
+            disabled={loading || busy}
+            onChange={(event) => {
+              setKeyValue(event.target.value)
+              setNotice({ text: '', error: false })
+            }}
+          />
+          <p className="mr-search-hint">{`Saved in the key slot ${keySlot}.`}</p>
+          <div className="mr-search-actions">
+            <button
+              type="button"
+              className="mr-search-save"
+              disabled={loading || busy}
+              onClick={askKey}
+            >
+              Save key
+            </button>
+          </div>
         </div>
       )}
 
@@ -264,6 +300,26 @@ export default function SearchSettings({ client: givenClient = null }) {
               type="button"
               className="mr-search-confirm-btn is-cancel"
               onClick={() => setConfirm(false)}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+          </div>
+        </section>
+      )}
+
+      {keyConfirm && (
+        <section className="mr-search-confirm" aria-label="Save key">
+          <p className="mr-search-confirm-text">{`Save the ${keySlot} key?`}</p>
+          <p className="mr-search-confirm-detail mono">{`Key slot ${keySlot}`}</p>
+          <div className="mr-search-confirm-actions">
+            <button type="button" className="mr-search-confirm-btn is-start" onClick={saveKey} disabled={busy}>
+              Save key
+            </button>
+            <button
+              type="button"
+              className="mr-search-confirm-btn is-cancel"
+              onClick={() => setKeyConfirm(false)}
               disabled={busy}
             >
               Cancel

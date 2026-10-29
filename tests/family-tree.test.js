@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DIRECT_HARNESS,
+  DIRECT_KEY_PROBLEM,
   assignSubLanesPlan,
   childConfirmText,
   childDetail,
@@ -13,6 +14,7 @@ import {
   groupSubPlan,
   harnessEfforts,
   harnessGroups,
+  harnessLabel,
   harnessModels,
   keyFormProblem,
   keyNames,
@@ -147,7 +149,18 @@ describe('the family tree order', () => {
 describe('a node line', () => {
   it('joins the harness, model and effort', () => {
     expect(familyMeta({ harness: 'claude', model: 'opus', effort: 'high' })).toBe('claude · opus · high')
+    expect(familyMeta({ harness: 'machineroom', model: 'openrouter/flash', effort: '' })).toBe(
+      'Direct API · openrouter/flash · default'
+    )
     expect(familyMeta({})).toBe('harness unknown · no model · default')
+  })
+
+  it('names the machineroom harness Direct API', () => {
+    expect(harnessLabel('machineroom')).toBe('Direct API')
+    expect(harnessLabel({ key: 'machineroom', name: 'MachineRoom' })).toBe('Direct API')
+    expect(harnessLabel({ key: 'opencode', name: 'OpenCode' })).toBe('OpenCode')
+    expect(harnessLabel('claude')).toBe('claude')
+    expect(harnessLabel(null)).toBe('')
   })
 
   it('names the state dot', () => {
@@ -216,7 +229,7 @@ describe('the harness choices', () => {
       key: 'machineroom',
       name: 'Direct API',
       available: true,
-      models: [{ id: 'deepseek/deepseek-v4.1-flash-1017', label: 'DeepSeek v4.1 Flash' }],
+      models: [],
     })
     const listed = childHarnesses(
       {
@@ -228,6 +241,7 @@ describe('the harness choices', () => {
       MODELS
     )
     expect(listed.filter((harness) => harness.key === DIRECT_HARNESS)).toHaveLength(1)
+    expect(listed.at(-1).name).toBe('Direct API')
     expect(listed.at(-1).models).toEqual([{ id: 'm1', label: 'm1' }])
   })
 
@@ -237,7 +251,6 @@ describe('the harness choices', () => {
       harness: 'opencode',
       model: 'qwen',
       effort: '',
-      key: '',
     })
   })
 
@@ -307,13 +320,24 @@ describe('the add child form', () => {
     const direct = {
       label: 'Writer',
       harness: DIRECT_HARNESS,
-      model: 'deepseek/deepseek-v4.1-flash-1017',
+      model: 'OpenRouter/flash',
       effort: '',
     }
-    expect(childFormProblem(direct, { harnesses: HARNESSES, models: MODELS })).toBe('')
-    expect(childFormProblem({ ...direct, model: 'other' }, { harnesses: HARNESSES, models: MODELS })).toBe(
-      'Choose a model for this harness.'
-    )
+    expect(childFormProblem(direct, { harnesses: HARNESSES, models: MODELS })).toBe(DIRECT_KEY_PROBLEM)
+    expect(
+      childFormProblem(direct, {
+        harnesses: HARNESSES,
+        models: MODELS,
+        directModels: [{ id: 'OpenRouter/flash', label: 'flash (OpenRouter)' }],
+      })
+    ).toBe('')
+    expect(
+      childFormProblem({ ...direct, model: 'other' }, {
+        harnesses: HARNESSES,
+        models: MODELS,
+        directModels: [{ id: 'OpenRouter/flash', label: 'flash (OpenRouter)' }],
+      })
+    ).toBe('Choose a model for this harness.')
   })
 
   it('names the parent and the change on the confirm card', () => {

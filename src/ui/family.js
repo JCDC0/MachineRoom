@@ -4,6 +4,7 @@ import { AGENT_NAME_MAX, cleanText } from './sidebar.js'
 
 export const DIRECT_HARNESS = 'machineroom'
 export const DIRECT_LABEL = 'Direct API'
+export const DIRECT_KEY_PROBLEM = 'Add a Direct API key in Settings first.'
 export const MAX_SUBS = 5
 
 const KINDS = new Set(['orchestrator', 'sub', 'lane'])
@@ -100,8 +101,23 @@ export function familyTree(answer) {
   }
 }
 
+function harnessKey(harness) {
+  if (typeof harness === 'string') return cleanText(harness, 40)
+  return cleanText(harness?.key, 40)
+}
+
+export function harnessLabel(harness) {
+  const key = harnessKey(harness)
+  if (key === DIRECT_HARNESS) return DIRECT_LABEL
+  if (harness && typeof harness === 'object') {
+    const name = cleanText(harness.name, 60)
+    if (name) return name
+  }
+  return key
+}
+
 export function familyMeta(node) {
-  const harness = cleanText(node?.harness, 40) || 'harness unknown'
+  const harness = harnessLabel(node?.harness) || 'harness unknown'
   const model = cleanText(node?.model, 120) || 'no model'
   const effort = cleanText(node?.effort, 20) || 'default'
   return `${harness} · ${model} · ${effort}`
@@ -231,11 +247,6 @@ export function findHarness(value, key) {
   return harnessList(value).find((row) => row.key === wanted) ?? null
 }
 
-function harnessKey(harness) {
-  if (typeof harness === 'string') return cleanText(harness, 40)
-  return cleanText(harness?.key, 40)
-}
-
 export function harnessModels(harness, models) {
   const key = harnessKey(harness)
   if (harness && typeof harness === 'object') {
@@ -258,7 +269,7 @@ export function harnessEfforts(harness) {
 
 export function directHarness(harnesses = null, models = null) {
   const listed = harnessList(harnesses).find((row) => row.key === DIRECT_HARNESS) ?? null
-  const directModels = listed && listed.models.length > 0 ? listed.models : modelChoices(models, DIRECT_HARNESS)
+  const directModels = listed && listed.models.length > 0 ? listed.models : []
   const directEfforts = listed && listed.efforts.length > 0 ? listed.efforts : effortLevels(DIRECT_HARNESS)
   return {
     key: DIRECT_HARNESS,
@@ -287,19 +298,23 @@ export function childDraft(harnesses = null, models = null) {
     harness: first?.key ?? '',
     model: preferredModel ? OPENCODE_DEFAULT_MODEL : first?.models?.[0]?.id ?? '',
     effort: own && first.efforts.includes('max') ? 'max' : first?.efforts?.[0] ?? '',
-    key: '',
   }
 }
 
-export function childFormProblem(draft, { harnesses = null, models = null } = {}) {
+export function childFormProblem(draft, { harnesses = null, models = null, directModels = null } = {}) {
   const problem = labelProblem(draft?.label)
   if (problem) return problem
   const offered = childHarnesses(harnesses, models)
   const harness = offered.find((row) => row.key === cleanText(draft?.harness, 40))
   if (!harness) return 'Choose a harness.'
   if (!harness.available) return 'That harness is not on this computer.'
-  const choices = harnessModels(harness, models)
-  if (choices.length === 0) return 'This harness has no models.'
+  const choices =
+    harness.key === DIRECT_HARNESS && Array.isArray(directModels)
+      ? modelRows(directModels)
+      : harnessModels(harness, models)
+  if (choices.length === 0) {
+    return harness.key === DIRECT_HARNESS ? DIRECT_KEY_PROBLEM : 'This harness has no models.'
+  }
   const model = cleanText(draft?.model, 120)
   if (!choices.some((row) => row.id === model)) return 'Choose a model for this harness.'
   const efforts = harnessEfforts(harness)

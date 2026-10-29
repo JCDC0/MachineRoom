@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import EndpointsPanel from './EndpointsPanel.jsx'
 import McpSettings from './McpSettings.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
@@ -15,10 +15,21 @@ export const EFFECTS = [
   { key: 'dust', label: 'Fine dust', costly: false },
 ]
 
-export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null }) {
+export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null, focusDirectApi = 0 }) {
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
   const [recordDraft, setRecordDraft] = useState(() => String(loadSettings(store()).recordMinutes))
+  const seenDirectApi = useRef(0)
+
+  useEffect(() => {
+    const nonce = Number(focusDirectApi) || 0
+    if (!open || nonce === 0 || seenDirectApi.current === nonce) return
+    seenDirectApi.current = nonce
+    const target = typeof document !== 'undefined' ? document.getElementById('settings-direct-api') : null
+    if (target && typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ block: 'start' })
+    }
+  }, [open, focusDirectApi])
 
   function updateSound(patch) {
     const next = saveSoundSettings(store(), patch)

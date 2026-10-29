@@ -4,6 +4,7 @@ import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
 import {
   DIRECT_HARNESS,
+  DIRECT_KEY_PROBLEM,
   MAX_SUBS,
   childConfirmText,
   childDetail,
@@ -15,10 +16,8 @@ import {
   familyTree,
   findHarness,
   harnessEfforts,
-  harnessGroups,
+  harnessLabel,
   harnessModels,
-  keyFormProblem,
-  keyNames,
   labelProblem,
   rowText,
   stateWord,
@@ -43,6 +42,15 @@ function openChat(id) {
     typeof window.CustomEvent === 'function'
       ? new window.CustomEvent('machineroom:open-chat', { detail })
       : { type: 'machineroom:open-chat', detail }
+  window.dispatchEvent(event)
+}
+
+function openSettings() {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return
+  const event =
+    typeof window.CustomEvent === 'function'
+      ? new window.CustomEvent('machineroom:open-settings')
+      : { type: 'machineroom:open-settings' }
   window.dispatchEvent(event)
 }
 
@@ -145,7 +153,6 @@ export function FamilyTree({ client = null, tasks = null }) {
   const [lanes, setLanes] = useState(null)
   const [harnesses, setHarnesses] = useState(null)
   const [models, setModels] = useState(null)
-  const [keys, setKeys] = useState([])
   const [readError, setReadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [open, setOpen] = useState(true)
@@ -157,9 +164,6 @@ export function FamilyTree({ client = null, tasks = null }) {
   const [childPicked, setChildPicked] = useState(false)
   const [draft, setDraft] = useState(null)
   const [childProblem, setChildProblem] = useState('')
-  const [keyOpen, setKeyOpen] = useState(false)
-  const [keyName, setKeyName] = useState('')
-  const [keyValue, setKeyValue] = useState('')
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
   const [selectedLanes, setSelectedLanes] = useState([])
@@ -178,7 +182,6 @@ export function FamilyTree({ client = null, tasks = null }) {
       ['lanes', () => client.lanes?.()],
       ['harnesses', () => client.harnesses?.()],
       ['models', () => client.models?.()],
-      ['keys', () => client.keys?.()],
       ['orchestrators', () => client.orchestrators?.()],
     ]
     const promises = jobs.map(([, read]) => {
@@ -198,8 +201,6 @@ export function FamilyTree({ client = null, tasks = null }) {
       if (values.lanes) setLanes(values.lanes)
       if (values.harnesses) setHarnesses(values.harnesses)
       if (values.models) setModels(values.models)
-      if (values.keys) setKeys(keyNames(values.keys))
-      else if (values.family) setKeys(keyNames(values.family.keys))
       if (values.orchestrators) setOrchestrators(values.orchestrators)
       const failed = results.find((result) => result.status === 'rejected')
       if (failed) setReadError(messageOf(failed.reason))
@@ -222,13 +223,6 @@ export function FamilyTree({ client = null, tasks = null }) {
       jobs.push(
         Promise.resolve(client.lanes()).then((answer) => {
           if (answer) setLanes(answer)
-        })
-      )
-    }
-    if (typeof client?.keys === 'function') {
-      jobs.push(
-        Promise.resolve(client.keys()).then((answer) => {
-          if (answer) setKeys(keyNames(answer))
         })
       )
     }
@@ -344,12 +338,25 @@ export function FamilyTree({ client = null, tasks = null }) {
 
   const editorHarness = useMemo(() => {
     if (!editingNode) return null
-    if (editingNode.kind === 'lane') return findHarness(harnesses, editingNode.harness)
+    if (editingNode.kind === 'lane') {
+      return (
+        findHarness(harnesses, editingNode.harness) ??
+        (editingNode.harness
+          ? {
+              key: editingNode.harness,
+              name: harnessLabel(editingNode.harness),
+              available: true,
+              models: [],
+              efforts: [],
+            }
+          : null)
+      )
+    }
     const key = nodeDraft?.harness ?? editingNode.harness
     return nodeHarnessOptions(editingNode).find((row) => row.key === key) ?? null
   }, [editingNode, harnesses, nodeDraft?.harness])
   const editorFallback = useMemo(
-    () => (editorHarness ? harnessModels(editorHarness, models) : []),
+    () => (editorHarness && editorHarness.key !== DIRECT_HARNESS ? harnessModels(editorHarness, models) : []),
     [editorHarness, models]
   )
   const editorModels = useHarnessModels({
@@ -365,7 +372,7 @@ export function FamilyTree({ client = null, tasks = null }) {
     return childHarnesses(harnesses, models).find((row) => row.key === draft?.harness) ?? null
   }, [childFor, draft?.harness, harnesses, models])
   const childFallback = useMemo(
-    () => (childHarness ? harnessModels(childHarness, models) : []),
+    () => (childHarness && childHarness.key !== DIRECT_HARNESS ? harnessModels(childHarness, models) : []),
     [childHarness, models]
   )
   const childModels = useHarnessModels({
@@ -381,7 +388,7 @@ export function FamilyTree({ client = null, tasks = null }) {
     return childHarnesses(harnesses, models).find((row) => row.key === subDraft?.harness) ?? null
   }, [groupOpen, subDraft?.harness, harnesses, models])
   const subFallback = useMemo(
-    () => (subHarness ? harnessModels(subHarness, models) : []),
+    () => (subHarness && subHarness.key !== DIRECT_HARNESS ? harnessModels(subHarness, models) : []),
     [subHarness, models]
   )
   const subModels = useHarnessModels({
@@ -409,6 +416,24 @@ export function FamilyTree({ client = null, tasks = null }) {
     setHarnesses((current) => withHarnessModels(current, subHarness.key, subModels.live))
     setModels((current) => withModelRows(current, subModels.live, subHarness.key))
   }, [subHarness?.key, subModels.live])
+
+  useEffect(() => {
+    if (editorHarness?.key !== DIRECT_HARNESS || !nodeDraft || nodeDraft.model) return
+    const first = editorModels.choices[0]?.id
+    if (first) setNodeDraft((current) => (current && !current.model ? { ...current, model: first } : current))
+  }, [editorHarness?.key, editorModels.choices, nodeDraft])
+
+  useEffect(() => {
+    if (childHarness?.key !== DIRECT_HARNESS || !draft || draft.model) return
+    const first = childModels.choices[0]?.id
+    if (first) setDraft((current) => (current && !current.model ? { ...current, model: first } : current))
+  }, [childHarness?.key, childModels.choices, draft])
+
+  useEffect(() => {
+    if (subHarness?.key !== DIRECT_HARNESS || !subDraft || subDraft.model) return
+    const first = subModels.choices[0]?.id
+    if (first) setSubDraft((current) => (current && !current.model ? { ...current, model: first } : current))
+  }, [subHarness?.key, subModels.choices, subDraft])
 
   useEffect(() => {
     const lanesInTree = new Set(tree.nodes.filter((node) => node.kind === 'lane').map((node) => node.id))
@@ -518,9 +543,6 @@ export function FamilyTree({ client = null, tasks = null }) {
     setChildFor(null)
     setDraft(null)
     setChildProblem('')
-    setKeyOpen(false)
-    setKeyName('')
-    setKeyValue('')
   }
 
   function closeEditor() {
@@ -531,13 +553,12 @@ export function FamilyTree({ client = null, tasks = null }) {
   }
 
   function nodeHarnessOptions(node) {
-    const groups = harnessGroups(harnesses)
-    const list = groups.available.slice()
+    const list = childHarnesses(harnesses, models)
     if (node && node.harness && !list.some((row) => row.key === node.harness)) {
       const known = findHarness(harnesses, node.harness)
       list.push({
         key: node.harness,
-        name: known?.name ?? node.harness,
+        name: harnessLabel(node.harness) || known?.name || node.harness,
         available: false,
         models: known?.models ?? [],
         efforts: known?.efforts ?? [],
@@ -589,10 +610,10 @@ export function FamilyTree({ client = null, tasks = null }) {
       setActionError('Choose a harness.')
       return
     }
-    const choices = harnessModels(harness, models)
+    const choices = harness.key === DIRECT_HARNESS ? editorModels.choices : harnessModels(harness, models)
     const model = cleanText(nodeDraft.model, 120)
     if (choices.length === 0) {
-      setActionError('This harness has no models.')
+      setActionError(harness.key === DIRECT_HARNESS ? DIRECT_KEY_PROBLEM : 'This harness has no models.')
       return
     }
     if (!choices.some((row) => row.id === model)) {
@@ -645,8 +666,12 @@ export function FamilyTree({ client = null, tasks = null }) {
       return
     }
     const harness = findHarness(harnesses, node.harness)
-    const choices = harnessModels(harness, models)
+    const choices = node.harness === DIRECT_HARNESS ? editorModels.choices : harnessModels(harness, models)
     const model = cleanText(nodeDraft.model, 120)
+    if (choices.length === 0 && node.harness === DIRECT_HARNESS) {
+      setActionError(DIRECT_KEY_PROBLEM)
+      return
+    }
     if (choices.length > 0 && !choices.some((row) => row.id === model)) {
       setActionError('Choose a model for this agent.')
       return
@@ -754,7 +779,7 @@ export function FamilyTree({ client = null, tasks = null }) {
 
   async function askGroupSub() {
     if (!subDraft || busy) return
-    const problem = childFormProblem(subDraft, { harnesses, models })
+    const problem = childFormProblem(subDraft, { harnesses, models, directModels: subModels.choices })
     if (problem) {
       setSubProblem(problem)
       return
@@ -914,9 +939,6 @@ export function FamilyTree({ client = null, tasks = null }) {
     setChildPicked(false)
     setDraft(null)
     setChildProblem('')
-    setKeyOpen(false)
-    setKeyName('')
-    setKeyValue('')
   }
 
   function toggleChild(node) {
@@ -938,54 +960,17 @@ export function FamilyTree({ client = null, tasks = null }) {
     setChildPicked(false)
     setDraft(childDraft(harnesses, models))
     setChildProblem('')
-    setKeyOpen(false)
-    setKeyName('')
-    setKeyValue('')
   }
 
   function chooseChildHarness(harness) {
     setChildProblem('')
     setChildPicked(true)
-    if (harness.key !== DIRECT_HARNESS) {
-      setKeyOpen(false)
-      setKeyName('')
-      setKeyValue('')
-    }
     setDraft((current) => ({
       ...(current ?? {}),
       harness: harness.key,
       model: harnessModels(harness, models)[0]?.id ?? '',
       effort: harnessEfforts(harness)[0] ?? '',
-      key: harness.key === DIRECT_HARNESS ? current?.key ?? '' : '',
     }))
-  }
-
-  function askAddKey() {
-    const problem = keyFormProblem(keyName, keyValue)
-    if (problem) {
-      setActionError(problem)
-      return
-    }
-    if (typeof client?.setKey !== 'function') {
-      setActionError('This bridge cannot store a key.')
-      return
-    }
-    const name = cleanText(keyName)
-    const value = keyValue
-    ask({
-      text: `Save the key slot "${name}"?`,
-      label: 'Add key',
-      busyText: 'Saving the key...',
-      run: async () => {
-        await client.setKey({ name, value, confirmed: true })
-        setKeyName('')
-        setKeyValue('')
-        setKeyOpen(false)
-        setDraft((current) => (current ? { ...current, key: name } : current))
-        setKeys((current) => (current.includes(name) ? current : [...current, name]))
-        await refresh()
-      },
-    })
   }
 
   async function readLadder() {
@@ -998,7 +983,7 @@ export function FamilyTree({ client = null, tasks = null }) {
 
   async function askCreate(parent) {
     if (!parent || !draft || busy) return
-    const problem = childFormProblem(draft, { harnesses, models })
+    const problem = childFormProblem(draft, { harnesses, models, directModels: childModels.choices })
     if (problem) {
       setChildProblem(problem)
       return
@@ -1118,6 +1103,24 @@ export function FamilyTree({ client = null, tasks = null }) {
     )
   }
 
+  function renderDirectNotice(onRefresh = null) {
+    return (
+      <div className="mr-family-direct">
+        <p className="mr-side-note">{DIRECT_KEY_PROBLEM}</p>
+        <div className="mr-family-direct-actions">
+          <button type="button" className="mr-side-action" onClick={openSettings}>
+            Open Settings
+          </button>
+          {onRefresh ? (
+            <button type="button" className="mr-side-action" onClick={onRefresh}>
+              Refresh models
+            </button>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
   function renderEditor(node, depth) {
     if (!nodeDraft) return null
     const lane = node.kind === 'lane'
@@ -1125,9 +1128,11 @@ export function FamilyTree({ client = null, tasks = null }) {
     const laneNodes = tree.nodes.filter((row) => row.kind === 'lane')
     const options = lane ? [] : nodeHarnessOptions(node)
     const harness = lane
-      ? findHarness(harnesses, node.harness)
+      ? editorHarness
       : options.find((row) => row.key === nodeDraft.harness) ?? null
+    const direct = harness?.key === DIRECT_HARNESS
     const choices = harness ? editorModels.choices : []
+    const directMissing = direct && !editorModels.loading && choices.length === 0
     const efforts = harness ? harnessEfforts(harness) : []
     const canLabel = typeof client?.setAgentLabel === 'function'
     return (
@@ -1159,8 +1164,10 @@ export function FamilyTree({ client = null, tasks = null }) {
         </div>
         {lane ? (
           <>
-            <p className="mr-family-note mono">{`Harness ${node.harness || 'unknown'}`}</p>
-            {harness ? (
+            <p className="mr-family-note mono">{`Harness ${harnessLabel(node.harness) || 'unknown'}`}</p>
+            {directMissing ? (
+              renderDirectNotice(editorModels.refresh)
+            ) : harness ? (
               <ModelSelect
                 label="Model"
                 ariaLabel={`Model for ${node.label}`}
@@ -1200,7 +1207,7 @@ export function FamilyTree({ client = null, tasks = null }) {
               <button
                 type="button"
                 className="mr-side-primary"
-                disabled={busy || typeof client?.updateLane !== 'function'}
+                disabled={busy || typeof client?.updateLane !== 'function' || directMissing}
                 onClick={() => askLaneSave(node)}
               >
                 Save
@@ -1233,7 +1240,7 @@ export function FamilyTree({ client = null, tasks = null }) {
                   ) : null}
                   {options.map((row) => (
                     <option value={row.key} key={row.key}>
-                      {row.name || row.key}
+                      {harnessLabel(row) || row.key}
                     </option>
                   ))}
                 </select>
@@ -1241,7 +1248,9 @@ export function FamilyTree({ client = null, tasks = null }) {
             ) : (
               <p className="mr-side-note is-dim">No harnesses are listed.</p>
             )}
-            {harness ? (
+            {directMissing ? (
+              renderDirectNotice(editorModels.refresh)
+            ) : harness ? (
               <ModelSelect
                 label="Model"
                 ariaLabel={`Model for ${node.label}`}
@@ -1281,6 +1290,7 @@ export function FamilyTree({ client = null, tasks = null }) {
                 className="mr-side-primary"
                 disabled={
                   busy ||
+                  directMissing ||
                   (typeof client?.setOrchestratorHarness !== 'function' &&
                     typeof client?.setOrchestratorEffort !== 'function')
                 }
@@ -1373,6 +1383,7 @@ export function FamilyTree({ client = null, tasks = null }) {
     const choices = selected ? childModels.choices : []
     const efforts = selected ? harnessEfforts(selected) : []
     const direct = draft.harness === DIRECT_HARNESS
+    const directMissing = direct && !childModels.loading && choices.length === 0
     const canCreate = typeof client?.createLane === 'function'
     return (
       <form
@@ -1411,76 +1422,8 @@ export function FamilyTree({ client = null, tasks = null }) {
         ) : (
           <p className="mr-side-note is-dim">Loading harnesses...</p>
         )}
-        {direct ? (
-          <div className="mr-family-keys">
-            <label className="mr-side-field">
-              <span className="mr-side-field-label mono">Key slot</span>
-              <select
-                className="mr-side-select mono"
-                aria-label="Key slot"
-                value={draft.key}
-                onChange={(event) => setDraft({ ...draft, key: event.target.value })}
-              >
-                <option value="">Choose a key slot</option>
-                {keys.map((name) => (
-                  <option value={name} key={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="mr-family-key-actions">
-              <button
-                type="button"
-                className="mr-side-action"
-                disabled={busy || typeof client?.setKey !== 'function'}
-                aria-expanded={keyOpen}
-                onClick={() => {
-                  setKeyOpen((value) => !value)
-                  setKeyName('')
-                  setKeyValue('')
-                }}
-              >
-                Add key
-              </button>
-            </div>
-            {keyOpen ? (
-              <div className="mr-family-key-form">
-                <input
-                  className="mr-side-input mono"
-                  value={keyName}
-                  maxLength={40}
-                  aria-label="Key name"
-                  placeholder="Name"
-                  autoComplete="off"
-                  onChange={(event) => setKeyName(event.target.value)}
-                />
-                <input
-                  className="mr-side-input mono"
-                  type="password"
-                  value={keyValue}
-                  maxLength={500}
-                  aria-label="Key value"
-                  placeholder="Key"
-                  autoComplete="off"
-                  onChange={(event) => setKeyValue(event.target.value)}
-                />
-                <button
-                  type="button"
-                  className="mr-side-primary"
-                  disabled={busy || !keyName || !keyValue}
-                  onClick={askAddKey}
-                >
-                  Add key
-                </button>
-              </div>
-            ) : null}
-            {typeof client?.setKey !== 'function' ? (
-              <p className="mr-side-note is-dim">This bridge cannot store keys.</p>
-            ) : null}
-          </div>
-        ) : null}
-        {selected ? (
+        {directMissing ? renderDirectNotice(childModels.refresh) : null}
+        {selected && !directMissing ? (
           <ModelSelect
             label="Model"
             ariaLabel="New agent model"
@@ -1493,7 +1436,7 @@ export function FamilyTree({ client = null, tasks = null }) {
             canRefresh={childModels.canRefresh}
           />
         ) : null}
-        {selected && efforts.length > 0 ? (
+        {selected && !directMissing && efforts.length > 0 ? (
           <label className="mr-side-field">
             <span className="mr-side-field-label mono">Effort</span>
             <select
@@ -1513,7 +1456,7 @@ export function FamilyTree({ client = null, tasks = null }) {
         ) : null}
         {childProblem ? <p className="mr-family-note is-error">{childProblem}</p> : null}
         <div className="mr-side-form-actions">
-          <button type="submit" className="mr-side-primary" disabled={busy || !canCreate}>
+          <button type="submit" className="mr-side-primary" disabled={busy || !canCreate || directMissing}>
             Create
           </button>
           <button type="button" className="mr-side-action" disabled={busy} onClick={closeChild}>
@@ -1530,6 +1473,8 @@ export function FamilyTree({ client = null, tasks = null }) {
     const offered = childHarnesses(harnesses, models)
     const selected = offered.find((row) => row.key === subDraft.harness) ?? null
     const efforts = selected ? harnessEfforts(selected) : []
+    const direct = selected?.key === DIRECT_HARNESS
+    const directMissing = direct && !subModels.loading && subModels.choices.length === 0
     const canGroup = typeof client?.setLadder === 'function' && typeof client?.orchestrators === 'function'
     return (
       <form
@@ -1565,7 +1510,8 @@ export function FamilyTree({ client = null, tasks = null }) {
             ))}
           </select>
         </label>
-        {selected ? (
+        {directMissing ? renderDirectNotice(subModels.refresh) : null}
+        {selected && !directMissing ? (
           <ModelSelect
             label="Model"
             ariaLabel="Sub orchestrator model"
@@ -1578,7 +1524,7 @@ export function FamilyTree({ client = null, tasks = null }) {
             canRefresh={subModels.canRefresh}
           />
         ) : null}
-        {selected && efforts.length > 0 ? (
+        {selected && !directMissing && efforts.length > 0 ? (
           <label className="mr-side-field">
             <span className="mr-side-field-label mono">Effort</span>
             <select
@@ -1601,7 +1547,7 @@ export function FamilyTree({ client = null, tasks = null }) {
         ) : null}
         {subProblem ? <p className="mr-family-note is-error">{subProblem}</p> : null}
         <div className="mr-side-form-actions">
-          <button type="submit" className="mr-side-primary" disabled={busy || !canGroup}>
+          <button type="submit" className="mr-side-primary" disabled={busy || !canGroup || directMissing}>
             Create
           </button>
           <button type="button" className="mr-side-action" disabled={busy} onClick={closeGroupForm}>

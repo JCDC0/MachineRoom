@@ -57,6 +57,7 @@ export const CLIENT_METHODS = [
   'providers',
   'endpoints',
   'saveEndpoint',
+  'quickEndpoint',
   'deleteEndpoint',
   'endpointModels',
   'createLane',
@@ -171,6 +172,26 @@ const SAMPLE_ENDPOINTS = [
   { name: 'Local Ollama', provider: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', keyName: '', models: ['llama3.3', 'qwen3'] },
   { name: 'OpenRouter Work', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'openrouter', models: ['deepseek/deepseek-v4.1-flash-1017'] },
 ]
+
+const QUICK_MODEL_NAMES = ['flash', 'pro', 'mini']
+
+function quickModelsFor() {
+  return [...QUICK_MODEL_NAMES]
+}
+
+function directModelRows(endpoints) {
+  const rows = []
+  const seen = new Set()
+  for (const endpoint of Array.isArray(endpoints) ? endpoints : []) {
+    for (const model of Array.isArray(endpoint?.models) ? endpoint.models : []) {
+      const id = `${endpoint.name}/${model}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      rows.push({ id, label: `${model} (${endpoint.name})` })
+    }
+  }
+  return rows
+}
 
 const SAMPLE_MCP_SERVERS = [
   {
@@ -1501,6 +1522,16 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         } else if (harnessOrOptions && typeof harnessOrOptions === 'object') {
           harness = typeof harnessOrOptions.harness === 'string' ? harnessOrOptions.harness : ''
         }
+        if (harness === 'machineroom') {
+          const models = directModelRows(endpointState)
+          return {
+            harness,
+            models,
+            source: 'live',
+            fetchedAt: new Date().toISOString(),
+            ...(models.length === 0 ? { error: 'Add a Direct API key in Settings first.' } : {}),
+          }
+        }
         const models = state.models
           .filter((m) => m.harness === harness)
           .map(({ id, label }) => ({ id, label }))
@@ -1537,6 +1568,40 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         }
         emit({ topic: 'endpoints' })
         return { endpoint: clone(endpoint), endpoints: clone(endpointState) }
+      }),
+
+    quickEndpoint: ({ provider, key, confirmed = true } = {}) =>
+      call('quickEndpoint', () => {
+        if (confirmed !== true) throw new Error('Confirm saving the key first.')
+        const preset = MOCK_PROVIDERS.find((entry) => entry.name === provider && entry.baseUrl !== '')
+        if (!preset) throw new Error('Choose a provider from the list.')
+        if (typeof key !== 'string' || key.length < 1 || key.length > 500) throw new Error('Write the key.')
+        keySlots.set(preset.name, key)
+        const endpoint = {
+          name: preset.name,
+          provider: preset.name,
+          baseUrl: preset.baseUrl,
+          keyName: preset.name,
+          models: quickModelsFor(),
+        }
+        const index = endpointState.findIndex((entry) => entry.name === endpoint.name)
+        if (index === -1) {
+          if (endpointState.length >= 20) throw new Error('At most 20 endpoints are allowed.')
+          endpointState.push(endpoint)
+        } else {
+          endpointState[index] = endpoint
+        }
+        emit({ topic: 'endpoints' })
+        return {
+          endpoint: {
+            name: endpoint.name,
+            provider: endpoint.provider,
+            baseUrl: endpoint.baseUrl,
+            keyName: endpoint.keyName,
+            models: endpoint.models.length,
+          },
+          endpoints: clone(endpointState),
+        }
       }),
 
     deleteEndpoint: ({ name, confirmed = true } = {}) =>

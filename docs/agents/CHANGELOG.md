@@ -6,6 +6,14 @@
 
 - The machineroom model list is the saved endpoints' `NAME/MODEL` list once any endpoint exists; without one it falls back to the built-in models only with `MACHINEROOM_API_KEY` or `OPENROUTER_API_KEY`, and says `Add a Direct API key in Settings first.` otherwise (task H17).
 
+- Settings gains a Direct API section with a quick provider key form behind one confirm card, a row per endpoint with Refresh models, Replace key and Delete, and the custom endpoint form folded under Custom endpoint (task U85).
+
+- `client.quickEndpoint` posts `{ provider, key, confirmed }` to `/api/endpoints/quick`, and the mock saves the slot and endpoint and answers three models (task U85).
+
+- The family tree's Direct API choice lists endpoint models as `NAME/MODEL` labelled `MODEL (NAME)`, drops the key slot and Add key form, offers Open Settings when no endpoint exists, and names the `machineroom` harness Direct API everywhere (task U85).
+
+- Web search saves the Tavily and Brave keys in slots named after the provider through `client.setKey`, behind its own confirm card (task U85).
+
 - `POST /api/control/runs` credits a lane that a sub's sector holds to that sub when the main orchestrator starts it, with or without `startedBy`, so its end wakes the sub; a sub's token may still name only itself (task O24).
 
 - The orchestrator guide tells the main not to message a sub only to thank it or confirm a result, since every message starts a turn for the sub and its reply starts one for the main (task O24).
