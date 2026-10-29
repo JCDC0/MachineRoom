@@ -25,6 +25,7 @@ What works:
 
 What was checked live:
 
+- A real team on 2026-10-29: the main orchestrator and two subs on OpenCode (`opencode-go/glm-5.3-flash`) with one OpenCode coder lane each (`opencode-go/deepseek-v4.1-flash`) on a scratch git project. The main split one task in two, each sub started its lane in its own worktree, the lanes committed, each sub fast forwarded main and reported, and the main confirmed `npm test`. The run found four bugs, fixed on the day: the program of a changed harness, a sub that did not start on an order, a resumed OpenCode session with a dead token, and the run route reading the wrong runs folder. The free OpenCode models ran out of quota during the test.
 - A real queue on ulolTris through the room: `machine-room up --lanes --sessions` from that folder, four tasks in Dispatch, one OpenCode lane, 43 minutes, each task committed after `npm test` passed, main untouched, nothing pushed. The room showed each task live and turned green.
 - The LowBeam milestone too. The owner's two projects have now run through the room.
 - OpenCode, Claude Code and AGY each ran for real through `run-lane --project` on a scratch git project and showed in the room.
@@ -34,7 +35,6 @@ What was checked live:
 
 Not checked live yet:
 
-- A real sub orchestrator at work. On 2026-10-29 Build a team attached two subs to a live bridge on the test project, and the room drew them, their lines, the chips, the Team tab and the labels, but no sub has run a turn, dispatched a lane or reported back yet.
 - A lane using an MCP server, a browser one above all. H16 passes the servers, and none has been added yet.
 - The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
 - The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
@@ -46,7 +46,7 @@ Not checked live yet:
 In order:
 
 1. Done: the gaps the live check of the family tree found, V44 (a sector lights while its team works), V45 (a sub's chip does not cover the hub), O21 (the main orchestrator lists only the lanes it leads) and U84 (the sidebar has room for the family tree).
-2. A real team on the test project: two subs with one OpenCode lane each, one task through the main orchestrator, watched for orders, dispatches, reports and wakes in the room.
+2. Done: a real OpenCode team on a scratch project. Next, the same test with AGY only, Claude Code only and the Direct API only, then a mixed team.
 3. The room checked by eye at 1280 by 800, 900 by 700, 768 by 1024 and a phone.
 
 After that the owner decides the licence and the public release (P4).
