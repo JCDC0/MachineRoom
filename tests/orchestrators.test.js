@@ -7,7 +7,7 @@ import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource } from '../server/lanes-source.js'
 import { chatFileFor, CONFIRM_HARNESS_PROBLEM } from '../server/orchestrator.js'
-import { branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
+import { availableHarnesses, branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
@@ -1565,5 +1565,16 @@ describe('sub orchestrator agents', () => {
       'the sub chat log line'
     )
     expect(line.payload.chunk).toContain('tool_use')
+  })
+})
+
+describe('availableHarnesses with a Direct API endpoint', () => {
+  it('lists the endpoint models for the Direct API and not the built-in ones', () => {
+    const list = availableHarnesses({}, {}, process.platform, [{ name: 'OpenRouter', models: ['a/one', 'b/two'] }])
+    const direct = list.find((entry) => entry.key === 'machineroom')
+    expect(direct.models).toEqual([
+      { id: 'OpenRouter/a/one', label: 'a/one (OpenRouter)' },
+      { id: 'OpenRouter/b/two', label: 'b/two (OpenRouter)' },
+    ])
   })
 })
