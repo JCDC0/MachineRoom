@@ -749,10 +749,15 @@ export function createOrchestrator({
     if (pending.length === 0) return
     const ordered = pending.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
     if (!ordered) {
-      if (!sessionId) return
+      if (!givenWork()) return
       if (!roomTurnAllowed()) return
     }
     startTurn()
+  }
+
+  function givenWork() {
+    if (sessionId) return true
+    return messages.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
   }
 
   function startTurn(options = null) {
@@ -1414,7 +1419,7 @@ export function createOrchestrator({
     if (!record && laneKey.startsWith('sub-')) return
     const startedBy = typeof record?.startedBy === 'string' && record.startedBy ? record.startedBy : ORCHESTRATOR_KEY
     if (startedBy !== key) return
-    if (!sessionId || state === 'paused') return
+    if (!givenWork() || state === 'paused') return
     try {
       onMessage({ from: laneKey, to: key, kind: 'wake' })
     } catch {}

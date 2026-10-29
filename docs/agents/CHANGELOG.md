@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A room message, a sub report or a lane wake starts a turn once the orchestrator has been given work (an owner message, or an order from the main for a sub), not only once it has a session id, so an orchestrator on a harness that runs fresh each turn (AGY, Hermes, ACP, the machineroom harness) and one whose session was just compacted still wake. Found in the live AGY team test.
+
+- The orchestrator guide keeps the orchestrator to the project, its scratch folder and the run records; in the AGY team test the main orchestrator read the bridge's command line, the owner's test scripts and MachineRoom's source before it acted.
+
 - An orchestrator's turn fills `{{SCRATCH}}` with `<runs>/scratch-<id>` and makes that folder before the turn, so its task, run, ladder and goal files no longer pile up beside `runs.jsonl` (task O23).
 
 - A sub orchestrator's instructions say its reply is its report, ended with its turn, and never a POST to `/api/orchestrator/messages` (task O23).

@@ -1796,6 +1796,35 @@ describe('the lane source and the orchestrator turn', () => {
   })
 
   describe('a fresh turn through a fake harness', () => {
+    it('starts a room turn on a harness with no session once the owner gave it work', async () => {
+      const fakeHarness = {
+        key: 'fake',
+        name: 'Fake',
+        command({ cli, prompt }) {
+          return { file: cli.bin, args: ['--prompt', prompt], cwd: process.cwd() }
+        },
+        createParser() {
+          return { push() { return [] }, flush() { return [] } }
+        },
+        reply(log) {
+          return String(log ?? '').trim()
+        },
+      }
+      const rig = makeRig({
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: fakeHarness },
+        lanes: { orchestrator: { name: 'Orchestrator', harness: 'Fake', cli: { harness: 'fake', bin: process.execPath, model: 'fake-model' } } },
+      })
+      rig.orchestrator.deliver('room', 'A lane ended.')
+      await sleep(200)
+      expect(rig.calls()).toHaveLength(0)
+      rig.send('Start the work')
+      await waitFor(() => rig.calls().length === 1 && rig.answer().state === 'idle', 15000, 'the owner turn to finish')
+      rig.orchestrator.deliver('room', 'Run x on lane opencode ended: succeeded.')
+      await waitFor(() => rig.calls().length === 2, 15000, 'the room turn to start')
+    })
+
     it('runs fresh each time with instructions, summary and last 20 messages', async () => {
       const fakeHarness = {
         key: 'fake',
