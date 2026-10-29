@@ -838,7 +838,7 @@ export function createOrchestrator({
     let args
     if (harness === 'opencode') {
       const modelArg = effort ? `${model}#${effort}` : model
-      args = ['run', '--format', 'json', '--model', modelArg, '--auto', '--title', logName]
+      args = ['run', '--standalone', '--format', 'json', '--model', modelArg, '--auto', '--title', logName]
       if (!first) args.push('--session', sessionId)
       const restarted = `The room restarted, so your bridge token is new. Send the header X-MachineRoom-Orchestrator: ${token} on every bridge request from now on.`
       const body = first ? `${instruction}\n\n${message}` : tokenSent ? message : `${restarted}\n\n${message}`
