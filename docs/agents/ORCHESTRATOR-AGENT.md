@@ -79,6 +79,7 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 ```
 
 - Send each goal once. A sub keeps it in its chat while it works; send a new message only to change the goal.
+- Do not send a sub a message only to thank it or confirm a result. Every message starts a turn for the sub, and its reply starts one for you.
 - Start a lane for a sub by adding `"startedBy": "frontend"` to the run body. That run's end wakes the sub, not you.
 - A sub reports back as a message from `sub:frontend` in your chat. Treat it as a lane report.
 

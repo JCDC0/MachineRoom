@@ -448,16 +448,33 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
           sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
           return true
         }
-        startedBy = actor
+        const main = actor === 'orchestrator'
         if (Object.hasOwn(body, 'startedBy')) {
           const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
-          if (wanted !== actor) {
+          if (!wanted) {
             sendJson(req, res, 403, { error: TOKEN_MISMATCH_PROBLEM })
             return true
           }
+          if (wanted !== actor) {
+            const target = main ? registry.sector(wanted) : null
+            if (!target) {
+              sendJson(req, res, 403, { error: TOKEN_MISMATCH_PROBLEM })
+              return true
+            }
+            if (Array.isArray(target.lanes) && !target.lanes.includes(lane)) {
+              sendJson(req, res, 403, { error: `The ${target.name} sector does not hold the lane ${lane}.` })
+              return true
+            }
+          }
+          startedBy = wanted
+        } else if (main) {
+          const holder = typeof registry.sectorForLane === 'function' ? registry.sectorForLane(lane) : null
+          startedBy = holder ? holder.id : actor
+        } else {
+          startedBy = actor
         }
         const sector = registry.sector(actor)
-        if (actor !== 'orchestrator' && Array.isArray(sector?.lanes) && !sector.lanes.includes(lane)) {
+        if (!main && Array.isArray(sector?.lanes) && !sector.lanes.includes(lane)) {
           sendJson(req, res, 403, { error: `The ${sector.name} sector does not hold the lane ${lane}.` })
           return true
         }
