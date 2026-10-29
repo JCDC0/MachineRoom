@@ -14,6 +14,7 @@ import { gitPath } from '../server/programPath.js'
 import { readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { acpRunCommand } from './acp-run.mjs'
 import { processAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from './lane-lock.mjs'
+import { enabledMcpServers, mcpConfigForClaude, mcpConfigForOpencode } from './mcp-bridge.mjs'
 import { writeRecording } from './recording-files.mjs'
 
 const entry = fileURLToPath(import.meta.url)
@@ -405,11 +406,15 @@ export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effo
   return { ...acpRunCommand({ command, minutes, model, effort }), input: true }
 }
 
-function printCommand(command, prompt) {
+function printCommand(command, prompt, { mcpConfig = '', mcpServers = [] } = {}) {
   const shown = command.args.map((arg) => (arg === prompt ? `<prompt: ${prompt.length} characters>` : arg))
   console.log(`file: ${command.file}`)
   console.log(`args: ${JSON.stringify(shown)}`)
   console.log(`cwd: ${command.cwd}`)
+  if (mcpConfig && Array.isArray(mcpServers) && mcpServers.length > 0) {
+    console.log(`mcp config: ${mcpConfig}`)
+    console.log(`mcp servers: ${mcpServers.map((s) => s.name).join(', ')}`)
+  }
   if (!command.args.includes(prompt)) console.log(`prompt: <prompt: ${prompt.length} characters>`)
 }
 
@@ -743,7 +748,12 @@ async function main() {
     const usageFile = join(folder, `${name}.usage.json`)
 
     if (options.dryRun) {
-      printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project }), prompt)
+      const enabledServers = enabledMcpServers(folder)
+      const harness = lane.cli?.harness
+      const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
+      const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
+      const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, cwd: project, mcpConfig: mcpConfigPath })
+      printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
       return 0
     }
 
@@ -809,7 +819,12 @@ async function main() {
 
   if (options.dryRun) {
     const start = gitCheckout(lane.worktree) ? laneWorktreeStart({ worktree: lane.worktree }) : null
-    printCommand(commandFor({ lane, prompt, env: process.env, usageFile, title: name }), prompt)
+    const enabledServers = enabledMcpServers(folder)
+    const harness = lane.cli?.harness
+    const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
+    const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
+    const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, mcpConfig: mcpConfigPath })
+    printCommand(command, prompt, { mcpConfig: mcpConfigPath, mcpServers: enabledServers })
     if (start) {
       const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
       console.log(`start branch: ${start.startBranch}${from}`)
@@ -836,127 +851,158 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     start = laneWorktreeStart({ worktree: lane.worktree, move: true })
   }
 
-  const sessionId = randomUUID()
-  const command = commandFor({ lane, prompt, env: process.env, usageFile, title: name, sessionId, ...(project ? { cwd: project } : {}) })
-  if (project) {
-    const meta = { lane: options.lane, project, sessionId }
-    if (queue) {
-      meta.queue = queue.branch
-      meta.index = queue.index
-    }
-    writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
-  }
-  const log = createWriteStream(logPath)
-  const laneLog = createLaneLog({ write: (text) => log.write(text), runId: name })
-  const startedAt = Date.now()
-  // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
-  const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
-  const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE']
-    .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
-  const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnvironment(process.env, command.cwd, { harness: lane.cli.harness, names: runnerNames }), stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
-  if (lockPath) writeLaneChild(lockPath, child.pid)
-  if (spawnSpec.input && child.stdin) {
-    child.stdin.on('error', () => {})
-    child.stdin.end(prompt)
-  }
-  child.stdout?.setEncoding('utf8')
-  child.stderr?.setEncoding('utf8')
-  child.stdout?.on('data', (text) => laneLog.push('stdout', text))
-  child.stderr?.on('data', (text) => laneLog.push('stderr', text))
-
-  let killed = false
-  let stopNote = ''
-  const stopChild = (note) => {
-    if (!child.pid || child.exitCode !== null || child.signalCode !== null) return
-    killed = true
-    if (stopNote === '') stopNote = note
-    const descendants = harnessDescendants(child.pid)
-    killTree(child)
-    stopDescendants(descendants)
-  }
-  const onInt = () => stopChild('stopped by SIGINT')
-  const onTerm = () => stopChild('stopped by SIGTERM')
-  const onHup = () => stopChild('stopped by SIGHUP')
-  const onExit = () => {
-    if (child.exitCode === null && child.signalCode === null) killTree(child)
-  }
-  process.on('SIGINT', onInt)
-  process.on('SIGTERM', onTerm)
-  process.on('SIGHUP', onHup)
-  process.on('exit', onExit)
-  const timer = setTimeout(() => {
-    stopChild('killed after the time limit')
-  }, options.minutes * 60 * 1000)
-
-  const result = await new Promise((done) => {
-    child.on('error', (error) => done({ code: null, error }))
-    child.on('close', (code) => done({ code }))
-  })
-  clearTimeout(timer)
-  process.removeListener('SIGINT', onInt)
-  process.removeListener('SIGTERM', onTerm)
-  process.removeListener('SIGHUP', onHup)
-  process.removeListener('exit', onExit)
-  const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 })
-  laneLog.flush()
-  await new Promise((done) => log.end(done))
-  const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
-  const harness = lane.cli.harness
-
-  if (result.error) console.log(`start failed: ${result.error.message}`)
-  if (start) {
-    const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
-    console.log(`start branch: ${start.startBranch}${from}`)
-  }
-  console.log(`exit code: ${result.code === null ? 'none' : result.code}${stopNote ? ` (${stopNote})` : ''}`)
-  console.log(`minutes: ${minutes}`)
-  console.log(`log: ${logPath}`)
-  const report = harness === 'hermes' ? readUsage(usageFile) : null
-  let toolLines = { count: 0, session: '' }
-  if (harness === 'hermes') {
-    printUsage(usageFile)
-    toolLines = captureToolLines(command.file, report?.session_id, logPath)
-    console.log(`tool lines: ${toolLines.count}`)
+  const folder = runsFolder()
+  const enabledServers = enabledMcpServers(folder)
+  const harness = lane.cli?.harness
+  const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
+  const mcpConfigPath = needsMcp ? join(folder, `${name}.mcp.json`) : ''
+  if (needsMcp) {
+    const config = harness === 'claude' ? mcpConfigForClaude(enabledServers) : mcpConfigForOpencode(enabledServers)
+    writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
   }
 
-  const worktree = project || lane.worktree
-  const summary = summarizeRun({ harness, log: readLog(logPath), worktree })
-  formatSummary(summary).forEach((line) => console.log(line))
-
-  const branch = project ? '' : gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
-  const commitsText = project ? '' : gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
-  const record = laneRunRecord({
-    lane: options.lane,
-    briefs: project ? [] : wanted.map((brief) => brief.id),
-    model: lane.cli.model,
-    reasoning: lane.reasoning ?? null,
-    startedAt,
-    minutes,
-    exitCode: result.code,
-    killed,
-    costUsd: harness === 'opencode' || harness === 'claude' || harness === 'acp' ? summary.costUsd : totalCost(report),
-    inputTokens: summary.inputTokens,
-    outputTokens: summary.outputTokens,
-    log: logPath,
-    branch,
-    commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
-    stoppedLeftovers,
-    ...(start ? { startBranch: start.startBranch } : {}),
-    ...(options.startedBy ? { startedBy: options.startedBy } : {}),
-    ...(project ? { project, task } : {}),
-    ...(queue ? { queue } : {}),
-  })
-  appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
-  console.log(`record: ${runsFile()}`)
-  if (project) return { code: result.code ?? 1, killed }
   try {
-    const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
-    console.log(`room: /?recording=${written.name}`)
-    if (written.indexError) console.log(`index: not updated (${written.indexError})`)
-  } catch (error) {
-    console.log(`room: not recorded (${String(error?.message ?? error)})`)
+    const sessionId = randomUUID()
+    const command = commandFor({
+      lane,
+      prompt,
+      env: process.env,
+      usageFile,
+      title: name,
+      sessionId,
+      mcpConfig: mcpConfigPath,
+      ...(project ? { cwd: project } : {}),
+    })
+    if (project) {
+      const meta = { lane: options.lane, project, sessionId }
+      if (queue) {
+        meta.queue = queue.branch
+        meta.index = queue.index
+      }
+      writeFileSync(join(dirname(logPath), `${name}.meta.json`), `${JSON.stringify(meta)}\n`)
+    }
+    const log = createWriteStream(logPath)
+    const laneLog = createLaneLog({ write: (text) => log.write(text), runId: name })
+    const startedAt = Date.now()
+    // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
+    const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
+    const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE']
+      .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
+    const childEnv = childEnvironment(process.env, command.cwd, {
+      harness: lane.cli.harness,
+      names: runnerNames,
+      extra: command.env,
+    })
+    const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
+    if (lockPath) writeLaneChild(lockPath, child.pid)
+    if (spawnSpec.input && child.stdin) {
+      child.stdin.on('error', () => {})
+      child.stdin.end(prompt)
+    }
+    child.stdout?.setEncoding('utf8')
+    child.stderr?.setEncoding('utf8')
+    child.stdout?.on('data', (text) => laneLog.push('stdout', text))
+    child.stderr?.on('data', (text) => laneLog.push('stderr', text))
+
+    let killed = false
+    let stopNote = ''
+    const stopChild = (note) => {
+      if (!child.pid || child.exitCode !== null || child.signalCode !== null) return
+      killed = true
+      if (stopNote === '') stopNote = note
+      const descendants = harnessDescendants(child.pid)
+      killTree(child)
+      stopDescendants(descendants)
+    }
+    const onInt = () => stopChild('stopped by SIGINT')
+    const onTerm = () => stopChild('stopped by SIGTERM')
+    const onHup = () => stopChild('stopped by SIGHUP')
+    const onExit = () => {
+      if (child.exitCode === null && child.signalCode === null) killTree(child)
+    }
+    process.on('SIGINT', onInt)
+    process.on('SIGTERM', onTerm)
+    process.on('SIGHUP', onHup)
+    process.on('exit', onExit)
+    const timer = setTimeout(() => {
+      stopChild('killed after the time limit')
+    }, options.minutes * 60 * 1000)
+
+    const result = await new Promise((done) => {
+      child.on('error', (error) => done({ code: null, error }))
+      child.on('close', (code) => done({ code }))
+    })
+    clearTimeout(timer)
+    process.removeListener('SIGINT', onInt)
+    process.removeListener('SIGTERM', onTerm)
+    process.removeListener('SIGHUP', onHup)
+    process.removeListener('exit', onExit)
+    const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 })
+    laneLog.flush()
+    await new Promise((done) => log.end(done))
+    const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
+
+    if (result.error) console.log(`start failed: ${result.error.message}`)
+    if (start) {
+      const from = start.from && start.from !== start.startBranch ? ` (the worktree was on ${start.from})` : ''
+      console.log(`start branch: ${start.startBranch}${from}`)
+    }
+    console.log(`exit code: ${result.code === null ? 'none' : result.code}${stopNote ? ` (${stopNote})` : ''}`)
+    console.log(`minutes: ${minutes}`)
+    console.log(`log: ${logPath}`)
+    const report = harness === 'hermes' ? readUsage(usageFile) : null
+    let toolLines = { count: 0, session: '' }
+    if (harness === 'hermes') {
+      printUsage(usageFile)
+      toolLines = captureToolLines(command.file, report?.session_id, logPath)
+      console.log(`tool lines: ${toolLines.count}`)
+    }
+
+    const worktree = project || lane.worktree
+    const summary = summarizeRun({ harness, log: readLog(logPath), worktree })
+    formatSummary(summary).forEach((line) => console.log(line))
+
+    const branch = project ? '' : gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
+    const commitsText = project ? '' : gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
+    const record = laneRunRecord({
+      lane: options.lane,
+      briefs: project ? [] : wanted.map((brief) => brief.id),
+      model: lane.cli.model,
+      reasoning: lane.reasoning ?? null,
+      startedAt,
+      minutes,
+      exitCode: result.code,
+      killed,
+      costUsd: harness === 'opencode' || harness === 'claude' || harness === 'acp' ? summary.costUsd : totalCost(report),
+      inputTokens: summary.inputTokens,
+      outputTokens: summary.outputTokens,
+      log: logPath,
+      branch,
+      commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
+      stoppedLeftovers,
+      ...(start ? { startBranch: start.startBranch } : {}),
+      ...(options.startedBy ? { startedBy: options.startedBy } : {}),
+      ...(project ? { project, task } : {}),
+      ...(queue ? { queue } : {}),
+    })
+    appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
+    console.log(`record: ${runsFile()}`)
+    if (project) return { code: result.code ?? 1, killed }
+    try {
+      const written = writeRecording({ record, lanes, root, env: process.env, session: toolLines.session })
+      console.log(`room: /?recording=${written.name}`)
+      if (written.indexError) console.log(`index: not updated (${written.indexError})`)
+    } catch (error) {
+      console.log(`room: not recorded (${String(error?.message ?? error)})`)
+    }
+    return { code: result.code ?? 1, killed }
+  } finally {
+    if (mcpConfigPath) {
+      try {
+        rmSync(mcpConfigPath, { force: true })
+      } catch {}
+    }
   }
-  return { code: result.code ?? 1, killed }
 }
 
 const sameFile = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b)

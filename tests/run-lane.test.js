@@ -1,11 +1,12 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
 import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
+import { startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const lanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
@@ -1376,6 +1377,114 @@ describe('scripts/run-lane.mjs', () => {
       expect(result.stdout).toContain(`The lane worktree ${checkout} is the main checkout`)
       expect(result.stdout).not.toContain('args:')
       expect(result.stdout).not.toContain('cwd:')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('prints MCP config and servers on dry run without exposing env values, and omits them when none are enabled', async () => {
+    const folder = makeTempDir('machine-room-mcp-dry-')
+    try {
+      const runs = join(folder, 'runs')
+      mkdirSync(runs, { recursive: true })
+      const lanesFile = lanesFileUnderWorktrees(folder)
+
+      const noMcp = await runLane(['opencode', 'S2a', '--dry-run', '--force'], {
+        MACHINEROOM_LANES_FILE: lanesFile,
+        MACHINEROOM_RUNS: runs,
+      })
+      expect(noMcp.code).toBe(0)
+      expect(noMcp.stdout).not.toContain('mcp config:')
+      expect(noMcp.stdout).not.toContain('mcp servers:')
+
+      writeFileSync(join(runs, 'mcp.json'), JSON.stringify({
+        servers: [
+          { name: 'browser', transport: 'http', url: 'https://example.com/mcp', enabled: true },
+          { name: 'db', transport: 'stdio', command: 'node', args: ['db.js'], env: { SECRET_KEY: 'topsecret' }, enabled: true },
+          { name: 'disabled_srv', transport: 'stdio', command: 'node', enabled: false },
+        ],
+      }))
+
+      const withMcp = await runLane(['opencode', 'S2a', '--dry-run', '--force'], {
+        MACHINEROOM_LANES_FILE: lanesFile,
+        MACHINEROOM_RUNS: runs,
+      })
+      expect(withMcp.code).toBe(0)
+      expect(withMcp.stdout).toContain('mcp config:')
+      expect(withMcp.stdout).toContain('mcp servers: browser, db')
+      expect(withMcp.stdout).not.toContain('disabled_srv')
+      expect(withMcp.stdout).not.toContain('topsecret')
+    } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('writes and cleans up MCP config during lane run and writes nothing when none is enabled', async () => {
+    const folder = makeTempDir('machine-room-mcp-run-')
+    try {
+      const runs = join(folder, 'runs')
+      const project = join(folder, 'project')
+      mkdirSync(runs, { recursive: true })
+      mkdirSync(project, { recursive: true })
+      const previous = process.env.MACHINEROOM_RUNS
+      process.env.MACHINEROOM_RUNS = runs
+      const checkFile = join(folder, 'mcp-existed.txt')
+      const script = join(project, 'run')
+      writeFileSync(script, [
+        "const { writeFileSync, existsSync } = require('node:fs')",
+        "const cfg = process.env.OPENCODE_CONFIG || ''",
+        "const existed = cfg ? existsSync(cfg) : false",
+        `writeFileSync(${JSON.stringify(checkFile)}, JSON.stringify({ cfg, existed }))`,
+        "console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+        '',
+      ].join('\n'))
+      const lane = {
+        name: 'test-opencode',
+        worktree: project,
+        cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model' },
+      }
+
+      await startLane({
+        options: { lane: 'test-opencode', minutes: 1 },
+        lane,
+        lanes: { 'test-opencode': lane },
+        wanted: [],
+        prompt: 'test prompt',
+        logPath: join(runs, 'run-no-mcp.log'),
+        usageFile: join(runs, 'run-no-mcp.usage.json'),
+        name: 'run-no-mcp',
+        project,
+        task: 'task',
+      })
+      const noMcpResult = JSON.parse(readFileSync(checkFile, 'utf8'))
+      expect(noMcpResult.cfg).toBe('')
+      expect(noMcpResult.existed).toBe(false)
+      expect(existsSync(join(runs, 'run-no-mcp.mcp.json'))).toBe(false)
+
+      writeFileSync(join(runs, 'mcp.json'), JSON.stringify({
+        servers: [
+          { name: 'browser', transport: 'http', url: 'https://example.com/mcp', enabled: true },
+        ],
+      }))
+      await startLane({
+        options: { lane: 'test-opencode', minutes: 1 },
+        lane,
+        lanes: { 'test-opencode': lane },
+        wanted: [],
+        prompt: 'test prompt',
+        logPath: join(runs, 'run-with-mcp.log'),
+        usageFile: join(runs, 'run-with-mcp.usage.json'),
+        name: 'run-with-mcp',
+        project,
+        task: 'task',
+      })
+      const withMcpResult = JSON.parse(readFileSync(checkFile, 'utf8'))
+      expect(withMcpResult.cfg).toBe(join(runs, 'run-with-mcp.mcp.json'))
+      expect(withMcpResult.existed).toBe(true)
+      expect(existsSync(join(runs, 'run-with-mcp.mcp.json'))).toBe(false)
+
+      if (previous === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previous
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }

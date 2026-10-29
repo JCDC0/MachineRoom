@@ -4,6 +4,8 @@
 
 - The cyan console above an agent shows its address as a link in its label that opens in a new tab and leaves the agent unselected, and the dock offers `Open ADDRESS` when the console has one (task U83).
 
+- Enabled MCP servers pass to Claude Code and OpenCode lane runs and orchestrator turns through temporary config files (task H16).
+
 - A ladder save sends the `agents` and `family` notices, so a new or removed sub shows in the room, the family tree and the waiting card at once instead of after the next minute read, and the waiting card counts the refreshed live roster.
 
 - The recent projects list skips temp folders, lane worktrees and runs folders, drops missing folders at most once a minute, and POST /api/projects/forget removes an entry (task O20).

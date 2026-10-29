@@ -6,6 +6,9 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { killTree } from '../server/processTree.js'
+import { mcpConfigForClaude, mcpConfigForOpencode } from '../src/briefs/run.js'
+
+export { mcpConfigForClaude, mcpConfigForOpencode }
 
 export const MCP_PROTOCOL_VERSION = '2024-11-05'
 export const LIST_TIMEOUT_MS = 8000

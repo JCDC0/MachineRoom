@@ -52,9 +52,13 @@ export const opencodeHarness = {
   name: 'OpenCode',
   adapterType: 'opencode_local',
   createParser: createOpencodeParser,
-  command({ cli, prompt, env = {}, folder, title, reasoning } = {}) {
+  command({ cli, prompt, env = {}, folder, title, reasoning, mcpConfig } = {}) {
     const model = reasoning ? `${cli.model}#${reasoning}` : cli.model
-    return { file: expandBin(cli.bin, env), args: ['run', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: folder }
+    const result = { file: expandBin(cli.bin, env), args: ['run', '--format', 'json', '--model', model, '--auto', '--title', title, prompt], cwd: folder }
+    if (typeof mcpConfig === 'string' && mcpConfig.trim() !== '') {
+      result.env = { OPENCODE_CONFIG: mcpConfig.trim() }
+    }
+    return result
   },
   readLine() {
     return jsonLineReader(createOpencodeParser)
