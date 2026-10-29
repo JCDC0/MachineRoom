@@ -12,11 +12,37 @@ function claudeReply(log) {
       continue
     }
     if (item?.type !== 'result' || item.parent_tool_use_id) continue
+    if (item.is_error) continue
     const text = item.result
     if (typeof text !== 'string' || !text.trim()) continue
     words = text
   }
   return words ?? ''
+}
+
+function claudeFailure(log) {
+  let failure = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'result' || item.parent_tool_use_id) continue
+    if (!item.is_error) continue
+    const message =
+      typeof item.result === 'string' && item.result.trim()
+        ? item.result.trim()
+        : typeof item.error?.message === 'string' && item.error.message.trim()
+          ? item.error.message.trim()
+          : typeof item.error === 'string' && item.error.trim()
+            ? item.error.trim()
+            : null
+    if (message) failure = message
+  }
+  return failure
 }
 
 function claudeUsage(log) {
@@ -57,6 +83,9 @@ export const claudeHarness = {
   },
   reply(log) {
     return claudeReply(log)
+  },
+  failure(log) {
+    return claudeFailure(log)
   },
   usage(log) {
     return claudeUsage(log)

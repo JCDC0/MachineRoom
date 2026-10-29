@@ -115,6 +115,13 @@ function readText(file) {
   }
 }
 
+function cleanFailure(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  const safe = maskKeys(raw).text.trim()
+  if (!safe) return null
+  return safe.length > 300 ? safe.slice(0, 300) : safe
+}
+
 export function projectHash(projectRoot) {
   const key = projectRoot ? pathKey(projectRoot) : ''
   return createHash('sha256').update(key).digest('hex').slice(0, 8)
@@ -915,6 +922,7 @@ export function createOrchestrator({
     const logText = readText(turn.logPath)
     let runStats
     let report
+    const descriptor = (harnesses && harnesses[harness]) || harnessByKey[harness]
     if (harness === 'opencode' || harness === 'claude') {
       runStats = summarizeRun({ harness, log: logText, worktree: root })
       report = replyText(harness, logText)
@@ -928,7 +936,6 @@ export function createOrchestrator({
         }
       }
     } else {
-      const descriptor = (harnesses && harnesses[harness]) || harnessByKey[harness]
       if (descriptor) {
         try {
           runStats = summarizeRun({ harness, log: logText, worktree: root })
@@ -955,13 +962,19 @@ export function createOrchestrator({
     } else if (typeof runStats?.inputTokens === 'number' && runStats.inputTokens > 0) {
       contextTokens = runStats.inputTokens
     }
+    const failureRaw = descriptor?.failure ? descriptor.failure(logText) : null
+    const failureMessage = cleanFailure(failureRaw)
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const text = failed
       ? Number.isInteger(code)
         ? report && !turn.killed
           ? `The orchestrator stopped: ${report}`
-          : `The orchestrator stopped: exit ${code}.`
-        : STOPPED_REPLY
+          : failureMessage
+            ? `The orchestrator stopped: ${failureMessage}`
+            : `The orchestrator stopped: exit ${code}.`
+        : failureMessage
+          ? `The orchestrator stopped: ${failureMessage}`
+          : STOPPED_REPLY
       : report || EMPTY_REPLY
     const record = runRecord({
       lane: logPrefix,
@@ -1403,6 +1416,29 @@ export function createOrchestrator({
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
     const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
     let text = record ? `${first}\n${recordLine(record)}` : first
+    if (status === 'failed') {
+      const logFile = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? join(folder, `${logName}.log`) : '')
+      const logContent = logFile ? readText(logFile) : ''
+      if (logContent) {
+        const laneEntry = lanes && Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
+        const laneHarnessKey = laneEntry?.cli?.harness || laneEntry?.harness || laneKey
+        const descriptor = (harnesses && (harnesses[laneHarnessKey] || harnesses[laneKey])) || harnessByKey[laneHarnessKey] || harnessByKey[laneKey]
+        let failureRaw = descriptor?.failure ? descriptor.failure(logContent) : null
+        if (!failureRaw) {
+          for (const h of Object.values(harnesses ?? harnessByKey)) {
+            if (typeof h?.failure === 'function') {
+              const found = h.failure(logContent)
+              if (found) {
+                failureRaw = found
+                break
+              }
+            }
+          }
+        }
+        const failureMessage = cleanFailure(failureRaw)
+        if (failureMessage) text = `${text}\nError: ${failureMessage}`
+      }
+    }
     const outside = typeof outsideFiles === 'function' ? outsideFiles(record, laneKey) : []
     if (Array.isArray(outside) && outside.length > 0) {
       text = `Outside the scope, do not merge:\n${outside.map((file) => `- ${file}`).join('\n')}\n\n${text}`

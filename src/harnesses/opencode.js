@@ -19,6 +19,30 @@ function opencodeReply(log) {
   return words ?? ''
 }
 
+function opencodeFailure(log) {
+  let failure = null
+  for (const line of String(log ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue
+    let item
+    try {
+      item = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (item?.type !== 'error') continue
+    const message =
+      typeof item.error?.message === 'string' && item.error.message.trim()
+        ? item.error.message.trim()
+        : typeof item.error === 'string' && item.error.trim()
+          ? item.error.trim()
+          : typeof item.message === 'string' && item.message.trim()
+            ? item.message.trim()
+            : null
+    if (message) failure = message
+  }
+  return failure
+}
+
 function opencodeUsage(log) {
   let cost = null
   const inputs = []
@@ -68,6 +92,9 @@ export const opencodeHarness = {
   },
   reply(log) {
     return opencodeReply(log)
+  },
+  failure(log) {
+    return opencodeFailure(log)
   },
   usage(log) {
     return opencodeUsage(log)
