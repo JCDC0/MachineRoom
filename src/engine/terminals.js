@@ -25,6 +25,17 @@ export function chipHalfWidth(open) {
   return ((open ? OPEN_W : CHIP_W) * SCALE) / 2
 }
 
+export const CHIP_SIDE_DEAD_BAND = 24
+
+export function chipSideFromScreen(agentX, hubX, previous = 1, deadBand = CHIP_SIDE_DEAD_BAND) {
+  const fallback = previous === -1 ? -1 : 1
+  if (!Number.isFinite(agentX) || !Number.isFinite(hubX)) return fallback
+  const band = Number.isFinite(deadBand) ? Math.max(0, deadBand) : CHIP_SIDE_DEAD_BAND
+  const gap = agentX - hubX
+  if (Math.abs(gap) <= band) return fallback
+  return gap > 0 ? 1 : -1
+}
+
 export function consoleRows(lines, limit = CONSOLE_ROWS) {
   if (!Array.isArray(lines) || lines.length === 0) return []
   const count = Number.isFinite(limit) ? Math.floor(limit) : CONSOLE_ROWS
@@ -179,6 +190,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       consoleAddress: null,
       consolePlaced: false,
       open: false,
+      side: 1,
       placed: false,
       visible: true,
       version: -1,
@@ -301,7 +313,8 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     for (const term of terminals.values()) {
       const anchor = anchorOf(term.key)
       if (anchor) {
-        goal.copy(anchor).addScaledVector(right, sideOf(term.key) * (AGENT_GAP + chipHalfWidth(term.open)))
+        term.side = sideOf(term.key) < 0 ? -1 : 1
+        goal.copy(anchor).addScaledVector(right, term.side * (AGENT_GAP + chipHalfWidth(term.open)))
         if (term.open) goal.addScaledVector(up, -40)
         if (term.placed) term.object.position.lerp(goal, rate)
         else term.object.position.copy(goal)
@@ -363,7 +376,8 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
 
   function edgePoint(key, side, out) {
     const term = terminals.get(key)
-    return out.copy(term.object.position).addScaledVector(right, side * chipHalfWidth(term.open))
+    const edge = term.side === -1 || term.side === 1 ? -term.side : side
+    return out.copy(term.object.position).addScaledVector(right, edge * chipHalfWidth(term.open))
   }
 
   function remove(key) {

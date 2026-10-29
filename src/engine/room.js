@@ -11,7 +11,7 @@ import { createLabels } from './labels.js'
 import { createMessages } from './messages.js'
 import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
-import { CHIP_REACH, createTerminals } from './terminals.js'
+import { CHIP_REACH, chipSideFromScreen, createTerminals } from './terminals.js'
 import { createVoid } from './void.js'
 
 const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
@@ -568,7 +568,20 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   let last = performance.now()
   let frameId = 0
   const anchorOf = (key) => agentSet.views.get(key)?.group.position
-  const chipSideOf = (key) => agentSet.views.get(key)?.chipSide ?? 1
+  const chipSides = new Map()
+  let hubScreenX = NaN
+
+  function chipSideOf(key) {
+    const view = agentSet.views.get(key)
+    if (!view) return 1
+    if (!view.orchestrator && !view.subOrchestrator) return view.chipSide ?? 1
+    const previous = chipSides.get(key) ?? view.chipSide ?? 1
+    const point = projectPoint(camera, view.group.position, width, height)
+    if (!point || !Number.isFinite(hubScreenX)) return previous
+    const side = chipSideFromScreen(point.x, hubScreenX, previous)
+    chipSides.set(key, side)
+    return side
+  }
 
   function frame(now) {
     frameId = requestAnimationFrame(frame)
@@ -627,6 +640,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     })
 
     rig.update(delta)
+    const hubPoint = projectPoint(camera, HUB_CENTER, width, height)
+    hubScreenX = hubPoint ? hubPoint.x : NaN
     terminals.update(state, now, camera, followFocus.focused(), anchorOf, delta, chipSideOf)
     renderer.render(scene, camera)
     cssRenderer.render(cssScene, camera)
