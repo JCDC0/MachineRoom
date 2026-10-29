@@ -7524,7 +7524,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   }
 
   .log-text {
-    overflow-wrap: normal;
+    overflow-wrap: anywhere;
     word-break: normal;
   }
 }

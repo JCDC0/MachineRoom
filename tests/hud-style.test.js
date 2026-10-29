@@ -331,7 +331,7 @@ describe('HUD concept style structure', () => {
       'grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) clamp(200px, calc(40vw - 160px), 280px)'
     )
     expect(css).toMatch(
-      /@media \(min-width: 900px\) \{\s+\.log-agent \{\s+width: calc\(var\(--space\) \* 12\);\s+\}\s+\.log-text \{\s+overflow-wrap: normal;\s+word-break: normal;\s+\}/
+      /@media \(min-width: 900px\) \{\s+\.log-agent \{\s+width: calc\(var\(--space\) \* 12\);\s+\}\s+\.log-text \{\s+overflow-wrap: anywhere;\s+word-break: normal;\s+\}/
     )
     expect(css).toMatch(/\.log-text \{[^}]*word-break: break-word;/)
   })

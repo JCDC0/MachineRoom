@@ -83,7 +83,9 @@ function EventLogBody({ entries, bodyRef = null }) {
             <div key={`${entry.time ?? index}-${index}`} className={`log-line is-${entry.tone ?? 'normal'}`}>
               {stamp && <span className="log-time">{stamp}</span>}
               {entry.agent && <span className="log-agent">{entry.agent}</span>}
-              <span className="log-text">{entry.text}</span>
+              <span className="log-text">
+                {String(entry.text ?? '').split('/').flatMap((part, at) => (at ? ['/', <wbr key={at} />, part] : [part]))}
+              </span>
             </div>
           )
         })
