@@ -986,6 +986,40 @@ describe('the orchestrator conversation file', () => {
     expect(restored.answer().messages.some((message) => message.text === 'Still there?')).toBe(true)
   })
 
+  it('gives a resumed OpenCode session its new token once after a restart', async () => {
+    const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
+    rig.send('Remember me')
+    await waitIdle(rig, 1)
+    rig.send('Again')
+    await waitIdle(rig, 2)
+    expect(rig.calls()[1].args.at(-1)).not.toContain('X-MachineRoom-Orchestrator')
+    rig.orchestrator.close()
+
+    const callsFile = join(rig.base, 'calls-restored.jsonl')
+    const spawnFake = (source, args, options) => {
+      const env = { ...(options.env ?? process.env), MR_CALLS: callsFile, MR_MODE: 'reply', MR_RELEASE: join(rig.base, 'no-release') }
+      return spawn(process.execPath, [rig.script, ...args], { ...options, env })
+    }
+    const restored = createOrchestrator({
+      projectRoot: rig.projectRoot,
+      runsFolder: rig.runs,
+      lanes: OPENCODE_LANES,
+      harness: 'opencode',
+      spawn: spawnFake,
+      promptFile: rig.promptFile,
+      token: 'fresh-token',
+    })
+    cleanups.push(async () => restored.close())
+    restored.send({ text: 'After the restart', confirmed: true })
+    await waitFor(() => readLines(callsFile).length === 1 && restored.answer().state === 'idle')
+    const resumed = readLines(callsFile)[0].args
+    expect(resumed).toContain('--session')
+    expect(resumed.at(-1)).toContain('X-MachineRoom-Orchestrator: fresh-token')
+    restored.send({ text: 'Once more', confirmed: true })
+    await waitFor(() => readLines(callsFile).length === 2 && restored.answer().state === 'idle')
+    expect(readLines(callsFile)[1].args.at(-1)).not.toContain('fresh-token')
+  })
+
   it('kills a running turn on close, saves the working state and says the room restarted', async () => {
     const rig = makeRig()
     rig.behaviour.mode = 'hold'

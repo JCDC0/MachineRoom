@@ -434,6 +434,7 @@ export function createOrchestrator({
   const roomTurns = []
   let ladder = null
   let sessionId = null
+  let tokenSent = false
   let state = 'idle'
   let running = null
   let stopped = false
@@ -804,7 +805,9 @@ export function createOrchestrator({
       const modelArg = effort ? `${model}#${effort}` : model
       args = ['run', '--format', 'json', '--model', modelArg, '--auto', '--title', logName]
       if (!first) args.push('--session', sessionId)
-      const body = first ? `${instruction}\n\n${message}` : message
+      const restarted = `The room restarted, so your bridge token is new. Send the header X-MachineRoom-Orchestrator: ${token} on every bridge request from now on.`
+      const body = first ? `${instruction}\n\n${message}` : tokenSent ? message : `${restarted}\n\n${message}`
+      tokenSent = true
       args.push(carried ? `${carried}\n\n${body}` : body)
     } else if (harness === 'claude') {
       args = [

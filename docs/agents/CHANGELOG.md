@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- After a restart, the first resumed OpenCode turn of an orchestrator carries its new bridge token. OpenCode gets the instructions only in its first message, so a resumed session kept the old token and every bridge call was refused.
+
 - An order from the main orchestrator starts a sub's first turn. Before, a message that was not the owner's started a turn only when a session existed, so a new sub kept the order and never ran.
 
 - An orchestrator runs the program of its current harness: after a harness change from Claude Code to OpenCode the main ran `claude` with OpenCode's arguments and stopped with exit 1; it now takes the program from the lane of that harness.
