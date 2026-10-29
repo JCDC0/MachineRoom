@@ -5,7 +5,7 @@ import { MODELS, modelsFor } from './models.js'
 import { programPath } from './programPath.js'
 import { readLanes, runsFolder } from './lanes-source.js'
 import { harnessUnavailableProblem, modelUnavailableProblem } from './model-list.js'
-import { modelAllowed, readHarnessModelsCache } from './harness-models.js'
+import { machineroomModels, modelAllowed, readHarnessModelsCache } from './harness-models.js'
 
 export const MAX_AGENTS = 30
 export const HARNESS_KEYS = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot']
@@ -119,6 +119,15 @@ export function listHarnesses({ lanes = {}, env = process.env, platform = proces
   const staticModels = runsFolder ? modelsFor(runsFolder) : MODELS
   const cache = runsFolder ? readHarnessModelsCache(runsFolder) : {}
   return HARNESS_KEYS.map((key) => {
+    if (key === 'machineroom') {
+      return {
+        key,
+        name: HARNESS_NAMES[key] ?? key,
+        available: isHarnessAvailable(key, { lanes, env, platform, endpoints }),
+        models: runsFolder ? machineroomModels(runsFolder, env).models : [],
+        efforts: [...(HARNESS_EFFORTS[key] ?? [])],
+      }
+    }
     const seen = new Set()
     const models = []
     for (const m of staticModels) {

@@ -9,7 +9,7 @@ export function endpointModels(runsFolder) {
     for (const id of endpoint.models) {
       models.push({
         id: `${endpoint.name}/${id}`,
-        label: `${id} (${endpoint.name})`,
+        label: `${endpoint.name}/${id}`,
         harness: 'machineroom',
         tier: 'medium',
         free: false,

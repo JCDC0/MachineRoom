@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `GET /api/harnesses` gives the Direct API the same model list as its model route, so the Add child form no longer starts on a built-in model the key never listed, and each endpoint model is labelled by its full `NAME/MODEL` id instead of `MODEL (NAME)`, which the pickers doubled (found checking U85 in the test room).
+
 - The Direct API counts as available for Add child, the orchestrator ladder and a harness change once an endpoint is saved, an endpoint saves up to 1000 models, and `POST /api/endpoints/quick` saves a provider key and loads its endpoint models in one step (task H17).
 
 - The machineroom model list is the saved endpoints' `NAME/MODEL` list once any endpoint exists; without one it falls back to the built-in models only with `MACHINEROOM_API_KEY` or `OPENROUTER_API_KEY`, and says `Add a Direct API key in Settings first.` otherwise (task H17).

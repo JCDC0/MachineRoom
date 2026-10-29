@@ -255,7 +255,7 @@ describe('GET /api/harnesses', () => {
     const machineroom = body.find((item) => item.key === 'machineroom')
     expect(machineroom.name).toBe('MachineRoom')
     expect(machineroom.efforts).toEqual([])
-    expect(machineroom.models.map((item) => item.id)).toEqual(['xiaomi/mimo-v2.6-pro', 'deepseek/deepseek-v4.1-flash-1017'])
+    expect(machineroom.models).toEqual([])
     expect(machineroom.available).toBe(false)
 
     const codex = body.find((item) => item.key === 'codex')

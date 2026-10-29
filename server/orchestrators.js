@@ -127,7 +127,7 @@ export function availableHarnesses(lanes = {}, env = process.env, platform = pro
       const descriptor = HARNESSES.find((h) => h.key === key)
       const name = descriptor?.name ?? key
       const models = key === 'machineroom' && endpoints.length > 0
-        ? endpoints.flatMap((endpoint) => (endpoint.models ?? []).map((id) => ({ id: `${endpoint.name}/${id}`, label: `${id} (${endpoint.name})` })))
+        ? endpoints.flatMap((endpoint) => (endpoint.models ?? []).map((id) => ({ id: `${endpoint.name}/${id}`, label: `${endpoint.name}/${id}` })))
         : MODELS.filter((m) => m.harness === key).map(({ id, label, contextWindow }) => ({
           id,
           label,

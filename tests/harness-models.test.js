@@ -215,8 +215,8 @@ describe('harness models discovery and caching', () => {
     const result = await getHarnessModels('machineroom', { runsFolder: runs, env: { OPENROUTER_API_KEY: 'placeholder' } })
     expect(result.error).toBeUndefined()
     expect(result.models).toEqual([
-      { id: 'Work/alpha', label: 'alpha (Work)' },
-      { id: 'Work/beta', label: 'beta (Work)' },
+      { id: 'Work/alpha', label: 'Work/alpha' },
+      { id: 'Work/beta', label: 'Work/beta' },
     ])
     expect(result.models.some((model) => model.id === 'xiaomi/mimo-v2.6-pro')).toBe(false)
     expect(modelAllowed('machineroom', 'Work/alpha', runs, { OPENROUTER_API_KEY: 'placeholder' })).toBe(true)

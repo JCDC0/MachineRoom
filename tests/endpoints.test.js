@@ -189,12 +189,7 @@ describe('endpoint lanes', () => {
     const harnesses = await get(url, '/api/harnesses')
     const machineroom = harnesses.body.find((entry) => entry.key === 'machineroom')
     expect(machineroom.available).toBe(true)
-    expect(machineroom.models.map((entry) => entry.id)).toEqual([
-      'xiaomi/mimo-v2.6-pro',
-      'deepseek/deepseek-v4.1-flash-1017',
-      'Local/alpha',
-      'Local/beta',
-    ])
+    expect(machineroom.models.map((entry) => entry.id)).toEqual(['Local/alpha', 'Local/beta'])
     const created = await post(url, '/api/lanes/create', {
       name: 'Endpoint Lane',
       harness: 'machineroom',

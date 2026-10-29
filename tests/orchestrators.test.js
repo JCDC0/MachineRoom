@@ -1573,8 +1573,8 @@ describe('availableHarnesses with a Direct API endpoint', () => {
     const list = availableHarnesses({}, {}, process.platform, [{ name: 'OpenRouter', models: ['a/one', 'b/two'] }])
     const direct = list.find((entry) => entry.key === 'machineroom')
     expect(direct.models).toEqual([
-      { id: 'OpenRouter/a/one', label: 'a/one (OpenRouter)' },
-      { id: 'OpenRouter/b/two', label: 'b/two (OpenRouter)' },
+      { id: 'OpenRouter/a/one', label: 'OpenRouter/a/one' },
+      { id: 'OpenRouter/b/two', label: 'OpenRouter/b/two' },
     ])
   })
 })
