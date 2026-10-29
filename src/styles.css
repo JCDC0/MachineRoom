@@ -9821,6 +9821,21 @@ body:has(#hud-orchestrator-chat) .waiting {
   border-bottom: 1px solid rgb(56 232 255 / 0.35);
 }
 
+.mr-term-console-link {
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.mr-term-console-link:hover {
+  text-decoration: underline;
+}
+
 .mr-term-console-body {
   padding: 5px 6px;
   display: flex;
