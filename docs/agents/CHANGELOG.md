@@ -12,6 +12,8 @@
 
 - `docs/agents/CHANGELOG.md` groups every entry under the version its commit names, newest first, and keeps the lines since 0.1.401 under Unreleased (task D16).
 
+- Audit the Direct API keys and the orchestrator wake rules at 0.1.401, finding key leakage risks on endpoint base URL spoofing, deleted sub sector bypass, path traversal in run logs, wake rules on uninitiated orchestrators, and key inheritance (task A9).
+
 - Below 1100 pixels the lower half's right column narrows to `clamp(200px, calc(40vw - 160px), 280px)`, from 200 pixels at 900 to 280 at 1100, while the sidebar keeps its U84 width, so the conversation keeps its room (task U86).
 
 - At 900 pixels and wider a log line moves a file path to its own line before it breaks it, breaks a longer path after a `/` (a `<wbr>` after each slash in `EventLogBody`), and the agent column fits `CLAUDE CODE`, so a file name and an agent name stay whole (task U86).
