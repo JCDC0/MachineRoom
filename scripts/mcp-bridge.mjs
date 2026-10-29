@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { killTree } from '../server/processTree.js'
-import { mcpConfigForClaude, mcpConfigForOpencode } from '../src/briefs/run.js'
+import { mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers } from '../src/briefs/run.js'
 
 export { mcpConfigForClaude, mcpConfigForOpencode }
 
@@ -29,38 +29,6 @@ export function mcpRunsDir(env = process.env) {
   return join(env?.TEMP || tmpdir(), 'machineroom-runs')
 }
 
-function stringMap(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
-  const out = {}
-  for (const [key, item] of Object.entries(value)) {
-    if (typeof item === 'string') out[key] = item
-  }
-  return out
-}
-
-function normalizeServer(entry) {
-  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null
-  const name = typeof entry.name === 'string' ? entry.name.trim() : ''
-  if (name === '') return null
-  const command = typeof entry.command === 'string' ? entry.command.trim() : ''
-  const url = typeof entry.url === 'string' ? entry.url.trim() : ''
-  const transport = entry.transport === 'http' || (entry.transport !== 'stdio' && url !== '' && command === '') ? 'http' : 'stdio'
-  const enabled = entry.enabled !== false
-  if (transport === 'http') {
-    if (!/^https?:\/\//i.test(url)) return null
-    return { name, transport, url, enabled }
-  }
-  if (command === '') return null
-  return {
-    name,
-    transport,
-    command,
-    args: Array.isArray(entry.args) ? entry.args.map((item) => String(item)) : [],
-    env: stringMap(entry.env),
-    enabled,
-  }
-}
-
 export function readMcpServers(runsDir = mcpRunsDir()) {
   let parsed
   try {
@@ -68,16 +36,7 @@ export function readMcpServers(runsDir = mcpRunsDir()) {
   } catch {
     return []
   }
-  const raw = Array.isArray(parsed)
-    ? parsed
-    : Array.isArray(parsed?.servers)
-      ? parsed.servers
-      : Array.isArray(parsed?.mcpServers)
-        ? parsed.mcpServers
-        : parsed?.mcpServers && typeof parsed.mcpServers === 'object'
-          ? Object.entries(parsed.mcpServers).map(([name, value]) => ({ name, ...value }))
-          : []
-  return raw.map(normalizeServer).filter(Boolean)
+  return normalizeMcpServers(parsed)
 }
 
 export function enabledMcpServers(runsDir = mcpRunsDir()) {
