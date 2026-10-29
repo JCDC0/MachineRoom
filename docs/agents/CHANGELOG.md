@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A run record takes its cost from the harness whenever the harness reports one, so a Direct API lane records the `total_cost_usd` its result line carries instead of nothing; the report total stays the fallback (found in the mixed team test).
+
 - A failed orchestrator turn with no reply now says `The orchestrator stopped: LINE` with the last non-empty line of the turn's stderr when the harness error finds none, masked with `maskKeys` and cut to 300 characters, instead of only `exit N`; the last 4 KB of stderr stay in memory and nothing more is stored, so a Direct API turn that could not reach its endpoint names it (O25).
 
 - A lane run whose record names an orchestrator in `startedBy` wakes that orchestrator even before it has a goal, so a sub whose lane the main started (O24) still reviews and merges it; a run with no `startedBy` still waits for an orchestrator that has been given work. Found in the Direct API team test, where both subs stayed silent after their lanes committed.
