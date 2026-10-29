@@ -218,6 +218,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const cssRef = useRef(null)
   const roomRef = useRef(null)
   const liveRosterRef = useRef(null)
+  const [liveRoster, setLiveRoster] = useState(null)
   const live = data.live ?? null
   const costMode = costModeFor(mode, Boolean(live?.simulated))
   const demoLadder = useMemo(() => {
@@ -573,6 +574,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (!diffRoster(liveRosterRef.current, next).changed) return
         liveRosterRef.current = next
         roomRef.current?.setRoster(next)
+        setLiveRoster(next)
       } catch {}
     }
 
@@ -967,7 +969,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
             onShare={(share) => roomRef.current?.setZoomShare?.(share)}
             onWheel={(deltaY) => roomRef.current?.zoomBy?.(deltaY)}
           />
-          {showWaiting && <Waiting agents={snapshot.agents} status={snapshot.status} />}
+          {showWaiting && <Waiting agents={liveRoster ?? snapshot.agents} status={snapshot.status} />}
         </div>
         {chromaFilter && (
           <svg

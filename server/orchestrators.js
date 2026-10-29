@@ -489,6 +489,8 @@ export function createOrchestrators({
     }
     main.setLadder(next.ladder)
     sync()
+    onNotice?.({ topic: 'agents' })
+    onNotice?.({ topic: 'family' })
     return { status: 200, body: { ladder: next.ladder } }
   }
 

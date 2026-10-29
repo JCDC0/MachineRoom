@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A ladder save sends the `agents` and `family` notices, so a new or removed sub shows in the room, the family tree and the waiting card at once instead of after the next minute read, and the waiting card counts the refreshed live roster.
+
 - The recent projects list skips temp folders, lane worktrees and runs folders, drops missing folders at most once a minute, and POST /api/projects/forget removes an entry (task O20).
 
 - Vitest setup file `tests/helpers/isolate.js` isolates `MACHINEROOM_RUNS` under the test temp root so tests never write the owner runs folder (task T25).

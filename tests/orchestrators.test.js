@@ -405,6 +405,22 @@ describe('branchChanges', () => {
 })
 
 describe('the orchestrator registry', () => {
+  it('sends the agents and family notices when the ladder changes', async () => {
+    const notices = []
+    let answer = null
+    const rig = makeRig(makeBase(), {
+      onNotice: (event) => notices.push(event.topic),
+      readJsonBody: async () => ({ ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true }),
+      sendJson: (req, res, status, body) => {
+        answer = { status, body }
+      },
+    })
+    const req = { method: 'POST', headers: { origin: 'http://localhost:5173' } }
+    await rig.registry.handle(req, {}, new URL('http://127.0.0.1/api/orchestrator/ladder'))
+    expect(answer.status).toBe(200)
+    expect(notices).toEqual(expect.arrayContaining(['agents', 'family']))
+  })
+
   it('keeps the main orchestrator alone and unchanged when there is no ladder', async () => {
     const rig = makeRig(makeBase())
     const list = rig.registry.list()
