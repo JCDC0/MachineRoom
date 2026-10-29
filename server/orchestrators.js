@@ -413,6 +413,15 @@ export function createOrchestrators({
     return { id: sub.id, name: sub.name, lanes: [...sub.lanes] }
   }
 
+  function sectorForLane(lane) {
+    const key = typeof lane === 'string' ? lane.trim() : ''
+    if (!key) return null
+    const { ladder } = readSaved()
+    const sub = ladder.subs.find((entry) => Array.isArray(entry.lanes) && entry.lanes.includes(key))
+    if (!sub) return null
+    return { id: sub.id, name: sub.name, lanes: [...sub.lanes] }
+  }
+
   function find(id) {
     const key = typeof id === 'string' && id.trim() ? id.trim() : ORCHESTRATOR_KEY
     return instances.get(key) ?? null
@@ -776,6 +785,7 @@ export function createOrchestrators({
     list,
     subs,
     sector,
+    sectorForLane,
     find,
     token,
     idForToken,

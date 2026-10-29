@@ -1378,6 +1378,87 @@ describe('starting lanes from a sub orchestrator', () => {
   })
 })
 
+describe('a run the main starts on a sub lane', () => {
+  const BACKEND = {
+    id: 'backend',
+    name: 'Backend',
+    harness: 'claude',
+    model: 'sonnet',
+    lanes: ['opencode2'],
+    scope: ['server/**'],
+    restricted: true,
+    setBy: 'owner',
+  }
+
+  async function laneRig() {
+    const files = makeBase({ ladder: { subs: [FRONTEND, BACKEND] } })
+    const runner = join(files.base, 'runner.mjs')
+    writeFileSync(runner, RUNNER)
+    const runnerCalls = join(files.base, 'runner-calls.jsonl')
+    const rig = await makeBridge(files, { runnerCommand: { file: process.execPath, args: [runner, runnerCalls] } })
+    return { ...rig, runnerCalls }
+  }
+
+  it('records the sub the main names and the sub that holds the lane', async () => {
+    const rig = await laneRig()
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+
+    const named = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      startedBy: 'frontend',
+      confirmed: true,
+    }, mainToken)
+    expect(named.status).toBe(202)
+    await waitFor(() => readLines(rig.runnerCalls).length === 1)
+    expect(readLines(rig.runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
+
+    const unnamed = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode2',
+      task: 'Fix it.',
+      confirmed: true,
+    }, mainToken)
+    expect(unnamed.status).toBe(202)
+    await waitFor(() => readLines(rig.runnerCalls).length === 2)
+    expect(readLines(rig.runnerCalls)[1].slice(-2)).toEqual(['--started-by', 'backend'])
+  })
+
+  it('refuses a sub that does not hold the lane and a sub that names another id', async () => {
+    const rig = await laneRig()
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+    const subToken = rig.bridge.orchestrators().token('frontend')
+
+    const outside = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode2',
+      task: 'Fix it.',
+      startedBy: 'frontend',
+      confirmed: true,
+    }, mainToken)
+    expect(outside.status).toBe(403)
+    expect(outside.body).toEqual({ error: 'The Frontend sector does not hold the lane opencode2.' })
+    expect(readLines(rig.runnerCalls)).toHaveLength(0)
+
+    const sibling = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      startedBy: 'backend',
+      confirmed: true,
+    }, subToken)
+    expect(sibling.status).toBe(403)
+    expect(sibling.body).toEqual({ error: 'The startedBy orchestrator must match the token.' })
+
+    const main = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      startedBy: 'orchestrator',
+      confirmed: true,
+    }, subToken)
+    expect(main.status).toBe(403)
+    expect(main.body).toEqual({ error: 'The startedBy orchestrator must match the token.' })
+    expect(readLines(rig.runnerCalls)).toHaveLength(0)
+  })
+})
+
 describe('a sub orchestrator report', () => {
   it('lands in the parent chat as sub:<id> and wakes the parent', async () => {
     const rig = makeRig(makeBase({ ladder: { subs: [FRONTEND] } }))
