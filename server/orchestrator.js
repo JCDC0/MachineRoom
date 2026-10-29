@@ -906,7 +906,7 @@ export function createOrchestrator({
       child = spawnChild(spawnChild === spawn ? programFor(program) : program, args, {
         cwd: root,
         shell: false,
-        env: childEnvironment(process.env, root, { harness, extra: mcpEnv }),
+        env: childEnvironment(process.env, root, { harness, extra: { MACHINEROOM_RUNS: folder, ...(mcpEnv || {}) } }),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       })

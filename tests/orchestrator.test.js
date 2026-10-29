@@ -1796,6 +1796,13 @@ describe('the lane source and the orchestrator turn', () => {
   })
 
   describe('a fresh turn through a fake harness', () => {
+    it('gives the turn the room runs folder', async () => {
+      const rig = makeRig({ project: true })
+      rig.send('Hello')
+      await waitFor(() => rig.spawned.length === 1, 15000, 'the turn to spawn')
+      expect(rig.spawned[0].env.MACHINEROOM_RUNS).toBe(rig.runs)
+    })
+
     it('starts a room turn on a harness with no session once the owner gave it work', async () => {
       const fakeHarness = {
         key: 'fake',

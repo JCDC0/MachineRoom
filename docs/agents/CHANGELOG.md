@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- An orchestrator turn passes `MACHINEROOM_RUNS` with its own runs folder to its child, since `childEnvironment` drops it, so a Direct API turn finds the endpoints and keys of a room whose runs folder is not the default one.
+
 - `scripts/mr-agent.mjs` uses the saved endpoint its model id names (`NAME/MODEL`) when no `--endpoint` is given, so an orchestrator turn on the Direct API reaches its endpoint and key; the first Direct API team turn stopped at once with `exit 1` because only lane runs passed `--endpoint`.
 
 - `GET /api/harnesses` gives the Direct API the same model list as its model route, so the Add child form no longer starts on a built-in model the key never listed, and each endpoint model is labelled by its full `NAME/MODEL` id instead of `MODEL (NAME)`, which the pickers doubled (found checking U85 in the test room).
