@@ -1,6 +1,8 @@
 # Agent guide
 
-The canonical guide is `docs/agents/ARCHITECTURE.md`. Read it first. Your task brief is in `docs/agents/TASKS.md`.
+Read `docs/agents/ARCHITECTURE.md` first, then `docs/agents/HOUSE-RULES.md`, then your brief in `docs/agents/TASKS.md`.
+
+The code is the first authority, then `docs/agents/ARCHITECTURE.md`, then every other doc.
 
 ```
 npm install

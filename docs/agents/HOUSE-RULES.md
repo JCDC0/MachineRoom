@@ -4,7 +4,7 @@ The bridge builds the prompt for each task from this file, `lanes.json` and the 
 
 ## About
 
-MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room. It follows the room's own lane runs, task queues and the owner's Claude Code and OpenCode sessions through a small Node bridge, and it can still follow a local Paperclip instance. Several agents work on it in parallel, each in its own git worktree and branch. The orchestrator is Claude, in Claude Code, and it reviews and merges every branch.
+MachineRoom is a React and three.js viewer that shows coding agents working on a project as a 3D room. It follows the room's own lane runs, task queues and the owner's Claude Code and OpenCode sessions through a small Node bridge. Paperclip was removed on 2026-10-24. Several agents work on it in parallel, each in its own git worktree and branch. The orchestrator is Claude, in Claude Code, and it reviews and merges every branch.
 
 ## Rules
 
