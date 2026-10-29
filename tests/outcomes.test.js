@@ -17,9 +17,13 @@ afterEach(() => {
 function useTemp() {
   const dir = makeTempDir('mr-outcome-')
   const previous = process.env.TEMP
+  const previousRuns = process.env.MACHINEROOM_RUNS
   process.env.TEMP = dir
+  process.env.MACHINEROOM_RUNS = join(dir, 'machineroom-runs')
   cleanups.push(() => {
     process.env.TEMP = previous
+    if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+    else process.env.MACHINEROOM_RUNS = previousRuns
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   })
   return dir
@@ -44,7 +48,7 @@ function runOutcome(temp, args) {
   return spawnSync(process.execPath, [OUTCOME_SCRIPT, ...args], {
     cwd: ROOT,
     encoding: 'utf8',
-    env: { ...process.env, TEMP: temp },
+    env: { ...process.env, TEMP: temp, MACHINEROOM_RUNS: join(temp, 'machineroom-runs') },
     windowsHide: true,
   })
 }

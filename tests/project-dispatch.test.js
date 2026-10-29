@@ -247,7 +247,9 @@ describe('the runs route with a task', () => {
     const { url } = await startBridge({ projectRoot: runs, runnerPath: writeRunner(runnerDir, out) })
 
     const previous = process.env.TEMP
+    const previousRuns = process.env.MACHINEROOM_RUNS
     process.env.TEMP = base
+    process.env.MACHINEROOM_RUNS = runs
     try {
       const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', confirmed: true })
       expect(res.status).toBe(400)
@@ -258,6 +260,8 @@ describe('the runs route with a task', () => {
     } finally {
       if (previous === undefined) delete process.env.TEMP
       else process.env.TEMP = previous
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
     }
   })
 
@@ -319,7 +323,9 @@ describe('the runs route with a queue', () => {
     const temp = tempDir('mr-project-temp-')
     const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out, 400) })
     const previous = process.env.TEMP
+    const previousRuns = process.env.MACHINEROOM_RUNS
     process.env.TEMP = temp
+    process.env.MACHINEROOM_RUNS = join(temp, 'machineroom-runs')
     try {
       const res = await postJson(`${url}/api/control/runs`, {
         lane: 'opencode',
@@ -346,6 +352,8 @@ describe('the runs route with a queue', () => {
     } finally {
       if (previous === undefined) delete process.env.TEMP
       else process.env.TEMP = previous
+      if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previousRuns
     }
   })
 

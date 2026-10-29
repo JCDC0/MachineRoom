@@ -143,9 +143,13 @@ function tempDir(prefix) {
 
 function useTemp(dir) {
   const previous = process.env.TEMP
+  const previousRuns = process.env.MACHINEROOM_RUNS
   process.env.TEMP = dir
+  process.env.MACHINEROOM_RUNS = join(dir, 'machineroom-runs')
   cleanups.push(() => {
     process.env.TEMP = previous
+    if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+    else process.env.MACHINEROOM_RUNS = previousRuns
   })
 }
 

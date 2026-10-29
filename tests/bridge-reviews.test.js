@@ -38,10 +38,14 @@ for (const [key, value] of Object.entries(GIT_ENV)) {
 beforeEach(() => {
   const dir = makeTempDir('mr-reviews-runs-')
   previousTemp = process.env.TEMP
+  const previousRuns = process.env.MACHINEROOM_RUNS
   process.env.TEMP = dir
+  process.env.MACHINEROOM_RUNS = join(dir, 'machineroom-runs')
   cleanups.push(() => {
     if (previousTemp === undefined) delete process.env.TEMP
     else process.env.TEMP = previousTemp
+    if (previousRuns === undefined) delete process.env.MACHINEROOM_RUNS
+    else process.env.MACHINEROOM_RUNS = previousRuns
   })
 })
 

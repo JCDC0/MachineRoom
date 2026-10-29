@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { handRun } from '../scripts/hand-run.mjs'
 import { parseBriefs } from '../src/briefs/briefs.js'
@@ -103,7 +104,7 @@ describe('hand-run refusals', () => {
     const result = spawnSync(process.execPath, [HAND_SCRIPT, 'nope', 'T1b', '--minutes', '5', '--branch', 'feat/x'], {
       cwd: ROOT,
       encoding: 'utf8',
-      env: { ...process.env, TEMP: temp },
+      env: { ...process.env, TEMP: temp, MACHINEROOM_RUNS: join(temp, 'machineroom-runs') },
       windowsHide: true,
     })
 
@@ -206,7 +207,7 @@ describe('hand-run record', () => {
     const accepted = spawnSync(process.execPath, [OUTCOME_SCRIPT, 'feat/hand-run', 'merged'], {
       cwd: ROOT,
       encoding: 'utf8',
-      env: { ...process.env, TEMP: temp },
+      env: { ...process.env, TEMP: temp, MACHINEROOM_RUNS: join(temp, 'machineroom-runs') },
       windowsHide: true,
     })
     expect(accepted.status).toBe(0)
@@ -254,5 +255,22 @@ describe('hand-run record', () => {
   it('is named in package.json', () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
     expect(pkg.scripts['hand-run']).toBe('node scripts/hand-run.mjs')
+  })
+})
+
+describe('the runs file', () => {
+  it('follows MACHINEROOM_RUNS, else the default runs folder', async () => {
+    const { runsFile, outcomesFile } = await import('../server/runs.js')
+    const before = process.env.MACHINEROOM_RUNS
+    try {
+      process.env.MACHINEROOM_RUNS = join(tmpdir(), 'mr-runs-file-check')
+      expect(runsFile()).toBe(join(resolve(process.env.MACHINEROOM_RUNS), 'runs.jsonl'))
+      expect(outcomesFile()).toBe(join(resolve(process.env.MACHINEROOM_RUNS), 'outcomes.jsonl'))
+      delete process.env.MACHINEROOM_RUNS
+      expect(runsFile()).toBe(join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl'))
+    } finally {
+      if (before === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = before
+    }
   })
 })

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `runsFile()` and `outcomesFile()` in `server/runs.js` follow `MACHINEROOM_RUNS`, so the run route, the costs, the tasks and the reviews read the same runs folder as the lane source. Before, a bridge with a custom runs folder refused its own owner-made lanes with `Choose a lane from the list.`; the tests that moved `TEMP` now set `MACHINEROOM_RUNS` too.
+
 - After a restart, the first resumed OpenCode turn of an orchestrator carries its new bridge token. OpenCode gets the instructions only in its first message, so a resumed session kept the old token and every bridge call was refused.
 
 - An order from the main orchestrator starts a sub's first turn. Before, a message that was not the owner's started a turn only when a session existed, so a new sub kept the order and never ran.

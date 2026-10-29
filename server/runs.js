@@ -8,7 +8,7 @@ import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems } from 
 import { outcomeTable } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
-import { readAllLanes } from './lanes-source.js'
+import { readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
 
 export const RECENT_LIMIT = 20
@@ -141,11 +141,11 @@ function resolvedLanes(lanes) {
 }
 
 export function runsFile() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'runs.jsonl')
+  return join(defaultRunsFolder(), 'runs.jsonl')
 }
 
 export function outcomesFile() {
-  return join(process.env.TEMP || tmpdir(), 'machineroom-runs', 'outcomes.jsonl')
+  return join(defaultRunsFolder(), 'outcomes.jsonl')
 }
 
 function readJsonLines(file) {
@@ -521,7 +521,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         lanes: resolvedLanes(lanes),
         home: realPath(homedir()),
         temp: realPath(process.env.TEMP || tmpdir()),
-        runs: realPath(join(process.env.TEMP || tmpdir(), 'machineroom-runs')),
+        runs: realPath(recordsDir()),
         commonDir: await rootCommonDir(),
         repoCommonDir: await repoCommonDir(),
         dirty,
