@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource } from '../server/lanes-source.js'
-import { chatFileFor, CONFIRM_HARNESS_PROBLEM } from '../server/orchestrator.js'
+import { chatFileFor, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT } from '../server/orchestrator.js'
 import { availableHarnesses, branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { gitPath } from '../server/programPath.js'
@@ -51,7 +51,7 @@ const FAKE_AGENT = [
   "  console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Working.' }] } }))",
   "  if (mode === 'hold') await hold()",
   "  const keyReply = 'I read OPENROUTER_API_KEY=' + 'sk-or-v1-' + 'q'.repeat(24) + ' in the file.'",
-  "  const reply = mode === 'empty' ? '' : mode === 'key' ? keyReply : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "  const reply = mode === 'empty' ? '' : mode === 'no_report' ? 'NO_REPORT' : mode === 'key' ? keyReply : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "  console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: 12, output_tokens: 3 } }))",
   '} else {',
   "  const at = args.indexOf('--session')",
@@ -60,7 +60,7 @@ const FAKE_AGENT = [
   "  console.log(JSON.stringify({ type: 'tool_use', timestamp: 2, sessionID: sessionId, part: { id: 'prt_1', type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'src/math.js' } } } }))",
   "  if (mode === 'hold') await hold()",
   "  console.log(JSON.stringify({ type: 'text', timestamp: 3, sessionID: sessionId, part: { type: 'text', text: 'Working.' } }))",
-  "  const reply = 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
+  "  const reply = mode === 'no_report' ? 'NO_REPORT' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "  console.log(JSON.stringify({ type: 'text', timestamp: 4, sessionID: sessionId, part: { type: 'text', text: reply } }))",
   "  console.log(JSON.stringify({ type: 'step_finish', timestamp: 5, sessionID: sessionId, part: { type: 'step-finish', cost: 0.25, tokens: { input: 12, output: 3 } } }))",
   '}',
@@ -1522,6 +1522,25 @@ describe('a sub orchestrator report', () => {
     expect(report.text).not.toContain(secret)
     expect(rig.chat('frontend').messages.some((message) => message.text.includes(secret))).toBe(false)
     expect(rig.chat('orchestrator').messages.some((message) => message.text.includes(secret))).toBe(false)
+  })
+
+  it('posts nothing to the parent and starts no parent turn when a sub replies NO_REPORT', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    files.behaviour.mode = 'no_report'
+    const rig = makeRig(files)
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Check the lanes', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+
+    const subReply = messagesOf(rig.registry, 'frontend').find((message) => message.from === 'orchestrator')
+    expect(subReply).toBeTruthy()
+    expect(subReply.text).toBe(NO_NEW_REPORT)
+    expect(rig.chat('frontend').messages.some((message) => message.from === 'orchestrator' && message.text === NO_NEW_REPORT)).toBe(true)
+
+    const report = messagesOf(rig.registry, 'orchestrator').find((message) => message.from === 'sub:frontend')
+    expect(report).toBeUndefined()
+    expect(rig.chat('orchestrator').messages.filter((message) => message.from === 'orchestrator')).toHaveLength(1)
   })
 })
 

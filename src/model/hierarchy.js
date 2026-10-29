@@ -299,5 +299,6 @@ export function subPrompt(sub, parent, ladder) {
     'Plan for your lanes, start them, review their work and merge it into your sector branch.',
     `Then report to your parent as \`sub:${id}\`.`,
     'Your reply is your report. End your turn with it. Never send it to /api/orchestrator/messages.',
+    'If a room message is about work you already reported, reply with exactly NO_REPORT and nothing else.',
   ].join('\n')
 }

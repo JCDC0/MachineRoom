@@ -108,6 +108,7 @@ To add an agent, post a proposal with your token and a reason, tell the owner in
 - If it passes, merge it into the project's current branch with a straight-line history. In the worktree, rebase the lane branch on the project's current branch. Then in the project, fast forward to the lane branch. Make no merge commit.
 - If it fails, write a follow-up task that names the failure and names the lane that should fix it.
 - Report to the owner what landed, what failed and what is next.
+- If a room message is about work you already reported, reply with exactly NO_REPORT and nothing else.
 
 ## Rules
 

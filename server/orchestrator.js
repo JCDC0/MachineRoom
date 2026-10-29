@@ -74,6 +74,8 @@ export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orch
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
 export const STOPPED_REPLY = 'The orchestrator stopped.'
+export const NO_NEW_REPORT = 'No new report.'
+export const NO_REPORT = 'NO_REPORT'
 export const RESTART_MESSAGE = 'The room restarted during a turn. Send the message again if it still matters.'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -1000,9 +1002,12 @@ export function createOrchestrator({
     const failureMessage = cleanFailure(failureRaw)
     const stderrMessage = report ? null : cleanFailure(lastStderrLine(turn.stderr))
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
+    const noReport = !failed && typeof report === 'string' && report.trim() === NO_REPORT
     const text = failed
       ? stoppedTurnText({ code, report, killed: turn.killed, failureMessage, stderrMessage })
-      : report || EMPTY_REPLY
+      : noReport
+        ? NO_NEW_REPORT
+        : report || EMPTY_REPLY
     const record = runRecord({
       lane: logPrefix,
       model,
@@ -1023,7 +1028,7 @@ export function createOrchestrator({
     addMessage('orchestrator', text)
     if (!turn.compacting && typeof onReply === 'function') {
       try {
-        onReply(text)
+        onReply(noReport ? NO_REPORT : text)
       } catch {}
     }
     if (turn.compacting) {

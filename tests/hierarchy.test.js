@@ -409,6 +409,12 @@ describe('subPrompt', () => {
     )
   })
 
+  it('tells the sub to reply with NO_REPORT when work was already reported', () => {
+    expect(text).toContain(
+      'If a room message is about work you already reported, reply with exactly NO_REPORT and nothing else.',
+    )
+  })
+
   it('names the two sibling subs by id and name and leaves itself out', () => {
     const three = read(
       sub(),
