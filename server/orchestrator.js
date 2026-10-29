@@ -213,11 +213,11 @@ function turnStartedAt(name) {
   return Number.isFinite(at) ? at : null
 }
 
-function fallbackPrompt(projectRoot, runsFolder) {
+function fallbackPrompt(projectRoot, scratchFolder) {
   return [
     `You are the orchestrator for the project at ${projectRoot}, talking to its owner through MachineRoom.`,
     "Read the project's agent guide before you plan, split the work into tasks for the lane runner, and check each branch before you merge it.",
-    `Never push, never print a key, and keep your task files in ${runsFolder}.`,
+    `Never push, never print a key, and keep your task files in ${scratchFolder}.`,
   ].join(' ')
 }
 
@@ -231,13 +231,15 @@ function enabledMcpServersFor(runsFolder) {
   return normalizeMcpServers(parsed).filter((entry) => entry.enabled)
 }
 
-function instructionFor(file, projectRoot, runsFolder, bridgeUrl, token = '') {
+function instructionFor(file, projectRoot, runsFolder, bridgeUrl, token = '', scratchFolder = '') {
   const text = readText(file).trim()
-  const source = text || fallbackPrompt(projectRoot, runsFolder)
+  const scratch = scratchFolder || runsFolder
+  const source = text || fallbackPrompt(projectRoot, scratch)
   let resolved = source
     .replaceAll('{{PROJECT}}', projectRoot)
     .replaceAll('{{MACHINEROOM}}', REPO_ROOT)
     .replaceAll('{{RUNS}}', runsFolder)
+    .replaceAll('{{SCRATCH}}', scratch)
     .replaceAll('{{BRIDGE}}', bridgeUrl)
   if (token) {
     if (resolved.includes('{{TOKEN}}')) {
@@ -436,6 +438,7 @@ export function createOrchestrator({
       ? Math.round(lane.cli.contextWindow)
       : 0
   const conversationFile = chatFileFor(root, folder, key)
+  const scratchFolder = join(folder, `scratch-${key}`)
   const messages = []
   const pending = []
   const roomTurns = []
@@ -777,6 +780,7 @@ export function createOrchestrator({
     setState('working')
     try {
       mkdirSync(folder, { recursive: true })
+      mkdirSync(scratchFolder, { recursive: true })
       writeFileSync(metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
       if (needsMcp) {
         if (harness === 'claude') {
@@ -803,7 +807,8 @@ export function createOrchestrator({
       root,
       folder,
       String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''),
-      token
+      token,
+      scratchFolder
     )
     const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
     let program = binFor(harness)

@@ -403,6 +403,12 @@ describe('subPrompt', () => {
     expect(text).toContain('Your lanes do not talk. They report when their run ends.')
   })
 
+  it('asks for the report as the reply and never through the messages route', () => {
+    expect(text).toContain(
+      'Your reply is your report. End your turn with it. Never send it to /api/orchestrator/messages.',
+    )
+  })
+
   it('names the two sibling subs by id and name and leaves itself out', () => {
     const three = read(
       sub(),

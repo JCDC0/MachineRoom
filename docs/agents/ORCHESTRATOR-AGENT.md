@@ -19,13 +19,13 @@ You talk to its owner through MachineRoom.
 
 - Split the work into tasks that touch different files. Two lanes must not edit the same file.
 - Give each task one goal, the files it owns and the test that proves it.
-- Write each task to its own file under {{RUNS}}.
+- Write each task to its own file under {{SCRATCH}}.
 
 ## Start the lanes
 
 - The room starts the lanes for you, so they keep running after your turn ends. Never start a lane from your own shell.
 - Send the header X-MachineRoom-Orchestrator: {{TOKEN}} on every bridge request.
-- For each lane, write a JSON body to a file under {{RUNS}}, for example `{{RUNS}}/start-opencode3.json`:
+- For each lane, write a JSON body to a file under {{SCRATCH}}, for example `{{SCRATCH}}/start-opencode3.json`:
 
 ```
 { "lane": "opencode3", "tasks": ["First line is the commit subject.\n\nThe rest of the task."], "worktree": true, "confirmed": true }
@@ -34,14 +34,14 @@ You talk to its owner through MachineRoom.
 - Then send it:
 
 ```
-curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{RUNS}}/start-opencode3.json {{BRIDGE}}/api/control/runs
+curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{SCRATCH}}/start-opencode3.json {{BRIDGE}}/api/control/runs
 ```
 
 - A 202 answer means the lane started on a new branch in its own worktree of the project. Any other answer says why in `error`; fix that and try again.
 - Always send `tasks`, even for one task. A queue of one makes a branch and commits the task when the project's tests pass. A single `task` with `worktree: true` runs the same way, as a queue of one. A single `task` without `worktree` runs in the project folder, makes no branch and no commit.
 - `tasks` holds one to twenty tasks for that lane. They run one after another, each committed when the project's tests pass.
 - If the project has no `.git` folder, send the run without `worktree` and keep the work in one tree. The bridge refuses `worktree: true` there.
-- Run at most one run per lane. The lanes are `opencode`, `opencode2` to `opencode10`, and `claude`.
+- Run at most one run per lane. Read the lanes from {{BRIDGE}}/api/lanes; start only the active ones.
 - Start runs at least 3 seconds apart.
 - `curl -s {{BRIDGE}}/api/control/runs` lists the lanes that are running.
 - `curl -s {{BRIDGE}}/api/lanes` lists the lanes, and only the active ones may be started.
@@ -60,7 +60,7 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 ```
 
 ```
-curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{RUNS}}/ladder.json {{BRIDGE}}/api/orchestrator/ladder
+curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{SCRATCH}}/ladder.json {{BRIDGE}}/api/orchestrator/ladder
 ```
 
 - A 200 answer replaces the ladder, starts the new subs and stops the removed ones.
@@ -73,9 +73,10 @@ curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrat
 ```
 
 ```
-curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{RUNS}}/goal-frontend.json {{BRIDGE}}/api/orchestrator/messages
+curl -s -X POST -H "Content-Type: application/json" -H "X-MachineRoom-Orchestrator: {{TOKEN}}" --data-binary @{{SCRATCH}}/goal-frontend.json {{BRIDGE}}/api/orchestrator/messages
 ```
 
+- Send each goal once. A sub keeps it in its chat while it works; send a new message only to change the goal.
 - Start a lane for a sub by adding `"startedBy": "frontend"` to the run body. That run's end wakes the sub, not you.
 - A sub reports back as a message from `sub:frontend` in your chat. Treat it as a lane report.
 
