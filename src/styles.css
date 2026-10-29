@@ -8768,7 +8768,8 @@ body:has(#hud-orchestrator-chat) .waiting {
 }
 
 .endpoints-row,
-.endpoints-form {
+.endpoints-form,
+.endpoints-quick {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -8857,6 +8858,23 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .endpoints-confirm {
   margin-bottom: 0;
+}
+
+.endpoints-custom-toggle {
+  align-self: flex-start;
+}
+
+.mr-family-direct {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+}
+
+.mr-family-direct-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
 }
 
 /* H12. Web search settings. */

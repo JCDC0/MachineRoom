@@ -5,6 +5,8 @@ import { CLIENT_METHODS, createMockClient } from '../src/control/mock.js'
 import SearchSettings, {
   SEARCH_PROVIDERS,
   keyNamesFrom,
+  keySaveProblem,
+  keySlotName,
   providerLabel,
   searchChoiceFrom,
   searchChoiceProblem,
@@ -58,6 +60,20 @@ describe('the web search settings helpers', () => {
     expect(searchChoiceSummary({ provider: 'searxng', url: 'https://search.example', keyName: '' })).toBe('SearXNG, https://search.example')
     expect(searchChoiceSummary({ provider: 'brave', url: '', keyName: 'BRAVE_API_KEY' })).toBe('Brave, key slot BRAVE_API_KEY')
   })
+
+  it('names the key slot after the provider that uses one', () => {
+    expect(keySlotName('tavily')).toBe('Tavily')
+    expect(keySlotName('brave')).toBe('Brave')
+    expect(keySlotName('searxng')).toBe('')
+    expect(keySlotName('duckduckgo')).toBe('')
+    expect(keySlotName('')).toBe('')
+  })
+
+  it('checks a web search key', () => {
+    expect(keySaveProblem('')).toBe('Write the key.')
+    expect(keySaveProblem('x'.repeat(501))).toBe('Keep the key to 500 characters.')
+    expect(keySaveProblem('tvly-test')).toBe('')
+  })
 })
 
 describe('the mock web search provider', () => {
@@ -85,6 +101,23 @@ describe('the mock web search provider', () => {
   it('is part of the client contract', () => {
     expect(CLIENT_METHODS).toContain('searchProvider')
     expect(CLIENT_METHODS).toContain('setSearchProvider')
+    expect(CLIENT_METHODS).toContain('quickEndpoint')
+  })
+
+  it('saves a provider-named key slot for Tavily and Brave', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    expect(await client.setKey({ name: 'Tavily', value: 'tvly-test', confirmed: true })).toEqual({
+      ok: true,
+      name: 'Tavily',
+    })
+    expect(await client.setKey({ name: 'Brave', value: 'brave-test', confirmed: true })).toEqual({
+      ok: true,
+      name: 'Brave',
+    })
+    expect((await client.keys()).map((entry) => entry.name)).toEqual(['Brave', 'Tavily'])
+    await expect(client.setKey({ name: 'Tavily', value: 'tvly-test', confirmed: false })).rejects.toThrow(
+      'Confirm setting the key first.'
+    )
   })
 })
 

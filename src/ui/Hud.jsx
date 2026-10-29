@@ -221,6 +221,7 @@ export default function Hud({
   const [menuOpen, setMenuOpen] = useState(false)
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsDirectApi, setSettingsDirectApi] = useState(0)
   const [controlOpen, setControlOpen] = useState(() => Boolean(controlTarget?.nonce != null))
   const [chatOpen, setChatOpen] = useState(false)
   const [chatFocus, setChatFocus] = useState(0)
@@ -366,6 +367,19 @@ export default function Hud({
       setLogOpen(false)
     }
   }, [settingsRequest, wide])
+
+  useEffect(() => {
+    function onOpenSettings() {
+      setSettingsOpen(true)
+      setSettingsDirectApi((value) => value + 1)
+      if (wide) {
+        setControlOpen(false)
+        setLogOpen(false)
+      }
+    }
+    window.addEventListener('machineroom:open-settings', onOpenSettings)
+    return () => window.removeEventListener('machineroom:open-settings', onOpenSettings)
+  }, [wide])
 
   useEffect(() => {
     if (!wide || mode === 'replay' || !client || typeof client.orchestratorSessions !== 'function') {
@@ -880,6 +894,7 @@ export default function Hud({
               onChange={onSettingsChange}
               onClose={() => setSettingsOpen(false)}
               client={client}
+              focusDirectApi={settingsDirectApi}
             />
           )}
           <div id="hud-dock-costs" className="hud-dock-costs" />
@@ -926,6 +941,7 @@ export default function Hud({
             onChange={onSettingsChange}
             onClose={() => setSettingsOpen(false)}
             client={client}
+            focusDirectApi={settingsDirectApi}
           />
         </div>
       )}

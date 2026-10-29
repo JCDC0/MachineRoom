@@ -15,6 +15,7 @@ export const REQUEST_LIMITS = {
   mergeReview: 140000,
   backupNow: 130000,
   decide: 10000,
+  quickEndpoint: 60000,
 }
 
 function timeoutError(timeoutMs) {
@@ -407,6 +408,9 @@ export function createClient({
     },
 
     saveEndpoint: (draft) => request('POST', '/api/endpoints', draft ?? {}),
+
+    quickEndpoint: ({ provider, key, confirmed = true } = {}) =>
+      request('POST', '/api/endpoints/quick', { provider, key, confirmed }, REQUEST_LIMITS.quickEndpoint),
 
     deleteEndpoint: ({ name, confirmed = true } = {}) =>
       request('POST', `/api/endpoints/${encodeURIComponent(name ?? '')}/delete`, { confirmed }),
