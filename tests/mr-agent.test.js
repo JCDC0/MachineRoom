@@ -251,6 +251,26 @@ describe('mr-agent', () => {
     expect(api.calls[0].body.model).toBe('test/model')
   })
 
+  it('uses the saved endpoint its model names when no endpoint is given', async () => {
+    const folder = tempDir()
+    const runs = tempDir('mr-agent-runs-')
+    const api = await startFakeApi(() => chatAnswer({ text: 'Done.' }))
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify({ endpoints: [{ name: 'Local', provider: 'Custom', baseUrl: api.url, keyName: 'local', models: ['test/model'] }] }),
+    )
+    writeFileSync(join(runs, 'keys.json'), JSON.stringify({ local: 'slot-secret-value' }), 'utf8')
+    const result = await runAgent({
+      folder,
+      model: 'Local/test/model',
+      env: { MACHINEROOM_RUNS: runs, MACHINEROOM_API_KEY: '', OPENROUTER_API_KEY: '' },
+    })
+    expect(result.code).toBe(0)
+    expect(api.calls).toHaveLength(1)
+    expect(api.calls[0].headers.authorization).toBe('Bearer slot-secret-value')
+    expect(api.calls[0].body.model).toBe('test/model')
+  })
+
   it('prints one sentence for an endpoint that is not saved', async () => {
     const folder = tempDir()
     const runs = tempDir('mr-agent-runs-')

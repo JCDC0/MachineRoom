@@ -641,6 +641,10 @@ async function main() {
   if (!options) return
   let key = ''
   let url = ''
+  if (options.endpoint === '' && options.model.includes('/')) {
+    const named = readEndpoint(runsFolderFrom(process.env), options.model.split('/')[0])
+    if (named) options.endpoint = named.name
+  }
   if (options.endpoint !== '') {
     const runsFolder = runsFolderFrom(process.env)
     const endpoint = readEndpoint(runsFolder, options.endpoint)
