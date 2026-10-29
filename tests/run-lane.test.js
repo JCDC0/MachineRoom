@@ -1392,6 +1392,7 @@ describe('scripts/run-lane.mjs', () => {
       const noMcp = await runLane(['opencode', 'S2a', '--dry-run', '--force'], {
         MACHINEROOM_LANES_FILE: lanesFile,
         MACHINEROOM_RUNS: runs,
+        APPDATA: process.env.APPDATA ?? folder,
       })
       expect(noMcp.code).toBe(0)
       expect(noMcp.stdout).not.toContain('mcp config:')
@@ -1408,6 +1409,7 @@ describe('scripts/run-lane.mjs', () => {
       const withMcp = await runLane(['opencode', 'S2a', '--dry-run', '--force'], {
         MACHINEROOM_LANES_FILE: lanesFile,
         MACHINEROOM_RUNS: runs,
+        APPDATA: process.env.APPDATA ?? folder,
       })
       expect(withMcp.code).toBe(0)
       expect(withMcp.stdout).toContain('mcp config:')
