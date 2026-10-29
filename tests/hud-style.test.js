@@ -316,7 +316,7 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.mr-item.is-failed')
     expect(css).toContain('.mr-card.is-flash-red .mr-card-face')
     expect(css).toContain('.hud-lower')
-    expect(css).toContain('grid-template-columns: 260px minmax(0, 1fr) 280px')
+    expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px')
     expect(css).toContain('.hud-lower-crumb')
     expect(css).toContain('.hud-overview')
     expect(css).toContain('.hud-drawer')

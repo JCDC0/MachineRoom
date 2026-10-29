@@ -1671,95 +1671,101 @@ export function FamilyTree({ client = null, tasks = null }) {
           ) : (
             <span className="mr-family-check-space" aria-hidden="true" />
           )}
-          <button
-            type="button"
-            className={`mr-family-open is-${node.kind}`}
-            aria-expanded={editing === node.id}
-            aria-label={`Edit ${node.label}`}
-            onClick={() => openNode(node)}
-          >
-            <span className="mr-family-top">
-              <span className={`mr-family-dot is-${dotState}`} aria-hidden="true" />
-              <span className="mr-family-label">{node.label}</span>
+          <div className="mr-family-main">
+            <button
+              type="button"
+              className={`mr-family-open is-${node.kind}`}
+              aria-expanded={editing === node.id}
+              aria-label={`Edit ${node.label}`}
+              onClick={() => openNode(node)}
+            >
+              <span className="mr-family-top">
+                <span className={`mr-family-dot is-${dotState}`} aria-hidden="true" />
+                <span className="mr-family-label">{node.label}</span>
+              </span>
+            </button>
+            <div className="mr-family-under">
               {text ? <span className={`mr-family-state is-${dotState} mono`}>{text}</span> : null}
               <span className="mr-family-kind mono">{node.kind === 'lane' ? 'lane' : node.kind}</span>
-            </span>
-            <span className="mr-family-meta mono">{familyMeta(node)}</span>
-          </button>
-          {node.kind === 'lane' ? (
-            <button
-              type="button"
-              role="switch"
-              aria-checked={node.active}
-              aria-label={`${node.active ? 'Turn off' : 'Turn on'} ${node.label}`}
-              className={`mr-side-switch${node.active ? ' is-on' : ''}`}
-              disabled={busy || typeof client?.setActiveLanes !== 'function'}
-              onClick={() => toggleLane(node, !node.active)}
-            >
-              <span className="mr-side-switch-knob" aria-hidden="true" />
-            </button>
-          ) : null}
-          {node.kind === 'lane' || sub ? (
-            <button
-              type="button"
-              className="mr-family-trash"
-              aria-label={`Delete ${node.label}`}
-              title={`Delete ${node.label}`}
-              disabled={
-                busy ||
-                (sub
-                  ? typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function'
-                  : typeof client?.deleteLane !== 'function')
-              }
-              onClick={() => (sub ? askRemoveSub(node) : askRemove(node))}
-            >
-              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-                <path
-                  d="M2 3.5h8M4.5 3.5V2.5h3v1M3.4 3.5l.4 6h4.4l.4-6M5 5.5v2.6M7 5.5v2.6"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          ) : null}
-          <button
-            type="button"
-            className="mr-family-add"
-            aria-label={
-              node.kind === 'lane'
-                ? `Add sub orchestrator for ${node.label}`
-                : `Add child to ${node.label}`
-            }
-            aria-expanded={
-              node.kind === 'lane' ? groupOpen && selectedLanes.includes(node.id) : childFor === node.id
-            }
-            disabled={busy}
-            onClick={() => toggleChild(node)}
-          >
-            +
-          </button>
-          {node.kind === 'lane' ? null : (
-            <button
-              type="button"
-              className="mr-family-chat"
-              aria-label={`Open chat with ${node.label}`}
-              title={`Open chat with ${node.label}`}
-              onClick={() => openChat(node.id)}
-            >
-              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
-                <path
-                  d="M2 2.5h8v5.5H6L3.5 10V8H2z"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
+              <span className="mr-family-meta mono">{familyMeta(node)}</span>
+              <span className="mr-family-actions">
+                {node.kind === 'lane' ? (
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={node.active}
+                    aria-label={`${node.active ? 'Turn off' : 'Turn on'} ${node.label}`}
+                    className={`mr-side-switch${node.active ? ' is-on' : ''}`}
+                    disabled={busy || typeof client?.setActiveLanes !== 'function'}
+                    onClick={() => toggleLane(node, !node.active)}
+                  >
+                    <span className="mr-side-switch-knob" aria-hidden="true" />
+                  </button>
+                ) : null}
+                {node.kind === 'lane' || sub ? (
+                  <button
+                    type="button"
+                    className="mr-family-trash"
+                    aria-label={`Delete ${node.label}`}
+                    title={`Delete ${node.label}`}
+                    disabled={
+                      busy ||
+                      (sub
+                        ? typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function'
+                        : typeof client?.deleteLane !== 'function')
+                    }
+                    onClick={() => (sub ? askRemoveSub(node) : askRemove(node))}
+                  >
+                    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+                      <path
+                        d="M2 3.5h8M4.5 3.5V2.5h3v1M3.4 3.5l.4 6h4.4l.4-6M5 5.5v2.6M7 5.5v2.6"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="mr-family-add"
+                  aria-label={
+                    node.kind === 'lane'
+                      ? `Add sub orchestrator for ${node.label}`
+                      : `Add child to ${node.label}`
+                  }
+                  aria-expanded={
+                    node.kind === 'lane' ? groupOpen && selectedLanes.includes(node.id) : childFor === node.id
+                  }
+                  disabled={busy}
+                  onClick={() => toggleChild(node)}
+                >
+                  +
+                </button>
+                {node.kind === 'lane' ? null : (
+                  <button
+                    type="button"
+                    className="mr-family-chat"
+                    aria-label={`Open chat with ${node.label}`}
+                    title={`Open chat with ${node.label}`}
+                    onClick={() => openChat(node.id)}
+                  >
+                    <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
+                      <path
+                        d="M2 2.5h8v5.5H6L3.5 10V8H2z"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </span>
+            </div>
+          </div>
         </div>
         {editing === node.id ? renderEditor(node, row.depth) : null}
         {childFor === node.id ? renderChildForm(node, row.depth) : null}

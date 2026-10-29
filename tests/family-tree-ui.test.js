@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, expect, it } from 'vitest'
@@ -608,6 +609,54 @@ describe('FamilyTree rows', () => {
       const sub = rowByLabel(container, 'Frontend')
       expect(classesOf(sub.querySelector('.mr-family-dot'))).toContain('is-idle')
     })
+  })
+
+  it('gives the label the first line and the state, meta and controls the second', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client, {
+        tasks: new Map([['opencode', 'JC-19']]),
+      })
+      const main = rowByLabel(container, 'Orchestrator')
+      const top = main.querySelector('.mr-family-top')
+      expect(top.children.map((child) => String(child.className))).toEqual([
+        'mr-family-dot is-idle',
+        'mr-family-label',
+      ])
+      const under = main.querySelector('.mr-family-under')
+      expect(under).not.toBeNull()
+      expect(under.querySelector('.mr-family-state').textContent).toBe('waiting')
+      expect(under.querySelector('.mr-family-kind').textContent).toBe('orchestrator')
+      expect(under.querySelector('.mr-family-meta').textContent).toBe('claude · opus · high')
+      expect(under.querySelector('.mr-family-add').textContent).toBe('+')
+      expect(under.querySelector('.mr-family-chat')).not.toBeNull()
+
+      const lane = rowByLabel(container, 'OpenCode')
+      const laneTop = lane.querySelector('.mr-family-top')
+      expect(laneTop.children.map((child) => String(child.className))).toEqual([
+        'mr-family-dot is-working',
+        'mr-family-label',
+      ])
+      const laneUnder = lane.querySelector('.mr-family-under')
+      expect(laneUnder.querySelector('.mr-family-state').textContent).toBe('JC-19')
+      expect(laneUnder.querySelector('.mr-side-switch')).not.toBeNull()
+      expect(laneUnder.querySelector('.mr-family-trash')).not.toBeNull()
+      expect(laneUnder.querySelector('.mr-family-add')).not.toBeNull()
+      expect(laneUnder.querySelector('.mr-family-chat')).toBeNull()
+      expect(lane.querySelector('.mr-family-row').children.map((child) => String(child.className))).toEqual([
+        'mr-family-indent',
+        'mr-family-check',
+        'mr-family-main',
+      ])
+    })
+  })
+
+  it('gives the lower half sidebar room for a full label', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px')
+    expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 320px')
+    expect(css).toContain('.mr-family-under {')
+    expect(css).toContain('.mr-family-actions {')
   })
 
   it('shows each orchestrator state word beside its dot', async () => {
