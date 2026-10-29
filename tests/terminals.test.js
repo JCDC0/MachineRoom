@@ -1,7 +1,46 @@
 import { describe, expect, it } from 'vitest'
-import { addressIn, addressUrl, consoleRows } from '../src/engine/terminals.js'
+import { CHIP_SIDE_DEAD_BAND, addressIn, addressUrl, chipSideFromScreen, consoleRows } from '../src/engine/terminals.js'
 
 const line = (text, tone = 'normal') => ({ text, tone })
+
+describe('chipSideFromScreen', () => {
+  it('puts the chip on the side away from the hub', () => {
+    expect(chipSideFromScreen(420, 300, 1)).toBe(1)
+    expect(chipSideFromScreen(180, 300, -1)).toBe(-1)
+  })
+
+  it('follows the agent across the hub', () => {
+    expect(chipSideFromScreen(260, 300, 1)).toBe(-1)
+    expect(chipSideFromScreen(340, 300, -1)).toBe(1)
+  })
+
+  it('keeps the previous side inside the dead band', () => {
+    expect(chipSideFromScreen(300 + CHIP_SIDE_DEAD_BAND, 300, -1)).toBe(-1)
+    expect(chipSideFromScreen(300 - CHIP_SIDE_DEAD_BAND, 300, 1)).toBe(1)
+    expect(chipSideFromScreen(300, 300, -1)).toBe(-1)
+  })
+
+  it('switches once the gap is past the dead band', () => {
+    expect(chipSideFromScreen(300 + CHIP_SIDE_DEAD_BAND + 1, 300, -1)).toBe(1)
+    expect(chipSideFromScreen(300 - CHIP_SIDE_DEAD_BAND - 1, 300, 1)).toBe(-1)
+  })
+
+  it('takes another dead band', () => {
+    expect(chipSideFromScreen(305, 300, -1, 2)).toBe(1)
+    expect(chipSideFromScreen(305, 300, -1, 10)).toBe(-1)
+  })
+
+  it('keeps the previous side when a point is not on screen', () => {
+    expect(chipSideFromScreen(null, 300, -1)).toBe(-1)
+    expect(chipSideFromScreen(NaN, 300, 1)).toBe(1)
+    expect(chipSideFromScreen(500, undefined, -1)).toBe(-1)
+  })
+
+  it('defaults to the right for an unknown previous side', () => {
+    expect(chipSideFromScreen(300, 300, 0)).toBe(1)
+    expect(chipSideFromScreen(300, 300, undefined)).toBe(1)
+  })
+})
 
 describe('consoleRows', () => {
   it('keeps the last five lines by default', () => {
