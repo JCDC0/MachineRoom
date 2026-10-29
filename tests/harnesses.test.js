@@ -175,6 +175,33 @@ describe('harness reports and usage', () => {
     expect(harnessByKey.opencode.usage(log)).toEqual({ costUsd: 0.5, inputTokens: 112, outputTokens: 25 })
   })
 
+  it('reads the OpenCode error line and answers null on a log with none', () => {
+    const errorLog = lines(
+      { type: 'step_start', timestamp: 1 },
+      { type: 'error', error: { type: 'provider.quota', message: 'Free usage limit reached. Please upgrade your plan or try again later.' } },
+    )
+    expect(harnessByKey.opencode.failure(errorLog)).toBe('Free usage limit reached. Please upgrade your plan or try again later.')
+    const okLog = lines(
+      { type: 'text', part: { text: 'All done.' } },
+      { type: 'step_finish', part: { cost: 0.1 } },
+    )
+    expect(harnessByKey.opencode.failure(okLog)).toBeNull()
+    expect(harnessByKey.opencode.failure('')).toBeNull()
+  })
+
+  it('reads the Claude Code error result line and answers null on a log with none', () => {
+    const errorLog = lines(
+      { type: 'system', subtype: 'init' },
+      { type: 'result', subtype: 'error', is_error: true, result: 'Stopped after 60 steps.' },
+    )
+    expect(harnessByKey.claude.failure(errorLog)).toBe('Stopped after 60 steps.')
+    const okLog = lines(
+      { type: 'result', result: 'First.\nSecond.', is_error: false },
+    )
+    expect(harnessByKey.claude.failure(okLog)).toBeNull()
+    expect(harnessByKey.claude.failure('')).toBeNull()
+  })
+
   it('reads the AGY result line', () => {
     const log = lines({ event: 'result', result: { response: 'Ready.\nSet.', usage: { input_tokens: 7, output_tokens: 3, thinking_tokens: 2 } } })
     expect(harnessByKey.agy.report(log)).toEqual(['Ready.', 'Set.'])

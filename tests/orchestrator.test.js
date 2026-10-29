@@ -60,6 +60,10 @@ const FAKE_CLAUDE = [
   "console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }))",
   "console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Working.' }] } }))",
   "const mode = String(process.env.MR_MODE ?? 'reply')",
+  "if (mode === 'quota') {",
+  "  console.log(JSON.stringify({ type: 'error', error: { type: 'provider.quota', message: 'Free usage limit reached. Please upgrade your plan or try again later.' } }))",
+  "  process.exit(1)",
+  "}",
   "if (mode === 'hold') {",
   "  while (!existsSync(String(process.env.MR_RELEASE ?? ''))) {",
   '    await new Promise((done) => setTimeout(done, 20))',
@@ -85,6 +89,10 @@ const FAKE_OPENCODE = [
   "console.log(JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: sessionId, part: { type: 'step-start' } }))",
   "console.log(JSON.stringify({ type: 'tool_use', timestamp: 2, sessionID: sessionId, part: { id: 'prt_1', type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'src/math.js' } } } }))",
   "const mode = String(process.env.MR_MODE ?? 'reply')",
+  "if (mode === 'quota') {",
+  "  console.log(JSON.stringify({ type: 'error', error: { type: 'provider.quota', message: 'Free usage limit reached. Please upgrade your plan or try again later.' } }))",
+  "  process.exit(1)",
+  "}",
   "if (mode === 'hold') {",
   "  while (!existsSync(String(process.env.MR_RELEASE ?? ''))) {",
   '    await new Promise((done) => setTimeout(done, 20))',
@@ -435,6 +443,16 @@ describe('one orchestrator turn', () => {
     rig.send('Fail now')
     await waitIdle(rig, 2)
     expect(rig.answer().messages.at(-1).text).toBe('The orchestrator stopped: You have hit your session limit.')
+  })
+
+  it('shows the quota error message for a failed OpenCode turn', async () => {
+    const rig = makeRig({ harness: 'opencode' })
+    rig.behaviour.mode = 'quota'
+    rig.send('Do work')
+    await waitIdle(rig, 1)
+    expect(rig.answer().messages.at(-1).text).toBe(
+      'The orchestrator stopped: Free usage limit reached. Please upgrade your plan or try again later.'
+    )
   })
 
   it('uses the fallback when the prompt file is missing', async () => {
@@ -887,6 +905,70 @@ describe('waking the orchestrator', () => {
     rig.orchestrator.onFrame(frame('run-opencode7-K2-20261024-130000', 'failed'))
     await sleep(150)
     expect(rig.calls()).toHaveLength(3)
+  })
+
+  it('adds an Error line to the wake message when a failed run has an error in its log', async () => {
+    const rig = makeRig()
+    rig.send('Hello')
+    await waitIdle(rig, 1)
+
+    const longKeyError = 'Free usage limit reached. key sk-ant-api03-' + 'x'.repeat(24) + ' ' + 'more text '.repeat(40)
+    const log = join(rig.runs, 'opencode-failed-run.log')
+    writeFileSync(
+      log,
+      JSON.stringify({
+        type: 'error',
+        error: { type: 'provider.quota', message: longKeyError },
+      }) + '\n'
+    )
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({
+        lane: 'opencode',
+        briefs: ['T1'],
+        model: 'm',
+        startedAt: '2026-10-24T12:00:00.000Z',
+        minutes: 1,
+        exitCode: 1,
+        killed: false,
+        log,
+      })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode-failed-run', 'failed'))
+    await waitFor(() => rig.calls().length === 2)
+    await waitIdle(rig, 2)
+
+    const prompt = rig.calls()[1].args[1]
+    expect(prompt).toContain('Run opencode-failed-run on lane opencode ended: failed.')
+    expect(prompt).toContain('exit 1')
+    expect(prompt).toContain('Error: Free usage limit reached. key [key]')
+    expect(prompt).not.toContain('sk-ant-api03-')
+    const errorLine = prompt.split('\n').find((line) => line.startsWith('Error: '))
+    expect(errorLine).toBeDefined()
+    expect(errorLine.slice('Error: '.length)).toHaveLength(300)
+
+    const noErrorLog = join(rig.runs, 'opencode-plain-fail.log')
+    writeFileSync(noErrorLog, 'some output without json error\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({
+        lane: 'opencode',
+        briefs: ['T2'],
+        model: 'm',
+        startedAt: '2026-10-24T12:05:00.000Z',
+        minutes: 1,
+        exitCode: 2,
+        killed: false,
+        log: noErrorLog,
+      })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode-plain-fail', 'failed'))
+    await waitFor(() => rig.calls().length === 3)
+    await waitIdle(rig, 3)
+
+    const nextPrompt = rig.calls()[2].args[1]
+    expect(nextPrompt).toContain('exit 2')
+    expect(nextPrompt).not.toContain('Error:')
   })
 
   it('starts at most 30 room turns in an hour and waits for the owner after that', async () => {

@@ -4,6 +4,8 @@
 
 - A project run records the folder's branch when it ended on another branch and the commits made during the run, from `git log --oneline START..HEAD`, and a queue task's record is written after its commit so the room names it (task L5).
 
+- A failed turn with no reply says why and a failed lane run wake adds Error: MESSAGE when its log has one, from the pure failure helper on the OpenCode and Claude Code descriptors (task O22).
+
 - `runsFile()` and `outcomesFile()` in `server/runs.js` follow `MACHINEROOM_RUNS`, so the run route, the costs, the tasks and the reviews read the same runs folder as the lane source. Before, a bridge with a custom runs folder refused its own owner-made lanes with `Choose a lane from the list.`; the tests that moved `TEMP` now set `MACHINEROOM_RUNS` too.
 
 - After a restart, the first resumed OpenCode turn of an orchestrator carries its new bridge token. OpenCode gets the instructions only in its first message, so a resumed session kept the old token and every bridge call was refused.
