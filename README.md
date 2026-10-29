@@ -6,7 +6,7 @@ MachineRoom shows coding agents working on one project as a 3D machine room in y
 
 - Node 24 or newer. The version is pinned in `package.json` and `.nvmrc`.
 - git on the PATH. Worktrees and queues need a git project.
-- OpenCode or Claude Code installed and signed in. A lane uses the program its entry in `docs/agents/lanes.json` names. The orchestrator uses Claude Code, or OpenCode when its entry says so.
+- OpenCode, Claude Code or AGY installed and signed in, or a Direct API key in Settings. A lane uses the program or endpoint its entry in `docs/agents/lanes.json` names. The orchestrator uses Claude Code, or OpenCode when its entry says so.
 - A browser with WebGL.
 
 ## Start it on your project
@@ -57,7 +57,7 @@ Press Ctrl+C in the terminal to stop the room.
   - Green is finished work. A run that ends well turns the agent, its chip and the files it wrote green.
   - Red is failure. A failed tool call, test or run flashes red and leaves the file red until it is written again. A failed run turns the agent, its chip and the tunnel red.
 - Terminal chips: a chip beside each agent, joined by a thin line. It shows the name and a status word: yellow working, red error, green done. Click it, or the Log button in the agent dock, to read its log. `T` opens the focused agent's chip, or every chip when no agent is focused. An agent whose latest tool call is a shell command or another command also shows a cyan `CONSOLE` above its head with the last five log lines; it stays for 6 seconds after the call ends.
-- The page: a menu across the top and the room in a lens below it. At 900 pixels and wider the lens fills the window from the menu to the transport by default, and the lower half sits under the transport: the sidebar on the left, the conversation in the middle, and an Overview card on the right whose Agent and Costs entries open in its place. The Agent drawer, and the dock's context column below 900 pixels, show status, model, task, command, cost and the last log lines. An orchestrator also shows its context share and an Autocompact switch. In a live room at 900 pixels and wider the orchestrator chat sits in the middle of the lower half; in a replay, or below 900 pixels, it floats at the bottom right. Below 900 pixels the dock holds the agent list, the selected agent's context, and the settings and the cost board. Below 900 pixels the menu folds into one button. On a phone the lens keeps 300 pixels, the transport stacks, and the orchestrator chat is a full-width panel over the dock.
+- The page: a menu across the top and the room in a lens below it. The room is made for a desktop window. At 900 pixels and wider the lens fills the window from the menu to the transport by default, and the lower half sits under the transport: the sidebar on the left, the conversation in the middle, and an Overview card on the right whose Agent and Costs entries open in its place. The Agent drawer, and the dock's context column below 900 pixels, show status, model, task, command, cost and the last log lines. An orchestrator also shows its context share and an Autocompact switch. In a live room at 900 pixels and wider the orchestrator chat sits in the middle of the lower half; in a replay, or below 900 pixels, it floats at the bottom right. Below 900 pixels the page folds into one column: the menu folds into one button and the dock holds the agent list, the selected agent's context, and the settings and the cost board. Phones are not a target.
 - The agent list: below 900 pixels, in the dock, one row for each agent, with its lane key, status and a Log button. At 900 pixels and wider the sidebar's Agents tab holds the family tree instead, and the selected agent's Log button is in the Overview card's Agent drawer. With a ladder, the list groups under the main orchestrator, then a header for each sub with its name, state and lane count, then a `Main` header for the lanes in no sub. Working, queued, failed and recently finished lanes come first in each group. The rest sit under one collapsible idle row.
 - A subagent appears beside its parent as a smaller shape with its own chip.
 - Follow mode: `F` cycles wide, close up and off. It follows the card an agent is touching. A click on an agent focuses it, a click on empty space ends follow mode, and `0`, `1` to `9` or `Escape` leave it. A click on a folder card body holds the camera on that card; `0`, `Escape` with no panel open or a double click on empty space returns to the park view.
@@ -75,7 +75,7 @@ The Settings button in the menu opens the Settings panel. At 900 pixels and wide
 - Four screen effects each have a switch and a strength: chromatic aberration, vignette, grain and fine dust. Aberration and grain start off; vignette and fine dust start on. Fine dust also has a Pulse switch.
 - Record time sets how many minutes the page keeps for its own replay, from 1 to 240, 10 by default.
 - Sound holds the beeps, their volume, the music, its volume and Dance. Music plays from the MachineRoom music folder.
-- Providers holds up to 20 OpenAI-compatible endpoints, each with a provider preset, a base URL, an optional key slot and up to 50 models. Web search picks the provider for the harness web tools. MCP tools lists the Model Context Protocol servers and runs their tools.
+- Providers holds up to 20 OpenAI-compatible endpoints, each with a provider preset, a base URL, an optional key slot and up to 1000 models. Web search picks the provider for the harness web tools. MCP tools lists the Model Context Protocol servers and runs their tools.
 - Key slots, endpoints, the web search provider and the MCP servers are saved in the runs folder, never in this repository.
 
 ## Ask the orchestrator for work
@@ -207,13 +207,16 @@ A seeded room at 40000 files.
 
 | Harness | State | What the room reads |
 | --- | --- | --- |
-| OpenCode | In use: lanes `opencode`, `opencode2` to `opencode10` | `tool_use` lines, with the tool, its file or command and its result |
+| OpenCode | In use: lanes `opencode`, `opencode2` and `opencode3` | `tool_use` lines, with the tool, its file or command and its result |
 | Claude Code | In use: lane `claude` and the orchestrator | stream-json `tool_use` and `tool_result` lines, and a `Task` or `Agent` child while it works |
+| Direct API | In use when the owner adds a lane on the `machineroom` harness with a saved endpoint | Claude Code's stream-json lines from `scripts/mr-agent.mjs` over an OpenAI-compatible endpoint |
 | Hermes | Supported, retired | plain `read` and `delegate` lines |
-| AGY | Supported: backend lanes `agy`, `agy2` and `agy3`, left out of the active lane list | `step_update` lines, and `invoke_subagent` for a subagent |
+| AGY | In use: backend lanes `agy`, `agy2` and `agy3` on Flash | `step_update` lines, and `invoke_subagent` for a subagent |
 | ACP | Supported: no lane yet | `tool_call` updates, with each kind and location mapped to a touch |
+| Codex | Supported: no lane yet | `exec --json` item lines |
+| GitHub Copilot | Supported: no lane yet | `-p --output-format json` lines, or plain tool lines |
 
-Hermes is retired in `docs/agents/lanes.json`; remove `"retired": true` from its entry to bring it back, then check its `cli` block and model. AGY is supported, and its lanes stay out of the active lane list unless you make one in the family tree's Add child form. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`. The harness plan is in `docs/agents/HARNESSES.md`.
+Hermes is retired in `docs/agents/lanes.json`; remove `"retired": true` from its entry to bring it back, then check its `cli` block and model. AGY is supported, and `agy`, `agy2` and `agy3` are live backend lanes on Flash. A Direct API lane names a saved endpoint in its `cli.endpoint` and runs on the `machineroom` harness; add one in the family tree's Add child form. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`. The harness plan is in `docs/agents/HARNESSES.md`.
 
 ## Develop it
 
@@ -251,7 +254,7 @@ The drawer needs a control client. It is there in replay, the demo and a live ro
 
 ## Working with lanes
 
-A lane is one agent. On this repository, each lane has its own worktree and branch, listed in `docs/agents/lanes.json`. Ten OpenCode lanes (`opencode` and `opencode2` to `opencode10`) and the `claude` lane are live. `hermes` is retired, so `npm run run-lane` refuses it. Remove `"retired": true` from its entry to bring it back. AGY is supported, and its lanes stay out of the active lane list unless you make one in the family tree's Add child form. The drawer can start a local lane run on an open brief and show the result.
+A lane is one agent. On this repository, each lane has its own worktree and branch, listed in `docs/agents/lanes.json`. Three OpenCode lanes (`opencode`, `opencode2` and `opencode3`), three AGY backend lanes (`agy`, `agy2` and `agy3`) and the `claude` lane are live. `opencode4` to `opencode10` and `hermes` are retired, so `npm run run-lane` refuses them. Remove `"retired": true` from an entry to bring it back. The drawer can start a local lane run on an open brief and show the result.
 
 - Start a lane run. Press `C`, open Dispatch, pick a brief, then Run now. The confirm card names the lane, model and brief and says it spends money. Confirm starts the lane in its own worktree. The Runs list shows its last lines and its record.
 - Start one from a terminal. `npm run run-lane -- opencode <brief>` starts a lane on the open brief you name. The `claude` lane runs Claude Code, and `npm run run-lane -- claude --project <folder> --task "Fix the failing test."` starts it on another folder. A task with `--worktree` runs as a queue of one, so it makes a branch and commits the work when the project's tests pass. `--dry-run` prints the command, `--list` shows the last 10 runs, and `--stats` shows runs, minutes and cost per lane and model.
@@ -313,9 +316,9 @@ A lane's `cli.model` can name a `provider/model` from any OpenAI-compatible prov
 - `C` toggle the control drawer
 - `?` toggle keyboard help
 
-MachineRoom prints no key and puts none in the repository or `lanes.json`. The Settings key slots are saved in `<runs>/keys.json` outside the repository, with mode 0o600. The bridge needs no key to run: the assistant route runs OpenCode, which uses the login on this computer, and only the optional decision route reads `OPENROUTER_API_KEY` from the environment (without it that route answers 404). The assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second.
+MachineRoom prints no key and puts none in the repository or `lanes.json`. A Direct API key goes in Settings, Direct API: choose a provider, paste the key, then press `Save key`. Keys are saved in `<runs>/keys.json` outside the repository, with mode 0o600. The bridge needs no key to run: the assistant route runs OpenCode, which uses the login on this computer, and only the optional decision route reads `OPENROUTER_API_KEY` from the environment (without it that route answers 404). The assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second.
 
-A lane started with `npm run run-lane` sees only a short allow-list of the shell's names: `PATH`, `Path`, `PATHEXT`, `SystemRoot`, `WINDIR`, `COMSPEC`, `TEMP`, `TMP`, `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `PROGRAMFILES`, `PROGRAMFILES(X86)`, `PROGRAMDATA`, `NUMBER_OF_PROCESSORS`, `OS`, `PROCESSOR_ARCHITECTURE`, `LANG`, `LC_ALL`, `TERM`, `HOME` and `SHELL`, its own `PWD`, and `MACHINEROOM_RUNS` and `MACHINEROOM_LANES_FILE` when the runner sets them. No key reaches a lane except the one its harness needs. The MachineRoom harness gets `MACHINEROOM_API_KEY` or `OPENROUTER_API_KEY`, and `MACHINEROOM_API_URL` for its base address, and Hermes gets `OPENROUTER_API_KEY`; OpenCode and Claude Code use the login on this computer. The runner also writes the run's log through the same `[key]` mask, so a key an agent prints is masked on disk.
+A lane started with `npm run run-lane` sees only a short allow-list of the shell's names: `PATH`, `Path`, `PATHEXT`, `SystemRoot`, `WINDIR`, `COMSPEC`, `TEMP`, `TMP`, `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `PROGRAMFILES`, `PROGRAMFILES(X86)`, `PROGRAMDATA`, `NUMBER_OF_PROCESSORS`, `OS`, `PROCESSOR_ARCHITECTURE`, `LANG`, `LC_ALL`, `TERM`, `HOME` and `SHELL`, its own `PWD`, and `MACHINEROOM_RUNS` and `MACHINEROOM_LANES_FILE` when the runner sets them. No key reaches a lane except the one its harness needs. The Direct API harness gets `MACHINEROOM_API_KEY` or `OPENROUTER_API_KEY`, or the key of its saved endpoint, and `MACHINEROOM_API_URL` for its base address. Hermes gets `OPENROUTER_API_KEY`; OpenCode and Claude Code use the login on this computer. The runner also writes the run's log through the same `[key]` mask, so a key an agent prints is masked on disk.
 
 ## Recordings
 

@@ -1,3 +1,5 @@
+This note describes Paperclip, which was removed on 2026-10-24.
+
 # Paperclip API notes
 
 Task C1. Paperclip 2026.1012.0 in `local_trusted` mode (no sign-in), base URL `http://127.0.0.1:3100`.
