@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 export const MAX_ENDPOINTS = 20
-export const MAX_ENDPOINT_MODELS = 50
+export const MAX_ENDPOINT_MODELS = 1000
 export const MODELS_TIMEOUT_MS = 10000
 export const ENDPOINT_NAME_PATTERN = /^[A-Za-z0-9 _-]{1,40}$/
 
@@ -34,13 +34,17 @@ export const BASE_URL_PROBLEM = 'The base URL must be a full https address, or h
 export const BASE_URL_PARTS_PROBLEM = 'The base URL cannot hold a user name, a query or a fragment.'
 export const KEY_NAME_PROBLEM = 'The key slot name must be 1 to 40 letters, digits, spaces, dashes or underscores.'
 export const KEY_REQUIRED_PROBLEM = 'A remote endpoint needs a key slot.'
-export const MODELS_PROBLEM = 'Models must be a list of 0 to 50 ids.'
+export const MODELS_PROBLEM = 'Models must be a list of 0 to 1000 ids.'
 export const TOO_MANY_PROBLEM = 'At most 20 endpoints are allowed.'
 export const ENDPOINT_NOT_FOUND_PROBLEM = 'The endpoint was not found.'
 export const NO_KEY_PROBLEM = 'The key slot has no key.'
 export const MODELS_FAILED_PROBLEM = 'The endpoint did not answer its model list.'
 export const MODELS_TIMEOUT_PROBLEM = 'The endpoint did not answer within 10 seconds.'
 export const MODELS_JSON_PROBLEM = 'The endpoint model list was not JSON.'
+export const QUICK_ORIGIN_PROBLEM = 'A request to save a Direct API key needs a page Origin.'
+export const QUICK_CONFIRM_PROBLEM = 'Confirm saving the Direct API key first.'
+export const QUICK_KEY_PROBLEM = 'The key must be 1 to 500 characters.'
+export const QUICK_KEY_SAVE_PROBLEM = 'The Direct API key could not be saved.'
 
 export function endpointsFile(runsFolder) {
   return join(runsFolder, 'endpoints.json')
@@ -181,6 +185,52 @@ export async function readEndpointKey(runsFolder, keyName) {
   return keyFromFile(runsFolder, name)
 }
 
+export async function writeEndpointKey(runsFolder, keyName, value) {
+  const name = typeof keyName === 'string' ? keyName.trim() : ''
+  if (name === '') return false
+  let family = null
+  try {
+    family = await import('./family.js')
+  } catch {
+    family = null
+  }
+  if (!family || typeof family.writeKey !== 'function') return false
+  try {
+    family.writeKey(runsFolder, name, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+export function quickEndpointName(provider) {
+  const text = typeof provider === 'string' ? provider.trim() : ''
+  return text.replace(/[^A-Za-z0-9 _-]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 40)
+}
+
+async function fetchEndpointModelList(endpoint, key, { fetchImpl, timeoutMs }) {
+  const headers = { accept: 'application/json' }
+  if (key !== '') headers.authorization = `Bearer ${key}`
+  let response
+  try {
+    response = await fetchImpl(`${endpoint.baseUrl}/models`, {
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  } catch (error) {
+    const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError'
+    return { status: timedOut ? 504 : 502, error: timedOut ? MODELS_TIMEOUT_PROBLEM : MODELS_FAILED_PROBLEM }
+  }
+  if (!response.ok) return { status: 502, error: MODELS_FAILED_PROBLEM }
+  let data
+  try {
+    data = await response.json()
+  } catch {
+    return { status: 502, error: MODELS_JSON_PROBLEM }
+  }
+  return { models: modelIdsFromAnswer(data) }
+}
+
 export function modelIdsFromAnswer(data) {
   const list = Array.isArray(data)
     ? data
@@ -259,6 +309,98 @@ export function createEndpointsApi(options = {}) {
       return true
     }
 
+    if (path === '/api/endpoints/quick') {
+      if (method !== 'POST') {
+        sendJson(req, res, 405, { error: 'Method not allowed.' })
+        return true
+      }
+      if (!page) {
+        sendJson(req, res, 403, { error: QUICK_ORIGIN_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: QUICK_CONFIRM_PROBLEM })
+        return true
+      }
+      const providerName = typeof body.provider === 'string' ? body.provider.trim() : ''
+      const preset = PROVIDERS.find((entry) => entry.name === providerName)
+      if (!preset) {
+        sendJson(req, res, 400, { error: PROVIDER_PROBLEM })
+        return true
+      }
+      const key = typeof body.key === 'string' ? body.key : ''
+      if (key.length < 1 || key.length > 500) {
+        sendJson(req, res, 400, { error: QUICK_KEY_PROBLEM })
+        return true
+      }
+      const name = quickEndpointName(providerName)
+      if (!ENDPOINT_NAME_PATTERN.test(name)) {
+        sendJson(req, res, 400, { error: NAME_PROBLEM })
+        return true
+      }
+      const endpoints = readEndpoints(runsDir)
+      const index = endpoints.findIndex((entry) => entry.name === name)
+      if (index === -1 && endpoints.length >= MAX_ENDPOINTS) {
+        sendJson(req, res, 400, { error: TOO_MANY_PROBLEM })
+        return true
+      }
+      const existing = index === -1 ? null : endpoints[index]
+      const keyName = existing && existing.keyName !== '' ? existing.keyName : name
+      const draft = {
+        name,
+        provider: providerName,
+        baseUrl: preset.baseUrl,
+        keyName,
+        models: existing ? [...existing.models] : [],
+      }
+      const problem = endpointProblem(draft)
+      if (problem !== null) {
+        sendJson(req, res, 400, { error: problem })
+        return true
+      }
+      const savedKey = await writeEndpointKey(runsDir, keyName, key)
+      if (!savedKey) {
+        sendJson(req, res, 500, { error: QUICK_KEY_SAVE_PROBLEM })
+        return true
+      }
+      const endpoint = cleanEndpoint(draft)
+      if (index === -1) endpoints.push(endpoint)
+      else endpoints[index] = endpoint
+      saveEndpoints(runsDir, endpoints)
+      if (typeof notify === 'function') {
+        notify({ topic: 'family' })
+        notify({ topic: 'endpoints' })
+      }
+      const fetched = await fetchEndpointModelList(endpoint, key, { fetchImpl, timeoutMs })
+      if (Array.isArray(fetched.models)) {
+        const seen = new Set()
+        const models = []
+        for (const id of fetched.models) {
+          const text = typeof id === 'string' ? id.trim() : ''
+          if (!text || seen.has(text)) continue
+          seen.add(text)
+          models.push(text)
+          if (models.length >= MAX_ENDPOINT_MODELS) break
+        }
+        endpoint.models = models
+        saveEndpoints(runsDir, endpoints)
+      }
+      const answer = {
+        endpoint: {
+          name: endpoint.name,
+          provider: endpoint.provider,
+          baseUrl: endpoint.baseUrl,
+          keyName: endpoint.keyName,
+          models: endpoint.models.length,
+        },
+      }
+      if (fetched.error) answer.error = fetched.error
+      sendJson(req, res, 200, answer)
+      return true
+    }
+
     const modelsMatch = /^\/api\/endpoints\/([^/]+)\/models$/.exec(path)
     if (modelsMatch) {
       if (method !== 'GET') {
@@ -279,31 +421,12 @@ export function createEndpointsApi(options = {}) {
           return true
         }
       }
-      const headers = { accept: 'application/json' }
-      if (key !== '') headers.authorization = `Bearer ${key}`
-      let response
-      try {
-        response = await fetchImpl(`${endpoint.baseUrl}/models`, {
-          headers,
-          signal: AbortSignal.timeout(timeoutMs),
-        })
-      } catch (error) {
-        const timedOut = error?.name === 'TimeoutError' || error?.name === 'AbortError'
-        sendJson(req, res, timedOut ? 504 : 502, { error: timedOut ? MODELS_TIMEOUT_PROBLEM : MODELS_FAILED_PROBLEM })
+      const fetched = await fetchEndpointModelList(endpoint, key, { fetchImpl, timeoutMs })
+      if (fetched.error) {
+        sendJson(req, res, fetched.status, { error: fetched.error })
         return true
       }
-      if (!response.ok) {
-        sendJson(req, res, 502, { error: MODELS_FAILED_PROBLEM })
-        return true
-      }
-      let data
-      try {
-        data = await response.json()
-      } catch {
-        sendJson(req, res, 502, { error: MODELS_JSON_PROBLEM })
-        return true
-      }
-      sendJson(req, res, 200, { models: modelIdsFromAnswer(data) })
+      sendJson(req, res, 200, { models: fetched.models })
       return true
     }
 

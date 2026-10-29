@@ -19,6 +19,7 @@ import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
+import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { killTree } from './processTree.js'
@@ -1200,7 +1201,7 @@ export function createOrchestrator({
   function setHarness(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_HARNESS_PROBLEM } }
     const nextHarness = typeof body?.harness === 'string' ? body.harness.trim() : ''
-    if (!nextHarness || !isHarnessAvailable(nextHarness, { lanes })) {
+    if (!nextHarness || !isHarnessAvailable(nextHarness, { lanes, endpoints: readEndpoints(folder) })) {
       return { status: 400, body: { error: harnessUnavailableProblem(nextHarness || 'unknown') } }
     }
     const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''

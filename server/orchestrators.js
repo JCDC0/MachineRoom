@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
 import { isHarnessAvailable } from './agents-config.js'
+import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import {
   CONFIRM_MESSAGE_PROBLEM,
@@ -118,11 +119,11 @@ export function branchChanges(record, lanes = {}, options = {}) {
   }
 }
 
-export function availableHarnesses(lanes = {}, env = process.env, platform = process.platform) {
+export function availableHarnesses(lanes = {}, env = process.env, platform = process.platform, endpoints = []) {
   const keys = [...new Set([...HARNESSES.map((h) => h.key), ...MODELS.map((m) => m.harness)])]
   const list = []
   for (const key of keys) {
-    if (isHarnessAvailable(key, { lanes, env, platform })) {
+    if (isHarnessAvailable(key, { lanes, env, platform, endpoints })) {
       const descriptor = HARNESSES.find((h) => h.key === key)
       const name = descriptor?.name ?? key
       const models = MODELS.filter((m) => m.harness === key).map(({ id, label, contextWindow }) => ({
@@ -340,7 +341,7 @@ export function createOrchestrators({
     const { ladder } = readSaved()
     const claimed = new Set(ladder.subs.flatMap((sub) => sub.lanes))
     const answer = main.answer()
-    const activeHarnesses = availableHarnesses(lanes)
+    const activeHarnesses = availableHarnesses(lanes, process.env, process.platform, readEndpoints(folder))
     const entries = [
       {
         id: ORCHESTRATOR_KEY,

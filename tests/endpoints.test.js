@@ -20,6 +20,7 @@ import {
 } from '../server/endpoints.js'
 import { modelsFor } from '../server/models.js'
 import { readAllLanes } from '../server/agents-config.js'
+import { readKeys } from '../server/family.js'
 import { startLaneBridge } from './helpers/bridge.js'
 import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
@@ -106,7 +107,7 @@ describe('endpoint rules', () => {
     expect(endpointProblem(endpointBody({ provider: 'Elsewhere' }))).toBe(PROVIDER_PROBLEM)
   })
 
-  it('refuses more than 50 models', () => {
+  it('refuses more than 1000 models', () => {
     const models = Array.from({ length: MAX_ENDPOINT_MODELS + 1 }, (_, index) => `model-${index}`)
     expect(endpointProblem(endpointBody({ models }))).not.toBeNull()
   })
@@ -148,6 +149,17 @@ describe('/api/endpoints', () => {
     expect(deleted.status).toBe(200)
     expect(deleted.body.deleted).toBe('Work')
     expect(readEndpoints(runsDir)).toEqual([])
+  })
+
+  it('saves an endpoint with 181 models', async () => {
+    const { url, runsDir } = await startLaneBridge()
+    const models = Array.from({ length: 181 }, (_, index) => `model-${index}`)
+    const saved = await post(url, '/api/endpoints', endpointBody({ name: 'Big', models }))
+    expect(saved.status).toBe(200)
+    expect(saved.body.endpoint.models).toHaveLength(181)
+    const list = await get(url, '/api/endpoints')
+    expect(list.body.endpoints[0].models).toHaveLength(181)
+    expect(readEndpoints(runsDir)[0].models).toHaveLength(181)
   })
 
   it('refuses a new endpoint past 20', async () => {
@@ -202,7 +214,7 @@ describe('endpoint lanes', () => {
     expect(updated.status).toBe(200)
     expect(updated.body).toMatchObject({ name: 'Endpoint Lane Two', model: 'Local/beta', endpoint: 'Local' })
     const cleared = await post(url, `/api/lanes/${encodeURIComponent(created.body.key)}/update`, {
-      model: 'xiaomi/mimo-v2.6-pro',
+      model: 'Local/alpha',
       endpoint: '',
       confirmed: true,
     })
@@ -341,5 +353,88 @@ describe('/api/endpoints/NAME/models', () => {
     )
     expect(MODELS_TIMEOUT_MS).toBe(10000)
     expect(signal).toBeInstanceOf(AbortSignal)
+  })
+})
+
+describe('POST /api/endpoints/quick', () => {
+  it('needs a page Origin and a confirmation', async () => {
+    const { url, runsDir } = await startLaneBridge()
+    const noOrigin = await post(url, '/api/endpoints/quick', { provider: 'OpenRouter', key: 'secret', confirmed: true }, null)
+    expect(noOrigin.status).toBe(403)
+    const unconfirmed = await post(url, '/api/endpoints/quick', { provider: 'OpenRouter', key: 'secret', confirmed: false })
+    expect(unconfirmed.status).toBe(400)
+    expect(readEndpoints(runsDir)).toEqual([])
+    expect(readKeys(runsDir)).toEqual({})
+  })
+
+  it('saves the slot, the endpoint and 181 models from a fake provider', async () => {
+    const runsDir = makeTempDir('mr-quick-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    const key = 'quick-secret-value'
+    const models = Array.from({ length: 181 }, (_, index) => `model-${index}`)
+    const seen = []
+    const answers = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ provider: 'OpenRouter', key, confirmed: true }),
+      fetchImpl: async (url, init) => {
+        seen.push({ url: String(url), auth: init.headers.authorization })
+        return { ok: true, json: async () => ({ data: models.map((id) => ({ id })) }) }
+      },
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers).toHaveLength(1)
+    expect(answers[0].status).toBe(200)
+    expect(seen).toEqual([{ url: 'https://openrouter.ai/api/v1/models', auth: `Bearer ${key}` }])
+    expect(answers[0].body).toEqual({
+      endpoint: {
+        name: 'OpenRouter',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'OpenRouter',
+        models: 181,
+      },
+    })
+    expect(JSON.stringify(answers[0].body)).not.toContain(key)
+    expect(readKeys(runsDir)).toEqual({ OpenRouter: key })
+    const endpoints = readEndpoints(runsDir)
+    expect(endpoints).toHaveLength(1)
+    expect(endpoints[0].models).toHaveLength(181)
+    expect(JSON.stringify(endpoints)).not.toContain(key)
+  })
+
+  it('keeps the endpoint and its models when the fetch fails and answers without the key', async () => {
+    const runsDir = makeTempDir('mr-quick-fail-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(runsDir, [
+      { name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'openrouter', models: ['alpha'] },
+    ])
+    const key = 'quick-fail-value'
+    const answers = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ provider: 'OpenRouter', key, confirmed: true }),
+      fetchImpl: async () => {
+        throw new Error('no network')
+      },
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers).toHaveLength(1)
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.error).toBe(MODELS_FAILED_PROBLEM)
+    expect(answers[0].body.endpoint).toMatchObject({ name: 'OpenRouter', keyName: 'openrouter', models: 1 })
+    expect(JSON.stringify(answers[0].body)).not.toContain(key)
+    expect(readKeys(runsDir)).toEqual({ openrouter: key })
+    expect(readEndpoints(runsDir)[0].models).toEqual(['alpha'])
   })
 })

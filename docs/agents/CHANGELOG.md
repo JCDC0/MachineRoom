@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The Direct API counts as available for Add child, the orchestrator ladder and a harness change once an endpoint is saved, an endpoint saves up to 1000 models, and `POST /api/endpoints/quick` saves a provider key and loads its endpoint models in one step (task H17).
+
+- The machineroom model list is the saved endpoints' `NAME/MODEL` list once any endpoint exists; without one it falls back to the built-in models only with `MACHINEROOM_API_KEY` or `OPENROUTER_API_KEY`, and says `Add a Direct API key in Settings first.` otherwise (task H17).
+
 - `POST /api/control/runs` credits a lane that a sub's sector holds to that sub when the main orchestrator starts it, with or without `startedBy`, so its end wakes the sub; a sub's token may still name only itself (task O24).
 
 - The orchestrator guide tells the main not to message a sub only to thank it or confirm a result, since every message starts a turn for the sub and its reply starts one for the main (task O24).

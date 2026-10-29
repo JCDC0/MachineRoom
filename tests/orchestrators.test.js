@@ -8,6 +8,7 @@ import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource } from '../server/lanes-source.js'
 import { chatFileFor, CONFIRM_HARNESS_PROBLEM } from '../server/orchestrator.js'
 import { branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
+import { saveEndpoints } from '../server/endpoints.js'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
 import { getJson, postJson, readFrames } from './helpers/bridge.js'
@@ -717,6 +718,32 @@ describe('the orchestrator registry', () => {
     expect(runningConflict.body).toEqual({ error: 'A turn is already running.' })
     writeFileSync(files.releaseFile, 'go')
     await waitFor(() => rig.chat('orchestrator')?.state === 'idle')
+  })
+
+  it('offers and sets the machineroom harness when an endpoint is saved', async () => {
+    const files = makeBase()
+    saveEndpoints(files.runs, [
+      {
+        name: 'Work',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['alpha'],
+      },
+    ])
+    const rig = await makeBridge(files)
+
+    const list = (await getJson(`${rig.url}/api/orchestrators`)).body
+    const machineroom = list[0].harnesses.find((entry) => entry.harness === 'machineroom')
+    expect(machineroom).toBeDefined()
+
+    const changed = await pagePost(`${rig.url}/api/orchestrator/harness`, {
+      harness: 'machineroom',
+      model: 'Work/alpha',
+      confirmed: true,
+    })
+    expect(changed.status).toBe(200)
+    expect(changed.body).toMatchObject({ id: 'orchestrator', harness: 'machineroom', model: 'Work/alpha' })
   })
 
   it('sets reasoning effort and manages sessions over the bridge routes', async () => {

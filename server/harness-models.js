@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
-import { modelIdsFromAnswer, readEndpointKey, readEndpoints } from './endpoints.js'
+import { readEndpoints } from './endpoints.js'
 import { readLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { MODELS } from './model-list.js'
 import { endpointModels } from './models.js'
@@ -14,6 +14,7 @@ export const COMMAND_TIMEOUT_MS = 30000
 export const MAX_OUTPUT_BYTES = 1024 * 1024
 export const KNOWN_HARNESSES = ['claude', 'opencode', 'agy', 'acp', 'machineroom', 'codex', 'copilot', 'hermes']
 export const OWNER_MODELS_PROBLEM = 'Only the owner can refresh the model list.'
+export const DIRECT_API_KEY_PROBLEM = 'Add a Direct API key in Settings first.'
 
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
@@ -66,20 +67,38 @@ export function saveCachedHarnessModels(runsFolder, harness, models, fetchedAt =
   saveHarnessModelsCache(runsFolder, cache)
 }
 
-export function modelAllowed(harness, id, runsFolder) {
+export function machineroomModels(runsFolder, env = process.env) {
+  const endpoints = typeof runsFolder === 'string' && runsFolder.trim() !== '' ? readEndpoints(runsFolder) : []
+  if (endpoints.length > 0) {
+    return {
+      models: endpointModels(runsFolder).map(({ id, label }) => ({ id, label })),
+      error: null,
+    }
+  }
+  const key = env?.MACHINEROOM_API_KEY
+  const fallback = env?.OPENROUTER_API_KEY
+  const hasKey =
+    (typeof key === 'string' && key.trim() !== '') ||
+    (typeof fallback === 'string' && fallback.trim() !== '')
+  if (!hasKey) return { models: [], error: DIRECT_API_KEY_PROBLEM }
+  return {
+    models: MODELS.filter((m) => m.harness === 'machineroom').map(({ id, label }) => ({ id, label })),
+    error: null,
+  }
+}
+
+export function modelAllowed(harness, id, runsFolder, env = process.env) {
   const modelId = typeof id === 'string' ? id.trim() : ''
   if (!modelId || typeof harness !== 'string' || !harness.trim()) return false
 
   const harnessKey = harness.trim()
 
-  if (MODELS.some((m) => m.harness === harnessKey && m.id === modelId)) {
-    return true
+  if (harnessKey === 'machineroom') {
+    return machineroomModels(runsFolder, env).models.some((m) => m.id === modelId)
   }
 
-  if (harnessKey === 'machineroom' && runsFolder) {
-    if (endpointModels(runsFolder).some((m) => m.id === modelId)) {
-      return true
-    }
+  if (MODELS.some((m) => m.harness === harnessKey && m.id === modelId)) {
+    return true
   }
 
   if (runsFolder) {
@@ -295,54 +314,6 @@ export function parseCommandModels(stdout) {
   return models
 }
 
-export async function fetchLiveMachineroomModels(runsFolder, { fetchImpl = fetch, timeoutMs = 10000 } = {}) {
-  const endpoints = readEndpoints(runsFolder)
-  const endpointModelsList = []
-  let anyError = null
-
-  for (const endpoint of endpoints) {
-    let key = ''
-    if (endpoint.keyName) {
-      key = await readEndpointKey(runsFolder, endpoint.keyName)
-    }
-    const headers = { accept: 'application/json' }
-    if (key) headers.authorization = `Bearer ${key}`
-    try {
-      const response = await fetchImpl(`${endpoint.baseUrl}/models`, {
-        headers,
-        signal: AbortSignal.timeout(timeoutMs),
-      })
-      if (!response.ok) {
-        anyError = 'The endpoint did not answer its model list.'
-        continue
-      }
-      const data = await response.json()
-      const ids = modelIdsFromAnswer(data)
-      for (const id of ids) {
-        endpointModelsList.push({
-          id: `${endpoint.name}/${id}`,
-          label: `${id} (${endpoint.name})`,
-        })
-      }
-    } catch {
-      anyError = 'The endpoint did not answer its model list.'
-    }
-  }
-
-  const staticModels = MODELS.filter((m) => m.harness === 'machineroom').map(({ id, label }) => ({ id, label }))
-  const seen = new Set()
-  const combined = []
-
-  for (const item of [...endpointModelsList, ...staticModels]) {
-    if (!seen.has(item.id)) {
-      seen.add(item.id)
-      combined.push(item)
-    }
-  }
-
-  return { models: combined, error: endpointModelsList.length === 0 && endpoints.length > 0 ? anyError : null }
-}
-
 export async function getHarnessModels(harness, {
   refresh = false,
   runsFolder,
@@ -350,7 +321,6 @@ export async function getHarnessModels(harness, {
   env = process.env,
   platform = process.platform,
   timeoutMs = COMMAND_TIMEOUT_MS,
-  fetchImpl = fetch,
   cacheTtlMs = CACHE_TTL_MS,
 } = {}) {
   const staticModels = MODELS.filter((m) => m.harness === harness).map(({ id, label }) => ({ id, label }))
@@ -361,6 +331,17 @@ export async function getHarnessModels(harness, {
       models: staticModels,
       source: 'list',
       fetchedAt: new Date().toISOString(),
+    }
+  }
+
+  if (harness === 'machineroom') {
+    const result = machineroomModels(runsFolder, env)
+    return {
+      harness,
+      models: result.models,
+      source: 'list',
+      fetchedAt: new Date().toISOString(),
+      ...(result.error ? { error: result.error } : {}),
     }
   }
 
@@ -377,21 +358,6 @@ export async function getHarnessModels(harness, {
           fetchedAt: entry.fetchedAt,
         }
       }
-    }
-  }
-
-  if (harness === 'machineroom') {
-    const result = await fetchLiveMachineroomModels(runsFolder, { fetchImpl, timeoutMs: Math.min(timeoutMs, 10000) })
-    const fetchedAt = new Date().toISOString()
-    if (runsFolder && result.models.length > 0) {
-      saveCachedHarnessModels(runsFolder, harness, result.models, fetchedAt)
-    }
-    return {
-      harness,
-      models: result.models,
-      source: 'live',
-      fetchedAt,
-      ...(result.error ? { error: result.error } : {}),
     }
   }
 
@@ -481,7 +447,6 @@ export function createHarnessModelsApi(options = {}) {
   const env = options.env ?? process.env
   const platform = options.platform ?? process.platform
   const timeoutMs = options.timeoutMs ?? COMMAND_TIMEOUT_MS
-  const fetchImpl = options.fetchImpl ?? fetch
   const cacheTtlMs = options.cacheTtlMs ?? CACHE_TTL_MS
   const sendJson = options.sendJson ?? ((req, res, status, body) => {
     const payload = JSON.stringify(body)
@@ -520,7 +485,6 @@ export function createHarnessModelsApi(options = {}) {
       env,
       platform,
       timeoutMs,
-      fetchImpl,
       cacheTtlMs,
     })
 

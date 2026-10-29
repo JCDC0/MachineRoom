@@ -21,6 +21,7 @@ import {
   readProposals,
 } from '../server/family.js'
 import { createBridge } from '../server/index.js'
+import { saveEndpoints } from '../server/endpoints.js'
 import { NO_TOKEN_PROBLEM } from '../server/orchestrators.js'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
@@ -500,6 +501,41 @@ describe('Proposals: POST /api/family/proposals', () => {
       },
     })
     expect(badModel.status).toBe(400)
+  })
+
+  it('accepts a machineroom proposal when an endpoint is saved', async () => {
+    const { url, runsFolder } = await startBridge()
+
+    const noEndpoint = await request(`${url}/api/family/proposals`, {
+      method: 'POST',
+      body: {
+        label: 'Direct Worker',
+        harness: 'machineroom',
+        model: 'Work/alpha',
+      },
+    })
+    expect(noEndpoint.status).toBe(400)
+    expect(noEndpoint.body.error).toBe('Add a Direct API key in Settings first.')
+
+    saveEndpoints(runsFolder, [
+      {
+        name: 'Work',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['alpha'],
+      },
+    ])
+    const accepted = await request(`${url}/api/family/proposals`, {
+      method: 'POST',
+      body: {
+        label: 'Direct Worker',
+        harness: 'machineroom',
+        model: 'Work/alpha',
+      },
+    })
+    expect(accepted.status).toBe(200)
+    expect(accepted.body).toMatchObject({ label: 'Direct Worker', harness: 'machineroom', model: 'Work/alpha' })
   })
 
   it('keeps at most 20 pending proposals', async () => {
