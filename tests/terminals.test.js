@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addressIn, consoleRows } from '../src/engine/terminals.js'
+import { addressIn, addressUrl, consoleRows } from '../src/engine/terminals.js'
 
 const line = (text, tone = 'normal') => ({ text, tone })
 
@@ -81,5 +81,52 @@ describe('addressIn', () => {
 
   it('skips a clock and still finds the port after it', () => {
     expect(addressIn('started at 10:30 on :5173')).toBe(':5173')
+  })
+})
+
+describe('addressUrl', () => {
+  it('keeps a full http or https address', () => {
+    expect(addressUrl('http://localhost:5173/')).toBe('http://localhost:5173/')
+    expect(addressUrl('https://example.com/room?x=1')).toBe('https://example.com/room?x=1')
+  })
+
+  it('adds http to a local host and port', () => {
+    expect(addressUrl('localhost:5173')).toBe('http://localhost:5173')
+    expect(addressUrl('127.0.0.1:8080')).toBe('http://127.0.0.1:8080')
+    expect(addressUrl('[::1]:3000')).toBe('http://[::1]:3000')
+  })
+
+  it('turns a bare port into a localhost address', () => {
+    expect(addressUrl(':5173')).toBe('http://localhost:5173')
+  })
+
+  it('answers the url for an addressIn value', () => {
+    expect(addressUrl(addressIn('Local: http://localhost:5173/'))).toBe('http://localhost:5173/')
+    expect(addressUrl(addressIn('vite is running at :5173 now'))).toBe('http://localhost:5173')
+  })
+
+  it('refuses another scheme', () => {
+    expect(addressUrl('ftp://example.com/room')).toBeNull()
+    expect(addressUrl('file:///C:/room')).toBeNull()
+    expect(addressUrl('javascript:alert(1)')).toBeNull()
+  })
+
+  it('refuses a value with spaces or no address', () => {
+    expect(addressUrl('http://localhost:5173/a b')).toBeNull()
+    expect(addressUrl('localhost:5173 room')).toBeNull()
+    expect(addressUrl('example.com:8080')).toBeNull()
+    expect(addressUrl('')).toBeNull()
+    expect(addressUrl(null)).toBeNull()
+    expect(addressUrl(42)).toBeNull()
+  })
+
+  it('refuses a full address that cannot be parsed', () => {
+    expect(addressUrl('http://')).toBeNull()
+    expect(addressUrl('https://')).toBeNull()
+  })
+
+  it('refuses a port out of range', () => {
+    expect(addressUrl('localhost:70000')).toBeNull()
+    expect(addressUrl(':0')).toBeNull()
   })
 })

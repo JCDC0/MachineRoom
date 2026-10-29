@@ -385,6 +385,50 @@ describe('agentContext', () => {
     expect(result.command).toBe('line 20')
   })
 
+  it('reads the address from the agent console lines', () => {
+    const result = agentContext({
+      agent: lane,
+      lanes: [lane],
+      costs: board([costRow]),
+      liveRuns: [],
+      tasks: [],
+      log: [
+        { agent: 'OpenCode', text: 'vite v6 ready', tone: 'normal' },
+        { agent: 'OpenCode', text: '  Local: localhost:5173', tone: 'normal' },
+      ],
+    })
+
+    expect(result.address).toBe('localhost:5173')
+    expect(result.addressUrl).toBe('http://localhost:5173')
+  })
+
+  it('leaves the dock address empty without an address in the newest lines', () => {
+    const result = agentContext({
+      agent: lane,
+      lanes: [lane],
+      costs: board([costRow]),
+      liveRuns: [],
+      tasks: [],
+      log: [{ agent: 'OpenCode', text: 'Test Files  42 passed (42)', tone: 'normal' }],
+    })
+
+    expect(result.address).toBeNull()
+    expect(result.addressUrl).toBeNull()
+  })
+
+  it('does not invent an address from a script link', () => {
+    const result = agentContext({
+      agent: lane,
+      lanes: [lane],
+      costs: board([costRow]),
+      liveRuns: [],
+      tasks: [],
+      log: [{ agent: 'OpenCode', text: 'open javascript:alert(1)', tone: 'normal' }],
+    })
+
+    expect(result.addressUrl).toBeNull()
+  })
+
   it('a sub orchestrator shows its lanes, scope, restriction and setter', () => {
     const result = agentContext({
       agent: subAgent,
@@ -636,6 +680,36 @@ describe('AgentDock', () => {
     expect(html).not.toContain('>Command<')
     expect(html).not.toContain('>Cost<')
     expect(html).not.toContain('>Tokens<')
+  })
+
+  it('draws Open ADDRESS when the console has an address', () => {
+    const html = renderToString(
+      createElement(AgentDock, {
+        agent: lane,
+        lanes: [lane],
+        costs: board([costRow]),
+        liveRuns: [],
+        tasks: [],
+        log: [{ agent: 'OpenCode', text: 'Local: localhost:5173', tone: 'normal' }],
+      })
+    )
+
+    expect(html).toContain('Open localhost:5173')
+  })
+
+  it('leaves Open ADDRESS off when the console has no address', () => {
+    const html = renderToString(
+      createElement(AgentDock, {
+        agent: lane,
+        lanes: [lane],
+        costs: board([costRow]),
+        liveRuns: [],
+        tasks: [],
+        log: [{ agent: 'OpenCode', text: 'npm test', tone: 'normal' }],
+      })
+    )
+
+    expect(html).not.toContain('Open ')
   })
 })
 

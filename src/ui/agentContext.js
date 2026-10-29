@@ -1,5 +1,6 @@
 import { agentTasks } from '../model/liveTasks.js'
 import { visibleText } from '../model/paths.js'
+import { addressIn, addressUrl, consoleRows } from '../engine/terminals.js'
 import { isOrchestratorAgent } from './agentList.js'
 
 export const DOCK_LOG_LIMIT = 12
@@ -144,6 +145,16 @@ function commandFromLog(entries) {
     if (entry.tone === 'normal' || entry.tone === 'error') return entry.text
   }
   return ''
+}
+
+function addressFromLog(entries) {
+  const rows = consoleRows(entries)
+  for (let index = rows.length - 1; index >= 0; index -= 1) {
+    const text = addressIn(rows[index].text)
+    const url = addressUrl(text)
+    if (url) return { address: text, url }
+  }
+  return { address: null, url: null }
 }
 
 function costRows(costs) {
@@ -328,6 +339,8 @@ function emptyContext() {
     restricted: null,
     setBy: null,
     log: [],
+    address: null,
+    addressUrl: null,
     context: null,
     autocompact: null,
   }
@@ -381,6 +394,7 @@ export function agentContext({ agent = null, working = null, lanes = null, costs
     : NOT_REPORTED
 
   const sectorInfo = sectorData(source, orchestrator)
+  const address = addressFromLog(entries)
 
   return {
     empty: false,
@@ -403,6 +417,8 @@ export function agentContext({ agent = null, working = null, lanes = null, costs
     restricted: sectorInfo.restricted,
     setBy: sectorInfo.setBy,
     log: entries.slice(-DOCK_LOG_LIMIT),
+    address: address.address,
+    addressUrl: address.url,
     context: isOrchestrator ? readContext(source, run) : null,
     autocompact: isOrchestrator && typeof source?.autocompact === 'boolean' ? source.autocompact : null,
   }

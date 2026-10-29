@@ -105,6 +105,14 @@ export default function AgentDock({
         <button type="button" onClick={() => onToggleTerminal(context.key)} disabled={!context.key}>
           Log
         </button>
+        {context.addressUrl && (
+          <button
+            type="button"
+            onClick={() => window.open(context.addressUrl, '_blank', 'noopener,noreferrer')}
+          >
+            {`Open ${context.address}`}
+          </button>
+        )}
         {context.isOrchestrator && (
           <button type="button" onClick={() => onOpenChat()}>
             Open chat

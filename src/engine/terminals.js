@@ -44,6 +44,9 @@ const WEB_ADDRESS = /https?:\/\/[^\s<>"'`]+/gi
 const LOCAL_ADDRESS = /(?:localhost|127\.0\.0\.1|\[::1\]):\d{1,5}/gi
 const BARE_PORT = /:(\d{2,5})\b/g
 const TRAILING_PUNCTUATION = /[.,;!?'"]+$/
+const WEB_URL = /^https?:\/\//i
+const LOCAL_URL = /^(?:localhost|127\.0\.0\.1|\[::1\]):(\d{1,5})$/i
+const PORT_URL = /^:(\d{1,5})$/
 
 function validPort(text) {
   const port = Number(text)
@@ -99,6 +102,24 @@ export function addressIn(text) {
   return found ? found.value : null
 }
 
+export function addressUrl(value) {
+  const text = typeof value === 'string' ? value.trim() : ''
+  if (text === '' || /\s/.test(text)) return null
+  if (WEB_URL.test(text)) {
+    try {
+      const parsed = new URL(text)
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? text : null
+    } catch {
+      return null
+    }
+  }
+  const local = LOCAL_URL.exec(text)
+  if (local && validPort(local[1])) return `http://${text}`
+  const port = PORT_URL.exec(text)
+  if (port && validPort(port[1])) return `http://localhost${text}`
+  return null
+}
+
 export function createTerminals(cssScene, roster, { onPick = null } = {}) {
   const terminals = new Map()
   const notes = new Map()
@@ -126,7 +147,13 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     if (onPick) consoleElement.addEventListener('click', () => onPick(key))
     const consoleLabel = document.createElement('div')
     consoleLabel.className = 'mr-term-console-label'
-    consoleLabel.textContent = 'CONSOLE'
+    const consoleLink = document.createElement('a')
+    consoleLink.className = 'mr-term-console-link'
+    consoleLink.target = '_blank'
+    consoleLink.rel = 'noopener noreferrer'
+    consoleLink.hidden = true
+    consoleLink.onclick = (event) => event.stopPropagation()
+    consoleLabel.append('CONSOLE', consoleLink)
     const consoleBody = document.createElement('div')
     consoleBody.className = 'mr-term-console-body'
     consoleElement.append(consoleLabel, consoleBody)
@@ -144,6 +171,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       body,
       object,
       consoleElement,
+      consoleLink,
       consoleBody,
       consoleObject,
       consoleLines: [],
@@ -323,6 +351,12 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       if (term.consoleElement.className !== consoleClass) term.consoleElement.className = consoleClass
       const consoleTitle = term.consoleAddress ?? `${term.name} console`
       if (term.consoleElement.title !== consoleTitle) term.consoleElement.title = consoleTitle
+      const linkUrl = addressUrl(term.consoleAddress)
+      if (term.consoleLink.hidden !== !linkUrl) term.consoleLink.hidden = !linkUrl
+      if (linkUrl) {
+        if (term.consoleLink.textContent !== term.consoleAddress) term.consoleLink.textContent = term.consoleAddress
+        if (term.consoleLink.getAttribute('href') !== linkUrl) term.consoleLink.href = linkUrl
+      }
       if (term.consoleObject.visible !== showing) term.consoleObject.visible = showing
     }
   }
