@@ -10,6 +10,8 @@
 
 - The root card sits 240 units below the hub plane, so the ring's projected front edge stays above its name row at the overview pitch (task U87).
 
+- `docs/agents/CHANGELOG.md` groups every entry under the version its commit names, newest first, and keeps the lines since 0.1.401 under Unreleased (task D16).
+
 - Below 1100 pixels the lower half's right column narrows to `clamp(200px, calc(40vw - 160px), 280px)`, from 200 pixels at 900 to 280 at 1100, while the sidebar keeps its U84 width, so the conversation keeps its room (task U86).
 
 - At 900 pixels and wider a log line moves a file path to its own line before it breaks it, breaks a longer path after a `/` (a `<wbr>` after each slash in `EventLogBody`), and the agent column fits `CLAUDE CODE`, so a file name and an agent name stay whole (task U86).
@@ -100,22 +102,33 @@
 - The orchestrator chat's Team tab merges every orchestrator's messages by time, tagged with where and who, opens an orchestrator's tab from a line, and marks a message from the main in a sub's chat (task U79).
 - The bridge sends an `orchestrator.message` frame when the main orchestrator orders a sub, a sub reports back, an orchestrator dispatches a lane run or a run end wakes an orchestrator, and the room reads it as one dim `agent.message` log line (task O17).
 - The family tree shows the main and each sub orchestrator's state word and a chat button that opens its chat, and a working lane shows its short task (task U82).
+- A sector with one lane parks it at the middle of its arc under its sub, and two or more lanes spread evenly inside the arc with the same gap at each end; `sectorLaneAngles` is pure with tests for one lane, three lanes and an empty sector (task V43).
+- The hub's `setWorking` brightens a sector's arc to full white while its sub or one of its lanes works and returns it over 1 second when none does, at once under reduced motion, and leaves the rest of the ring as it is (task V43).
+
+## 0.1.400
+
 - The retired lane dry-run test passes `LOCALAPPDATA` to the runner, so the Hermes lane's `%LOCALAPPDATA%` program path expands on a Linux CI runner (task Q13).
 - `run-lane` lists the harness's descendants before it stops the harness on a signal, the time limit or `--stop`, and stops them after it, so a detached grandchild on Linux cannot outlive the run (task Q13).
 - `descendantProcesses` in `server/processTree.js` lists the processes whose parent chain reaches a root pid, with tests for the pure helper (task Q13).
 - The two `run-lane` dry-run tests use a temp `MACHINEROOM_LANES_FILE` whose lanes sit under the checkout's own `.worktrees`, so they no longer depend on where the checkout lives (task Q13).
 - The queue branch test gives its temp project a git identity in its own config, so the queue's commit works on a CI runner with no global `user.name` (task Q13).
 - The `--stop` test accepts a null exit code for a run killed by a signal (task Q13).
+
+## 0.1.398
+
 - A single `--task` with `--worktree` runs as a queue of one, so its work is committed on the queue branch when the project's tests pass instead of left in a detached worktree, and `ORCHESTRATOR-AGENT.md` says so (task U78, A6).
 - A queue run writes its branch to `branch` as well as `queue` in `runs.jsonl`, so `--list` and `npm run outcome` find it (task U78, A9).
 - `formatQueueSummary` names the worktree and its branch when `--worktree` is on, and keeps the `git switch -` line for a project run (task U78, A12).
+
+## 0.1.397
+
+- A leftover's command line counts only when it names the lane worktree as a whole folder, so stopping `opencode` leaves `opencode2` to `opencode10` alone, and a project run without its own worktree finds leftovers by the harness's process tree only, so an editor or a bridge open on that project is never stopped (task U75, review fix).
+
+## 0.1.394
+
 - `run-lane`, the lane source and `doctor` read the runs folder through one helper in `server/lanes-source.js`, so `MACHINEROOM_RUNS` moves the room and the doctor to the folder the runner writes (task U76, A11).
 - `candidate` checks the port again after the build and stops with `Port N is in use. Pass --port.` when another program took it while the build ran (task U76, A10).
 - README says MachineRoom prints no key and puts none in the repository or `lanes.json`, that the Settings key slots are saved in `<runs>/keys.json` outside the repository with mode 0o600, and keeps the sentence about the masked lane log (task U76, A8).
-- A brief run refuses a lane worktree that is the main checkout, another lane's worktree, the user profile, the OS temp folder, the runs folder or a folder outside `.worktrees` of this repository, and `--dry-run` refuses the same way (task U77, A4).
-- `briefProblems` reads the brief's `Files:` list and refuses an absolute entry, one that holds `..` or one the lane's `forbidden` globs match, naming the entry (task U77, A7).
-- `briefFileList` reads a backticked or plain `Files:` list, and `tests/briefs.test.js` and `tests/run-lane.test.js` cover both helpers and a real dry run with a temp lanes file whose lane points at the checkout (task U77).
-- A leftover's command line counts only when it names the lane worktree as a whole folder, so stopping `opencode` leaves `opencode2` to `opencode10` alone, and a project run without its own worktree finds leftovers by the harness's process tree only, so an editor or a bridge open on that project is never stopped (task U75, review fix).
 - `run-lane` writes the harness child's pid into the lane lock beside its own as one JSON line, and an old plain pid lock is still read (task U75).
 - The lane source and `npm run worktrees` read the new lane lock and an old plain pid lock (task U75).
 - `run-lane` stops the harness tree on SIGINT, SIGTERM, SIGHUP, the time limit and its own exit (task U75).
@@ -123,8 +136,20 @@
 - A run record carries `stoppedLeftovers` with the count when the cleanup found any (task U75).
 - `npm run run-lane -- --stop LANE` stops the run, its harness and the worktree leftovers, prints what it stopped and removes the lock; a new run refuses a live harness child or leftover with a sentence that names `--stop` (task U75).
 - `ORCHESTRATOR.md` names `--stop` as the way to pause a lane, and `ARCHITECTURE.md` documents the lock, the leftovers and the record field (task U75).
-- A sector with one lane parks it at the middle of its arc under its sub, and two or more lanes spread evenly inside the arc with the same gap at each end; `sectorLaneAngles` is pure with tests for one lane, three lanes and an empty sector (task V43).
-- The hub's `setWorking` brightens a sector's arc to full white while its sub or one of its lanes works and returns it over 1 second when none does, at once under reduced motion, and leaves the rest of the ring as it is (task V43).
+
+## 0.1.393
+
+- A brief run refuses a lane worktree that is the main checkout, another lane's worktree, the user profile, the OS temp folder, the runs folder or a folder outside `.worktrees` of this repository, and `--dry-run` refuses the same way (task U77, A4).
+- `briefProblems` reads the brief's `Files:` list and refuses an absolute entry, one that holds `..` or one the lane's `forbidden` globs match, naming the entry (task U77, A7).
+- `briefFileList` reads a backticked or plain `Files:` list, and `tests/briefs.test.js` and `tests/run-lane.test.js` cover both helpers and a real dry run with a temp lanes file whose lane points at the checkout (task U77).
+- `run-lane` puts a lane's worktree back on a detached `refs/heads/main` before a brief starts and refuses a worktree whose branch has commits main does not have, and the run record and summary name the starting branch (task U74).
+- `POST /api/control/reviews/LANE/merge` needs the page's `Origin` or a valid `X-MachineRoom-Orchestrator` token, and answers 403 `The caller is not the owner, so the lane was not merged.` otherwise (task U71).
+- Every `/api/mcp` route needs the page's `Origin`, and `POST /api/mcp/call` needs `confirmed: true`, answering `The owner must confirm the tool call first.` without it (task U71).
+- `POST /api/assistant`, `POST /api/decide` and `GET /api/harnesses/KEY/models` need the page's `Origin`, and the assistant and decide routes also need `confirmed: true`, with a sentence naming the owner's confirm (task U71).
+- A page GET with no `Origin` passes the new gates only when it carries `Sec-Fetch-Site: same-origin`, because a browser sends no `Origin` on a GET, so the built room's model refresh and MCP tool list still work on one port (task U71).
+- The control client's `callMcpTool` and `decide` send `confirmed: true`, so the Settings tool tester and the decide client keep working (task U71).
+
+## 0.1.392
 
 - A lane started by `run-lane` gets only an allow-list of the shell's names, so `OPENROUTER_API_KEY`, `ANTHROPIC_API_KEY`, `GITHUB_TOKEN` and other secrets no longer reach it; the MachineRoom harness receives its own key names and Hermes receives `OPENROUTER_API_KEY` (task U72).
 - The runner writes a lane's log through the bridge's split-key masker, so a key in the output, split across chunks or not, is `[key]` in the file under the runs folder (task U72).
@@ -136,24 +161,30 @@
 - A focus on an agent the room has no view for stops the follow instead of tracking the last agent (task U73, W4).
 - `occluderParts` sizes the depth blocker from `cardBaseWidth` plus the face border, so it covers a card with a long name (task U73, W5).
 - `review-lane` puts its merged-result worktree in `MachineRoom-review-*` beside the checkout instead of the OS temp folder, so the temp-folder test passes in review (task U73).
-- `run-lane` puts a lane's worktree back on a detached `refs/heads/main` before a brief starts and refuses a worktree whose branch has commits main does not have, and the run record and summary name the starting branch (task U74).
-- `POST /api/control/reviews/LANE/merge` needs the page's `Origin` or a valid `X-MachineRoom-Orchestrator` token, and answers 403 `The caller is not the owner, so the lane was not merged.` otherwise (task U71).
-- Every `/api/mcp` route needs the page's `Origin`, and `POST /api/mcp/call` needs `confirmed: true`, answering `The owner must confirm the tool call first.` without it (task U71).
-- `POST /api/assistant`, `POST /api/decide` and `GET /api/harnesses/KEY/models` need the page's `Origin`, and the assistant and decide routes also need `confirmed: true`, with a sentence naming the owner's confirm (task U71).
-- A page GET with no `Origin` passes the new gates only when it carries `Sec-Fetch-Site: same-origin`, because a browser sends no `Origin` on a GET, so the built room's model refresh and MCP tool list still work on one port (task U71).
-- The control client's `callMcpTool` and `decide` send `confirmed: true`, so the Settings tool tester and the decide client keep working (task U71).
+
+## 0.1.391
+
 - The aberration map's square is sized from the park ring's projected radius with full strength at 2.5 ring radii, never smaller than the lens-covering square and never more than twice the lens diagonal, and its centre is pulled back toward the lens only as far as covering it needs, so the fringes keep their strength while a card or an agent holds the camera (task U70).
 - `parkScreen()` answers the ring's projected radius beside its centre, and `mapPlacement` takes it, so an anchored card gets a square at the 2,658 pixel cap for a 1,247 by 460 lens instead of growing without limit (task U70).
 - `src/Stage.jsx` passes the ring radius into `mapPlacement` and writes the park point again when the radius moves 2 pixels, as it does for the centre (task U70).
+
+## 0.1.390
+
 - An agent that runs a command shows a cyan `CONSOLE` above its head with the last five log lines while its latest tool call is `shell` or `other`, holds for 6 seconds after the call ends, fades with the agent, and a click selects the agent (task U68).
 - The console's title is the first address in its lines and it carries `is-address`, and `consoleRows` and `addressIn` are pure and tested (task U68).
 - The screen filter's aberration map sits on the projected centre of the park ring, so its neutral centre stays on the ring while the camera orbits, zooms or follows an agent (task U69).
 - `AUDIT-2026-10-V8.md` audits the folder blocks and the camera hold at 0.1.389 and lists five findings, W1 to W5 (task A7).
+
+## 0.1.389
+
 - Folder cards stack up to three full folder blocks behind the face, each the face's size with a tab on its top edge, stepped 12 pixels left, and `backOffsets` places them the same way for the paint and the occluder (task V39).
 - A click on a folder card body holds the camera on that card, or its nearest drawn ancestor, at `ANCHOR_DIST` and turns agent follow off (task U67).
 - A double click on empty space, Escape with no panel open and the `0` key call `room.park()`, which drops the folder hold and returns to the park ring (task U67).
 - Picking a wide agent frames the midpoint of the agent and the file or folder it last touched instead of its chip (task U67).
 - The wheel over a folder card scrolls its rows while they overflow, including over the card face beside the rows, without scrolling the page or zooming the camera (task U67).
+
+## 0.1.388
+
 - The Settings panel has a `Content files` range from 4 to 20, 6 by default, saved as `maxFiles` and passed to the room so a folder card can show more than three files (task U66).
 - `planFolderView` takes `limitItems`, and with `false` a card keeps every folder and file item it holds with `hiddenItems: 0` (task V38).
 - Folder cards show up to `maxFiles` rows, 6 by default and 4 to 20, and scroll the rest of the list inside the card; a wheel over a scrollable list no longer zooms the camera (task V38).
@@ -214,12 +245,18 @@
 
 - The folder cards lie flat on one ring around the hub, the first at 12 o'clock and the rest clockwise at equal angles on a radius from their count (never under 900 units), with the root card inside the ring in front of the hub, children branching 450 units outward per level and a clicked card popping up to spray its child folders (task V27).
 - Every shown folder lists its own files, so the depth setting draws each level as a real card; the folder plans and replay digests changed on purpose, and the scale probe's covered, tallest and overview rows are updated for the flat ring.
-- AGY lists its 13 models (Gemini 4 Argon, Gemini 3.8 Flash, Claude Opus and Sonnet 5.5 and GPT-OSS 120B, each at its levels, from `agy models`) in the model pickers instead of none.
-- The fine dust holds up to 12000 specks between 400 and 6000 units from the hub, so the room fills at full strength, and the internet shape rests dim (0.08) and glows bright, with its label, only while an agent searches or fetches.
 - The lens has straight top and bottom edges with a tick every 40 pixels, a taller tick and a 9 pixel Space Mono coordinate label every 200, a `+` crosshair at the middle of each edge and a bracket at each corner, and its `mr-lens-clip` curve is gone (task U46).
 - The live link tag moves out of the lens into the left end of the transport beside `Live feed`, in the same yellow and red, and the follow and toast badges stay in the lens (task U46).
 - Fish eye is removed from Settings, `effectSettings` and `saveEffectSettings`, with its barrel map and `feDisplacementMap`; an old saved value is ignored and chromatic aberration keeps its `feOffset` filter (task U46).
+
+## 0.1.387
+
+- AGY lists its 13 models (Gemini 4 Argon, Gemini 3.8 Flash, Claude Opus and Sonnet 5.5 and GPT-OSS 120B, each at its levels, from `agy models`) in the model pickers instead of none.
+- The fine dust holds up to 12000 specks between 400 and 6000 units from the hub, so the room fills at full strength, and the internet shape rests dim (0.08) and glows bright, with its label, only while an agent searches or fetches.
 - The page loads again: the mock control client no longer reaches server code that reads files (a 0.1.386 regression that left a black page), the pure model list moved to `server/model-list.js`, and `tests/browser-imports.test.js` fails when the page entry reaches any Node module.
+
+## 0.1.386
+
 - The owner saves up to 20 OpenAI-compatible endpoints from provider presets in Settings, each with a base URL, a key slot and up to 50 models, and a machineroom lane can run on one through `mr-agent --endpoint` (task H10).
 - The MachineRoom harness has `web_search` and `web_fetch` tools over SearXNG, Tavily, Brave or DuckDuckGo, with the provider saved in `<runs>/search.json`, address-checked page fetches capped at 1 MB and 20 seconds, a Web search section in Settings behind a confirm card, and the provider routes on the bridge (task H12).
 - The codex and copilot harnesses add descriptors, models, efforts and parsers for OpenAI Codex CLI and GitHub Copilot CLI with fixture tests, using Codex CLI documentation from openai.com and codex-docs.com for event shapes and flags (task H11).
@@ -228,20 +265,24 @@
 - A slowly breathing `INTERNET` wireframe sphere floats high above the orchestrator with a small label under it; a `web` call sends that agent's tunnel to it in blue with packets flying out, five fly back when the call ends, the agent keeps its last file focus and the shape glows while an agent is on the web (task N4).
 - The tunnel end for a web call and the morph offsets from a seed are pure and tested (task N4).
 - The left drawer is three tabs at its top, Chat, Projects and Agents, with a thin `#e5ff00` outline on the open one saved as `sidebarTab`, and the family tree keeps the sub orchestrator Attach form and each sub's Detach at its foot (task U45).
-- The fine dust strength sets how many specks are drawn, up to 4000, instead of only their brightness, and a Pulse switch on its settings row makes them breathe in and out (still under reduced motion).
-- A small hamburger icon (`MenuIcon.jsx`) marks each dropdown, the conversation switch in the top band and the model and effort pickers, in place of the letter V.
-- The folder lines rest dimmer (0.1 instead of 0.22) and the root project card draws no faint folders behind it, since its folders already stand in the room.
 - A live room re-reads `/api/agents` on each `agents` notice and updates its roster in place, so a new lane gets a view, chip, callout and hub slot, a lane that is gone loses them, the slots re-space and the camera stays; a session reader takes no slot and draws nothing until its first run (task U44).
 - The family tree on the bridge, key slots, agent proposals and labels (task O16).
 
 - The sidebar's Agents roster is a family tree from `family()`: the root and its children indented 16 pixels a level with thin connectors, each row with its label, harness, model and effort, a state dot and a lane's active switch, a node editor and Add child behind confirm cards, and a Requests group with Approve and Decline (task U43).
-- The overview camera aims at the hub centre and only fits its distance to the cards, so the ring sits in the middle of the lens instead of the middle of all the cards. The live badge sits inside the lens's bottom left corner at 900 pixels and wider, off the chat input.
 - The live transport under the lens shows the orchestrator's state and a context ring beside the clock, and a click on either scrolls to the conversation and focuses the chat input (task U42).
 - The MachineRoom harness runs a small agent on any OpenAI-compatible key through `scripts/mr-agent.mjs`, with read, write, edit, list, search and shell tools, stream-json lines the room and `summarizeRun` already read, the `machineroom` descriptor and two OpenRouter models (task H9).
 - The orchestrator runs any harness, its window follows its model, and the bridge exposes /api/orchestrator/harness (task O15).
 
+## 0.1.385
+
+- The fine dust strength sets how many specks are drawn, up to 4000, instead of only their brightness, and a Pulse switch on its settings row makes them breathe in and out (still under reduced motion).
+- A small hamburger icon (`MenuIcon.jsx`) marks each dropdown, the conversation switch in the top band and the model and effort pickers, in place of the letter V.
+- The folder lines rest dimmer (0.1 instead of 0.22) and the root project card draws no faint folders behind it, since its folders already stand in the room.
+- The overview camera aims at the hub centre and only fits its distance to the cards, so the ring sits in the middle of the lens instead of the middle of all the cards. The live badge sits inside the lens's bottom left corner at 900 pixels and wider, off the chat input.
 - The roster tests point their lanes at Node's own program, so they pass on a computer without Claude Code or OpenCode, as CI is.
-- The sidebar's Agents roster sits at the top, open: the orchestrators and every lane with their harness, model, effort and autocompact percent, inline editors behind confirm cards, and Add agent from the harnesses on this computer (task U39).
+
+## 0.1.379
+
 - The Compact card and the agent dock ask for autocompact with one plain number in percent or tokens, convert between them through the context window, show where it compacts, and keep the owner's compact rules or name the default ones (task U40).
 - Compact by tokens or percent with autocompactMode, autocompactValue and default compactRules per orchestrator (task O14).
 
@@ -250,12 +291,25 @@
 - While music plays and Dance is on, an analyser reads the bass and each agent shape pulses its scale by at most 8 percent and turns a little on a beat, the orchestrator less, with no motion under reduced motion (task U41).
 - Each read, write, created file and deleted file plays a short synthesized beep panned by the touched card's place in the lens, quieter with distance and capped at eight a second, after the first click or key (task U41).
 - The pan, distance gain, beat detector, delete command test, sound rate limit and dance pulse are pure and tested (task U41).
+
+## 0.1.378
+
+- The sidebar's Agents roster sits at the top, open: the orchestrators and every lane with their harness, model, effort and autocompact percent, inline editors behind confirm cards, and Add agent from the harnesses on this computer (task U39).
 - Log and Settings open from the menu as dropdowns under it, like Control, at every width; the Overview card keeps Agent and Costs, and the sidebar's Settings opens the same dropdown. The fine dust is soft round specks in three sizes that grow as the camera nears them, not 3 pixel points.
 - The root card sits in the park space just under the hub ring, every top-level folder's string ends there, strings brighten only on a working agent's path, each lane has a faint grey line to the main orchestrator, and packets start at the agent's centre on its tunnel (task U38).
 
 - The owner can make custom lanes from installed harnesses with /api/lanes/create, update and delete them, and run tasks on the room's project (task O13).
+
+## 0.1.377
+
 - At 900 pixels and wider the whole page scrolls: the lens keeps the height its rail sets and the lower half below it is as tall as the window under the menu (at least 520 pixels), so a taller lens pushes the lower half down instead of squeezing it. The wheel over the lens or a rail zooms or sizes without scrolling the page. Lanes may use their own harness's skills, tools and subagents (HOUSE-RULES).
+
+## 0.1.376
+
 - Two rails sit on the lens: Height on the left (900 pixels and wider) makes the lens taller or shorter, from 30 to 80 percent of the window, saved as `lensShare`, and Zoom on the right moves the camera closer or further on a log scale. Each has a faint label on top and a multiplier below (the height against the default, the zoom against the overview), and both follow a drag, the wheel over them and the arrow, Page and Home and End keys.
+
+## 0.1.369
+
 - A live room with no saved lane choice asks how many agents should work, starts at 2 and saves them from Start, and the live tour outlines the lens, the orchestrator chip and the strip controls one at a time, skipping any that are missing (task U33).
 - A project picker shows on the first visit to a live room that is not a git checkout, and whenever the `machineroom:projects` event fires: the current folder first, then recent projects and the folders beside it with a `git` tag, and a box for any absolute folder path; a pick opens the folder, waits for the bridge and reloads the page (task U36).
 
@@ -265,15 +319,27 @@
 - Add sessions and reasoning effort for each orchestrator (task O10).
 - At 900 pixels and wider the strip and the dock give way to a lower half with the conversation in the middle, Overview and its drawer on the right, and the model, effort and Compact controls under the input (task U34).
 
+## 0.1.368
+
 - The menu row and the info strip no longer draw a straight line along the lens, so only the curved edges show (the owner's sketch).
+
+## 0.1.367
 
 - MachineRoom's own lane worktrees moved from `C:\GitHub\MachineRoom-<lane>` into `.worktrees\<lane>` inside the checkout; `lanes.json` and its notes name the new paths, `.gitignore` lists `.worktrees/`, and the Vite dev server does not watch it.
 
+## 0.1.366
+
 - A lane worktree lives inside its project at `.worktrees/<lane>` instead of beside it as `<project>-mr-<lane>`, so a project's lanes stay in one folder; run-lane adds `/.worktrees/` to the project's `.git/info/exclude`, and the bridge's tree and watcher skip it.
+
+## 0.1.365
 
 - A `machineroom` command, linked once with `npm link`, starts the room on the folder it runs in (or the folder given), prints `MachineRoom is running.` with the address, and opens the browser; `--no-open` leaves it closed, and the build hint names the MachineRoom folder.
 
+## 0.1.363
+
 - The top band shows `/NAME` and the orchestrator conversation list at 900 pixels and wider, the lens moves its labels and shows the clock, brackets and the waiting card inside it, and the tour and guide texts say how the dock picks an agent and where `/` leads (task U30).
+
+## 0.1.359
 
 - The README names the five drawer tabs and the sample costs in a replay, ARCHITECTURE names the dock fallback and the tour's terminal chip, and TASKS marks its old path split as history (task D13).
 
@@ -281,18 +347,35 @@
 - At 900 pixels and wider the dock starts closed under a 72 pixel strip that shows the agent, its model, its context or tokens and cost, Compact and its three newest log lines, and the strip's Expand control or Escape opens and closes the dock (task U29).
 - A no-Origin run request without a token is refused when the bridge has orchestrators, and the assistant drops approvals, issue creation and agent and budget edits (task Q14).
 
+## 0.1.358
+
 - `?replay&ladder=none` no longer gets the demo ladder from the default fixture, and the OpenCode lane notes name all ten lanes and say Paperclip is gone (found by R14).
+
+## 0.1.355
+
 - Add compact now, an autocompact percent and a model route per orchestrator (task O9).
+
+## 0.1.354
 
 - The lens's top and bottom edges curve inward, as in the owner's sketch, with a thin edge line drawn on the same curve.
 
+## 0.1.352
+
 - The waiting card hides while the orchestrator chat is open, the chat has a solid background and at least 320 pixels below 1024 wide, and the waiting card counts the agents instead of naming more than four.
+
+## 0.1.351
 
 - The control drawer has a solid background, so the dock no longer shows through it, and the Team tab leaves out a lane's role when it has none instead of printing `NULL`.
 - Sector names sit below the ring plane and further out, dimmer than the agents' names, and spread wider with each sector so four names never overlap (task U27).
 - machine-room up prints a short block after its checks with the address to open, that the room fills when a lane or session works and the Ctrl+C line, and adds --open to open the default browser (task D12).
 
+- A folder card shows its name in full up to 24 characters, widens to fit it, cuts only a longer name from the middle with the full path in its title, and the cards stacked behind it show no name (task U26).
+
+## 0.1.350
+
 - The connect screen names `npm run serve -- up --root YOUR-PROJECT` instead of the old `npm run bridge`.
+
+## 0.1.342
 
 - AGY, AGY 2 and AGY 3 are backend lanes on Flash, the OpenCode lanes may change App and Stage, and a lane prompt leaves out the forbidden paths line when the lane has none.
 - Tests cover the history audit range audit with removed lines and the profile check when GITHUB_ACTIONS is true (task T23).
@@ -305,112 +388,204 @@
 - A task thread has no comment composer and Team lists the lanes read only, with no hire or edit controls (task U25).
 - The route and model helpers that only the issue form used are deleted (task U25).
 - The overview fits the lens viewport's own width and height and each card by its face, and can come closer than 1800 units, so the hub, the agents and the always-present cards fill more of the short lens (task U24).
-- A folder card shows its name in full up to 24 characters, widens to fit it, cuts only a longer name from the middle with the full path in its title, and the cards stacked behind it show no name (task U26).
 - Each orchestrator gets an in-memory token, required in X-MachineRoom-Orchestrator for ladder changes, sub messages and lane runs (task O8).
 
+- The connect screen opens with two short sentences and a `Take the tour` button focused on first boot; it opens `?replay&fixture=scenario-i&tour` at the start at 1x, draws a thin `#e5ff00` outline around the eight tour targets and places the card beside them, waits for a working tunnel with Next always available, and offers `Connect to my project` and `Keep watching` on the last step, while the Guide button opens the tour and a visit that is not a tour keeps the plain five step guide (task G9).
+
+## 0.1.340
+
 - `package-lock.json` carries the root `bin` entry, so `npm install` in a fresh clone leaves the tree clean (found by D11).
+
+## 0.1.337
+
+- The README says how to stop the room with Ctrl+C (task D11).
+- The README shows `--dry-run` beside a project lane run (task D11).
+- The README says the doctor finds the lane programs, not that it starts them (task D11).
+- The README names the stop when another room is already running on the project (task D11).
+- A room that cannot start prints `machine-room could not start:` and one sentence, including when another room holds the project, instead of a stack trace (task D11).
+
+## 0.1.336
 
 - The end to end orchestrator test now covers a restricted sub: the owner's ladder attach, a lane started with `startedBy`, an outside scope file, the wake in the sub and the main chat, and the sub's reply as `sub:<id>` (task T22).
 
 - The scope check reads a lane worktree only from the lane file's own keys, so an inherited key cannot name a folder (task R13).
 - The scope check runs its diff with external diff and textconv off, so a configured diff program is not run (task R13).
 - The bridge reads the actor from the request: a page Origin is the owner and no Origin is an orchestrator, so a no-Origin ladder write as owner, owner message or main orchestrator run is refused with 403, while a page can still write the ladder, send a message and start a run (task Q13a).
-- The README says how to stop the room with Ctrl+C (task D11).
-- The README shows `--dry-run` beside a project lane run (task D11).
-- The README says the doctor finds the lane programs, not that it starts them (task D11).
-- The README names the stop when another room is already running on the project (task D11).
-- A room that cannot start prints `machine-room could not start:` and one sentence, including when another room holds the project, instead of a stack trace (task D11).
 - The project review tests copy a room and a project made once, so each test starts one git worktree instead of building two repositories (task T21).
 - `worktreePlan` reads whether a folder is a checkout and its common git folder in one git command, so a `--worktree` check starts three git commands instead of five (task T21).
 - The reviews route resolves this checkout once per process instead of once per bridge, and the review tests skip the tree read they do not use (task T21).
 - The worktree reuse test leaves the clean reuse to `prepareWorktree` after the dirty refusal, so it starts fewer git commands under load (task T21).
 - The lane lock tests use a process id that is never alive, so a Windows process that reused a dead test child's id cannot make a stale lock look live (task T21).
-- The connect screen opens with two short sentences and a `Take the tour` button focused on first boot; it opens `?replay&fixture=scenario-i&tour` at the start at 1x, draws a thin `#e5ff00` outline around the eight tour targets and places the card beside them, waits for a working tunnel with Next always available, and offers `Connect to my project` and `Keep watching` on the last step, while the Guide button opens the tour and a visit that is not a tour keeps the plain five step guide (task G9).
+- The scope check reads uncommitted work too: untracked, modified, deleted and renamed paths from `git status` join the committed changes, relative to the project folder and with no duplicates (task Q13b).
+
+## 0.1.335
 
 - History audit: on GitHub Actions the profile check is off, since the runner's user name (`runner`) is not the owner's and is a word the docs use.
 
+## 0.1.332
+
 - The soak test reads the bridge history again after the run ends, since a page that joins mid-run gets the history and then live frames (CI failed on Ubuntu with 501 frames).
+
+## 0.1.324
+
+- A live page keeps the agent key the bridge sends and the sub orchestrator flag, so a sub is drawn above its sector instead of as a lane (task Q12g).
+- `docs/agents/HIERARCHY.md` now says the ladder is built: O1 to O7 with their versions, the V23, V25, V26 and S10 changes, and the two points X1 and X3 that wait for the owner (task D10).
+- `npm run worktrees -- --clean` removes a lane worktree's `node_modules` link before `git worktree remove`, so a worktree the runner made is removed without `--force` and the project's modules stay (task Q12f).
+- The dock gets each lane's harness and model: the room state keeps the agent's id, harness and model, and both snapshot maps pass them on (task Q12h).
+
+## 0.1.323
 
 - The Dispatch project lane list leaves out sub orchestrators, and the lens counts lanes only, not the main or sub orchestrators (task Q12b).
 
 - A closed orchestrator's killed turn writes its run record without adding a message, notice or turn, so a ladder change cannot overwrite a new sub's chat file (task Q12e).
 - A sub orchestrator's report in the parent's chat carries a `Sub <id>` label, so it no longer reads as the main orchestrator's own message (task Q12c).
-- A live page keeps the agent key the bridge sends and the sub orchestrator flag, so a sub is drawn above its sector instead of as a lane (task Q12g).
-- `docs/agents/HIERARCHY.md` now says the ladder is built: O1 to O7 with their versions, the V23, V25, V26 and S10 changes, and the two points X1 and X3 that wait for the owner (task D10).
 - The scope check diffs a lane against the project's current branch instead of `main`, lists paths relative to the project folder, ignores case on Windows, and tells the parent when git cannot be read (task Q12a).
-- The scope check reads uncommitted work too: untracked, modified, deleted and renamed paths from `git status` join the committed changes, relative to the project folder and with no duplicates (task Q13b).
-
-- `npm run worktrees -- --clean` removes a lane worktree's `node_modules` link before `git worktree remove`, so a worktree the runner made is removed without `--force` and the project's modules stay (task Q12f).
 - A sub orchestrator agent from `GET /api/agents` carries its harness and model, taken from the sub or from the first lane with that harness, so its dock no longer shows `claude_local` or `not reported` (task Q12d).
 
-- The dock gets each lane's harness and model: the room state keeps the agent's id, harness and model, and both snapshot maps pass them on (task Q12h).
+## 0.1.321
+
 - History audit: a range audit (`--from`) leaves out removed lines, which were in the history before the range, so CI does not fail when a commit deletes a test that held a fake key.
+
+## 0.1.314
+
+- A sub orchestrator's shape drops its own name label when that name matches its sector's, so the sector label on the ring, the chip and the callout name it once (task V26).
+
+## 0.1.313
+
+- The dead Paperclip leftovers are gone: `src/ui/panels/agentForm.js` and `src/assistant/llm.js` with their tests, plus the unused exports `redact`, `resolveExplicit`, `finalizeModelAction`, `laneForBrief`, `pickAssignee`, `groupBriefs`, `ADAPTER_TO_HARNESS`, `timeUntil`, `approvalTypeLabel`, `runResultWord`, `formatMinutes`, `timeSince`, `formatRecordLine` and `runningLine` (task Q11).
+
+## 0.1.312
 
 - The agent dock shows a sub orchestrator's lanes, scope, restriction and who set them, and a lane in a sector shows the sector's name and rules, in the order the brief asks (task O7).
 
-- A sub orchestrator's shape drops its own name label when that name matches its sector's, so the sector label on the ring, the chip and the callout name it once (task V26).
-- The dead Paperclip leftovers are gone: `src/ui/panels/agentForm.js` and `src/assistant/llm.js` with their tests, plus the unused exports `redact`, `resolveExplicit`, `finalizeModelAction`, `laneForBrief`, `pickAssignee`, `groupBriefs`, `ADAPTER_TO_HARNESS`, `timeUntil`, `approvalTypeLabel`, `runResultWord`, `formatMinutes`, `timeSince`, `formatRecordLine` and `runningLine` (task Q11).
+## 0.1.311
+
+- `?replay&fixture=scenario-i` plays a two minute replay where the main orchestrator, the two demo sub orchestrators and their lanes work, the fixture sets the demo ladder by itself, and one lane run fails its test (task S10).
+- The dock's agent list follows the ladder: the main orchestrator first, a header per sub with its name, its state word and its lane count, its lanes indented 16 pixels, then the lanes in no sub under a `Main` header, with the active order, the `N idle lanes` row and the number keys inside each group, and the flat list when there is no ladder (task V25).
+
+## 0.1.309
+
+- The Meters panel reads this month's spend and tokens per lane from the run records only: it has no budget editor, confirm card or save, and says budgets are not set there (task Q10).
+
+## 0.1.308
+
+- Read what changed from 0.1.276 to 0.1.307 and wrote `docs/agents/AUDIT-2026-10-V7.md`, with 13 findings, the sharpest about a ladder write that claims to be the owner and a scope check that reads no commits on a project without `main` (task Q9).
+
+## 0.1.307
 
 - The orchestrator reports its context use and window and compacts a session at 80 percent into a 40 line summary behind a switch in the agent dock, and `POST /api/orchestrator/autocompact` sets it (task O5).
 
-- The Meters panel reads this month's spend and tokens per lane from the run records only: it has no budget editor, confirm card or save, and says budgets are not set there (task Q10).
-- `?replay&fixture=scenario-i` plays a two minute replay where the main orchestrator, the two demo sub orchestrators and their lanes work, the fixture sets the demo ladder by itself, and one lane run fails its test (task S10).
 - The orchestrator's chat masks a key in every message it stores, sends or restores, and the count joins the health `masked` total (task Q6b).
 - The orchestrator writes its chat file through `<file>.tmp`, keeps a file that fails to parse as `<file>.bad`, refuses a second room on the same project with a lock, writes a failed record for a turn the room ended, and saves the room-started turn times (task Q6b).
 - `docs/agents/ORCHESTRATOR-AGENT.md` says to always send `tasks`, and to run without `worktree` on a project with no `.git` (task Q6b).
-- The dock's agent list follows the ladder: the main orchestrator first, a header per sub with its name, its state word and its lane count, its lanes indented 16 pixels, then the lanes in no sub under a `Main` header, with the active order, the `N idle lanes` row and the number keys inside each group, and the flat list when there is no ladder (task V25).
-- Read what changed from 0.1.276 to 0.1.307 and wrote `docs/agents/AUDIT-2026-10-V7.md`, with 13 findings, the sharpest about a ladder write that claims to be the owner and a scope check that reads no commits on a project without `main` (task Q9).
+
+## 0.1.305
+
 - ARCHITECTURE, README and PLAN describe the lens and dock, the hub sectors and sub orchestrators, the grouped agent list, the ACP harness, the current commands and scripts, the current file layout and the order of work at 0.1.331 (task D9).
-- The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
 - Dispatch's project section can give each of several tasks its own idle lane and worktree, pairing them in picker order with `planLaneTasks`, refusing when there are too few idle lanes, and starting one run per task three seconds apart with each start's answer shown (task R11).
-- The hub's sector arcs are brighter and wider with a clear gap, their labels stay at 12 pixels or more on screen, and subs float further from the main orchestrator so their chips and callouts stay apart (task V23).
 - The page holds at 900 by 700, 768 by 1024 and 375 by 812: the lens keeps at least 300 pixels, the dock stacks the agent list, the agent context, the settings and the costs in that order, the menu folds into one button below 900 pixels, and on a phone the transport stacks and the orchestrator chat is a full-width panel over the dock (task V24).
 - CI runs `npm run pack-check` and `npm run history-audit` on Ubuntu and Windows, and the history step reads only the commits in the change from the base the event names, so the repository's older records do not fail every run (task Q8).
 - A new `acp` harness runs any Agent Client Protocol agent through `scripts/acp-run.mjs`, maps each `tool_call` kind and location to touches and reads its reports and usage, tested on recorded `opencode acp` updates and a fake ACP agent (task H8, step H4 of HARNESSES.md).
+
+## 0.1.300
+
+- The lane agents from `GET /api/agents` carry the `harness` and `model` of their lane's `cli` block, and the page keeps both through `toAgents` (task I5).
+
+## 0.1.299
+
+- The hub's sector arcs are brighter and wider with a clear gap, their labels stay at 12 pixels or more on screen, and subs float further from the main orchestrator so their chips and callouts stay apart (task V23).
 - The orchestrator loop is tested end to end through real processes: a fake Claude turn starts a fake lane through `POST /api/control/runs`, the lane commits once on its queue branch in `<project>-mr-<lane>`, the run end wakes a second turn with a room message that names the branch, and its reply reaches the chat; the runs route and the runner take a test lane file and runs folder (task Q7).
+
+## 0.1.296
+
 - A live room reads the sub orchestrator ladder from `client.orchestrators()` at start, every 60 seconds and on an `orchestrator` notice, and the hub draws a sub's sector arc from its lanes even before the sub's `sub-<id>` agent is in the roster (task O6).
+
+## 0.1.295
+
 - The dock's middle column reads a lane's cost, tokens and task from the cost board, the live runs and the issues, and joins a room lane to its control id, so Cost, Tokens and Task no longer read `not reported` or `none` (task I4).
 - The first visit guide names the lens, the dock and its three columns, the tunnel and the colours, the chat with its tabs, and the keys, and the waiting card points at the chat at the bottom right (task N3).
 - A new `server/harnesses/` holds one Node descriptor per harness with a session reader, and `server/sessions-source.js` ticks the readers the registry lists instead of naming Claude Code and OpenCode (task H7, step H3 of HARNESSES.md).
 - The parser maps and the UI lane lists read the harness registry and the agent list instead of fixed arrays: the live source and Dispatch model list, the valid brief lanes, the project run lanes and the route picker (task H6).
+
+## 0.1.292
+
 - The orchestrator chat names the project folder: the header shows its base name beside the model and the first-message card gives the full path (task Q6c).
+
+## 0.1.289
+
 - Folder card names stay at 11 pixels or more on screen in the lens overview, the dock legend has its own row, and the lens bow and its black bars are clear (task I3).
 - `run-lane` holds `<runs>/project-<hash>.lock` with its pid for every `--project` run, or the worktree folder with `--worktree`, so a second run on one project stops with one sentence and lanes in their own worktrees still run side by side; the queue branch is `machineroom/queue-<lane>-<stamp>` (task Q6a).
 - The bridge refuses a brief run on a room rooted in another repository with `Briefs run in this repository. Use a task or a queue on another project.` (task Q6a).
 - The bridge refuses a queue or a `worktree: true` run on a folder that is not a git checkout with the sentence `run-lane` prints, before it writes the queue file or starts the runner (task Q6a).
 - The bridge allows the Vite origin `http://localhost:5173` and its 127.0.0.1 form only when it has no `staticDir`, so a served room accepts its own port and the named origins only (task Q6a).
+
+## 0.1.287
+
 - The dock's middle column shows the selected agent's context (I2's `AgentDock`), or the orchestrator's when none is selected, with styles for its rows, log and buttons.
 - The orchestrator chat has a tab per orchestrator, an Attach form that saves the whole ladder and lists the bridge's problems, and Detach behind a confirm card, with the ladder form helpers and the client and mock routes behind them (task O4).
 - A new `src/harnesses/` holds one browser-safe descriptor per harness for its command line, parser, line reader, report, reply and usage, and the runner, the recording builder, the parser picker, the agent order and the brief owners read the registry instead of naming harnesses (task H5).
 - `npm run worktrees -- --project FOLDER` lists a project's lane worktrees with their branch, commits ahead of the project's current branch, uncommitted changes and merge state, and `--clean` removes only the clean merged ones without deleting a branch or touching a lane whose lock file names a live process (task W7).
+- The git-heavy test files copy a repository made once instead of building one for every test, and the static viewer tests share one bridge, so a full test run is faster with all 2151 tests still running (task T1).
+
+## 0.1.284
+
 - The bridge runs a ladder of sub orchestrators beside the main one: their own chats, logs and instructions, the ladder route with the owner's settings protected, `startedBy` routing for lanes, the restricted scope warning, `sub:` reports that wake the parent, and `sub-<id>` agents in the lane source (task O2).
 - The npm pack holds `src/model/hierarchy.js`, which the bridge now imports.
-- The git-heavy test files copy a repository made once instead of building one for every test, and the static viewer tests share one bridge, so a full test run is faster with all 2151 tests still running (task T1).
+- The hub ring splits into named sector arcs when a ladder has subs, each lane parks inside its sector, and a sub orchestrator floats above its arc at 0.7 of the main orchestrator's size on the armillary shape, with `?ladder=demo` for a replay check (task O3).
+
+## 0.1.283
+
 - The orchestrator's reply reaches the chat whole; it was cut to its first 20 lines (`replyText` in `src/briefs/run.js`).
+
+## 0.1.281
+
 - The Reviews tab follows lanes on the room's project: when the room's root is another repository it lists the worktrees beside the project, compares each lane against the project's current branch and fast-forwards that branch after a confirm, and the panel names the branch (task R10).
+
+## 0.1.279
+
+- A new `src/model/hierarchy.js` reads and checks sub orchestrator ladders, glob scopes, sector arcs and sub prompts, with tests (task O1).
+- The agent context helper and `AgentDock` show a selected lane or the orchestrator in plain rows: harness and model, status, task, current command, this month's cost and tokens, the last 12 log lines and, for the orchestrator, its context share (task I2).
+
+- The page is a fixed menu row, the room in a curved lens viewport with the project name, the working lanes and the newest log line at its corners, and a dock that scrolls below it with the agent list, the empty context column and the settings above the cost board; the orchestrator chat stays fixed at the bottom right (task I1).
+- README: a first-time user's guide to starting the room on their own project, with the orchestrator, Dispatch, replay, the runs folder and five common problems (task B2).
+
+## 0.1.277
+
 - OpenCode run records carry input and output tokens: the summary sums the tokens of every `step_finish` line, both cache counts as input and reasoning as output, so the cost board no longer reads `? in / ? out` for them (task R2).
 - An agent that has not run in this room yet draws smaller and fainter with no chip, callout or chip line, grows to full size and opacity when first queued or working, and its hub slot marker is dim until then (task R9).
 - The Dispatch panel starts a project lane in its own worktree, on by default, with the allow-uncommitted switch hidden while it is on, and it marks a running lane so it cannot be picked (task R5).
-- A new `src/model/hierarchy.js` reads and checks sub orchestrator ladders, glob scopes, sector arcs and sub prompts, with tests (task O1).
-- The hub ring splits into named sector arcs when a ladder has subs, each lane parks inside its sector, and a sub orchestrator floats above its arc at 0.7 of the main orchestrator's size on the armillary shape, with `?ladder=demo` for a replay check (task O3).
 - The orchestrator recovers after a room restart: a running turn is killed and its state saved when the bridge stops, a saved `working` state reopens as `idle` with a room message, and an owner message that waited behind the turn starts a turn after the restart (task R4).
 - The orchestrator can run on OpenCode as well as Claude Code: the lane's `cli.harness` picks `claude -p` or `opencode run --format json` with its saved session, the first OpenCode turn carries the filled instructions, and the reply, cost and tokens come from the turn's own log (task R3).
 - The pack now holds the agent docs the room reads at run time, `docs/agents/lanes.json`, `TASKS.md`, `HOUSE-RULES.md`, `policy.json` and `ORCHESTRATOR-AGENT.md`, and `npm run pack-check` names any of them the pack leaves out (task R1).
 - The orchestrator chat draws a reply's Markdown as paragraphs, headings, lists, code blocks and inline code, with bold and italic markers dropped, and the state line names the current command while a turn runs (task R8).
-- The agent context helper and `AgentDock` show a selected lane or the orchestrator in plain rows: harness and model, status, task, current command, this month's cost and tokens, the last 12 log lines and, for the orchestrator, its context share (task I2).
-
-- The page is a fixed menu row, the room in a curved lens viewport with the project name, the working lanes and the newest log line at its corners, and a dock that scrolls below it with the agent list, the empty context column and the settings above the cost board; the orchestrator chat stays fixed at the bottom right (task I1).
 - Read what changed on 2026-10-24 from 0.1.255 to 0.1.276 and wrote `docs/agents/AUDIT-2026-10-V6.md`, with 12 findings, the sharpest about two lanes working in one project checkout and a brief run that checks one project and edits another (task R6).
-- README: a first-time user's guide to starting the room on their own project, with the orchestrator, Dispatch, replay, the runs folder and five common problems (task B2).
 - The queue and review tests copy a prepared repository instead of rebuilding one, open a fresh connection per request, give each review test its own runs folder and git config, and allow 30 seconds only for the git-heavy suites, so they hold while other lanes run their suites (task R7).
+
+## 0.1.276
+
 - The doctor, up and worktree dry-run tests put fake lane programs on the PATH, so they pass on a CI runner that has neither OpenCode nor Claude Code installed, nor an APPDATA folder on Linux.
 - The HUD agent list puts the orchestrator first, shows working, queued, failed and finished lanes above one collapsible idle row, scrolls above the open orchestrator chat, and the waiting card sits beside the chat at 1280 by 800 and 900 by 700 (task N2).
+
+## 0.1.275
+
 - The orchestrator's wake message for a queue task names the queue branch and says the runner commits it only after the project's tests pass, a little after the message (the first live run on ulolTris showed `branch no branch`).
 - Paperclip is out of the README, the architecture guide and the agent guides, its four notes move to `docs/agents/history/`, and its last code leftovers are gone (`server/surface.js`, the unused company and project ids, the backup mock, the old runner adapter and `scripts/frames-from-runs.mjs`) (task Y3).
+
+## 0.1.271
+
 - The orchestrator chat says why a turn stopped when Claude gave a reason (the first live try on ulolTris hit the subscription's session limit and the chat only said `exit 1`).
+
+## 0.1.269
+
 - Review fixes on K1: the orchestrator starts its lanes through the bridge (`POST /api/control/runs` with `worktree: true`, which passes `--worktree` to run-lane), so they keep running after its `claude -p` turn exits; its instructions get the bridge address as `{{BRIDGE}}`; `claude` is looked up on PATH so Windows never runs one from the project folder; the run route refuses the orchestrator lane.
-- The room greets a first visit with a five step guide card (Next and Skip, Done at the end), a Guide button in the help panel opens it again, and the legend adds the line from an agent to the file it is working on (task N1).
 - The bridge tests Y1 dropped are back on the lane bridge: the agent list, SSE replay, key masking, the unreadable counter, the assistant, briefs, run and decide routes, with the cases whose subject is gone left out (task Y1c).
+
+## 0.1.267
+
+- The room greets a first visit with a five step guide card (Next and Skip, Done at the end), a Guide button in the help panel opens it again, and the legend adds the line from an agent to the file it is working on (task N1).
+
+## 0.1.266
+
 - The room has an orchestrator chat: a bottom left panel with the conversation, the state line, the message box and the confirm cards, opened by an ORCHESTRATOR button beside CONTROL or by `/`, and the waiting card points a beginner at it (task K2).
 - A lane run on another project takes `--worktree` to run in a git worktree beside the project at `<parent>/<project>-mr-<lane>`, made from the project's HEAD when missing and reused when clean, with a `node_modules` link and a refusal that names a dirty worktree; a queue makes its branch there and `--dry-run` prints the path and whether it would be made (task K3).
 - `docs/agents/ORCHESTRATOR-AGENT.md` gives the orchestrator lane its system prompt: find out what the owner wants, plan tasks that touch different files, start lanes in worktrees, check their branches, merge what passes with a straight-line history and report (task K3).
@@ -418,12 +593,30 @@
 - The bridge runs the room's orchestrator on the lane `orchestrator`: `GET /api/orchestrator` holds the chat, `POST /api/orchestrator/messages` starts a Claude Code turn on the project and `POST /api/orchestrator/stop` kills it and pauses; each lane run that ends wakes it with the record, at most 30 times an hour, and a restart keeps the chat and resumes the same session (task K1).
 - Paperclip is out of the drawer routes, the doctor and the command: issues, live runs, agents and costs come from the lane records, comments and approvals are empty, task and agent writes answer 409, the doctor checks the project folder, git, the runs folder and the lane programs, `up` starts the lane and session sources by default with `--no-sessions` to turn sessions off, and `--paperclip` and `--company` are gone (task Y1b).
 - The page connects only through the bridge: the connect screen has one address and no Paperclip or company choice, the proxy route and its saved choice are gone, the health chip names sources rather than Paperclip, the drawer has no Approvals tab, no Backups section and no hire form, and a replay's cost board reads the machine's lanes (task Y2).
+
+## 0.1.265
+
 - Four more OpenCode lanes, `opencode7` to `opencode10`, with their worktrees (the owner gave ten lanes for the push to Monday), and the briefs for an orchestrator inside the room (K1 to K3) and for taking Paperclip out of the app (Y1, Y1b, Y2, Y3).
+
+## 0.1.264
+
 - The owner found the room confusing (a beginner could not tell what points where): each working agent now has one solid tunnel from its own centre to the file it touches, with the packets running along it, instead of a faint line with dashes that started above the agent; the callout line is white, so the tunnel is the only coloured line; the root card no longer has a line through the middle of the hub, and the hub centre carries the project name below the agent ring, so the folder lines read as the project branching out.
+
+## 0.1.263
+
 - A room started on a project now shows the project runs and queues working in its other git worktrees, on the root's paths, so six lanes in six worktrees of LowBeam show in one room (S9, `server/lanes-source.js`, tested). A run in an unrelated folder is still skipped.
 - A sixth OpenCode lane, `opencode6`, with its worktree `C:\GitHub\MachineRoom-opencode6` (the owner's choice for LowBeam: six OpenCode agents at once).
+
+## 0.1.262
+
 - The owner's first milestone passed: Claude used the room as a user would on ulolTris. It started `machine-room up --lanes --sessions` from the ulolTris folder (the room picked the folder by itself), gave four tasks in Dispatch separated by `---`, and confirmed. The OpenCode lane ran them in order on `machineroom/queue-20261024-192349` in 43 minutes for about 0.37 USD, each committed after ulolTris's `npm test` passed, with main untouched and nothing pushed, while the room showed each task live and turned green. Claude then played the built game: the Classic high score list records a game and marks it NEW #1; a held key moves Classic's piece 1 cell where Casual's slides 4 with the same default handling; Classic at phone width hides the hold and hard drop buttons that Casual shows; R restarts a game in play and on the game over screen (5 of 6 presses in play restarted; the one miss did not come back). Left for the owner: the Classic pause screen still lists hard drop and hold among the controls, and at phone width the Classic next box sits under the settings button.
+
+## 0.1.261
+
 - `machine-room up` with `--lanes` or `--sessions` and no Paperclip no longer prints `FAIL Paperclip does not answer` and the start-Paperclip advice: it prints `Paperclip is not running, and the lane and session sources do not need it.` and opens the room. Claude found the alarming line when starting the room from the ulolTris folder as a user would.
+
+## 0.1.260
+
 - Review note on D6: one fix. ARCHITECTURE and ORCHESTRATOR said OpenCode orchestrated up to 0.1.259; Claude took the role back earlier, so both now say OpenCode held it from 0.1.163 until Claude took it back. The README's opening, quick start, harness table and colour key were checked against the code and the live ulolTris run.
 - README: the opening names the room's sources, a quick start on a project comes first, the harness table and a separate Paperclip section are new, and the stale lane, recording and hand-run lines are gone (task D6).
 - ARCHITECTURE: the first paragraphs and Open work name the lane runner, queues, sessions and the optional Paperclip source, and Claude in Claude Code as the orchestrator; stale lines about the task label, recordings, hand-run and the child fade are fixed (task D6).
@@ -434,22 +627,57 @@
 - README-DRAFT.md is deleted after its WebGL note, the contributor rules and the licence line move into README.md (task D6).
 - AGENTS.md and GEMINI.md add the one-port serve command (task D6).
 
+## 0.1.259
+
 - Review note on S8b: no fixes in the branch. Claude renamed its own docs brief from D1 to D6, since D1 was taken and the brief parser test caught the repeat. Its tests also pass with TEMP set to an 8.3 short path. The `--replay` digests did not change. Full suite on the merge: 129 files, 2466 tests.
+
+## 0.1.258
+
 - Review note on S8: no fixes. The queue holds the lane lock for the whole queue and each task runs through `startLane`, which takes no lock of its own; queue logs start with `<lane>-`, so the lane source shows each task live. A dry run on ulolTris parsed its four tasks and found `npm test`. Its tests also pass with TEMP set to an 8.3 short path and with no APPDATA. The `--replay` digests did not change. Full suite on the merge: 129 files, 2451 tests.
 - The Dispatch panel starts a queue on the room's project: several tasks in the box, separated by a line of `---`, run as `run-lane --project --queue`, which writes the queue file, refuses an uncommitted project or an allow-dirty switch, and carries `queue` and the task count in the runs list (task S8b).
 
-- TASKS.md has S8: `run-lane --queue` runs a list of tasks on a project one after another, runs the project's tests after each, commits each passing task on a new `machineroom/queue-<stamp>` branch and stops at the first failure, never touching main or pushing. The owner's milestone runs it on ulolTris, then LowBeam.
 - `npm run run-lane -- <lane> --project <folder> --queue <file> [--test "<command>"] [--minutes N]` runs the tasks in a plain text queue one after another on a new `machineroom/queue-<stamp>` branch, runs the project's tests after each task, commits each task that ends well and passes, stops at the first failed task or test with its changes left uncommitted, never touches main or pushes, and prints the branch and one line per task (task S8).
+
+## 0.1.257
+
+- TASKS.md has S8: `run-lane --queue` runs a list of tasks on a project one after another, runs the project's tests after each, commits each passing task on a new `machineroom/queue-<stamp>` branch and stops at the first failure, never touching main or pushing. The owner's milestone runs it on ulolTris, then LowBeam.
+
+## 0.1.256
+
 - Review note on S7b: one fix and the wiring. The reader imported `node:sqlite` at the top, so every bridge would have loaded SQLite and printed Node's experimental warning once the sessions source imported it; it now loads it with `process.getBuiltinModule` when it first opens the database. Claude added the reader to `createSessionsSource`'s default readers, so `--sessions` follows Claude Code and OpenCode sessions, and named OpenCode in the flag's usage line, the README and ARCHITECTURE. The `--replay` digests did not change.
+
+## 0.1.255
+
 - Review note on S7a: no fixes. The reader sends only `tool_use` and `tool_result` items, so a prompt or the assistant's prose never leaves the session file; frames still pass the bridge's key masking. Its tests also pass with TEMP set to an 8.3 short path, as on the Windows runner. The `--replay` digests did not change. Full suite on the merge: 127 files, 2410 tests.
+
+## 0.1.254
+
 - `docs/agents/HARNESSES.md` plans pluggable harnesses at the owner's request: where a harness is named today, one descriptor per harness in a browser-safe half and a Node half, a registry the pipeline, runner, recorder, bridge and panels read, `retired` in `lanes.json` as the on and off switch, and a generic ACP harness. Planned only; TASKS.md lists H1 to H4 as not dispatched.
 - The room follows your own Claude Code sessions on its project with `--sessions` (or `MACHINEROOM_SESSIONS=1`): it reads each session file from where it starts, shows prompts and tool calls as runs, follows a subagent through its own file, skips the sessions `run-lane` starts (`--session-id`), and lists a `claude-session` agent beside the lane agents (task S7a).
 - The OpenCode session reader follows the owner's OpenCode sessions on the room's project from `opencode.db`: it reads only the two session tables, sends one log line for each finished tool call, keeps a child session's calls in its parent's run, skips run-lane sessions, and ends a turn on idle or quiet (task S7b).
+
+## 0.1.253
+
 - AGY is retired in `docs/agents/lanes.json` for now, by the owner's choice (too slow): the room leaves it out and `run-lane` refuses it. The lane source tests that check AGY's lane shape use a copy with it brought back. TASKS.md has S7a and S7b: the room follows the owner's own Claude Code and OpenCode sessions on its project, read-only, with the owner's yes to reading their files under the home folder.
+
+## 0.1.252
+
 - `tests/temp-root.test.js` compares the folder `makeTempDir` returns with the resolved process folder, the one test 0.1.251 missed on the Windows runner. The full suite passes on this machine with TEMP set to an 8.3 short path.
+
+## 0.1.251
+
 - CI failed on 0.1.248 to 0.1.250 in tests from Q5a and Q5b. On the Windows runner TEMP is an 8.3 short path (`RUNNER~1`) and the project checks resolve the long one, so `makeTempDir` in `tests/helpers/tempRoot.js` now returns the folder through `realpathSync.native`; the 7 failures came back on this machine with TEMP set to a short path and pass with the fix. On the Ubuntu runner the checkout sits under the home folder, so `--project` on home is refused as holding this checkout before the profile rule, and the test now accepts either.
+
+## 0.1.250
+
 - `run-lane` prints the Claude lane's reply after a run, from the last top-level `result` line of its stream (`claudeReport` in `src/briefs/run.js`), where it printed `report: none`. Claude found it in a smoke run on a scratch project after Q5: OpenCode and Claude Code project runs both showed live, turned green and wrote what the task asked. TASKS.md no longer holds a real home path in W2a.
+
+## 0.1.249
+
 - Review note on Q5b: one fix, which the lane found and named. The source reopens a run it ended for quiet when its log grows again, but `createPipeline` dropped the second `running` status (its dedupe key) and every later line (the ended set), so the room still showed the run failed. A `running` status for an ended run now clears both, so the room shows the run again and reads its later lines and its real end; a test fails without the fix. Health's `unparsed` stays 0 in lane mode, since unreadable lines no longer become frames (X6). The `--replay` digests did not change. Full suite on the merge: 126 files, 2389 tests.
+
+## 0.1.248
+
 - Review note on Q5a and Q5c: one fix. Both were cherry-picked onto main, since their branches grew from the audit commit that still held the owner's user name; the audit rows they marked were joined by hand and masked again. Q5c's new Claude label tests used the owner's real user name in their example paths; they now use `someone`. Claude dry-ran the project checks after the merge: a project under `C:\GitHub` and the scratch project under temp are allowed, `C:\GitHub` and the profile folder are refused. The `--replay` digests did not change. Full suite on the merge: 126 files, 2376 tests.
 - A project run resolves the project, this checkout, the main checkout and every lane worktree before its checks, refuses the user profile and folders that hold it, the OS temp folder and the runs folder, starts the harness with `PWD` set and `OLDPWD` and `INIT_CWD` removed, masks keys in the recording log and the stored task, and records Claude Code runs (task Q5a).
 - A `run.end` for a run that is not the agent's current run no longer ends that agent; it ends only the working children of that run, so two runs of one lane cannot show the lane finished while the newer one works (X7).
@@ -458,81 +686,155 @@
 - A `Glob`, `Grep` or `LS` label for a folder outside the project shows its base name, and a stream-json `Bash` label shortens an absolute path under the user profile folder to its base name (X10).
 - The lane source marks a log seen only when it adopts it, reopens a run ended for quiet when its log grows, waits for the lane lock, sends the held last line and only lines the reader marks read, keeps a run's start in the bridge history, reads `runs.jsonl` only when it changed, caps the held line at 1 MB, shows worktree runs from the repository's main checkout, and registers the lane parsers at bridge start (task Q5b).
 
+## 0.1.247
+
 - Briefs Q5a, Q5b and Q5c: the V5 audit's findings X1 to X17, in three parts that touch separate files.
+
+- Read what changed on 2026-10-24 from 0.1.228 to 0.1.243 and wrote `docs/agents/AUDIT-2026-10-V5.md`, with 18 findings, the sharpest about a lane run that can work in the wrong folder.
+
+## 0.1.246
 
 - Two fixes from the first browser check of L3: the lane fallback of `/api/control/agents` gave lane agents the role `general`, so Dispatch's `Run on this project` section, which lists only agents with no Paperclip role, never showed; lane agents now answer with `role: null`, with a test. The waiting overlay no longer tells the owner to assign an issue in Paperclip: it names Dispatch and `npm run run-lane` first, and its titles say the live feed instead of Paperclip. A task typed in Dispatch then ran on OpenCode 2 on a scratch project and made its change there.
 
+## 0.1.245
+
 - Review note on L3: no fixes. `POST /api/control/runs` with a task and no briefs starts `run-lane --project` on the bridge's root, still behind `confirmed: true`, with the project checks and the dirty check on the server; it spawns `node` with `shell: false`, so the task text is one argument. `GET /api/control/runs` now carries the project folder's name for the confirm card. Full suite on the merge: 125 files, 2343 tests.
+
+## 0.1.244
+
 - Review note on L4: one fix. Claude Code's `usage` on the result line covers only the last turn (82 output tokens on the real scratch run), while `modelUsage` holds the run's totals per model (738); the summary now sums `modelUsage` and falls back to `usage`, with a test. On the real run the summary reads $0.289, 240,877 input and 738 output tokens. Full suite on the merge: 124 files, 2330 tests.
 - The Dispatch panel starts a run on the room's own project when the lane source is on: `POST /api/control/runs` takes a lane and a task and runs `run-lane --project` with `--task`, the same project checks refuse this checkout, a lane worktree and a dirty folder, and the panel shows a confirm card with a switch for uncommitted changes (task L3).
-- Read what changed on 2026-10-24 from 0.1.228 to 0.1.243 and wrote `docs/agents/AUDIT-2026-10-V5.md`, with 18 findings, the sharpest about a lane run that can work in the wrong folder.
-
-- Briefs L3 (start a project run from the drawer), L4 (costs and tokens for Claude Code and AGY, and the Meters check) and Q5 (read what changed on 2026-10-24).
 - Claude Code runs record the cost of their last result line and both Claude Code and AGY record their input and output tokens, the lane costs sum those tokens for the board, and the Meters tab reads lane mode from the bridge health answer (task L4).
 
+## 0.1.243
+
+- Briefs L3 (start a project run from the drawer), L4 (costs and tokens for Claude Code and AGY, and the Meters check) and Q5 (read what changed on 2026-10-24).
 - Review note on L2: no fixes. With the lane source on and Paperclip down, issues, live runs, comments and approvals come from the lane runs; writes to a lane task answer 409. Run queued and status frames now also send an `issues` notice (not log frames, so a few per run). The control client gained `health()` so the Approvals tab can tell lane mode apart. Full suite on the merge: 124 files, 2324 tests.
+
+## 0.1.242
+
 - Review note on L1: no fixes. With the lane source on and Paperclip down, `/api/control/costs` and the agents' spend come from `runs.jsonl` (this UTC month, per lane). The Meters tab tells lane mode apart by a failed backup read whose error is `Paperclip did not answer.` while costs loaded; a health flag passed down would be more direct, outside the brief's files. A lane with spend and no tokens shows `? in / ? out` on the board. `tests/candidate.test.js` failed once in the full run while L2 ran its own suite and passed alone. Full suite on the merge: 123 files, 2313 tests.
 - The drawer and the cost board read the lanes' spend from the run records when Paperclip does not answer: `/api/control/costs` and the spend of `/api/control/agents` fall back to `server/lane-costs.js`, the board shows this month's spend with no budget and null tokens, and the Meters tab says backups belong to Paperclip (task L1).
 - Lane mode reads its Tasks and Approvals from the lane runs: each open or recent run is a task with its briefs, a live run marks a working lane, the callout names its brief id, a task or comment write is refused, and a run start or end sends an `issues` notice too (task L2).
+
+## 0.1.241
 
 - Briefs L1 (costs and meters from the lane records) and L2 (tasks, approvals and the callout from the lane runs).
 
 - CI on 0.1.240 failed on Linux in two of S6f's tests: their dry runs read the real `lanes.json`, whose OpenCode binary sits under `%APPDATA%`, which Linux does not set. The test helper now falls back to the file's fake `APPDATA` and `LOCALAPPDATA` beneath the real environment; the tests pass with both unset.
 
+## 0.1.240
+
 - `run-lane` sets `PWD` to the run's folder when it starts a harness. OpenCode takes its folder from `PWD`, so a project run started from a shell in this checkout worked in this checkout instead of the project (found on a scratch project: OpenCode read this repository's files, found no target and stopped without a change). `--standalone` did not change it. With the fix, OpenCode, AGY and Claude Code each made their change in the scratch project and nowhere else.
 
+## 0.1.239
+
 - A real Claude Code run (Sonnet, through `run-lane -- claude --project` on a scratch git project) confirmed the stream shapes S6g read from the docs, with one difference: this Claude Code's `Agent` tool answers at once and runs the subagent in the background, so the parser ended the child before its first line. A good `Agent` or `Task` result that comes before any line of its child now leaves the child open until the parent's run ends; a failed one still ends it, and a child heard from first still ends at its result. In the room the run showed Claude Code and its `Explore` subagent (`claude~1`) working at once, the child listed under its parent, and the parent's read and write of `src/math.js` beside the child's read of `src/strings.js`.
+
+## 0.1.238
+
 - Review note on S6g: two fixes. Its Claude command ran in `lane.worktree`, so it now takes the project folder like the others. A room served on another project still showed this repository's lane worktree runs, with their files mapped onto that project's tree (found by eye on a scratch project while S6g ran); the lane source now shows a run with no meta file only when the room's root is this repository, with a test. Claude ran AGY end to end on a scratch git project through `run-lane -- agy --project`: 1.4 minutes, the two asked changes and nothing else, the model `gemini-3.8-flash-high` accepted, the record carrying `project`, and the room on that project showing AGY working, then finished in green. Not yet checked: a real Claude Code headless run, so the hand-written `scenario-h` shapes (`parent_tool_use_id`, where a `Task` result lands) are unconfirmed. Full suite on the merge: 122 files, 2304 tests.
+
+## 0.1.237
+
 - Review note on S6b: one fix. Its AGY command ran in `lane.worktree`, which S6f had just changed to an optional project folder, so `run-lane -- agy --project` would have run AGY in its worktree; it now uses the same folder as the other harnesses. The README's two AGY lines now say AGY runs through `run-lane`. The lane also fixed AGY recordings, whose untimed lines sorted before the running frame, and added `src/model/parsers/agy.js` to the pack list. Not yet checked: a real AGY run through `run-lane`, and the model id `gemini-3.8-flash-high`. Full suite on the merge: 121 files, 2290 tests.
+
+## 0.1.236
+
 - Review note on S6f: two fixes. `projectProblems` refused a folder inside this checkout but not one that holds it, so `--project C:\GitHub` would have handed an agent every repository there; a folder that holds this checkout or a lane worktree is now refused, with a test. `run-lane` wrote the meta file just after opening the log; it now writes it first, so the lane source never sees a project log without its meta. Full suite on the merge: 121 files, 2279 tests.
+
+## 0.1.235
+
 - The HUD no longer shows "Paperclip is not connected" while the lane source is on: `/api/health` carries `lanes`, and Paperclip is optional then. Claude found it in the first browser check of a live lane room (three OpenCode lanes working at once, strips and active rows right).
+
+## 0.1.234
 
 - Review note on F8, P18 and S6e: no fixes. They were cherry-picked onto main, since their branches grew from the first version of the brief commit, which held profile-name fragments. F8 masks each run's joined text and also joins AGY's `text_delta` steps, where `scenario-g`'s split was; rebuilt from the raw run, the fixture matches the committed one byte for byte. P18 shares the room's card chain with the probe as `cardPlan`; 4 of 8 fixture layout digests changed (the others never fill a stack), and the seeded rows moved (tallest 5,601 at 40,000 files and 11,743 at 200,000). S6e found that `opencode acp` takes its model through `session/set_config_option`, sends a file call's path only in its first `tool_call_update`, asked for no permission, and shows a subagent inside the parent session rather than as its own. Full suite on the merge: 120 files, 2252 tests.
 - AGY is a lane: `docs/agents/lanes.json` gives it a command line, `run.js` builds `agy --print PROMPT --output-format stream-json --model MODEL --dangerously-skip-permissions` in its worktree and summarizes its tool steps, `recording.js` maps `agy` to the `process` adapter and reads its log with the AGY parser, the lane source lists it, and `npm run hand-run` no longer takes an AGY run (task S6b).
 - Claude Code runs headless as a lane: its stream-json parser reads the file, search and Bash tools, a `Task` or `Agent` call gives the child its own tool calls and strip until its result ends it, and the `claude` lane runs `claude -p ... --output-format stream-json` (task S6g).
-- Briefs S6f (a lane run on another project), S6b (AGY as a lane) and S6g (Claude Code as a lane), for the Sunday target.
 - `run-lane --project FOLDER` with `--task` or `--task-file` runs a lane on another folder, refuses this checkout, a lane worktree and a dirty git folder unless `--allow-dirty`, writes `project` and `task` to the run record, and leaves a meta file beside the log (task S6f).
 - The lane source reads `lanes.json` from this repository, shows a meta-file run for the room's root with its paths kept, and skips one for another folder (task S6f).
 - README and `ARCHITECTURE.md` describe runs on another project and OpenAI-compatible models in a lane's `cli.model` (task S6f).
 
+## 0.1.233
+
+- Briefs S6f (a lane run on another project), S6b (AGY as a lane) and S6g (Claude Code as a lane), for the Sunday target.
 - Review note on S6a: one fix. The source polled `runs.jsonl` (61 KB here) five times a second even with no lane running; it now reads the records only while a run is open. The README's run section now starts from `npm run serve -- up --lanes`, with Paperclip as the optional second source. The lane found that the page recomputes agent keys from adapter and name, so lanes `opencode2` to `opencode5` show as `opencode-2` to `opencode-5`; matching goes by `agentId`, so it was left. Not checked: a real lane run seen live in a browser. The `--replay` digests did not change. Full suite on the merge: 120 files, 2238 tests.
 - The fixture builder masks a profile name or e-mail address split across chunks of one run, including two text deltas of one step, and refuses a key split across chunks (task F8).
 - The scale probe now lays cards out through the same chain as the room, stacks included, so its layout digests and its covered and tallest rows describe what is drawn (task P18).
 - A probe of OpenCode over ACP (`scripts/acp-probe.mjs`): the model is a session config option, tool calls start empty and fill in absolute locations, and a subagent arrives as a `subagent` tool call with its child calls tagged by `_meta` (task S6e).
+
+## 0.1.232
+
 - Briefs F8 (the fixture builder masks across chunks), P18 (the scale probe lays out what the room draws) and S6e (a probe of OpenCode over ACP).
 - Review note on S5: no code fixes. The AGY parser reads the real run: the three renamed file tools, the `invoke_subagent` start (held from `ACTIVE` to its `DONE` so the label carries the prompt), the end at the first `manage_subagents` list that shows the child not running, and no open tool call. `scenario-g` is the real run; Claude checked it again for the profile name, user paths and e-mail addresses and found none (the one transcript path is masked to `C:/Users/user`). The lane found that `scripts/build-fixtures.mjs` masks per frame, so a profile name split across two chunks slipped through as two prefixes, and repaired them in the fixture by hand; the builder itself still has the gap. `ARCHITECTURE.md` describes the real shape at the merge. The `--replay` digests are the same apart from the new `scenario-g` line. Full suite on the merge: 119 files, 2227 tests.
+
+## 0.1.231
+
 - Review note on Q4a: no fixes. W1 (`planOpenSet`: every plan view that is open or lists files is open for the stacks and the layout, so a recent touch's folder is never stacked away), W4 (the working mask and the row key are rebuilt only on a real change) and W5 (follow's end clears the room's focus) are fixed, each with a test. The `--replay` digests did not change, and the lane found why: `scripts/scale-probe.mjs` lays out from `openChain` and never calls `stackOverflow`, so the probe does not see the room's stacks; a gap to close in the probe. Full suite on the merge: 119 files, 2219 tests.
+
+## 0.1.230
+
 - Paperclip is uninstalled from the owner's machine (its data folder is kept), and the README and `ARCHITECTURE.md` say that MachineRoom grew out of Paperclip and now runs its agents through its own lane runner; the Paperclip code stays as an optional source until each part has a replacement.
+
+## 0.1.229
+
 - Review note on Q4b: no fixes. W2 (packets only while the agent works; the touch burst stays), W3 (the strip reuses its two points and recomputes the dash distances only when an end moved) and W6 (any open `[role="dialog"]` blocks the HUD and room keys) are fixed, each with a test that fails on the old code. Escape still closes a dialog, since it is handled before the block; `?` no longer closes help while it is open. The `--replay` digests are the same before and after the merge. Full suite on the merge: 119 files, 2210 tests.
 - The bridge shows lane runs live from the `run-lane` logs with `--lanes` or `MACHINEROOM_LANES=1`: it watches `%TEMP%\machineroom-runs`, sends each complete line as a frame through `accept()`, lists the lane agents in `/api/agents`, and ends a run on its record or after 10 quiet minutes (task S6a).
-- Brief S6a: the bridge shows lane runs live from the `run-lane` logs, the owner's choice of run-lane as a service.
-- `docs/agents/SOURCES.md`: what Paperclip costs the room, and a plan for a direct live source from `run-lane` (S6a to S6d), AGY's children from their transcripts, Claude Code hooks, and an ACP probe; a design note for after Saturday.
 - The strip sends no packets after a run ends and still sends the burst at each touch (task Q4b).
 - The strip reuses its two points and recomputes the dashed distances only when an end moves (task Q4b).
 - The HUD and the room ignore their keys while a dialog is open, even when focus stays on the button that opened it (task Q4b).
 - The folder layout takes its open set from the plan's open and files views plus the focus chain and the pins, so a recent touch's folder is never stacked or hidden (task Q4a, W1).
 - The room keeps its working mask, and a card keeps its row frame key, until the activity, an agent, a focus array, the mask, a flash or a row changes (task Q4a, W4).
 - Ending follow clears the room's focused agent, and a focus that names no agent view clears it too, so the room and the HUD agree (task Q4a, W5).
+
+## 0.1.228
+
+- Brief S6a: the bridge shows lane runs live from the `run-lane` logs, the owner's choice of run-lane as a service.
+- `docs/agents/SOURCES.md`: what Paperclip costs the room, and a plan for a direct live source from `run-lane` (S6a to S6d), AGY's children from their transcripts, Claude Code hooks, and an ACP probe; a design note for after Saturday.
 - Review note on Q4: no fixes. Six findings from 0.1.201 to 0.1.222, W1 (Medium: a recent touch's folder can be stacked and hidden while its parent is drawn open) and W2 to W6 (Low), each with its check; W5 and W6 are marked unproved. Briefs Q4a and Q4b fix them.
 - AGY's real subagent: `invoke_subagent` spawns `PARENT~N` with the role and prompt, `manage_subagents` ends it at the first state other than running, the `subagent` DONE closes the call, and `read_file`, `write_file` and `edit_file` are known file tools; `scenario-g` replays the recorded run (task S5).
+
+## 0.1.227
+
 - A real AGY run through Paperclip with a subagent (run `ffd660e6`): the child appears as an `invoke_subagent` tool step and in `manage_subagents` states, its own steps are not in the parent's output, and this AGY's file tools are `read_file`, `write_file` and `edit_file`, which the parser does not know yet. Brief S5 reads it.
 - Review note on S4: no fixes. The AGY parser turns a second `conversation_id` in a run into a subagent that works beside its parent, with its own key, focus, strip, packets, callout and chip (`agy > NAME`); the state and the engine needed no change, which the lane checked with a scratch test. The pipeline already passes `agentKey` to the parser at its one call site. The `--replay` digests are the same before and after the merge apart from the new `scenario-f` line. Not checked by eye: the browser pane was hidden, so the room did not render. Not checked against the real AGY: its subagent output has not been seen, so the rule may change once a real run is recorded. Full suite on the merge: 119 files, 2199 tests, in parallel on the first try.
+
+## 0.1.226
+
 - Review note on F7: no fixes. The fixture script writes `agents.json` for the default name (`fixtureNames`), which kept the change to one code file; a rename would also have needed `src/live/simulated.js`, a reader the brief missed. The mock reports a rejected hire as `error`, as the real client does, and still refuses to update it or give it a task. Full suite, build and pack check pass on the merge.
+
+## 0.1.225
+
 - Review note on F2: no fixes. Each change names its proof; spot checks hold (a chip shows a status word from `.mr-term::after`, not a ring, and a failed run turns the agent and chip red but leaves its files as they were). Every file under `src/` and `server/` is now in the code layout, the Replay and Live switch is described as `syncUrl` does it, and the DOM contract gains `.is-targeted`, `.is-lit` and `.is-dim`. The lane left the Version line, Known limits and Open work alone as asked. Full suite on the merge passed.
+
+## 0.1.224
+
 - The bridge checks that the project folder exists before it arms the file watcher, and a watcher that reports an error later drops back to polling. On Linux, Node's recursive `fs.watch` does not throw on a missing folder, so Q3d's fallback never ran there and CI failed its two watcher tests after the 0.1.222 push; the bridge would have stopped seeing new files. Found by CI, fixed by Claude.
+
+## 0.1.223
+
 - Review note on F1: two fixes at the merge. The README said the bridge needs no key of its own, but the optional decision route reads `OPENROUTER_API_KEY`; and its warm start line described the old sphere, where V21 keeps every card whose role did not change. The rest checks against the code: the cabinet sphere, packets, travelling strands, motes, the flat board, the lanes, the 6 second subagent hold and the probe rows. The lane noted that the HUD help says `F` follows the working agent while the room follows the touched card, and that `README-DRAFT.md` is now only history. Full suite on the merge passed.
 - An AGY run's other conversations become subagents that work beside their parent, from `conversation_id` alone: the parser spawns `PARENT~N` at the conversation's first step, credits its calls to the child and ends it when the parent acts again, and `scenario-f` plays it through the fake Paperclip (task S4).
 - Audit of the room, version 4 (task Q4): 6 findings in `docs/agents/AUDIT-2026-10-V4.md`, no code changed.
-- Briefs S4 (a subagent that works beside its parent, read from AGY's conversations), Q4 (audit what changed since Q3) and F7 (the fixture name and the mock's terminated status).
 - The fixture builder writes the default agent list as `public/fixtures/agents.json`, the file the default replay reads, and a test compares the two (task F7).
 - The mock control client reports a terminated agent as `error` like the real client, while both still refuse it a task and a settings change (task F7).
+
+## 0.1.222
+
+- Briefs S4 (a subagent that works beside its parent, read from AGY's conversations), Q4 (audit what changed since Q3) and F7 (the fixture name and the mock's terminated status).
 - Review note on F3: no fixes. Each changed line names the code that proves it, `PAPERCLIP-API.md` was left alone with a reason, and the new `.env.example` lines hold only empty values or comments; every reader treats an empty value as unset, and the history audit finds nothing in it. Two gaps the lane found and left, both outside its files: `npm run fixtures` with no name writes `sandbox-agents.json` while the default replay reads `agents.json`, and the mock control client can report `terminated` while the real one reports `error`. Full suite on the merge: 118 files, 2183 tests, in parallel on the first try.
+
+## 0.1.221
+
 - Review note on F4: no fixes. `tests/e2e-room.test.js` runs a task for each of the five fake agents at once and, after every activity, the room's pure layers (`viewInput`, `planFolderView` at depth 2, `openChain`, `stackOverflow`, `cardSize`, a warm `layoutSphere`, `stripPoints`, `packetSpots`), with the checks the brief named and a second play that gives the same layouts; it takes about 6 seconds. The sandbox tree draws at most 4 cards, so the stack limit holds there without being pressed; `tests/sphere.test.js` covers full stacks. The lane noted that a subagent's `runs` stays 0 in `state.js`, since it reports only a spawn and an end. `roomInputs` and `playFrames` moved to `tests/helpers/loop.js`. Full suite on the merge: 118 files, 2181 tests, in parallel on the first try.
+
+## 0.1.220
+
 - Review note on F5: no fixes. `tests/serve-fake.test.js` starts the fake Paperclip and `bin/machine-room.mjs` on free ports with a temporary `agent-sandbox` and dist, checks the address, the page, health, agents, tree, a Hermes task whose reads land on the sandbox paths, `doctor` (0 against the fake, 1 against port 1) and `up`, and stops every child with `killTree()`. The steps in `ARCHITECTURE.md` for the fake worked as written, and no defect was found. The lane noted that `POST /api/control/issues` does not read `confirmed`; the docs name only a lane run, a merge and a backup as needing it. Full suite on the merge: 117 files, 2180 tests, in parallel on the first try.
 - End to end room test (task F4): five fake Paperclip agents play through the bridge into `createPipeline` and `apply`, and every activity runs the folder plan, the warm sphere layout, the strips and the packet pool.
 - README brought up to 0.1.219 (task F1): the cabinet sphere and stacked folders, the packets on the strip, the travelling strands, the flat cost board and the dust motes, the subagent hold, the scale probe rows, the lanes and the key note.
 - Read ARCHITECTURE.md against 0.1.219: the packed folder plan and its stack limit, the packets and travelling strands, the command flags, the code layout, the hub, strip and card class lines, and the Replay and Live switch.
-- Briefs F1 to F5, the finish line before Saturday: the README, ARCHITECTURE and the other user docs read against the app, and two end to end checks against the fake Paperclip (the room's engine layers, and the one-port room).
 - `tests/serve-fake.test.js` starts the fake Paperclip and the one-port room together and checks the viewer, health, agents, tree, a Hermes task's reads, doctor and up (task F5).
 - The control client doc names the real client beside the mock, drops the C2b wait notes, says where reasoning effort and subagents are kept and how a terminated agent is reported (task F3).
 - The candidate doc lists `--help` (task F3).
@@ -540,18 +842,46 @@
 - The backup doc says the bridge sends no token, so the backup routes work only in `local_trusted` mode (task F3).
 - The plugin page doc names `Hud.jsx` for the C, L and `?` keys and the model list in `server/models.js` (task F3).
 - `.env.example` adds the project and workspace ids, the briefs folder, the settings file, the assistant and decision settings and the Paperclip token (task F3).
+
+## 0.1.219
+
+- Briefs F1 to F5, the finish line before Saturday: the README, ARCHITECTURE and the other user docs read against the app, and two end to end checks against the fake Paperclip (the room's engine layers, and the one-port room).
 - Review note on G4c: no fixes, 31 minutes. The three images show the flat cost board, the straight striped strips, the corner brackets and the drawer on Dispatch, each 1280 by 800, under 170 KB, with no text chunks and nothing private. They were taken at 0.1.208, before V21 and V22, so the folders sit on the old sphere and the strips carry no packets; a retake waits until the owner has looked at the cabinet sphere.
+
+## 0.1.218
+
 - Review note on V21: no code fixes. The activity and plan digests are the same before and after the merge, and every layout digest changes, as the brief expected. The lane went past the brief's file list in three test files whose assertions the new scales, the probe row and the digests broke, and said so; it dropped the probe's move rows, since a card that changes role now moves on purpose. `ARCHITECTURE.md` was brought up to the cabinet sphere at the merge (the sphere line, the card layout, the overview and layout numbers). Not checked by eye: the browser pane was hidden. Full suite on the merge: 116 files, 2173 tests, in parallel on the first try.
+
+## 0.1.217
+
 - Review note on V22: one fix at the merge. The 5 packets of a burst were all sent at the same moment, so they travelled stacked as one point; they now leave 30 ms apart. The lane found that the scatter came from a second path (`fillStrandDirect` and its offsets) as well as `strandPoints`, and fixed both. `ARCHITECTURE.md` describes the packets and the travelling strands. The `--replay` digests are the same before and after the merge. Not checked by eye: the browser pane scales an emulated viewport, so 3 pixel points cannot be judged there. Full suite on the merge: 116 files, 2163 tests, in parallel on the first try.
 - The strand points sit on their line and travel along it at 2000 units a second when the folder is on a working agent's path (task V22).
 - Each agent's strip sends yellow packets every 90 ms and a burst of five at each tool.start, green after a good run and red after a failure, from a fixed pool of 24 points (task V22).
+
+## 0.1.216
+
 - Review note on Q3d: no fixes. V6 (one glow texture for every strand, freed once at teardown; a build clears without freeing it), V7 (a strand writes its colour and opacity only when its yellow, lit or dim level moved) and V12 (the bridge stays on its poll when the watcher cannot be armed, after a burst and at start) are fixed, each with a test that fails on the old code. The startup half of V12 went past the brief's wording, and the lane said so. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 116 files, 2156 tests, in parallel on the first try. The first run of Q3d ended with `provider.content-filter` before any change; the second run did the work.
+
+## 0.1.215
+
 - Review note on Q3c: no fixes. A seek clears the follow timers, the pending card and the held card and aims again from the newest touch; ending follow (a click on empty space, a card head or a row, `focusPath`) tells Stage through `onPick(null)`, which clears the badge (`focus(null)` returns early); the HUD keys skip inputs, selects and dialogs. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 116 files, 2152 tests, in parallel on the first try.
+
+## 0.1.214
+
 - The owner chose to keep an agent's focus on its last file during a tool call that names no file (audit finding V3); `ARCHITECTURE.md` says so under Known limits.
 - Review note on G3g: no fixes. Two lines changed, each with the code that proves it (the obstacle gap is the half diagonal plus the radius plus 60, and the layout numbers are measured again on the sphere, dated 2026-10-23); the brief's other examples were already right or fixed by Q3, and the lane said so rather than rewriting true lines. V21 will change the sphere's numbers again.
 - The cabinet sphere (task V21): top-level folders sit on a packed first shell sized by their count, closed children stack behind their folder four deep with the rest counted on the back, and the open path steps out 650 units per level with its siblings fanned; cards are smaller and near uniform, and the scale probe's overlap row is now a covered row.
+
+## 0.1.213
+
 - Review note on Q3a: no fixes. V1 (the depth mesh starts at its card's place, so the root's no longer sits at the hub centre), V2 (a seek clears each row's cached file and counts) and V10 (the row loop is skipped while the newest activity, the mask, the flashes, the fades, the dimming and a row revision are unchanged) are fixed, with tests that a flash, its end, a fade and a new activity each still repaint. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 114 files, 2137 tests, in parallel on the first try.
+
+## 0.1.212
+
 - Review note on Q3b: no fixes. V5 (red stripes when the last call failed), V8 (a subagent's chip is removed with its view, queued when a seek removes it), V9 (every chip, a subagent's too, takes the click) and V11 (a line's buffer is written only when an end moved) are fixed, each with a test. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 113 files, 2131 tests, in parallel on the first try.
+
+## 0.1.211
+
 - Briefs V21 (the cabinet sphere: a packed first layer of top-level folders, subfolders stacked behind their folder, the working path stepping outward) and V22 (packets on the lines), from the owner's sketch.
 - The strip turns red when a working agent's last tool call failed, before the working yellow (task Q3b, V5).
 - A subagent's chip is removed with its view, element, CSS3D object and map entry (task Q3b, V8).
@@ -560,200 +890,447 @@
 - The depth mesh of a card starts at the card's position, rows drop the old state's file after a seek, and a paused replay skips the row loop when nothing changed (task Q3a).
 - Follow mode resets on a seek and ends on a card head, a card row or empty space, a seek drops the label timers `focusPath` set, and the HUD keys ignore a target inside a dialog (task Q3c).
 - The strands share one glow texture and skip colour and opacity writes that change nothing, and the bridge keeps polling when its watcher cannot be armed again (task Q3d).
-- Retake three README screenshots (task G4c): overview with two working agents, follow mode close up, and control drawer, showing the bottom right cost board, straight striped strips and default motes with no grain.
+
+## 0.1.210
 
 - Review note on Q3: no fixes. 16 findings, each with a file and line, six proven by a Node check; V1 (the root card's depth mesh left at the hub centre) checked here against `cards.js`. V16 fixed at the merge. V3 held for the owner. Briefs Q3a to Q3d take the rest.
-- Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
 - Bring the room lines of `ARCHITECTURE.md` up to date for the sphere layout: the warm and cold layout times, 222 cards, 0 overlapping layouts, a 12,819 unit tallest layout, 0 moves over 150 units and a 33 unit worst move from `npm run scale-probe` on 2026-10-23, the frame times marked as measured before the redesign, and the obstacle clearance.
+
+## 0.1.209
+
+- Retake three README screenshots (task G4c): overview with two working agents, follow mode close up, and control drawer, showing the bottom right cost board, straight striped strips and default motes with no grain.
+
+- Brief G3g (bring the known limits and the numbers in `ARCHITECTURE.md` up to date).
+
+## 0.1.208
+
 - Brief G4c (retake the three README screenshots that show the old cost board and strip).
+
+## 0.1.207
+
 - Review note on Q2: no fixes. Its table found every reduced motion rule in `ARCHITECTURE.md` in place but one (a closing list's ghost still faded; now it goes at once), and the camera and strands now share one media query listener. The `--replay` digests are the same before and after the merge. Not checked by eye. Full suite on the merge: 112 files, 2118 tests, in parallel on the first try.
+
+## 0.1.206
+
 - Two more OpenCode lanes, `opencode4` and `opencode5`, at the owner's request (DeepSeek V4.1 Flash runs slowly enough that more lanes help): `lanes.json`, their worktrees and `VALID_LANES` in `src/ui/panels/briefs.js`. Each OpenCode lane's notes name the other four.
+
+## 0.1.205
+
 - The fine dust is motes in the 3D void now, at the owner's request: it was 600 points of size 4 packed within 2300 units of the hub at 0.09 opacity, too small and faint to see from the overview, while the grain overlay read as white noise on the screen. Now 1400 motes fill the volume from 400 to 9000 units, each a crisp 3 pixel point (`sizeAttenuation: false`) at an opacity of 0.25 plus 0.75 of the strength, and grain starts off (a browser that saved grain on keeps it until it is switched off in Settings). Checked in replay at 40,000 files: small specks across the space around the room. Full suite: 112 files, 2115 tests.
+
+## 0.1.204
+
 - Review note on S2g: no fixes. The scenario-e agent keys did not match the fake's `urlKey`s except for `orchestrator` and `hermes`, and a plain match would have given Hermes the one line delegate run; the lane mapped `orchestrator` and `opencode` to the fake agents instead and said so. The live path now carries an orchestrator and subagents end to end in `tests/e2e-loop.test.js`. Full suite on the merge: 111 files, 2108 tests, in parallel on the first try.
+
+## 0.1.203
+
 - Review note on G4b: no fixes. Five images at 1280 by 800, each under 400 KB, holding only image chunks (no text or metadata), with no paths, e-mail addresses, keys or imagery from the show; `drawer.png` and `scale.png` are new, so the README's links now all resolve. AGY branched at 0.1.191, so `overview.png`, `closeup.png` and `drawer.png` show the old cost board floating below the hub and the bright yellow strip with its bends, which V19 (0.1.196) and 0.1.202 replaced; `connect.png` and `scale.png` still match. It ran 186 minutes by hand, much of it stalled until the owner asked for a status report.
+
+## 0.1.202
+
 - The strip from a working agent to its file is one straight line now, faint white with yellow stripes, at the owner's request: it was two parallel bright yellow lines with additive blending at 0.9 opacity, bent through a rise and a level run, so it glared and met the card at a sharp angle. `stripPoints` gives the two ends; the band helpers are gone. Checked in replay at 40,000 files: each working agent's strip runs straight down to its card as a faint dashed line. The `--replay` digests are the same.
 - Reduced motion reads one shared media query that follows a change event and is removed when the room is disposed (task Q2).
 - Under reduced motion a closing list fades out at once, and a test holds the fine dust near the camera still (task Q2).
 - Audit of the room, version 3 and what followed it (task Q3): 16 findings in `docs/agents/AUDIT-2026-10-V3.md`, no code changed.
-- Briefs S2g (the orchestrator and subagents through the fake Paperclip), Q2 (reduced motion across the room, version 3) and Q3 (read what the redesign changed).
 - A fifth fake Paperclip agent, the Orchestrator, and per-agent scripts so it and OpenCode Go play the scenario-e runs while Claude, Hermes and agy keep the sandbox runs (task S2g).
+
+## 0.1.201
+
+- Briefs S2g (the orchestrator and subagents through the fake Paperclip), Q2 (reduced motion across the room, version 3) and Q3 (read what the redesign changed).
+
+## 0.1.200
+
 - Review note on S2f: no fixes. The `--replay` digests are the same before and after the merge. The look was not checked: with the preview pane hidden the room's animation frames do not run, so the replay clock stayed at 00:00 and no chip was drawn; the hold rests on the tests of `childFade` and `childEndIsFresh`. Full suite on the merge: 111 files, 2106 tests, in parallel on the first try.
+
+## 0.1.199
+
 - Review note on V20: no fixes. Its sums match `src/styles.css` (the face is 2 px taller than `cardHeight` for its border, the tab sits 8 px above the face, each back is shifted 12 px right and up), the `--replay` digests are the same before and after the merge, and the lane's sphere rows did not change. The look was not checked: the hidden preview pane renders too slowly for the close-up camera to reach a card. The merge also fixes a V19 overlap seen in that check: the follow, live and toast badges sat at the bottom right over the new cost board, and from 900 px wide, where the board shows, they now sit 16 px to its left (`.stage-badge`). Full suite on the merge: 111 files, 2098 tests, in parallel on the first try.
 - Hold an ended subagent at full opacity for 6 seconds, then fade it over 1.5 seconds on wall time at any replay speed, and keep the hold when the parent's run ends (task S2f).
+
+## 0.1.198
+
 - Brief S2f (keep a subagent in view long enough to see). The hub line of `ARCHITECTURE.md` still said agents park only between runs; it now says they stay parked.
+
+## 0.1.197
+
 - Review note on S2e: no fixes. The `--replay` digests of the other fixtures and recordings are the same, and `fixtures/scenario-e` is added (34 activities, 9 layouts). Checked in replay at `/?replay&fixture=scenario-e`: the orchestrator floats above the hub in its armillary shape, and the room shows the three subagents (`OpenCode Go > Count the exported functions`, `OpenCode Go > Check the test names`, `Hermes > Review the release notes`), each with a chip and an indented HUD row; the chips have faded to nothing by the end of the run. This is the first time either was seen. The fade runs on wall time and lasts 1.5 seconds, so no screenshot caught a subagent. Full suite on the merge: 110 files, 2084 tests, in parallel on the first try.
+
+## 0.1.196
+
 - Review note on V19: two fixes. (1) The brief put the board inside the element that carries the screen effects filter, and in the browser fish eye at full strength bent it into a trapezoid with blurred text; the board is a panel to read, like the HUD, so it now hangs on the surface element outside the filter, with `z-index: 2` above the vignette and grain overlay (the control drawer still opens over it). (2) A press or a wheel on the board reached the camera, so dragging on it orbited the room and scrolling its rows zoomed; `camera.js` now skips `.mr-board` as it skips the HUD and the cards. Checked in replay at 40,000 files and 1280 by 800: the board sits 16 px from the right and 18 px above the transport bar, flat with fish eye on, and hidden at 860 px wide. The `--replay` digests are the same before and after the merge. Full suite on the merge: 109 files, 2074 tests, in parallel on the first try.
 - A replay with an orchestrator and subagents (task S2e): `?replay&fixture=scenario-e` loads four runs, three subagents and one failed Claude run from `public/fixtures/scenario-e-*`.
 - The depth plane of each card now covers its face, tab and faint folders, with the sizes and offsets from the stylesheet in a pure helper; the replay digests and the probe's sphere rows are unchanged (task V20).
-- Briefs V19 (the cost board as a screen panel), S2e (a replay with an orchestrator and subagents) and V20 (the depth plane covers the tab and the faint folders).
 - The cost board is a fixed 280 px screen panel at the bottom right, above the transport bar, with scrollable rows, and it takes no part in the card layout or the overview fit (task V19).
+
+## 0.1.195
+
+- Briefs V19 (the cost board as a screen panel), S2e (a replay with an orchestrator and subagents) and V20 (the depth plane covers the tab and the faint folders).
+
+## 0.1.194
+
 - Review note on V18: one fix. The obstacle clearance used half of `CARD_CLEARANCE` (20) where the brief says 40; it is 40 now. The `--replay` digests of every fixture and local recording are the same before and after the merge. Checked in replay at 40,000 files and 1280 by 800: the overview is closer (median card width 32 px), and the board still has 3 cards over it on screen, one of them the root, which the brief keeps in place and which always meets the board's ball. Moving the board beside the hub put 13 cards over it and below and right of the root 7, so it stays where it was; a clearance in 3D cannot keep a panel clear on screen in the sphere room. Full suite on the merge: 109 files, 2070 tests, in parallel on the first try.
+
+## 0.1.193
+
 - Review note on G3f: one fix, which the lane found. Follow mode was meant to stay still when the next card already sits in the middle two thirds of the frame, but `room.js` passed the card's screen box where `followTarget` expects `{ width, height, card }`, so the check never held and the camera always moved after the 4 second hold; the room now wraps the box. The merge also brings the agent lines of `ARCHITECTURE.md` up to date (agents stay parked; the strip and brackets replaced the dashed trace). The README links `drawer.png` and `scale.png`, which wait for AGY's G4b. It ran on OpenCode 3. Full suite on the merge: 109 files, 2064 tests, in parallel on the first try.
+
+## 0.1.192
+
 - Review note on P17: no fixes. 165 lines removed and 13 added; the `--replay` digests of every fixture and local recording (102 lines) are the same before and after the merge, and `npm run pack-check` passed in the lane. `dirname` is slower than the old `parentPath` (239 ms against 6 ms over 200,000 paths) but the room calls it only on focus paths and drawn cards. It ran 8 minutes and 3 cents. Full suite on the merge: 109 files, 2064 tests, in parallel on the first try.
 - Remove what the redesign left unused (task P17): `route.js`, `layout.js` and `fastPath.js` are gone with their tests, `curvePoint`, `SAG` and `SAG_MAX` are out of `strings.js`, and `dirname` from `paths.js` is now the one path helper because it normalises Windows separators and repeated slashes.
 - README for the room, version 3 (task G3f): the folder sphere, the parked agents and the orchestrator above the hub, the strip and corner brackets, follow mode on the touched card, the always-present tree, and the Settings panel with its depth slider and five screen effects.
 - The sphere layout keeps cards clear of the cost board while it is shown, the overview fits only the hub, the board, the root and the pinned cards, and the probe prints the overview distance (task V18).
+
+## 0.1.191
+
 - Briefs V18 (the cost board and the sphere's overview) and P17 (remove what the redesign left unused); G3f runs beside G4b.
 - Fresh screenshots for version 3 of the room (task G4b): overview with two working agents, follow mode close up on one working agent, connect screen, control drawer open on Dispatch, and a seeded room at 40,000 files, each under 400 KB.
 
+## 0.1.190
+
 - Review note on V17: three fixes. (1) The fish eye's barrel map was a base64 PNG written into `Stage.jsx`, and it does not decode: after the header its next chunk has a garbage type and a length of 3.8 billion. With no map, `feDisplacementMap` only shifts the picture, so the fish eye never bent anything, and its timing was taken that way. `src/ui/barrel.js` now draws the map (128 by 128, each point pulled toward the centre by r - 1, the centre and the rim still) on a canvas at load, with a test; the filter uses `color-interpolation-filters: sRGB` so 128 means no shift, and the scale is 240 at full strength (the map moves a pixel at most a quarter of the scale), not 40, which moved about 5 pixels. Checked in replay: the map decodes at 128 by 128 and the picture visibly bulges at full strength. (2) The key handler skipped every key whose target was a button, so after clicking any HUD button, `F`, `0`, `T` and the rest did nothing until the room was clicked; it now skips only Space and Enter on a button, and every key inside the Settings dialog. The fish eye's cost was not measured again with the working map. It ran 71 minutes. Full suite on the merge: 111 files, 2075 tests, in parallel on the first try.
+
+## 0.1.189
+
 - Review note on V15: one fix, a merge. V15 removed V14's bracket code from `agents.js` while S2d added the child views there, so the merge kept S2d's code and dropped `syncTargets`, `BRACKETS` and `wantedTargets`. Checked in replay: the touched card keeps full opacity and its four brackets while the cards off the path fade to 0.25 over about a second, and after `F` the touched card grew from 81 to 229 px wide as the camera closed in. It ran 15 minutes and 9 cents. Full suite on the merge: 111 files, 2064 tests, in parallel on the first try.
+
+## 0.1.188
+
 - Review note on S2d: no fixes. No fixture or recording reports a child, so the room was not checked by eye; the tests build a child view, fade it and check the chip title and the HUD rows. The number keys stay on top agents because `Stage.jsx` maps them to the roster. It ran 12 minutes and 10 cents. Full suite on the merge with V16: 110 files, 2053 tests, in parallel on the first try.
 - Follow mode (task V15) now follows the folder card that holds the touched file, wide with its parent or close alone, holding each card 4 seconds, staying still when the next card is already in the middle two thirds, and easing over 1.2 seconds; cards off a working agent's path dim to 0.25 with their lines and strands while the path cards and lines glow, the V14 brackets move into `cards.js`, and `tests/follow-card.test.js` covers the hold and the middle rule.
-- Add Settings panel in the HUD with always-shown folder depth slider, screen effects switches and strength sliders, pure effectSettings with persistence in machineroom.settings, vignette and grain CSS overlay, fine dust WebGL point field in void.js, and chromatic aberration and fish eye SVG filter (task V17).
+
+## 0.1.187
 
 - Review note on V16: one fix. The probe's tallest row read 17,674 units at 40,000 files and 18,809 at 200,000: a folder at depth d sat 1700 + (d - 1) x 1000 units out, so a touched path 9 to 12 levels deep went past 10,000 units, the overview fit all of it, and in the browser the 157 cards of the 40,000 file replay had a median width of 14 px. The shells now step 1000 units to depth 3 (`FULL_SHELLS`) and 400 beyond (`DEEP_STEP`): the row reads 9,703 at 40,000 files, the cards still never overlap, and no layout moves over 150 units. The sphere in the overview is still small at that size, and the hidden browser pane here could not judge its look; V15's follow mode is the next step. The cost board is no longer an obstacle for the cards (the sphere layout has none). It ran 20 minutes and 16 cents. Full suite on the merge: 109 files, 2039 tests, in parallel on the first try.
 - Subagents drawn beside their parked parent (task S2d): a child takes the next spare shape at 0.6 of its parent's size, joins it with a short line, shows a chip titled PARENT > NAME, fades out over 1.5 seconds after it ends, and the HUD puts it under its parent with a subagent tag.
+
+## 0.1.186
+
+- Add Settings panel in the HUD with always-shown folder depth slider, screen effects switches and strength sliders, pure effectSettings with persistence in machineroom.settings, vignette and grain CSS overlay, fine dust WebGL point field in void.js, and chromatic aberration and fish eye SVG filter (task V17).
+
 - Review note on V14: no fixes. Checked in replay: the agents stay on the ring, the strips run to the cards and the brackets are `#e5ff00`, 14 px corners on one or two targeted cards while agents work. The brackets are added from `agents.js` by finding the card's element through `data-path` and re-adding `is-targeted` each frame, because `cards.js` was not in the brief and rewrites the class name; V15 moves them into `cards.js`. `createHub` now takes the agents, so the orchestrator has no slot. No recording holds an orchestrator, so its place above the hub was not seen. Full suite on the merge: 111 files, 2054 tests, in parallel on the first try.
 - Agents stay parked at their hub slots with the orchestrator above the centre, and the dashed trace is now a two-line strip that runs to the touched file row with four corner brackets on its card (task V14).
 - Wire the folder sphere into the room (task V16): cards are placed by `layoutSphere`, the plan keeps every folder to depth 2 by default through `room.setOptions`, every string is a straight line from the centre or its parent, new cards and opened item lists fade over 0.4 seconds, `layoutCards` and its tests are gone, and the probe chain rows use `layoutSphere` with 0 overlaps.
+
+## 0.1.185
+
 - Review note on V11: no fixes. The plan skip in `cards.js` is complete: `state.js` always replaces an agent's `focus` array, never changes it in place, so the identity check sees every new touch; recent touches age with `state.latest`; a pin, a seek (`sync`) and a new obstacle bump `pinnedVersion`; a child agent from S2c changes the agent count. Checked in replay by seeking: the cards and rows still follow the run. The p95 target of 33 ms was met at 40,000 files and missed by 3 ms at 200,000. `fastPath.parentPath` repeats `dirname` without its checks, and `strandPoints` now repeats the curve's sag formula; V16 replaces the curves with straight lines. It ran about 127 minutes. Full suite on the merge: 110 files, 2047 tests, in parallel on the first try.
+
+## 0.1.184
+
 - Review note on V12: two fixes. (1) The probe rows timed 39 cards, but with V13's `alwaysDepth` the room can draw 300, and there the cold layout took about 1.2 seconds (370 ms for the 158 cards of the 200,000 file tree at depth 3): `settleDirections` ran all 600 passes, because the pull toward each card's starting direction keeps a crowded cone from getting under its stop of 0.15 units. It now also stops at 2 units (the 10 unit margin stays) and when the worst overlap has not improved by 1 percent in 25 passes, and the repair after it handles the rest: 300 cards in 110 ms and the 158 in 91 ms, no overlap, warm adds unchanged (about 1 ms, nothing else moves). (2) The places carried their card size as hidden, non-enumerable properties for the next warm start, which a copy of the values lost; they are plain properties now. The shells are 1700 and 1000 apart, not 1400 and 700, so the 300 folder and 80 child tests do not overlap. It ran 49 minutes and 20 cents. Full suite on the merge: 109 files, 2043 tests, in parallel on the first try.
+
+## 0.1.183
+
 - Review note on S2c: no fixes. No fixture or local recording holds a `subagent` or `delegate` line, so the `--replay` digests are the same for all 95 (the parser tests use the line shapes S1a quotes). The engine and the event log skip the two new types; until S2d a child appears only in the HUD agent list, and `src/live/livePlayer.js` still gives no `parent` or `depth` in its snapshot (S2d). It ran 15 minutes and 9 cents. Full suite on the merge: 108 files, 2031 tests, in parallel on the first try.
+
+## 0.1.182
+
 - Review note on V13: no fixes. With `alwaysDepth` 0 the `--replay` plans digests are the same before and after for all 94 fixtures and local recordings (the lane's worktree has only the 5 fixtures). The cap of 300 counts the root, and parents share it breadth first in name order; `pinned` is only ever `true`, so V16 reads `view.pinned === true`. Full suite on the merge: 107 files, 2020 tests, in parallel on the first try.
 - The folder plan keeps every folder down to a chosen depth in the room, closed and pinned, capped at 300 with the rest in back layers, while only the paths agents touch now or recently open and list items (task V13).
 - Subagents in the state (task S2c): the OpenCode and Hermes parsers emit `agent.spawn` and `agent.end` beside the existing `other` tool call, `state.js` adds children with parent and depth up to 3 and closes them on the parent's run end, `player.snapshot()` gives parent and depth, and 9 tests cover the children and both parser lines; every fixture and local recording replays to the same activities as before.
 - The folder sphere layout (task V12): `src/engine/sphere.js` puts the root 1000 below the hub centre, every folder on a shell by depth (1700 for the first shell and 1000 between shells), spreads top-level folders by a Fibonacci spiral inside a 25 degree cap at each pole, keeps every pair of cards at least their half diagonals plus 40 apart and every card clear of the hub, and holds warm places still while moving only a crowded family; `scripts/scale-probe.mjs` times the 200,000 file tree cold and warm and counts 0 overlapping chain layouts, and `tests/sphere.test.js` covers 300 folders, 80 siblings, shells and the root.
 
+## 0.1.181
+
 - Briefs for the room, version 3 (the owner's redesign): V12 (the folder sphere layout), V13 (the plan for an always-present tree), S2c (subagents in the state, replacing S2a and S3a), V16 (wire the sphere, straight lines and the fade in), V14 (agents parked on the hub, the orchestrator on top, a yellow strip and corner brackets), V17 (Settings: the depth slider and the screen effects), V15 (the camera on the touched card, the rest dims), S2d (subagents beside their parent, replacing S2b) and G3f. G4b waits for V17.
+
+## 0.1.180
+
 - Review note on P15: one fix. The lane met the CPU budget by closing the watcher on a burst and polling, but it polled with reads back to back, and the brief's CPU row counted only the bridge. Each `git ls-files` keeps about one core busy (measured 0.36 to 0.45 seconds of CPU in 0.4 seconds at 40,000 files), so at 40,000 files the burst started 24 reads, about 74 percent of a core in git on top of the bridge's 8, against 66 percent for the bridge alone on main. The poll now starts a read only when three times the last read's length has passed since it ended: at 40,000 files the burst starts 6 reads (git about 18 percent, the bridge 2), and the last file still arrives in 1.5 seconds; at 200,000 files 4 reads, the bridge 7 percent, the last file in 1.7 seconds, a new file in 1.8, every budget met. It ran 47 minutes and 13 cents. Full suite on the merge: 107 files, 2010 tests, in parallel on the first try.
+
+## 0.1.179
+
 - Review note on G3e: one fix, from the brief. Its check, every command and number in the README must appear in `ARCHITECTURE.md`, led the lane to remove `paperclipai run` (twice), the speed clamp of 0.25 to 64, the 5 second arrow seek and the seven drawer tabs, all true in the code; they are back. The links to `drawer.png` and `scale.png` stay broken until AGY's G4b. Full suite on the merge: 106 files, 2007 tests, in parallel on the first try.
+
+## 0.1.178
+
 - Review note on P16: no fixes. 661 lines out, 5 in. The `--replay` digests of the activities, folder plans and layouts are the same before and after for all 91 fixtures and local recordings (the lane's worktree has only the 5 fixtures). `treeFromState` in `layout.js` now has a caller only in `tests/live.test.js`; it stays, as the brief asked. Full suite on the merge: 106 files, 2005 tests, in parallel on the first try.
 - Remove the collapse plan and the whole-tree layout (task P16): `src/model/collapse.js` and its tests are gone, `layoutTree` and the helpers and constants only it used are out of `src/engine/layout.js`, and the scale probe no longer times a collapse or hashes one, while the activities, plans and layouts digests stay the same.
 - README for big repositories (task G3e): a Big repositories section with the measured numbers at 40000 and 200000 files, `scale` and `fps` among the query parameters, and a Screenshots section for the four images, which replaces the placeholder line.
 - Brief P15 (the bridge on a real 200,000 file checkout): `scripts/scale-live.mjs` and `npm run scale-live` build a seeded git checkout under `%TEMP%\machineroom-scale\FILES-SEED` (reused, a 2 GB free check, batch writes with bounded open files, the scale author), start `createBridge` in a child process on the dead port 3999 and print the live rows; `tests/scale-live.test.js` runs it at 2,000 files with bursts of 200 and checks the new file and that no ignored file is sent.
 - The bridge drops its recursive watcher when a burst starts and polls until two quiet seconds, and a folder-shaped `GET /api/tree` reuses a tree read in the last second: at 200,000 files the folder gzip row falls from 2113 to 307 ms, the new file row from 2187 to 1751 ms and the two CPU shares from 70.35 and 69.85 to 10.85 and 8.19 percent (task P15).
 - Cut per-frame costs in cards and strings at 200,000 files (task V11): parentPath helper, bail out on unchanged card view inputs, skip redundant card DOM and transform writes, and cache string scatter offsets.
+
+## 0.1.177
+
 - A third OpenCode lane, `opencode3`, in `docs/agents/lanes.json`, with its own worktree; the dispatch panel lists it and maps every `opencodeN` lane to the OpenCode agent. Briefs P15, P16, G3e, V11 and G4b for Saturday.
+
+## 0.1.176
+
 - Review note on P14b: one fix. In `repairCards`, a pair with the root card goes to the nearest free place before the pair code runs, so the four root branches in it could never run; they are out, and the numbers are the same. Measured with the review's own chain (the room's warm started chain, the move of a layout being the mean distance the cards it shares with the layout before moved): over every fixture and recording (3251 layouts) 0 overlapping layouts (main 11), 88 moves over 150 units (main 86) and a worst move of 404 (main 404); at 200,000 files (399 layouts) 0 overlapping (main 308), 82 moves (main 52; the lane's probe chain, with other activities, gives 55 against 47) and a worst move of 322 (main 335), the layout 4875 units tall (main 3796); `layoutCards` p95 17.5 ms against 17.1. The lane changed P14's test of 40 tall cards to check no overlap only, since a card that does not overlap now stays where the relaxation put it. It ran 75 minutes and 32 cents. Full suite on the merge: 107 files, 2028 tests, in parallel on the first try.
 - Brief P14b (repair only the cards that overlap, and keep the room still, for OpenCode 2): the repair separates only the cards in an overlapping pair and returns the repaired places; over every fixture and recording 0 layouts overlap, 74 move over 150 units (target 90) and the worst move is 404 (target 600), and in the seeded 200,000 file chain 0 overlap, 55 move (target 80), the worst move is 312 (target 1000) and `layoutCards` p95 is 0.5 to 0.9 ms above main's (target 2).
+
+## 0.1.175
+
 - P14 rejected (OpenCode, 31 minutes, 8 cents): it left no overlap in any layout, but `packCards` repacked every card into columns by depth whenever one overlap remained, and the next warm start began from the places before the repair, so the room jumped between two arrangements: at 200,000 files the cards moved over 150 units on average in 253 of 399 layouts (main 52) and up to 7605 units (main 335), and over the recordings up to 2468 (main 404). The brief had no bound on movement. Brief P14b keeps its `cardOverlaps`, probe row and tests, repairs only the cards that overlap, and sets limits on movement.
 - Brief P14: `cardOverlaps` lists crossing cards and cards on the hub or an obstacle, and a layout the relaxation leaves with an overlap is packed into columns on the same side; the scale probe counts overlapping layouts and reports none (0.1.175).
+
+## 0.1.174
+
 - Brief P14 (no two folder cards overlap, even at 200,000 files, for OpenCode): over every fixture and recording 11 of 3027 layouts end with an overlap, and in the seeded replay at 200,000 files 308 of 399, because `CARD_V` clamps a crowded column; the new step acts only when the relaxation leaves an overlap, so a clean layout keeps every place.
+
+## 0.1.173
+
 - Review note on V10: five fixes. (1) `relaxCards`: the shorter warm passes (30 instead of 260, the parent pull only for fresh cards) left 45 overlapping pairs over the 3027 layouts of every fixture and recording, where main left 12, and the skip of every pair on opposite sides of x=0 could hide two wide cards overlapping near the middle. Both are out; a warm layout now only stops as soon as nothing overlaps, which leaves 11 pairs (worst 92 units, main 149) and is a third faster on the recordings; at 200,000 files it is as fast as before. (2) The layout key in `cards.js` held the path, state and item counts, but a card's size also changes with its faint folders and its `+ N more` line, and `setObstacles` did not clear it, so a grown card or a new cost board box skipped the layout; the key is now each card's width and height, and `setObstacles` clears it. (3) `Stage.jsx` kept every frame time in `window.__ALL_DELTAS__` for as long as the page ran, and set `window.__FIRST_FRAME_MS__` and `window.__FPS_STATS__`; they are out, and only the 120 frame ring is kept. It also emptied the assistant's path list above 20,000 files, which breaks `focusPath` on a big repo and cost nothing per frame, since the list is built only when the counts change; that is back. A `speed` parameter for the replay, which the brief did not ask for, is out. (4) `scaleSize` read plain objects and numbers too; it now reads the query only. (5) The frame line was in capitals at 0.85 white, because `.hud-title p` outranks `.hud-fps-line`; the rule is now `.hud-title .hud-fps-line`. Kept: the strand and line updates only for strings whose ends moved, the cached file list in `viewInput`, the scale replay and the frame line. Checked by eye at 1280 by 800 and 1024 by 768: `?replay&scale=40000&fps` and `scale=200000` load and draw, the frame line reads `frame N ms, p95 N ms` in lowercase at 0.7 white, and the plain replay shows no line. Frame times were not measured again: the browser pane was hidden, which runs about one frame a second. Full suite on the merge: 106 files, 2015 tests, in parallel on the first try.
+
+## 0.1.172
+
 - Review note on P12: no fixes. The lookup checks the same boundaries as the old pattern, character by character, and sorts the matches by their place in the list, so the touches come out in the same order; it even keeps a duplicate entry twice in the base name matches, as `files.filter` did. Its two files outside the brief were needed: `pipeline.js` builds the index when the pipeline starts, so the first line does not pay for it, and `package.json` packs the new module (`npm run pack-check` passed, 70 files). The comparison with the old walk passed on every shell command in the 80 local recordings too, which the lane's worktree does not have (they are not in git). With P12 and P13 in, the probe at 200,000 files gives the shell and read line 0.53 ms mean and 8.18 ms worst (14 and 33 before), the gzip folder answer 568 KB and the first event with `since` 100 bytes; still over are the plain size rows, which a page older than P13 gets, and `planCollapse`, which the room does not use. Full suite on the merge: 105 files, 2007 tests, in parallel on the first try.
+
+## 0.1.171
+
 - Review note on P13: no fixes. Checked by hand on a bridge with the dead Paperclip port: the gzip answer unpacks to the same JSON as the plain one (711 against 4199 bytes on 300 files), and after a new file the first `tree` event of a stream opened with `since` held only that file. Checked in the page with the fake Paperclip: Chrome read the gzip answer (303 files, `version` 1) and opened `/events?history=1&tree=folders&since=1`. The version always matches the list it names, since `startTreeRead` runs `publishTree` before it answers; a stream that opens again keeps its first `since`, which at worst sends files the page already has. The page keeps the version per bridge address in `src/live/tree.js`, because `Stage.jsx` is not the lane's file. The proxy route reads the version but has no tree stream to send it on, as the lane said. Full suite on the merge: 104 files, 2000 tests, in parallel on the first try.
 - Brief P13 (a smaller first file list, for OpenCode 2): `GET /api/tree` answers gzipped when the request names gzip, the folder answer carries a `version`, and a stream opened with `since` gets only the files added since that version. The scale probe adds a gzip row and a first-event-with-since row.
 - Shell names are looked up from a file index, so the Hermes read and shell line at 200,000 files takes 0.45 ms mean and 6.00 ms worst against 16 ms (task P12).
 - Seeded scale replay under /?replay&scale=N, HUD frame timing with &fps, and room layout and strings updates optimized for large trees (task V10): scaleTree moves to pure model, scaleSize validates N from 1000 to 500000, Hud shows rolling median and p95 frame timing, relaxCards and strings skip unchanged elements, and tests in tests/scale-tree.test.js.
 
+## 0.1.170
+
 - Briefs P12 (shell names looked up from an index, for OpenCode), P13 (a smaller first file list, for OpenCode 2) and V10 (the room at 200,000 files in the browser, for AGY), from the scale probe at 200,000 files in 20,000 folders: the shell and read line pipeline took 14 ms mean and 33 ms worst, and the first file list 3.1 MB, sent twice. The owner's target is the app finished by Saturday 2026-10-24 (in `PLAN.md`). On Node 24.22.1 three full parallel runs passed with no retry; Known limits says so.
+
+## 0.1.169
+
 - Review note on Q1f: no fixes. The accept queue chains each call on the last one whether it failed or not, and `upstream` keeps its timeout, so a slow Paperclip holds the queue for at most that long. Its race test fails on the old `server/plans.js`, as the lane checked. The merge kept main's D4 row (fixed in Q1c) beside the lane's D5 row. D1 to D8 of the delta review are now all fixed. Full suite on the merge: 104 files, 1991 tests, on one worker after Node crashed on all 3 parallel tries.
+
+## 0.1.168
+
 - Review note on U20: no fixes. The texts, classes and buttons match the brief, and each panel gained `initial*` props so a server render can reach loaded data, as the lane said. Checked by eye with the mock at 1280 by 800 and 1024 by 768: Request changes on one approval and then Reject on the other leaves one card open, a note adds ` Your note goes with it.`, the card's Reject decides it (2 pending became 1); Set budget opens `Set Claude Code's monthly budget to $12.50 in Paperclip?` with the amount box locked, and the card's button saves it; Hire agent opens the hire card, Cancel writes nothing (5 agents before and after), and Save on an edited agent asks first and then shows `Claude Code updated.` The hire card names the adapter key (`on process`), as the brief's HARNESS reads. Full suite on the merge: 104 files, 1988 tests, in parallel on the first try.
 - CI on 0.1.166 failed on Windows only: `tests/bridge-reviews.test.js` could not remove its temp folder (EPERM), the same error OpenCode 2 saw once in `tests/bridge.test.js`. Every test that removes a temp folder now passes `maxRetries: 5, retryDelay: 100` to `rmSync`, which retries on EPERM and EBUSY. The v7 actions themselves ran: the Ubuntu job passed.
+
+## 0.1.167
+
 - Both OpenCode lanes get a note in `lanes.json`: their shell may start in the owner's checkout, so each command begins with `cd` to the lane's worktree in forward slashes, nothing is written or run in `C:\GitHub\MachineRoom`, and unwanted output goes to `/dev/null`. U20's first command had left a file named `nul` in the main checkout. Two review lessons in `ORCHESTRATOR.md`.
 - Budget Save, Approve, Request changes and Reject, and the agent builder's Hire agent and Save open a confirm card before they write to Paperclip (task U20); Post on a comment stays one click.
+
+## 0.1.166
+
 - Brief U20 (confirm cards for Budget Save, Approve, Request changes and Reject, and the agent builder's Hire and Save, for OpenCode). The owner chose these on 2026-10-22; comment Post stays one click. The owner also chose to upgrade Node 24 on this machine, after which the 0xC0000409 crash and the one-worker workaround are checked again.
 - Review note on Q1e: one fix. `latestOnly` came with aliases (`next`, `start`, `isLatest`, `current`, `valueOf`) and a lookup by id that nothing calls; it is now a closure of five lines that answers a check per read, which is all `Stage.jsx` uses, and the first test and the test of two separate helpers read only that. The behaviour tests (an older answer dropped, an older error that does not clear a newer board, the newest error that does) are kept. Full suite on the merge, on one worker: 102 files, 1969 tests.
+
+## 0.1.165
+
 - Review note on Q1c: no fixes. It touched `src/live/source.js` and `tests/live.test.js` beyond its list, as the owner allowed: the proxy route calls `reset()` on a reconnect, and the proxy test helper numbers `seq` per run. Its rule assumes Paperclip numbers `seq` per run across stdout and stderr; over the 83 recorded runs here, 5641 log chunks all carry a `seq`, none has a gap, and 11 places switch stream inside a run, so the rule never splits a real recording. The masker and live tests pass with the recordings here (229 tests). Full suite on the merge, on one worker: 102 files, 1963 tests.
-- Brief Q1f (one plan accept at a time, and a planner's tests stay in `tests/`, for OpenCode 2).
 - Brief Q1f (D5): the plan reader refuses a test path outside `tests/` with `Brief ID names a test outside tests/: PATH.`, and the bridge runs plan accepts one after another, so two accepts that start together both land in `TASKS.md`.
+
+## 0.1.164
+
+- Brief Q1f (one plan accept at a time, and a planner's tests stay in `tests/`, for OpenCode 2).
 - Review note on Q1d and G8: no fixes. `src/live/bridge.js` already opened `/events?tree=folders`, so the page keeps its tree events; a page older than 0.1.141 (P3d) opened `/events` with no parameter and now gets its file list only from `GET /api/tree`, which is fine since the page and the bridge ship together. It changed `tests/tree-format.test.js`, which the brief did not name, because that test asked for the old behaviour, and said so. G8: it read the v4 to v7 release notes of both actions and found no break for this file's inputs. Full suite on the merge, on one worker: 102 files, 1953 tests. CI is checked after the push.
+
+## 0.1.163
+
 - The orchestrator is an interactive OpenCode session in the main checkout from 0.1.163, on the owner's subscription, since Claude's and the cloud session's usage runs out. `ORCHESTRATOR.md` says how to start it, that the two OpenCode lanes stay the workers, how AGY checks a UI branch by eye for it, that a push needs the owner's yes and a clean history audit, how to read CI after a push, the one-worker test run for when Node crashes three times, and how to merge the cloud's last report (Q1c).
+
+## 0.1.162
+
 - Review note on Q1b: two fixes. `briefMarkdown` compared the title it read back with the raw title, so a planner title with two spaces or a tab came back as an empty text, and the accept route wrote that empty line to `TASKS.md` and still answered that the brief was added. It now compares with the folded title, `parsePlan` reports `Brief ID cannot be written as one line of the brief list.` for any brief it cannot write, and the accept route answers 400 `Could not write TASKS.md.` instead of writing an empty line; a test in `tests/plan.test.js`. The brief text's colour was an inline style because the brief left out `src/styles.css`; it is now the `.plan-brief-text` rule there. D5's refusal of a test path outside `tests/` was not in the brief and is not built. Checked by eye at 1280 by 800 with the mock: after Ask, each brief shows its text below its files and tests, in Space Mono at 11 pixels and white 0.7. Full suite on the merge, on one worker: 102 files, 1950 tests.
 - CI uses `actions/checkout@v7` and `actions/setup-node@v7`, both on Node 24, with no input changes: the checkout fork guard covers `pull_request_target` and `workflow_run`, setup-node keeps explicit `cache: npm`, and neither step publishes (task G8).
 - The bridge sends `tree` events only to a page that opened `/events` with a `tree` parameter, so the control client's stream gets none, and the scale probe reads a fresh `mkdtempSync` folder and removes it (task Q1d).
+
+## 0.1.161
+
 - CI on Linux failed from 0.1.155 on: U17's test that a retired lane runs with `--force` started the runner without `LOCALAPPDATA`, which Hermes's binary path needs and Linux does not set, so the dry run exited 1. The test now passes its own `LOCALAPPDATA` and `APPDATA`, as the other run-lane tests do. Windows has the variable, so the suite passed here. Brief G8 (CI actions on Node 24, for OpenCode 2), and Q1d no longer waits for Q1c: it keeps to `publishTree` and puts its bridge tests beside the tree event tests.
 - Review note on Q1a: one fix. Its new test starts the fixture builder with the default output name, so if the key check ever failed, `npm test` would overwrite the committed `public/fixtures/sandbox-run.jsonl`; the test now passes the name `mr-test-refused`, checks that no such file was written and removes it if one was. `findLeaks` covers the `sk-`, `AIza` and `ghp_` cases that left `SECRET`, at the lengths real keys have. The five committed fixtures pass the new check. The OpenCode process exited 1 after it had written its final report; the work was complete. Full suite on the merge: 102 files, 1944 tests, on one worker.
-- The split masker starts a new line after a gap (Q1c, D4 of the delta review): `createSplitMasker` keeps the last `seq` of each run and, when a chunk's `seq` is not that number plus one, releases what the run holds and drops its kept lines; a chunk still marked `truncated` does the same for its stream; the new `reset()` releases everything and drops every kept line, and the bridge calls it when the Paperclip socket opens, in order behind frames that wait for a restore. A key at the start of a chunk after missed text is masked again, as in 0.1.151. `push`, `due`, `nextDue` and `flush` are unchanged. The proxy route (`openStream` in `src/live/source.js`) calls `reset()` instead of `flush()` when its socket closes, so the next socket starts a new line too, and `tests/live.test.js` numbers `seq` per run as Paperclip does.
-- The cost board and the task line keep the newest answer (task Q1e): pure latestOnly in src/ui/panels/notices.js numbers reads and tells whether an answer is still the newest one started, used in Stage.jsx updateCosts and updateTasks for the answer and error paths so an older read or error never replaces newer state; tests in tests/panels-notices.test.js.
+
+## 0.1.160
+
 - Review note on U19: no fixes. One masker serves a whole `openStream`, so frames held when the socket closes are flushed before the new socket's first frame, and `close()` clears the hold timer. When Q1c adds `reset()` to the masker, `openStream` must call it on a reconnect too, or the proxy route keeps the false join D4 describes. Full suite on the merge on one worker, since the default run crashed inside Node on all three tries twice while both lanes ran their own suites: 102 files, 1931 tests.
 - The fixture builder refuses every key shape the audit knows before it writes (task Q1a): `fixtureLeak` runs `findLeaks` over each frame line and stops with `possible key in frame N; fixture not written` and exit code 2, while `SECRET` keeps the bearer, JWT, Slack and e-mail cases.
 - Brief Q1b (the planner's briefs are written as the owner read them, for OpenCode): the plan reader refuses a title that can break the brief head and checks test paths, the brief writer returns an empty line when the brief list would read another owner, the bridge pins an accept to the planner comment the owner read and answers 409 when a newer one exists, the client and the mock send that plan id, and the Plan tab shows each brief's text through `visibleText`.
+
+## 0.1.159
+
+- The cost board and the task line keep the newest answer (task Q1e): pure latestOnly in src/ui/panels/notices.js numbers reads and tells whether an answer is still the newest one started, used in Stage.jsx updateCosts and updateTasks for the answer and error paths so an older read or error never replaces newer state; tests in tests/panels-notices.test.js.
 - Review note on U18: no fixes. Two runners that read the same dead holder: the second either fails to take the takeover file and is refused while the first is alive, or takes it after the first finished and sees the first one's process in the lock. A takeover file left by a dead start costs one refused start. `buildCommand`'s new refusal is printed by the candidate's own error handler, after the worktree checks and before any build. On this machine `resolveOpencodeBinary` still finds the real `opencode.exe` through the shim search. Full suite on the merge: 102 files, 1924 tests. A first run failed one test whose name the kept output did not show; the rerun passed, and U18's three test files passed five runs in a row.
+
+## 0.1.158
+
+- The split masker starts a new line after a gap (Q1c, D4 of the delta review): `createSplitMasker` keeps the last `seq` of each run and, when a chunk's `seq` is not that number plus one, releases what the run holds and drops its kept lines; a chunk still marked `truncated` does the same for its stream; the new `reset()` releases everything and drops every kept line, and the bridge calls it when the Paperclip socket opens, in order behind frames that wait for a restore. A key at the start of a chunk after missed text is masked again, as in 0.1.151. `push`, `due`, `nextDue` and `flush` are unchanged. The proxy route (`openStream` in `src/live/source.js`) calls `reset()` instead of `flush()` when its socket closes, so the next socket starts a new line too, and `tests/live.test.js` numbers `seq` per run as Paperclip does.
 - Review note on V9: three fixes. `reducedMotion` answered a function that also carried `still` and `mql`, and `sprites.js` exported it twice more as `motionHelper` and `createMotionHelper`, which nothing used; it now answers `{ mql, still }` and the aliases are gone. `camera.js` and `strings.js` imported `still` and never used it. Terminal chips still glided after their agent while the agent jumped, because the brief left `terminals.js` out; the chip now follows with `easeRate` too. Checked by eye at 1280 by 800 in the replay with reduced motion emulated through `MediaQueryList.prototype.matches`: after `1` the camera moved in the first frame and then held still, with the setting off the same key eased over several frames, turning the setting on and off applied without a reload, and after a seek the chips moved in one frame and held. Full suite on the merge: 102 files, 1916 tests.
+
+## 0.1.157
+
 - Briefs Q1a to Q1e from the delta review. Q1a (D1, the fixture builder's key check) goes to OpenCode, since Hermes is retired. D7 is in `src/Stage.jsx`, which is AGY's, so it left Q1d and became Q1e for AGY. Q1d waits for Q1c, since both change `server/index.js` and `tests/bridge.test.js`. Q1c is the cloud session's.
 - Review note on Q1: no fixes. D1 checked on main: none of the seven key shapes, built from pieces, matches `SECRET` in `scripts/build-fixtures.mjs`, and the history audit names no key in the tracked fixtures today. D2 checked on main: `parseBriefs` reads the review's title as owned by Claude and done.
 - The proxy route masks keys too (task U19): `openStream` in `src/live/source.js` runs one `createSplitMasker` per stream, holds a chunk whose tail could still grow into a key for at most 1 second, releases held frames on one timer, drops them on close and flushes them before a reconnect; tests in `tests/live.test.js`, and the README, the architecture's Known limits and the audit's N6 row say so.
+
+## 0.1.156
+
 - Brief U19 (the proxy route masks keys too, for OpenCode). The UI audit table now records the fixes for N1 to N5 (U6 to U10a, 0.1.122 to 0.1.132).
 - Review note on G3d: no fixes. Every key, flag, default port and folder, query parameter, drawer tab and confirm card it names was checked against `src/ui/Hud.jsx`, `src/Stage.jsx`, `bin/machine-room.mjs`, `server/index.js` and the panels. It declined the brief's `never spends money without a confirm card`, because Start task creates a Paperclip task that can wake its agent with no card, and wrote that exception instead. It removed seven claims the code no longer backs, among them `--port` on `doctor`, a key check in `pack-check` and a lane run drawn live in the room.
 - A runner replaces a stale lane lock only under `LANE.lock.takeover`, and a takeover file left by a dead start is cleared with `Another start of the LANE lane stopped half way. Start it again.` (task U18, N9).
 - `npm run candidate` refuses with `npm was not found. Run this as npm run candidate.` when neither `npm_execpath` nor `npm-cli.js` beside Node exists, instead of running npm through a shell (task U18, N10).
 - The assistant finds `opencode` by its absolute path with `programPath` after `OPENCODE_BIN` and the shim search, and starts nothing when it is missing (task U18, N11).
+
+## 0.1.155
+
 - Brief U18 (one runner replaces a stale lock, and nothing starts by its bare name, for OpenCode 2). The audit table now records that N7, N8 and N9 were fixed in 0.1.116 (U5d), and that a narrower race is left of N9.
 - Review note on U17: one fix. The mock client had no `opencode2` lane, so in the demo Run brief on a second OpenCode brief failed with `Choose a lane from the list.`; `SAMPLE_LANES` in `src/control/mock.js` now has it. Checked by eye at 1280 by 800 in the replay with the mock: with the mock's `opencode` run going, the confirm card for U4 reads `Lane: opencode2`, and with no run it reads `Lane: opencode`. Full suite on the merge: 101 files, 1902 tests.
-- Brief G3d (the README for the room as it is now, OpenCode).
 - README for the room as it is now (task G3d): the agent callouts, the cost board below the hub, the drawer tab by tab, the lane run and recording path, the Reviews merge after a confirm card, the Plan and Route rows, `npm run serve -- doctor` and `up`, and the key masking in the bridge.
+
+## 0.1.154
+
+- Brief G3d (the README for the room as it is now, OpenCode).
 - Review note on U15 and U16: one fix. U16 set the review list's limit to 160 seconds from three lanes of five git calls at 10 seconds each, read one lane after another in `server/reviews.js`; with `opencode2` there are four lanes, so it is now 210 seconds. U15 changed one activity over the 74 recorded runs, the one it meant to: `grep -o '<title>[^<]*</title>' dist/index.html` in `hermes-P1c` now reads `index.html` instead of writing it. Full suite on the merge: 101 files, 1893 tests.
-- Brief U17 (a retired lane does not start, and Run brief picks the free OpenCode lane, for OpenCode 2).
 - A retired lane is refused before it starts: `npm run run-lane` and `POST /api/control/runs` answer `The hermes lane is retired.` unless the runner gets `--force`, and Run brief picks a free lane of the same harness (`runLaneFor` in `src/ui/panels/briefs.js`), with the confirm card naming the lane it will use.
+
+## 0.1.153
+
+- Brief U17 (a retired lane does not start, and Run brief picks the free OpenCode lane, for OpenCode 2).
 - Review note on C4f: no fixes. The first run of the second OpenCode lane, beside the first lane's U15 and U16. It also changed one expectation in `tests/control-contract.test.js`, which reads the mock policy and which the brief failed to name, and said so. It ran only the policy, route and contract tests, so the full suite and the build ran at merge: 100 files, 1881 tests. The tiers now read small `opencode2` then `agy`, medium `opencode` then `agy`, large `agy` then the owner.
 - Small work routes to `opencode2` and medium work to `opencode`, each on `opencode-go/deepseek-v4.1-flash` at `max` with `agy` on `Gemini 3.8 Flash (High)` at `high` on another provider when OpenCode's quota is over, and Hermes leaves the policy but keeps its lane (C4f).
-- Hermes is retired (the owner, 2026-10-22: subscriptions instead of OpenRouter credits), and a second OpenCode lane runs beside the first: `opencode2` in `docs/agents/lanes.json` with its own worktree, told not to start the real Paperclip and to touch only its brief's files. `briefProblems` in `src/briefs/run.js` lets a lane named with a number take its harness's briefs (`opencode2` takes OpenCode's); a test in `tests/run-lane.test.js`. Brief C4f takes Hermes out of the routing policy.
 - Security review of what changed since the two October audits (Q1, report only): `docs/agents/AUDIT-2026-10-DELTA.md` lists 8 findings (1 High: the fixture builder's key check misses OpenRouter, Anthropic and other key shapes; 3 Medium: a planner title can change a brief's owner in `TASKS.md`, the Plan tab adds briefs whose text the owner never saw, and the split masker joins a chunk across a gap and lets a key through; 4 Low) with briefs Q1a to Q1d, and what was checked and found sound.
+
+## 0.1.152
+
+- Hermes is retired (the owner, 2026-10-22: subscriptions instead of OpenRouter credits), and a second OpenCode lane runs beside the first: `opencode2` in `docs/agents/lanes.json` with its own worktree, told not to start the real Paperclip and to touch only its brief's files. `briefProblems` in `src/briefs/run.js` lets a lane named with a number take its harness's briefs (`opencode2` takes OpenCode's); a test in `tests/run-lane.test.js`. Brief C4f takes Hermes out of the routing policy.
 - Brief Q1 (a security review of what changed since the two October audits, report only, for the cloud session).
 - Review note on U14: no fixes. On Windows `tests/mask-split.test.js` ran 168 tests, the 30 of the cloud plus the recording cases over the 69 recordings in `public/recordings` that its VM lacked, and all passed. Over the 74 recorded runs (4934 log chunks, recordings and fixtures as recorded) no chunk was held. The bridge test that a held tail goes out in under 2 seconds passed in the full suite while OpenCode ran its own. Full suite on the merge: 100 files, 1876 tests.
 - The control client gives up on a request that never answers (task U16): every request gets an `AbortController` whose abort is scheduled through the injected `setTimer` and cleared through `clearTimer`, passed to `fetchImpl` as `signal` and kept until the body is read, with 30 seconds by default and a longer limit for the routes the bridge can take longer over, so a panel no longer stays on its loading state for ever; tests in `tests/client-timeout.test.js`.
 - A quoted `>` no longer turns a read into a write, and a known path inside a longer known path is no longer touched twice (task U15): `touchesForCommand` looks for the write operator outside quoted text but keeps a quoted command string after PowerShell, pwsh, bash, sh or cmd, and keeps only the longest match when one known path lies inside another; tests in `tests/commands.test.js`.
-- Briefs U15 (a quoted `>` is not a write, and the longer path wins; the security audit's N13) and U16 (the control client gives up on a request that never answers; N15), both for OpenCode in one run.
 - The bridge masks a key that Paperclip splits across two or more chunks of a run (U14): `createSplitMasker` in `src/briefs/audit.js` holds a chunk whose last line could still grow into a key, with every later frame, until the next chunk on that run and stream, the run's end or 1 second, and keeps the number, ids, `seq` and order of frames. `tests/mask-split.test.js` cuts every recording at seeded points.
 - Reduced motion across the room (task V9): pure easeRate and the reducedMotion helper in src/engine/sprites.js answer still() from prefers-reduced-motion; the camera, folder cards, agents and pulses jump, shapes, the dash ring and dust stop turning, labels fade without rising, and tests in tests/motion.test.js cover easeRate and the helper with matchMedia stubs.
 
+## 0.1.151
+
+- Briefs U15 (a quoted `>` is not a write, and the longer path wins; the security audit's N13) and U16 (the control client gives up on a request that never answers; N15), both for OpenCode in one run.
 - Briefs U14 (mask a key that Paperclip splits across two chunks, the cloud session) and V9 (reduced motion across the room, AGY). The owner kept the separate app and skipped the plugin page; `PLUGIN-PAGE.md` records the decision.
 - Review note on W6b: no fixes. `agentTasks` also falls back to a task's `title` when it has no identifier and reads a few more time fields than the brief asked for; harmless, left as written. Checked in the browser with the mock in replay mode at 1280 by 800: seeking to a third and to two thirds, OpenCode Go's callout read `JC-19` under its name in Space Mono 400 at white 0.7, and the callouts of Claude Code, Hermes and agy had an empty task line hidden by `:empty`. The mock's live run stays `running` after the replay's OpenCode run fails, so the failed callout keeps `JC-19`; in live mode the line follows Paperclip. Full suite on the merge: 99 files, 1705 tests.
+
+## 0.1.150
+
 - Review note on E2a: no fixes. Spot-checked in the installed 2026.1012.0: a plugin worker starts through `fork` in `plugin-worker-manager.js`, `listPluginLocalFolderEntries` caps at 5000 entries, the UI folder is served at `/_plugins/:pluginId/ui/*`, and nothing outside its own file imports `plugin-runtime-sandbox.js`. Briefs E2b to E2d stay in `PLUGIN-PAGE.md` until the owner decides whether a plugin page is worth it.
+
+## 0.1.149
+
 - Review note on U13: no fixes. `start()` now waits for the first tree read before it listens, so a page never sees an empty `lastFiles`; it already returned a promise and every caller awaits it. Checked on Windows with a bridge on this checkout and Paperclip on the dead port 3999: `GET /api/health` answered in 111 ms while the `GET /api/tree` read beside it took 320 ms (294 files), and a file created in the folder reached an open `/events` page as a `tree` event. `npm run scale-probe -- --replay` printed the same 72 lines before and after. Full suite on the merge: 98 files, 1698 tests.
+
+## 0.1.148
+
 - Review note on T20: no fixes. Hermes proved the check still bites: with `tempRoot` dropped from one call and the folder kept, the file failed naming `machineroom-review-xfAqWa` under its own folder. Full suite on the merge: 97 files, 1694 tests.
 - The review checker's temp test reads a folder of its own (task T20): `tests/review-lane.test.js` points `TEMP` and `TMP` at a fresh `makeTempDir` folder before anything reads `tmpdir()`, puts them back and removes the folder in `afterAll`, and the check looks for `machineroom-review-*` in that folder only, so a review run elsewhere on the machine no longer fails it while a call without `tempRoot` still does.
+
+## 0.1.147
 
 - Review note on T19: no fixes. `node scripts/build-fixtures.mjs` with no arguments prints the usage line and exits 1, so the entry point guard works when run directly. Full suite on the merge: 97 files, 1693 tests. Hermes lost two full runs to `tests/review-lane.test.js`, whose last test reads the shared system temp folder; brief T20 points it at its own folder.
 - Brief T20 (the review checker's temp test looks only at its own folder, Hermes).
 - The fixture builder starts git through `gitPath()` and lists with `-z` (task T19): the new exported `sandboxFiles(sandbox)` in `scripts/build-fixtures.mjs` runs `ls-files`, `rev-list` and `ls-tree` by the absolute path from `server/programPath.js` and splits the `ls-files` and `ls-tree` output on `\0`, so a name such as `données/été.md` arrives as it is; the script's work runs only when it is the entry point, so a test can import it; tests in `tests/build-fixtures.test.js`.
 
 - The bridge reads the file tree without blocking (task U13): `readTree` answers a promise from `execFile` and falls back to `walkFiles`, the bridge keeps one read in flight and marks the tree dirty for one more read, `GET /api/tree` shares the read in flight, the first read finishes before the bridge listens, and `createBridge` takes a `readTree` option for tests.
+
+## 0.1.146
+
 - Briefs T19 (the fixture builder starts git by its path and lists with `-z`, Hermes) and U13 (the bridge reads the file tree without blocking, from the security audit's N14, OpenCode).
 - Review note on U12: no fixes. `existingFiles` is a getter over `files.size - missingFiles`, so the live player's `addFiles`, which adds tree files with `exists` true outside `ensureFile` and skips a path already in the state, keeps it right without a change; nothing copies the state object, which would freeze the getter. The report left out the after-change digest and the timing the brief asked for, so they were measured at review: `npm run scale-probe -- --replay` printed the same 72 lines before and after the merge (the 5 fixtures and the 63 recordings in `public/recordings`, which a lane worktree lacks), and on a 40000 file state 1000 calls of the old key took 573 ms against 0.7 ms for `viewKey`, so about 0.57 ms a frame is gone. Full suite on the merge: 96 files, 1692 tests, after one run where Node crashed three times.
+
+## 0.1.145
+
 - Review note on U11: no fixes. The review checker failed its paths check because `src/App.jsx` and `src/ui/Assistant.jsx` are AGY's; the brief gave them to Hermes on purpose, since both fixes are small and stay clear of W6b's files. Every other `setEntries` call in the assistant replaces an entry, so nothing else grows the log. Full suite on the merge: 96 files, 1683 tests. One of Hermes's three full runs lost a `tests/bridge-reviews.test.js` test while OpenCode ran its own suite; the next two passed.
 - `?simulate&speed=` is clamped (task U11): pure `simulatedSpeed` in `src/live/simulated.js` answers 1 for a value that is not a finite number above 0 and clamps anything else to 0.25 through 64, and `loadSimulated` in `src/App.jsx` uses it, so a negative speed or one such as `1e-300` no longer plays every frame at once; tests in `tests/simulated.test.js` cover `'3'`, `'0'`, `'-2'`, `'abc'`, `'1e-300'`, `'1e9'`, `''` and `null`.
 - The assistant's log keeps its newest 200 entries (task U11): `MAX_ENTRIES` and pure `appendEntries(list, ...items)` in `src/ui/Assistant.jsx` add the items and drop the oldest past 200, every append to the log goes through it, and the calls that map `prev` to replace one entry stay as they were; tests in `tests/assistant-ui.test.js` cover the order kept, the oldest dropped and the list passed in left unchanged.
 - Research for brief E2a in the new `docs/agents/PLUGIN-PAGE.md`: what a Paperclip 2026.1012.0 plugin page is (the manifest, slots, launchers, the UI static route, the worker and its limits, install and removal), whether each part of the room could run there, what stays with the bridge (lane runs, reviews, merges, briefs, run records, the decision model), and a recommendation: keep the separate app and add a thin plugin whose page holds the built room in a same-origin iframe. It ends with three proposed briefs, E2b to E2d. Read from the installed package only; the package ships no example plugin, so no Paperclip was started.
 - The room names the task each agent runs (task W6b): pure agentTasks in src/model/liveTasks.js maps room agent keys to the task identifier from running live runs, cut to 16 characters and filtered through visibleText; Stage reads live runs, issues and agents on notices and hands the map to room.setTasks, which passes it to agents; callouts show .mr-callout-task under the title, hidden when empty via CSS; tests in tests/live-tasks.test.js.
 
-- Briefs W6b (the room names the task each agent runs, AGY), E2a (can the room ship as a Paperclip plugin page, the cloud session), U11 (UI audit N7 and N10, Hermes) and U12 (N9, OpenCode). The UI audit's N8 was fixed in 0.1.127; its row now says so.
 - The card plan key reads a maintained file count instead of walking every file (task U12): `state.existingFiles` follows the files that exist, `viewKey` builds the old key from it, the focus and the recent paths, and `recompute` calls `viewInput` only when the key changes; 1000 keys on 40000 files take 1.1 ms instead of 624 ms, and the 5 fixture replays keep their digests.
+
+## 0.1.144
+
+- Briefs W6b (the room names the task each agent runs, AGY), E2a (can the room ship as a Paperclip plugin page, the cloud session), U11 (UI audit N7 and N10, Hermes) and U12 (N9, OpenCode). The UI audit's N8 was fixed in 0.1.127; its row now says so.
 - Review note on W6a: no fixes. Read Paperclip's two live-runs handlers in the installed 2026.1012.0: the defaults match the report (`minCount` 0, `limit` 50 and at most 50, only queued and running runs, newest first), and the runtime status decorator adds fields but never changes `status`, so the bridge's filter drops nothing live. The issue route adds nothing the company route lacks, so W6 is done; `PAPERCLIP-API.md` now notes both routes. Checked in the browser with the mock in replay mode at 1280 by 800: JC-19 reads `running OpenCode Go` in yellow beside `in progress`; at 880 the mark fits its row. Full suite on the merge: 96 files, 1675 tests.
-- Handoff in ORCHESTRATOR.md for the next session: W6a runs in the cloud, the other lanes are idle, AGY's model.
 - Show which task is running now (task W6a): the bridge answers `GET /api/control/live-runs` under the tasks feature with `{ runs }`, the queued and running runs from Paperclip's `GET /api/companies/:id/live-runs?limit=50`, newest first, at most 50, each mapped to `runId`, `agentId`, `agentName`, `adapterType`, `status`, `issueId`, `startedAt` and `lastOutputAt` with null for a field Paperclip leaves out. `changeEvents` sends `{ topic: 'liveRuns' }` on `heartbeat.run.queued` and `heartbeat.run.status`, but not on the log, event and progress frames, which arrive many times a second. `liveRuns()` is in the client, the mock (one running run, plus one for the lane's agent while its sample run lasts) and `CONTROL-CLIENT.md`; the fake Paperclip serves the route from its own runs with Paperclip's `minCount` and `limit`. The Tasks panel reads it on open and on each notice and marks a task with a live run `running AGENT` or `queued AGENT` in yellow beside its status; a failed read shows nothing. Tests in `tests/live-runs.test.js` and `tests/control-contract.test.js`. Checked in Chromium against the fake Paperclip: the mark read `queued Hermes`, then `running Hermes`, and went away when the run ended.
+
+## 0.1.143
+
+- Handoff in ORCHESTRATOR.md for the next session: W6a runs in the cloud, the other lanes are idle, AGY's model.
 - Review fix on C5e: `briefMarkdown` dropped a planner brief's `tests`, so a brief added from the Plan tab whose text named no test file read as unclear in `TASKS.md` and routed to the large tier (C7a showed the small tier in the Plan tab and the large tier in Dispatch), and its Files list left out the test file. It now adds `Tests in ...` when the text names none and lists the tests and `docs/agents/CHANGELOG.md` in the Files list; tests in `tests/plan.test.js` and `tests/plans.test.js`. Checked in the browser with the mock at 1280 by 800: ask, add C7a, `Dispatch C7a` opens Dispatch with C7a picked, its title, the OpenCode agent and the same route as the Plan tab. The review checker's merged result failed only from the Node crash; the full suite passed on the merge.
+
+## 0.1.142
+
 - Brief W6a (which task is running now, for the cloud session).
 - Review note on A5c: no fixes. It also changed `src/engine/cards.js`, the only caller of `layoutCards`, which the brief failed to name. Checked in the browser with the mock, two minutes into the replay: at 1280 by 800 the board sits under the hub and reads, and no card overlaps it; at 1024 by 768 no card overlaps it and its bottom comes close to the transport bar; at 880 it is hidden and the cards stay.
+
+## 0.1.141
+
 - Review fix on P3d (the cloud's option A): `openBridge` opens `/events?history=1&tree=folders`, so a page gets its first tree event in the folder shape; the two expected URLs in `tests/bridge-client.test.js` follow. Checked on Windows: Chromium sends the `Accept` value from port 5179 to a bridge on 5174 with no preflight, and the 67 replay digests from before P3d are unchanged.
 - Fix found in the P3d review: `readTree` lists a git project with `git ls-files -z`, so a name such as `données/été.md` no longer arrives as `"donn/303/251es//303/251t/303/251.md"` (git quoted it, and the backslash rule turned the escapes into slashes); a test in `tests/tree.test.js`. `scripts/build-fixtures.mjs` still lists without `-z`.
-- Brief C5e (from the Plan tab to Dispatch) for AGY.
 - Send the file list in a folder shape (task P3d): `packTree` in `server/index.js` names each folder once as its parent and its name and each file as a run of names in its folder, in the list's own order, and falls back to the list of paths when a path would not read back the same. `GET /api/tree` uses it when the page sends `Accept: application/json; shape=folders`, and the first `tree` event uses it for a page that opens `/events?tree=folders`; later events stay a short list of paths. `readFileList` in the new `src/live/tree.js` reads both shapes for `discoverBridge`, the `tree` event and `loadTree`, refuses anything else with a sentence and never throws, so a page and a bridge of different versions still agree. Tests in `tests/tree-format.test.js`.
 - The probe (task P3d) times `packTree` and measures the first `tree` event and `GET /api/tree` in the folder shape against 1 MB: 613597 bytes each for 40000 files, down from 2415832. The 5 fixtures replay to the same digests.
 - Make room for the cost board (task A5c): it sits below the hub at scale 2.4, exports its view-plane box, and `layoutCards` keeps cards clear of optional obstacle boxes while the overview fit includes the board only while it is shown; tests in `tests/layout.test.js` and `tests/cost-board.test.js`.
 - C5e: the Plan tab shows a `Dispatch C7a` button for each added brief. It opens Dispatch with that brief picked (title, agent, model, prompt, Route row), or says in red that the brief is not in the list.
+
+## 0.1.140
+
+- Brief C5e (from the Plan tab to Dispatch) for AGY.
 - Review note on V8: no fixes.
+
+## 0.1.139
+
 - Brief P3d (a smaller file list, for the cloud session).
 - Review note on P3c (Claude in the cloud): no fixes. On Windows, `npm run scale-probe -- --replay` gives identical digests on main and on the merge for all 68 replays (5 fixtures and 63 recordings); the probe passes every budget but the first tree event (2.4 MB), with the warm layout at 13.8 ms; the full suite passed twice while a lane ran its own. The planCollapse shortcut was compared with the old code on odd paths (trailing slash, `./`, leading slash, `..`, a space) and matches.
 - Strands keep up with longer strings (task V8): `fillStrand` in `src/engine/strings.js` replaces a strand's geometry when its point count changes and reuses it when the count is the same, so a growing string no longer prints `Buffer size too small` or stops short; tests in `tests/strings.test.js` cover growth, disposal and a same-size update.
+
+## 0.1.138
+
 - Review fix on A5b: the quota rows' provider, label and error come from Paperclip, so `boardLines` shows them through `visibleText`; a test in `tests/cost-board.test.js` covers U+202E. Checked in the browser with the mock at 1280 by 800: the numbers match the Meters tab, but the board is about 110 by 150 pixels at the overview and cannot be read, and at scale 2.4 it covers right-hand folder cards and chips. Brief A5c moves it below the hub and makes the layout keep cards clear of it. Also found: strands print thousands of `Buffer size too small` warnings in a replay and stop short when a string grows (brief V8).
+
+## 0.1.137
+
 - Review note on C4e: no fixes. The review checker's merged result failed only from the Node crash; the full suite passed on the merge (1601). Its brief warning came from the brief's own wording, which names a `Files:` list before the real one, and `briefFiles` reads the first.
+
+## 0.1.136
+
 - Review fix on C5d: `briefMarkdown` writes each brief as one line. A planner brief whose text held a blank line and a `**Z9. ... (Hermes).**` paragraph passed `parsePlan` and became a second, unchecked brief in `TASKS.md`; a test in `tests/plan.test.js` covers it. Checked in the browser with the mock at 1280 by 800: ask, the ready brief ticked, `Add to TASKS.md` off with none ticked, the confirm sentence for 1 brief, `Added C7a.`, a second add refused in red, and C7a in the Dispatch brief menu.
+
+## 0.1.135
+
 - Review note on T18: no fixes.
 - Prompts name main by its ref (task T18): `buildPrompt` in `src/briefs/briefs.js` writes `git switch -c BRANCH refs/heads/main`, so a tag named `main` cannot stand in for the branch; `scripts/agy-prompt.mjs` starts git through `gitPath()` from `server/programPath.js` and prints `Tell AGY: Read agy-ID-prompt.txt in your worktree root and do the task.` before the hand-run line; tests in `tests/briefs.test.js` expect both changed branches and that no prompt line ends in ` main`.
 - Add a plan's briefs to TASKS.md (task C5d): `POST /api/control/plans/:issueId/accept` writes the chosen briefs under one heading and keeps the line endings, and the Plan tab ticks the briefs and confirms before adding them; tests in `tests/plans.test.js`, `tests/plan-panel.test.js` and `tests/control-contract.test.js`.
 - The mock's sample briefs name their files and a test (task C4e), so replay mode routes them to the small, medium and large tiers instead of the large tier for every one; tests in `tests/control-mock-briefs.test.js`.
-- Briefs C5d (add a plan's briefs to TASKS.md) and C4e (the mock's sample briefs name their files) for OpenCode, and T18 (prompts name `refs/heads/main`) for Hermes.
 - Cost board in the room (task A5b): pure `boardLines` and `createCostBoard` in `src/engine/board.js` show room costs and provider quotas on a CSS3D billboard panel beside the hub ring, hidden under 900px width, with click to focus an agent; wired in `src/engine/room.js` and `src/Stage.jsx` with costs notices, styles in `src/styles.css`, tests in `tests/cost-board.test.js` (8).
 - Add `npm run scale-probe` (task P3c, `scripts/scale-probe.mjs`): it builds a seeded tree (40000 files in 4000 folders, up to 12 deep, with `--files`, `--folders` and `--seed`) and prints the time or size of each stage, from `readTree` with a fake `listDir` to the Hermes pipeline, against 16 ms for work per frame or activity, 1 second for work at load and 2 MB for a `tree` event; `--replay` prints a digest of the activities, folder plans, layouts and collapse plans of each fixture and each `public/recordings/*-run.jsonl`, to compare two versions. Tests in `tests/scale.test.js`.
 - The bridge sends a page the whole file list in its first `tree` event and only the files that page has not had in each later one (task P3c), so a new file in a 40000 file project sends about 100 bytes instead of 2.4 MB; the page only adds files, so it ends with the same list.
 - Make the room fast on a large project (task P3c): `planFolderView` keeps an index of the file list and adds new files to it, so a plan over 40000 files takes about 2 ms instead of 800; `layoutCards` reads positions from arrays in its pair loop (31 ms to about 11 for 122 cards); `planCollapse` builds its tree with a parent walk and sorts once (25 ms to about 10); `touchesForCommand` and `resolveKnown` test for the plain text before they build a regular expression or split a path (137 ms to about 2 a Hermes line). The 5 fixtures replay to the same activities, folder plans and layouts as before.
+
+## 0.1.134
+
+- Briefs C5d (add a plan's briefs to TASKS.md) and C4e (the mock's sample briefs name their files) for OpenCode, and T18 (prompts name `refs/heads/main`) for Hermes.
 - Briefs A5b (the cost board in the room, AGY) and P3c (a large project pass, Claude in the cloud).
 - Review note on C4c: no fixes. Checked in the browser with the mock at 1280 by 800 and 1024 by 768: the Route row under Agent, `Use` sets agy and keeps the default model with the yellow note, and the row goes with no brief. Every mock brief routes to the large tier because the mock's sample briefs have no `Files:` list, so `profileFromBrief` calls them unclear; real briefs carry one.
+
+## 0.1.133
+
 - Review fix on C5c: `routeLine` reads a brief's route with `Object.hasOwn`, since the id comes from the planner's text, and the count reads `1 brief`. Checked in the browser with the mock at 1280 by 800: the empty tab, the confirm sentence, `Waiting for PLANNER.`, the ready brief with its route, the problem in red. Copy shows `Copy failed.` there because the built-in pane denies clipboard writes, as it does for the dispatch prompt copy.
 - Add the Plan tab to the control drawer (task C5c): a goal of 1 to 2000 characters, a confirm card, `Waiting for PLANNER.` while the plan task runs, the briefs with their size, files, tests and route, the problems in red, and `Copy as Markdown` with the copied sentence; pure helpers in `src/ui/panels/plan.js`, tests in `tests/plan-panel.test.js` (10).
+
+## 0.1.132
+
 - C5c moved from AGY to OpenCode, so it runs beside AGY's C4c.
 - Review note on U10a: no fixes; its test and U6a's met at the end of `tests/reviews-panel.test.js`, and both were kept. The four moved briefs were checked in the browser where the brief asked (the Reviews card shows the open diff's short head).
+
+## 0.1.131
+
 - Review fix on U6a: `handleOpenConfirm` calls `clearMoved` instead of a copy of it.
+
+## 0.1.130
+
 - Review note on U9: no fixes.
+
+## 0.1.129
+
 - Review note on U7: no code fixes. It branched before 0.1.127 fixed `tests/plan.test.js` and fixed it again its own way; main's copy was kept and its changelog line dropped.
 - Use `visibleText` in the cards and the Reviews panel (task U10a): card names, row names, the inspected detail, the failure band, diff file paths and every patch line mark direction and control characters, while the merge message stays as typed; tests in `tests/reviews-panel.test.js` cover U+202E in a patch line.
+
+## 0.1.128
+
 - Merged the bridge follow-up from the cloud session (branch `claude/bridge-pair-and-404`, 4 commits on 0.1.127, about 2 dollars). No fixes. The late-chunk drop was checked on Windows against every recording here: 56 lane recordings and 5 fixtures replay to the same activities as before.
 - Long agent names stay short in the room (task U9): pure `nameLabel` in `src/engine/agents.js` uppercases a text name, keeps 32 characters and cuts a longer one to 31 plus `~`, answers empty text for a name that is not text, and the label under each agent uses it; `min-width: 0` on `.mr-term-title` lets the grid item shrink so the chip title's existing CSS ellipsis cuts at the chip width; tests in `tests/agent-label.test.js` cover a short name, exactly 32 characters, a 60 character name and `null`.
 - Merge the head whose diff the owner read (task U6a): `mergeHead` in `src/ui/panels/reviews.js` keeps the list head with no diff or another lane's diff, uses the diff's head when it matches, and answers the moved branch sentence when they differ; the Reviews confirm card shows the diff's short head, and the row shows that sentence in the error style and does not open a card.
 - Suggest a lane and a model in the dispatch form (task C4c): pure agentForLane and routeFields in src/ui/panels/route.js map lanes to agents and route choices to fields with notes, and DispatchPanel shows a Route row with policy suggestion and Use button; tests in tests/dispatch-route.test.js.
+
+## 0.1.127
+
 - C4c brief: `useRoute` renamed `routeFields` (it is not a hook), and the by-eye check picks any two briefs of different lanes, since C6b and M1a are merged.
 - The model list names the models the lanes run: `server/models.js` and the mock client's copy add `deepseek/deepseek-v4.1-flash-1017` (DeepSeek v4.1 Flash (OpenRouter), Hermes) and `opencode-go/deepseek-v4.1-flash` (DeepSeek v4.1 Flash (Go), OpenCode), both tier medium and not free, and keep the other six; no test counted the list, so the contract suite now checks both entries on both clients and `tests/dispatch-models.test.js` checks that the dispatch form offers each only to its own harness.
 - A log chunk that arrives after its run ended no longer opens the run again: it did, like the late error event fixed in 0.1.126, and worse, since `createPipeline` made a new parser for the run, kept it and its time for the whole session, and drew any tool call in the chunk after `run.end`, so a finished agent showed as working. The pipeline in `src/model/pipeline.js` now keeps the ids of the last 1000 ended runs (`ENDED_LIMIT`) and drops their log chunks; a run it joined after the start is still read. `remembered()` also reports the open parsers. Tests in `tests/live.test.js` (50 runs with a late chunk each, which failed before the fix, and a joined run); no recording in `public/fixtures` has such a chunk, so the replays are unchanged.
@@ -762,10 +1339,19 @@
 - Review note on M1a: no fixes. Checked in the browser at 1280 by 800: with no agent only `Default model`, Claude Code and the Orchestrator get the three Claude models, Hermes MiMo, OpenCode its two, agy only the default, each default labelled with the agent's model or `set in the harness`. It shows that `server/models.js` is stale: it lacks the DeepSeek V4.1 Flash 1017 models Hermes and OpenCode run. Left in: a string form in `normalizeAgent` and an `Other` group no listed model falls into.
 - Fix for 0.1.126: `tests/plan.test.js` still pinned OpenCode out of `src/ui/**`; it now checks `src/Stage.jsx`.
 - One broken panel no longer blanks the room (task U7): `PanelBoundary` wraps the active control drawer panel, keyed by the tab so a switch starts clean, and shows one red line with the error's message cut to 120 characters; `panelStoppedText` is pure, and tests in `tests/panel-boundary.test.js` cover the sentence, the error state and every drawer tab on the mock client.
+
+## 0.1.126
+
 - U7, U9, U6a and U10a moved from AGY to OpenCode at the owner's word: OpenCode may now change `src/ui/**`, `src/styles.css` and `src/engine/**`, and leaves the by-eye checks to the orchestrator.
 - Merged the fake Paperclip, the end-to-end loop test and the soak test from a cloud Claude Opus 5.5 session (branch `claude/inspiring-hopper-onh5my`, 7 commits on 0.1.124, about 8 dollars). No fixes; the suite passed on Windows (1513 tests) on the second full run. The first run crashed once in Node and then failed `gains no machineroom-review-* folder` in `tests/review-lane.test.js`, which passed alone; a process left by the crashed try is the likely cause. Its bridge findings (the spec and version read apart, retries after a 404) go back to the same cloud session.
+
+## 0.1.125
+
 - Review note on P11: no fixes.
 - Name an OpenCode subagent call by its task (task P11): `opencode.js` labels a `subagent` tool call `subagent: DESCRIPTION` from `part.state.input.description` cut with `shorten`, or `subagent` when there is none, keeps the tool kind `other`, touches no file (the `prompt` names files but is not read) and keeps the same start and end times; tests in `tests/parsers.test.js` cover the recorded line, an error status and no description.
+
+## 0.1.124
+
 - S1a: subagent runs recorded for Hermes and OpenCode on their CLIs. Both name a child only once it has ended and never show its calls, so S2a, S3a and S2b are held. New brief: P11 (name an OpenCode subagent call by its task, Hermes).
 - A fake Paperclip for checks without the owner's one: `npm run fake-paperclip -- [--port 3999] [--speed 4] [--missing ROUTE,...] [--slow ROUTE,...] [--fail ROUTE,...]` in `scripts/fake-paperclip.mjs` (a dev tool, outside the pack, on the `ws` dev dependency) serves every route in `server/surface.js` with answers shaped like Paperclip's, `/api/health` with version `0.0.0-fake` and a backup block, and `/api/openapi.json` built from `surface.js`; it keeps one company and four agents (Claude Code, Hermes, OpenCode Go, agy) in memory with fixed ids; a task for an agent queues a run that plays the first succeeded run of that harness in `public/fixtures` (all four come from `sandbox-run.jsonl`, or a short built-in script when none fits) on the socket, cuts a chunk over 8192 characters as Paperclip does and keeps the whole one in `/api/heartbeat-runs/:id/log`, then books a cost and adds a reply comment; approvals, hires, budgets, pause and resume, costs, quota windows and backups (each POST a new `paperclip-YYYYMMDD-HHMMSS.sql.gz` name) work in memory; `--missing` leaves a route out of the spec and answers 404, `--slow` never answers, `--fail` answers 500; it prints the company id and the `npm run serve` line; tests in `tests/fake-paperclip.test.js`.
 - The whole loop in one test (`tests/e2e-loop.test.js`): the fake on port 0 and a bridge pointed at it, used only through the bridge's routes: health ok with every feature on, a Hermes task created with `confirmed`, its frames from `/events` run through `createPipeline` and the room state (started, read 4 project files, wrote `docs/hermes-summary.md`, finished green), the reply in the thread, costs, a backup with `confirmed`, an approval decided twice, a budget, a hire, every `npm run serve -- doctor` check, a cut chunk restored, approvals off with 503 while the room still streams under `--missing`, and 504 within the limit under `--slow` on the agents route; `tests/helpers/loop.js` holds the start and the event stream reader.
@@ -776,29 +1362,64 @@
 - A race in `tests/bridge.test.js` ("checks the spec again when the Paperclip socket reopens"), which failed about 1 run in 8 on its own: a surface check that read the old spec could finish after the spec changed and take the new version from `/api/health`, so the wait ended on the new version while the surface still read ok; the test now waits for the surface to read `ok: false` as well.
 - Models offered per agent in the dispatch form (task M1a): pure modelsFor in src/ui/panels/dispatchModels.js filters options by adapterType and harness (claude_local to claude, hermes_local to hermes, opencode_local to opencode, process to agy), shows Default model (MODEL) or Default model (set in the harness), and falls back to Default model when no agent is chosen or the model no longer fits; tests in tests/dispatch-models.test.js.
 - Review note on U8: no fixes. The run was cut by a shutdown after its commit, so it has no run record; the files were checked against the brief by hand.
-- Handoff: ORCHESTRATOR.md gains `Where things stand`, with the cut U8 run and how to start it again, AGY's queue and what is not pushed.
 - The control client opens its change stream again (task U8): `createClient` in `src/control/client.js` drops a stream the browser gave up on (`readyState` 2) and opens a new one after 1 second, doubling up to 15 seconds and back to 1 second after an `open` event, only while a listener is subscribed; the last unsubscribe cancels a waiting reopen; `setTimer` and `clearTimer` join its options, and tests in `tests/control-client-stream.test.js` cover the delays, the reset, no listener and the cancel.
+
+## 0.1.123
+
+- Handoff: ORCHESTRATOR.md gains `Where things stand`, with the cut U8 run and how to start it again, AGY's queue and what is not pushed.
 - Review note on U6: no fixes. Its race test accepts either head, since the read can land before or after the commit; the first test pins the case that matters. U6a (AGY) can start.
+
+## 0.1.122
+
 - Review note on U10: no code fixes; a blank line after its changelog entry removed. `visibleText` marks a line feed too, as the brief asks, so U10a must pass it one patch line or one name at a time, never a whole patch.
 - Hidden direction and control characters in names and diff lines (task U10): `visibleText(text)` in `src/model/paths.js` replaces U+200E, U+200F, U+202A to U+202E, U+2066 to U+2069 and the C0 controls except tab with `[U+XXXX]` in upper-case hex, and returns other text unchanged; no panel calls it yet, since the brief keeps the change to the pure helper; tests in `tests/paths.test.js` cover each listed character, a kept tab, plain and non-Latin text, an unlisted character and a mixed line.
 - The review diff names the head it shows (task U6): `laneDiff` in `server/reviews.js` reads the lane's `HEAD` first and diffs `refs/heads/main...SHA` with `--no-ext-diff --no-textconv`, so a commit made after the read is not in the patch; the answer carries `head`, the mock's `reviewDiff` answers it, and `ReviewDiff` in CONTROL-CLIENT.md names it; tests in `tests/bridge-reviews.test.js` and the contract suite on both clients.
+
+## 0.1.121
+
 - Merged the UI audit from a cloud Claude Opus 5.5 session (branch `claude/dreamy-cannon-svjbvc`, 12 commits on 0.1.112, no duplicates, so a normal merge). Fixed at merge: `agents.js` had a `dispose` from both sides, now one that also frees V7b's callout and its line; the fake `document` in `tests/engine-dispose.test.js` gains `style`, `append`, `setAttribute` and `remove`, since a callout is a CSS3D div. Read on Windows: the link check, the confirm flag reaching the dispatcher only from the card, the reopen of the bridge stream and the Meters guards.
+
+## 0.1.120
+
 - Review note on V7b (fixed at merge): every callout stayed on screen once shown, idle and parked agents included, because the CSS3D renderer sets each element's `display` on every frame; callouts now hide through the object's `visible`. A failed run's red callout stayed up until the next run; it now lasts 5 seconds like the green one. The callouts reached the CSS scene through the first terminal chip's parent and their `dispose` was never called; `createAgents` now takes the CSS scene and the room disposes the agents. `strings.js` read the active path from a module-level set in `cards.js`; the room now passes `cards.onPath` to `createStrings`, which reads reduced motion once instead of per strand per frame. Checked by eye at 1280 by 800 and 1024 by 768 in replay: callouts while working, the done and failed callouts clearing after 5 seconds, and the failure band (forced on with a style, as the hidden pane crawled). The strands are about 2 pixels at the overview distance, too small to judge in the pane.
 - Concept details in the room itself (task V7b): pure strandPoints in src/engine/strings.js generates deterministic scattered points along each curved string between folders and turns active strands yellow for 1.5 seconds; working agent tags become CSS3D callouts with thin connecting lines, yellow working borders, red failure bands, and green completion states; failed cards display a red FAILED NAME band across the card face for 2.6 seconds over faint scanlines; tests in tests/strands.test.js.
+
+## 0.1.119
+
 - Review note on U5e: no fixes. The first branch reviewed with `npm run review-lane`: 10 PASS in 81 seconds, the merged suite 1441 passed; the diff was read by hand as the checker says.
 - Review worktrees of the tests under the test temp folder (task U5e): `reviewLane` and `main` take a `tempRoot` option (default `tmpdir()`), so the merged-result worktree is made there; `tests/review-lane.test.js` passes a `makeTempDir` folder, checks it is empty afterwards and checks the system temp folder gains no `machineroom-review-*` folder.
+
+## 0.1.118
+
 - New brief: U5e (review worktrees of the tests under the test temp folder, OpenCode). The leftover folder held no `node_modules` link and was removed by hand.
+
+## 0.1.117
+
 - Merged the review checker and `npm run bump` from a cloud Claude Opus 5.5 session (branch `claude/admiring-brahmagupta-ged1ep`), squashed into one commit so its two copies of audit commits stay out of the history. Checked on Windows in a scratch clone with its own `node_modules` and a fake Hermes lane one commit ahead: `node scripts/review-lane.mjs hermes` took 82 seconds, made the `node_modules` junction in a temporary worktree of main, ran the merged suite and the build there, then removed the junction, the worktree and the temporary folder; the scratch `node_modules` kept every file (the run added its vitest and Vite caches), the real one was never linked, and `git worktree list` was back as before. It found npm through `npm-cli.js` beside `node.exe`. That run caught a real failure: G1b, merged after the branch started, skips example e-mail domains, so the test's `someone@example.com` no longer counted; the test now uses another domain. This version was set with `npm run bump -- 0.1.117`, which also refused 0.1.117 again and `1.2`.
-- Review note on U5d: no fixes. `scripts/run-lane.mjs` was checked for the imports it dropped, and a dry run loads the new `scripts/lane-lock.mjs`.
-- Three small fixes from the audit (task U5d): the bridge accepts a JSON body only when the media type before the first semicolon is `application/json` in any case and with spaces ignored, and its 413 now sends `Connection: close` and destroys the request so it stops reading a large body at once; the lane lock lives in `scripts/lane-lock.mjs` and replaces a stale lock by deleting it and taking it again with the `wx` flag, refusing with the running lane sentence when another runner takes it between the two tries; tests in `tests/bridge.test.js` and `tests/lane-lock.test.js`.
-- Review note on C6d: no fixes. Run on the real records it proposed nothing (Hermes 11 and OpenCode 10 decided runs, both 100% merged), and a bad `--min` and a bad `--since` printed their sentences and exit 1. New brief: U5d (three small fixes the audit left open, OpenCode).
-- Review note on G1b: no code fixes. The audit of the repository went from 184 findings to 70 (46 key shapes, all test fakes, 11 e-mail addresses, 4 user paths, 1 profile, 8 mentions of the graded folder). Removed a stray blank line from its changelog entry, a habit Hermes has.
-- Write a policy proposal as a patch to review (task C6d): `npm run policy-propose -- [--since YYYY-MM-DD] [--min N]` reads the run and outcome records, keeps the runs since the date, builds `outcomeTable`, reads `docs/agents/policy.json` with `readPolicy` and calls `proposePolicy`; it prints each change and note, writes `policy-YYYYMMDD-HHMMSS.patch` in the runs folder when there is a change and prints the `git apply` line for the main checkout, refuses a bad date or `--min`, never writes the policy file, and tests in `tests/policy-propose.test.js` check a swap patch with `git apply --check`, no change, both bad values and the real file left alone.
-- Review note on C5b: no fixes. Not tried against the real Paperclip: it needs an agent with the role `pm`, and a try writes a task and spends the planner's budget, so it waits on the owner's yes. The suite now allows 20 seconds a test and a hook (`vite.config.js`), in place of the 20 second limit that 0.1.110 gave only `tests/bridge-reviews.test.js`: tests that start git or a bridge took 5 to 11 seconds while a lane ran its suite beside them, in the candidate, contract, hand-run and review files. Main was pushed to GitHub at 0.1.112 with the owner's yes.
-- Placeholders left out of the history audit (task G1b): `findLeaks` in `src/briefs/audit.js` skips a user path whose user folder is `user`, `owner`, `name`, `you`, `me`, `example`, `username`, `%USERNAME%`, `$env:USERNAME` or `<user>` in any case, and an e-mail address at `example.com`, `example.org`, `example.net` or a domain ending in `.example`, `.invalid`, `.test` or `.localhost`; the path pattern reads those folder shapes, so `$env:USERNAME` and `<user>` are matched and then left out; keys, the profile name, the graded paths and any other folder or domain are still found; tests in `tests/history-audit.test.js` cover each placeholder folder, each kept domain, a real-looking folder and domain, and both on one line; on this repository the audit went from 88 user paths and 41 addresses to 4 and 11.
 - Review checker: `npm run review-lane -- LANE [--json] [--keep]` in `scripts/review-lane.mjs` reads the lane's worktree and branch against `refs/heads/main` and prints PASS, WARN or FAIL for commits ahead and nothing uncommitted, forbidden paths (`pathAllowed`), the brief's `Files:` list from the newest run record, em dashes, keys, user paths and e-mail addresses (FAIL) and emoji and bold (WARN) in added lines, new dependencies, heuristics for bare `git`, `main` refs, `git diff` flags, fetch without a signal and lookups without `Object.hasOwn`, the changelog line, commit prefixes and `TASKS.md` ids, then runs `npm test` and `npm run build` on the merge in a temporary worktree of main with `node_modules` linked and keys left out (`laneEnv`), and removes it; the checks are pure in `src/briefs/review.js`; tests in `tests/review-lane.test.js` with temporary git repositories.
 - Version bump: `npm run bump -- X.Y.Z` in `scripts/bump.mjs` sets `package.json`, the two version lines of `package-lock.json` and the `Version` line of ARCHITECTURE.md, keeps line endings, prints each change, and refuses a version that is not three whole numbers or not higher than the current one, writing nothing; tests in `tests/bump.test.js`.
 - ORCHESTRATOR.md has a `Review checker` section (run review-lane first, read every FAIL and WARN, then the diff, odd input and UI by eye; a PASS is not a review), step 3 names `refs/heads/main` and the diff flags, and step 5 uses `npm run bump`. ARCHITECTURE.md lists both commands.
+
+## 0.1.116
+
+- Review note on U5d: no fixes. `scripts/run-lane.mjs` was checked for the imports it dropped, and a dry run loads the new `scripts/lane-lock.mjs`.
+- Three small fixes from the audit (task U5d): the bridge accepts a JSON body only when the media type before the first semicolon is `application/json` in any case and with spaces ignored, and its 413 now sends `Connection: close` and destroys the request so it stops reading a large body at once; the lane lock lives in `scripts/lane-lock.mjs` and replaces a stale lock by deleting it and taking it again with the `wx` flag, refusing with the running lane sentence when another runner takes it between the two tries; tests in `tests/bridge.test.js` and `tests/lane-lock.test.js`.
+
+## 0.1.115
+
+- Review note on C6d: no fixes. Run on the real records it proposed nothing (Hermes 11 and OpenCode 10 decided runs, both 100% merged), and a bad `--min` and a bad `--since` printed their sentences and exit 1. New brief: U5d (three small fixes the audit left open, OpenCode).
+
+## 0.1.114
+
+- Review note on G1b: no code fixes. The audit of the repository went from 184 findings to 70 (46 key shapes, all test fakes, 11 e-mail addresses, 4 user paths, 1 profile, 8 mentions of the graded folder). Removed a stray blank line from its changelog entry, a habit Hermes has.
+- Write a policy proposal as a patch to review (task C6d): `npm run policy-propose -- [--since YYYY-MM-DD] [--min N]` reads the run and outcome records, keeps the runs since the date, builds `outcomeTable`, reads `docs/agents/policy.json` with `readPolicy` and calls `proposePolicy`; it prints each change and note, writes `policy-YYYYMMDD-HHMMSS.patch` in the runs folder when there is a change and prints the `git apply` line for the main checkout, refuses a bad date or `--min`, never writes the policy file, and tests in `tests/policy-propose.test.js` check a swap patch with `git apply --check`, no change, both bad values and the real file left alone.
+
+## 0.1.113
+
+- Review note on C5b: no fixes. Not tried against the real Paperclip: it needs an agent with the role `pm`, and a try writes a task and spends the planner's budget, so it waits on the owner's yes. The suite now allows 20 seconds a test and a hook (`vite.config.js`), in place of the 20 second limit that 0.1.110 gave only `tests/bridge-reviews.test.js`: tests that start git or a bridge took 5 to 11 seconds while a lane ran its suite beside them, in the candidate, contract, hand-run and review files. Main was pushed to GitHub at 0.1.112 with the owner's yes.
+- Placeholders left out of the history audit (task G1b): `findLeaks` in `src/briefs/audit.js` skips a user path whose user folder is `user`, `owner`, `name`, `you`, `me`, `example`, `username`, `%USERNAME%`, `$env:USERNAME` or `<user>` in any case, and an e-mail address at `example.com`, `example.org`, `example.net` or a domain ending in `.example`, `.invalid`, `.test` or `.localhost`; the path pattern reads those folder shapes, so `$env:USERNAME` and `<user>` are matched and then left out; keys, the profile name, the graded paths and any other folder or domain are still found; tests in `tests/history-audit.test.js` cover each placeholder folder, each kept domain, a real-looking folder and domain, and both on one line; on this repository the audit went from 88 user paths and 41 addresses to 4 and 11.
+
+## 0.1.112
 
 - UI audit (`docs/agents/AUDIT-2026-10-UI.md`): the browser code read as an attacker and a reviewer, 10 findings fixed with a test each, 10 found and not fixed with the reason, and what could not be checked. New briefs in TASKS.md under `Briefs from the UI audit`: U6 (OpenCode), U6a (AGY), U7 (AGY), U8 (OpenCode), U9 (AGY), U10 (Hermes), U10a (AGY).
 - UI audit follow-up: with `forceContextLoss()` in `room.dispose()`, the room's own `webglcontextlost` handler printed `machine-room: WebGL context lost` on every switch between Replay and Live. The room now removes its two context handlers before it releases the context, so the warning still means a real loss. Checked in headless Chromium over 20 switches: one canvas, no errors and no warnings.
@@ -813,30 +1434,72 @@
 - UI audit fix: `Stage.jsx` ran every assistant action with `confirmed: true`, and `Assistant.jsx` ran an `action` or `blocked` answer at once, so a write that came back as `kind: 'action'` (a model reply, or a later intent rule) skipped the confirm card and the dispatcher's own check. `cardFirst` in `src/assistant/actions.js` turns such a write into a card with `That changes a task, a budget or an agent. Confirm to go on.` and drops a write that rides on any other answer; only the card's Confirm passes `{ confirmed: true }`, through `createAssistantRunner` in `src/assistant/dispatch.js`; tests in `tests/assistant.test.js` and `tests/dispatch.test.js`.
 - UI audit fix: a link such as `/?bridge=http://other-host` opened a live room fed by that host with no question, showed its agents, tasks and reviews as the owner's, and sent the owner's task titles, comments and merge messages there; `?paperclip=//other-host` and `?tree=` did the same. A link address must now be on this computer or the page's origin (`linkAddressAllowed` in `src/startup.js`), any other opens the connect screen with a notice, and a replay keeps the saved connection; tests in `tests/startup.test.js`.
 - New brief: G1b (placeholders the history audit should not count, Hermes). The fixtures' 76 user paths are the placeholder `C:\Users\user`, not the owner's profile.
+
+## 0.1.111
+
 - Review note on C6c: no fixes. Probed on the real `docs/agents/policy.json` with 12 decided runs a side: it moved Hermes ahead of OpenCode in the medium tier with the brief's sentence, left the owner choice and the free small-tier model alone with their notes, and wrote a patch that swaps only the two blocks.
 - Ask the planner through Paperclip (task C5b): `POST /api/control/plans` in `server/plans.js` refuses an unconfirmed request, a goal outside 1 to 2000 characters, no planner, more than one planner and a waiting or terminated planner, builds `planPrompt` from the brief files and creates a medium priority task for the `pm` agent; `GET /api/control/plans/:issueId` answers `waiting` until a comment from the planner holds a `{`, then `ready` with `parsePlan`; `askPlanner(goal)` and `plan(issueId)` join the client and the mock, `PlanAnswer` joins CONTROL-CLIENT.md, `src/briefs/plan.js` joins the pack list, and tests in `tests/plans.test.js` and `tests/control-contract.test.js`.
+
+## 0.1.110
+
 - Review note on U5c: no code fixes. Both ways a frame arrives, a normal one and a long chunk restored from the log, pass `accept()`, so both are masked before the history and the pages see them. ARCHITECTURE.md now names the `masked` health field and the limit: a key split across two chunks is not masked, and the proxy route masks nothing. `tests/bridge-reviews.test.js` now allows 20 seconds a test: alone its tests take 1 to 4 seconds, but in a full run on this machine git starts slow and two of them passed the 5 second default.
+
+## 0.1.109
+
 - Review fixes on W3c, checked by eye in replay at 1280 by 800 and 1024 by 768 (AGY could not open a browser): with six tabs the drawer's tab strip was 6 pixels wider than the drawer and cut `Reviews` at the edge (the tabs now have 4 pixel side padding and wrap if a seventh comes); the confirm card stayed open after a merge with Merge still enabled (it now closes and the card shows `Merged as COMMIT7.`); `1 commits ahead` now reads `1 commit ahead`; and the real client dropped the conflicting files from a merge refusal, which AGY's report found (`request()` now keeps `files` on the error, with a test). Checked: the rows, a diff (hunk headers yellow, added lines white), the confirm card with the prefilled message, `Merging` while it runs, the merge, and `Nothing to merge.` on a second try. AGY's run is the first recorded with `npm run hand-run` (12 minutes, from its reflog).
 - Keys in the frames the bridge keeps and sends (task U5c): `accept()` in `server/index.js` runs `maskKeys` on `payload.chunk`, `payload.message` and `payload.error` after `countUnreadable`, for live frames and restored long chunks, so `/events`, `/events?history=1` and a `Last-Event-ID` replay carry `[key]`; `/api/health` adds `masked: { total, since }`; `src/briefs/audit.js` joins the pack; tests in `tests/bridge.test.js`, and `npm run pack-check` passes. The proxy route has no bridge and still shows an unmasked chunk.
 - Policy changes proposed from the outcome table (task C6c): `proposePolicy` in `src/policy/proposals.js` swaps at most one pair of choices in a tier when the later choice merges at least 15 points more often over at least 10 decided runs at no higher cost a merge, never moves the owner choice and leaves `limits` and `quotaSkipPercent` alone, with one sentence per change and per reason a tier kept its order; `policyText` writes the policy back with one newline, `policyDiff` writes a unified diff with three lines of context that `git apply` takes, and tests in `tests/policy-proposals.test.js`.
+
+## 0.1.108
+
 - Review note on C4b: no fixes. `npm run pack-check` passes with `src/policy/route.js` in the pack (66 files, 750.6 kB).
+
+## 0.1.107
+
 - Review fixes on C5a: the forbidden-path check let a planner through with `src/model/../../server/index.js`, `Server/index.js` or an absolute path, and with a `Files:` list written into the brief's own text, which `briefMarkdown` then kept unchecked. `pathAllowed` now folds `.` and `..`, compares without case, and refuses a path that climbs out of the project or is absolute; the paths after `Files:` in the text are checked too. Two tests. Hermes committed the work, then its run ended with exit 2 when OpenRouter refused the next call (the workspace's $1.00 daily budget), so it wrote no report; the suite was run here.
-- Planner prompt and plan reader (task C5a): `planPrompt` in `src/briefs/plan.js` builds the planner's prompt from the goal, the house rules, each lane's key, name, role and forbidden paths, the ids already used and the JSON answer format; `parsePlan` reads the first JSON object in the answer and keeps only the briefs with no problem, with one sentence for each fault (not JSON, no briefs, more than 8, a bad id, a taken or repeated id, an owner that is not a lane, a size that is not small, medium or large, no files, a forbidden path, no test, an em dash, a dependency that is not in the plan, a loop); `pathAllowed` checks a path against a lane's forbidden list and `briefMarkdown` writes a brief back as a TASKS.md line; tests in `tests/plan.test.js`.
 - Route suggestion through the bridge (task C4b): `POST /api/control/route` in `server/policy.js` reads `docs/agents/policy.json` from the briefs folder, checks it with `readPolicy` and answers `{ tier, choice, reason }` from `chooseRoute`, with the `quota` list from Paperclip's `costs/quota-windows` and `{ companyMonthlyUsd }` from `costs/summary` (`spendCents` over 100), or adds ` Quota and spend were not read.` when the meters are off or either call fails; it refuses a missing file with 404, a bad file with the `readPolicy` sentence, a profile that is not an object with `Describe the task first.` and failures outside 0 to 5 with `Failures must be a whole number from 0 to 5.`; `suggestRoute(profile, { failures })` joins the control client and the mock, which holds a copy of the policy, `RouteSuggestion` joins CONTROL-CLIENT.md, `src/policy/route.js` joins the pack list, and tests in `tests/policy-route.test.js` and `tests/control-contract.test.js`; `npm run pack-check` passes.
+
+## 0.1.106
+
+- Planner prompt and plan reader (task C5a): `planPrompt` in `src/briefs/plan.js` builds the planner's prompt from the goal, the house rules, each lane's key, name, role and forbidden paths, the ids already used and the JSON answer format; `parsePlan` reads the first JSON object in the answer and keeps only the briefs with no problem, with one sentence for each fault (not JSON, no briefs, more than 8, a bad id, a taken or repeated id, an owner that is not a lane, a size that is not small, medium or large, no files, a forbidden path, no test, an em dash, a dependency that is not in the plan, a loop); `pathAllowed` checks a path against a lane's forbidden list and `briefMarkdown` writes a brief back as a TASKS.md line; tests in `tests/plan.test.js`.
+
+## 0.1.105
+
 - Review fix on C4d: `touchesSecrets`, `touchesDeploy` and `touchesData` came from every path a brief names, so a brief that only reads recordings (P5, T11, T12, P10, S2a) went to the large tier as if it changed data. They now come from the paths after `Files:`. Of the 123 briefs in TASKS.md, 95 read as large, 13 medium and 15 small; most large ones are older briefs with no `Files:` list.
 - Hand-run records for AGY (task C6e): `npm run hand-run -- LANE ID --minutes N [--model TEXT] [--branch NAME] [--exit CODE]` appends a run record with `source: 'hand'`, the lane's current branch and the commits from `refs/heads/main..HEAD`, so `npm run outcome` accepts AGY's branches; it refuses an unknown lane, a lane with a command line, a brief the lane cannot take, minutes outside 1 to 600, `main` and a branch that already has a record; `npm run agy-prompt` prints the command to run when AGY is done; tests in `tests/hand-run.test.js`.
+
+## 0.1.104
+
 - Review note on U5a: a protected check, so it was probed on a running bridge on Windows: its own port on both host names, 5173 and a listed origin answered 200 with the CORS header; the listed origin under the other host name, port 3000, https, `http://localhost:5173.evil.test`, `null` and `[::1]` answered 403; three bad list entries each printed their skipped line; a run without `confirmed` answered 400. The run button in the dispatch panel already sits behind a confirm card. The known limit in ARCHITECTURE.md and the `startRun` row in CONTROL-CLIENT.md now say this. OpenCode's own full run hit the 0xC0000409 crash on all three tries once.
 - A task profile read from a brief (task C4d): `profileFromBrief(brief)` in `src/policy/profile.js` reads a brief from `parseBriefs` and answers the backticked paths after `Files:` (without `docs/agents/CHANGELOG.md` and `tests/`), `hasTests`, `newTest`, `clarity`, `reversible`, `touchesSecrets`, `touchesDeploy`, `touchesData` and `kind` (`design` for AGY work checked by eye); `tierFor` in `src/policy/route.js` keeps a brief that needs a new test out of small and sends design work and data to large; tests in `tests/policy-profile.test.js`, including C6b, M1a, U4 and C6a from the real `TASKS.md`, and `tests/policy.test.js`.
+
+## 0.1.103
+
 - Review fixes on U5b: a key inside a JSON-escaped command (`$env:OPENROUTER_API_KEY=\"sk-...\"` in a tool call line) lost its escaping backslash, so the masked line no longer parsed and the parser would miss the call; a setting's value now leaves trailing backslashes alone. Two key shapes that overlap (`sk-ghp_...`) cut the rest of the line off and counted twice; overlapping matches now merge into one `[key]`. Two tests.
 - A key masker for text that leaves the bridge (task U5b): `maskKeys(text)` in `src/briefs/audit.js` replaces each key that `findLeaks` reports as `key` with `[key]`, and for a key setting it keeps the name and masks only the value, so `OPENROUTER_API_KEY=...` becomes `OPENROUTER_API_KEY=[key]`; it answers `{ text, count }`, leaves a 40 character git sha, a UUID and a placeholder alone, keeps the line endings, and masking twice gives the same text; tests in `tests/history-audit.test.js`.
 - Bridge origin allowlist and confirmed lane runs (task U5a): `isAllowed` in `server/index.js` allows only the bridge's own port (the real port after `listen`, also with `--port 0`), Vite 5173 and each origin in `MACHINEROOM_ORIGINS`, prints `MACHINEROOM_ORIGINS: skipped TEXT.` for each entry it ignores, and answers 403 to every other Origin; `POST /api/control/runs` needs `confirmed: true` (400 `Confirm the run first.`), which `startRun` in the control client sends and the mock checks; `.env.example` names the new variable; tests in `tests/bridge.test.js` and `tests/control-contract.test.js`.
+
+## 0.1.102
+
 - Merged the October audit from a cloud Claude Opus 5.5 session (branch `claude/confident-wright-z9081g`, 23 commits on 0.1.98): the suite passes on Linux, 19 findings fixed with a test each, `docs/agents/AUDIT-2026-10.md`, and 15 new briefs. Checked on Windows at merge: 68 files and 1242 tests pass, the crash retry test included, which Linux skips. Finding 1 was checked by hand: with `NoDefaultCurrentDirectoryInExePath` unset, as it is in the owner's user and machine environment, a bare `git` started in a folder holding a planted `git.exe` ran the planted program, and `gitPath()` ran the real git; the planted-git test fails against the old `server/reviews.js`. S2b no longer asks for Gemini 4 Argon, which is used up.
 - Review and merge panel (task W3c): `src/ui/panels/reviews.js` adds pure helpers `reviewRow(review)`, `canMerge(review)`, `defaultMergeMessage(review)` and `patchLines(patch)`, `ControlDrawer.jsx` adds the `Reviews` tab, and `ReviewsPanel.jsx` lists each lane with its branch, commits ahead, file counts, dirty warning, last run or error, opens the diff from `reviewDiff(lane)` on click with truncation notice and styled patch lines, and offers a `Merge` confirm card on clean ahead lanes that calls `mergeReview(lane, { head, message })` once, shows `Merged as COMMIT7.`, refreshes the list, and displays refusals and conflict files in red; tests in `tests/reviews-panel.test.js`.
+
+## 0.1.101
+
 - Review fixes on V7a, checked by eye at 1280 by 800 and 1024 by 768 in replay: the legend cut `FINISHED` off at the title box's edge (it now wraps), and the control drawer's Close button was black text on the black fill every button gets (it is now transparent on the white strip). The room drew nothing when the page started while its window had no size: `room.js` divided 0 by 0 for the camera's aspect and the NaN spread into the scene; it now starts at 1 by 1 and skips a resize to 0, and the next real resize sets the size. That bug was older than V7a. AGY ran V7a on Gemini 4 Argon High; Argon is used up, so W3c and V7b run on Gemini 3.8 Flash High.
+
+## 0.1.100
+
 - Review fix on G3c: the README said a merge goes through the room; it now says the bridge can merge and the Reviews panel (W3c) is still to come.
 - README for the room as it is now (task G3c): `Run it` leads with `paperclipai run`, `npm run build` and `npm run serve -- up`, lists what each check means and says machine-room never starts Paperclip, keeps the replay and the simulated feed for a try without Paperclip, a new `Working with lanes` section covers a task from the drawer, the thread, `npm run candidate` and a merge only after a confirm and never a push, `Checks` adds `npm run history-audit` and `npm run pack-check`, `Keys` says no key is printed or stored, and `Screenshots come with G4.` marks where the images go.
 - The room's panels in the owner's concept style (task V7a): panels, drawers and folder cards use 2px corners, thin CSS corner ticks (`--corner-ticks`), inverted header strips (`.hud-header-strip`) and uppercase titles with `0.04em` letter spacing; agent rows in `Hud.jsx` and terminal chips in `styles.css` render a top name block with lane and status sub-tags below; `MetersPanel` and `backupAgePercent` in `src/ui/panels/backup.js` render outlined `.meter-bar` tracks with right-aligned `.meter-percent` numbers for budgets, quotas and backup age; error states on chips, refusals and the red health chip use a solid red band with white uppercase text, while failed file rows and `.is-flash-red` cards get faint red horizontal scanlines (`--scanlines-red`); the help overlay uses a numbered index list (`ol.hud-index-list`) with a `│` rule, `Assistant.jsx` adds an outlined `EXEC` submit button to its black command bar, and `Waiting.jsx` adds a blinking underscore after its title; tests in `tests/hud-style.test.js`.
+
+## 0.1.99
+
 - New brief: G3c (README for the room as it is now, Hermes). OpenCode waits while the cloud audit session works on `server/**`.
+
+## 0.1.98
+
 - New briefs under `Briefs from the October audit` in TASKS.md: C4b, C4d and C4c (a route suggestion from the policy in the dispatch form), C5a, C5b and C5c (a planner that splits a goal into briefs), C6c and C6d (policy changes from the outcome log as a patch to review), C6e (run records for AGY's hand-run tasks), S2a, S3a and S2b (subagents once S1 has recorded them), U5a (named origins and a confirmed lane run), U5b and U5c (keys masked in the frames the bridge sends).
 - Audit report: `docs/agents/AUDIT-2026-10.md` lists the 19 findings fixed on this branch with severity, file, line, what an attacker or bad input does and the fix commit, what Part 0 changed for Linux, and 17 findings left open with the reason for each.
 - Audit fix: `relativeTo` in `src/model/paths.js` folds `.` and `..` folders and answers `null` for a path that climbs out of the project, so a lane reading `../MachineRoom/docs/agents/TASKS.md` no longer draws a `..` folder inside the room; `.` is the project root, a trailing slash is dropped, and a project with no name yet no longer reads every path that ends in a slash as the root; the four recorded scenarios replay unchanged; tests in `tests/paths.test.js`.
@@ -858,111 +1521,268 @@
 - Audit fix: the review list, the diff and the merge check in `server/reviews.js`, the lane runner's commit list and `npm run history-audit` name the branch as `refs/heads/main`, so a tag called `main` no longer hides a lane's commits from the review, refuses a merge as `Nothing to merge.` or keeps commits on main out of the audit (git reads a tag before a branch of the same name); tests in `tests/bridge-reviews.test.js` and `tests/history-audit.test.js`.
 - Green on Linux: `killTree(child)` in `server/processTree.js` stops a process and every process it started, with `taskkill /T /F` on Windows and a kill of the process group elsewhere, and the bridge's run route, the lane runner's time limit and the candidate build use it, so `bridge.stop()` now ends a lane run on Linux too (it called only `taskkill` before); `resolveOpencodeBinary` reads a Windows PATH with `path.win32`; the crash retry test in `tests/run-lane.test.js` runs only on Windows, because Linux keeps the low 8 bits of an exit code; tests in `tests/process-tree.test.js`, including a real grandchild process.
 - Review note on W2c: checked by eye against the mock in replay (the red `Newest backup 2 days ago` with its warning line, the confirm card, a backup that answered `Backed up as paperclip-…sql.gz, 778 kB.`, the title after it). AGY's report gave test counts that did not match its branch point; the merged suite was run here. `main` was pushed to a new private GitHub repository, `JCDC0/MachineRoom`, with the owner's yes (main only, no `feat/` branches).
+
+## 0.1.97
+
 - M1 passed on 2026-10-20 (0.1.97) with the owner's yes: `machine-room up` against the real Paperclip 2026.1012.0 (every route check ok, the backup 68 hours old), a task JC-24 created from the drawer for Hermes in the sandbox (low priority, 15 turns, 300 seconds), the run drawn in the room (Hermes left the hub, the sandbox card opened, `package.json` read once, Hermes green at the end), and its correct reply read in the thread, 58 seconds in all. Found: Hermes in Paperclip has no model set and runs on its own default, `xiaomi/mimo-v2.6-pro` at xhigh (the owner's choice whether to set one); the Hermes adapter reports no spend, so the meters show 0 cents for it; the dispatch form offers every model to every agent (M1a); posting the reply is three shell calls through `PAPERCLIP_API_URL`, even when the task says to run no command; with five agents parked, the hub is crowded in the overview; and JC-16 (agy, in progress) and JC-1 (Orchestrator, to do) are old open tasks in Paperclip. New brief: M1a.
+
+## 0.1.96
+
 - Cost per merge from decided runs and the outcome table in the lane runner (task C6b): `outcomeTable` counts only the merged and rejected runs in `costPerMerge` and adds `decidedCostUsd` beside `costUsd`, so a run with no outcome no longer raises the cost of a merge; `npm run run-lane -- --outcomes` (with `--since YYYY-MM-DD`) prints one line per lane and model from `formatOutcomes(rows)` in `src/briefs/run.js` and `No runs yet.` with no rows; `OutcomeRow` in CONTROL-CLIENT.md and the contract test carry the new field.
+
+## 0.1.95
+
 - New brief: C6b (cost per merge from decided runs, and `--outcomes` in the lane runner, OpenCode).
+
+## 0.1.94
+
 - Review note on C6a: the outcomes of the eight lane branches merged on 2026-10-20 are recorded (grades A to B+). `costPerMerge` divides the cost of every run in a row, pending ones too, by the merges, so it reads high while older runs have no outcome (Hermes 37 cents, OpenCode 19 cents today); C6b should count only decided runs.
 - Routing policy, version 1 (task C4a): `docs/agents/policy.json` holds the three tiers filled from `lanes.json` (small is Hermes on `deepseek/deepseek-v4.1-flash-1017` at xhigh, then Hermes on `minimax/minimax-m3.1-flash:free` at high; medium is OpenCode on `opencode-go/deepseek-v4.1-flash` at max, then Hermes on DeepSeek; large is AGY on Gemini 4 Argon (Medium), then the owner), the four money limits (0.25, 1, 10 and 30 dollars), 200 turns, 3600 seconds and a quota skip at 90 percent; `src/policy/route.js` adds `readPolicy`, which checks the schema and throws a plain sentence naming the first bad field, `tierFor`, `escalate` and `chooseRoute`, which takes the first choice of the tier whose provider is not above its quota and answers no choice with the spend sentence when a limit is reached; tests in `tests/policy.test.js`, including the real policy file. Nothing calls it yet.
+
+## 0.1.93
+
 - Review fixes on G1a: the email, path, profile and graded samples printed the raw line, so a key on the same line showed in full; every key on a line is now masked before the other kinds are read. The `sk-` pattern missed keys with hyphens (`sk-ant-api03-…`, `sk-proj-…`) and Google keys (`AIza…`) were not looked for; both are found now. On the real history the audit finds 20 keys, all fakes in tests (the key guard cases in `tests/assistant.test.js`, a variable in `tests/bridge.test.js`, the audit's own tests), 31 e-mail addresses (test fixtures and docs), 84 Windows user paths (mostly the recorded fixtures in `public/fixtures/`), 1 profile name and 5 mentions of coursework in the docs. No real key. These need a decision before G6: scrub the fixtures' paths, or allow them.
 - Outcome log (task C6a): `npm run outcome -- BRANCH merged|rejected [--grade A-] [--fixes N] [--note TEXT]` appends `{ branch, outcome, grade, fixes, note, version, recordedAt }` to `outcomes.jsonl` beside `runs.jsonl`, refuses a branch no run made and a bad outcome, grade, fixes or note before writing, and lets the newest outcome for a branch win; `outcomeTable(runs, outcomes)` in `server/outcomes.js` counts merged, rejected and pending runs per lane and model with the merge rate, average fixes and cost per merge, `GET /api/control/runs/outcomes` answers `{ rows }`, `outcomes()` joins the control client and its mock, and `OutcomeRow` joins CONTROL-CLIENT.md.
+
+## 0.1.92
+
 - New briefs: C6a (outcome log, OpenCode) and C4a (routing policy version 1, Hermes).
+
+## 0.1.91
+
 - Review note on U3a: a real run built OpenCode's worktree, served it on 5176 with `/` answering 200, and stopping the script left no process on the port. `ORCHESTRATOR.md` now names the orchestrator's model (Hermes on `deepseek/deepseek-v4.1-flash-1017` at xhigh), a free second opinion from AGY on Gemini 4 Argon before merging a route that writes, and `minimax/minimax-m3.1-flash:free` as the fallback for routine merges.
 - Try a lane's build beside the stable room (task U3a): `npm run candidate -- LANE` reads the lane's worktree, refuses a lane with no worktree, a worktree with uncommitted changes and a port in use before it does anything else, then builds that worktree and starts its own `bin/machine-room.mjs` on port 5175 or `--port` with `--paperclip`, `--company` and `--root` passed through, prints the branch, the short sha and the address, and stops the child on Ctrl+C; `MACHINEROOM_BUILD_COMMAND` (a JSON array) replaces the build command in tests, and `docs/agents/CANDIDATE.md` gives the try, merge and restart steps.
 - History audit before anything is published (task G1a): `findLeaks(text, { profileName })` in `src/briefs/audit.js` returns `{ kind, line, sample }` for key-shaped tokens, key settings that are not placeholders, email addresses except the two allowed ones, user paths, the profile name and paths into the graded folder, where a key shows only its first four characters and its length and every other kind shows the line cut to 80 characters around the match; `npm run history-audit` reads `git log -p --no-color --no-ext-diff --no-textconv main --tags` as a stream and the tracked files under 2 MB, prints the findings grouped by kind with the commit, file and line and then the count per kind, takes `--json`, exits 1 when it found anything and writes nothing; tests in `tests/history-audit.test.js`, including a throwaway repo where a fake key is added and then removed.
 - Backup age and Back up now in the meters panel (task W2c): `backupNotice(status)` in `src/ui/panels/backup.js` formats the newest backup age in hours or days and maps warning codes to plain sentences, `formatBytes(n)` formats sizes in kB or MB, and `MetersPanel` adds a Backups section with a confirm card that runs `client.backupNow()` and updates the status; tests in `tests/backup-notice.test.js`.
 
+## 0.1.90
+
 - Handoff: Hermes becomes the orchestrator after 0.1.90 and works from the new `docs/agents/ORCHESTRATOR.md` (the owner's standing rules, the review and merge loop, ownership, the review lessons, what waits on the owner). `scripts/agy-prompt.mjs` writes AGY's prompt file for a brief after the same checks the lane runner makes. `lanes.json` moves `src/engine/**`, `src/Stage.jsx` and `src/App.jsx` to AGY and `src/control/**`, `src/assistant/**` and `src/decider/**` to OpenCode, and V7a and V7b run on Gemini 4 Argon. `Concepts/`, the owner's reference stills, stays out of git. New briefs: G1a, U3a, V7a, W3c and V7b.
+
+## 0.1.88
+
 - The lane runner refuses a brief it cannot run (task T17): `briefProblems({ briefs, ids, laneKey, branchExists, force })` in `src/briefs/run.js` returns the sentences for an id that is not there, an id that appears more than once (ids compared without case), a brief marked done (with its `ownerText` as written), a brief owned by other lanes (`owners` joined with `and`) and a brief whose `branchFor(brief)` already exists, in that order, and `--force` drops only the done and owner sentences; `parseRunArgs` takes `--force`, and `scripts/run-lane.mjs` runs the check before the prompt, the lock or the log, prints each sentence and exits 1 for a real run and for `--dry-run`, with `branchExists` running `git rev-parse --verify --quiet refs/heads/NAME` in the main checkout with an argument list; tests in `tests/run-lane.test.js` cover each sentence, the fixed order, the id compared without case, `--force`, and the bin on a merged brief from the real `TASKS.md`.
+
+## 0.1.87
 
 - Review note on P1c: an unpacked real pack holds the same 61 files as `npm pack --dry-run` lists, none empty. 0.1.85 had a red `tests/briefs.test.js` (two briefs with the id W3a) because the suite ran before the briefs were written; Hermes found it and 0.1.86 had already fixed it.
 - Pack, unpack and start the room (task P1c): `packTo(root, destination, budgetMs)` in `scripts/pack-check.mjs` runs `npm pack --json --pack-destination` the way `runPack` runs the dry run, with the same timeout, and returns `{ status, error, signal, file }` with the full path of the `.tgz` read from npm's JSON; `untar(gzipBuffer, destination)` in `scripts/untar.mjs` gunzips with `node:zlib` and writes the regular files of the 512-byte tar blocks (name, size, type, and the `prefix` joined in front of the name when set) under the destination, making their folders and skipping other types, stops at the first all-zero block and throws `Unsafe path in the pack: NAME` for an absolute name or one with a `..` part, so no shell `tar` is needed; `tests/pack-start.test.js` packs into a `makeTempDir` folder, unpacks it, starts `package/bin/machine-room.mjs --port 0` with `PAPERCLIP_URL`, `PAPERCLIP_COMPANY_ID`, `PROJECT_ROOT` and `PORT` removed from its environment, and checks that `/` answers 200 with the same `<title>` as `dist/index.html`, that `/api/health` answers `paperclip: false` and that the unpacked folder has no `node_modules`, skipping without `dist/index.html` or when the pack runs past its budget; `tests/untar.test.js` covers a file in a folder, a long name split with `prefix`, a skipped folder entry and both unsafe names.
 - Merge a lane branch with a confirm step (task W3b): `GET /api/control/reviews` adds the full `head` sha of each lane, `POST /api/control/reviews/:lane/merge` takes `{ confirmed: true, head, message }`, checks the lane, the confirm, the head and message, one merge at a time, a clean `main`, the lane head and a clean lane, merges that sha with `--no-ff` and a set editor, aborts a conflict and leaves `main` as it was with the conflicted paths, writes nothing before a refusal, and never pushes; `mergeReview(lane, { head, message })` joins the control client and the mock, `head` and `MergeResult` join CONTROL-CLIENT.md, and the throwaway repository tests cover every refusal, a conflict, a union changelog merge and two merges at once.
+
+## 0.1.86
+
 - `docs/agents/CHANGELOG.md` merges with git's union driver (`.gitattributes`), so the line each branch adds under `Unreleased` no longer conflicts with the lines main added. The second W3a brief written in 0.1.85 repeated a merged task under the same id; OpenCode found W3a merged as 0.1.52 and stopped, and the brief is replaced by W3b.
+
+## 0.1.85
+
 - Review fix on T16: `tests/machine-up.test.js` (W1b, merged after T16 started) makes its temp folders with `makeTempDir` too. Two full runs after the merge left one empty folder of a finished run under `machineroom-tests`, which the next run deletes.
+
+## 0.1.83
+
 - One root for the tests' temp folders (task T16): `makeTempDir(prefix)` in `tests/helpers/tempRoot.js` makes each test's folder under `%TEMP%\machineroom-tests\<process id>\` (the process folder is made on first use) and the ten test files that called `mkdtempSync(join(tmpdir(), ...))` now call it, each keeping its own cleanup; `tests/helpers/cleanTemp.js` is the vitest `globalSetup` and at the start of a run deletes only the `<process id>` folders under that root whose process is no longer alive (`process.kill(pid, 0)` in a try block, with `EPERM` counted as alive), keeping the folders of live processes and unparseable names, so the folders a killed run leaves go at the start of the next run and nothing outside `machineroom-tests` is touched; `staleFolders(names, isAlive)` and `cleanTempRoot(root, alive)` are exported for tests in `tests/temp-root.test.js`.
 - `machine-room up` (task W1b): `npm run serve -- up` takes the serve flags, runs the doctor checks and prints their `ok` or `FAIL` lines, then starts the bridge and the built viewer and prints the address; a failed check adds `Some checks failed. The room opens anyway; features whose routes changed stay off.`, a Paperclip that does not answer adds `Paperclip is not running. Start it yourself with paperclipai run; machine-room never starts it.` and the room still serves its replay, a missing build exits 1 with the serve sentence, and it never starts, stops or changes Paperclip; tests in `tests/machine-up.test.js` with a fake Paperclip and a temp dist folder.
 - Review fix on U2b: `Stage.jsx` calls `useBridgeHealth` with the live bridge address (never in replay or the simulated feed) and passes `health` to the HUD. Checked against a bridge on a fake Paperclip that served the real spec without the approvals route: the chip read `Paperclip changed: 1 route (Paperclip 2026.1012.0)` and listed the route, and after the fake Paperclip stopped it read `Paperclip is not connected`.
-- Health chip in the HUD (task U2b): `healthNotice(health)` in `src/ui/healthNotice.js` returns null or the notice tone, title and lines, `useBridgeHealth(bridge)` in `src/ui/useBridgeHealth.js` polls `${bridge}/api/health`, and `Hud` renders the chip under the mode switch, opening the lines list with Close on click and closing on Escape.
-- The tests run again when Node crashes (task T15b): `npm test` runs `scripts/test.mjs`, which starts `node node_modules/vitest/vitest.mjs run` with any extra arguments passed through and the output shown live, and when the child exits with 3221226505 or -1073740791 (`0xC0000409`) it says the test worker crashed inside Node rather than a test and runs the suite again, at most three attempts, then exits 1 with a pointer to Known limits; `nextTestStep(status, tries)` in `src/briefs/run.js` makes that call, a status that is not the crash is kept as it is, a missing exit code counts as 1, and `MACHINEROOM_TEST_COMMAND` (a JSON array of the command and its arguments) replaces the vitest command for tests.
+
+## 0.1.81
+
 - Review fix on U2d: reading the agent list (`GET /api/control/agents`) no longer checks `team`, because it uses the agent list and the spend routes, not the hire and update routes; a changed hire route now stops a hire and leaves the list.
 - Feature switches (task U2d): each route in `server/surface.js` names its feature, `GET /api/health` adds `features` with every name true until a surface check marks one false, and the tasks, approvals, meters and team control routes plus both `/api/backup` methods answer 503 with the feature sentence before they call Paperclip, while the room routes keep working; tests in `tests/bridge.test.js` and `tests/doctor.test.js`.
+
+## 0.1.80
+
+- The tests run again when Node crashes (task T15b): `npm test` runs `scripts/test.mjs`, which starts `node node_modules/vitest/vitest.mjs run` with any extra arguments passed through and the output shown live, and when the child exits with 3221226505 or -1073740791 (`0xC0000409`) it says the test worker crashed inside Node rather than a test and runs the suite again, at most three attempts, then exits 1 with a pointer to Known limits; `nextTestStep(status, tries)` in `src/briefs/run.js` makes that call, a status that is not the crash is kept as it is, a missing exit code counts as 1, and `MACHINEROOM_TEST_COMMAND` (a JSON array of the command and its arguments) replaces the vitest command for tests.
 - Review fix on P1b: Vite copies `public/` into `dist/`, so a pack held 76 local lane recordings from `dist/recordings/` (agent output and local paths). The `files` list now leaves out `dist/recordings/` and the check forbids it; a pack is 61 files and 737 kB.
+
+## 0.1.79
+
 - Pack check (task P1b): `package.json` lists only the files the one-port command needs, and `npm run pack-check` reads `npm pack --dry-run --json` to fail when an imported file is missing from the pack or a secret, test, recording, module or log file is in it.
-- The native test crash found (task T15): a full run dies about half the time with exit code 0xC0000409 inside `node.exe` 24.15.0 at a fixed offset, always while `tests/bridge.test.js` is in flight (7 of 12 full runs, and 7 of 20 runs of that file alone), with `tests/control-contract.test.js` and `tests/bridge-reviews.test.js` in flight too and `tests/run-recording.test.js` sometimes; `--pool=forks` does not stop it (6 of 12) and one worker does (6 of 6) but takes 34 seconds a run against 9, so `vite.config.js` is unchanged.
+
+## 0.1.78
+
 - Review fixes on D2: the mock client and the contract have `decide`, and the mock answers like a bridge with no key.
 - Decide route in the bridge (task D2): `POST /api/decide` is local pages only, takes `state`, `questions` and an optional `model` with a 32 KB limit, calls `decide()` with `OPENROUTER_API_KEY` and the model from the body, `DECISION_MODEL` or `typesafe/jev-1.14`, answers the model, answers, usage, milliseconds and attempts, maps a missing key to 404 and a rate limit to 429 and any other failure to 502, logs only the model, the question names, the result kind and the milliseconds, and `decide({ state, questions, model })` joins the control client; tests in `tests/bridge.test.js` use a fake Decisions server.
+
+## 0.1.77
+
 - Review fixes on T13b: `readRunRecords` reads through `readAllRunRecords` instead of a second copy of the loop, the bridge takes the bad day sentence from `src/briefs/run.js` (`SINCE_PROBLEM`, now exported), and the mock client and the contract have `runStats`.
 - Lane run totals through the bridge (task T13b): `GET /api/control/runs/stats` answers `laneStats` over every record in `runs.jsonl`, with an optional `?since=YYYY-MM-DD` that uses the same date check as `parseRunArgs` and a 400 with its sentence for a bad day, a missing or empty file gives the empty result, `readAllRunRecords` sits beside the last-20 reader, and `runStats({ since })` joins the control client; tests in `tests/bridge.test.js`.
+
+## 0.1.76
+
+- The native test crash found (task T15): a full run dies about half the time with exit code 0xC0000409 inside `node.exe` 24.15.0 at a fixed offset, always while `tests/bridge.test.js` is in flight (7 of 12 full runs, and 7 of 20 runs of that file alone), with `tests/control-contract.test.js` and `tests/bridge-reviews.test.js` in flight too and `tests/run-recording.test.js` sometimes; `--pool=forks` does not stop it (6 of 12) and one worker does (6 of 6) but takes 34 seconds a run against 9, so `vite.config.js` is unchanged.
 - Review fixes on W1a: a Paperclip that answers `/api/health` with 503 and its version (its database is down) gets `Paperclip answers but says it is unhealthy (database_unreachable). Check its database.` instead of `does not answer`, and the backup hint says `Make one with paperclipai db:backup while Paperclip runs.` until the room has a backup button. Checked with a fake server serving the spec that Paperclip 2026.1012.0 builds itself: every one of the 23 routes passes, and this machine's newest backup (56 hours old) fails loudly.
+
+## 0.1.75
+
 - Machine-room doctor (task W1a): `npm run serve -- doctor` starts neither the bridge nor the viewer and prints one `ok` or `FAIL` line for Paperclip's health and version, the routes in its spec, the company, the project folder, and the age of its newest database backup, which fails when backups are off, none exists, or the newest is over 24 hours old, names Paperclip's warning codes and ends failed backup lines with the `paperclipai db:backup` hint; the checks live in `server/doctor.js`, and the spec reader moved to `server/surface.js` so `npm run doctor` and the machine doctor share it. Tests in `tests/machine-doctor.test.js`.
 - Labels for the recordings list (task T14): `describeRecording(entry)` in `src/model/replay.js` gives `{ name, title, detail, when }` for one `parseRecordingIndex` entry, where `title` is the lane and the briefs joined by spaces (`run` when the lane is empty, the lane alone when there are no briefs), `detail` joins with `, ` the minutes rounded to whole minutes (`under 1 min` below one), the tool calls (`1 tool call`, else `N tool calls`) and `finished` or `failed`, leaving out any part whose number is null, and `when` is the start as `YYYY-MM-DD HH:MM` in the local time or an empty string for a start that is not a time; `filterRecordings(entries, { lane, text })` keeps the order and returns the entries of one lane and the entries whose name, lane, briefs or model contain the text ignoring case, where a blank lane or text filters nothing and junk input gives an empty list. Tests in `tests/replay.test.js`. It is not wired into a picker yet.
+
+## 0.1.74
+
 - Review fix on T13: the totals say `1 run` instead of `1 runs`.
-- Lane run totals (task T13): `npm run run-lane -- --stats` prints one line per lane and model from `runs.jsonl` with the runs, the finished, killed and failed counts, the total and median minutes and the cost over the runs that reported one, then an `all` line, and `--since YYYY-MM-DD` keeps only the runs started on or after that day in UTC; `parseRunArgs` takes `--stats` without a lane or a brief and `--since` with a real day, `laneStats(records, { since })` in `src/briefs/run.js` builds the rows and the total, and `formatStats(stats)` returns the lines to print or `No runs recorded.`
+
+## 0.1.73
+
 - Review fixes on W2b: the mock client has `backupStatus` and `backupNow` (a backup 49.5 hours old to start with, a refusal while one runs) and the contract lists both with their shapes. The route list names the exact health fields the bridge reads (`version`, `databaseBackup.enabled`, `status`, `latestBackup.mtime`, `latestBackup.ageHours`, `warnings[].code`). Checked against the spec that Paperclip 2026.1012.0's own `buildOpenApiDocument()` builds, offline: all 749 routes load and every route and field the bridge uses is there. That check showed the spec's `info.version` is a fixed `1.0.0`, so `paperclipVersion` in the health answer now comes from Paperclip's `GET /api/health` `version` (the package version on an npm install).
 - Backup age and back up now through the bridge (task W2b): `server/surface.js` lists Paperclip's `GET /api/health` and `POST /api/instance/database-backups`; `GET /api/backup` answers `{ enabled, status, latestAt, ageHours, warnings, checkedAt }` from the health block (disabled with null times when the block is missing) and `POST /api/backup` with `{ confirmed: true }` makes a backup and answers `{ ok, name, sizeBytes, prunedCount, finishedAt }` with the bare file name, mapping 409, 403, any other failure and a dead Paperclip to plain answers, and `backupStatus()` and `backupNow()` join the control client. Tests in `tests/bridge.test.js`.
-- The unreadable counter in the health answer (task U2c): the bridge feeds one `createUnreadableCounter` in `accept`, with an agent id to parser map filled at start, when the Paperclip socket opens and whenever `/api/agents` is asked (a frame from an unknown agent asks for that list at most once every 30 seconds, and a failed fetch keeps the old map), ends a run's tail on `succeeded`, `failed`, `cancelled` or `timed_out`, and `GET /api/health` adds `unparsed: { total, byParser, since }` beside the old fields. Tests in `tests/bridge.test.js`.
+
+## 0.1.72
+
+- Lane run totals (task T13): `npm run run-lane -- --stats` prints one line per lane and model from `runs.jsonl` with the runs, the finished, killed and failed counts, the total and median minutes and the cost over the runs that reported one, then an `all` line, and `--since YYYY-MM-DD` keeps only the runs started on or after that day in UTC; `parseRunArgs` takes `--stats` without a lane or a brief and `--since` with a real day, `laneStats(records, { since })` in `src/briefs/run.js` builds the rows and the total, and `formatStats(stats)` returns the lines to print or `No runs recorded.`
+
+## 0.1.71
+
 - The README brought up to date (task G3b): it now describes the room as `docs/agents/ARCHITECTURE.md` has it (the hub ring, the agent shapes, the terminal chips, the folder cards and the four colours), the connect screen and its addresses, the one port run with `npm run serve` and its flags, the keys from `SHORTCUTS` in `src/ui/Hud.jsx`, the recordings that `npm run run-lane` writes, and the three checks; the three image lines are unchanged.
+
+## 0.1.70
+
+- The unreadable counter in the health answer (task U2c): the bridge feeds one `createUnreadableCounter` in `accept`, with an agent id to parser map filled at start, when the Paperclip socket opens and whenever `/api/agents` is asked (a frame from an unknown agent asks for that list at most once every 30 seconds, and a failed fetch keeps the old map), ends a run's tail on `succeeded`, `failed`, `cancelled` or `timed_out`, and `GET /api/health` adds `unparsed: { total, byParser, since }` beside the old fields. Tests in `tests/bridge.test.js`.
+
+## 0.1.69
+
 - Paperclip's backup routes, read from its code (task W2a): `docs/agents/BACKUPS.md` records the one backup route (`POST /api/instance/database-backups`, instance admin only, no request body, 201 with the file path, size, pruned count, folder, retention and times), the file name `<prefix>-YYYYMMDD-HHMMSS.sql.gz` in the backup folder, the hourly timer and the settings that control it, the `databaseBackup` block of `/api/health` as the only way to read the time of the last backup, and the restore steps the code shows, with a file and line for each fact and `not found in the code` where the code is silent. No code was changed.
-- The bridge serves the built viewer (task P1a): `createBridge({ staticDir })` answers GET and HEAD for the files under that folder, gives `index.html` at `/` and for a deep link with no file extension, sets a content type from the extension, refuses traversal outside the folder, and leaves API paths and the JSON 404 as they were; `bin/machine-room.mjs` starts it with `--paperclip`, `--company`, `--root`, `--port`, `--dist` and `--help`, prints the one line to open, and `npm run serve` runs it.
+
+## 0.1.68
+
+- Health chip in the HUD (task U2b): `healthNotice(health)` in `src/ui/healthNotice.js` returns null or the notice tone, title and lines, `useBridgeHealth(bridge)` in `src/ui/useBridgeHealth.js` polls `${bridge}/api/health`, and `Hud` renders the chip under the mode switch, opening the lines list with Close on click and closing on Escape.
 - Review fix on A5a: a cost row with no `agentId` is skipped, so it can never match a roster agent that has no id.
+
+## 0.1.67
+
 - Cost board rows (task A5a): `costBoard(costs, roster)` in `src/model/costs.js` joins the control client's `Costs` with the room's agents and returns `{ summary, rows, quota }`, with a row per roster agent in roster order and then the `byAgent` rows no roster agent covers (dearest first, then by name), a `reported` flag that is false when a harness reports no cost and no tokens, shares of the reported cost rounded to 3 decimals, the percent from `utilizationPercent` or from spend over budget, an `over` flag, one quota row per window and one error row per failed provider; junk input gives empty parts and never throws. Tests in `tests/costs.test.js`. It is not wired into the panels or the room yet.
-- Terminal buttons in the HUD (task V5b): each agent row has a Log button that toggles its chip and shows its log state, Overview gains a Show all or Hide all button, and T is added to the shortcut help list.
 - Review fix on V5b: the HUD's left column is 288px instead of 240px, so the Log buttons no longer cut the agent names short (checked by eye at 1280 by 800 and 1024 by 768).
+
+## 0.1.66
+
 - Review fix on P10: when a line grows past the tail limit, the counter skips the rest of that line in the next chunks instead of counting its end as a new line.
 - Count unreadable lines across chunks (task P10): `createUnreadableCounter({ tailLimit = 65536 })` in `src/model/parsers/unreadable.js` returns `{ push, end, counts, reset }`, puts the kept tail of a run in front of the next chunk before counting its complete lines with `unreadableLines`, keeps the text after the last line break as the new tail, drops a tail longer than the limit without counting it, counts a run's tail as one last line at `end` and forgets the run, keeps tails for at most 50 runs and drops the oldest first, and counts nothing and keeps no tail for an unknown parser; `counts()` gives a fresh `{ total, byParser: { claude, hermes, opencode, agy } }`. Tests in `tests/unreadable.test.js`, including the sandbox fixture at a total of 0. It is not wired into the pipeline.
+
+## 0.1.65
+
+- The bridge serves the built viewer (task P1a): `createBridge({ staticDir })` answers GET and HEAD for the files under that folder, gives `index.html` at `/` and for a deep link with no file extension, sets a content type from the extension, refuses traversal outside the folder, and leaves API paths and the JSON 404 as they were; `bin/machine-room.mjs` starts it with `--paperclip`, `--company`, `--root`, `--port`, `--dist` and `--help`, prints the one line to open, and `npm run serve` runs it.
 - Review fixes on P9: Hermes' progress lines (`┊ 💻 preparing terminal…` and `┊ review diff`) hold no call and no longer count, which the Paperclip sandbox recording showed (18 false counts, now 0; every lane recording also counts 0). The runs panel test waits for the mock run to finish instead of a fixed 40 ms, so a busy machine no longer fails it.
+
+## 0.1.64
+
 - Lines that look like tool calls but no parser read (task P9): `unreadableLines(parser, text)` in `src/model/parsers/unreadable.js` returns the lines of one log chunk that are shaped like a tool call for `claude`, `hermes`, `opencode` or `agy` but that parser could not read, and nothing for another parser name, plain text, blank lines or a good call; `hermes.js` exports its line pattern as `LINE` and `opencode.js` exports `recoverCall`, so an OpenCode masked line the recovery reads does not count. Tests in `tests/unreadable.test.js`. It is not wired into the bridge or the pipeline.
-- Paperclip version and route check in the health answer (task U2a): the bridge fetches `/api/openapi.json` at start, when its socket opens and every 15 minutes (`surfaceEveryMs` shortens that for a test), and `GET /api/health` now carries `paperclipVersion` and `surface` (ok, the missing and changed routes, or a plain sentence when the spec cannot be read) beside the old fields.
+
+## 0.1.63
+
 - Review fix on T12: `loadRecordingIndex` gives an empty list when the answer is an HTML page, because the Vite dev server answers a missing `recordings/index.json` with its own page and a 200, and a fresh checkout has no index yet.
 - Read the recordings index (task T12): `parseRecordingIndex(raw)` in `src/model/replay.js` turns the parsed `recordings/index.json` into a clean list of `{ name, lane, briefs, model, start, minutes, exitCode, frames, toolCalls }`, dropping anything that is not a plain object with a name that matches `RECORDING_NAME`, keeping the first of a repeated name, cutting the list at 50 and leaving the order as given, and `loadRecordingIndex({ base, fetchImpl })` fetches `${base}recordings/index.json`, answers an empty list on a 404 and throws the plain sentence `The list of recordings could not be read.` for another failed answer or a body that is not JSON. Tests in `tests/replay.test.js`. It is not wired into the HUD yet.
+
+## 0.1.62
+
+- Paperclip version and route check in the health answer (task U2a): the bridge fetches `/api/openapi.json` at start, when its socket opens and every 15 minutes (`surfaceEveryMs` shortens that for a test), and `GET /api/health` now carries `paperclipVersion` and `surface` (ok, the missing and changed routes, or a plain sentence when the spec cannot be read) beside the old fields.
+
+## 0.1.61
+
 - An index of the recordings (task T11): `writeRecording` in `scripts/recording-files.mjs` keeps `public/recordings/index.json` as an array of `{ name, lane, briefs, model, start, minutes, exitCode, frames, toolCalls }`, newest first and at most 50, drops entries whose `-run.jsonl` is gone, and writes the file through a temporary file and a rename, while the pure `recordingIndex(entries, entry, limit)` in `src/briefs/recording.js` puts the new entry first, replaces an older entry with the same name, drops anything without a plain name and cuts the list to the limit; a failed index write leaves the recording in place and returns `indexError`, which `scripts/run-lane.mjs` prints as `index: not updated (<the sentence>)`.
 - Review fixes on U1: the doctor matches a route whose path parameter Paperclip renamed (`{id}` and `{agentId}` count as the same place), so only a real change in a path reports it missing, and the route list also holds `GET /api/companies`, which the browser reads on the proxy route to find the company.
-- Paperclip route list and doctor (task U1): `server/surface.js` lists every Paperclip route the bridge calls, with the answer fields it reads and the request fields it sends, and `npm run doctor` fetches `/api/openapi.json` from a running Paperclip and prints a plain sentence for each route, method or field the spec does not list.
+
+## 0.1.60
+
 - Review fix on P8: the Hermes parser uses the last folder only for a bare file name. A line that carries a path, such as the full paths in session tool lines, still resolves by that path, so a read of `C:\...\test\index.js` after work in `src/` stays in `test/`.
 - Resolve a bare Hermes file name from the agent's last folder (task P8): `resolveKnown(name, files, near)` in `src/model/paths.js` takes an optional folder path and, when several files share the name, picks the one in that folder, else the one that shares the longest leading folder path with it counted in whole folder names, else keeps the bare name, and `src/model/parsers/hermes.js` remembers the folder of the last read, write or edit that was a known file or had a folder and passes it as `near`.
+
+## 0.1.59
+
+- Terminal buttons in the HUD (task V5b): each agent row has a Log button that toggles its chip and shows its log state, Overview gains a Show all or Hide all button, and T is added to the shortcut help list.
+- Paperclip route list and doctor (task U1): `server/surface.js` lists every Paperclip route the bridge calls, with the answer fields it reads and the request fields it sends, and `npm run doctor` fetches `/api/openapi.json` from a running Paperclip and prints a plain sentence for each route, method or field the spec does not list.
 - The folder cards open only for recent touches from the last 90 seconds of run time: `viewInput` in `src/engine/cards.js` uses `freshRecent(state)` for the focus and keeps the full recent list for ranking.
 - Folders close after the work ends (task V6): `src/model/state.js` keeps `state.latest` (the largest activity time applied so far, 0 in a new state) and `state.recentAt` (a map from each path in `state.recent` to the time of the touch that last added it, kept in step with `state.recent`), and exports `RECENT_KEEP_MS` (90000) and `freshRecent(state, keepMs)`, which returns the paths of `state.recent` in the same order whose last touch is at most `keepMs` before `state.latest`. It reads activity times, not `state.now`, so a replay and a seek give the same answer. Claude wires it into the cards.
+
+## 0.1.58
+
 - `Stage.jsx` passes `openTerminals`, `onToggleTerminal(key)` and `onShowTerminals(open)` to the HUD and keeps the open chips in step with the `T` key and the assistant. New briefs V5b (terminal buttons in the HUD, AGY) and V6 (folders close after the work ends, Hermes).
 - OpenCode's lane runs DeepSeek V4.1 Flash 1017 at `max` (`opencode-go/deepseek-v4.1-flash#max`), the owner's choice on 2026-10-20, now that OpenCode serves the 1017 version. OpenCode accepts `max` and `high` for this model and refuses `xhigh`. Hermes keeps the same model at `xhigh`.
-- Late join replay (task B6): `/events` sends the kept history to a client that connects without `Last-Event-ID` when it asks with `?history=1`, and the bridge client asks on its first connect, while a reconnect that sends `Last-Event-ID` still resumes after that id.
-- Unique agent keys and the Paperclip role (task B6): the agent list carries each agent's `role` (`ceo`, `engineer` and so on, or null) in `mapAgent` and in `toAgents`, and keys stay unique in list order, where the first agent with a known adapter keeps the adapter key and any later agent whose key is taken gets the slug of its name, with a number when that is taken too, in both places.
+
+## 0.1.55
+
 - Record every lane run (task T10): `scripts/run-lane.mjs` writes the recording itself right after it appends the run record, so `npm run run-recording` is no longer needed by hand, and it prints `room: /?recording=<name>` so the owner can open it. The work lives in `writeRecording({ record, lanes, root, env })` in `scripts/recording-files.mjs`, which returns the three paths and the frame and tool call counts or throws a plain sentence; `run-recording` calls the same function and prints what it printed before. A failed recording prints `room: not recorded (<the sentence>)` and the run keeps its exit code. `--dry-run` and `--list` write nothing.
 - The room, version 2 (tasks V2 to V5, after the owner's sketch). The Machine and the terminal wall are gone. The middle is a flat hub ring (`src/engine/hub.js`, radius 300) where each agent parks at its own slot between runs. Each agent has its own wireframe shape (`src/engine/shapes.js`), and Paperclip's Orchestrator gets an armillary with a second ring. Space is black with a faint lattice in all three axes, coordinate labels and far dust (`src/engine/void.js`), and the camera looks across the room and drifts a little with the pointer.
 - Folders are cards (`src/engine/cards.js`, replacing `clusters.js`): `planFolderView` picks them, closed cards are small, open cards larger with up to 3 faint folders behind, and the folder that holds a touched file lists up to 10 items with read and write counts. A head click pins a folder open, and a row click shows the full path and flies to it. `layoutCards` in `layout.js` lays the cards out in the overview camera's view plane around the hub, with deeper folders nearer the camera, and `fitView` in `camera.js` frames the hub and the cards (replacing `fitDistance`).
 - The WebGL canvas now sits over the CSS3D layer with a clear background, and each card has an invisible depth plane, so agents and lines in front of a card show over it and those behind it are hidden.
 - Terminals are chips beside their agents with a status ring. `T` opens the focused agent's chip to show its log, or every chip when no agent is focused. A working agent stands on the hub side of its card with its chip between them and a dashed trace from the chip to the file row.
 - Finished work is green (`#2aff80`): an agent, its chip, the files it wrote in a good run, its hub slot, the scrubber's finished markers and the HUD legend. Yellow now means active: the card and file an agent works on carry a dashed yellow outline. `state.js` keeps each agent's current `focus` paths and the 8 most `recent` touches for the folder plan.
+
+## 0.1.54
+
+- Late join replay (task B6): `/events` sends the kept history to a client that connects without `Last-Event-ID` when it asks with `?history=1`, and the bridge client asks on its first connect, while a reconnect that sends `Last-Event-ID` still resumes after that id.
+- Unique agent keys and the Paperclip role (task B6): the agent list carries each agent's `role` (`ceo`, `engineer` and so on, or null) in `mapAgent` and in `toAgents`, and keys stay unique in list order, where the first agent with a known adapter keeps the adapter key and any later agent whose key is taken gets the slug of its name, with a number when that is taken too, in both places.
 - Review fix on V1: in a folder that lists its files, a child folder on another focus path ranks with the focused file, so two agents working in `a/` and `a/sub/` both keep their path on screen.
+
+## 0.1.52
+
 - A folder view plan (task V1): `src/model/folderView.js` exports `planFolderView({ files, focus, touched, maxFolders, maxItems, backLayers })`, a pure function that keeps the root drawn, opens every folder on the way to a focus path, shows at most three child folders per open folder (focus paths first, then touched, then by name) with up to three faint folders behind for the rest, and gives the folder that holds a focused file a list of at most ten items with at most three folders, the focused file first. Paths are cleaned like `paths.js`, nothing is random, and `tests/folder-view.test.js` covers a deep path, a hundred child folders, forty files, two agents on two branches, a folder focus, the root alone and input order. It is not wired into the room yet.
-- Run a brief from the dispatch panel (task T7): when client.startRun is a function and the chosen brief has a lane, add a Run now button beside Copy prompt that opens an in-panel confirm card (lane, model, brief id, spend warning) and runs the brief; add the runs list under the brief section when client.runs exists (running entries with time ago and last lines in Space Mono dim, recent records with lane, briefs, result, cost or cost unknown, minutes, start time; no log path), with pure helpers in src/ui/panels/runs.js and tests in tests/panels-runs.test.js.
 - Review fixes on W3a: every `git diff` the reviews routes run passes `--no-ext-diff --no-textconv`, so a diff driver or text filter set in the shared git config never runs from the bridge.
-- Read the lane branches from the bridge (task W3a): `GET /api/control/reviews` lists one entry per lane with a worktree (branch, commits on top of `main`, dirty flag, diff totals and the newest run record from `runs.jsonl`, or `{ lane, worktree, error }` when the worktree is missing or is not a git repository) and `GET /api/control/reviews/:lane/diff` answers the files and the patch of `git diff main...HEAD`, cut at 400 KB (`createBridge({ patchLimit })` makes the cut smaller for a test). Both routes only read: git runs as an argument list in the lane's own worktree from `lanes.json`. `reviews()` and `reviewDiff(lane)` join the control client, the mock and the shared contract tests.
+
+## 0.1.51
+
 - The OpenCode report and the model in run lists (task T9): the summary of an OpenCode run now takes the text of the last `text` line in the log as its report and prints it after the OpenCode lines as `report: first N lines` (or `report: none`), the way the Hermes summary does, and `npm run run-lane -- --list` names the model right after the lane, so runs on different models tell each other apart.
+
+## 0.1.50
+
+- Run a brief from the dispatch panel (task T7): when client.startRun is a function and the chosen brief has a lane, add a Run now button beside Copy prompt that opens an in-panel confirm card (lane, model, brief id, spend warning) and runs the brief; add the runs list under the brief section when client.runs exists (running entries with time ago and last lines in Space Mono dim, recent records with lane, briefs, result, cost or cost unknown, minutes, start time; no log path), with pure helpers in src/ui/panels/runs.js and tests in tests/panels-runs.test.js.
+- Read the lane branches from the bridge (task W3a): `GET /api/control/reviews` lists one entry per lane with a worktree (branch, commits on top of `main`, dirty flag, diff totals and the newest run record from `runs.jsonl`, or `{ lane, worktree, error }` when the worktree is missing or is not a git repository) and `GET /api/control/reviews/:lane/diff` answers the files and the patch of `git diff main...HEAD`, cut at 400 KB (`createBridge({ patchLimit })` makes the cut smaller for a test). Both routes only read: git runs as an argument list in the lane's own worktree from `lanes.json`. `reviews()` and `reviewDiff(lane)` join the control client, the mock and the shared contract tests.
 - `npm run run-lane` takes `--model <id>` and `--reasoning <level>` for one run, without changing `lanes.json`. The prompt, the command and the run record all use the override.
 - `/?recording=<name>` replays a lane run: it opens the replay with `public/recordings/<name>-run.jsonl`, `-agents.json` and `-tree.json` instead of the sandbox fixtures. The name must be a plain file name (letters, digits, `-`, `_` and single dots inside), and a missing recording says how to make one.
 - Review fixes on T8: `agentsFile` and the recording script look a lane up with `Object.hasOwn`, and the script refuses a commit or branch name from the run record that is not a plain ref (one starting with `-` would reach `git ls-tree` as an option).
+
+## 0.1.49
+
 - Replay a lane run in the room (task T8): `src/briefs/recording.js` turns a finished run into the frames, agent list and file tree the replay loads, `npm run run-recording -- <n>` writes them under `public/recordings/` (ignored by git, because they hold real commands), and the Hermes parser reads ` [error]` at the end of a tool line as a failed call.
 - One run per lane, whoever starts it: `scripts/run-lane.mjs` takes `%TEMP%\machineroom-runs\<lane>.lock` (holding its process id) before it checks the worktree, refuses with a plain sentence while the process in the lock is alive, takes over a lock whose process is gone, and removes its own lock when it ends. The bridge's `409` only knew the runs the bridge started, so a run from the command line and one from the panel could share a worktree.
 - Review fixes on T5: the mock's fake run lasts `runMs` (50 times `latencyMs` by default, so 6 seconds in the app and no time in tests), long enough to see it running and to be refused a second run on the same lane. CONTROL-CLIENT.md lists `runs` among the change notice topics.
+
+## 0.1.47
+
 - Start a lane from the bridge (task T5): `GET /api/control/runs` lists the runs this bridge started that have not ended with their last five output lines, and the last 20 records from `%TEMP%\machineroom-runs\runs.jsonl`, newest first; `POST /api/control/runs` with `{ lane, briefs }` starts `node scripts/run-lane.mjs <lane> <ids>` from the project root as a child process (argument list, `shell: false`), one run per lane, and `bridge.stop()` kills the running children with `taskkill /T /F /PID`. A `runs` change notice goes out when a run starts and when it ends. `runs()` and `startRun(lane, briefs)` join the control client and the mock, where a fake run ends and adds a record.
 - Tool lines from Hermes runs (task T6): one-shot mode prints only the final report, so the runner now reads back the session Hermes keeps for that run (`hermes sessions export --session-id <id> --format jsonl -`, the id comes from the usage file), turns its tool calls into the `┊` lines that `src/model/parsers/hermes.js` reads, and appends them to the run log. `summarizeRun` for hermes now reports the tool calls, the failed calls and the files read and written relative to the worktree, then the first 20 lines of the report, and the script prints how many tool lines it captured.
 - The assistant knows the Agents tab: `open_panel` accepts `agents`, and asking for an agent's general, model or subagent settings opens that tab when the connection offers the agent builder. A refused hire or save now moves focus to the first field with a problem, so its message is in view.
+
+## 0.1.46
+
 - OpenCode's lane runs MiMo V2.6 Pro at its default level. OpenCode refuses every level name for that model (`max`, `high`, `xhigh` and `thinking` all answer "Variant unavailable" before any model call), so the lane has no `reasoning` and the runner passes no `#` part.
+
+## 0.1.45
+
 - Review fixes on C2b: pausing and resuming an agent go through Paperclip's own `/pause` and `/resume` routes (pause also cancels its active runs, resume checks its reporting chain) instead of writing `status` in a PATCH, and an agent id that is not valid percent encoding answers `404` instead of `500`. PAPERCLIP-API.md records the effort keys per harness, the missing subagent field, and the instructions bundle.
 - OpenCode costs and a smaller Hermes toolset (task T4): `summarizeRun` adds up the `cost` on every `step_finish` part of an `opencode run --format json` log as `costUsd` (null when no step carries a number), the summary prints it as `estimated cost`, and the run record uses it for opencode runs, so `--list` shows a cost for both harnesses. The Hermes lane now passes `-t file,terminal`, so an unattended run gets only the file and terminal tools, with no browser, web, messaging, desktop or delegation tools.
+
+## 0.1.44
+
 - Run records and summaries (task T3): the OpenCode lane now passes `--format json` right after `run`, each run ends with a summary from the pure `summarizeRun` (tool calls, failed calls and the files read and written for OpenCode; the first 20 lines of the report for Hermes), and each run appends a record to `%TEMP%\machineroom-runs\runs.jsonl` with the lane, briefs, model, reasoning, start time, minutes, exit code, kill flag, cost, log, branch and commits. `npm run run-lane -- --list` prints the last 10 records, newest first.
+
+## 0.1.43
+
 - A lane runner (task T2): `npm run run-lane -- <lane> <briefId...>` builds the prompt from the briefs, the house rules and the lane, starts Hermes or OpenCode with the lane's model and reasoning, writes all output to `%TEMP%\machineroom-runs\<lane>-<briefs>-<time>.log`, and kills the process tree with `taskkill` after `--minutes` (100 by default). `--dry-run` prints the file, the args and the cwd without starting anything. `src/briefs/run.js` holds the pure `commandFor` and `parseRunArgs` with tests, `buildPrompt` now adds the reasoning level to its first line, and `lanes.json` gives Hermes and OpenCode their command lines.
+
+## 0.1.42
+
 - The owner's model table (2026-10-19). Coding: AGY on Gemini 3.8 Flash (High) or Gemini 4 Argon (Medium), OpenCode on MiMo V2.6 Pro at max, Hermes on DeepSeek V4.1 Flash 1017 at xhigh. Live tests in MachineRoom: AGY on Gemini 3.8 Flash at medium only, OpenCode and Hermes on MiniMax M3.1 Flash Free at high, Claude Code on Haiku 5.5 at medium (in the M1 brief). New brief T2 for a lane runner that starts Hermes and OpenCode from the command line.
-- OpenCode's lane now names MiMo V2.6 Pro (`opencode-go/mimo-v2.6-pro`) in its prompts instead of Gemini 4 Argon, the owner's choice from C2b on.
 - A folder collapse plan (task P3a): `src/model/collapse.js` exports `planCollapse({ folders, fileCounts, hot, maxTiles })`, a pure function that adds missing ancestors, keeps the root, every hot folder and every hot ancestor open, then opens the rest breadth first while the tile count stays within `maxTiles` (400 by default). It returns the sorted open folders, one `{ path, folders, files }` entry per collapsed folder with subtree counts, and an `overBudget` flag. `tests/collapse.test.js` covers the fit, the over-budget split, a hot chain, input order, an oversized hot set, a missing parent and 10,000 folders under 200 ms. It is not wired into the room yet.
 - The Node version is pinned (task G7): `engines.node` in `package.json` is `>=24`, `.nvmrc` holds `24`, and the README draft says where the version is pinned. `package-lock.json` gains the same `engines` field, and `npm ci --dry-run` still matches.
 - Hire and update routes in the bridge (task C2b): `POST /api/control/agents` and `PATCH /api/control/agents/:id` run on `cleanAgentDraft` and `cleanAgentPatch`, so a bad request is refused with the same sentence as the mock. Model, turn limit and time limit go in `adapterConfig`, reasoning effort goes to the harness field (`effort`, `modelReasoningEffort`, `variant`, `thinking`) where the harness has one and to `metadata.reasoningEffort` where it has not, subagents go to `metadata.subagents = { allowed, depth }` because no harness has a field for them, and a budget in a patch goes through `PATCH /api/agents/:id/budgets`. A hire answers `{ agent, approval }` from the company flag `requireBoardApprovalForNewAgents` and the agent's `hire_agent` approval. `hireAgent` and `updateAgent` join the real control client and `CLIENT_METHODS`. An update that changes the instructions is refused with a plain sentence, because Paperclip edits instructions through its own bundle routes and not through the agent patch.
+
+## 0.1.41
+
+- OpenCode's lane now names MiMo V2.6 Pro (`opencode-go/mimo-v2.6-pro`) in its prompts instead of Gemini 4 Argon, the owner's choice from C2b on.
 - New briefs G7 (pin Node) and P3a (folder collapse plan) for Hermes. The M1 brief records the models for live tests that spend money: MiniMax M3.1 Flash Free for Hermes and OpenCode with DeepSeek V4.1 Flash as the fallback, Haiku 5.5 for Claude Code, Gemini 3.8 Flash for agy.
 - Agent builder form in the control drawer (task C3d): add the Agents tab when `client.hireAgent` exists, with a form to hire a new agent or edit an existing one from the list below (`src/ui/panels/AgentBuilder.jsx`), pure form helpers (`src/ui/panels/agentForm.js`) and tests (`tests/panels-agent-form.test.js`).
+
+## 0.1.40
+
 - `src/control/agents.js` exports `LIMITS` and `TEXT_LIMITS` (the numbers the checks use) and `fieldProblem(key, value)`, so a form can show a refusal under the field it names without copying a number. C3d now asks for this.
 - A first draft of the public README in `docs/agents/README-DRAFT.md` (task G3). It covers the replay and demo quick starts, live mode through the proxy or the bridge, the four harnesses with their known limits, what is not built yet, the safety rules of the bridge and the assistant, where the plan lives, how agents contribute, and a licence line that is still to be chosen. `README.md` is untouched; the owner moves the draft over at G6.
 - The body of a PowerShell here-string no longer counts as a file touch (task P7). Text from `@'` or `@"` up to the matching `'@` or `"@` is blanked before the command is split into segments, and a body whose closing mark never comes is blanked to the end. Text after the closing mark still counts, so a report piped into `Set-Content` still writes its file. A single quoted `'@'` and an email address such as `me@site.com` are not here-strings. Four scenario lines now expect no touches.
+
+## 0.1.39
+
 - A lane name such as `__proto__`, `constructor` or `toString` no longer crashes the briefs route. Lane lookups in the bridge, `buildPrompt` and the mock use `Object.hasOwn`, so these names get a `400` like any unknown lane. The bridge also answers a `500` with a plain sentence when a route throws, instead of leaving the request hanging (`tests/bridge-safety.test.js`).
+
+## 0.1.37
+
 - Hire and update an agent (task C3c): `hireAgent(draft)` and `updateAgent(id, patch)` in the control client contract and the mock, with the checks in `src/control/agents.js` (Paperclip roles and harnesses, limits, plain-words refusals). With approval required a hire makes a `pending_approval` agent and a pending `hire_agent` approval, approving it makes the agent ready and rejecting it terminates it, and a waiting or terminated agent cannot take a task. Agents carry effort, limits, subagent settings and instructions. The dispatcher can now change the subagent setting through the mock. New brief C2b for the real routes and a fuller C3d for the builder form.
 - Recover the tool calls that Paperclip's `***REDACTED***` mask used to drop (task P5). When a stored OpenCode line fails to parse and the mask is the cause, the parser now takes the tool name and the command up to the mask, or a complete path, and builds the same call it builds for a good line. It still drops a line with no tool name or no command or path. The four recorded scenarios now show the six calls they used to lose. The Hermes `grep` line counts as a search.
 
@@ -972,51 +1792,114 @@
 - The bridge rejects requests whose `Host` header is not `localhost`, `127.0.0.1` or `[::1]` (with any port) with `403`, blocking DNS rebinding reads (task U4).
 - Briefs menu in the dispatch panel (task T1b): list open briefs grouped by owner above Title when `client.briefs` exists, fill Title and Assignee on selection, load the agent prompt into a read-only box with `Copy prompt` and `Use as description`, and add pure brief helpers (`src/ui/panels/briefs.js`) with tests (`tests/panels-briefs.test.js`).
 - HUD polish (task C3e): move the assistant terminal default position above the transport bar on the right while keeping saved positions, fix the top-right action bar clipping and control drawer spacing, and subscribe the control drawer to approval notices for the tab badge count.
+
+## 0.1.36
+
 - Prompts come from the repository (task T1): `docs/agents/HOUSE-RULES.md` holds the rules every agent follows, `docs/agents/lanes.json` holds each agent's worktree, model and forbidden paths, and `src/briefs/briefs.js` parses the briefs in `TASKS.md` and builds the full prompt for one or more briefs and one lane. The mock client serves sample briefs through `briefs()` and `briefPrompt(ids, lane)`. TASKS.md loses its old rules and branch table. New briefs: T1a (routes), T1b (panel), G5 (CI), and a sharper P5.
+
+## 0.1.35
+
 - Stage passes the real control client to the HUD when the viewer is connected through the bridge (`createClient({ baseUrl })`), so the drawer, the assistant and its confirmed writes talk to Paperclip. Demo and replay still use the mock. PAPERCLIP-API.md gains the approval, comment order and cost event findings from C2. New briefs U4 (reject a foreign Host header), C3e (HUD polish) and the M1 exit test.
-- Hermes P6: the value of a commit message or a request body (`-m`, `--message`, `-d`, `--data`, `--data-raw`, `--data-binary`, quoted with `"`, `'` or `\"`) no longer counts as a file touch. A cut message with no closing quote is blanked to the end. A quoted path that is an ordinary argument still counts. Four scenario lines that pinned the old behaviour now expect no touches.
-- The assistant now acts (task A3). `src/assistant/dispatch.js` runs each validated action against a host: it moves the camera to an agent, a terminal, a folder or a file, controls the overview, follow and replay, and creates a task or sets a budget through the control client after the confirm card. The room gains `focusTerminal` and `focusPath`. `Stage.jsx` passes the paths of the project, the action handler and a `controlTarget` to the HUD, and shows results in a toast. The control plane agent is matched by the room's agent id, then by key, then by name.
-- Change notices in the panels and drawer opening from outside (task C3b): panels subscribe to change notices with pure 100 ms batching, and Hud accepts controlTarget to open tabs and task threads.
+
+## 0.1.33
+
 - Real control client (`src/control/client.js`), bridge control routes (`/api/control/*`), SSE `change` notices on `/events`, assistant model fallback route (`POST /api/assistant`), and shared contract test suite (`tests/control-contract.test.js`).
-- Floating assistant terminal (task A2): draggable terminal in the style of wall terminals, opened with / and closed with Escape, history ring of 20 lines, position remembered in settings and clamped to the window, bottom docked under 900px, proposal confirmations, and secret blocking.
+
+## 0.1.32
+
+- Hermes P6: the value of a commit message or a request body (`-m`, `--message`, `-d`, `--data`, `--data-raw`, `--data-binary`, quoted with `"`, `'` or `\"`) no longer counts as a file touch. A cut message with no closing quote is blanked to the end. A quoted path that is an ordinary argument still counts. Four scenario lines that pinned the old behaviour now expect no touches.
+- Change notices in the panels and drawer opening from outside (task C3b): panels subscribe to change notices with pure 100 ms batching, and Hud accepts controlTarget to open tabs and task threads.
+
+## 0.1.31
+
+- The assistant now acts (task A3). `src/assistant/dispatch.js` runs each validated action against a host: it moves the camera to an agent, a terminal, a folder or a file, controls the overview, follow and replay, and creates a task or sets a budget through the control client after the confirm card. The room gains `focusTerminal` and `focusPath`. `Stage.jsx` passes the paths of the project, the action handler and a `controlTarget` to the HUD, and shows results in a toast. The control plane agent is matched by the room's agent id, then by key, then by name.
+
+## 0.1.27
+
 - Decision model comparison tool (task D1): `src/decider/` (Decisions API request and answer shapes, `decide()` with a time limit, retries and key scrubbing, the fixed assistant and routing questions, stats, baselines, runner), `npm run decide-eval` and 138 probes in `tests/probes/` (98 assistant phrases, 40 coding tasks). It makes no call without `--run`, reads the key only from your environment, and sends it only over https or to this machine. Tests use a fake Decisions server. `rankPaths` in the assistant narrows the path options. The assistant test now takes its phrases from `tests/probes/`.
+
+## 0.1.26
+
 - The decision model: design, rules for acting on its answers, what is sent, a comparison of 27 listed models (Jev 1.14, Perplexity Decider, Clef, Mercury Decide, Microsoft-Decision-1 and local open ones), and tasks D1 to D5. The choice is to be measured on our own probe set.
-- Next plan (`docs/agents/PLAN.md`): milestones M1 to M4, the order of work for OpenCode, AGY and Claude, rules for staying current while Paperclip changes by itself, rules for MachineRoom building on itself, and the steps to publish on GitHub.
+
+## 0.1.25
+
+- Floating assistant terminal (task A2): draggable terminal in the style of wall terminals, opened with / and closed with Escape, history ring of 20 lines, position remembered in settings and clamped to the window, bottom docked under 900px, proposal confirmations, and secret blocking.
+
+## 0.1.24
+
 - The control client contract gains `subscribe` (change notices) and an `overrides` field on issues. The mock sends a notice after each write and keeps the dispatch limits on the issue. Tests run in the threads pool, because the forks pool crashed on Windows in `tests/bridge.test.js` about once in eight full runs (exit code 3221226505); 40 runs in a row pass now.
+
+## 0.1.23
+
+- Next plan (`docs/agents/PLAN.md`): milestones M1 to M4, the order of work for OpenCode, AGY and Claude, rules for staying current while Paperclip changes by itself, rules for MachineRoom building on itself, and the steps to publish on GitHub.
 - Merged OpenCode's four recorded scenarios and the stored-run frame tool, and AGY's control drawer (dispatch, tasks, approvals, meters on the mock). Removed a debug line that put the client on `window`.
+
+## 0.1.20
+
 - Assistant core (`src/assistant/`): a closed list of 14 actions with a validator, rule based intent with agent and path resolution, a guard that stops keys before they go anywhere, and a parser for a cheap fallback model. Tests in `tests/assistant.test.js`. The plan and the cost board are in `docs/agents/CONTROL-PLANE.md` and tasks A1 to A6.
+
+## 0.1.19
+
 - Fix keyboard handling, agent spend mapping, and typography in the control drawer panels.
 - Control drawer with dispatch form, tasks list and thread, approvals queue and spend and quota meters against the control client.
+
+## 0.1.18
+
 - Control client contract (`docs/agents/CONTROL-CLIENT.md`) and a mock (`src/control/mock.js`) with tests, so the dispatch, thread, approvals and meter panels can be built before the real client exists. The demo and replay pass the mock to the HUD as `client`.
+
+## 0.1.17
+
 - First run: a connect screen (bridge, Paperclip directly, demo, replay) opens on the first visit, remembers the choice and the replay speed, and comes back with a clear message when a live connection fails. A waiting overlay explains an empty or dropped live room. The start-up choice is a tested pure module.
 - Merged AGY's first-run components, settings module and README images.
+
+## 0.1.13
+
 - Add `src/ui/brand.js`, `src/ui/settings.js` with `tests/settings.test.js`, `src/ui/Connect.jsx`, `src/ui/Waiting.jsx` and improved `src/ui/Notice.jsx` with retry support.
 - Add overview, close-up and connect screen screenshots under `docs/images/` and link them in `README.md`.
+
+## 0.1.11
+
+- Fold the colour legend into the title block so the HUD clears the terminal wall at narrow widths, and align the event log columns.
+
+## 0.1.10
+
 - Folders float in 3D space at different heights and are joined by sagging strings. The layout is a fixed-pass relaxation, so it is deterministic, keeps tiles apart and out of the core, and a growing live tree keeps existing folders in place while tiles glide to new positions.
 - Agents travel along the strings from folder to folder and hover above the exact file they touch, with a tether and a floating tag with the current command.
 - Follow mode on `F` now cycles wide, close up and off.
 - The overview camera centers on the bounding sphere of the room, so deep folders stay in view.
-- Fold the colour legend into the title block so the HUD clears the terminal wall at narrow widths, and align the event log columns.
 - Four recorded scenarios under `public/fixtures/` (failing test then fix, edit across three files, rename on three agents, tool error) with parser tests that pin the files, modes and results of every tool call.
 - A shell command that renames or deletes files now touches them as writes, so a `git mv` or `rm` shows on both names.
 - Fixture building scrubs email addresses along with the Windows profile name, and still refuses to write when a frame looks like it holds a key.
 - `scripts/frames-from-runs.mjs` rebuilds a frame file from Paperclip's stored run data, so a recording is complete even where the live socket truncates large log chunks. The frame building is unit tested with fake API answers.
 - `npm run fixtures` also takes plain frame files and an optional output name, so one fixture set per recording can live under `public/fixtures/`.
+
+## 0.1.9
+
 - The bridge restores truncated log frames from Paperclip's run log, so large tool calls are no longer lost in live mode. Frames keep their order and the restored chunk is replayed after a reconnect.
+
+## 0.1.8
+
 - Merged OpenCode's bridge (`server/index.js`, `npm run bridge`) and `createPipeline`. The viewer's own copy is gone: `createPipeline` also carries `learn` and `context`.
 - Merged AGY's HUD: run markers, event log drawer on `L`, mode switch, help overlay on `?`, caret and glow on terminals.
 - Viewer connects through the bridge with `/?live&bridge=URL`, and adds files when the bridge reports them.
 - Replay and Live switch in the HUD without a page refresh. Live mode shows a feed clock instead of the scrubber.
 - Log lines and run markers come from `src/model/log.js`.
 - The bridge accepts any `localhost` or `127.0.0.1` page, not only port 5173.
-- Live mode: the viewer follows a running Paperclip over its WebSocket, with agent discovery, reconnect, an incremental pipeline and a live player. Open `/?live`.
-- The scene rebuilds its folders when the file list grows, so a live room can start empty.
-- Agents get their own key, so two agents with the same adapter no longer collide. Terminal wall gains rows.
-- Vite proxies `/paperclip` to Paperclip for REST calls.
+
+## 0.1.4
+
 - Simulated live feed: `/?live&simulate&speed=3` plays the recording through the live path, with a Demo badge.
 - Layout rewrite: folders no longer overlap, big folders use a dense grid and the overview camera fits the room.
 - Follow mode on `F`: the camera tracks the agent that is working.
 - File name labels for reads, writes and failures. Clusters recolour only the planes that changed.
+
+## 0.1.3
+
+- Live mode: the viewer follows a running Paperclip over its WebSocket, with agent discovery, reconnect, an incremental pipeline and a live player. Open `/?live`.
+- The scene rebuilds its folders when the file list grows, so a live room can start empty.
+- Agents get their own key, so two agents with the same adapter no longer collide. Terminal wall gains rows.
+- Vite proxies `/paperclip` to Paperclip for REST calls.
 
 ## 0.1.0
 
