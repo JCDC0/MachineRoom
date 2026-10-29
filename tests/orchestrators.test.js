@@ -184,6 +184,11 @@ function makeBase({ ladder = null, branch = '' } = {}) {
 }
 
 function makeRig(files, extra = {}) {
+  const activeFile = activeLanesFileFor(files.projectRoot, files.runs)
+  if (!existsSync(activeFile) && extra.active !== false) {
+    writeActiveLanes(activeFile, Object.keys(LANES).filter((k) => k !== 'orchestrator'))
+  }
+  const { active: _active, ...rest } = extra
   const registry = createOrchestrators({
     projectRoot: files.projectRoot,
     runsFolder: files.runs,
@@ -192,7 +197,7 @@ function makeRig(files, extra = {}) {
     promptFile: files.promptFile,
     bridgeUrl: () => 'http://127.0.0.1:5999',
     onNotice: () => {},
-    ...extra,
+    ...rest,
   })
   cleanups.push(() => registry.close())
   return { ...files, registry }
@@ -451,6 +456,51 @@ describe('the orchestrator registry', () => {
     rig.registry.onFrame(frame('opencode-K1-20261025-120000'))
     await waitIdle(rig.registry, 'orchestrator', 2)
     expect(rig.calls()[1].args[1]).toContain('Run opencode-K1-20261025-120000 on lane opencode ended: succeeded.')
+  })
+
+  it('leaves out a retired lane from the main orchestrator lanes', () => {
+    const files = makeBase()
+    const lanesWithRetired = {
+      ...LANES,
+      hermes: { name: 'Hermes', retired: true, cli: { harness: 'hermes', bin: 'hermes', model: 'hermes-3' } },
+    }
+    const activeFile = activeLanesFileFor(files.projectRoot, files.runs)
+    writeActiveLanes(activeFile, ['opencode', 'hermes', 'claude'])
+    const rig = makeRig(files, { lanes: lanesWithRetired })
+    const mainEntry = rig.registry.list()[0]
+    expect(mainEntry.lanes).toContain('opencode')
+    expect(mainEntry.lanes).toContain('claude')
+    expect(mainEntry.lanes).not.toContain('hermes')
+    expect(rig.registry.sector('orchestrator').lanes).toEqual(mainEntry.lanes)
+  })
+
+  it('leaves out an inactive lane when an active choice has been made', () => {
+    const files = makeBase()
+    const activeFile = activeLanesFileFor(files.projectRoot, files.runs)
+    writeActiveLanes(activeFile, ['opencode'])
+    const rig = makeRig(files)
+    const mainEntry = rig.registry.list()[0]
+    expect(mainEntry.lanes).toEqual(['opencode'])
+    expect(rig.registry.sector('orchestrator').lanes).toEqual(['opencode'])
+  })
+
+  it('leaves out a lane that a sub orchestrator claims', () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const activeFile = activeLanesFileFor(files.projectRoot, files.runs)
+    writeActiveLanes(activeFile, ['opencode', 'opencode2', 'claude'])
+    const rig = makeRig(files)
+    const list = rig.registry.list()
+    expect(list[0].lanes).toEqual(['opencode2', 'claude'])
+    expect(list[1].lanes).toEqual(['opencode'])
+    expect(rig.registry.sector('orchestrator').lanes).toEqual(['opencode2', 'claude'])
+  })
+
+  it('lists no lanes when no active lanes choice has been made', () => {
+    const files = makeBase()
+    const rig = makeRig(files, { active: false })
+    const mainEntry = rig.registry.list()[0]
+    expect(mainEntry.lanes).toEqual([])
+    expect(rig.registry.sector('orchestrator').lanes).toEqual([])
   })
 
   it('reads and sets autocompact per orchestrator', async () => {

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The main orchestrator lists only the eligible active lanes it leads, leaving out retired lanes, lanes a sub claims, and every lane when no choice is made (task O21).
+
 - The cyan console above an agent shows its address as a link in its label that opens in a new tab and leaves the agent unselected, and the dock offers `Open ADDRESS` when the console has one (task U83).
 
 - Enabled MCP servers pass to Claude Code and OpenCode lane runs and orchestrator turns through temporary config files (task H16).

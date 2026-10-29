@@ -80,6 +80,31 @@ export function eligibleLanes(lanesConfig = {}) {
   return list
 }
 
+export function activeEligibleLanes({
+  lanesConfig,
+  projectRoot,
+  runsFolder,
+  activeLanes,
+} = {}) {
+  const eligible = eligibleLanes(lanesConfig)
+  if (activeLanes) {
+    const helper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+    if (helper && typeof helper.isChosen === 'function') {
+      if (!helper.isChosen()) return []
+      return eligible.filter((lane) => helper.isLaneActive(lane.key))
+    }
+  }
+  const file = activeLanesFileFor(projectRoot, runsFolder)
+  const saved = readActiveLanesChoice(file)
+  if (saved === null) return []
+  const activeSet = new Set(saved)
+  return eligible.filter((lane) => activeSet.has(lane.key))
+}
+
+export function activeEligibleLaneKeys(options = {}) {
+  return activeEligibleLanes(options).map((lane) => lane.key)
+}
+
 export function listActiveLanes({
   lanesConfig,
   projectRoot,
@@ -268,6 +293,12 @@ export function createActiveLanesApi(options = {}) {
         projectRoot,
         runsFolder,
         isWorking,
+      }),
+    activeEligibleLaneKeys: () =>
+      activeEligibleLaneKeys({
+        lanesConfig: getLanesConfig(),
+        projectRoot,
+        runsFolder,
       }),
   }
 }
