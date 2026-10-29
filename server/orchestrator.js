@@ -736,8 +736,8 @@ export function createOrchestrator({
       return
     }
     if (pending.length === 0) return
-    const hasOwner = pending.some((message) => message.from === 'owner')
-    if (!hasOwner) {
+    const ordered = pending.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
+    if (!ordered) {
       if (!sessionId) return
       if (!roomTurnAllowed()) return
     }

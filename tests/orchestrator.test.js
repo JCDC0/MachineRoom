@@ -148,7 +148,7 @@ const FAKE_AGENT_SCRIPT = [
   "console.log('Fake reply for: ' + prompt.slice(-40).split('\\n').join(' '))",
 ].join('\n')
 
-function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true } = {}) {
+function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'claude', model = '', contextWindow = 0, harnesses = undefined, project = true, id = undefined } = {}) {
   const base = makeTempDir('mr-orchestrator-')
   const runs = join(base, 'runs')
   const projectRoot = project ? join(base, 'project') : ''
@@ -185,6 +185,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
   const notices = []
   const masked = { total: 0 }
   const orchestrator = createOrchestrator({
+    ...(id ? { id } : {}),
     projectRoot,
     runsFolder: runs,
     lanes,
@@ -1592,6 +1593,15 @@ describe('the lane source and the orchestrator turn', () => {
         },
       })
       expect(rigDefault.answer().contextWindow).toBe(200000)
+    })
+
+    it('starts the first turn of a sub on an order from the main orchestrator, and not on a room message', async () => {
+      const rig = makeRig({ id: 'team-1' })
+      rig.orchestrator.deliver('room', 'A lane ended.')
+      await sleep(200)
+      expect(rig.spawned).toHaveLength(0)
+      rig.orchestrator.deliver('orchestrator', 'Add slugify to src/text.js.')
+      await waitFor(() => rig.spawned.length === 1, 15000, 'the sub turn to spawn')
     })
 
     it('runs the program of its new harness after a harness change', async () => {

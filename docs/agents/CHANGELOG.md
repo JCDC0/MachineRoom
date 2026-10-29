@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- An order from the main orchestrator starts a sub's first turn. Before, a message that was not the owner's started a turn only when a session existed, so a new sub kept the order and never ran.
+
 - An orchestrator runs the program of its current harness: after a harness change from Claude Code to OpenCode the main ran `claude` with OpenCode's arguments and stopped with exit 1; it now takes the program from the lane of that harness.
 
 - The room passes the hub the keys of the agents working in its state, a sub orchestrator and its lanes included, and calls `setWorking` only when that set changes, so a sector's arc lights while its team works and returns over 1 second (task V44).
