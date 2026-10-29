@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -325,7 +325,8 @@ function runTestCommand(command, cwd, minutes) {
   })
 }
 
-function queueGit(project, branch, lane) {
+function queueGit(project, branch, lane, { onSettled } = {}) {
+  const settle = typeof onSettled === 'function' ? onSettled : () => {}
   const run = (args, allowFailure = false) => {
     const result = spawnSync(gitPath(), args, {
       cwd: project,
@@ -346,15 +347,34 @@ function queueGit(project, branch, lane) {
     create: (name) => {
       run(['switch', '-c', name])
     },
-    status: () => String(run(['status', '--porcelain']).stdout ?? ''),
+    status: () => {
+      const text = String(run(['status', '--porcelain']).stdout ?? '')
+      if (text.trim() === '') settle()
+      return text
+    },
     add: () => {
       run(['add', '-A'])
     },
     commit: (message) => {
       run(['commit', '-m', message])
-      return String(run(['rev-parse', '--short', 'HEAD']).stdout ?? '').trim()
+      const sha = String(run(['rev-parse', '--short', 'HEAD']).stdout ?? '').trim()
+      settle()
+      return sha
     },
   }
+}
+
+function writeProjectRecord({ record, folder, startHead, startBranch } = {}) {
+  if (!record) return
+  const git = projectRunGit({
+    branch: gitRead(folder, ['branch', '--show-current']) ?? '',
+    startBranch,
+    commits: startHead ? gitRead(folder, ['log', '--oneline', `${startHead}..HEAD`]) ?? '' : '',
+  })
+  if (git.branch !== '') record.branch = git.branch
+  record.commits = git.commits
+  appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
+  console.log(`record: ${runsFile()}`)
 }
 
 function projectHash(project) {
@@ -681,25 +701,40 @@ async function runQueueProject({ options, lane, lanes }) {
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
     const test = projectTestCommand(plan.made ? project : plan.path, options.test)
     const target = options.worktree ? prepareWorktree(project, options.lane) : plan
-    const result = await runQueue({
-      tasks,
-      git: queueGit(target.path, branch, options.lane),
-      runTask: async (task, number) => {
-        console.log(`task ${number} of ${tasks.length}`)
-        const prompt = unattendedPrompt(task)
-        const name = `${options.lane}-queue-${queueStamp}-${number}`
-        const logPath = join(folder, `${name}.log`)
-        const usageFile = join(folder, `${name}.usage.json`)
-        const run = await startLane({
-          options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
-          project: target.path, task, queue: { branch, index: number }, lockPath: lock,
-        })
-        return { code: run.code, killed: run.killed }
-      },
-      runTests: test ? async () => runTestCommand(test, target.path, options.minutes) : null,
-    })
-    formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? target.path : '' }).forEach((line) => console.log(line))
-    return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
+    const startBranch = gitRead(target.path, ['branch', '--show-current']) ?? ''
+    let pending = null
+    const finishPending = () => {
+      if (!pending) return
+      const item = pending
+      pending = null
+      writeProjectRecord(item)
+    }
+    try {
+      const result = await runQueue({
+        tasks,
+        git: queueGit(target.path, branch, options.lane, { onSettled: finishPending }),
+        runTask: async (task, number) => {
+          console.log(`task ${number} of ${tasks.length}`)
+          const prompt = unattendedPrompt(task)
+          const name = `${options.lane}-queue-${queueStamp}-${number}`
+          const logPath = join(folder, `${name}.log`)
+          const usageFile = join(folder, `${name}.usage.json`)
+          const run = await startLane({
+            options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
+            project: target.path, task, queue: { branch, index: number }, lockPath: lock,
+            projectBranch: startBranch, deferRecord: true,
+          })
+          pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch }
+          if (run.code !== 0 || run.killed) finishPending()
+          return { code: run.code, killed: run.killed }
+        },
+        runTests: test ? async () => runTestCommand(test, target.path, options.minutes) : null,
+      })
+      formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? target.path : '' }).forEach((line) => console.log(line))
+      return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
+    } finally {
+      finishPending()
+    }
   } finally {
     releaseLaneLock(lock)
     releaseLaneLock(projectLock)
@@ -843,7 +878,7 @@ async function main() {
   }
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '' }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false }) {
   let start = null
   if (!project) {
     const status = gitStatus(lane.worktree)
@@ -884,6 +919,12 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const log = createWriteStream(logPath)
     const laneLog = createLaneLog({ write: (text) => log.write(text), runId: name })
     const startedAt = Date.now()
+    const projectStart = project
+      ? {
+          branch: typeof projectBranch === 'string' ? projectBranch : gitRead(project, ['branch', '--show-current']) ?? '',
+          head: gitRead(project, ['rev-parse', 'HEAD']) ?? '',
+        }
+      : null
     // OpenCode takes its folder from PWD, which a shell started elsewhere leaves pointing at that shell's folder.
     const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
     const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE']
@@ -962,8 +1003,16 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const summary = summarizeRun({ harness, log: readLog(logPath), worktree })
     formatSummary(summary).forEach((line) => console.log(line))
 
-    const branch = project ? '' : gitRead(lane.worktree, ['branch', '--show-current']) ?? ''
-    const commitsText = project ? '' : gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? ''
+    const git = project
+      ? projectRunGit({
+          branch: gitRead(project, ['branch', '--show-current']) ?? '',
+          startBranch: projectStart.branch,
+          commits: projectStart.head ? gitRead(project, ['log', '--oneline', `${projectStart.head}..HEAD`]) ?? '' : '',
+        })
+      : {
+          branch: gitRead(lane.worktree, ['branch', '--show-current']) ?? '',
+          commits: (gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? '').split(/\r?\n/).filter(Boolean),
+        }
     const record = laneRunRecord({
       lane: options.lane,
       briefs: project ? [] : wanted.map((brief) => brief.id),
@@ -977,14 +1026,17 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       inputTokens: summary.inputTokens,
       outputTokens: summary.outputTokens,
       log: logPath,
-      branch,
-      commits: commitsText ? commitsText.split(/\r?\n/).filter(Boolean) : [],
+      branch: git.branch,
+      commits: git.commits,
       stoppedLeftovers,
       ...(start ? { startBranch: start.startBranch } : {}),
       ...(options.startedBy ? { startedBy: options.startedBy } : {}),
       ...(project ? { project, task } : {}),
       ...(queue ? { queue } : {}),
     })
+    if (project && deferRecord) {
+      return { code: result.code ?? 1, killed, record, startHead: projectStart.head, startBranch: projectStart.branch }
+    }
     appendFileSync(runsFile(), `${JSON.stringify(record)}\n`)
     console.log(`record: ${runsFile()}`)
     if (project) return { code: result.code ?? 1, killed }

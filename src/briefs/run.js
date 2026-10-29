@@ -906,6 +906,16 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
   return record
 }
 
+export function projectRunGit({ branch, startBranch, commits } = {}) {
+  const ended = typeof branch === 'string' ? branch.trim() : ''
+  const started = typeof startBranch === 'string' ? startBranch.trim() : ''
+  const lines = Array.isArray(commits) ? commits : String(commits ?? '').split(/\r?\n/)
+  return {
+    branch: ended !== '' && ended !== started ? ended : '',
+    commits: lines.map((line) => String(line ?? '').trim()).filter(Boolean),
+  }
+}
+
 export function runListLine(record) {
   const when = record.startedAt ?? 'time unknown'
   const model = record.model ? String(record.model) : 'model unknown'

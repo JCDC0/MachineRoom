@@ -1,10 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
-import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -876,6 +876,16 @@ describe('runRecord', () => {
   })
 })
 
+describe('projectRunGit', () => {
+  it('names the branch only when it changed and keeps the commits it was given', () => {
+    expect(projectRunGit({ branch: 'machineroom/queue-opencode-20261029-120000', startBranch: 'main', commits: 'abc1234 Write the lane note.' }))
+      .toEqual({ branch: 'machineroom/queue-opencode-20261029-120000', commits: ['abc1234 Write the lane note.'] })
+    expect(projectRunGit({ branch: 'main', startBranch: 'main', commits: 'abc1234 Write the lane note.' }))
+      .toEqual({ branch: '', commits: ['abc1234 Write the lane note.'] })
+    expect(projectRunGit({ branch: '', startBranch: 'main', commits: [] })).toEqual({ branch: '', commits: [] })
+  })
+})
+
 describe('runListLine', () => {
   it('prints one line with the cost or not reported', () => {
     const record = runRecord({ lane: 'hermes', briefs: ['T3'], startedAt: '2026-10-19T12:00:00.000Z', minutes: 12.4, exitCode: 0, costUsd: 0.0421, branch: 'feat/t3' })
@@ -1489,6 +1499,109 @@ describe('scripts/run-lane.mjs', () => {
       else process.env.MACHINEROOM_RUNS = previous
     } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+})
+
+describe('the record of a project run on a git project', { timeout: 30000 }, () => {
+  const FAKE_LANE = fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url))
+
+  function gitIn(folder, args) {
+    const result = spawnSync(gitPath(), ['-c', 'user.name=MachineRoom Test', '-c', 'user.email=machineroom@example.invalid', '-c', 'commit.gpgsign=false', ...args], {
+      cwd: folder,
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    if (result.error) throw result.error
+    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${folder}: ${String(result.stderr ?? '').trim()}`)
+    return String(result.stdout ?? '').trim()
+  }
+
+  function setupProject(base) {
+    const project = join(base, 'Other')
+    mkdirSync(project, { recursive: true })
+    gitIn(project, ['init', '-q', '-b', 'main'])
+    writeFileSync(join(project, 'readme.txt'), 'start\n')
+    writeFileSync(join(project, 'package.json'), `${JSON.stringify({ scripts: { test: 'node --version' } })}\n`)
+    copyFileSync(FAKE_LANE, join(project, 'run'))
+    gitIn(project, ['add', '-A'])
+    gitIn(project, ['commit', '-q', '-m', 'Start the project'])
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const lanesFile = join(base, 'lanes.json')
+    writeFileSync(lanesFile, `${JSON.stringify({
+      opencode: {
+        name: 'Fake lane',
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      },
+    }, null, 2)}\n`)
+    return {
+      project,
+      runs,
+      env: { TEMP: base, MACHINEROOM_RUNS: runs, MACHINEROOM_LANES_FILE: lanesFile },
+    }
+  }
+
+  function readLatestRecord(runs) {
+    const lines = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/)
+    return JSON.parse(lines[lines.length - 1])
+  }
+
+  it('records its branch and one commit for a queue run with one committed task', async () => {
+    const base = makeTempDir('machine-room-project-record-')
+    try {
+      const { project, runs, env } = setupProject(base)
+      const file = join(base, 'queue.txt')
+      writeFileSync(file, 'Write the lane note.\n')
+      const result = await runLane(['opencode', '--project', project, '--queue', file], env)
+      expect(result.code).toBe(0)
+      const record = readLatestRecord(runs)
+      expect(record.project).toBe(realpathSync.native(project))
+      expect(record.branch).toMatch(/^machineroom\/queue-opencode-/)
+      expect(record.queue).toBe(record.branch)
+      expect(record.commits).toHaveLength(1)
+      expect(record.commits[0]).toContain('Write the lane note.')
+      expect(gitIn(project, ['branch', '--show-current'])).toBe(record.branch)
+      expect(gitIn(project, ['log', '--oneline', 'refs/heads/main..HEAD'])).toBe(record.commits[0])
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('records the commits on the worktree branch of a worktree run', async () => {
+    const base = makeTempDir('machine-room-worktree-record-')
+    try {
+      const { project, runs, env } = setupProject(base)
+      const result = await runLane(['opencode', '--project', project, '--task', 'Write the lane note.', '--worktree'], env)
+      expect(result.code).toBe(0)
+      const path = join(project, '.worktrees', 'opencode')
+      const record = readLatestRecord(runs)
+      expect(record.project).toBe(realpathSync.native(path))
+      expect(record.branch).toMatch(/^machineroom\/queue-opencode-/)
+      expect(record.queue).toBe(record.branch)
+      expect(record.commits).toHaveLength(1)
+      expect(record.commits[0]).toContain('Write the lane note.')
+      expect(gitIn(path, ['branch', '--show-current'])).toBe(record.branch)
+      expect(gitIn(path, ['log', '--oneline', 'refs/heads/main..HEAD'])).toBe(record.commits[0])
+      expect(gitIn(project, ['branch', '--show-current'])).toBe('main')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('records no branch and no commits for a run on the project branch with no commit', async () => {
+    const base = makeTempDir('machine-room-project-nocommit-')
+    try {
+      const { project, runs, env } = setupProject(base)
+      const result = await runLane(['opencode', '--project', project, '--task', 'Write the lane note.'], env)
+      expect(result.code).toBe(0)
+      const record = readLatestRecord(runs)
+      expect(record.project).toBe(realpathSync.native(project))
+      expect(record.branch).toBe('')
+      expect(record.commits).toEqual([])
+      expect(gitIn(project, ['branch', '--show-current'])).toBe('main')
+    } finally {
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })
 })
