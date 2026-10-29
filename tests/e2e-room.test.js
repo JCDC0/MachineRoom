@@ -349,7 +349,7 @@ describe('the room, played from a recorded lane run', () => {
   it('lays out every activity and plays the same frames twice', () => {
     const { frames, agents, tree } = loadScenario('scenario-e')
     expect(ROOT_AHEAD).toBe(0)
-    expect(ROOT_DROP).toBe(40)
+    expect(ROOT_DROP).toBe(240)
     expect(agents.map((agent) => agent.key)).toEqual(['claude', 'hermes', 'opencode', 'orchestrator'])
     expect(tree.files.length).toBeGreaterThan(0)
 
