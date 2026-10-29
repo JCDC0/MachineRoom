@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The room passes the hub the keys of the agents working in its state, a sub orchestrator and its lanes included, and calls `setWorking` only when that set changes, so a sector's arc lights while its team works and returns over 1 second (task V44).
+
 - The cyan console above an agent shows its address as a link in its label that opens in a new tab and leaves the agent unselected, and the dock offers `Open ADDRESS` when the console has one (task U83).
 
 - Enabled MCP servers pass to Claude Code and OpenCode lane runs and orchestrator turns through temporary config files (task H16).

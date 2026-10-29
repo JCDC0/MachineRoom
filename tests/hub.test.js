@@ -8,6 +8,7 @@ import {
   sectorIdForKey,
   sectorLaneAngles,
   sectorSlotAngles,
+  workingKeys,
 } from '../src/engine/hub.js'
 import { sectorArcs } from '../src/model/hierarchy.js'
 
@@ -150,6 +151,65 @@ describe('which sector an agent belongs to', () => {
     expect(sectorIdForKey('agy', LADDER)).toBe('orchestrator')
     expect(sectorIdForKey('', LADDER)).toBe('orchestrator')
     expect(sectorIdForKey('opencode', null)).toBe('orchestrator')
+  })
+})
+
+function roomState(entries) {
+  const agents = new Map()
+  for (const [key, status] of entries) agents.set(key, { key, status })
+  return { agents }
+}
+
+describe('which agents a sector lights for', () => {
+  it('names no key when no agent works', () => {
+    expect(workingKeys(roomState([]))).toEqual([])
+    expect(workingKeys(roomState([['opencode', 'idle'], ['claude', 'done']]))).toEqual([])
+    expect(workingKeys(null)).toEqual([])
+    expect(workingKeys(undefined, undefined)).toEqual([])
+  })
+
+  it('names a working lane, in its own sector', () => {
+    const state = roomState([['opencode', 'working'], ['claude', 'idle']])
+    expect(workingKeys(state)).toEqual(['opencode'])
+    expect(sectorIdForKey('opencode', LADDER)).toBe('frontend')
+  })
+
+  it('names a working sub orchestrator', () => {
+    const state = roomState([['sub-backend', 'working'], ['claude', 'queued']])
+    expect(workingKeys(state)).toEqual(['sub-backend'])
+    expect(sectorIdForKey('sub-backend', LADDER)).toBe('backend')
+  })
+
+  it('keeps the previous list when the set has not changed', () => {
+    const state = roomState([['opencode', 'working'], ['sub-backend', 'working']])
+    const first = workingKeys(state)
+    expect(first).toEqual(['opencode', 'sub-backend'])
+    expect(workingKeys(state, first)).toBe(first)
+    state.agents.get('opencode').status = 'idle'
+    expect(workingKeys(state, first)).toEqual(['sub-backend'])
+  })
+
+  it('calls once across frames while the working set holds', () => {
+    const state = roomState([['opencode', 'working'], ['claude', 'idle']])
+    const calls = []
+    let last = []
+    for (let frame = 0; frame < 60; frame++) {
+      const next = workingKeys(state, last)
+      if (next !== last) {
+        calls.push(next)
+        last = next
+      }
+    }
+    expect(calls).toEqual([['opencode']])
+  })
+
+  it('gives an empty list when the last working agent stops', () => {
+    const state = roomState([['opencode', 'working']])
+    const first = workingKeys(state)
+    state.agents.get('opencode').status = 'done'
+    const next = workingKeys(state, first)
+    expect(next).toEqual([])
+    expect(next).not.toBe(first)
   })
 })
 

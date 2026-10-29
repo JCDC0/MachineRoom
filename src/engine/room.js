@@ -5,7 +5,7 @@ import { createAgents } from './agents.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
-import { HUB_CENTER, HUB_RADIUS, createHub } from './hub.js'
+import { HUB_CENTER, HUB_RADIUS, createHub, workingKeys } from './hub.js'
 import { createInternet } from './internet.js'
 import { createLabels } from './labels.js'
 import { createMessages } from './messages.js'
@@ -269,6 +269,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const pointer = new THREE.Vector2()
   const followFocus = createFollowFocus()
   const masks = createWorkingMaskCache()
+  let lastWorking = []
 
   function agentAt(event) {
     const rect = gl.getBoundingClientRect()
@@ -577,6 +578,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
     const state = getState()
     const mask = masks.of(state)
+    const working = workingKeys(state, lastWorking)
+    if (working !== lastWorking) {
+      lastWorking = working
+      hub.setWorking(working)
+    }
     space.update(delta)
     hub.update(now / 1000, delta, camera, height)
     internet.update(delta, agentSet.webActive() > 0)

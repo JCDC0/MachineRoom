@@ -157,6 +157,31 @@ export function sectorGlow(level, working, delta, reduced = false) {
   return Math.max(0, current - step)
 }
 
+const NO_KEYS = Object.freeze([])
+
+export function workingKeys(state, previous = NO_KEYS) {
+  const before = Array.isArray(previous) ? previous : NO_KEYS
+  const agents = state?.agents
+  if (!agents || typeof agents.values !== 'function') return before.length === 0 ? before : NO_KEYS
+  let count = 0
+  let same = true
+  for (const agent of agents.values()) {
+    if (!agent || agent.status !== 'working') continue
+    const key = typeof agent.key === 'string' ? agent.key : ''
+    if (key === '') continue
+    if (same && before[count] !== key) same = false
+    count += 1
+  }
+  if (same && count === before.length) return before
+  const keys = []
+  for (const agent of agents.values()) {
+    if (!agent || agent.status !== 'working') continue
+    const key = typeof agent.key === 'string' ? agent.key : ''
+    if (key !== '') keys.push(key)
+  }
+  return keys
+}
+
 function ringPoints(radius, steps, y = 0) {
   return Array.from({ length: steps }, (_, i) => {
     const angle = (i / steps) * Math.PI * 2
@@ -280,7 +305,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let sectorLabels = []
   let sectorGroups = []
   let sectorLevels = new Map()
-  let workingKeys = new Set()
+  let workingSet = new Set()
   let ringLines = [main]
   let boost = 0
 
@@ -346,7 +371,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   }
 
   function setWorking(keys) {
-    workingKeys = new Set(
+    workingSet = new Set(
       (Array.isArray(keys) ? keys : []).filter((key) => typeof key === 'string' && key !== '')
     )
   }
@@ -367,7 +392,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     const isStill = still()
     boost = Math.max(0, boost - delta * 1.2)
     const workingSectors = new Set()
-    for (const key of workingKeys) workingSectors.add(sectorIdForKey(key, currentLadder))
+    for (const key of workingSet) workingSectors.add(sectorIdForKey(key, currentLadder))
     for (const [id, level] of sectorLevels) {
       sectorLevels.set(id, sectorGlow(level, workingSectors.has(id), delta, isStill))
     }
