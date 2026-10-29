@@ -179,7 +179,7 @@ describe('the flat ring', () => {
     const root = placeOf(placed, '')
     const fromHub = Math.hypot(root.x - HUB_CENTER.x, root.z - HUB_CENTER.z)
     expect(ROOT_AHEAD).toBe(0)
-    expect(ROOT_DROP).toBe(40)
+    expect(ROOT_DROP).toBe(240)
     expect(fromHub).toBe(0)
     expect(root.x).toBe(HUB_CENTER.x)
     expect(root.z).toBe(HUB_CENTER.z)
@@ -188,6 +188,13 @@ describe('the flat ring', () => {
     expect(root.y).toBeLessThan(HUB_CENTER.y)
     expect(root.y).toBeGreaterThan(HUB_CENTER.y - HUB_RADIUS)
     expect({ x: root.x, z: root.z }).toEqual({ x: ROOT_PLACE.x, z: ROOT_PLACE.z })
+  })
+
+  it('drops the root far enough below the ring to clear its front edge at the overview pitch', () => {
+    const placed = layoutRing([rootEntry()])
+    const root = placeOf(placed, '')
+    expect(ROOT_DROP).toBeGreaterThanOrEqual(200)
+    expect(root.y + root.height / 2).toBeLessThanOrEqual(HUB_CENTER.y - 200)
   })
 
   it('keeps the root top edge below the hub however many files it lists', () => {

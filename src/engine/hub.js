@@ -19,9 +19,10 @@ export const SECTOR_ARC_OPACITY = Object.freeze({ main: 0.52, sub: 0.88 })
 export const SECTOR_LABEL_BASE = 0.9
 export const SECTOR_LABEL_FONT = 28
 export const SECTOR_LABEL_MIN = 12
-export const SECTOR_LABEL_OUT = 220
-export const SECTOR_LABEL_SPREAD = 60
-export const SECTOR_LABEL_DROP = 180
+export const SECTOR_LABEL_OUT = 300
+export const SECTOR_LABEL_SPREAD = 20
+export const SECTOR_LABEL_DROP = 40
+export const SECTOR_LABEL_INSET = 0.1
 export const SECTOR_LABEL_OPACITY = 0.45
 export const SECTOR_LABEL_COLOR = `rgba(255,255,255,${SECTOR_LABEL_OPACITY})`
 export const SECTOR_GLOW_MS = 1000
@@ -99,6 +100,13 @@ export function sectorLabelPoint(angle, radius = HUB_RADIUS, sectors = 1, out = 
   const theta = Number.isFinite(mid) ? mid : 0
   const distance = sectorLabelRadius(radius, sectors)
   return out.set(Math.cos(theta) * distance, -SECTOR_LABEL_DROP, Math.sin(theta) * distance)
+}
+
+export function sectorLabelAngle(arc) {
+  const start = Number(arc?.start)
+  const end = Number(arc?.end)
+  if (!Number.isFinite(start) || !Number.isFinite(end) || !(end > start)) return 0
+  return start + (end - start) * SECTOR_LABEL_INSET
 }
 
 export function sectorArcTone(main) {
@@ -260,9 +268,8 @@ function buildSectors(ladder, parkedKeys, group) {
       sector.add(line)
       lines.push(line)
     })
-    const mid = (arc.start + arc.end) / 2
     const label = textSprite(String(arc.name).toUpperCase(), { scale: SECTOR_LABEL_BASE, color: SECTOR_LABEL_COLOR })
-    label.position.copy(sectorLabelPoint(mid, HUB_RADIUS, arcs.length))
+    label.position.copy(sectorLabelPoint(sectorLabelAngle(arc), HUB_RADIUS, arcs.length))
     label.userData.base = { x: label.scale.x, y: label.scale.y }
     label.userData.factor = 1
     sector.add(label)
