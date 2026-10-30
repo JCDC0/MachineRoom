@@ -16,6 +16,8 @@ import { DEFAULT_FIXTURE } from './model/replay.js'
 import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
+import Inspector from './ui/Inspector.jsx'
+import { INSPECT_EVENT, inspectTarget } from './ui/inspector.js'
 import { CostsModeContext } from './ui/panels/MetersPanel.jsx'
 import { name } from './ui/brand.js'
 import { lensClock, lensProject, lensStatus } from './ui/lens.js'
@@ -270,6 +272,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const health = useBridgeHealth(live && !live.simulated ? live.bridge ?? null : null)
   const [snapshot, setSnapshot] = useState(() => player.snapshot())
   const [focused, setFocused] = useState(null)
+  const [inspector, setInspector] = useState(null)
+  const inspectorRef = useRef(null)
+  inspectorRef.current = inspector
   const [following, setFollowing] = useState(false)
   const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
@@ -329,6 +334,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [ladder, setLadder] = useState(null)
   const [orchestrators, setOrchestrators] = useState(NONE)
   const [labels, setLabels] = useState(null)
+  const [familyNodes, setFamilyNodes] = useState(NONE)
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const [dockCosts, setDockCosts] = useState(null)
@@ -370,6 +376,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   )
   const pathsRef = useRef(assistantPaths)
   pathsRef.current = assistantPaths
+  const inspectorTree = useMemo(() => {
+    if (inspector?.kind !== 'folder') return null
+    return {
+      rootName: data.tree.rootName,
+      files: [...player.state.files.keys()],
+      dirs: [...player.state.dirs.keys()],
+    }
+  }, [inspector?.kind, player, data.tree.rootName, fileCount, dirCount])
   const timeline = useMemo(() => (live ? null : buildTimeline(data.activities, player.stamps, agents)), [live, data, player, agents])
   const log = useMemo(
     () => (timeline ? entriesUpTo(timeline.entries, snapshot.position) : liveLog),
@@ -380,6 +394,41 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     followRef.current = on
     roomRef.current?.setFollow(on)
     setFollowing(on)
+  }
+
+  function showInspector(detail) {
+    const next = inspectTarget(detail)
+    if (!next) return null
+    setInspector(next)
+    if (next.kind === 'agent') setFocused(next.id)
+    else setFocused(null)
+    return next
+  }
+
+  function inspectHere(detail) {
+    const next = showInspector(detail)
+    if (!next) return
+    setFollow(false)
+    roomRef.current?.inspect(next)
+  }
+
+  function closeInspector() {
+    setInspector(null)
+  }
+
+  function navigateInspector(path) {
+    setFollow(false)
+    setFocused(null)
+    const shown = roomRef.current?.focusPath(path) ?? false
+    if (shown) setInspector({ kind: 'folder', id: path })
+    return shown
+  }
+
+  function selectInspector(detail) {
+    const next = showInspector(detail)
+    if (!next) return
+    setFollow(false)
+    roomRef.current?.inspect(next)
   }
 
   useEffect(() => {
@@ -431,11 +480,19 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           followRef.current = false
           setFollowing(false)
           setFocused(null)
+          setInspector(null)
           return
         }
         setFollow(false)
-        room.focus(key)
+        room.inspect({ kind: 'agent', id: key })
         setFocused(key)
+        setInspector({ kind: 'agent', id: key })
+      },
+      onInspect: (detail) => {
+        showInspector(detail)
+      },
+      onDismiss: () => {
+        setInspector(null)
       },
     })
     roomRef.current = room
@@ -533,6 +590,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
     if (!live || !client || typeof client.family !== 'function') {
       apply(null)
+      setFamilyNodes(NONE)
       roomRef.current?.setLabels(null)
       return undefined
     }
@@ -546,10 +604,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (!active || !isLatest()) return
         const next = labelsFromFamily(answer)
         apply(next)
+        setFamilyNodes(Array.isArray(answer?.nodes) ? answer.nodes : NONE)
         roomRef.current?.setLabels(next)
       } catch {
         if (!active || !isLatest()) return
         apply(null)
+        setFamilyNodes(NONE)
         roomRef.current?.setLabels(null)
       }
     }
@@ -606,6 +666,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
     window.addEventListener('machineroom:show-git-tree', onShowGitTree)
     return () => window.removeEventListener('machineroom:show-git-tree', onShowGitTree)
+  }, [])
+
+  useEffect(() => {
+    function onInspect(event) {
+      inspectHere(event.detail)
+    }
+    window.addEventListener(INSPECT_EVENT, onInspect)
+    return () => window.removeEventListener(INSPECT_EVENT, onInspect)
   }, [])
 
   useEffect(() => {
@@ -795,6 +863,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       const room = roomRef.current
       if (event.key === 'Escape') {
         if (document.querySelector(OPEN_PANEL)) return
+        if (inspectorRef.current) {
+          setInspector(null)
+          return
+        }
         parkRoom()
       } else if (event.code === 'Space') {
         event.preventDefault()
@@ -835,8 +907,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   function focus(key) {
     setFollow(false)
-    roomRef.current?.focus(key)
+    roomRef.current?.inspect({ kind: 'agent', id: key })
     setFocused(key)
+    setInspector({ kind: 'agent', id: key })
   }
 
   function toggleTerminal(key) {
@@ -852,10 +925,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     setFollow(false)
     roomRef.current?.park()
     setFocused(null)
+    setInspector(null)
   }
 
   function onEmptyDoubleClick(event) {
-    if (event.target?.closest?.('.mr-card, .mr-term, .mr-term-console, .mr-board')) return
+    if (event.target?.closest?.('.mr-card, .mr-term, .mr-term-console, .mr-board, .mr-inspector')) return
     if (roomRef.current?.agentAt?.(event)) return
     parkRoom()
   }
@@ -944,6 +1018,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const lens = lensStatus(snapshot.agents, log)
   const project = lensProject(data.tree.rootName)
   const clock = lensClock(Boolean(live), snapshot.position)
+  const bridgeLive = Boolean(live) && !live.simulated
+  const workingInspector = snapshot.agents.find((agent) => agent.status === 'working') ?? null
+  const inspectorLanes = snapshot.agents.map((agent) => {
+    const calls = roomRef.current?.callsFor?.(agent.key)
+    return calls && calls.count > 0 ? { ...agent, openCalls: calls.count, tool: calls.tool } : agent
+  })
+  const inspectorTouches = inspector?.kind === 'file' ? roomRef.current?.touches?.(inspector.id) ?? NONE : NONE
+  const webAgents = roomRef.current?.webAgents?.() ?? NONE
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
@@ -995,6 +1077,28 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
               </div>
               <p className={`lens-corner is-bottom mono is-${lens.tone}`}>{lens.activity}</p>
             </div>
+            {inspector && (
+              <Inspector
+                target={inspector}
+                live={Boolean(live)}
+                bridge={bridgeLive}
+                client={client}
+                lanes={inspectorLanes}
+                working={workingInspector}
+                costs={dockCosts}
+                liveRuns={dockRuns}
+                tasks={dockTasks}
+                log={log}
+                orchestrator={orchestrators}
+                family={familyNodes}
+                tree={inspectorTree}
+                touches={inspectorTouches}
+                webAgents={webAgents}
+                onClose={closeInspector}
+                onSelect={selectInspector}
+                onOpenPath={navigateInspector}
+              />
+            )}
           </div>
           <LensRail
             side="left"

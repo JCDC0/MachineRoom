@@ -176,7 +176,7 @@ export function createCameraRig(camera, surface) {
   }
 
   function down(event) {
-    if (event.target.closest('.hud, .mr-term, .mr-card, .mr-board')) return
+    if (event.target.closest('.hud, .mr-term, .mr-card, .mr-board, .mr-inspector')) return
     drag.active = true
     drag.moved = 0
     drag.x = event.clientX
@@ -208,7 +208,7 @@ export function createCameraRig(camera, surface) {
   }
 
   function wheel(event) {
-    if (event.target.closest('.hud, .mr-board, .lens-rail')) return
+    if (event.target.closest('.hud, .mr-board, .lens-rail, .mr-inspector')) return
     event.preventDefault()
     zoomBy(event.deltaY)
   }
