@@ -391,6 +391,31 @@ export function canSend(text) {
   return trimmed.length > 0 && trimmed.length <= ORCH_MAX_CHARS
 }
 
+function sendCall(client, text, id) {
+  if (!client || typeof client !== 'object') return null
+  if (typeof client.sendOrchestrator === 'function') {
+    return {
+      method: 'sendOrchestrator',
+      args: [text, id === 'orchestrator' ? {} : { id }],
+    }
+  }
+  if (id === 'orchestrator' && typeof client.sendToOrchestrator === 'function') {
+    return { method: 'sendToOrchestrator', args: [text, { confirmed: true }] }
+  }
+  return null
+}
+
+export async function sendChatMessage(client, text, id = 'orchestrator') {
+  const call = sendCall(client, text, id)
+  if (!call) return { ok: false, error: 'The orchestrator is not connected.' }
+  try {
+    await client[call.method](...call.args)
+    return { ok: true }
+  } catch (failure) {
+    return { ok: false, error: errorText(failure, 'Could not send the message.') }
+  }
+}
+
 export function needsStartConfirm(chat) {
   const list = chat && Array.isArray(chat.messages) ? chat.messages : []
   return !list.some(
