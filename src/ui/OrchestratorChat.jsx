@@ -28,6 +28,7 @@ import {
   needsStartConfirm,
   normalizeChat,
   projectBaseName,
+  sendChatMessage,
   statusDetail,
   statusTone,
   teamLines,
@@ -452,25 +453,17 @@ export default function OrchestratorChat({
     }
     setSending(true)
     setError(null)
-    setProblems([])
     setConfirm(null)
-    try {
-      if (typeof client.sendOrchestrator === 'function') {
-        await client.sendOrchestrator(text, id === 'orchestrator' ? {} : { id })
-      } else if (id === 'orchestrator' && typeof client.sendToOrchestrator === 'function') {
-        await client.sendToOrchestrator(text, { confirmed: true })
-      } else {
-        throw new Error('The orchestrator is not connected.')
-      }
-      setStartedIds((currentStarted) => ({ ...currentStarted, [id]: true }))
-      setDraft((currentDraft) => (currentDraft.trim() === text ? '' : currentDraft))
-      if (id === selected) await readChatRef.current?.()
-      await readListRef.current?.()
-    } catch (failure) {
-      setError(errorText(failure, 'Could not send the message.'))
-    } finally {
-      setSending(false)
+    const result = await sendChatMessage(client, text, id)
+    setSending(false)
+    if (!result.ok) {
+      setError(result.error)
+      return
     }
+    setStartedIds((currentStarted) => ({ ...currentStarted, [id]: true }))
+    setDraft((currentDraft) => (currentDraft.trim() === text ? '' : currentDraft))
+    if (id === selected) await readChatRef.current?.()
+    await readListRef.current?.()
   }
 
   function requestSend() {

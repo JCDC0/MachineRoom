@@ -19,6 +19,7 @@ import {
   normalizeChat,
   orchestratorDoing,
   projectBaseName,
+  sendChatMessage,
   statusDetail,
   statusText,
   statusTone,
@@ -231,6 +232,110 @@ describe('orchestratorChat helpers', () => {
     expect(orchestratorDoing([{ key: 'opencode', status: 'working', label: 'npm test' }])).toBe('')
     expect(orchestratorDoing([])).toBe('')
     expect(orchestratorDoing(null)).toBe('')
+  })
+})
+
+describe('sendChatMessage', () => {
+  it('sends the main chat through sendOrchestrator with no id', async () => {
+    const calls = []
+    const client = {
+      sendOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'message-1' }
+      },
+      sendToOrchestrator: async () => {
+        throw new Error('The legacy call must not run.')
+      },
+    }
+    expect(await sendChatMessage(client, 'Build it.')).toEqual({ ok: true })
+    expect(calls).toEqual([{ text: 'Build it.', options: {} }])
+  })
+
+  it('sends a sub chat through sendOrchestrator with its id', async () => {
+    const calls = []
+    const client = {
+      sendOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'message-1' }
+      },
+    }
+    expect(await sendChatMessage(client, 'Write the header.', 'frontend')).toEqual({ ok: true })
+    expect(calls).toEqual([{ text: 'Write the header.', options: { id: 'frontend' } }])
+  })
+
+  it('uses sendToOrchestrator with a confirmation on a client without sendOrchestrator', async () => {
+    const calls = []
+    const client = {
+      sendToOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'message-1' }
+      },
+    }
+    expect(await sendChatMessage(client, 'Build it.', 'orchestrator')).toEqual({ ok: true })
+    expect(calls).toEqual([{ text: 'Build it.', options: { confirmed: true } }])
+  })
+
+  it('refuses a sub chat when the client has only the legacy main call', async () => {
+    const calls = []
+    const client = {
+      sendToOrchestrator: async (text, options) => {
+        calls.push({ text, options })
+        return { id: 'message-1' }
+      },
+    }
+    expect(await sendChatMessage(client, 'Build it.', 'frontend')).toEqual({
+      ok: false,
+      error: 'The orchestrator is not connected.',
+    })
+    expect(calls).toEqual([])
+  })
+
+  it('refuses a client with no send call at all', async () => {
+    expect(await sendChatMessage(null, 'Build it.')).toEqual({
+      ok: false,
+      error: 'The orchestrator is not connected.',
+    })
+    expect(await sendChatMessage({}, 'Build it.')).toEqual({
+      ok: false,
+      error: 'The orchestrator is not connected.',
+    })
+  })
+
+  it('gives up with the existing sentence when the send fails', async () => {
+    const client = {
+      sendOrchestrator: async () => {
+        throw new Error('The bridge did not answer within 30 seconds.')
+      },
+    }
+    expect(await sendChatMessage(client, 'Build it.')).toEqual({
+      ok: false,
+      error: 'The bridge did not answer within 30 seconds.',
+    })
+    const silent = { sendOrchestrator: async () => Promise.reject('no') }
+    expect(await sendChatMessage(silent, 'Build it.')).toEqual({
+      ok: false,
+      error: 'Could not send the message.',
+    })
+  })
+
+  it('ends when the send is accepted and starts no read of its own', async () => {
+    const calls = []
+    let accept
+    const client = {
+      sendOrchestrator: () => new Promise((resolve) => (accept = resolve)),
+      orchestrator: async () => calls.push('chat'),
+      orchestrators: async () => calls.push('list'),
+    }
+    let settled = false
+    const pending = sendChatMessage(client, 'Build it.').then((result) => {
+      settled = true
+      return result
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+    accept({ id: 'message-1' })
+    expect(await pending).toEqual({ ok: true })
+    expect(calls).toEqual([])
   })
 })
 

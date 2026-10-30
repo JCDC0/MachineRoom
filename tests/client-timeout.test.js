@@ -46,6 +46,23 @@ describe('control client request limits', () => {
     expect(cleared).toEqual([timers[0].id])
   })
 
+  it('gives the orchestrator send and read calls the default limit', async () => {
+    const calls = [
+      (client) => client.sendOrchestrator('Build it.'),
+      (client) => client.sendToOrchestrator('Build it.', { confirmed: true }),
+      (client) => client.orchestrator(),
+      (client) => client.orchestrators(),
+    ]
+    for (const call of calls) {
+      const { fetchImpl } = hangingFetch()
+      const { client, timers } = harness(fetchImpl)
+      const pending = call(client)
+      expect(timers[0].ms).toBe(REQUEST_TIMEOUT_MS)
+      timers[0].fn()
+      await expect(pending).rejects.toThrow('The bridge did not answer within 30 seconds.')
+    }
+  })
+
   it('gives a long route a limit above the bridge limit', async () => {
     const { fetchImpl, seen } = hangingFetch()
     const { client, timers } = harness(fetchImpl)
