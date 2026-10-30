@@ -8,6 +8,7 @@ export const GIT_MAX_HEIGHT = 900
 export const GIT_LEAN_STEP = 76
 export const GIT_MAX_LABELS = 12
 export const GIT_LABEL_LIFT = 18
+export const GIT_LABEL_STACK = 44
 export const GIT_LABEL_OFFSET = 34
 export const GIT_FOCUS_DIST = 1700
 export const GIT_START = {
@@ -19,9 +20,9 @@ export const GIT_START = {
 const TAU = Math.PI * 2
 const HEAD_COLOR = new THREE.Color(YELLOW)
 const REST_COLOR = new THREE.Color(WHITE)
-const REST_OPACITY = 0.2
-const POINT_SIZE = 7
-const POINT_OPACITY = 0.6
+const REST_OPACITY = 0.45
+const POINT_SIZE = 12
+const POINT_OPACITY = 0.9
 const HEAD_REST = 0.72
 const HEAD_SWING = 0.28
 const HEAD_RATE = 2.4
@@ -181,14 +182,19 @@ export function layoutGitTree(commits, branches = []) {
     })
   }
   tips.sort((a, b) => Number(b.current) - Number(a.current) || b.time - a.time || nameOrder(a, b))
-  const labels = tips.slice(0, GIT_MAX_LABELS).map((tip) => ({
-    name: tip.name,
-    sha: tip.sha,
-    current: tip.current,
-    x: tip.x + Math.cos(tip.angle) * GIT_LABEL_OFFSET,
-    y: tip.y + GIT_LABEL_LIFT,
-    z: tip.z + Math.sin(tip.angle) * GIT_LABEL_OFFSET,
-  }))
+  const onCommit = new Map()
+  const labels = tips.slice(0, GIT_MAX_LABELS).map((tip) => {
+    const below = onCommit.get(tip.sha) ?? 0
+    onCommit.set(tip.sha, below + 1)
+    return {
+      name: tip.name,
+      sha: tip.sha,
+      current: tip.current,
+      x: tip.x + Math.cos(tip.angle) * GIT_LABEL_OFFSET,
+      y: tip.y + GIT_LABEL_LIFT + below * GIT_LABEL_STACK,
+      z: tip.z + Math.sin(tip.angle) * GIT_LABEL_OFFSET,
+    }
+  })
 
   const headIndex = trunkHead ? commitPlaces.findIndex((commit) => commit.sha === trunkHead) : -1
 
@@ -341,7 +347,7 @@ export function createGitTree(scene) {
 
     for (const label of next.labels) {
       const sprite = textSprite(label.name, {
-        scale: 0.55,
+        scale: 0.9,
         color: label.current ? 'rgba(229,255,0,.9)' : 'rgba(255,255,255,.55)',
       })
       sprite.position.set(label.x, label.y, label.z)

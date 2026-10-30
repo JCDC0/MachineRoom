@@ -61,7 +61,7 @@ Open now:
    - The October audit (`AUDIT-2026-10.md`): N5 (a lane worktree's git config and hooks reach the merge), N6 (the merge stops after 10 seconds), N12 (the runs route starts the runner from the folder the room watches) and N16 (an all-zero cost reads as not reported, a design question).
    - The version 7 audit (`AUDIT-2026-10-V7.md`): X2 still has no base commit in a run record, so a lane whose worktree is not based on the current branch reads as unread, and X8 still leaves a sub's own model out of the lane list.
    - The version 9 audit's Y4 and Y7 stay as they are: Y4 is the rule O24 chose and Y7 is H17's design.
-4. The open briefs of 2026-10-30: T28 (who kills the git processes under load), H20 (a lane whose harness has exited does not stay open), L8 (a real compaction and a real OpenCode session), A10 (the page's handlers) and A11 (the backend since the version 9 audit).
+4. No brief is open. S20, U92 and U93, the project's branches and the git tree above the INTERNET sphere, were checked in a browser on 2026-10-30: the section, Switch, New branch, Show the tree and `0`, at 1280 by 800 only.
 
 ## History: the plan from 0.1.37
 
