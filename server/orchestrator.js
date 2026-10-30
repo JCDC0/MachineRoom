@@ -22,7 +22,7 @@ import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem 
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
-import { killTree } from './processTree.js'
+import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
 import { programPath } from './programPath.js'
 
 export const ORCHESTRATOR_KEY = 'orchestrator'
@@ -180,7 +180,20 @@ function roomLockProblem(holder, path) {
   return `Another room is already running on this project (process ${holder}). Wait for it to end, or delete ${path} if no room is going.`
 }
 
-function takeRoomLock(path) {
+function isRoomHolderAlive(holder, path, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+  if (!processAlive(holder)) return false
+  if (platform !== 'win32') return true
+  let mtime = null
+  try {
+    mtime = stat(path).mtimeMs
+  } catch {
+    mtime = null
+  }
+  return !isLockHolderStale(holder, mtime, { platform, list })
+}
+
+export function takeRoomLock(path, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+  const holderAlive = (pid, file) => isRoomHolderAlive(pid, file, { platform, list, stat })
   const takeover = `${path}.takeover`
   const take = (file) => {
     try {
@@ -193,14 +206,14 @@ function takeRoomLock(path) {
   }
   const clearTakeover = () => {
     const holder = Number.parseInt(readHolder(takeover), 10)
-    if (processAlive(holder)) throw new Error(roomLockProblem(holder, path))
+    if (holderAlive(holder, takeover)) throw new Error(roomLockProblem(holder, path))
     rmSync(takeover, { force: true })
   }
   if (existsSync(takeover)) clearTakeover()
   if (take(path)) return path
   const holderText = readHolder(path)
   const holder = Number.parseInt(holderText, 10)
-  if (processAlive(holder)) throw new Error(roomLockProblem(holder, path))
+  if (holderAlive(holder, path)) throw new Error(roomLockProblem(holder, path))
   let mine = take(takeover)
   if (!mine) {
     clearTakeover()
@@ -210,7 +223,7 @@ function takeRoomLock(path) {
   try {
     const current = readHolder(path)
     if (current !== holderText) throw new Error(roomLockProblem(Number.parseInt(current, 10) || holder, path))
-    if (processAlive(holder)) throw new Error(roomLockProblem(holder, path))
+    if (holderAlive(holder, path)) throw new Error(roomLockProblem(holder, path))
     rmSync(path, { force: true })
     if (!take(path)) throw new Error(roomLockProblem(Number.parseInt(readHolder(path), 10), path))
     return path

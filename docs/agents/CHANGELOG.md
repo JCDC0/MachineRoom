@@ -7,6 +7,7 @@
 - The H20 test counts stopped leftovers only on Windows, since a Linux orphan has init as its parent and CI failed on it; the limit is named in ARCHITECTURE.
 
 - One hand-made DOM, `tests/helpers/uiDom.js`, serves every UI test; `tests/helpers/handDom.js` and the copies inside the UI test files are gone, and every test moved to it without an assertion change (task T29).
+- Room and lane locks treat a holder as stale when created after the lock file, and stopLane passes its injected list and kill down to stopDescendants and stopLeftovers (task Q16b, V11 Z5 and Z8).
 
 - A chat button or sub chip opens the orchestrator chat on a narrow window and closes the sessions overlay, from a listener in Hud, with `tests/chat-open-ui.test.js` (task U90, Z1).
 

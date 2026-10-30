@@ -188,3 +188,19 @@ export function killTree(child, { platform = process.platform, run = spawnSync, 
     return false
   }
 }
+
+export function isCreatedAfterLock(created, lockMtime, platform = process.platform) {
+  return platform === 'win32' && typeof created === 'number' && (lockMtime === null || created > lockMtime + 2000)
+}
+
+export function isLockHolderStale(pid, lockMtime, { platform = process.platform, processes = null, list = listProcesses } = {}) {
+  if (platform !== 'win32' || !Number.isInteger(pid) || pid <= 0) return false
+  const listItems = processes instanceof Map ? processes : Array.isArray(processes) ? processes : list({ platform })
+  if (listItems instanceof Map) {
+    const found = listItems.get(pid)
+    return isCreatedAfterLock(found?.created, lockMtime, platform)
+  }
+  if (!Array.isArray(listItems) || listItems.length === 0) return false
+  const found = listItems.find((item) => item?.pid === pid)
+  return isCreatedAfterLock(found?.created, lockMtime, platform)
+}

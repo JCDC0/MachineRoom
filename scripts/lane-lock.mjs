@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { isLockHolderStale, listProcesses } from '../server/processTree.js'
 import { laneLockPids, laneLockText } from '../src/briefs/run.js'
 
 function readHolder(path) {
@@ -42,28 +43,41 @@ function take(path, folder) {
   }
 }
 
-function clearTakeover(takeover, laneKey, lock) {
+function isHolderAlive(holder, path, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+  if (!processAlive(holder)) return false
+  if (platform !== 'win32') return true
+  let mtime = null
+  try {
+    mtime = stat(path).mtimeMs
+  } catch {
+    mtime = null
+  }
+  return !isLockHolderStale(holder, mtime, { platform, list })
+}
+
+function clearTakeover(takeover, laneKey, lock, holderAlive = processAlive) {
   const holder = readLaneLock(takeover).pid
-  if (processAlive(holder)) throw running(laneKey, holder, lock)
+  if (holderAlive(holder, takeover)) throw running(laneKey, holder, lock)
   rmSync(takeover, { force: true })
   throw stoppedHalfWay(laneKey)
 }
 
-export function takeLaneLock(folder, laneKey, { beforeRetry = () => {}, worktree = '' } = {}) {
+export function takeLaneLock(folder, laneKey, { beforeRetry = () => {}, worktree = '', platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+  const holderAlive = (pid, file) => isHolderAlive(pid, file, { platform, list, stat })
   const path = join(folder, `${laneKey}.lock`)
   const takeover = `${path}.takeover`
-  if (existsSync(takeover)) clearTakeover(takeover, laneKey, path)
+  if (existsSync(takeover)) clearTakeover(takeover, laneKey, path, holderAlive)
   if (take(path, worktree)) return path
   const holderText = readHolder(path)
   const holder = laneLockPids(holderText).pid
-  if (processAlive(holder)) throw running(laneKey, holder, path)
+  if (holderAlive(holder, path)) throw running(laneKey, holder, path)
   beforeRetry()
   const mine = take(takeover, worktree)
-  if (!mine) clearTakeover(takeover, laneKey, path)
+  if (!mine) clearTakeover(takeover, laneKey, path, holderAlive)
   try {
     const current = readHolder(path)
     if (current !== holderText) throw running(laneKey, laneLockPids(current).pid || holder, path)
-    if (processAlive(laneLockPids(current).pid)) throw running(laneKey, laneLockPids(current).pid, path)
+    if (holderAlive(laneLockPids(current).pid, path)) throw running(laneKey, laneLockPids(current).pid, path)
     rmSync(path, { force: true })
     if (!take(path, worktree)) throw running(laneKey, laneLockPids(readHolder(path)).pid, path)
     return path
