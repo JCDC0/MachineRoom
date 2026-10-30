@@ -13,6 +13,7 @@ import {
   NO_KEY_PROBLEM,
   PROVIDERS,
   PROVIDER_PROBLEM,
+  cleanEndpoint,
   createEndpointsApi,
   endpointProblem,
   readEndpoints,
@@ -88,9 +89,19 @@ describe('endpoint rules', () => {
 
   it('accepts http only on localhost, 127.0.0.1 and [::1]', () => {
     for (const baseUrl of ['http://localhost:8080/v1', 'http://127.0.0.1:11434/v1', 'http://[::1]:1234/v1']) {
-      expect(endpointProblem(endpointBody({ baseUrl, keyName: '' }))).toBeNull()
+      expect(endpointProblem(endpointBody({ provider: 'Custom', baseUrl, keyName: '' }))).toBeNull()
     }
-    expect(endpointProblem(endpointBody({ baseUrl: 'http://192.168.1.4/v1', keyName: '' }))).toBe(BASE_URL_PROBLEM)
+    expect(endpointProblem(endpointBody({ provider: 'Custom', baseUrl: 'http://192.168.1.4/v1', keyName: '' }))).toBe(BASE_URL_PROBLEM)
+  })
+
+  it('refuses an address that does not match a preset provider', () => {
+    expect(endpointProblem(endpointBody({ provider: 'OpenRouter', baseUrl: 'https://attacker.com/v1' }))).toBe(
+      'The OpenRouter preset uses its own address. Pick Custom for another one.',
+    )
+    expect(endpointProblem(endpointBody({ provider: 'OpenAI', baseUrl: 'https://attacker.com/v1' }))).toBe(
+      'The OpenAI preset uses its own address. Pick Custom for another one.',
+    )
+    expect(endpointProblem(endpointBody({ provider: 'Custom', baseUrl: 'https://attacker.com/v1' }))).toBeNull()
   })
 
   it('refuses a remote endpoint with no key slot', () => {
@@ -110,6 +121,15 @@ describe('endpoint rules', () => {
   it('refuses more than 1000 models', () => {
     const models = Array.from({ length: MAX_ENDPOINT_MODELS + 1 }, (_, index) => `model-${index}`)
     expect(endpointProblem(endpointBody({ models }))).not.toBeNull()
+  })
+
+  it('keeps preset address in cleanEndpoint and normalizes Custom address', () => {
+    expect(cleanEndpoint(endpointBody({ provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1/' })).baseUrl).toBe(
+      'https://openrouter.ai/api/v1',
+    )
+    expect(cleanEndpoint(endpointBody({ provider: 'Custom', baseUrl: 'https://example.com/api/v1/' })).baseUrl).toBe(
+      'https://example.com/api/v1',
+    )
   })
 })
 
@@ -138,11 +158,16 @@ describe('/api/endpoints', () => {
     expect(created.status).toBe(200)
     expect(created.body.endpoint).toMatchObject({ name: 'Work', provider: 'OpenRouter', keyName: 'openrouter' })
 
-    const replaced = await post(url, '/api/endpoints', endpointBody({ baseUrl: 'https://api.openai.com/v1', models: ['beta'] }))
+    const replaced = await post(
+      url,
+      '/api/endpoints',
+      endpointBody({ provider: 'OpenAI', baseUrl: 'https://api.openai.com/v1', keyName: 'openai', models: ['beta'] }),
+    )
     expect(replaced.status).toBe(200)
     const list = await get(url, '/api/endpoints')
     expect(list.body.endpoints).toHaveLength(1)
     expect(list.body.endpoints[0].baseUrl).toBe('https://api.openai.com/v1')
+    expect(list.body.endpoints[0].provider).toBe('OpenAI')
     expect(list.body.endpoints[0].models).toEqual(['beta'])
 
     const deleted = await post(url, `/api/endpoints/${encodeURIComponent('Work')}/delete`, { confirmed: true })
@@ -431,5 +456,65 @@ describe('POST /api/endpoints/quick', () => {
     expect(JSON.stringify(answers[0].body)).not.toContain(key)
     expect(readKeys(runsDir)).toEqual({ openrouter: key })
     expect(readEndpoints(runsDir)[0].models).toEqual(['alpha'])
+  })
+
+  it('repoints the endpoint at the provider slot when another endpoint names that slot', async () => {
+    const runsDir = makeTempDir('mr-quick-repoint-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(runsDir, [
+      { name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'shared_slot', models: ['alpha'] },
+      { name: 'Team', provider: 'Custom', baseUrl: 'http://127.0.0.1:1234/v1', keyName: 'shared_slot', models: ['beta'] },
+    ])
+    const oldShared = 'kept-shared-value'
+    const newProvider = 'new-provider-value'
+    const { saveKeys } = await import('../server/family.js')
+    saveKeys(runsDir, { shared_slot: oldShared })
+    const answers = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ provider: 'OpenRouter', key: newProvider, confirmed: true }),
+      fetchImpl: async () => ({ ok: true, json: async () => ({ data: [{ id: 'alpha' }] }) }),
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers).toHaveLength(1)
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.endpoint.keyName).toBe('OpenRouter')
+    const savedKeys = readKeys(runsDir)
+    expect(savedKeys.shared_slot).toBe(oldShared)
+    expect(savedKeys.OpenRouter).toBe(newProvider)
+    const endpoints = readEndpoints(runsDir)
+    expect(endpoints.find((entry) => entry.name === 'OpenRouter').keyName).toBe('OpenRouter')
+    expect(endpoints.find((entry) => entry.name === 'Team').keyName).toBe('shared_slot')
+  })
+
+  it('reuses the existing endpoint slot when no other endpoint names that slot', async () => {
+    const runsDir = makeTempDir('mr-quick-reuse-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(runsDir, [
+      { name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'single_slot', models: ['alpha'] },
+    ])
+    const updatedValue = 'updated-slot-value'
+    const answers = []
+    const api = createEndpointsApi({
+      runsFolder: runsDir,
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ provider: 'OpenRouter', key: updatedValue, confirmed: true }),
+      fetchImpl: async () => ({ ok: true, json: async () => ({ data: [{ id: 'alpha' }] }) }),
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/endpoints/quick'),
+    )
+    expect(answers).toHaveLength(1)
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.endpoint.keyName).toBe('single_slot')
+    const savedKeys = readKeys(runsDir)
+    expect(savedKeys.single_slot).toBe(updatedValue)
   })
 })

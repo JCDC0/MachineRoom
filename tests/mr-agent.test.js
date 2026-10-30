@@ -360,6 +360,36 @@ describe('mr-agent', () => {
     expect(final).toMatchObject({ type: 'result', is_error: true })
     expect(final.result).toContain('The API request failed')
   })
+
+  it('reads endpoint slot key from list shape keys.json', async () => {
+    const folder = tempDir()
+    const runsFolder = tempDir('mr-runs-')
+    const token = 'agent-slot-token'
+    const seenHeaders = []
+    const api = await startFakeApi((_body, _index, calls) => {
+      seenHeaders.push(calls.at(-1)?.headers?.authorization)
+      return chatAnswer({ text: 'Done.' })
+    })
+    writeFileSync(
+      join(runsFolder, 'endpoints.json'),
+      JSON.stringify({
+        endpoints: [
+          { name: 'CustomTest', provider: 'Custom', baseUrl: api.url, keyName: 'shared_slot', models: ['test-model'] },
+        ],
+      }),
+    )
+    writeFileSync(
+      join(runsFolder, 'keys.json'),
+      JSON.stringify({ keys: [{ name: 'shared_slot', value: token }] }),
+    )
+    const result = await runAgent({
+      folder,
+      env: { MACHINEROOM_RUNS: runsFolder },
+      model: 'CustomTest/test-model',
+    })
+    expect(result.code).toBe(0)
+    expect(seenHeaders).toEqual([`Bearer ${token}`])
+  })
 })
 
 describe('machineroom harness', () => {

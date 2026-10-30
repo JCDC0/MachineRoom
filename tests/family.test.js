@@ -14,6 +14,7 @@ import {
   ORIGIN_KEY_PROBLEM,
   ORIGIN_LABEL_PROBLEM,
   buildFamilyNodes,
+  keyFromFile,
   labelsFileFor,
   readKey,
   readKeys,
@@ -416,6 +417,53 @@ describe('Key slots: /api/keys, /api/keys/NAME/delete and readKey', () => {
       body: { confirmed: true },
     })
     expect(deleteAgain.status).toBe(404)
+  })
+
+  it('reads keys from both a map and a list of key objects', () => {
+    const runsFolder = tempDir('mr-readkeys-')
+    const file = join(runsFolder, 'keys.json')
+
+    writeFileSync(file, JSON.stringify({ slot_a: 'val_a', slot_b: 'val_b' }))
+    expect(readKeys(runsFolder)).toEqual({ slot_a: 'val_a', slot_b: 'val_b' })
+    expect(readKey(runsFolder, 'slot_a')).toBe('val_a')
+    expect(readKey(runsFolder, 'missing')).toBeNull()
+    expect(keyFromFile(runsFolder, 'slot_a')).toBe('val_a')
+    expect(keyFromFile(runsFolder, 'missing')).toBe('')
+
+    writeFileSync(file, JSON.stringify({ keys: { slot_a: 'val_a' } }))
+    expect(readKeys(runsFolder)).toEqual({ slot_a: 'val_a' })
+    expect(readKey(runsFolder, 'slot_a')).toBe('val_a')
+    expect(keyFromFile(runsFolder, 'slot_a')).toBe('val_a')
+
+    writeFileSync(file, JSON.stringify({ keys: [{ name: 'slot_a', value: 'val_a' }, { name: 'slot_b', value: 'val_b' }] }))
+    expect(readKeys(runsFolder)).toEqual({ slot_a: 'val_a', slot_b: 'val_b' })
+    expect(readKey(runsFolder, 'slot_a')).toBe('val_a')
+    expect(readKey(runsFolder, 'slot_b')).toBe('val_b')
+    expect(keyFromFile(runsFolder, 'slot_a')).toBe('val_a')
+    expect(keyFromFile(runsFolder, 'slot_b')).toBe('val_b')
+
+    writeFileSync(file, JSON.stringify([{ name: 'slot_a', value: 'val_a' }]))
+    expect(readKeys(runsFolder)).toEqual({ slot_a: 'val_a' })
+    expect(readKey(runsFolder, 'slot_a')).toBe('val_a')
+    expect(keyFromFile(runsFolder, 'slot_a')).toBe('val_a')
+  })
+
+  it('ensures readKey and keyFromFile never disagree', () => {
+    const runsFolder = tempDir('mr-readkeys-agree-')
+    const file = join(runsFolder, 'keys.json')
+
+    const shapes = [
+      { slot_one: 'alpha' },
+      { keys: { slot_one: 'alpha' } },
+      { keys: [{ name: 'slot_one', value: 'alpha' }] },
+      [{ name: 'slot_one', value: 'alpha' }],
+    ]
+
+    for (const shape of shapes) {
+      writeFileSync(file, JSON.stringify(shape))
+      expect(keyFromFile(runsFolder, 'slot_one')).toBe(readKey(runsFolder, 'slot_one') ?? '')
+      expect(keyFromFile(runsFolder, 'missing')).toBe(readKey(runsFolder, 'missing') ?? '')
+    }
   })
 })
 
