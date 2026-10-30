@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The H20 test counts stopped leftovers only on Windows, since a Linux orphan has init as its parent and CI failed on it; the limit is named in ARCHITECTURE.
+
 - A chat button or sub chip opens the orchestrator chat on a narrow window and closes the sessions overlay, from a listener in Hud, with `tests/chat-open-ui.test.js` (task U90, Z1).
 
 - The conversation preview keeps the newest click by request ticket, so a slower answer or failure from an earlier conversation cannot replace it or clear it, with `tests/sidebar-preview-ui.test.js` (task U90, Z2).
