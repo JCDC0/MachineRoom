@@ -38,11 +38,12 @@ What was checked live:
 - A real Claude Code run showed its `Explore` subagent in the room.
 - A lane using an MCP server on 2026-10-30: a probe lane on OpenCode with `opencode-go/deepseek-v4.1-flash` on a scratch git project under `%TEMP%`, with a tiny stdio MCP server configured in `mcp.json`. The agent called the tool `write_marker`, the marker file existed, and the run log showed the tool call.
 - A real ACP agent the same day: a probe lane on the `acp` harness running `opencode acp` with `opencode-go/deepseek-v4.1-flash` on a scratch git project. The harness handled protocol initialization, session creation, and model option configuration; the agent wrote the requested file, and the run log parsed into 3 tool calls with 1 file written.
+- A real compaction on 2026-10-30: an OpenCode orchestrator (`opencode-go/deepseek-v4.1-flash`) in a scratch git project under `%TEMP%` with autocompact set to tokens mode at 1000. Turn 1 reported context tokens (10570), triggered an automatic compact turn, printed the room notice, and the next turn opened a fresh session starting from the summary.
+- A real OpenCode session the same day: the bridge running with `--sessions` followed `opencode run` on DeepSeek V4.1 Flash in a scratch git project under `%TEMP%`. The `/events?history=1` stream emitted `agent-opencode-session` status frames and tool call logs to completion.
 
 Not checked live yet:
 
-- The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
-- The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
+- The owner's Claude Code sessions with `--sessions`. The reader is tested, but left unchecked live to save Claude quota.
 - The room by eye: checked on 2026-10-30 at 1280 by 800, 900 by 700 and 768 by 1024 on the demo ladder replay; a live room at those sizes is still to see. Phones are not a target.
 
 ## Next

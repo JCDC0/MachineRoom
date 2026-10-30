@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Check a real compaction and a real OpenCode session on OpenCode with DeepSeek V4.1 Flash, verifying autocompaction and session stream events (task L8).
+
 - The orchestrator chat's start card names the orchestrator's harness, so an OpenCode or Direct API orchestrator no longer reads as Claude, and it says the Direct API uses no subscription (task T27).
 
 - `tests/no-undefined-names.test.js` fails when a `src/ui/*.jsx` file calls a `setX` function it does not declare or import, the fault that left Send stuck on `Sending` (task T27).
