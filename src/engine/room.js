@@ -6,6 +6,7 @@ import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, pro
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub, workingKeys } from './hub.js'
+import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { createInternet } from './internet.js'
 import { createLabels } from './labels.js'
 import { createMessages } from './messages.js'
@@ -186,6 +187,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     viewOf: (key) => agentSet.views.get(key)?.group.position ?? null,
   })
   const internet = createInternet(scene, texture)
+  const gitTree = createGitTree(scene)
   const terminals = createTerminals(cssScene, roster, { onPick })
   const board = createCostBoard(surface, { onPick })
   let boardShown = boardVisible(width)
@@ -599,6 +601,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     space.update(delta)
     hub.update(now / 1000, delta, camera, height)
     internet.update(delta, agentSet.webActive() > 0)
+    gitTree.update(delta)
     if (cards.update(state, delta, camera, mask)) {
       const holdLost = releaseLostHold()
       relink()
@@ -696,6 +699,18 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return true
   }
 
+  function focusGitTree() {
+    if (!gitTree.ready()) return false
+    releaseHold()
+    followFocus.setFollowing(false)
+    followFocus.clear()
+    followCard = null
+    pendingFollow = null
+    onPick(null)
+    rig.hold(() => gitTree.center(), GIT_FOCUS_DIST)
+    return true
+  }
+
   return {
     onActivity,
     soundAt,
@@ -747,6 +762,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     setCosts(costBoardData) {
       board.update(costBoardData)
     },
+    setGitState(state) {
+      return gitTree.setState(state)
+    },
+    focusGitTree,
     setOptions(options = {}) {
       if (!cards.setOptions(options)) return
       cards.sync(getState())
@@ -783,6 +802,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       messages.dispose()
       terminals.dispose()
       internet.dispose()
+      gitTree.dispose()
       board.dispose()
       labels.dispose()
       strings.dispose()
