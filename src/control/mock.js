@@ -88,6 +88,8 @@ export const CLIENT_METHODS = [
   'gitState',
   'switchBranch',
   'createBranch',
+  'fileInfo',
+  'network',
   'subscribe',
 ]
 
@@ -400,6 +402,24 @@ export const SAMPLE_GIT_COMMITS = [
   },
 ]
 
+export const MOCK_FILE_INFO = {
+  'README.md': {
+    text: '# MachineRoom\n\nA room that shows coding agents at work.\n',
+  },
+  'src/control/client.js': {
+    text: "export function createClient() {\n  return { fileInfo: () => null, network: () => null }\n}\n",
+  },
+  'server/files.js': {
+    text: 'export const FILE_MAX_BYTES = 256 * 1024\n',
+  },
+  'server/network.js': {
+    text: 'export const NETWORK_HOST = "1.1.1.1"\n',
+  },
+  'assets/logo.png': {
+    binary: true,
+  },
+}
+
 const SAMPLE_REVIEWS = {
   hermes: {
     lane: 'hermes',
@@ -617,6 +637,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     truncated: false,
   }
   let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
+  const networkOnline = true
   let searchChoice = { provider: '', url: '', keyName: '' }
   const subChats = new Map()
   const familyLabels = new Map()
@@ -2180,6 +2201,33 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         emit({ topic: 'git' })
         return clone(gitState)
       }),
+
+    fileInfo: ({ path } = {}) =>
+      call('fileInfo', () => {
+        const value = typeof path === 'string' ? path.replace(/\\/g, '/') : ''
+        if (!value) throw new Error('Send a relative file path.')
+        if (value.startsWith('/') || /^[a-zA-Z]:/.test(value) || value.split('/').includes('..')) {
+          throw new Error('That path is outside the project.')
+        }
+        const entry = MOCK_FILE_INFO[value]
+        if (!entry) throw new Error('That file was not found.')
+        const binary = entry.binary === true
+        const text = binary ? '' : entry.text
+        return {
+          path: value,
+          size: binary ? 2048 : new TextEncoder().encode(text).length,
+          modified: new Date(now()).toISOString(),
+          binary,
+          truncated: false,
+          text,
+        }
+      }),
+
+    network: () =>
+      call('network', () => ({
+        online: networkOnline,
+        checkedAt: new Date(now()).toISOString(),
+      })),
 
     subscribe(listener) {
       listeners.add(listener)

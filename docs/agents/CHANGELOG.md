@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `GET /api/file` serves a read-only preview inside the project root, with the page Origin check, the real path check, refused `.git`, `.worktrees`, `.env`, `.pem` and `.key` names, a binary answer, a 256 KB cut and masked keys (task S21).
+
+- `GET /api/network` checks the connection over a cached TCP connection to 1.1.1.1, at most once every 30 seconds while pages ask, and sends a `network` notice on a change (task S21).
+
+- The control client and the mock gain `fileInfo` and `network`, with the mock reading sample files (task S21).
+
 - The project's git tree stands above the INTERNET sphere from `client.gitState()`, with the current branch's first parent chain as the trunk, other branches leaning out in name order, the current head in `#e5ff00` and at most 12 branch name labels; `room.setGitState` rebuilds it only when the sha list or the current branch changes and `room.focusGitTree` holds the camera on it, with pure tests for the layout, the rebuild and dispose (task U93).
 
 - The Projects tab opens with a Repository section that shows the current and local branches, switches a branch or makes one after a confirm card, marks the switch blocked by uncommitted changes or a worktree, and dispatches the git tree event (task U92).
