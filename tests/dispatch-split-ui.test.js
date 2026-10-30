@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import DispatchPanel from '../src/ui/panels/DispatchPanel.jsx'
-import { buttonWithText, withDom } from './helpers/handDom.js'
+import { buttonWithText, withDom } from './helpers/uiDom.js'
 
 const AGENTS = [
   { id: 'agent-alpha', key: 'alpha', name: 'Alpha', adapterType: 'opencode_local', role: null },

@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 
-const ELEMENT_NODE = 1
+export const ELEMENT_NODE = 1
 const TEXT_NODE = 3
 const DOCUMENT_NODE = 9
 
@@ -53,6 +53,20 @@ function testStyle() {
     },
   })
   return style
+}
+
+function selection() {
+  return {
+    rangeCount: 0,
+    anchorNode: null,
+    anchorOffset: 0,
+    focusNode: null,
+    focusOffset: 0,
+    isCollapsed: true,
+    getRangeAt() {
+      return null
+    },
+  }
 }
 
 export function createTestDom() {
@@ -314,6 +328,9 @@ export function createTestDom() {
     querySelector(selector) {
       return doc.documentElement.querySelector(selector)
     },
+    getSelection() {
+      return selection()
+    },
   }
 
   const html = makeElement('html')
@@ -368,7 +385,7 @@ export function createTestDom() {
       return element.style
     },
     getSelection() {
-      return { anchorNode: null, anchorOffset: 0, focusNode: null, focusOffset: 0 }
+      return selection()
     },
     matchMedia() {
       return { matches: false, addEventListener() {}, removeEventListener() {} }
@@ -410,7 +427,7 @@ export async function withDom(run) {
   dom.body.appendChild(container)
   const root = createRoot(container)
   try {
-    await run({ container, dom, root })
+    await run({ container, dom, root, window: dom.window })
   } finally {
     try {
       await act(async () => root.unmount())
@@ -453,4 +470,12 @@ export async function type(root, node, value) {
     node.dispatchEvent({ type: 'input', bubbles: true, cancelable: true })
     node.dispatchEvent({ type: 'change', bubbles: true, cancelable: true })
   })
+}
+
+export function buttonWithText(scope, text) {
+  return scope.querySelectorAll('button').find((button) => button.textContent.trim() === text) ?? null
+}
+
+export function classesOf(node) {
+  return String(node.className).split(/\s+/).filter(Boolean)
 }

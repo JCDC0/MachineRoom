@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import Sidebar from '../src/ui/Sidebar.jsx'
-import { click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 const NOW = Date.now()
 
@@ -44,10 +44,6 @@ function rowByTitle(container, title) {
       .querySelectorAll('.mr-side-session')
       .find((button) => button.querySelector('.mr-side-title')?.textContent === title) ?? null
   )
-}
-
-function buttonWithText(scope, text) {
-  return scope.querySelectorAll('button').find((button) => button.textContent.trim() === text) ?? null
 }
 
 describe('the conversation preview', () => {

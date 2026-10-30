@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import { PROVIDERS } from '../server/endpoints.js'
 import EndpointsPanel from '../src/ui/EndpointsPanel.jsx'
-import { buttonWithText, withDom } from './helpers/handDom.js'
+import { buttonWithText, withDom } from './helpers/uiDom.js'
 
 function makeClient() {
   const calls = []
