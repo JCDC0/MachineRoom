@@ -8,6 +8,8 @@
 
 - On Windows `stopLane` stops a lock's process id only when it was created no later than the lock file's last change plus 2 seconds, and `descendantProcesses` and `leftoverProcesses` ignore a parent created after its child (task H19).
 
+- Check a lane using an MCP server and a real ACP agent on OpenCode with DeepSeek V4.1 Flash, verifying tool calls and file changes (task L6).
+
 - `killTree` leaves an exited child alone on Windows, because `taskkill /T /F` on its old process id could stop an unrelated process that reused it, which failed a `git rev-parse` in another test thread with no error text.
 
 - Endpoints lock preset providers to their base URL, quick endpoints repoint when their key slot is shared, and family readKeys reads both map and list shapes through a shared key reader (task Q15a).
