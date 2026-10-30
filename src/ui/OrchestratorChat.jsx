@@ -14,7 +14,6 @@ import {
   ORCH_MAX_CHARS,
   ORCH_MAX_LINES,
   ORCH_REFRESH_MS,
-  ORCH_START_CONFIRM,
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
   TEAM_TAB,
@@ -29,6 +28,7 @@ import {
   normalizeChat,
   projectBaseName,
   sendChatMessage,
+  startConfirmText,
   statusDetail,
   statusTone,
   teamLines,
@@ -227,9 +227,7 @@ export default function OrchestratorChat({
   ]
   const startText =
     selected === 'orchestrator'
-      ? project
-        ? `The orchestrator works in ${project} with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.`
-        : ORCH_START_CONFIRM
+      ? startConfirmText(project, harness)
       : `${current?.name || selected} runs on this project with full permissions. It plans for its lanes, works in its scope and reports to the main orchestrator.`
 
   useEffect(() => {
