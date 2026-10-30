@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Projects tab opens with a Repository section that shows the current and local branches, switches a branch or makes one after a confirm card, marks the switch blocked by uncommitted changes or a worktree, and dispatches the git tree event (task U92).
+
 - The H20 test counts stopped leftovers only on Windows, since a Linux orphan has init as its parent and CI failed on it; the limit is named in ARCHITECTURE.
 
 - One hand-made DOM, `tests/helpers/uiDom.js`, serves every UI test; `tests/helpers/handDom.js` and the copies inside the UI test files are gone, and every test moved to it without an assertion change (task T29).
