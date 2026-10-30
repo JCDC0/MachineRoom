@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
 import FamilyTeam from './FamilyTeam.jsx'
 import FamilyTree from './FamilyTree.jsx'
+import RepositoryPanel from './RepositoryPanel.jsx'
 import SidebarTabs from './SidebarTabs.jsx'
 import { loadSettings, saveSettings } from './settings.js'
 import {
@@ -494,6 +495,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   function renderProjects() {
     return (
       <section className="mr-side-projects" aria-label="Projects">
+        <RepositoryPanel client={client} live={connected} project={project} />
         {renderProjectsHead()}
         {!projects ? (
           <p className="mr-side-note">{readError ? 'Projects are not available.' : 'Loading projects...'}</p>

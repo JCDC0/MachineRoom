@@ -6953,6 +6953,252 @@ body:has(#hud-orchestrator-chat) .waiting {
   color: var(--white);
 }
 
+/* U92: the Repository section at the top of the Projects tab */
+.mr-repo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-repo-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+  padding: 0 4px;
+}
+
+.mr-repo-title {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.mr-side .mr-repo-tree {
+  margin-left: auto;
+  padding: 2px 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.7);
+}
+
+.mr-side .mr-repo-tree:hover:not(:disabled) {
+  color: var(--white);
+  background: rgb(255 255 255 / 0.06);
+}
+
+.mr-repo-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  padding: 0 4px;
+}
+
+.mr-repo-branch {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--white);
+}
+
+.mr-repo-dirty {
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.65);
+}
+
+.mr-repo-branches {
+  max-height: 192px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 2px 0;
+}
+
+.mr-repo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-height: 24px;
+  padding: 3px 4px;
+  border-radius: 2px;
+}
+
+.mr-repo-row:hover {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.mr-repo-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  color: rgb(255 255 255 / 0.82);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-repo-row.is-current .mr-repo-name {
+  color: #e5ff00;
+}
+
+.mr-repo-tag {
+  flex: 0 0 auto;
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.mr-side .mr-repo-switch {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.55);
+  white-space: nowrap;
+}
+
+.mr-side .mr-repo-switch:hover:not(:disabled) {
+  color: var(--white);
+  background: rgb(255 255 255 / 0.08);
+}
+
+.mr-side .mr-repo-switch:disabled {
+  color: rgb(255 255 255 / 0.25);
+}
+
+.mr-repo-reason {
+  flex: 1 0 100%;
+  font-size: 8px;
+  line-height: 1.35;
+  color: rgb(255 255 255 / 0.38);
+}
+
+.mr-repo-actions {
+  display: flex;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.mr-side .mr-repo-new {
+  height: 24px;
+  padding: 0 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-side .mr-repo-new:hover:not(:disabled) {
+  color: var(--white);
+}
+
+.mr-repo-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 4px;
+  padding: 6px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  border-radius: 2px;
+  background: rgb(255 255 255 / 0.03);
+}
+
+.mr-repo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mr-repo-label {
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.mr-repo-input,
+.mr-repo-select {
+  width: 100%;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid rgb(255 255 255 / 0.24);
+  border-radius: 2px;
+  background: rgb(0 0 0 / 0.25);
+  color: var(--white);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.mr-repo-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.mr-side .mr-repo-form-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  font-family: var(--mono);
+  font-size: 9px;
+  text-align: center;
+}
+
+.mr-side .mr-repo-form-btn.is-primary {
+  border-color: var(--yellow);
+  background: var(--yellow);
+  color: var(--black);
+}
+
+.mr-repo-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 8px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 2px;
+  background: #191919;
+}
+
+.mr-repo-confirm-text {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.mr-repo-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.mr-side .mr-repo-confirm-btn {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgb(255 255 255 / 0.25);
+  font-family: var(--mono);
+  font-size: 9px;
+  text-align: center;
+}
+
+.mr-side .mr-repo-confirm-btn.is-primary {
+  border-color: var(--yellow);
+  background: var(--yellow);
+  color: var(--black);
+}
+
+.mr-repo-error {
+  padding: 0 4px;
+  font-size: 9px;
+  line-height: 1.4;
+  color: var(--red);
+}
+
 .mr-side-overlay {
   position: fixed;
   inset: var(--menu-h) 0 0 0;
