@@ -1448,6 +1448,43 @@ describe('a run the main starts on a sub lane', () => {
     expect(unnamed.status).toBe(202)
     await waitFor(() => readLines(rig.runnerCalls).length === 2)
     expect(readLines(rig.runnerCalls)[1].slice(-2)).toEqual(['--started-by', 'backend'])
+
+    const pageRun = await fetch(`${rig.url}/api/control/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: rig.url },
+      body: JSON.stringify({
+        lane: 'opencode',
+        task: 'Fix it.',
+        confirmed: true,
+      }),
+    })
+    expect(pageRun.status).toBe(202)
+    await waitFor(() => readLines(rig.runnerCalls).length === 3)
+    expect(readLines(rig.runnerCalls)[2].slice(-2)).toEqual(['--started-by', 'frontend'])
+  })
+
+  it('refuses a no-Origin request whose token names an orchestrator with no sector', async () => {
+    const rig = await laneRig()
+    const subToken = rig.bridge.orchestrators().token('frontend')
+    const origSector = rig.bridge.orchestrators().sector
+    rig.bridge.orchestrators().sector = (id) => (id === 'frontend' ? null : origSector(id))
+
+    const res = await tokenPost(`${rig.url}/api/control/runs`, {
+      lane: 'opencode',
+      task: 'Fix it.',
+      confirmed: true,
+    }, subToken)
+    expect(res.status).toBe(403)
+    expect(res.body).toEqual({ error: 'The frontend sector does not hold the lane opencode.' })
+    expect(readLines(rig.runnerCalls)).toHaveLength(0)
+  })
+
+  it('credits a run the page starts with no startedBy to the sub whose sector holds the lane', async () => {
+    const rig = await laneRig()
+    const res = await pagePost(`${rig.url}/api/control/runs`, { lane: 'opencode', task: 'Fix it.', confirmed: true })
+    expect(res.status).toBe(202)
+    await waitFor(() => readLines(rig.runnerCalls).length === 1)
+    expect(readLines(rig.runnerCalls)[0].slice(-2)).toEqual(['--started-by', 'frontend'])
   })
 
   it('refuses a sub that does not hold the lane and a sub that names another id', async () => {

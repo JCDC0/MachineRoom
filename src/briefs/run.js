@@ -489,14 +489,22 @@ export const HARNESS_KEY_NAMES = {
 
 const LANE_ENV_SET = new Set(LANE_ENV_NAMES.map((name) => name.toLowerCase()))
 
-export function harnessKeyNames(harness) {
+export function harnessKeyNames(harness, { model = '', endpoints = [] } = {}) {
   const key = typeof harness === 'string' ? harness : ''
+  if (key === 'machineroom') {
+    const list = Array.isArray(endpoints) ? endpoints : []
+    const hasEndpoint = typeof model === 'string' && model.includes('/') && list.some((ep) => {
+      const name = typeof ep === 'string' ? ep.trim() : typeof ep?.name === 'string' ? ep.name.trim() : ''
+      return name !== '' && model.startsWith(`${name}/`)
+    })
+    if (hasEndpoint) return []
+  }
   return Object.hasOwn(HARNESS_KEY_NAMES, key) ? HARNESS_KEY_NAMES[key] : []
 }
 
-export function childEnvironment(env, cwd, { harness = '', names = [], extra = {} } = {}) {
+export function childEnvironment(env, cwd, { harness = '', names = [], extra = {}, model = '', endpoints = [] } = {}) {
   const allowed = new Set(LANE_ENV_SET)
-  for (const name of harnessKeyNames(harness)) allowed.add(name.toLowerCase())
+  for (const name of harnessKeyNames(harness, { model, endpoints })) allowed.add(name.toLowerCase())
   for (const name of Array.isArray(names) ? names : []) {
     if (typeof name === 'string' && name !== '') allowed.add(name.toLowerCase())
   }

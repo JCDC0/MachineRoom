@@ -12,6 +12,7 @@ import { outcomeTable } from '../server/outcomes.js'
 import { killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { readAllLanes, runsFolder } from '../server/lanes-source.js'
+import { readEndpoints } from '../server/endpoints.js'
 import { acpRunCommand } from './acp-run.mjs'
 import { processAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from './lane-lock.mjs'
 import { enabledMcpServers, mcpConfigForClaude, mcpConfigForOpencode } from './mcp-bridge.mjs'
@@ -929,10 +930,14 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     const spawnSpec = laneSpawn({ command, minutes: options.minutes, model: lane.cli.model, effort: lane.reasoning })
     const runnerNames = ['MACHINEROOM_RUNS', 'MACHINEROOM_LANES_FILE']
       .filter((name) => typeof process.env[name] === 'string' && process.env[name] !== '')
+    const runsDir = options?.runs || (logPath ? dirname(logPath) : runsFolder())
+    const endpoints = readEndpoints(runsDir)
     const childEnv = childEnvironment(process.env, command.cwd, {
       harness: lane.cli.harness,
       names: runnerNames,
       extra: command.env,
+      model: lane.cli.model,
+      endpoints,
     })
     const child = spawn(spawnSpec.file, spawnSpec.args, { cwd: command.cwd, env: childEnv, stdio: spawnSpec.input ? ['pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'], windowsHide: true })
     if (lockPath) writeLaneChild(lockPath, child.pid)

@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
@@ -925,7 +925,12 @@ export function createOrchestrator({
       child = spawnChild(spawnChild === spawn ? programFor(program) : program, args, {
         cwd: root,
         shell: false,
-        env: childEnvironment(process.env, root, { harness, extra: { MACHINEROOM_RUNS: folder, ...(mcpEnv || {}) } }),
+        env: childEnvironment(process.env, root, {
+          harness,
+          model,
+          endpoints: readEndpoints(folder),
+          extra: { MACHINEROOM_RUNS: folder, ...(mcpEnv || {}) },
+        }),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       })
@@ -1451,7 +1456,10 @@ export function createOrchestrator({
     const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
     let text = record ? `${first}\n${recordLine(record)}` : first
     if (status === 'failed') {
-      const logFile = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? join(folder, `${logName}.log`) : '')
+      const candidate = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? resolve(folder, `${logName}.log`) : '')
+      const rel = candidate ? relative(folder, candidate) : ''
+      const inside = Boolean(candidate && rel && !rel.startsWith('..') && !isAbsolute(rel))
+      const logFile = inside ? candidate : ''
       const logContent = logFile ? readText(logFile) : ''
       if (logContent) {
         const laneEntry = lanes && Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null

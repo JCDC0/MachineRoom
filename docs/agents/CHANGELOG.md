@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The run and wake fixes from the version 9 audit: an orchestrator token with no sector gets 403 on a lane run (Y2), a failed run's log is read only when it resolves inside the runs folder (Y3), a run the page starts with no `startedBy` on a lane a sub's sector holds is credited to that sub (Y5), and a Direct API lane or turn gets the bridge's `MACHINEROOM_API_KEY`, `OPENROUTER_API_KEY` and `MACHINEROOM_API_URL` only when its model names no saved endpoint (Y6) (task Q15b).
+
 - OpenCode lane runs and orchestrator turns pass `--standalone` so their private server stops with the process tree when killed (task H18).
 
 - A sub or main orchestrator reply of NO_REPORT shows in its chat as No new report., and a sub reply skips posting to the parent and waking it (task O26).
