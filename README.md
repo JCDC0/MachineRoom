@@ -75,7 +75,7 @@ The Settings button in the menu opens the Settings panel. At 900 pixels and wide
 - Four screen effects each have a switch and a strength: chromatic aberration, vignette, grain and fine dust. Aberration and grain start off; vignette and fine dust start on. Fine dust also has a Pulse switch.
 - Record time sets how many minutes the page keeps for its own replay, from 1 to 240, 10 by default.
 - Sound holds the beeps, their volume, the music, its volume and Dance. Music plays from the MachineRoom music folder.
-- Providers holds up to 20 OpenAI-compatible endpoints, each with a provider preset, a base URL, an optional key slot and up to 1000 models. Web search picks the provider for the harness web tools. MCP tools lists the Model Context Protocol servers and runs their tools.
+- Direct API holds up to 20 OpenAI-compatible endpoints, each with a provider preset, a base URL, an optional key slot and up to 1000 models. Web search picks the provider for the harness web tools. MCP tools lists the Model Context Protocol servers and runs their tools.
 - Key slots, endpoints, the web search provider and the MCP servers are saved in the runs folder, never in this repository.
 
 ## Ask the orchestrator for work
@@ -216,7 +216,7 @@ A seeded room at 40000 files.
 | Codex | Supported: no lane yet | `exec --json` item lines |
 | GitHub Copilot | Supported: no lane yet | `-p --output-format json` lines, or plain tool lines |
 
-Hermes is retired in `docs/agents/lanes.json`; remove `"retired": true` from its entry to bring it back, then check its `cli` block and model. AGY is supported, and `agy`, `agy2` and `agy3` are live backend lanes on Flash. A Direct API lane names a saved endpoint in its `cli.endpoint` and runs on the `machineroom` harness; add one in the family tree's Add child form. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`. The harness plan is in `docs/agents/HARNESSES.md`.
+Hermes is retired in `docs/agents/lanes.json`; remove `"retired": true` from its entry to bring it back, then check its `cli` block and model. AGY is supported, and `agy`, `agy2` and `agy3` are live backend lanes on Flash. A Direct API lane names a saved endpoint in its `cli.endpoint` and runs on the `machineroom` harness; add its key and endpoint in Settings, Direct API, then pick its model in the family tree. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`. The harness plan is in `docs/agents/HARNESSES.md`.
 
 ## Develop it
 
