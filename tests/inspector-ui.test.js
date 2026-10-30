@@ -115,9 +115,10 @@ describe('the inspector panel', () => {
 
       await click(root, buttonWithText(container, 'Open chat'))
       expect(heard).toEqual([{ id: 'orchestrator' }])
+      expect(onClose).toHaveBeenCalledTimes(1)
 
       await click(root, container.querySelector('.mr-inspector-close'))
-      expect(onClose).toHaveBeenCalledTimes(1)
+      expect(onClose).toHaveBeenCalledTimes(2)
     })
   })
 
