@@ -15,11 +15,13 @@ import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createFamilyApi } from './family.js'
 import { createEndpointsApi } from './endpoints.js'
+import { createFilesApi } from './files.js'
 import { createGitApi } from './git.js'
 import { createHarnessModelsApi } from './harness-models.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
 import { createMcpApi } from './mcp.js'
 import { createMusicApi } from './music.js'
+import { createNetworkApi } from './network.js'
 import { createOrchestrators } from './orchestrators.js'
 import { createPlansApi } from './plans.js'
 import { createPolicyApi } from './policy.js'
@@ -486,6 +488,18 @@ export function createBridge(options = {}) {
     gitRunner: options.gitRunner,
     ttlMs: options.gitTtlMs,
   })
+  const filesApi = createFilesApi({ projectRoot, sendJson })
+  const networkApi = createNetworkApi({
+    sendJson,
+    connector: options.networkConnector,
+    now: options.networkNow ?? options.now,
+    intervalMs: options.networkIntervalMs,
+    activeMs: options.networkActiveMs,
+    timeoutMs: options.networkTimeoutMs,
+    onNotice: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
+  })
   const treeSent = new WeakMap()
   const folderClients = new WeakSet()
   const treeClients = new WeakSet()
@@ -802,6 +816,8 @@ export function createBridge(options = {}) {
     if (await projects.handle(req, res, url)) return
     if (await familyApi.handle(req, res, url)) return
     if (await gitApi.handle(req, res, url)) return
+    if (await filesApi.handle(req, res, url)) return
+    if (await networkApi.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {
@@ -950,6 +966,7 @@ export function createBridge(options = {}) {
     }
     runs.stopAll()
     orchestrators?.close()
+    networkApi.stop()
     lanesSource?.stop()
     sessionsSource?.stop()
     clearInterval(heartbeatTimer)

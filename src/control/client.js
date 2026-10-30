@@ -558,6 +558,10 @@ export function createClient({
 
     gitState: () => request('GET', '/api/git'),
 
+    fileInfo: ({ path } = {}) => request('GET', `/api/file?path=${encodeURIComponent(path ?? '')}`),
+
+    network: () => request('GET', '/api/network'),
+
     switchBranch: ({ branch, confirmed = true } = {}) => request('POST', '/api/git/switch', { branch, confirmed }),
 
     createBranch: ({ name, from, confirmed = true } = {}) => request('POST', '/api/git/branch', { name, from, confirmed }),
