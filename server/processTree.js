@@ -146,6 +146,8 @@ export function killTree(child, { platform = process.platform, run = spawnSync, 
   const pid = child?.pid
   if (!Number.isInteger(pid) || pid <= 0) return false
   if (platform === 'win32') {
+    // Windows reuses a process id quickly, so taskkill on an exited child can stop a stranger.
+    if ((child.exitCode ?? child.signalCode ?? null) !== null) return false
     const result = run('taskkill', ['/T', '/F', '/PID', String(pid)], { windowsHide: true, timeout: KILL_TIMEOUT_MS })
     return !result?.error && result?.status === 0
   }

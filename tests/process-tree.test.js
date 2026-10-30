@@ -183,6 +183,29 @@ describe('killTree', () => {
     expect(signals).toEqual([{ pid: -4242, signal: 'SIGKILL' }])
   })
 
+  it('leaves an exited child alone on Windows, since its process id may be reused', () => {
+    const calls = []
+    const run = (file, args) => {
+      calls.push({ file, args })
+      return { status: 0 }
+    }
+    expect(killTree({ pid: 4242, exitCode: 0, signalCode: null }, { platform: 'win32', run })).toBe(false)
+    expect(killTree({ pid: 4242, exitCode: null, signalCode: 'SIGTERM' }, { platform: 'win32', run })).toBe(false)
+    expect(calls).toEqual([])
+    expect(killTree({ pid: 4242, exitCode: null, signalCode: null }, { platform: 'win32', run })).toBe(true)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('still signals the group of an exited leader elsewhere', () => {
+    const signals = []
+    const kill = (pid, signal) => {
+      signals.push({ pid, signal })
+      return true
+    }
+    expect(killTree({ pid: 4242, exitCode: 0 }, { platform: 'linux', kill })).toBe(true)
+    expect(signals).toEqual([{ pid: -4242, signal: 'SIGKILL' }])
+  })
+
   it('falls back to the child alone when it leads no group', () => {
     const killed = []
     const child = { pid: 4242, kill: (signal) => killed.push(signal) }

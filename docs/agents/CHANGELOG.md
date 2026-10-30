@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `killTree` leaves an exited child alone on Windows, because `taskkill /T /F` on its old process id could stop an unrelated process that reused it, which failed a `git rev-parse` in another test thread with no error text.
+
 - Endpoints lock preset providers to their base URL, quick endpoints repoint when their key slot is shared, and family readKeys reads both map and list shapes through a shared key reader (task Q15a).
 
 - The run and wake fixes from the version 9 audit: an orchestrator token with no sector gets 403 on a lane run (Y2), a failed run's log is read only when it resolves inside the runs folder (Y3), a run the page starts with no `startedBy` on a lane a sub's sector holds is credited to that sub (Y5), and a Direct API lane or turn gets the bridge's `MACHINEROOM_API_KEY`, `OPENROUTER_API_KEY` and `MACHINEROOM_API_URL` only when its model names no saved endpoint (Y6) (task Q15b).
