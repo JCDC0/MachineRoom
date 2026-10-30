@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process'
 export const KILL_TIMEOUT_MS = 10000
 export const LIST_TIMEOUT_MS = 20000
 
-export const WINDOWS_LIST_COMMAND = 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine | ConvertTo-Json -Compress'
+export const WINDOWS_LIST_COMMAND = 'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,CommandLine,CreationDate | ConvertTo-Json -Compress'
 
 export function treeSpawnOptions(platform = process.platform) {
   return platform === 'win32' ? {} : { detached: true }
@@ -16,10 +16,26 @@ export function processListCommand(platform = process.platform) {
   return { file: 'ps', args: ['-eo', 'pid,ppid,args'] }
 }
 
-function processRow(pid, ppid, command) {
+function parseCreationDate(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const match = /\/Date\((\d+)(?:[+-]\d+)?\)\//.exec(value)
+    if (match) {
+      const ms = Number(match[1])
+      if (Number.isFinite(ms)) return ms
+    }
+    const parsed = Date.parse(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function processRow(pid, ppid, command, created = null) {
   if (!Number.isInteger(pid) || pid < 0) return null
   if (!Number.isInteger(ppid) || ppid < 0) return null
-  return { pid, ppid, command: typeof command === 'string' ? command : '' }
+  const row = { pid, ppid, command: typeof command === 'string' ? command : '' }
+  if (typeof created === 'number' && Number.isFinite(created)) row.created = created
+  return row
 }
 
 function windowsRows(text) {
@@ -34,7 +50,8 @@ function windowsRows(text) {
   for (const item of items) {
     const pid = Number(item?.ProcessId ?? item?.pid)
     const ppid = Number(item?.ParentProcessId ?? item?.ppid)
-    const row = processRow(pid, ppid, item?.CommandLine ?? item?.command ?? '')
+    const created = parseCreationDate(item?.CreationDate ?? item?.created)
+    const row = processRow(pid, ppid, item?.CommandLine ?? item?.command ?? '', created)
     if (row) rows.push(row)
   }
   return rows
@@ -97,7 +114,14 @@ function parentChain(byPid, pid) {
   let current = pid
   while (Number.isInteger(current) && current > 0 && !chain.has(current)) {
     chain.add(current)
-    current = byPid.get(current)?.ppid
+    const currentProc = byPid.get(current)
+    const nextPid = currentProc?.ppid
+    if (!Number.isInteger(nextPid) || nextPid <= 0 || chain.has(nextPid)) break
+    const nextProc = byPid.get(nextPid)
+    if (currentProc && nextProc && typeof currentProc.created === 'number' && typeof nextProc.created === 'number') {
+      if (nextProc.created > currentProc.created) break
+    }
+    current = nextPid
   }
   return chain
 }
@@ -116,7 +140,7 @@ export function descendantProcesses(processes, { rootPid = 0, ownPid = 0, exclud
   for (const item of list) {
     if (item.pid === root) continue
     if (excluded.has(item.pid)) continue
-    if (parentChain(byPid, item.ppid).has(root)) found.push(item)
+    if (parentChain(byPid, item.pid).has(root)) found.push(item)
   }
   return found.sort((left, right) => left.pid - right.pid)
 }
@@ -135,7 +159,7 @@ export function leftoverProcesses(processes, { childPid = 0, worktree = '', ownP
   for (const item of list) {
     if (item.pid === child) continue
     if (excluded.has(item.pid)) continue
-    const related = child > 0 && parentChain(byPid, item.ppid).has(child)
+    const related = child > 0 && parentChain(byPid, item.pid).has(child)
     const named = namesFolder(processKey(item.command, platform), folder)
     if (related || named) found.push(item)
   }

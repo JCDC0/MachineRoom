@@ -37,12 +37,22 @@ describe('the process list', () => {
     expect(command.args[2]).toContain('ProcessId')
     expect(command.args[2]).toContain('ParentProcessId')
     expect(command.args[2]).toContain('CommandLine')
+    expect(command.args[2]).toContain('CreationDate')
     expect(processListCommand('linux')).toEqual({ file: 'ps', args: ['-eo', 'pid,ppid,args'] })
   })
 
   it('reads one object or an array from the Windows listing', () => {
     const one = JSON.stringify({ ProcessId: 10, ParentProcessId: 4, CommandLine: 'node a.js' })
     expect(parseProcessList(one, { platform: 'win32' })).toEqual([{ pid: 10, ppid: 4, command: 'node a.js' }])
+    const withDate = JSON.stringify({
+      ProcessId: 10,
+      ParentProcessId: 4,
+      CommandLine: 'node a.js',
+      CreationDate: '/Date(1793351410153)/',
+    })
+    expect(parseProcessList(withDate, { platform: 'win32' })).toEqual([
+      { pid: 10, ppid: 4, command: 'node a.js', created: 1793351410153 },
+    ])
     const many = JSON.stringify([
       { ProcessId: 10, ParentProcessId: 4, CommandLine: 'node a.js' },
       { ProcessId: 11, ParentProcessId: 10, CommandLine: null },
@@ -110,6 +120,17 @@ describe('leftoverProcesses', () => {
     expect(leftoverProcesses(rows, { worktree: 'C:\\work\\lane', platform: 'win32', excludePids: [4] }).map((item) => item.pid)).toEqual([])
     expect(leftoverProcesses(rows, { worktree: '', childPid: 2, excludePids: [3] }).map((item) => item.pid)).toEqual([])
   })
+
+  it('does not count a process as a child of a parent created after it', () => {
+    const list = [
+      { pid: 1, ppid: 0, command: 'init', created: 1000 },
+      { pid: 2, ppid: 1, command: 'node harness', created: 2000 },
+      { pid: 3, ppid: 2, command: 'node helper', created: 3000 },
+      { pid: 4, ppid: 2, command: 'node stranger', created: 1500 },
+      { pid: 5, ppid: 2, command: 'node nocreation' },
+    ]
+    expect(leftoverProcesses(list, { childPid: 2, platform: 'win32' }).map((item) => item.pid)).toEqual([3, 5])
+  })
 })
 
 describe('descendantProcesses', () => {
@@ -136,6 +157,17 @@ describe('descendantProcesses', () => {
     expect(descendantProcesses(null, { rootPid: 2 })).toEqual([])
     expect(descendantProcesses(rows, {})).toEqual([])
     expect(descendantProcesses([null, {}, { pid: 0, ppid: 0, command: 'x' }], { rootPid: 2 })).toEqual([])
+  })
+
+  it('does not count a process as a child of a parent created after it', () => {
+    const list = [
+      { pid: 1, ppid: 0, command: 'init', created: 1000 },
+      { pid: 2, ppid: 1, command: 'node harness', created: 2000 },
+      { pid: 3, ppid: 2, command: 'node helper', created: 3000 },
+      { pid: 4, ppid: 2, command: 'node stranger', created: 1500 },
+      { pid: 5, ppid: 2, command: 'node nocreation' },
+    ]
+    expect(descendantProcesses(list, { rootPid: 2 }).map((item) => item.pid)).toEqual([3, 5])
   })
 })
 
