@@ -70,6 +70,8 @@ export default function Assistant({
   const logRef = useRef(null)
   const posRef = useRef(pos)
   posRef.current = pos
+  const dragRef = useRef(null)
+  const [dragging, setDragging] = useState(false)
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -82,6 +84,8 @@ export default function Assistant({
         }
       } else if (event.key === 'Escape' && isOpen) {
         event.preventDefault()
+        dragRef.current = null
+        setDragging(false)
         if (controlledOpen === undefined) {
           setInternalOpen(false)
         }
@@ -153,7 +157,69 @@ export default function Assistant({
     }
   }, [entries, isOpen])
 
+  useEffect(() => {
+    if (!dragging) return undefined
+
+    function getTerminalSize() {
+      if (!terminalRef.current) return DEFAULT_TERMINAL_SIZE
+      const rect = terminalRef.current.getBoundingClientRect()
+      return {
+        width: rect.width || DEFAULT_TERMINAL_SIZE.width,
+        height: rect.height || DEFAULT_TERMINAL_SIZE.height,
+      }
+    }
+
+    function onPointerMove(e) {
+      const drag = dragRef.current
+      if (!drag) return
+      const dx = e.clientX - drag.startX
+      const dy = e.clientY - drag.startY
+      const size = getTerminalSize()
+      setPos(
+        clampPosition(
+          { x: drag.startPosX + dx, y: drag.startPosY + dy },
+          size,
+          { windowWidth: window.innerWidth, windowHeight: window.innerHeight }
+        )
+      )
+    }
+
+    function onPointerUp(e) {
+      const drag = dragRef.current
+      if (!drag) return
+      dragRef.current = null
+      const dx = e.clientX - drag.startX
+      const dy = e.clientY - drag.startY
+      const size = getTerminalSize()
+      const finalPos = clampPosition(
+        { x: drag.startPosX + dx, y: drag.startPosY + dy },
+        size,
+        { windowWidth: window.innerWidth, windowHeight: window.innerHeight }
+      )
+      savedPosRef.current = finalPos
+      setPos(finalPos)
+      saveAssistantPosition(storage, finalPos)
+      setDragging(false)
+    }
+
+    function onPointerCancel() {
+      dragRef.current = null
+      setDragging(false)
+    }
+
+    window.addEventListener('pointermove', onPointerMove)
+    window.addEventListener('pointerup', onPointerUp)
+    window.addEventListener('pointercancel', onPointerCancel)
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove)
+      window.removeEventListener('pointerup', onPointerUp)
+      window.removeEventListener('pointercancel', onPointerCancel)
+    }
+  }, [dragging, storage])
+
   function handleClose() {
+    dragRef.current = null
+    setDragging(false)
     if (controlledOpen === undefined) {
       setInternalOpen(false)
     }
@@ -170,53 +236,13 @@ export default function Assistant({
     if (event.target?.closest?.('button')) return
     if (typeof window !== 'undefined' && window.innerWidth < 900) return
     event.preventDefault()
-
-    const startX = event.clientX
-    const startY = event.clientY
-    const startPosX = posRef.current.x
-    const startPosY = posRef.current.y
-
-    function getTerminalSize() {
-      if (!terminalRef.current) return DEFAULT_TERMINAL_SIZE
-      const rect = terminalRef.current.getBoundingClientRect()
-      return {
-        width: rect.width || DEFAULT_TERMINAL_SIZE.width,
-        height: rect.height || DEFAULT_TERMINAL_SIZE.height,
-      }
+    dragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      startPosX: posRef.current.x,
+      startPosY: posRef.current.y,
     }
-
-    function onPointerMove(e) {
-      const dx = e.clientX - startX
-      const dy = e.clientY - startY
-      const size = getTerminalSize()
-      const nextPos = clampPosition(
-        { x: startPosX + dx, y: startPosY + dy },
-        size,
-        { windowWidth: window.innerWidth, windowHeight: window.innerHeight }
-      )
-      setPos(nextPos)
-    }
-
-    function onPointerEnd(e) {
-      window.removeEventListener('pointermove', onPointerMove)
-      window.removeEventListener('pointerup', onPointerEnd)
-      window.removeEventListener('pointercancel', onPointerEnd)
-      const dx = e.clientX - startX
-      const dy = e.clientY - startY
-      const size = getTerminalSize()
-      const finalPos = clampPosition(
-        { x: startPosX + dx, y: startPosY + dy },
-        size,
-        { windowWidth: window.innerWidth, windowHeight: window.innerHeight }
-      )
-      savedPosRef.current = finalPos
-      setPos(finalPos)
-      saveAssistantPosition(storage, finalPos)
-    }
-
-    window.addEventListener('pointermove', onPointerMove)
-    window.addEventListener('pointerup', onPointerEnd)
-    window.addEventListener('pointercancel', onPointerEnd)
+    setDragging(true)
   }
 
   async function processText(textToSend) {

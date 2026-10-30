@@ -112,8 +112,8 @@ export default function SearchSettings({ client: givenClient = null }) {
     }
     let active = true
     setLoading(true)
-    client
-      .searchProvider()
+    Promise.resolve()
+      .then(() => client.searchProvider())
       .then((answer) => {
         if (!active) return
         const next = searchChoiceFrom(answer)

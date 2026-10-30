@@ -57,6 +57,65 @@ export const PROJECT_TASK_COUNT_LIMIT = 20
 export const PROJECT_QUEUE_TEXT_LIMIT = PROJECT_TASK_LIMIT * PROJECT_TASK_COUNT_LIMIT + 4000
 export const PROJECT_CONFIRM_LIMIT = 120
 export const PROJECT_SPLIT_DELAY = 3000
+
+const EMPTY_SPLIT_RUN = Object.freeze({ active: false, pairs: [], answers: [], failed: false, done: false })
+let splitRun = EMPTY_SPLIT_RUN
+const splitRunListeners = new Set()
+
+export function splitRunSnapshot() {
+  return splitRun
+}
+
+export function subscribeSplitRun(listener) {
+  if (typeof listener !== 'function') return () => {}
+  splitRunListeners.add(listener)
+  return () => {
+    splitRunListeners.delete(listener)
+  }
+}
+
+function publishSplitRun(next) {
+  splitRun = next
+  for (const listener of [...splitRunListeners]) listener()
+}
+
+export function clearSplitRun() {
+  if (splitRun.active) return false
+  if (splitRun === EMPTY_SPLIT_RUN) return true
+  publishSplitRun(EMPTY_SPLIT_RUN)
+  return true
+}
+
+export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY } = {}) {
+  if (splitRun.active) return false
+  const list = (Array.isArray(pairs) ? pairs : []).filter(
+    (pair) => pair && typeof pair === 'object' && typeof pair.lane === 'string' && typeof pair.task === 'string'
+  )
+  if (list.length === 0) return false
+  if (typeof client?.startRun !== 'function') return false
+  publishSplitRun({ active: true, pairs: list, answers: [], failed: false, done: false })
+  const answers = []
+  let failed = false
+  for (let index = 0; index < list.length; index += 1) {
+    const pair = list[index]
+    try {
+      const answer = await client.startRun(pair.lane, { tasks: [pair.task], worktree: true })
+      answers.push({ ok: true, message: runStartLine(answer) })
+    } catch (err) {
+      failed = true
+      answers.push({ ok: false, message: err?.message || 'Could not start run.' })
+    }
+    publishSplitRun({ active: true, pairs: list, answers: [...answers], failed, done: false })
+    if (index < list.length - 1) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, delay)
+      })
+    }
+  }
+  publishSplitRun({ active: false, pairs: list, answers, failed, done: true })
+  return true
+}
+
 export const PROJECT_TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
 export const PROJECT_TASKS_PROBLEM = 'Write one to twenty tasks, each 1 to 4000 characters.'
 export const PROJECT_TASK_SEPARATOR_PROBLEM = 'A task cannot hold a line of only ---.'

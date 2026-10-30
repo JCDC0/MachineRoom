@@ -167,22 +167,28 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
         setLoading(false)
         return
       }
-      const [providerList, endpointList, keys] = await Promise.allSettled([
-        typeof client.providers === 'function' ? client.providers() : [],
-        typeof client.endpoints === 'function' ? client.endpoints() : [],
-        typeof client.keys === 'function' ? client.keys() : [],
-      ])
-      if (!alive) return
-      if (providerList.status === 'fulfilled') setProviders(Array.isArray(providerList.value) ? providerList.value : [])
-      if (endpointList.status === 'fulfilled') setEndpoints(Array.isArray(endpointList.value) ? endpointList.value : [])
-      else setError(endpointList.reason?.message || 'Could not load the endpoints.')
-      if (keys.status === 'fulfilled') {
-        const list = Array.isArray(keys.value) ? keys.value : []
-        setKeyNames(list.map((entry) => (typeof entry === 'string' ? entry : entry?.name)).filter((entry) => typeof entry === 'string' && entry !== ''))
+      try {
+        const [providerList, endpointList, keys] = await Promise.allSettled([
+          typeof client.providers === 'function' ? Promise.resolve().then(() => client.providers()) : Promise.resolve([]),
+          typeof client.endpoints === 'function' ? Promise.resolve().then(() => client.endpoints()) : Promise.resolve([]),
+          typeof client.keys === 'function' ? Promise.resolve().then(() => client.keys()) : Promise.resolve([]),
+        ])
+        if (!alive) return
+        if (providerList.status === 'fulfilled') setProviders(Array.isArray(providerList.value) ? providerList.value : [])
+        if (endpointList.status === 'fulfilled') setEndpoints(Array.isArray(endpointList.value) ? endpointList.value : [])
+        else setError(endpointList.reason?.message || 'Could not load the endpoints.')
+        if (keys.status === 'fulfilled') {
+          const list = Array.isArray(keys.value) ? keys.value : []
+          setKeyNames(list.map((entry) => (typeof entry === 'string' ? entry : entry?.name)).filter((entry) => typeof entry === 'string' && entry !== ''))
+        }
+      } finally {
+        if (alive) setLoading(false)
       }
-      setLoading(false)
     }
-    load()
+    load().catch((error) => {
+      if (!alive) return
+      setError(error?.message || 'Could not load the endpoints.')
+    })
     return () => {
       alive = false
     }
@@ -414,6 +420,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
             onChange={(event) => {
               setQuickKey(event.target.value)
               setQuickNotice({ text: '', error: false })
+              setQuickConfirm(null)
             }}
           />
         </div>
