@@ -422,6 +422,41 @@ describe('the room, played from a recorded lane run', () => {
 })
 
 describe('the camera hold on a live room', () => {
+  it('inspects a folder and keeps the zoom and park working', async () => {
+    const { room } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
+    try {
+      expect(room.inspect({ kind: 'folder', id: 'src' })).toBe(true)
+      expect(room.inspecting()).toEqual({ kind: 'folder', id: 'src' })
+      tickRoom(2)
+      expect(room.holding()).toBe('src')
+      expect(room.soundAt('src').distance).toBeCloseTo(700, 0)
+      room.zoomBy(-600)
+      tickRoom(1)
+      expect(room.soundAt('src').distance).toBeLessThan(700)
+      room.park()
+      expect(room.holding()).toBe(null)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('inspects an agent and the internet sphere without a card hold', async () => {
+    const { room } = await makeRoom(['src/a.js'], ['claude'])
+    try {
+      expect(room.inspect({ kind: 'agent', id: 'claude' })).toBe(true)
+      expect(room.inspecting()).toEqual({ kind: 'agent', id: 'claude' })
+      expect(room.focused()).toBe('claude')
+      tickRoom(2)
+      expect(room.holding()).toBe(null)
+      expect(room.inspect({ kind: 'internet', id: 'internet' })).toBe(true)
+      tickRoom(2)
+      expect(room.inspecting()).toEqual({ kind: 'internet', id: 'internet' })
+      room.park()
+    } finally {
+      room.dispose()
+    }
+  })
+
   it('releases the hold and refits when the held card leaves the plan', async () => {
     const first = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
     expect(first.room.anchor('src')).toBe(true)

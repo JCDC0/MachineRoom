@@ -160,7 +160,7 @@ export function roomAgent(agent) {
   }
 }
 
-export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {} }) {
+export function createRoom({ surface, gl, css, rootName, agents, getState, beforeFrame = () => {}, onPick = () => {}, onInspect = () => {}, onDismiss = () => {} }) {
   const texture = glowTexture()
   const scene = new THREE.Scene()
   scene.fog = new THREE.FogExp2(0x000000, 0.00007)
@@ -198,7 +198,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const cards = createCards(cssScene, {
     glScene: scene,
     rootName,
-    onInspect: (path) => focusPath(path),
+    onInspect: (path) => inspectPath(path),
     alwaysDepth: 2,
   })
   let linkKey = ''
@@ -266,11 +266,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   const scratch = new THREE.Vector3()
+  const inspectPoint = new THREE.Vector3()
   const rig = createCameraRig(camera, surface)
   const raycaster = new THREE.Raycaster()
   const pointer = new THREE.Vector2()
   const followFocus = createFollowFocus()
   const masks = createWorkingMaskCache()
+  const openCalls = new Map()
+  const touchLog = new Map()
+  let inspected = null
   let lastWorking = []
 
   function agentAt(event) {
@@ -284,19 +288,40 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return hit ? hit.object.userData.key : null
   }
 
+  function internetAt(event) {
+    const rect = gl.getBoundingClientRect()
+    if (!rect.width || !rect.height) return false
+    pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointer, camera)
+    return raycaster.intersectObject(internet.group, true).length > 0
+  }
+
   rig.setClickHandler((event) => {
     const key = agentAt(event)
-    if (key !== null) onPick(key)
-    else endFollow()
+    if (key !== null) {
+      onPick(key)
+      return
+    }
+    if (internetAt(event)) {
+      inspectObject({ kind: 'internet', id: 'internet' })
+      onInspect({ kind: 'internet', id: 'internet' })
+      return
+    }
+    endFollow()
+    onDismiss()
   })
 
   function onCardClick(event) {
-    if (cardClickEndsFollow(event.target)) {
+    const card = event.target?.closest?.('.mr-card')
+    if (!card) return
+    if (event.target?.closest?.('.mr-item')) return
+    const path = card.dataset.path ?? ''
+    if (event.target?.closest?.('.mr-card-head')) {
       endFollow()
+      onInspect({ kind: 'folder', id: path })
       return
     }
-    const card = event.target?.closest?.('.mr-card')
-    if (card) anchor(card.dataset.path ?? '')
+    if (anchor(path)) onInspect({ kind: 'folder', id: path })
   }
   cssRenderer.domElement.addEventListener('click', onCardClick, true)
 
@@ -315,6 +340,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     timers.clear()
     terminals.clearNotes()
     webCalls.clear()
+    openCalls.clear()
+    touchLog.clear()
     labels.clear()
     pulses.forEach((pulse) => {
       pulse.active = false
@@ -377,6 +404,97 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     heldPath = target
     rig.hold(() => card.object.position, ANCHOR_DIST)
     onPick(null)
+    return true
+  }
+
+  function noteActivity(activity) {
+    const agent = activity?.agent
+    if (typeof agent !== 'string' || agent === '') return
+    if (activity.type === 'tool.start') {
+      if (!openCalls.has(agent)) openCalls.set(agent, new Map())
+      openCalls.get(agent).set(activity.id ?? '', activity.tool)
+      const time = Number.isFinite(activity.time) ? activity.time : Date.now()
+      for (const touch of activity.touches ?? []) {
+        if (touch.kind !== 'file' || typeof touch.path !== 'string') continue
+        const list = touchLog.get(touch.path) ?? []
+        list.push({ key: agent, mode: touch.mode === 'read' ? 'read' : 'write', time })
+        if (list.length > 50) list.shift()
+        touchLog.set(touch.path, list)
+      }
+      return
+    }
+    if (activity.type === 'tool.end') {
+      openCalls.get(agent)?.delete(activity.id ?? '')
+      return
+    }
+    if (activity.type === 'run.start' || activity.type === 'run.end' || activity.type === 'agent.end') {
+      openCalls.delete(agent)
+    }
+  }
+
+  function inspectObject(detail) {
+    if (!detail || typeof detail !== 'object') return false
+    const kind = detail.kind
+    const id = typeof detail.id === 'string' ? detail.id : ''
+    if (kind === 'agent') {
+      const view = agentSet.views.get(id)
+      if (!view) return false
+      releaseHold()
+      followFocus.setFollowing(false)
+      followFocus.focus(id, true)
+      followCard = null
+      pendingFollow = null
+      rig.hold(() => view.group.position, ANCHOR_DIST)
+      inspected = { kind, id }
+      return true
+    }
+    if (kind === 'internet') {
+      releaseHold()
+      followFocus.setFollowing(false)
+      followFocus.clear()
+      followCard = null
+      pendingFollow = null
+      rig.hold(() => internet.position, ANCHOR_DIST)
+      inspected = { kind: 'internet', id: 'internet' }
+      return true
+    }
+    if (kind !== 'folder' && kind !== 'file') return false
+    const state = getState()
+    if (kind === 'file' && !state.files.has(id)) return false
+    if (kind === 'folder' && id !== '' && !state.dirs.has(id)) return false
+    const drawn = new Set()
+    for (const card of cards.cards.values()) {
+      if (card.view && !card.leaving) drawn.add(card.path)
+    }
+    const target = nearestDrawnPath(kind === 'file' ? dirname(id) : id, drawn)
+    if (target === null) return false
+    releaseHold()
+    followFocus.setFollowing(false)
+    followFocus.clear()
+    followCard = null
+    pendingFollow = null
+    heldPath = target
+    if (kind === 'file' && target === dirname(id)) {
+      rig.hold(() => cards.slotPosition(target, id, inspectPoint), ANCHOR_DIST)
+    } else {
+      rig.hold(() => cards.center(target), ANCHOR_DIST)
+    }
+    inspected = { kind, id }
+    return true
+  }
+
+  function inspectPath(path) {
+    const state = getState()
+    const kind = state.files.has(path) ? 'file' : state.dirs.has(path) ? 'folder' : null
+    if (kind === null) return false
+    const shown = inspectObject({ kind, id: path })
+    if (shown) onInspect({ kind, id: path })
+    return shown
+  }
+
+  function inspect(detail) {
+    const shown = inspectObject(detail)
+    if (!shown) return false
     return true
   }
 
@@ -497,6 +615,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function onActivity(activity) {
+    noteActivity(activity)
     terminals.note(activity)
     messages.note(activity)
     const view = agentSet.views.get(activity.agent)
@@ -732,6 +851,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     focus: focusAgent,
     focusTerminal,
     focusPath,
+    inspect,
+    inspecting: () => inspected,
+    touches: (path) => touchLog.get(path) ?? [],
+    callsFor(key) {
+      const calls = openCalls.get(key)
+      if (!calls || calls.size === 0) return { count: 0, tool: '' }
+      return { count: calls.size, tool: [...calls.values()].at(-1) ?? '' }
+    },
+    webAgents: () => [...new Set(webCalls.values())],
     toggleTerminal(key) {
       if (key) terminals.toggle(key)
       else terminals.openAll(terminals.openKeys().length === 0)

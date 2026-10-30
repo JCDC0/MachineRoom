@@ -154,6 +154,371 @@ summary:focus-visible,
   cursor: grabbing;
 }
 
+.mr-inspector {
+  position: absolute;
+  top: 32px;
+  right: 46px;
+  bottom: 26px;
+  z-index: 6;
+  width: min(380px, 34vw);
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  background: rgb(0 0 0 / 0.9);
+  background-image: var(--corner-ticks);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  color: var(--white);
+  font-family: var(--mono);
+}
+
+.mr-inspector-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4px var(--space);
+  padding: var(--space) calc(var(--space) * 1.5);
+  border-bottom: 1px solid var(--line);
+}
+
+.mr-inspector-kind {
+  grid-column: 1 / -1;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.mr-inspector-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.mr-inspector-close {
+  padding: 2px 6px;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.mr-inspector-close:hover {
+  border-color: var(--white);
+}
+
+.mr-inspector-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: calc(var(--space) * 1.5);
+  scrollbar-width: thin;
+}
+
+.mr-inspector-rows {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  column-gap: calc(var(--space) * 2);
+  row-gap: 6px;
+  margin: 0 0 calc(var(--space) * 1.5);
+}
+
+.mr-inspector-row {
+  display: contents;
+}
+
+.mr-inspector-row dt {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.55);
+}
+
+.mr-inspector-row dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.mr-inspector-state {
+  text-transform: uppercase;
+  color: var(--yellow);
+}
+
+.mr-inspector-state.is-idle {
+  color: var(--text-dim);
+}
+
+.mr-inspector-state.is-failed {
+  color: var(--red);
+}
+
+.mr-inspector-state.is-done {
+  color: var(--green);
+}
+
+.mr-inspector-tool,
+.mr-inspector-command {
+  color: var(--text-dim);
+}
+
+.mr-inspector-subtitle {
+  margin: calc(var(--space) * 1.5) 0 var(--space);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-inspector-note {
+  margin: 0 0 var(--space);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mr-inspector-error {
+  margin: 0 0 var(--space);
+  font-size: 11px;
+  color: var(--red);
+  overflow-wrap: anywhere;
+}
+
+.mr-inspector-log,
+.mr-inspector-explorer,
+.mr-inspector-touches,
+.mr-inspector-web,
+.mr-inspector-chat-list {
+  list-style: none;
+  margin: 0 0 var(--space);
+  padding: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: thin;
+}
+
+.mr-inspector-log {
+  max-height: 180px;
+}
+
+.mr-inspector-explorer {
+  max-height: 240px;
+}
+
+.mr-inspector-touches {
+  max-height: 150px;
+}
+
+.mr-inspector-web {
+  max-height: 140px;
+}
+
+.mr-inspector-chat-list {
+  max-height: 220px;
+}
+
+.mr-inspector-log-line {
+  padding: 3px 0;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.mr-inspector-log-line.is-dim {
+  color: var(--text-dim);
+}
+
+.mr-inspector-log-line.is-error {
+  color: var(--red);
+}
+
+.mr-inspector-log-line.is-done {
+  color: var(--green);
+}
+
+.mr-inspector-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 var(--space);
+  font-size: 11px;
+}
+
+.mr-inspector-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mr-inspector-crumb-sep {
+  color: var(--text-dim);
+}
+
+.mr-inspector-crumb-btn,
+.mr-inspector-entry-btn {
+  color: var(--white);
+  background: transparent;
+  border: 0;
+  padding: 2px 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mr-inspector-crumb-btn:hover,
+.mr-inspector-entry-btn:hover {
+  color: var(--yellow);
+}
+
+.mr-inspector-entry {
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-inspector-entry-btn {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space);
+  width: 100%;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.mr-inspector-entry-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-inspector-entry-kind {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.mr-inspector-entry.is-dir .mr-inspector-entry-kind {
+  color: var(--yellow);
+}
+
+.mr-inspector-path {
+  margin: 0 0 var(--space);
+  font-size: 11px;
+  color: var(--text-dim);
+  overflow-wrap: anywhere;
+}
+
+.mr-inspector-touch,
+.mr-inspector-web-agent {
+  display: flex;
+  gap: var(--space);
+  padding: 4px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+  font-size: 11px;
+}
+
+.mr-inspector-touch-agent {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-inspector-touch-mode {
+  text-transform: uppercase;
+  color: var(--yellow);
+}
+
+.mr-inspector-touch.is-write .mr-inspector-touch-mode {
+  color: var(--green);
+}
+
+.mr-inspector-touch-time {
+  color: var(--text-dim);
+}
+
+.mr-inspector-pre {
+  max-height: 320px;
+  margin: 0;
+  padding: var(--space);
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.03);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mr-inspector-chat-line {
+  padding: 6px 0;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-inspector-chat-from {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.mr-inspector-chat-text {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mr-inspector-action {
+  padding: var(--space);
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--white);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.mr-inspector-action:hover {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+@media (max-width: 899px) {
+  .mr-inspector {
+    position: fixed;
+    top: calc(var(--menu-h) + var(--lens-h) + 8px);
+    right: var(--space);
+    bottom: calc(var(--transport-h) + var(--space));
+    left: var(--space);
+    width: auto;
+  }
+}
+
 .lens-labels {
   position: absolute;
   inset: 0;
