@@ -339,6 +339,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const latestTasksRef = useRef(null)
   const latestLadderRef = useRef(null)
   const latestLabelsRef = useRef(null)
+  const latestGitRef = useRef(null)
   const knownSoundRef = useRef(null)
   if (knownSoundRef.current === null) {
     const missing = new Set(data.tree?.created ?? [])
@@ -452,6 +453,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (latestLabelsRef.current) {
       room.setLabels(latestLabelsRef.current)
     }
+    if (latestGitRef.current) {
+      room.setGitState(latestGitRef.current)
+    }
     setOpenChips(NONE)
     if (!live) {
       const saved = loadSettings(store()).speed
@@ -560,6 +564,49 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       unsubscribe()
     }
   }, [client, live])
+
+  useEffect(() => {
+    function apply(next) {
+      latestGitRef.current = next
+      roomRef.current?.setGitState(next)
+    }
+    if (!live || live.simulated || !client || typeof client.gitState !== 'function') {
+      apply(null)
+      return undefined
+    }
+    let active = true
+    const latest = latestOnly()
+
+    async function updateGit() {
+      const isLatest = latest()
+      try {
+        const answer = await client.gitState()
+        if (!active || !isLatest()) return
+        apply(answer)
+      } catch {
+        if (!active || !isLatest()) return
+        apply(null)
+      }
+    }
+
+    updateGit()
+    const timer = setInterval(updateGit, 60000)
+    const unsubscribe = subscribeToNotices(client, ['git'], updateGit)
+
+    return () => {
+      active = false
+      clearInterval(timer)
+      unsubscribe()
+    }
+  }, [client, live])
+
+  useEffect(() => {
+    function onShowGitTree() {
+      roomRef.current?.focusGitTree()
+    }
+    window.addEventListener('machineroom:show-git-tree', onShowGitTree)
+    return () => window.removeEventListener('machineroom:show-git-tree', onShowGitTree)
+  }, [])
 
   useEffect(() => {
     if (!live || live.simulated || !live.bridge) return undefined
