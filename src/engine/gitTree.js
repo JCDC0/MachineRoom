@@ -209,8 +209,8 @@ function stateKey(state) {
   if (!state || state.git !== true) return ''
   const commits = Array.isArray(state.commits) ? state.commits : []
   const branches = Array.isArray(state.branches) ? state.branches : []
-  const current = branches.find((branch) => branch?.current === true)?.name ?? ''
-  return `${commits.map((commit) => (typeof commit?.sha === 'string' ? commit.sha : '')).join(',')}|${current}`
+  const named = branches.map((branch) => `${branch?.name}:${branch?.head}:${branch?.current === true}`).join(',')
+  return `${commits.map((commit) => (typeof commit?.sha === 'string' ? commit.sha : '')).join(',')}|${named}`
 }
 
 function stateLayout(state) {
@@ -298,6 +298,8 @@ export function createGitTree(scene) {
   function rebuild(state) {
     const next = stateLayout(state)
     clearLabels()
+    lineGeometry.dispose()
+    pointGeometry.dispose()
     layout = next
     headIndex = next.headIndex
     focusTarget.set(next.start.x, next.start.y + next.height / 2, next.start.z)

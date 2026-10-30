@@ -249,6 +249,10 @@ describe('createGitTree', () => {
     expect(tree.setState(switched)).toBe(true)
     expect(tree.builds()).toBe(2)
     expect(tree.layout().headSha).toBe('f2')
+    const named = sampleState()
+    named.branches = [...switched.branches, { name: 'new-at-head', head: 'f2', current: false }]
+    expect(tree.setState({ ...named, commits: switched.commits })).toBe(true)
+    expect(tree.layout().labels.map((label) => label.name)).toContain('new-at-head')
     expect(tree.setState({ git: false })).toBe(true)
     expect(tree.layout()).toBe(null)
     tree.dispose()
