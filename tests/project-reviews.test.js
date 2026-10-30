@@ -215,8 +215,9 @@ describe('review routes on another project', () => {
     const { url } = await startBridge({ projectRoot: project, briefsDir })
 
     const res = await mergeRequest(url, 'opencode', { confirmed: true, head: laneHead, message: 'Merge the lane' })
-    expect(res.status).toBe(409)
-    expect(await res.json()).toEqual({
+    const answer = await res.json()
+    expect(res.status, JSON.stringify(answer)).toBe(409)
+    expect(answer).toEqual({
       error: 'The lane is not a fast forward of trunk. Rebase it onto trunk and read it again.',
     })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(projectHead)

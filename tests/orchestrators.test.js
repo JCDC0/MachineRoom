@@ -360,7 +360,9 @@ describe('branchChanges', () => {
     mkdirSync(join(worktree, 'secret'), { recursive: true })
     git(worktree, ['mv', 'src/old.js', 'secret/moved.js'])
 
-    expect(branchChanges({ project: worktree }, {}, { project }).sort()).toEqual(
+    const changes = branchChanges({ project: worktree }, {}, { project })
+    expect(Array.isArray(changes), `branchChanges returned ${JSON.stringify(changes)}`).toBe(true)
+    expect(changes.sort()).toEqual(
       ['secret/moved.js', 'secret.txt', 'server/committed.js', 'server/edited.js', 'src/old.js'].sort()
     )
   })
