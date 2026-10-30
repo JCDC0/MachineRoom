@@ -14,13 +14,14 @@ What works:
 - The orchestrator chat on `/` or ORCHESTRATOR: Claude Code or OpenCode, confirm cards for Start and Stop, recovery after a restart, Markdown replies, the project folder named, a tab per orchestrator, and its context use with an Autocompact switch that summarises a session at 80 percent.
 - Sub orchestrators: `readLadder` and the ladder routes, ring sectors and sub shapes, chat tabs and Attach, and the live ladder from `client.orchestrators()`. Lanes in no sector stay with the main orchestrator. `?replay&fixture=scenario-i` plays two subs and their lanes working.
 - The page: the lens with its corner labels, the lower half with the sidebar, the conversation and the Overview card, the dock below 900 pixels with the agent list, the selected agent's context and the settings above the cost board, the guide, and a short agent list with one idle row. With a ladder the list groups by sector.
-- The room's latest pass: a cyan `CONSOLE` above an agent that runs a command, up to three folder backs behind a card, a click on a card that holds the camera and a park on `Escape`, `0` or a double click, and an aberration map centred on the park ring (U67 to U70).
+- The room's latest pass: a cyan `CONSOLE` above an agent that runs a command, up to three folder backs behind a card, a click on a card that holds the camera and a park on `Escape`, `0` or a double click, an aberration map centred on the park ring (U67 to U70), a conversation column that keeps its room below 1100 pixels (U86), sector names and the root card clear of each other (U87), and the main orchestrator's name clear of a sub's shape (U88).
 - Reviews and merges from the drawer, including lanes that work in worktrees beside another project.
 - `npm run worktrees` lists the lane worktrees a project leaves and cleans only the clean merged ones.
 - The harness registry: steps H1 to H4 are merged as H5, H6, H7 and H8, so a harness brings a browser descriptor and, when it has sessions, a Node reader. The `acp` harness runs any Agent Client Protocol agent through `scripts/acp-run.mjs`. Hermes stays supported and retired in `lanes.json`; AGY is a supported backend lane and its lanes stay out of the active list unless the owner makes one.
 - The family tree in the Agents tab: Build a team makes 1 to 4 sub orchestrators with 1 to 3 coders each in one step, a row per node with its state and a chat button, and the owner's labels on the chips (U79 to U82, V42). The orchestrators know each other (O18), and when one talks to another the room sends packets between them (O17, V41). Each lane has its line to the orchestrator that leads it (V40).
 - A project starts with no lanes on, and the recent projects list holds only real projects (O19, O20). Tests never write the owner's runs folder (T25).
 - Claude Code and OpenCode lanes and the orchestrator turns get the MCP servers the owner turns on in Settings (H16), and the console's address opens in a new tab (U83).
+- The Direct API in Settings, Direct API: one key form behind a confirm card, a row per endpoint with Refresh models, Replace key and Delete, and the Agents tab picks only from those endpoint models (U85, H17).
 - Replays and recordings, and a test suite that is about 40 percent faster than before T1.
 
 What was checked live:
@@ -43,17 +44,19 @@ Not checked live yet:
 
 - The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
 - The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
-- The room by eye: checked on 2026-10-30 at 1280 by 800, 900 by 700 and 768 by 1024 on the demo ladder replay; a live room at those sizes is still to see. Phones are not a target.
+- The room by eye: checked on 2026-10-30 at 1280 by 800, 900 by 700 and 768 by 1024 on the demo ladder replay, with the narrow window lens fixed at once; a live room at those sizes is still to see.
 
 ## Next
 
-In order:
+Open now:
 
-1. Done: the gaps the live check of the family tree found, V44 (a sector lights while its team works), V45 (a sub's chip does not cover the hub), O21 (the main orchestrator lists only the lanes it leads) and U84 (the sidebar has room for the family tree).
-2. Done: a real OpenCode team, AGY team, Claude Code team, Direct API team and a mixed team of all four on a scratch project.
-3. Done 2026-10-30: the room checked by eye at 1280 by 800, 900 by 700 and 768 by 1024. The narrow window lens was fixed at once and U86 (the narrow conversation column at 900 pixels) is briefed. Phones are out of scope: the bridge accepts pages only from localhost, so a phone cannot open a live room, and V46 was dropped.
-
-After that the owner decides the licence and the public release (P4).
+1. The owner's P4: the licence and the public release, with the licence and names decided in G2 and the push in G6.
+2. The room by eye in a live room, at 1280 by 800, 900 by 700 and 768 by 1024, including the U86 conversation column and the U87 and U88 placements. The replay was checked on 2026-10-30; the live room has not been. A lane cannot see the screen, so the orchestrator checks it in a browser.
+3. The open audit findings:
+   - The October audit (`AUDIT-2026-10.md`): N5 (a lane worktree's git config and hooks reach the merge), N6 (the merge stops after 10 seconds), N12 (the runs route starts the runner from the folder the room watches) and N16 (an all-zero cost reads as not reported, a design question).
+   - The version 7 audit (`AUDIT-2026-10-V7.md`): X2 still has no base commit in a run record, so a lane whose worktree is not based on the current branch reads as unread, and X8 still leaves a sub's own model out of the lane list.
+   - The version 9 audit's Y4 and Y7 stay as they are: Y4 is the rule O24 chose and Y7 is H17's design.
+4. The open briefs of 2026-10-30: T28 (who kills the git processes under load), H20 (a lane whose harness has exited does not stay open), L8 (a real compaction and a real OpenCode session), A10 (the page's handlers) and A11 (the backend since the version 9 audit).
 
 ## History: the plan from 0.1.37
 

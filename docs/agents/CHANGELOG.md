@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The plan's Next section names what is open (the owner's P4, the live room by eye and the open audit findings), the README names the Settings section Direct API and sends the owner there for a key, and the orchestrator guide names the OpenCode service hazard that a killed session without `--standalone` leaves running (task D17).
+
 - The orchestrator chat's start card names the orchestrator's harness, so an OpenCode or Direct API orchestrator no longer reads as Claude, and it says the Direct API uses no subscription (task T27).
 
 - `tests/no-undefined-names.test.js` fails when a `src/ui/*.jsx` file calls a `setX` function it does not declare or import, the fault that left Send stuck on `Sending` (task T27).
