@@ -33,6 +33,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   const [selectedIssueId, setSelectedIssueId] = useState(null)
   const [notice, setNotice] = useState(null)
   const lastHandledNonceRef = useRef(null)
+  const targetReqRef = useRef(0)
   const mountedRef = useRef(true)
 
   useEffect(() => {
@@ -109,6 +110,9 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
     if (controlTarget.nonce === lastHandledNonceRef.current) return
 
     lastHandledNonceRef.current = controlTarget.nonce
+    const nonce = controlTarget.nonce
+    const ticket = targetReqRef.current + 1
+    targetReqRef.current = ticket
 
     const rawId = controlTarget.issueIdentifier
     const targetIdentifier = typeof rawId === 'string' ? rawId.trim() : (rawId != null ? String(rawId).trim() : '')
@@ -121,12 +125,14 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
     resolveIssue(targetIdentifier, issues, () => client.issues())
       .then(({ issue, issues: fresh }) => {
         if (!mountedRef.current) return
+        if (targetReqRef.current !== ticket || lastHandledNonceRef.current !== nonce) return
         if (fresh !== issues) setIssues(fresh)
         setSelectedIssueId(issue ? issue.id : null)
         setNotice(issue ? null : 'That task was not found.')
       })
       .catch(() => {
         if (!mountedRef.current) return
+        if (targetReqRef.current !== ticket || lastHandledNonceRef.current !== nonce) return
         setSelectedIssueId(null)
         setNotice('That task was not found.')
       })
@@ -149,10 +155,12 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   if (selectedIssue) {
     return (
       <IssueThread
+        key={selectedIssue.id}
         issue={selectedIssue}
         client={client}
         agents={agents}
         onBack={() => {
+          targetReqRef.current += 1
           setSelectedIssueId(null)
           setNotice(null)
         }}
@@ -179,6 +187,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
         type="button"
         className="task-row"
         onClick={() => {
+          targetReqRef.current += 1
           setNotice(null)
           setSelectedIssueId(issue.id)
         }}

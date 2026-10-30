@@ -235,7 +235,7 @@ describe('Sidebar without bridge methods', () => {
   it('keeps the projects in their own tab', () => {
     const html = renderSidebar('projects', { client: null, live: false, project: '/MachineRoom' })
     expect(html).toContain('class="mr-side-projects"')
-    expect(html).toContain('Open folder')
+    expect(html).not.toContain('Open folder')
     expect(html).toContain('MachineRoom')
     expect(html).toContain('Projects and conversations appear when the room runs live.')
     expect(html).not.toContain('New conversation')

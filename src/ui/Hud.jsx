@@ -31,6 +31,7 @@ import {
   logButtonAriaLabel,
   toggleAllTerminalsLabel,
 } from './terminalButtons.js'
+import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
 
 export { agentRows } from './agentList.js'
 
@@ -382,6 +383,18 @@ export default function Hud({
     window.addEventListener('machineroom:open-settings', onOpenSettings)
     return () => window.removeEventListener('machineroom:open-settings', onOpenSettings)
   }, [wide])
+
+  useEffect(() => {
+    function onOpenChat(event) {
+      const id = event && event.detail ? event.detail.id : ''
+      if (typeof id !== 'string' || !id) return
+      setChatTab(id)
+      setChatOpen(true)
+      setSessionsOpen(false)
+    }
+    window.addEventListener(OPEN_CHAT_EVENT, onOpenChat)
+    return () => window.removeEventListener(OPEN_CHAT_EVENT, onOpenChat)
+  }, [])
 
   useEffect(() => {
     if (!wide || mode === 'replay' || !client || typeof client.orchestratorSessions !== 'function') {

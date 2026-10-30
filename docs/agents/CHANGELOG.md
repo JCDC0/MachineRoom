@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- A chat button or sub chip opens the orchestrator chat on a narrow window and closes the sessions overlay, from a listener in Hud, with `tests/chat-open-ui.test.js` (task U90, Z1).
+
+- The conversation preview keeps the newest click by request ticket, so a slower answer or failure from an earlier conversation cannot replace it or clear it, with `tests/sidebar-preview-ui.test.js` (task U90, Z2).
+
+- `AutocompactInput` keeps the fields the owner edited when a poll returns and takes the server values for the fields they did not edit, with `tests/autocompact-draft-ui.test.js` (task U90, Z5).
+
+- The Team tab names a sub whose read failed instead of `Nothing said yet.`, and a synchronous read error becomes a shown error, with `tests/team-read-ui.test.js` (task U90, Z9).
+
+- The issue thread drops a late answer for another issue, and TasksPanel keys it by the issue and checks the control target's ticket, with `tests/issue-thread-ui.test.js` (task U90, Z10).
+
+- The Projects tab offers Open folder only in a live room, with `tests/sidebar-preview-ui.test.js` (task U90, Z12).
+
+- The version 10 audit marks Z1, Z2, Z5, Z9, Z10 and Z12 fixed at 0.1.402, and the shared hand-made DOM helper is in `tests/helpers/uiDom.js` (task U90).
+
 - The plan's Next section names what is open (the owner's P4, the live room by eye and the open audit findings), the README names the Settings section Direct API and sends the owner there for a key, and the orchestrator guide names the OpenCode service hazard that a killed session without `--standalone` leaves running (task D17).
 
 - The version 10 audit reads every handler and effect in `src/ui` and `src/ui/panels` and records twelve findings, from a sub chat button that does nothing on a narrow window to a project queue that keeps starting runs after its panel closes (task A10).
