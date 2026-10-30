@@ -4,6 +4,8 @@
 
 - The orchestrator chat clears `Sending` as soon as the bridge accepts the message, runs the chat and list reads after it without holding the button, and shows the existing error sentence when the send gives up; the leftover call to the removed `setProblems` no longer stops a send before it starts (task U89).
 
+- The main orchestrator's chip and callout rise 240 units when a sub exists, so the main's name stays clear of a sub's shape from the overview at any heading (task U88).
+
 - `killTree` leaves an exited child alone on Windows, because `taskkill /T /F` on its old process id could stop an unrelated process that reused it, which failed a `git rev-parse` in another test thread with no error text.
 
 - Endpoints lock preset providers to their base URL, quick endpoints repoint when their key slot is shared, and family readKeys reads both map and list shapes through a shared key reader (task Q15a).

@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
+import { orchestratorNameLift } from './agents.js'
 import { easeRate, still } from './sprites.js'
 
 const VISIBLE_LINES = 7
@@ -134,6 +135,7 @@ export function addressUrl(value) {
 export function createTerminals(cssScene, roster, { onPick = null } = {}) {
   const terminals = new Map()
   const notes = new Map()
+  const subKeys = new Set()
   let currentLabels = null
 
   function addTerminal(key, name) {
@@ -204,6 +206,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
   }
 
   function ensure(key, name) {
+    if (String(key).startsWith('sub-')) subKeys.add(key)
     const term = terminals.get(key)
     if (term) {
       if (name && term.name !== name) term.name = name
@@ -254,7 +257,10 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     notes.clear()
   }
 
-  roster.forEach((agent) => addTerminal(agent.key, agent.name))
+  roster.forEach((agent) => {
+    if (agent?.subOrchestrator === true || String(agent?.key ?? '').startsWith('sub-')) subKeys.add(agent.key)
+    addTerminal(agent.key, agent.name)
+  })
 
   function render(term, entry, now) {
     term.version = entry.version
@@ -310,11 +316,13 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     const rate = easeRate(delta, FOLLOW_RATE, still())
+    const nameLift = orchestratorNameLift(subKeys.size)
     for (const term of terminals.values()) {
       const anchor = anchorOf(term.key)
       if (anchor) {
         term.side = sideOf(term.key) < 0 ? -1 : 1
         goal.copy(anchor).addScaledVector(right, term.side * (AGENT_GAP + chipHalfWidth(term.open)))
+        if (term.key === 'orchestrator') goal.addScaledVector(up, nameLift)
         if (term.open) goal.addScaledVector(up, -40)
         if (term.placed) term.object.position.lerp(goal, rate)
         else term.object.position.copy(goal)
@@ -384,6 +392,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     const term = terminals.get(key)
     if (!term) return
     notes.delete(key)
+    subKeys.delete(key)
     cssScene.remove(term.object)
     term.element.remove()
     cssScene.remove(term.consoleObject)
