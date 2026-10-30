@@ -194,20 +194,31 @@ export function FamilyTeam({ client = null }) {
     }
   }
 
+  async function readLadder() {
+    if (typeof client?.orchestrators !== 'function') {
+      throw new Error('This bridge cannot read the ladder.')
+    }
+    return ladderFromOrchestrators(await client.orchestrators())
+  }
+
   function askSave() {
     if (busy) return
     if (!ready) {
       setActionError('The lanes are not loaded yet.')
       return
     }
-    const next = teamPlan({
-      lanes,
-      ladder,
-      orchestrators: draft.orchestrators,
-      coders: draft.coders,
-      harness: draft.harness,
-      model: draft.model,
-    })
+    const draftForPlan = { ...draft }
+    function planTeams(ladderValue) {
+      return teamPlan({
+        lanes,
+        ladder: ladderValue,
+        orchestrators: draftForPlan.orchestrators,
+        coders: draftForPlan.coders,
+        harness: draftForPlan.harness,
+        model: draftForPlan.model,
+      })
+    }
+    const next = planTeams(ladder)
     if (next.problem) {
       setActionError(next.problem)
       return
@@ -227,9 +238,11 @@ export function FamilyTeam({ client = null }) {
       busyText: 'Building the team...',
       teams: next.teams,
       run: async () => {
-        await client.setLadder({ subs: next.subs })
+        const fresh = planTeams(await readLadder())
+        if (fresh.problem) throw new Error(fresh.problem)
+        await client.setLadder({ subs: fresh.subs })
         try {
-          for (const team of next.teams) {
+          for (const team of fresh.teams) {
             await client.setAgentLabel({ id: team.id, label: team.name, confirmed: true })
           }
         } catch (error) {

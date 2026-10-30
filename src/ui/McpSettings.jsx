@@ -234,8 +234,8 @@ export default function McpSettings({
     if (typeof client?.mcpServers !== 'function') return undefined
     let active = true
     setLoading(true)
-    client
-      .mcpServers()
+    Promise.resolve()
+      .then(() => client.mcpServers())
       .then((answer) => {
         if (!active) return
         setServers(mcpServerList(answer))

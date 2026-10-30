@@ -6,6 +6,8 @@ import { subscribeToNotices } from './notices.js'
 
 export const CostsModeContext = createContext('live')
 
+export const METERS_UNAVAILABLE = 'Meters need a newer bridge.'
+
 function tokenCount(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null
 }
@@ -29,8 +31,11 @@ export default function MetersPanel({ client, initialCosts = null }) {
   const [costs, setCosts] = useState(initialCosts)
   const [loading, setLoading] = useState(() => initialCosts == null)
   const [loadError, setLoadError] = useState(null)
+  const canRead = typeof client?.costs === 'function'
+  const hasCosts = costs != null
 
   async function loadData({ isInitial = false } = {}) {
+    if (!canRead) return
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
@@ -50,6 +55,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
   }
 
   useEffect(() => {
+    if (!canRead) return
     loadData({ isInitial: true })
   }, [client])
 
@@ -83,7 +89,9 @@ export default function MetersPanel({ client, initialCosts = null }) {
 
       {sample && <div className="meter-label-dim mono">{sample.note}</div>}
 
-      {loading ? (
+      {!canRead && !hasCosts ? (
+        <div className="panel-state is-dim mono">{METERS_UNAVAILABLE}</div>
+      ) : loading ? (
         <div className="panel-state mono">Loading meters...</div>
       ) : loadError ? (
         <div className="panel-state">

@@ -779,12 +779,14 @@ export function FamilyTree({ client = null, tasks = null }) {
 
   async function askGroupSub() {
     if (!subDraft || busy) return
-    const problem = childFormProblem(subDraft, { harnesses, models, directModels: subModels.choices })
+    const draftForPlan = subDraft
+    const pickedForPlan = selectedLanes
+    const problem = childFormProblem(draftForPlan, { harnesses, models, directModels: subModels.choices })
     if (problem) {
       setSubProblem(problem)
       return
     }
-    if (selectedLanes.length === 0) {
+    if (pickedForPlan.length === 0) {
       setSubProblem('Select at least one code agent.')
       return
     }
@@ -794,6 +796,13 @@ export function FamilyTree({ client = null, tasks = null }) {
     }
     setSubProblem('')
     setActionError('')
+    const laneKeys = lanesOf(lanes)
+    for (const node of tree.nodes) {
+      if (node.kind === 'lane' && !laneKeys.includes(node.id)) laneKeys.push(node.id)
+    }
+    function planGroup(ladder) {
+      return groupSubLadder(ladder, draftForPlan, pickedForPlan, laneKeys)
+    }
     let ladder
     try {
       ladder = await readLadder()
@@ -801,22 +810,20 @@ export function FamilyTree({ client = null, tasks = null }) {
       setActionError(messageOf(error))
       return
     }
-    const laneKeys = lanesOf(lanes)
-    for (const node of tree.nodes) {
-      if (node.kind === 'lane' && !laneKeys.includes(node.id)) laneKeys.push(node.id)
-    }
-    const plan = groupSubLadder(ladder, subDraft, selectedLanes, laneKeys)
+    const plan = planGroup(ladder)
     if (plan.problem) {
       setSubProblem(plan.problem)
       return
     }
     ask({
       text: `Add "${plan.sub.name}" to lead ${agentCount(plan.sub.lanes.length)}?`,
-      detail: childDetail(subDraft, harnesses, models),
+      detail: childDetail(draftForPlan, harnesses, models),
       label: 'Create',
       busyText: 'Creating the sub orchestrator...',
       run: async () => {
-        await client.setLadder({ subs: plan.subs })
+        const fresh = planGroup(await readLadder())
+        if (fresh.problem) throw new Error(fresh.problem)
+        await client.setLadder({ subs: fresh.subs })
         clearSelection()
         await refresh()
       },
@@ -853,7 +860,9 @@ export function FamilyTree({ client = null, tasks = null }) {
       label: 'Save',
       busyText: 'Saving the sub orchestrator...',
       run: async () => {
-        await client.setLadder({ subs: plan.subs })
+        const fresh = assignSubLadder(await readLadder(), node.id, picked)
+        if (fresh.problem) throw new Error(fresh.problem)
+        await client.setLadder({ subs: fresh.subs })
         await refresh()
       },
     })
@@ -884,7 +893,9 @@ export function FamilyTree({ client = null, tasks = null }) {
       tone: 'danger',
       busyText: 'Removing the sub orchestrator...',
       run: async () => {
-        await client.setLadder({ subs: plan.subs })
+        const fresh = removeSubLadder(await readLadder(), node.id)
+        if (fresh.problem) throw new Error(fresh.problem)
+        await client.setLadder({ subs: fresh.subs })
         if (editing === node.id) closeEditor()
         await refresh()
       },

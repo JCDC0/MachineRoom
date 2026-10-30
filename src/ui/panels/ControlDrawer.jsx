@@ -6,12 +6,6 @@ import AgentBuilder from './AgentBuilder.jsx'
 import ReviewsPanel from './ReviewsPanel.jsx'
 import PanelBoundary from './PanelBoundary.jsx'
 
-const BASE_TABS = [
-  { id: 'dispatch', label: 'Dispatch' },
-  { id: 'tasks', label: 'Tasks' },
-  { id: 'meters', label: 'Meters' },
-]
-
 export default function ControlDrawer({
   client,
   open,
@@ -21,12 +15,20 @@ export default function ControlDrawer({
 }) {
   const hasTeamTab = typeof client?.agents === 'function'
   const hasReviewsTab = typeof client?.reviews === 'function'
+  const hasTasksTab =
+    typeof client?.issues === 'function' &&
+    typeof client?.agents === 'function' &&
+    typeof client?.liveRuns === 'function' &&
+    typeof client?.comments === 'function'
+  const hasMetersTab = typeof client?.costs === 'function'
   const tabs = useMemo(() => {
-    const next = [...BASE_TABS]
+    const next = [{ id: 'dispatch', label: 'Dispatch' }]
+    if (hasTasksTab) next.push({ id: 'tasks', label: 'Tasks' })
+    if (hasMetersTab) next.push({ id: 'meters', label: 'Meters' })
     if (hasTeamTab) next.push({ id: 'agents', label: 'Team' })
     if (hasReviewsTab) next.push({ id: 'reviews', label: 'Reviews' })
     return next
-  }, [hasTeamTab, hasReviewsTab])
+  }, [hasTasksTab, hasMetersTab, hasTeamTab, hasReviewsTab])
 
   const [activeTab, setActiveTab] = useState(() => {
     const rawId = controlTarget?.issueIdentifier

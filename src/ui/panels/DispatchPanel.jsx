@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import {
   briefTarget,
   formatBriefTitle,
@@ -8,13 +8,7 @@ import {
   VALID_LANES,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, PROJECT_SPLIT_DELAY, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, runStartLine, splitTasks, timeSinceStart } from './runs.js'
-
-function wait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
-}
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
 
 export default function DispatchPanel({
   client,
@@ -57,10 +51,14 @@ export default function DispatchPanel({
   const [projectAllowDirty, setProjectAllowDirty] = useState(false)
   const [projectShowConfirm, setProjectShowConfirm] = useState(false)
   const [projectSplitPlan, setProjectSplitPlan] = useState(null)
-  const [projectAnswers, setProjectAnswers] = useState([])
   const [projectStarting, setProjectStarting] = useState(false)
   const [projectError, setProjectError] = useState(null)
 
+  const splitRun = useSyncExternalStore(subscribeSplitRun, splitRunSnapshot, splitRunSnapshot)
+  const splitAnswers = splitRun.answers
+  const splitActive = splitRun.active
+  const mountedRef = useRef(true)
+  const splitDoneRef = useRef(false)
   const promptReqRef = useRef(0)
   const promptBoxRef = useRef(null)
 
@@ -179,6 +177,28 @@ export default function DispatchPanel({
     })
   }, [client])
 
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (splitRun.done && !splitDoneRef.current) {
+      splitDoneRef.current = true
+      if (mountedRef.current) {
+        if (!splitRun.failed) {
+          setProjectTask('')
+          setProjectAllowDirty(false)
+        }
+        loadRuns()
+      }
+    } else if (!splitRun.done) {
+      splitDoneRef.current = false
+    }
+  }, [splitRun.done, splitRun.failed])
+
   async function loadPromptForBrief(briefId, briefObj) {
     const brief = briefObj ?? briefs.find((item) => item.id === briefId)
     if (!brief) return
@@ -283,18 +303,19 @@ export default function DispatchPanel({
   function dismissProjectConfirm() {
     setProjectShowConfirm(false)
     setProjectSplitPlan(null)
-    setProjectAnswers([])
+    if (!splitActive) clearSplitRun()
     setProjectError(null)
   }
 
   function openProjectConfirm() {
+    if (splitActive) return
     const tasks = splitTasks(projectTask)
     if (projectTaskProblem(tasks)) return
     const split = projectOneLanePerTask && tasks.length > 1
     if (!split && (!projectLane || projectLaneRunning)) return
     const plan = split ? planLaneTasks(tasks, projectLanes) : null
+    clearSplitRun()
     setProjectSplitPlan(plan)
-    setProjectAnswers([])
     setProjectShowConfirm(true)
     setProjectError(null)
   }
@@ -306,31 +327,11 @@ export default function DispatchPanel({
         return
       }
       if (typeof client?.startRun !== 'function') return
-      setProjectStarting(true)
       setProjectError(null)
-      setProjectAnswers([])
-      const answers = []
-      let failed = false
-      for (let index = 0; index < projectSplitPlan.pairs.length; index += 1) {
-        const pair = projectSplitPlan.pairs[index]
-        try {
-          const answer = await client.startRun(pair.lane, { tasks: [pair.task], worktree: true })
-          answers.push({ ok: true, message: runStartLine(answer) })
-        } catch (err) {
-          failed = true
-          answers.push({ ok: false, message: err.message || 'Could not start run.' })
-        }
-        setProjectAnswers([...answers])
-        if (index < projectSplitPlan.pairs.length - 1) {
-          await wait(PROJECT_SPLIT_DELAY)
-        }
+      const started = await startSplitRun({ client, pairs: projectSplitPlan.pairs })
+      if (!started) {
+        setProjectError('The split run is already starting.')
       }
-      setProjectStarting(false)
-      if (!failed) {
-        setProjectTask('')
-        setProjectAllowDirty(false)
-      }
-      loadRuns()
       return
     }
 
@@ -414,7 +415,16 @@ export default function DispatchPanel({
   const canStartProject =
     typeof client?.startRun === 'function' &&
     !projectProblem &&
+    !splitActive &&
     (projectSplitRun || (Boolean(projectLane) && !projectLaneRunning))
+  const splitStarted = splitAnswers.filter((answer) => answer.ok).length
+  const splitProgress = splitRun.pairs.length === 0
+    ? ''
+    : splitActive
+      ? `Starting ${splitRun.pairs.length} tasks, ${splitAnswers.length} started.`
+      : splitRun.failed
+        ? `Started ${splitStarted} of ${splitRun.pairs.length} tasks.`
+        : `Started ${splitRun.pairs.length} tasks.`
 
   return (
     <div className="dispatch-form">
@@ -530,9 +540,19 @@ export default function DispatchPanel({
               disabled={!canStartProject}
               onClick={openProjectConfirm}
             >
-              {projectSplitRun ? projectSplitLabel(projectTasks.length) : projectRunLabel(projectTasks.length)}
+              {splitActive
+                ? 'Starting'
+                : projectSplitRun
+                  ? projectSplitLabel(projectTasks.length)
+                  : projectRunLabel(projectTasks.length)}
             </button>
           </div>
+
+          {splitProgress && (
+            <div className="brief-state is-dim mono" role="status">
+              {splitProgress}
+            </div>
+          )}
 
           {projectShowConfirm && projectSplitPlan && (
             <div className="brief-confirm-card" role="region" aria-label="Confirm project runs">
@@ -551,7 +571,7 @@ export default function DispatchPanel({
               ) : (
                 <div className="runs-list">
                   {projectSplitPlan.pairs.map((pair, index) => {
-                    const answer = projectAnswers[index]
+                    const answer = splitAnswers[index]
                     return (
                       <div
                         key={`split-${pair.lane}-${index}`}
@@ -591,15 +611,15 @@ export default function DispatchPanel({
                   type="button"
                   className="brief-confirm-btn"
                   disabled={
-                    projectStarting ||
+                    splitActive ||
                     Boolean(projectSplitPlan.problem) ||
-                    projectAnswers.length >= projectSplitPlan.pairs.length
+                    splitAnswers.length >= projectSplitPlan.pairs.length
                   }
                   onClick={handleConfirmProjectRun}
                 >
-                  {projectStarting
+                  {splitActive
                     ? 'Starting'
-                    : projectAnswers.length >= projectSplitPlan.pairs.length &&
+                    : splitAnswers.length >= projectSplitPlan.pairs.length &&
                         projectSplitPlan.pairs.length > 0
                       ? 'Done'
                       : 'Confirm'}
@@ -607,10 +627,10 @@ export default function DispatchPanel({
                 <button
                   type="button"
                   className="brief-cancel-btn"
-                  disabled={projectStarting}
+                  disabled={splitActive}
                   onClick={dismissProjectConfirm}
                 >
-                  {projectAnswers.length > 0 ? 'Close' : 'Cancel'}
+                  {splitAnswers.length > 0 ? 'Close' : 'Cancel'}
                 </button>
               </div>
               {projectError && (

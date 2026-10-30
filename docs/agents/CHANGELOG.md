@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- The One lane per task run keeps its progress outside DispatchPanel, so closing or reopening the panel does not stop the confirmed runs, shows what is still starting, and refuses a second start (task U91, Z3).
+
+- FamilyTree and FamilyTeam read the ladder again when the owner presses the confirm button, so a sub added while the card was open is kept (task U91, Z4).
+
+- Assistant owns its drag listeners in an effect and ends the drag on Escape, so a closed terminal does not save a new position or follow the pointer (task U91, Z6).
+
+- A change to the quick key field closes the Direct API confirm card, so the key that is saved is the one in the field (task U91, Z7).
+
+- The MCP, web search and Direct API first reads turn a synchronous client throw into a rejection, so the section shows its error and leaves Loading (task U91, Z8).
+
+- A client without the methods a drawer panel needs shows a plain sentence or hides its tab instead of a raw TypeError (task U91, Z11).
+
 - The plan's Next section names what is open (the owner's P4, the live room by eye and the open audit findings), the README names the Settings section Direct API and sends the owner there for a key, and the orchestrator guide names the OpenCode service hazard that a killed session without `--standalone` leaves running (task D17).
 
 - The version 10 audit reads every handler and effect in `src/ui` and `src/ui/panels` and records twelve findings, from a sub chat button that does nothing on a narrow window to a project queue that keeps starting runs after its panel closes (task A10).

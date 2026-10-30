@@ -12,6 +12,8 @@ const OPEN_ORDER = {
   backlog: 5,
 }
 
+export const TASKS_UNAVAILABLE = 'Tasks need a newer bridge.'
+
 export function openRank(status) {
   return Object.hasOwn(OPEN_ORDER, status) ? OPEN_ORDER[status] : 99
 }
@@ -34,6 +36,11 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   const [notice, setNotice] = useState(null)
   const lastHandledNonceRef = useRef(null)
   const mountedRef = useRef(true)
+  const canRead =
+    typeof client?.issues === 'function' &&
+    typeof client?.agents === 'function' &&
+    typeof client?.liveRuns === 'function' &&
+    typeof client?.comments === 'function'
 
   useEffect(() => {
     mountedRef.current = true
@@ -43,6 +50,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   }, [])
 
   async function loadData({ isInitial = false } = {}) {
+    if (!canRead) return
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
@@ -66,6 +74,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   }
 
   async function refreshLiveRuns() {
+    if (typeof client?.liveRuns !== 'function') return
     try {
       const runs = await client.liveRuns()
       if (mountedRef.current) setLiveRuns(Array.isArray(runs) ? runs : [])
@@ -75,6 +84,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   }
 
   async function refreshIssues() {
+    if (typeof client?.issues !== 'function') return
     try {
       const issueList = await client.issues()
       setIssues(issueList)
@@ -84,6 +94,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   }
 
   useEffect(() => {
+    if (!canRead) return
     if (initialIssues == null) loadData({ isInitial: true })
     refreshLiveRuns()
   }, [client])
@@ -101,6 +112,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   }, [client])
 
   useEffect(() => {
+    if (!canRead) return
     if (loading || loadError) return
     if (controlTarget?.nonce == null) {
       lastHandledNonceRef.current = null
@@ -131,6 +143,10 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
         setNotice('That task was not found.')
       })
   }, [loading, loadError, issues, controlTarget])
+
+  if (!canRead) {
+    return <div className="panel-state is-dim mono">{TASKS_UNAVAILABLE}</div>
+  }
 
   if (loading) {
     return <div className="panel-state mono">Loading tasks...</div>

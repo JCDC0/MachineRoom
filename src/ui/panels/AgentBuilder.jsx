@@ -4,6 +4,7 @@ import { statusLabel } from './format.js'
 import { subscribeToNotices } from './notices.js'
 
 export const NEW_LANES_TEXT = 'New lanes are added in docs/agents/lanes.json.'
+export const AGENTS_UNAVAILABLE = 'The lanes need a newer bridge.'
 
 export default function AgentBuilder({
   client,
@@ -12,8 +13,10 @@ export default function AgentBuilder({
   const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
   const [loading, setLoading] = useState(() => !Array.isArray(initialAgents))
   const [loadError, setLoadError] = useState(null)
+  const canRead = typeof client?.agents === 'function'
 
   async function loadData({ isInitial = false } = {}) {
+    if (!canRead) return
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
@@ -33,6 +36,7 @@ export default function AgentBuilder({
   }
 
   useEffect(() => {
+    if (!canRead) return
     loadData({ isInitial: true })
   }, [client])
 
@@ -41,6 +45,10 @@ export default function AgentBuilder({
       loadData({ isInitial: false })
     })
   }, [client])
+
+  if (!canRead) {
+    return <div className="panel-state is-dim mono">{AGENTS_UNAVAILABLE}</div>
+  }
 
   if (loading) {
     return <div className="panel-state mono">Loading lanes...</div>
