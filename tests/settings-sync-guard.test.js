@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import EndpointsPanel from '../src/ui/EndpointsPanel.jsx'
 import McpSettings from '../src/ui/McpSettings.jsx'
 import SearchSettings from '../src/ui/SearchSettings.jsx'
-import { withDom } from './helpers/handDom.js'
+import { withDom } from './helpers/uiDom.js'
 
 async function mount(container, root, element) {
   await act(async () => {

@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import FamilyTree from '../src/ui/FamilyTree.jsx'
-import { buttonWithText, withDom } from './helpers/handDom.js'
+import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
 
 const NODES = [
   {
@@ -116,12 +116,6 @@ function rowByLabel(container, label) {
       return found !== null && found.textContent === label
     }) ?? null
   )
-}
-
-async function settle() {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 0))
-  })
 }
 
 describe('FamilyTree ladder changes', () => {

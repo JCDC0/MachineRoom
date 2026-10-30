@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import { OPEN_CHAT_EVENT } from '../src/ui/transportOrchestrators.js'
-import { settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
 
 const SNAPSHOT = {
   position: 0,
@@ -56,10 +56,6 @@ async function mount(root, client) {
     )
   })
   await settle()
-}
-
-function buttonWithText(scope, text) {
-  return scope.querySelectorAll('button').find((button) => button.textContent.trim() === text) ?? null
 }
 
 describe('the open chat event', () => {

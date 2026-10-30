@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import Assistant from '../src/ui/Assistant.jsx'
-import { withDom } from './helpers/handDom.js'
+import { withDom } from './helpers/uiDom.js'
 
 function makeStorage() {
   const data = new Map()

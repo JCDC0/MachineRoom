@@ -4,7 +4,7 @@ import AgentBuilder, { AGENTS_UNAVAILABLE } from '../src/ui/panels/AgentBuilder.
 import ControlDrawer from '../src/ui/panels/ControlDrawer.jsx'
 import MetersPanel, { METERS_UNAVAILABLE } from '../src/ui/panels/MetersPanel.jsx'
 import TasksPanel, { TASKS_UNAVAILABLE } from '../src/ui/panels/TasksPanel.jsx'
-import { withDom } from './helpers/handDom.js'
+import { withDom } from './helpers/uiDom.js'
 
 async function mount(container, root, element) {
   await act(async () => {
