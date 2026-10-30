@@ -25,8 +25,9 @@ function lower(value) {
   return value.toLowerCase()
 }
 
+// A colon also names an NTFS stream, as in .env::$DATA, so no path may hold one.
 function isAbsoluteLike(value) {
-  return isAbsolute(value) || /^[a-zA-Z]:/.test(value) || value.startsWith('/') || value.startsWith('\\')
+  return isAbsolute(value) || value.includes(':') || value.startsWith('/') || value.startsWith('\\')
 }
 
 function isRefusedName(name) {
@@ -113,8 +114,9 @@ export function createFilesApi({ projectRoot, sendJson } = {}) {
     let root
     let target
     try {
-      root = realpathSync(resolve(currentRoot()))
-      target = realpathSync(resolve(root, requested))
+      // The native call expands a Windows short name, so ENV~1 cannot stand in for a refused file.
+      root = realpathSync.native(resolve(currentRoot()))
+      target = realpathSync.native(resolve(root, requested))
     } catch {
       sendProblem(sendJson, req, res, 404, FILE_NOT_FOUND_PROBLEM)
       return true

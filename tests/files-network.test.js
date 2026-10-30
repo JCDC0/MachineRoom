@@ -185,6 +185,9 @@ describe('the file route trust boundary', () => {
       expect(res.body.error, path).toBe(FILE_REFUSED_PROBLEM)
       expect(res.body.error).not.toContain(root)
     }
+    const stream = await getJson(url, filePath('.env::$DATA'))
+    expect(stream.status).toBe(400)
+    expect(stream.body.error).toBe(FILE_OUTSIDE_PROBLEM)
   })
 
   it('answers 404 for a missing file and 400 for a folder', async () => {
