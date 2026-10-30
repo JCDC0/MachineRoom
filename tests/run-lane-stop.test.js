@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { killTree } from '../server/processTree.js'
-import { readLaneLock, releaseLaneLock, takeLaneLock } from '../scripts/lane-lock.mjs'
+import { readLaneLock, releaseLaneLock, takeLaneLock, processAlive } from '../scripts/lane-lock.mjs'
 import { startLane, stopLane } from '../scripts/run-lane.mjs'
 import { laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -131,9 +131,9 @@ describe('a stopped lane stays stopped', () => {
     const stopped = await runLane(['--stop', 'fake'], env)
     expect(stopped.code).toBe(0)
     expect(stopped.stdout).toContain(`stopped: ${lock.child} (the harness)`)
-    expect(stopped.stdout).toContain(`stopped: ${lock.pid} (the run)`)
     expect(stopped.stdout).toContain('leftover: stopped')
     expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
+    expect(await waitUntil(() => !processAlive(lock.pid), 5000), `the run ${lock.pid} is still alive`).toBe(true)
     const finished = await run
     expect(finished.code === null || Number.isInteger(finished.code)).toBe(true)
     await sleep(6600)
