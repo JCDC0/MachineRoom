@@ -1583,7 +1583,11 @@ describe('the record of a project run on a git project', { timeout: 30000 }, () 
       windowsHide: true,
     })
     if (result.error) throw result.error
-    if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed in ${folder}: ${String(result.stderr ?? '').trim()}`)
+    if (result.status !== 0) {
+      const stderr = String(result.stderr ?? '').trim()
+      if (stderr !== '') throw new Error(`git ${args.join(' ')} failed in ${folder}: ${stderr}`)
+      throw new Error(`git ${args.join(' ')} failed in ${folder} with exit ${result.status} and signal ${result.signal ?? 'none'}.`)
+    }
     return String(result.stdout ?? '').trim()
   }
 

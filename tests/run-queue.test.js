@@ -39,7 +39,11 @@ function git(folder, args) {
     env: { ...process.env, ...GIT_ENV },
   })
   if (result.error) throw result.error
-  if (result.status !== 0) throw new Error(String(result.stderr ?? '').trim() || `git ${args[0]} failed.`)
+  if (result.status !== 0) {
+    const stderr = String(result.stderr ?? '').trim()
+    if (stderr !== '') throw new Error(stderr)
+    throw new Error(`git ${args.join(' ')} failed in ${folder} with exit ${result.status} and signal ${result.signal ?? 'none'}.`)
+  }
   return String(result.stdout ?? '')
 }
 

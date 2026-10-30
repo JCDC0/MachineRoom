@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The `git` helpers in `tests/run-queue.test.js` and `tests/run-lane.test.js` name the exit status and signal when stderr is empty, so a silent failure says what happened (task T26).
+
+- The project review merge test names the bridge's answer when the status is not 409, and the branch changes test names a null result, so the next silent failure says what happened (task T26).
+
 - `killTree` leaves an exited child alone on Windows, because `taskkill /T /F` on its old process id could stop an unrelated process that reused it, which failed a `git rev-parse` in another test thread with no error text.
 
 - Endpoints lock preset providers to their base URL, quick endpoints repoint when their key slot is shared, and family readKeys reads both map and list shapes through a shared key reader (task Q15a).
