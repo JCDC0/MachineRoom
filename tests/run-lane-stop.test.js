@@ -514,4 +514,41 @@ describe('stopLane creation time rules', () => {
       console.log = log
     }
   })
+
+  it('passes injected list and kill down to stopDescendants and stopLeftovers', () => {
+    const { runs, env } = setup('mr-stop-descendants-')
+    const lockPath = join(runs, 'fake.lock')
+    const worktreePath = 'C:\\fake\\worktree'
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: worktreePath }))
+    const killed = []
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [
+            { pid: 100, ppid: 1, created: 9000 },
+            { pid: 200, ppid: 100, created: 9500 },
+            { pid: 300, ppid: 200, created: 9600 },
+            { pid: 400, ppid: 1, created: 9700, command: 'node C:\\fake\\worktree\\worker.js' },
+          ],
+          kill: ({ pid }) => {
+            killed.push(pid)
+            return true
+          },
+        })
+        expect(code).toBe(0)
+      })
+      expect(killed).toEqual([200, 100, 300, 400])
+      expect(lines).toContain('stopped: 200 (the harness)')
+      expect(lines).toContain('stopped: 100 (the run)')
+      expect(lines).toContain('leftover: stopped 300')
+      expect(lines).toContain('leftover: stopped 400')
+    } finally {
+      console.log = log
+    }
+  })
 })

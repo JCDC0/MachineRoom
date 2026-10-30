@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { descendantProcesses, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, treeSpawnOptions } from '../server/processTree.js'
+import { descendantProcesses, isCreatedAfterLock, isLockHolderStale, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, treeSpawnOptions } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const PARENT = [
@@ -304,5 +304,46 @@ describe('killTree', () => {
       if (grandchild > 0 && alive(grandchild)) process.kill(grandchild, 'SIGKILL')
       if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL')
     }
+  })
+
+  it('treats a process created after the lock file plus 2 seconds as stale on Windows', () => {
+    expect(isCreatedAfterLock(13000, 10000, 'win32')).toBe(true)
+    expect(isCreatedAfterLock(12001, 10000, 'win32')).toBe(true)
+    expect(isCreatedAfterLock(12000, 10000, 'win32')).toBe(false)
+    expect(isCreatedAfterLock(9000, 10000, 'win32')).toBe(false)
+    expect(isCreatedAfterLock(13000, null, 'win32')).toBe(true)
+    expect(isCreatedAfterLock(null, 10000, 'win32')).toBe(false)
+    expect(isCreatedAfterLock(13000, 10000, 'linux')).toBe(false)
+  })
+
+  it('checks process list for stale lock holder on Windows', () => {
+    const list = [
+      { pid: 100, created: 9000 },
+      { pid: 200, created: 13000 },
+    ]
+    expect(isLockHolderStale(200, 10000, { platform: 'win32', processes: list })).toBe(true)
+    expect(isLockHolderStale(100, 10000, { platform: 'win32', processes: list })).toBe(false)
+    expect(isLockHolderStale(200, 10000, { platform: 'linux', processes: list })).toBe(false)
+  })
+
+  it('calls list only on Windows and returns false when list is empty', () => {
+    let called = false
+    const list = () => {
+      called = true
+      return []
+    }
+    expect(isLockHolderStale(200, 10000, { platform: 'linux', list })).toBe(false)
+    expect(called).toBe(false)
+    expect(isLockHolderStale(200, 10000, { platform: 'win32', list })).toBe(false)
+    expect(called).toBe(true)
+  })
+
+  it('supports Map of processes', () => {
+    const map = new Map([
+      [100, { pid: 100, created: 9000 }],
+      [200, { pid: 200, created: 13000 }],
+    ])
+    expect(isLockHolderStale(200, 10000, { platform: 'win32', processes: map })).toBe(true)
+    expect(isLockHolderStale(100, 10000, { platform: 'win32', processes: map })).toBe(false)
   })
 })

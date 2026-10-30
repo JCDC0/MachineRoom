@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from '../scripts/lane-lock.mjs'
+import { takeRoomLock } from '../server/orchestrator.js'
 import { laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -134,5 +135,119 @@ describe('lane lock', () => {
     releaseLaneLock(path)
     expect(existsSync(path)).toBe(true)
     expect(readFileSync(path, 'utf8')).toBe(String(process.ppid))
+  })
+
+  it('takes a lock when holder was created after lock file last change plus 2 seconds on Windows', () => {
+    const folder = makeTempDir('lane-lock-stale-')
+    const path = lockPath(folder)
+    writeFileSync(path, String(process.pid))
+    const taken = takeLaneLock(folder, 'hermes', {
+      platform: 'win32',
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => [{ pid: process.pid, created: 13000 }],
+    })
+    expect(taken).toBe(path)
+    expect(readFileSync(path, 'utf8')).toBe(laneLockText({ pid: process.pid }))
+  })
+
+  it('refuses a lock when holder was created before lock file last change on Windows', () => {
+    const folder = makeTempDir('lane-lock-held-')
+    const path = lockPath(folder)
+    writeFileSync(path, String(process.pid))
+    expect(() =>
+      takeLaneLock(folder, 'hermes', {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: () => [{ pid: process.pid, created: 9000 }],
+      }),
+    ).toThrow(sentence('hermes', process.pid, path))
+  })
+
+  it('refuses a lock when process listing fails on Windows', () => {
+    const folder = makeTempDir('lane-lock-fail-')
+    const path = lockPath(folder)
+    writeFileSync(path, String(process.pid))
+    expect(() =>
+      takeLaneLock(folder, 'hermes', {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: () => [],
+      }),
+    ).toThrow(sentence('hermes', process.pid, path))
+  })
+
+  it('refuses a lock without listing processes away from Windows', () => {
+    const folder = makeTempDir('lane-lock-linux-')
+    const path = lockPath(folder)
+    writeFileSync(path, String(process.pid))
+    let listCalled = false
+    expect(() =>
+      takeLaneLock(folder, 'hermes', {
+        platform: 'linux',
+        list: () => {
+          listCalled = true
+          return []
+        },
+      }),
+    ).toThrow(sentence('hermes', process.pid, path))
+    expect(listCalled).toBe(false)
+  })
+})
+
+describe('room lock', () => {
+  it('takes a room lock when holder was created after lock file last change plus 2 seconds on Windows', () => {
+    const folder = makeTempDir('room-lock-stale-')
+    const path = join(folder, 'room.lock')
+    writeFileSync(path, String(process.pid))
+    const taken = takeRoomLock(path, {
+      platform: 'win32',
+      stat: () => ({ mtimeMs: 10000 }),
+      list: () => [{ pid: process.pid, created: 13000 }],
+    })
+    expect(taken).toBe(path)
+    expect(readFileSync(path, 'utf8')).toBe(String(process.pid))
+  })
+
+  it('refuses a room lock when holder was created before lock file last change on Windows', () => {
+    const folder = makeTempDir('room-lock-held-')
+    const path = join(folder, 'room.lock')
+    writeFileSync(path, String(process.pid))
+    expect(() =>
+      takeRoomLock(path, {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: () => [{ pid: process.pid, created: 9000 }],
+      }),
+    ).toThrow(/Another room is already running on this project/)
+  })
+
+  it('refuses a room lock when process listing fails on Windows', () => {
+    const folder = makeTempDir('room-lock-fail-')
+    const path = join(folder, 'room.lock')
+    writeFileSync(path, String(process.pid))
+    expect(() =>
+      takeRoomLock(path, {
+        platform: 'win32',
+        stat: () => ({ mtimeMs: 10000 }),
+        list: () => [],
+      }),
+    ).toThrow(/Another room is already running on this project/)
+  })
+
+  it('refuses a room lock without listing processes away from Windows', () => {
+    const folder = makeTempDir('room-lock-linux-')
+    const path = join(folder, 'room.lock')
+    writeFileSync(path, String(process.pid))
+    let listCalled = false
+    expect(() =>
+      takeRoomLock(path, {
+        platform: 'linux',
+        list: () => {
+          listCalled = true
+          return []
+        },
+      }),
+    ).toThrow(/Another room is already running on this project/)
+    expect(listCalled).toBe(false)
   })
 })

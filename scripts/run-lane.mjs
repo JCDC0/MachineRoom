@@ -9,7 +9,7 @@ import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
 import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
-import { killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
+import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
 import { readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { readEndpoints } from '../server/endpoints.js'
@@ -42,12 +42,12 @@ function lanesFile() {
     : join(docs, 'lanes.json')
 }
 
-function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [] } = {}) {
+function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree } = {}) {
   const folder = String(worktree ?? '').trim()
   if (!folder && !(childPid > 0)) return 0
-  const found = leftoverProcesses(listProcesses(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
+  const found = leftoverProcesses(list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
   for (const item of found) {
-    if (killTree({ pid: item.pid })) console.log(`${label}: stopped ${item.pid}`)
+    if (kill({ pid: item.pid })) console.log(`${label}: stopped ${item.pid}`)
     else console.log(`${label}: could not stop ${item.pid}`)
   }
   return found.length
@@ -58,10 +58,11 @@ function harnessDescendants(childPid, { excludePids = [], processes = null } = {
   return descendantProcesses(processes ?? listProcesses(), { rootPid: childPid, ownPid: process.pid, excludePids })
 }
 
-function stopDescendants(descendants, label = 'leftover') {
+function stopDescendants(descendants, options = 'leftover') {
+  const { label = 'leftover', kill = killTree } = typeof options === 'string' ? { label: options } : options ?? {}
   let stopped = 0
   for (const item of Array.isArray(descendants) ? descendants : []) {
-    const killed = killTree({ pid: item.pid })
+    const killed = kill({ pid: item.pid })
     if (killed || !processAlive(item.pid)) {
       console.log(`${label}: stopped ${item.pid}`)
       stopped += 1
@@ -118,10 +119,7 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   const processes = list()
   const byPid = new Map((Array.isArray(processes) ? processes : []).map((item) => [item.pid, item]))
   const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
-  const isStranger = (pid) => {
-    const created = byPid.get(pid)?.created
-    return platform === 'win32' && typeof created === 'number' && (lockMtime === null || created > lockMtime + 2000)
-  }
+  const isStranger = (pid) => isLockHolderStale(pid, lockMtime, { platform, processes: byPid })
   const descendants = isStranger(rootPid) ? [] : harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
   let stopped = 0
   for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
@@ -133,8 +131,8 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
       stopped += 1
     }
   }
-  const stoppedDescendants = stopDescendants(descendants)
-  const leftovers = stopLeftovers({ worktree, excludePids: [holder.pid ?? 0] })
+  const stoppedDescendants = stopDescendants(descendants, { kill })
+  const leftovers = stopLeftovers({ worktree, excludePids: [holder.pid ?? 0], list, kill })
   if (stopped === 0 && leftovers === 0 && stoppedDescendants === 0) console.log(`Nothing was running for the ${laneKey} lane.`)
   rmSync(path, { force: true })
   return 0
