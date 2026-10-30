@@ -156,7 +156,7 @@ summary:focus-visible,
 
 .mr-inspector {
   position: absolute;
-  top: 32px;
+  top: 76px;
   right: 46px;
   bottom: 26px;
   z-index: 6;
@@ -516,6 +516,11 @@ summary:focus-visible,
     bottom: calc(var(--transport-h) + var(--space));
     left: var(--space);
     width: auto;
+    background: var(--black, #000);
+  }
+
+  body:has(.mr-inspector) #hud-orchestrator-chat {
+    display: none;
   }
 }
 

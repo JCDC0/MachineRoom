@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The inspector clears the lens clock, follows the connection when the window goes offline, closes on Open chat, and below 900 pixels is opaque and hides the floating chat while it shows.
+
 - `GET /api/file` serves a read-only preview inside the project root, with the page Origin check, the real path check, refused `.git`, `.worktrees`, `.env`, `.pem` and `.key` names, a binary answer, a 256 KB cut and masked keys (task S21).
 
 - `GET /api/network` checks the connection over a cached TCP connection to 1.1.1.1, at most once every 30 seconds while pages ask, and sends a `network` notice on a change (task S21).

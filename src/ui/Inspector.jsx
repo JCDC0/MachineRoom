@@ -154,11 +154,22 @@ export default function Inspector({
         if (active) setConnection(null)
       }
     }
+    function onOffline() {
+      if (active) setConnection(false)
+    }
     read()
     const timer = setInterval(read, 30000)
+    const unsubscribe = client.subscribe?.((notice) => {
+      if (notice?.topic === 'network') read()
+    })
+    window.addEventListener('online', read)
+    window.addEventListener('offline', onOffline)
     return () => {
       active = false
       clearInterval(timer)
+      if (typeof unsubscribe === 'function') unsubscribe()
+      window.removeEventListener('online', read)
+      window.removeEventListener('offline', onOffline)
     }
   }, [item?.kind, bridge, client])
 
@@ -209,6 +220,7 @@ export default function Inspector({
     if (typeof window.CustomEvent === 'function') {
       window.dispatchEvent(new window.CustomEvent(OPEN_CHAT_EVENT, { detail }))
     }
+    onClose()
   }
 
   return (
