@@ -98,9 +98,15 @@ function stopArgument(argv) {
   return lane
 }
 
-function stopLane(laneKey) {
+export function stopLane(laneKey, { platform = process.platform, list = listProcesses, kill = killTree, stat = statSync } = {}) {
   const folder = runsFolder()
   const path = join(folder, `${laneKey}.lock`)
+  let lockMtime = null
+  try {
+    lockMtime = stat(path).mtimeMs
+  } catch {
+    lockMtime = null
+  }
   const holder = readLaneLock(path)
   let lane = null
   try {
@@ -109,15 +115,44 @@ function stopLane(laneKey) {
     lane = null
   }
   const worktree = holder.folder || (typeof lane?.worktree === 'string' ? lane.worktree : '')
-  const processes = listProcesses()
+  const processes = list()
+  const byPid = new Map((Array.isArray(processes) ? processes : []).map((item) => [item.pid, item]))
   const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
-  const descendants = harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
+  const rootRow = byPid.get(rootPid)
+  const rootValid = platform !== 'win32' || processes.length === 0 || (
+    rootRow
+      ? (typeof rootRow.created !== 'number' || (lockMtime !== null && rootRow.created <= lockMtime + 2000))
+      : false
+  )
+  const descendants = rootValid
+    ? harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
+    : []
   let stopped = 0
   for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
-    if (killTree({ pid })) {
-      console.log(`stopped: ${pid} (${name})`)
-      stopped += 1
+    if (platform === 'win32' && processes.length > 0) {
+      const row = byPid.get(pid)
+      if (row && typeof row.created !== 'number') {
+        if (kill({ pid })) {
+          console.log(`stopped: ${pid} (${name})`)
+          stopped += 1
+        }
+      } else {
+        const valid = row && typeof row.created === 'number' && lockMtime !== null && row.created <= lockMtime + 2000
+        if (valid) {
+          if (kill({ pid })) {
+            console.log(`stopped: ${pid} (${name})`)
+            stopped += 1
+          }
+        } else {
+          console.log(`stale: ${pid} was not this run`)
+        }
+      }
+    } else {
+      if (kill({ pid })) {
+        console.log(`stopped: ${pid} (${name})`)
+        stopped += 1
+      }
     }
   }
   const stoppedDescendants = stopDescendants(descendants)
