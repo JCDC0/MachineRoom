@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import {
   autocompactRequest,
   autocompactState,
@@ -23,13 +23,27 @@ export default function AutocompactInput({ orchestrator = null, client = null, o
   const [saved, setSaved] = useState('')
   const inputId = useId()
   const rulesId = useId()
+  const idRef = useRef(snapshot.id)
+  const dirtyRef = useRef({ on: false, mode: false, value: false, rules: false })
 
   useEffect(() => {
     const next = autocompactState(orchestrator)
-    setOn(next.on)
-    setMode(next.mode)
-    setValue(String(next.value))
-    setRules(next.rules)
+    if (idRef.current !== next.id) {
+      idRef.current = next.id
+      dirtyRef.current = { on: false, mode: false, value: false, rules: false }
+      setOn(next.on)
+      setMode(next.mode)
+      setValue(String(next.value))
+      setRules(next.rules)
+      setConfirm(false)
+      setError('')
+      return
+    }
+    const dirty = dirtyRef.current
+    if (!dirty.on) setOn(next.on)
+    if (!dirty.mode) setMode(next.mode)
+    if (!dirty.value) setValue(String(next.value))
+    if (!dirty.rules) setRules(next.rules)
     setError('')
   }, [
     orchestrator?.id,
@@ -55,11 +69,14 @@ export default function AutocompactInput({ orchestrator = null, client = null, o
     if (value.trim() !== '' && Number.isFinite(number)) {
       setValue(String(convertAutocompactValue(number, mode, next, snapshot.window)))
     }
+    dirtyRef.current.mode = true
+    dirtyRef.current.value = true
     setMode(next)
     setSaved('')
   }
 
   function toggleOn(next) {
+    dirtyRef.current.on = true
     setOn(next)
     setSaved('')
   }
@@ -84,6 +101,7 @@ export default function AutocompactInput({ orchestrator = null, client = null, o
       const answer = await client.setAutocompact(
         autocompactRequest({ id: snapshot.id, on, mode, value, rules })
       )
+      dirtyRef.current = { on: false, mode: false, value: false, rules: false }
       setConfirm(false)
       setSaved('Saved.')
       onSaved(answer)
@@ -142,6 +160,7 @@ export default function AutocompactInput({ orchestrator = null, client = null, o
         aria-label="Autocompact value"
         aria-invalid={Boolean(problem)}
         onChange={(event) => {
+          dirtyRef.current.value = true
           setValue(event.target.value)
           setSaved('')
         }}
@@ -160,6 +179,7 @@ export default function AutocompactInput({ orchestrator = null, client = null, o
         placeholder={snapshot.defaultCompactRules}
         aria-label="Compact rules"
         onChange={(event) => {
+          dirtyRef.current.rules = true
           setRules(event.target.value.slice(0, 2000))
           setSaved('')
         }}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { statusLabel, timeAgo } from './format.js'
 import { subscribeToNotices } from './notices.js'
 
@@ -6,21 +6,26 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+  const commentsReqRef = useRef(0)
 
   async function loadComments({ isInitial = false } = {}) {
+    const ticket = commentsReqRef.current + 1
+    commentsReqRef.current = ticket
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
     }
     try {
       const list = await client.comments(issue.id)
+      if (commentsReqRef.current !== ticket) return
       setComments(list)
     } catch (err) {
+      if (commentsReqRef.current !== ticket) return
       if (isInitial) {
         setLoadError(err.message || 'Could not load comments.')
       }
     } finally {
-      if (isInitial) {
+      if (commentsReqRef.current === ticket) {
         setLoading(false)
       }
     }
@@ -31,6 +36,7 @@ export default function IssueThread({ issue, client, agents = [], onBack, onRefr
   }
 
   useEffect(() => {
+    setComments([])
     loadComments({ isInitial: true })
   }, [client, issue.id])
 

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import FamilyTeam from './FamilyTeam.jsx'
 import FamilyTree from './FamilyTree.jsx'
 import SidebarTabs from './SidebarTabs.jsx'
@@ -38,6 +38,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const [preview, setPreview] = useState(null)
   const [showAll, setShowAll] = useState(false)
   const [renaming, setRenaming] = useState(null)
+  const previewReqRef = useRef(0)
 
   useEffect(() => {
     if (!connected) return undefined
@@ -126,6 +127,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       busyText: 'Starting a conversation...',
       run: async () => {
         await client.newOrchestratorSession({ id: ORCHESTRATOR_ID, confirmed: true })
+        previewReqRef.current += 1
         setPreview(null)
         setShowAll(false)
         await refreshSessions()
@@ -135,12 +137,15 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
 
   async function openPreview(row) {
     if (!row) return
+    const ticket = previewReqRef.current + 1
+    previewReqRef.current = ticket
     setActionError('')
     setPreview({ loading: true, current: row.current, session: row.id, title: row.title })
     try {
       if (row.current) {
         if (typeof client?.orchestrator !== 'function') throw new Error('This bridge cannot show this conversation.')
         const answer = await client.orchestrator()
+        if (previewReqRef.current !== ticket) return
         setPreview({
           loading: false,
           current: true,
@@ -155,6 +160,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
         throw new Error('This bridge cannot show a conversation.')
       }
       const answer = await client.orchestratorSession({ id: ORCHESTRATOR_ID, session: row.id })
+      if (previewReqRef.current !== ticket) return
       setPreview({
         loading: false,
         current: false,
@@ -163,6 +169,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
         messages: Array.isArray(answer?.messages) ? answer.messages : [],
       })
     } catch (error) {
+      if (previewReqRef.current !== ticket) return
       setPreview(null)
       setActionError(messageOf(error))
     }
@@ -475,9 +482,11 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     return (
       <div className="mr-side-head">
         <span className="mr-side-head-title mono">Projects</span>
-        <button type="button" className="mr-side-open-folder" onClick={showProjects}>
-          Open folder
-        </button>
+        {connected ? (
+          <button type="button" className="mr-side-open-folder" onClick={showProjects}>
+            Open folder
+          </button>
+        ) : null}
       </div>
     )
   }
@@ -540,7 +549,14 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
     return (
       <section className="mr-side-preview" aria-label="Conversation preview">
         <div className="mr-side-preview-head">
-          <button type="button" className="mr-side-back" onClick={() => setPreview(null)}>
+          <button
+            type="button"
+            className="mr-side-back"
+            onClick={() => {
+              previewReqRef.current += 1
+              setPreview(null)
+            }}
+          >
             Back
           </button>
           <span className="mr-side-preview-title" title={title}>

@@ -136,6 +136,7 @@ export default function OrchestratorChat({
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState(null)
   const [readError, setReadError] = useState(null)
+  const [teamFailed, setTeamFailed] = useState([])
   const [modelsOpen, setModelsOpen] = useState(false)
   const [models, setModels] = useState(null)
   const [modelsLoading, setModelsLoading] = useState(false)
@@ -321,24 +322,41 @@ export default function OrchestratorChat({
     const ids = selected === TEAM_TAB ? allIds : allIds.filter((id) => id !== selected)
 
     async function readTeam() {
-      const answers = await Promise.allSettled(
-        ids.map((id) => client.orchestrator(id === 'orchestrator' ? undefined : id))
-      )
-      if (stopped) return
-      const nextChats = {}
-      const nextLoaded = {}
-      ids.forEach((id, index) => {
-        nextLoaded[id] = true
-        const answer = answers[index]
-        if (answer.status === 'fulfilled') nextChats[id] = normalizeChat(answer.value)
-      })
-      setChats((currentChats) => ({ ...currentChats, ...nextChats }))
-      setLoadedIds((currentLoaded) => ({ ...currentLoaded, ...nextLoaded }))
-      setList((currentList) =>
-        currentList.map((entry) =>
-          nextChats[entry.id] ? { ...entry, state: nextChats[entry.id].state } : entry
+      try {
+        const answers = await Promise.allSettled(
+          ids.map((id) => client.orchestrator(id === 'orchestrator' ? undefined : id))
         )
-      )
+        if (stopped) return
+        const nextChats = {}
+        const nextLoaded = {}
+        const failed = []
+        ids.forEach((id, index) => {
+          const answer = answers[index]
+          if (answer.status === 'fulfilled') {
+            nextChats[id] = normalizeChat(answer.value)
+            nextLoaded[id] = true
+          } else {
+            failed.push(id)
+          }
+        })
+        setChats((currentChats) => ({ ...currentChats, ...nextChats }))
+        setLoadedIds((currentLoaded) => ({ ...currentLoaded, ...nextLoaded }))
+        setList((currentList) =>
+          currentList.map((entry) =>
+            nextChats[entry.id] ? { ...entry, state: nextChats[entry.id].state } : entry
+          )
+        )
+        setTeamFailed(failed)
+        setReadError(
+          failed.length > 0
+            ? `Could not read ${failed.map((id) => teamName(id)).join(', ')}.`
+            : null
+        )
+      } catch (failure) {
+        if (stopped) return
+        setTeamFailed([...ids])
+        setReadError(errorText(failure, 'Could not read the team.'))
+      }
     }
 
     readTeam()
@@ -442,6 +460,12 @@ export default function OrchestratorChat({
   function changeSelected(id) {
     if (controlled) onSelect?.(id)
     else setOwnSelected(id)
+  }
+
+  function teamName(id) {
+    if (id === 'orchestrator') return 'Main'
+    const entry = list.find((item) => item.id === id)
+    return entry?.name || id
   }
 
   async function deliver(text, id = selected) {
@@ -642,9 +666,11 @@ export default function OrchestratorChat({
       setConfirm(null)
       setError(null)
       setReadError(null)
+      setTeamFailed([])
       return
     }
     setTeamOpen(false)
+    setTeamFailed([])
     if (id === selected) return
     changeSelected(id)
     setConfirm(null)
@@ -720,7 +746,11 @@ export default function OrchestratorChat({
         <div className="mr-orch-log is-team" role="log" aria-live="polite" ref={logRef}>
           {teamRows.length === 0 ? (
             <p className="mr-orch-empty">
-              {teamReady ? 'Nothing said yet.' : 'Reading the team.'}
+              {teamFailed.length > 0
+                ? readError || 'Could not read the team.'
+                : teamReady
+                  ? 'Nothing said yet.'
+                  : 'Reading the team.'}
             </p>
           ) : (
             teamRows.map((line) => (
