@@ -36,13 +36,13 @@ What was checked live:
 - A task typed in Dispatch ran on OpenCode 2 on a scratch project and made the change there.
 - Three OpenCode lanes worked at once with `--lanes`, with their strips and active rows right.
 - A real Claude Code run showed its `Explore` subagent in the room.
+- A lane using an MCP server on 2026-10-30: a probe lane on OpenCode with `opencode-go/deepseek-v4.1-flash` on a scratch git project under `%TEMP%`, with a tiny stdio MCP server configured in `mcp.json`. The agent called the tool `write_marker`, the marker file existed, and the run log showed the tool call.
+- A real ACP agent the same day: a probe lane on the `acp` harness running `opencode acp` with `opencode-go/deepseek-v4.1-flash` on a scratch git project. The harness handled protocol initialization, session creation, and model option configuration; the agent wrote the requested file, and the run log parsed into 3 tool calls with 1 file written.
 
 Not checked live yet:
 
-- A lane using an MCP server, a browser one above all. H16 passes the servers, and none has been added yet.
 - The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
 - The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
-- A real ACP agent. The harness is tested on recorded `opencode acp` updates and a fake agent, and no lane uses it yet.
 - The room by eye: checked on 2026-10-30 at 1280 by 800, 900 by 700 and 768 by 1024 on the demo ladder replay; a live room at those sizes is still to see. Phones are not a target.
 
 ## Next
