@@ -234,6 +234,7 @@ export function createOrchestrators({
     onNotice,
     onMasked,
     onMessage: (message) => announce(message?.from, message?.to, message?.kind),
+    hasSub: (id) => instances.has(id),
   })
   instances.set(ORCHESTRATOR_KEY, main)
 

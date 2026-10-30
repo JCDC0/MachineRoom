@@ -10,6 +10,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -139,6 +140,15 @@ function stoppedTurnText({ code, report, killed, failureMessage, stderrMessage }
   const reason = (!killed && report) || failureMessage || stderrMessage
   if (reason) return `The orchestrator stopped: ${reason}`
   return Number.isInteger(code) ? `The orchestrator stopped: exit ${code}.` : STOPPED_REPLY
+}
+
+function pauseSync(ms) {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+  } catch {
+    const end = Date.now() + ms
+    while (Date.now() < end) {}
+  }
 }
 
 export function projectHash(projectRoot) {
@@ -432,6 +442,8 @@ export function createOrchestrator({
   contextWindow: contextWindowOption = 0,
   token: tokenOption = '',
   harnesses = harnessByKey,
+  hasSub = null,
+  rename = renameSync,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -480,6 +492,16 @@ export function createOrchestrator({
   const sessions = []
   let summary = ''
   let pendingCompaction = null
+  const completedRuns = new Map()
+
+  function subExists(id) {
+    if (!id || id === ORCHESTRATOR_KEY) return false
+    if (typeof hasSub === 'function') return Boolean(hasSub(id))
+    if (ladder && Array.isArray(ladder.subs)) {
+      return ladder.subs.some((s) => s?.id === id)
+    }
+    return false
+  }
 
   function notify() {
     try {
@@ -500,7 +522,9 @@ export function createOrchestrator({
   function persist() {
     try {
       mkdirSync(folder, { recursive: true })
-      const waiting = pending.filter((message) => message.from === 'owner').map((message) => message.id)
+      const waiting = pending
+        .filter((message) => message.from === 'owner' || message.from === 'room' || message.from === ORCHESTRATOR_KEY || (typeof message.from === 'string' && message.from.startsWith('sub:')))
+        .map((message) => message.id)
       const saved = {
         project: root,
         harness,
@@ -536,8 +560,26 @@ export function createOrchestrator({
         ...(ladder ? { ladder } : {}),
       }
       const temporary = `${conversationFile}.tmp`
-      writeFileSync(temporary, `${JSON.stringify(saved, null, 2)}\n`)
-      renameSync(temporary, conversationFile)
+      let renamed = false
+      try {
+        writeFileSync(temporary, `${JSON.stringify(saved, null, 2)}\n`)
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          try {
+            rename(temporary, conversationFile)
+            renamed = true
+            break
+          } catch (error) {
+            if (error?.code !== 'EPERM' && error?.code !== 'EBUSY') break
+            if (attempt < 4) pauseSync(25)
+          }
+        }
+      } finally {
+        if (!renamed) {
+          try {
+            unlinkSync(temporary)
+          } catch {}
+        }
+      }
     } catch {}
   }
 
@@ -707,7 +749,9 @@ export function createOrchestrator({
     }
     const waitingIds = Array.isArray(saved.pending) ? saved.pending : []
     for (const id of waitingIds) {
-      const message = messages.find((item) => item.id === id && item.from === 'owner')
+      const message = messages.find(
+        (item) => item.id === id && (item.from === 'owner' || item.from === 'room' || item.from === ORCHESTRATOR_KEY || (typeof item.from === 'string' && item.from.startsWith('sub:')))
+      )
       if (message && !pending.includes(message)) pending.push(message)
     }
   }
@@ -1443,15 +1487,19 @@ export function createOrchestrator({
     if (record && typeof record.log === 'string' && TURN_LOG.test(basename(record.log))) return
     const laneKey = record?.lane ?? String(frame.payload?.agentId ?? '').replace(/^agent-/, '')
     if (!laneKey || laneKey === ORCHESTRATOR_KEY) return
-    if (!record && laneKey.startsWith('sub-')) return
-    const startedBy = typeof record?.startedBy === 'string' && record.startedBy ? record.startedBy : ORCHESTRATOR_KEY
-    if (startedBy !== key) return
-    const named = typeof record?.startedBy === 'string' && record.startedBy === key
+    if (laneKey.endsWith('-session')) return
+    if (!record && (!runName || laneKey.startsWith('sub-'))) return
+    const recordedStarter = typeof record?.startedBy === 'string' && record.startedBy ? record.startedBy : ''
+    const startedBy = recordedStarter || ORCHESTRATOR_KEY
+    const isSub = key !== ORCHESTRATOR_KEY
+    if (isSub) {
+      if (startedBy !== key) return
+    } else {
+      if (startedBy !== key && (!recordedStarter || subExists(recordedStarter))) return
+    }
+    const named = recordedStarter ? (recordedStarter === key || (key === ORCHESTRATOR_KEY && !subExists(recordedStarter))) : false
     if ((!named && !givenWork()) || state === 'paused') return
     if (named) ownsRun = true
-    try {
-      onMessage({ from: laneKey, to: key, kind: 'wake' })
-    } catch {}
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
     const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
     let text = record ? `${first}\n${recordLine(record)}` : first
@@ -1490,8 +1538,26 @@ export function createOrchestrator({
         } catch {}
       }
     }
+    const prevRun = runId ? completedRuns.get(runId) : null
+    if (prevRun) {
+      const pendingIndex = pending.findIndex((item) => item.id === prevRun.messageId)
+      if (pendingIndex !== -1) {
+        pending.splice(pendingIndex, 1)
+      } else if (prevRun.status === status) {
+        addMessage('room', text)
+        completedRuns.set(runId, { status, messageId: null })
+        return
+      }
+    }
+    try {
+      onMessage({ from: laneKey, to: key, kind: 'wake' })
+    } catch {}
     const message = addMessage('room', text)
     pending.push(message)
+    if (runId) {
+      completedRuns.set(runId, { status, messageId: message.id })
+      while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
+    }
     maybeStartTurn()
   }
 
