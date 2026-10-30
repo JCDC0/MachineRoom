@@ -1031,6 +1031,52 @@ describe('waking the orchestrator', () => {
     expect(nextPrompt).not.toContain('Error:')
   })
 
+  it('reads a failed run log only when it resolves inside the runs folder', async () => {
+    const rig = makeRig()
+    rig.send('Start')
+    await waitFor(() => rig.calls().length === 1)
+    await waitIdle(rig, 1)
+
+    const outsideLog = join(rig.base, 'outside-secret.log')
+    writeFileSync(
+      outsideLog,
+      JSON.stringify({
+        type: 'error',
+        error: { type: 'secret', message: 'LEAKED_SECRET_VALUE' },
+      }) + '\n'
+    )
+
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({
+        lane: 'opencode',
+        briefs: ['T3'],
+        model: 'm',
+        startedAt: '2026-10-24T12:10:00.000Z',
+        minutes: 1,
+        exitCode: 1,
+        killed: false,
+        log: outsideLog,
+      })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode-traversal', 'failed'))
+    await waitFor(() => rig.calls().length === 2)
+    await waitIdle(rig, 2)
+
+    const prompt1 = rig.calls()[1].args[1]
+    expect(prompt1).toContain('Run opencode-traversal on lane opencode7 ended: failed.')
+    expect(prompt1).not.toContain('LEAKED_SECRET_VALUE')
+    expect(prompt1).not.toContain('Error:')
+
+    rig.orchestrator.onFrame(frame('run-../outside-secret', 'failed'))
+    await waitFor(() => rig.calls().length === 3)
+    await waitIdle(rig, 3)
+
+    const prompt2 = rig.calls()[2].args[1]
+    expect(prompt2).not.toContain('LEAKED_SECRET_VALUE')
+    expect(prompt2).not.toContain('Error:')
+  })
+
   it('starts at most 30 room turns in an hour and waits for the owner after that', async () => {
     const rig = makeRig()
     rig.send('Start')
@@ -1865,6 +1911,48 @@ describe('the lane source and the orchestrator turn', () => {
       rig.send('Hello')
       await waitFor(() => rig.spawned.length === 1, 15000, 'the turn to spawn')
       expect(rig.spawned[0].env.MACHINEROOM_RUNS).toBe(rig.runs)
+    })
+
+    it('omits bridge API keys for a machineroom turn when model names a saved endpoint', async () => {
+      const prevOpenRouter = process.env.OPENROUTER_API_KEY
+      const prevMrKey = process.env.MACHINEROOM_API_KEY
+      const prevMrUrl = process.env.MACHINEROOM_API_URL
+      process.env.OPENROUTER_API_KEY = 'placeholder'
+      process.env.MACHINEROOM_API_KEY = 'placeholder'
+      process.env.MACHINEROOM_API_URL = 'http://127.0.0.1:9999'
+
+      const machineroomDescriptor = {
+        key: 'machineroom',
+        name: 'MachineRoom',
+        command({ cli, prompt }) {
+          return { file: cli.bin, args: ['--prompt', prompt], cwd: process.cwd() }
+        },
+        createParser() {
+          return { push() { return [] }, flush() { return [] } }
+        },
+      }
+
+      try {
+        const rig = makeRig({
+          harness: 'machineroom',
+          model: 'Custom/my-model',
+          harnesses: { machineroom: machineroomDescriptor },
+          lanes: { orchestrator: { name: 'Orchestrator', harness: 'MachineRoom', cli: { harness: 'machineroom', bin: process.execPath, model: 'Custom/my-model' } } },
+        })
+        writeFileSync(join(rig.runs, 'endpoints.json'), JSON.stringify([
+          { name: 'Custom', baseUrl: 'http://127.0.0.1:8000', provider: 'Custom', keyName: 'slot1', models: ['my-model'] },
+        ]))
+        rig.send('Run task')
+        await waitFor(() => rig.spawned.length === 1, 15000, 'the turn to spawn')
+        expect(rig.spawned[0].env).not.toHaveProperty('OPENROUTER_API_KEY')
+        expect(rig.spawned[0].env).not.toHaveProperty('MACHINEROOM_API_KEY')
+        expect(rig.spawned[0].env).not.toHaveProperty('MACHINEROOM_API_URL')
+      } finally {
+        for (const [name, value] of [['OPENROUTER_API_KEY', prevOpenRouter], ['MACHINEROOM_API_KEY', prevMrKey], ['MACHINEROOM_API_URL', prevMrUrl]]) {
+          if (value === undefined) delete process.env[name]
+          else process.env[name] = value
+        }
+      }
     })
 
     it('starts a room turn on a harness with no session once the owner gave it work', async () => {

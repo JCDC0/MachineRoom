@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
 import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
+import { harnessByKey } from '../src/harnesses/index.js'
 import { startLane } from '../scripts/run-lane.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -1498,6 +1499,75 @@ describe('scripts/run-lane.mjs', () => {
       if (previous === undefined) delete process.env.MACHINEROOM_RUNS
       else process.env.MACHINEROOM_RUNS = previous
     } finally {
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('omits bridge API keys for a machineroom lane when model names a saved endpoint', async () => {
+    const folder = makeTempDir('mr-lane-env-endpoints-')
+    const runs = join(folder, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const checkFile = join(folder, 'env.json')
+    const script = join(folder, 'record-env.mjs')
+    writeFileSync(
+      script,
+      `import { writeFileSync } from 'node:fs'; writeFileSync(process.argv[2], JSON.stringify({
+        hasOpenRouter: Object.hasOwn(process.env, 'OPENROUTER_API_KEY'),
+        hasMrKey: Object.hasOwn(process.env, 'MACHINEROOM_API_KEY'),
+        hasMrUrl: Object.hasOwn(process.env, 'MACHINEROOM_API_URL'),
+      }));\n`
+    )
+
+    writeFileSync(
+      join(runs, 'endpoints.json'),
+      JSON.stringify([
+        { name: 'Ollama', baseUrl: 'http://localhost:11434/v1', provider: 'Custom', keyName: '', models: ['llama3'] },
+      ])
+    )
+
+    const prevOpenRouter = process.env.OPENROUTER_API_KEY
+    const prevMrKey = process.env.MACHINEROOM_API_KEY
+    const prevMrUrl = process.env.MACHINEROOM_API_URL
+    process.env.OPENROUTER_API_KEY = 'placeholder'
+    process.env.MACHINEROOM_API_KEY = 'placeholder'
+    process.env.MACHINEROOM_API_URL = 'http://127.0.0.1:9999'
+
+    const previousCmd = harnessByKey.machineroom.command
+    harnessByKey.machineroom.command = () => ({
+      file: process.execPath,
+      args: [script, checkFile],
+      cwd: folder,
+    })
+
+    try {
+      const lane = {
+        name: 'test-machineroom',
+        worktree: folder,
+        cli: { harness: 'machineroom', bin: process.execPath, model: 'Ollama/llama3' },
+      }
+
+      await startLane({
+        options: { lane: 'test-machineroom', minutes: 1, runs },
+        lane,
+        lanes: { 'test-machineroom': lane },
+        wanted: [],
+        prompt: 'prompt',
+        logPath: join(runs, 'run.log'),
+        usageFile: join(runs, 'run.usage.json'),
+        name: 'run-mr-endpoint',
+        project: folder,
+        task: 'task',
+      })
+      const envResult = JSON.parse(readFileSync(checkFile, 'utf8'))
+      expect(envResult.hasOpenRouter).toBe(false)
+      expect(envResult.hasMrKey).toBe(false)
+      expect(envResult.hasMrUrl).toBe(false)
+    } finally {
+      harnessByKey.machineroom.command = previousCmd
+      for (const [name, value] of [['OPENROUTER_API_KEY', prevOpenRouter], ['MACHINEROOM_API_KEY', prevMrKey], ['MACHINEROOM_API_URL', prevMrUrl]]) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })

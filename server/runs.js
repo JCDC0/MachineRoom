@@ -474,8 +474,9 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
           startedBy = actor
         }
         const sector = registry.sector(actor)
-        if (!main && Array.isArray(sector?.lanes) && !sector.lanes.includes(lane)) {
-          sendJson(req, res, 403, { error: `The ${sector.name} sector does not hold the lane ${lane}.` })
+        if (!main && (!sector || !Array.isArray(sector.lanes) || !sector.lanes.includes(lane))) {
+          const name = sector && typeof sector.name === 'string' && sector.name.trim() ? sector.name.trim() : actor
+          sendJson(req, res, 403, { error: `The ${name} sector does not hold the lane ${lane}.` })
           return true
         }
       }
@@ -495,6 +496,11 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         return true
       }
       startedBy = wanted
+    } else {
+      const holder = typeof registry?.sectorForLane === 'function' ? registry.sectorForLane(lane) : null
+      if (holder) {
+        startedBy = holder.id
+      }
     }
 
     let briefs = []
