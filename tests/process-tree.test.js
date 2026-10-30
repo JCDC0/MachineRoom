@@ -193,6 +193,13 @@ describe('listProcesses', () => {
   }, 30000)
 })
 
+describe('descendantProcesses with a dead root', () => {
+  it('still finds a child whose root has left the list', () => {
+    const list = [{ pid: 300, ppid: 200, command: '', created: 5000 }, { pid: 999, ppid: 1, command: '', created: 1000 }]
+    expect(descendantProcesses(list, { rootPid: 200 }).map((item) => item.pid)).toEqual([300])
+  })
+})
+
 describe('killTree', () => {
   it('asks taskkill for the whole tree with force on Windows', () => {
     const calls = []

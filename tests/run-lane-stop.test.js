@@ -293,7 +293,7 @@ describe('stopLane creation time rules', () => {
     }
   })
 
-  it('prints stale when a process is not in the process list', () => {
+  it('treats a process missing from the list as gone', () => {
     const { runs, env } = setup('mr-stop-missing-')
     const lockPath = join(runs, 'fake.lock')
     writeFileSync(lockPath, laneLockText({ pid: 100, child: 200 }))
@@ -316,8 +316,8 @@ describe('stopLane creation time rules', () => {
         expect(code).toBe(0)
       })
       expect(killed).toEqual([])
-      expect(lines).toContain('stale: 200 was not this run')
-      expect(lines).toContain('stale: 100 was not this run')
+      expect(lines).not.toContain('stale: 200 was not this run')
+      expect(lines).not.toContain('stale: 100 was not this run')
     } finally {
       console.log = log
     }

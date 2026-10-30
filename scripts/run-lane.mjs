@@ -118,41 +118,19 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
   const processes = list()
   const byPid = new Map((Array.isArray(processes) ? processes : []).map((item) => [item.pid, item]))
   const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
-  const rootRow = byPid.get(rootPid)
-  const rootValid = platform !== 'win32' || processes.length === 0 || (
-    rootRow
-      ? (typeof rootRow.created !== 'number' || (lockMtime !== null && rootRow.created <= lockMtime + 2000))
-      : false
-  )
-  const descendants = rootValid
-    ? harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
-    : []
+  const isStranger = (pid) => {
+    const created = byPid.get(pid)?.created
+    return platform === 'win32' && typeof created === 'number' && (lockMtime === null || created > lockMtime + 2000)
+  }
+  const descendants = isStranger(rootPid) ? [] : harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
   let stopped = 0
   for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
-    if (platform === 'win32' && processes.length > 0) {
-      const row = byPid.get(pid)
-      if (row && typeof row.created !== 'number') {
-        if (kill({ pid })) {
-          console.log(`stopped: ${pid} (${name})`)
-          stopped += 1
-        }
-      } else {
-        const valid = row && typeof row.created === 'number' && lockMtime !== null && row.created <= lockMtime + 2000
-        if (valid) {
-          if (kill({ pid })) {
-            console.log(`stopped: ${pid} (${name})`)
-            stopped += 1
-          }
-        } else {
-          console.log(`stale: ${pid} was not this run`)
-        }
-      }
-    } else {
-      if (kill({ pid })) {
-        console.log(`stopped: ${pid} (${name})`)
-        stopped += 1
-      }
+    if (isStranger(pid)) {
+      console.log(`stale: ${pid} was not this run`)
+    } else if ((platform !== 'win32' || processes.length === 0 || byPid.has(pid)) && kill({ pid })) {
+      console.log(`stopped: ${pid} (${name})`)
+      stopped += 1
     }
   }
   const stoppedDescendants = stopDescendants(descendants)
