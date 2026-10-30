@@ -48,6 +48,8 @@ Not checked live yet:
 
 ## Next
 
+Phones are out of scope: the bridge accepts pages only from localhost, so a phone cannot open a live room.
+
 Open now:
 
 1. The owner's P4: the licence and the public release, with the licence and names decided in G2 and the push in G6.
