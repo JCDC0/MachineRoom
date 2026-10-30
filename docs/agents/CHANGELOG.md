@@ -10,6 +10,10 @@
 
 - Check a real compaction and a real OpenCode session on OpenCode with DeepSeek V4.1 Flash, verifying autocompaction and session stream events (task L8).
 
+- `tests/run-lane-stop.test.js` checks that a stopped run is gone instead of that `--stop` names it, because a run can finish by itself once its harness dies (task T28).
+
+- Ten full runs and 44 loaded run-throughs with a temporary kill and git log found no `taskkill` that named a `git` and no failed `git` beyond the tests' own expected exit 1 and 128, so the T26 failures remain unexplained (task T28).
+
 - The orchestrator chat's start card names the orchestrator's harness, so an OpenCode or Direct API orchestrator no longer reads as Claude, and it says the Direct API uses no subscription (task T27).
 
 - `tests/no-undefined-names.test.js` fails when a `src/ui/*.jsx` file calls a `setX` function it does not declare or import, the fault that left Send stuck on `Sending` (task T27).
