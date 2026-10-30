@@ -556,6 +556,12 @@ export function createClient({
     callMcpTool: ({ server, tool, arguments: toolArgs = {}, confirmed = true } = {}) =>
       request('POST', '/api/mcp/call', { server, tool, arguments: toolArgs, confirmed }),
 
+    gitState: () => request('GET', '/api/git'),
+
+    switchBranch: ({ branch, confirmed = true } = {}) => request('POST', '/api/git/switch', { branch, confirmed }),
+
+    createBranch: ({ name, from, confirmed = true } = {}) => request('POST', '/api/git/branch', { name, from, confirmed }),
+
     subscribe(listener) {
       listeners.add(listener)
       ensureStream()

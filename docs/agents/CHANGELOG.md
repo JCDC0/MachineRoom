@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `GET /api/git`, `POST /api/git/switch` and `POST /api/git/branch` read the project's branches and commits, switch branch and make a branch, with the client methods and the mock (S20); AGY ran out of credits before committing, so the orchestrator finished it.
+
 - The H20 test counts stopped leftovers only on Windows, since a Linux orphan has init as its parent and CI failed on it; the limit is named in ARCHITECTURE.
 
 - One hand-made DOM, `tests/helpers/uiDom.js`, serves every UI test; `tests/helpers/handDom.js` and the copies inside the UI test files are gone, and every test moved to it without an assertion change (task T29).

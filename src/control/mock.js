@@ -85,6 +85,9 @@ export const CLIENT_METHODS = [
   'deleteMcpServer',
   'mcpTools',
   'callMcpTool',
+  'gitState',
+  'switchBranch',
+  'createBranch',
   'subscribe',
 ]
 
@@ -336,6 +339,67 @@ export const MOCK_PROJECTS = {
   ],
 }
 
+export const SAMPLE_GIT_BRANCHES = [
+  {
+    name: 'main',
+    head: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
+    current: true,
+    worktree: false,
+    upstream: 'origin/main',
+    ahead: 0,
+    behind: 0,
+  },
+  {
+    name: 'feat/preview',
+    head: '3a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a4f2c',
+    current: false,
+    worktree: false,
+    upstream: null,
+    ahead: null,
+    behind: null,
+  },
+  {
+    name: 'feat/worktree-held',
+    head: '2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a4f2c3a1b7d',
+    current: false,
+    worktree: true,
+    upstream: null,
+    ahead: null,
+    behind: null,
+  },
+]
+
+export const SAMPLE_GIT_COMMITS = [
+  {
+    sha: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
+    parents: ['3a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a4f2c'],
+    subject: 'feat: add git route',
+    time: '2026-10-30T14:00:00+08:00',
+    refs: ['main'],
+  },
+  {
+    sha: '3a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a4f2c',
+    parents: ['1a0b9c8d7e6f5a4f2c3a1b7d2e8f0a6c5b4d3e2f'],
+    subject: 'feat: preview UI',
+    time: '2026-10-30T12:00:00+08:00',
+    refs: ['feat/preview'],
+  },
+  {
+    sha: '2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a4f2c3a1b7d',
+    parents: ['1a0b9c8d7e6f5a4f2c3a1b7d2e8f0a6c5b4d3e2f'],
+    subject: 'worktree changes',
+    time: '2026-10-30T11:00:00+08:00',
+    refs: ['feat/worktree-held'],
+  },
+  {
+    sha: '1a0b9c8d7e6f5a4f2c3a1b7d2e8f0a6c5b4d3e2f',
+    parents: [],
+    subject: 'initial commit',
+    time: '2026-10-30T10:00:00+08:00',
+    refs: [],
+  },
+]
+
 const SAMPLE_REVIEWS = {
   hermes: {
     lane: 'hermes',
@@ -542,6 +606,16 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
   const reviewState = clone(SAMPLE_REVIEWS)
   let endpointState = clone(SAMPLE_ENDPOINTS)
   let mcpServerState = clone(SAMPLE_MCP_SERVERS)
+  let gitState = {
+    git: true,
+    branch: 'main',
+    detached: false,
+    head: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
+    dirty: false,
+    branches: SAMPLE_GIT_BRANCHES.map((b) => ({ ...b })),
+    commits: SAMPLE_GIT_COMMITS.map((c) => ({ ...c, parents: [...c.parents], refs: [...c.refs] })),
+    truncated: false,
+  }
   let ladder = readLadder(SAMPLE_LADDER, { lanes: MOCK_LANE_KEYS }).ladder
   let searchChoice = { provider: '', url: '', keyName: '' }
   const subChats = new Map()
@@ -2045,6 +2119,66 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           },
           problem: null,
         }
+      }),
+
+    gitState: () =>
+      call('gitState', () => clone(gitState)),
+
+    switchBranch: ({ branch, confirmed = true } = {}) =>
+      call('switchBranch', () => {
+        if (confirmed !== true) throw new Error('Confirm switching the branch first.')
+        if (typeof branch !== 'string' || !branch.trim() || branch.startsWith('-')) {
+          throw new Error('That branch does not exist.')
+        }
+        const found = gitState.branches.find((b) => b.name === branch)
+        if (!found) throw new Error('That branch does not exist.')
+        if (found.worktree) throw new Error('Another worktree holds that branch.')
+        if (gitState.dirty) throw new Error('The checkout has uncommitted changes.')
+        gitState.branch = branch
+        gitState.detached = false
+        gitState.head = found.head
+        for (const b of gitState.branches) {
+          b.current = b.name === branch
+        }
+        emit({ topic: 'git' })
+        return clone(gitState)
+      }),
+
+    createBranch: ({ name, from, confirmed = true } = {}) =>
+      call('createBranch', () => {
+        if (confirmed !== true) throw new Error('Confirm creating the branch first.')
+        if (typeof name !== 'string' || !name.trim() || name.startsWith('-') || name.includes('..') || name.includes(' ')) {
+          throw new Error('That branch name is not valid.')
+        }
+        if (gitState.branches.some((b) => b.name === name)) {
+          throw new Error('That branch already exists.')
+        }
+        if (typeof from !== 'string' || !from.trim() || from.startsWith('-')) {
+          throw new Error('Choose a known branch to branch from.')
+        }
+        const source = gitState.branches.find((b) => b.name === from)
+        if (!source) {
+          throw new Error('Choose a known branch to branch from.')
+        }
+        const created = {
+          name,
+          head: source.head,
+          current: false,
+          worktree: false,
+          upstream: null,
+          ahead: null,
+          behind: null,
+        }
+        gitState.branches.push(created)
+        gitState.branches.sort((a, b) => a.name.localeCompare(b.name))
+        for (const c of gitState.commits) {
+          if (c.sha === source.head && !c.refs.includes(name)) {
+            c.refs.push(name)
+            c.refs.sort()
+          }
+        }
+        emit({ topic: 'git' })
+        return clone(gitState)
       }),
 
     subscribe(listener) {
