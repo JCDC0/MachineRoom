@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { killTree } from '../server/processTree.js'
 import { readLaneLock, releaseLaneLock, takeLaneLock } from '../scripts/lane-lock.mjs'
-import { startLane, stopLane } from '../scripts/run-lane.mjs'
+import { isResultLine, startLane, stopLane } from '../scripts/run-lane.mjs'
 import { laneLockText } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -97,6 +97,44 @@ function writeFakeHarness(project, mark, started, { stay = true } = {}) {
     stay ? 'setTimeout(() => {}, 60000)' : '',
     "console.log('{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"fake harness\"}}')",
     '',
+  ].join('\n'))
+}
+
+function writeFakeHarnessHoldingStdout(project, mark, started, { holdMs = 8000 } = {}) {
+  const late = join(project, 'late.cjs')
+  writeFileSync(late, [
+    "const { writeFileSync } = require('node:fs')",
+    `setTimeout(() => { try { writeFileSync(${JSON.stringify(mark)}, 'late') } catch {} }, ${holdMs})`,
+    '',
+  ].join('\n'))
+  const script = join(project, 'run')
+  writeFileSync(script, [
+    "const { spawn } = require('node:child_process')",
+    "const { writeFileSync } = require('node:fs')",
+    `writeFileSync(${JSON.stringify(started)}, 'started')`,
+    `const grandchild = spawn(process.execPath, [${JSON.stringify(late)}, ${JSON.stringify(project)}], { detached: true, stdio: [0, 1, 2], windowsHide: true })`,
+    'grandchild.unref()',
+    "console.log('{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"fake harness\"}}')",
+    'process.exit(0)',
+  ].join('\n'))
+}
+
+function writeFakeHangingResultHarness(project, started, { holdMs = 8000 } = {}) {
+  const late = join(project, 'late.cjs')
+  writeFileSync(late, [
+    "const { writeFileSync } = require('node:fs')",
+    `setTimeout(() => {}, ${holdMs})`,
+    '',
+  ].join('\n'))
+  const script = join(project, 'run')
+  writeFileSync(script, [
+    "const { spawn } = require('node:child_process')",
+    "const { writeFileSync } = require('node:fs')",
+    `writeFileSync(${JSON.stringify(started)}, 'started')`,
+    `const grandchild = spawn(process.execPath, [${JSON.stringify(late)}, ${JSON.stringify(project)}], { detached: true, stdio: [0, 1, 2], windowsHide: true })`,
+    'grandchild.unref()',
+    "console.log('{\"event\":\"result\",\"result\":{\"status\":\"SUCCESS\"}}')",
+    `setTimeout(() => {}, ${holdMs})`,
   ].join('\n'))
 }
 
@@ -211,6 +249,66 @@ describe('a stopped lane stays stopped', () => {
     expect(result.stdout).not.toContain(`leftover: stopped ${editor.pid}`)
     expect(editor.exitCode).toBe(null)
   }, 30000)
+
+  it('finishes with exit code 0 when the harness exits but a child holds stdout', async () => {
+    const { project, runs, env } = setup('mr-run-stdout-')
+    const mark = join(project, 'late.txt')
+    const started = join(project, 'started.txt')
+    writeFakeHarnessHoldingStdout(project, mark, started, { holdMs: 8000 })
+    const run = await runLane(['fake', '--project', project, '--task', 'Do it.'], {
+      ...env,
+      MACHINEROOM_CLOSE_TIMEOUT_MS: '400',
+    })
+    expect(run.code).toBe(0)
+    expect(run.stdout).toContain('exit code: 0 (leftovers were stopped)')
+    expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
+    const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
+    expect(record.lane).toBe('fake')
+    expect(record.exitCode).toBe(0)
+    expect(record.killed).toBe(false)
+    expect(record.note).toBe('leftovers were stopped')
+    expect(record.stoppedLeftovers).toBeGreaterThan(0)
+    await sleep(500)
+    expect(existsSync(mark)).toBe(false)
+  }, 30000)
+
+  it('finishes with exit code 0 when the harness hangs after printing its result line', async () => {
+    const { project, runs, env } = setup('mr-run-hang-')
+    const started = join(project, 'started.txt')
+    writeFakeHangingResultHarness(project, started, { holdMs: 8000 })
+    const run = await runLane(['fake', '--project', project, '--task', 'Do it.'], {
+      ...env,
+      MACHINEROOM_CLOSE_TIMEOUT_MS: '400',
+    })
+    expect(run.code).toBe(0)
+    expect(run.stdout).toContain('exit code: 0 (leftovers were stopped)')
+    expect(existsSync(join(runs, 'fake.lock'))).toBe(false)
+    const record = JSON.parse(readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim())
+    expect(record.lane).toBe('fake')
+    expect(record.exitCode).toBe(0)
+    expect(record.killed).toBe(false)
+    expect(record.note).toBe('leftovers were stopped')
+  }, 30000)
+})
+
+describe('isResultLine helper', () => {
+  it('detects AGY result event', () => {
+    expect(isResultLine('{"event":"result","result":{"status":"SUCCESS"}}')).toBe(true)
+  })
+
+  it('detects Claude and MachineRoom result type', () => {
+    expect(isResultLine('{"type":"result","result":"done"}')).toBe(true)
+  })
+
+  it('ignores subagent result lines with parent_tool_use_id', () => {
+    expect(isResultLine('{"type":"result","result":"sub","parent_tool_use_id":"123"}')).toBe(false)
+  })
+
+  it('ignores non-result and non-json lines', () => {
+    expect(isResultLine('{"type":"text","part":{"text":"hello"}}')).toBe(false)
+    expect(isResultLine('plain text')).toBe(false)
+    expect(isResultLine('')).toBe(false)
+  })
 })
 
 describe('stopLane creation time rules', () => {

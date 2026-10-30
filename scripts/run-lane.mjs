@@ -435,6 +435,19 @@ function readTask(options) {
   return text
 }
 
+export const DEFAULT_CLOSE_TIMEOUT_MS = 30000
+
+export function isResultLine(line) {
+  if (typeof line !== 'string' || !line.trim()) return false
+  if (!line.includes('"result"')) return false
+  try {
+    const item = JSON.parse(line)
+    if (item?.event === 'result') return true
+    if (item?.type === 'result' && !item.parent_tool_use_id) return true
+  } catch {}
+  return false
+}
+
 export function laneSpawn({ command, minutes = DEFAULT_MINUTES, model = '', effort = '' } = {}) {
   if (command?.transport !== 'acp') return { file: command?.file, args: command?.args ?? [], input: false }
   return { ...acpRunCommand({ command, minutes, model, effort }), input: true }
@@ -517,6 +530,8 @@ export function laneRunRecord(input = {}) {
   const record = runRecord(input)
   const startBranch = typeof input?.startBranch === 'string' ? input.startBranch.trim() : ''
   if (startBranch !== '') record.startBranch = startBranch
+  const note = typeof input?.note === 'string' ? input.note.trim() : ''
+  if (note !== '') record.note = note
   return record
 }
 
@@ -958,9 +973,80 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       child.stdin.on('error', () => {})
       child.stdin.end(prompt)
     }
+    const closeTimeoutMs = Number.isFinite(Number(options?.closeTimeoutMs ?? process.env.MACHINEROOM_CLOSE_TIMEOUT_MS))
+      ? Number(options?.closeTimeoutMs ?? process.env.MACHINEROOM_CLOSE_TIMEOUT_MS)
+      : DEFAULT_CLOSE_TIMEOUT_MS
+
+    let resultSeen = false
+    let lineBuffer = ''
+    let closeTimer = null
+    let harnessExited = false
+    let harnessExitCode = null
+    let leftoversCleaned = false
+    let extraStopped = 0
+    let settled = false
+    let finish
+
+    const armCloseTimer = () => {
+      if (settled) return
+      if (closeTimer !== null) clearTimeout(closeTimer)
+      closeTimer = setTimeout(onCloseTimeout, closeTimeoutMs)
+    }
+
+    const checkLine = (line) => {
+      if (resultSeen) return
+      if (isResultLine(line)) {
+        resultSeen = true
+        armCloseTimer()
+      }
+    }
+
+    const onChunk = (text) => {
+      if (resultSeen) return
+      lineBuffer += text
+      let index
+      while ((index = lineBuffer.indexOf('\n')) !== -1) {
+        const line = lineBuffer.slice(0, index).trim()
+        lineBuffer = lineBuffer.slice(index + 1)
+        checkLine(line)
+        if (resultSeen) break
+      }
+    }
+
+    const onCloseTimeout = () => {
+      if (settled) return
+      leftoversCleaned = true
+      if (stopNote === '') stopNote = 'leftovers were stopped'
+      let stopped = 0
+      if (child.pid && (child.exitCode === null && child.signalCode === null)) {
+        killTree(child)
+      }
+      const descendants = harnessDescendants(child.pid)
+      stopped += stopDescendants(descendants)
+      const folder = project ? (options.worktree ? project : '') : lane.worktree
+      stopped += stopLeftovers({ worktree: folder, childPid: child.pid ?? 0 })
+      extraStopped += stopped
+      try {
+        child.stdout?.destroy()
+      } catch {}
+      try {
+        child.stderr?.destroy()
+      } catch {}
+      if (child.stdin && !child.stdin.destroyed) {
+        try {
+          child.stdin.destroy()
+        } catch {}
+      }
+      const exitCode = harnessExitCode !== null ? harnessExitCode : (child.exitCode ?? 0)
+      finish?.({ code: exitCode, leftoversStopped: true })
+    }
+
     child.stdout?.setEncoding('utf8')
     child.stderr?.setEncoding('utf8')
-    child.stdout?.on('data', (text) => laneLog.push('stdout', text))
+    child.stdout?.on('data', (text) => {
+      laneLog.push('stdout', text)
+      onChunk(text)
+    })
     child.stderr?.on('data', (text) => laneLog.push('stderr', text))
 
     let killed = false
@@ -988,15 +1074,42 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     }, options.minutes * 60 * 1000)
 
     const result = await new Promise((done) => {
-      child.on('error', (error) => done({ code: null, error }))
-      child.on('close', (code) => done({ code }))
+      finish = (value) => {
+        if (settled) return
+        settled = true
+        if (closeTimer !== null) {
+          clearTimeout(closeTimer)
+          closeTimer = null
+        }
+        done(value)
+      }
+
+      child.on('error', (error) => finish({ code: null, error }))
+
+      child.once('exit', (code) => {
+        harnessExited = true
+        harnessExitCode = code ?? 0
+        if (!resultSeen && isResultLine(lineBuffer.trim())) {
+          resultSeen = true
+        }
+        armCloseTimer()
+      })
+
+      child.on('close', (code) => {
+        finish({ code: harnessExitCode !== null ? harnessExitCode : code })
+      })
     })
     clearTimeout(timer)
+    if (closeTimer !== null) {
+      clearTimeout(closeTimer)
+      closeTimer = null
+    }
     process.removeListener('SIGINT', onInt)
     process.removeListener('SIGTERM', onTerm)
     process.removeListener('SIGHUP', onHup)
     process.removeListener('exit', onExit)
     const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 })
+    const totalStoppedLeftovers = stoppedLeftovers + extraStopped
     laneLog.flush()
     await new Promise((done) => log.end(done))
     const minutes = Math.round(((Date.now() - startedAt) / 60000) * 10) / 10
@@ -1046,7 +1159,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       log: logPath,
       branch: git.branch,
       commits: git.commits,
-      stoppedLeftovers,
+      stoppedLeftovers: totalStoppedLeftovers > 0 ? totalStoppedLeftovers : undefined,
+      note: leftoversCleaned ? 'leftovers were stopped' : undefined,
       ...(start ? { startBranch: start.startBranch } : {}),
       ...(options.startedBy ? { startedBy: options.startedBy } : {}),
       ...(project ? { project, task } : {}),
