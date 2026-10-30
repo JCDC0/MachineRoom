@@ -23,6 +23,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-10-V8.md`: history. The audit of the folder blocks and the camera hold.
 - `AUDIT-2026-10-V9.md`: history. The audit of the Direct API keys and the orchestrator wake rules, with Q15a and Q15b as its fixes.
 - `AUDIT-2026-10-V10.md`: history. The audit of the page's handlers and effects, and the faults a click shows that a render test does not.
+- `AUDIT-2026-10-V11.md`: history. The backend audit from version 9 to 0.1.401, covering process lifecycle, locks, wakes and test seams.
 - `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
 - `CHANGELOG.md`: history. One line per change under the version it shipped in.
 - `CONTROL-PLANE.md`: plan. The control plane design from the Paperclip era; parts are replaced by the lane records.

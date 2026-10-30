@@ -14,6 +14,8 @@
 
 - Ten full runs and 44 loaded run-throughs with a temporary kill and git log found no `taskkill` that named a `git` and no failed `git` beyond the tests' own expected exit 1 and 128, so the T26 failures remain unexplained (task T28).
 
+- Audit the backend since version 9 across process trees, lane locks, orchestrator wakes, crash recovery and test seams (task A11).
+
 - The orchestrator chat's start card names the orchestrator's harness, so an OpenCode or Direct API orchestrator no longer reads as Claude, and it says the Direct API uses no subscription (task T27).
 
 - `tests/no-undefined-names.test.js` fails when a `src/ui/*.jsx` file calls a `setX` function it does not declare or import, the fault that left Send stuck on `Sending` (task T27).
