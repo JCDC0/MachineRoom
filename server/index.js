@@ -15,6 +15,7 @@ import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createFamilyApi } from './family.js'
 import { createEndpointsApi } from './endpoints.js'
+import { createGitApi } from './git.js'
 import { createHarnessModelsApi } from './harness-models.js'
 import { createLanesSource, readLanes, runsFolder } from './lanes-source.js'
 import { createMcpApi } from './mcp.js'
@@ -473,6 +474,18 @@ export function createBridge(options = {}) {
     readJsonBody,
     env,
   })
+  const gitApi = createGitApi({
+    projectRoot,
+    sendJson,
+    readJsonBody,
+    orchestrators: options.orchestrators ?? (() => orchestrators),
+    lanesSource: options.lanesSourceApi ?? (() => lanesSource),
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
+    gitRunner: options.gitRunner,
+    ttlMs: options.gitTtlMs,
+  })
   const treeSent = new WeakMap()
   const folderClients = new WeakSet()
   const treeClients = new WeakSet()
@@ -697,7 +710,9 @@ export function createBridge(options = {}) {
       }
     }
     trimHistory()
+    if (endsRun) gitApi.invalidateCache()
     const notices = changeEvents(parsed)
+    if (endsRun) notices.push({ topic: 'git' })
     for (const client of clients) {
       writeSseFrame(client, entry)
       for (const notice of notices) writeSseChange(client, notice)
@@ -786,6 +801,7 @@ export function createBridge(options = {}) {
     if (orchestrators && (await orchestrators.handle(req, res, url))) return
     if (await projects.handle(req, res, url)) return
     if (await familyApi.handle(req, res, url)) return
+    if (await gitApi.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
       sendJson(req, res, 200, {
