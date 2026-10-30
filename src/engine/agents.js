@@ -37,6 +37,7 @@ export const CHILD_GAP = 120
 export const SUB_ORCHESTRATOR_SCALE = 0.7
 export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.5
 export const SUB_ORCHESTRATOR_RADIUS = HUB_RADIUS * 2.4
+export const ORCHESTRATOR_NAME_LIFT = (ORCHESTRATOR_LIFT * 2) / 3
 export const ORCHESTRATOR_LINK_OPACITY = 0.1
 export const SUB_ORCHESTRATOR_LINK_OPACITY = 0.3
 export const DANCE_SCALE = 0.08
@@ -46,6 +47,11 @@ const DANCE_DECAY = 5
 export function danceScale(pulse, orchestrator = false) {
   const value = Math.min(1, Math.max(0, Number(pulse) || 0))
   return 1 + (orchestrator ? ORCHESTRATOR_DANCE_SCALE : DANCE_SCALE) * value
+}
+
+export function orchestratorNameLift(subCount) {
+  const count = Number.isFinite(Number(subCount)) ? Math.max(0, Math.floor(Number(subCount))) : 0
+  return count > 0 ? ORCHESTRATOR_NAME_LIFT : 0
 }
 
 export function subOrchestratorPlace(arc, out = null) {
@@ -892,6 +898,11 @@ export function createAgents(scene, roster, cssScene = null) {
         break
       }
     }
+    let subCount = 0
+    for (const view of views.values()) {
+      if (view.subOrchestrator) subCount += 1
+    }
+    const nameLift = orchestratorNameLift(subCount)
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
@@ -1001,7 +1012,7 @@ export function createAgents(scene, roster, cssScene = null) {
         const calloutSide = -view.chipSide
         calloutPos.copy(view.group.position)
         calloutPos.addScaledVector(world.right, calloutSide * 140)
-        calloutPos.addScaledVector(camUp, 180)
+        calloutPos.addScaledVector(camUp, 180 + (view.orchestrator ? nameLift : 0))
         view.callout.object.position.copy(calloutPos)
         view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
 
