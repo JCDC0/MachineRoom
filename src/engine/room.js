@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
+import { isOnlineCall } from '../model/online.js'
 import { createAgents } from './agents.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
@@ -596,7 +597,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   function trackWeb(activity) {
     const now = performance.now()
     const callKey = `${activity.agent}:${activity.id}`
-    if (activity.type === 'tool.start' && activity.tool === 'web') {
+    if (activity.type === 'tool.start' && isOnlineCall(activity)) {
       if (typeof activity.id === 'string') webCalls.set(callKey, activity.agent)
       agentSet.webStart(activity.agent, internet.position)
       return
@@ -894,6 +895,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       return gitTree.setState(state)
     },
     focusGitTree,
+    setOnline(next) {
+      internet.setOnline(next)
+      agentSet.setOnline(next)
+    },
     setOptions(options = {}) {
       if (!cards.setOptions(options)) return
       cards.sync(getState())

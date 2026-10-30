@@ -8,6 +8,7 @@ import {
   VALID_LANES,
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
+import { laneNeedsNetwork } from '../../model/online.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
 
 export default function DispatchPanel({
@@ -53,6 +54,7 @@ export default function DispatchPanel({
   const [projectSplitPlan, setProjectSplitPlan] = useState(null)
   const [projectStarting, setProjectStarting] = useState(false)
   const [projectError, setProjectError] = useState(null)
+  const [networkOnline, setNetworkOnline] = useState(true)
 
   const splitRun = useSyncExternalStore(subscribeSplitRun, splitRunSnapshot, splitRunSnapshot)
   const splitAnswers = splitRun.answers
@@ -175,6 +177,35 @@ export default function DispatchPanel({
     return subscribeToNotices(client, 'runs', () => {
       loadRuns()
     })
+  }, [client])
+
+  useEffect(() => {
+    let alive = true
+    async function readNetwork() {
+      if (typeof client?.network !== 'function') return
+      try {
+        const answer = await client.network()
+        if (alive && typeof answer?.online === 'boolean') setNetworkOnline(answer.online)
+      } catch {}
+    }
+    function onOnline() {
+      setNetworkOnline(true)
+    }
+    function onOffline() {
+      setNetworkOnline(false)
+    }
+    readNetwork()
+    const timer = setInterval(readNetwork, 30000)
+    const unsubscribe = subscribeToNotices(client, 'network', readNetwork)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+    return () => {
+      alive = false
+      clearInterval(timer)
+      unsubscribe()
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
   }, [client])
 
   useEffect(() => {
@@ -412,6 +443,11 @@ export default function DispatchPanel({
   const projectProblem = projectTaskProblem(projectTasks)
   const projectSplitRun = projectOneLanePerTask && projectTasks.length > 1
   const projectSplitTaskCount = projectSplitPlan?.pairs.length || projectTasks.length
+  const laneAgent = (key) => agents.find((agent) => agent && agent.key === key) ?? null
+  const offlineFor = (key) => networkOnline === false && laneNeedsNetwork(laneAgent(key))
+  const projectOffline = offlineFor(projectConfirm.lane)
+  const splitOffline = Boolean(projectSplitPlan?.pairs?.some((pair) => offlineFor(pair.lane)))
+  const briefOffline = offlineFor(runLane)
   const canStartProject =
     typeof client?.startRun === 'function' &&
     !projectProblem &&
@@ -604,6 +640,11 @@ export default function DispatchPanel({
                   <div className="brief-confirm-warning">
                     This starts {projectSplitTaskCount} agents on this computer three seconds apart and spends money.
                   </div>
+                  {splitOffline && (
+                    <div className="brief-confirm-warning" role="status">
+                      There is no connection, so this agent will likely fail.
+                    </div>
+                  )}
                 </>
               )}
               <div className="brief-confirm-actions">
@@ -669,6 +710,11 @@ export default function DispatchPanel({
               <div className="brief-confirm-warning">
                 This starts the agent on this computer and spends money.
               </div>
+              {projectOffline && (
+                <div className="brief-confirm-warning" role="status">
+                  There is no connection, so this agent will likely fail.
+                </div>
+              )}
               <div className="brief-confirm-actions">
                 <button
                   type="button"
@@ -810,6 +856,11 @@ export default function DispatchPanel({
                   <div className="brief-confirm-warning">
                     This starts the agent on this computer and spends money.
                   </div>
+                  {briefOffline && (
+                    <div className="brief-confirm-warning" role="status">
+                      There is no connection, so this agent will likely fail.
+                    </div>
+                  )}
                   <div className="brief-confirm-actions">
                     <button
                       type="button"

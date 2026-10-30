@@ -661,6 +661,48 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }, [client, live])
 
   useEffect(() => {
+    if (!live || live.simulated) return undefined
+    let active = true
+    const latest = latestOnly()
+
+    function apply(next) {
+      if (typeof next === 'boolean') roomRef.current?.setOnline(next)
+    }
+
+    async function updateNetwork() {
+      if (typeof client?.network !== 'function') return
+      const isLatest = latest()
+      try {
+        const answer = await client.network()
+        if (!active || !isLatest()) return
+        apply(answer?.online)
+      } catch {}
+    }
+
+    function onOnline() {
+      apply(true)
+    }
+
+    function onOffline() {
+      apply(false)
+    }
+
+    updateNetwork()
+    const timer = setInterval(updateNetwork, 30000)
+    const unsubscribe = subscribeToNotices(client, ['network'], updateNetwork)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('offline', onOffline)
+
+    return () => {
+      active = false
+      clearInterval(timer)
+      unsubscribe()
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('offline', onOffline)
+    }
+  }, [client, live])
+
+  useEffect(() => {
     function onShowGitTree() {
       roomRef.current?.focusGitTree()
     }

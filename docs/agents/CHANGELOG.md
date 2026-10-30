@@ -10,6 +10,8 @@
 
 - A click on an agent, a folder, a card row, a file or the INTERNET sphere, or the `machineroom:inspect` event, opens the inspector inside the lens at its right edge, or in the dock's column below 900 pixels, and holds the camera on the object like a card hold; it shows the agent rows from `agentContext`, the state word, the folder explorer from the whole file tree, a plain file preview with its touches, and the internet connection and agents on the web (task U94).
 
+- `isOnlineCall` marks a web, shell or MCP tool call that reaches the network, every such call draws a steady blue `#2a9dff` hairline with a few small packets between the agent and the INTERNET sphere while the yellow file tunnel stays, and `room.setOnline(false)` turns the sphere red with `NO CONNECTION` and adds the DispatchPanel confirm line for a lane whose model is not on a local endpoint (task U95).
+
 - The project's git tree stands above the INTERNET sphere from `client.gitState()`, with the current branch's first parent chain as the trunk, other branches leaning out in name order, the current head in `#e5ff00` and at most 12 branch name labels; `room.setGitState` rebuilds it only when the sha list or the current branch changes and `room.focusGitTree` holds the camera on it, with pure tests for the layout, the rebuild and dispose (task U93).
 
 - The Projects tab opens with a Repository section that shows the current and local branches, switches a branch or makes one after a confirm card, marks the switch blocked by uncommitted changes or a worktree, and dispatches the git tree event (task U92).
