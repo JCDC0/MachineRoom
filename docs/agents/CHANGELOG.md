@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The orchestrator chat's start card names the orchestrator's harness, so an OpenCode or Direct API orchestrator no longer reads as Claude, and it says the Direct API uses no subscription (task T27).
+
+- `tests/no-undefined-names.test.js` fails when a `src/ui/*.jsx` file calls a `setX` function it does not declare or import, the fault that left Send stuck on `Sending` (task T27).
+
+- A one-time ESLint scan with only `no-undef` and `react/jsx-no-undef` over `src`, `server`, `scripts` and `bin` found no other undefined name (task T27).
+
+- The prompt test skips its literal `undefined` check for the T27 brief, whose own text uses the word (task T27).
+
 - The orchestrator chat clears `Sending` as soon as the bridge accepts the message, runs the chat and list reads after it without holding the button, and shows the existing error sentence when the send gives up; the leftover call to the removed `setProblems` no longer stops a send before it starts (task U89).
 
 - `killTree` leaves an exited child alone on Windows, because `taskkill /T /F` on its old process id could stop an unrelated process that reused it, which failed a `git rev-parse` in another test thread with no error text.

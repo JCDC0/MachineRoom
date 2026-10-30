@@ -20,6 +20,7 @@ import {
   orchestratorDoing,
   projectBaseName,
   sendChatMessage,
+  startConfirmText,
   statusDetail,
   statusText,
   statusTone,
@@ -713,15 +714,36 @@ describe('OrchestratorChat panel', () => {
         open: true,
         client: fakeClient(),
         initialChat: { state: 'idle', messages: [] },
+        initialOrchestrators: [{ id: 'orchestrator', name: 'Orchestrator', harness: 'claude' }],
         initialDraft: 'Build the settings page.',
         initialConfirm: 'start',
       })
     )
     expect(html).toContain(
-      'The orchestrator runs Claude Code (Opus) on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.'
+      'The orchestrator runs Claude Code on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.'
     )
     expect(html).toContain('>Start</button>')
     expect(html).toContain('>Cancel</button>')
+  })
+
+  it('names the orchestrator harness in the start card', () => {
+    const claude = startConfirmText('', 'claude')
+    expect(claude).toContain('runs Claude Code on this project')
+    expect(claude).toContain('It uses your Claude subscription.')
+
+    const opencode = startConfirmText('', 'opencode')
+    expect(opencode).toContain('runs OpenCode on this project')
+    expect(opencode).toContain('It uses your OpenCode subscription.')
+    expect(opencode).not.toContain('Claude')
+
+    const direct = startConfirmText('', 'machineroom')
+    expect(direct).toContain('runs Direct API on this project')
+    expect(direct).toContain('It uses no subscription.')
+    expect(direct).not.toContain('It uses your')
+
+    expect(startConfirmText('', '')).toBe(
+      'The orchestrator runs on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes.'
+    )
   })
 
   it('names the project folder in the header and its full path in the start card', () => {
@@ -736,6 +758,7 @@ describe('OrchestratorChat panel', () => {
         open: true,
         client: fakeClient(chat),
         initialChat: chat,
+        initialOrchestrators: [{ id: 'orchestrator', name: 'Orchestrator', harness: 'opencode' }],
         initialDraft: 'Build the settings page.',
         initialConfirm: 'start',
       })
@@ -745,8 +768,10 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('>app</span>')
     expect(html).toContain('>opus</span>')
     expect(html).toContain(
-      'The orchestrator works in C:\\work\\projects\\app with full permissions.'
+      'The orchestrator works in C:\\work\\projects\\app on OpenCode with full permissions.'
     )
+    expect(html).toContain('It uses your OpenCode subscription.')
+    expect(html).not.toContain('It uses your Claude subscription.')
     expect(html).not.toContain('on this project with full permissions')
   })
 

@@ -202,7 +202,8 @@ describe('buildPrompt', () => {
     for (const brief of open) {
       const laneKey = brief.owners.find((owner) => lanes[owner])
       const prompt = buildPrompt({ briefs: [brief], laneKey, lanes, rules, version: '0.1.35' })
-      expect(prompt, brief.id).not.toContain('undefined')
+      const namesUndefined = `${brief.title}\n${brief.text}`.includes('undefined')
+      if (!namesUndefined) expect(prompt, brief.id).not.toContain('undefined')
       expect(prompt, brief.id).toContain(`Task ${brief.id}:`)
       expect(prompt.length, brief.id).toBeLessThan(9000)
     }

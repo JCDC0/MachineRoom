@@ -1,4 +1,6 @@
 import { createContext } from 'react'
+import { harnessByKey } from '../harnesses/index.js'
+import { DIRECT_HARNESS, DIRECT_LABEL } from './family.js'
 
 const CHAT_HIDDEN = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u200E\u200F\u202A-\u202E\u2066-\u2069]/g
 
@@ -15,8 +17,31 @@ export const ORCH_REFRESH_MS = 10000
 export const ORCH_MAX_LINES = 200
 export const TEAM_TAB = 'team'
 
-export const ORCH_START_CONFIRM =
-  'The orchestrator runs Claude Code (Opus) on this project with full permissions. It plans, starts lanes, merges what passes on a branch and never pushes. It uses your Claude subscription.'
+const SUBSCRIPTION_HARNESSES = new Set(['claude', 'opencode', 'agy', 'codex', 'copilot'])
+
+function startHarnessKey(harness) {
+  if (typeof harness === 'string') return harness.trim()
+  if (harness && typeof harness === 'object' && typeof harness.key === 'string') return harness.key.trim()
+  return ''
+}
+
+export function startConfirmText(project = '', harness = '') {
+  const key = startHarnessKey(harness)
+  const name = key === DIRECT_HARNESS ? DIRECT_LABEL : Object.hasOwn(harnessByKey, key) ? harnessByKey[key].name : ''
+  const where = project
+    ? `The orchestrator works in ${project}${name ? ` on ${name}` : ''} with full permissions.`
+    : name
+      ? `The orchestrator runs ${name} on this project with full permissions.`
+      : 'The orchestrator runs on this project with full permissions.'
+  const plan = ' It plans, starts lanes, merges what passes on a branch and never pushes.'
+  let account = ''
+  if (key === DIRECT_HARNESS) account = ' It uses no subscription.'
+  else if (SUBSCRIPTION_HARNESSES.has(key)) {
+    const label = key === 'claude' ? 'Claude' : name
+    account = ` It uses your ${label} subscription.`
+  }
+  return `${where}${plan}${account}`
+}
 
 export function projectBaseName(path) {
   const parts = String(path ?? '')
