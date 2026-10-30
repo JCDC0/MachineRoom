@@ -1,8 +1,8 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { ORCHESTRATOR_LINK_OPACITY, PACKET_BURST, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, createAgents, litChain, orchestratorLineEnds, packetSpots, samplePolyline, speckPolyline, stripPoints, webTunnelEnd } from '../src/engine/agents.js'
+import { BEAM_OPACITY, BEAM_PACKET_BURST, ORCHESTRATOR_LINK_OPACITY, PACKET_BURST, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, createAgents, litChain, orchestratorLineEnds, packetSpots, samplePolyline, speckPolyline, stripPoints, webTunnelEnd } from '../src/engine/agents.js'
 import { INTERNET_RADIUS } from '../src/engine/internet.js'
-import { WEB } from '../src/engine/sprites.js'
+import { WEB, YELLOW } from '../src/engine/sprites.js'
 import { apply, createState } from '../src/model/state.js'
 import {
   AUTOCOMPACT_MAX,
@@ -192,9 +192,9 @@ describe('webTunnelEnd', () => {
   })
 })
 
-describe('the tunnel for a web call', () => {
-  it('goes from the agent to the internet shape in blue and keeps the last file focus', () => {
-    const { agents, state, terminals, world } = harness()
+describe('the beam for an online call', () => {
+  it('draws a blue hairline to the shape and keeps the yellow tunnel on the file', () => {
+    const { agents, state, terminals, world, edge } = harness()
     startWrite(state, 1000)
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
@@ -204,12 +204,24 @@ describe('the tunnel for a web call', () => {
     expect(agents.webActive()).toBe(1)
     agents.update(state, 0.016, 1020, world, terminals)
 
-    expect(view.strip.material.color.getHex()).toBe(WEB)
-    const strip = view.strip.geometry.attributes.position.array
-    const end = { x: strip[3], y: strip[4], z: strip[5] }
+    expect(view.beam.visible).toBe(true)
+    expect(view.beam.material.color.getHex()).toBe(WEB)
+    expect(view.beam.material.opacity).toBe(BEAM_OPACITY)
+    const beam = view.beam.geometry.attributes.position.array
+    expect(beam[0]).toBeCloseTo(view.group.position.x, 6)
+    expect(beam[1]).toBeCloseTo(view.group.position.y, 6)
+    expect(beam[2]).toBeCloseTo(view.group.position.z, 6)
+    const end = { x: beam[3], y: beam[4], z: beam[5] }
     expect(Math.hypot(end.x - world.internet.x, end.y - world.internet.y, end.z - world.internet.z)).toBeCloseTo(INTERNET_RADIUS, 2)
-    const packets = view.packets.geometry.attributes.position.array
-    const count = view.packets.geometry.drawRange.count
+
+    expect(view.strip.material.color.getHex()).toBe(YELLOW)
+    const strip = view.strip.geometry.attributes.position.array
+    expect(strip[3]).toBeCloseTo(edge.x, 6)
+    expect(strip[4]).toBeCloseTo(edge.y, 6)
+    expect(strip[5]).toBeCloseTo(edge.z, 6)
+
+    const packets = view.beamPackets.geometry.attributes.position.array
+    const count = view.beamPackets.geometry.drawRange.count
     expect(count).toBeGreaterThan(0)
     const agentPoint = view.group.position
     const span = { x: end.x - agentPoint.x, y: end.y - agentPoint.y, z: end.z - agentPoint.z }
@@ -224,7 +236,7 @@ describe('the tunnel for a web call', () => {
         y: offset.z * span.x - offset.x * span.z,
         z: offset.x * span.y - offset.y * span.x,
       }
-      expect(Math.hypot(cross.x, cross.y, cross.z)).toBeLessThan(0.5)
+      expect(Math.hypot(cross.x, cross.y, cross.z)).toBeLessThan(1)
     }
     const before = packets[1]
     agents.update(state, 0.016, 1100, world, terminals)
@@ -233,7 +245,7 @@ describe('the tunnel for a web call', () => {
     agents.dispose()
   })
 
-  it('sends a burst of five packets back from the shape when the call ends', () => {
+  it('sends a few packets back from the shape when the call ends', () => {
     const { agents, state, terminals, world } = harness()
     startWrite(state, 1000)
     agents.update(state, 0.016, 1000, world, terminals)
@@ -243,18 +255,37 @@ describe('the tunnel for a web call', () => {
 
     expect(agents.webEnd('a', 1030)).toBe(true)
     expect(agents.webActive()).toBe(0)
-    expect(view.webSends).toHaveLength(PACKET_BURST)
-    expect(view.webSends[0]).toBe(1030)
-    expect(view.webSends[PACKET_BURST - 1]).toBe(1030 + (PACKET_BURST - 1) * 30)
+    expect(view.beamSends).toHaveLength(BEAM_PACKET_BURST)
+    expect(view.beamSends[0]).toBe(1030)
+    expect(view.beamSends[BEAM_PACKET_BURST - 1]).toBe(1030 + (BEAM_PACKET_BURST - 1) * 40)
     agents.update(state, 0.016, 1040, world, terminals)
 
-    const packets = view.packets.geometry.attributes.position.array
-    expect(view.packets.geometry.drawRange.count).toBe(1)
+    const packets = view.beamPackets.geometry.attributes.position.array
+    expect(view.beamPackets.geometry.drawRange.count).toBe(1)
     const distance = Math.hypot(packets[0] - world.internet.x, packets[1] - world.internet.y, packets[2] - world.internet.z)
     const shapeDistance = view.group.position.distanceTo(world.internet)
     expect(distance).toBeGreaterThan(INTERNET_RADIUS - 1)
     expect(distance).toBeLessThan(shapeDistance)
-    expect(view.packets.material.color.getHex()).toBe(WEB)
+    expect(view.beamPackets.material.color.getHex()).toBe(WEB)
+    agents.dispose()
+  })
+
+  it('draws no beam while the room is offline', () => {
+    const { agents, state, terminals, world } = harness()
+    startWrite(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+
+    expect(agents.webStart('a', world.internet)).toBe(true)
+    agents.update(state, 0.016, 1020, world, terminals)
+    expect(view.beam.visible).toBe(true)
+
+    agents.setOnline(false)
+    agents.update(state, 0.016, 1030, world, terminals)
+    expect(view.web).toBe(false)
+    expect(view.beam.visible).toBe(false)
+    expect(view.beamPackets.visible).toBe(false)
+    expect(agents.webStart('a', world.internet)).toBe(false)
     agents.dispose()
   })
 })

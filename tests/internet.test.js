@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import * as THREE from 'three'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ORCHESTRATOR_HOME } from '../src/engine/hub.js'
-import { BASE_OPACITY, GLOW_OPACITY, INTERNET_HOME, MORPH_SWING, morphOffsets } from '../src/engine/internet.js'
+import { BASE_OPACITY, GLOW_OPACITY, INTERNET_HOME, INTERNET_LABEL, INTERNET_OFF_COLOR, INTERNET_OFF_LABEL, MORPH_SWING, createInternet, morphOffsets } from '../src/engine/internet.js'
+import { WEB } from '../src/engine/sprites.js'
 
 describe('morphOffsets', () => {
   it('gives the same offsets for the same seed, count and time', () => {
@@ -40,5 +42,75 @@ describe('the internet glow', () => {
   it('rests dim and glows bright only while an agent is on the web', () => {
     expect(BASE_OPACITY).toBeLessThan(0.15)
     expect(BASE_OPACITY + GLOW_OPACITY).toBeGreaterThanOrEqual(0.6)
+  })
+})
+
+const context2d = {
+  font: '',
+  fillStyle: '',
+  measureText: (text) => ({ width: String(text).length * 10 }),
+  fillRect: () => {},
+  fillText: () => {},
+}
+
+function element(tag) {
+  if (tag === 'canvas') return { width: 0, height: 0, style: {}, getContext: () => context2d }
+  const node = {
+    className: '',
+    textContent: '',
+    style: {},
+    children: [],
+    append() {},
+    remove() {},
+    setAttribute() {},
+    addEventListener() {},
+    classList: { add() {}, remove() {}, contains: () => false },
+  }
+  return node
+}
+
+describe('the internet shape when the room is offline', () => {
+  let savedDocument
+
+  beforeAll(() => {
+    savedDocument = globalThis.document
+    globalThis.document = { createElement: element }
+  })
+
+  afterAll(() => {
+    globalThis.document = savedDocument
+  })
+
+  it('turns the wireframe and label red, reads NO CONNECTION and keeps breathing', () => {
+    const internet = createInternet(new THREE.Scene())
+    const wire = internet.group.children.find((child) => child.isMesh)
+    expect(wire.material.color.getHex()).toBe(WEB)
+    expect(internet.label.visible).toBe(true)
+    expect(internet.labelOff.visible).toBe(false)
+    expect(internet.online()).toBe(true)
+
+    internet.setOnline(false)
+    expect(internet.online()).toBe(false)
+    expect(wire.material.color.getHex()).toBe(INTERNET_OFF_COLOR)
+    expect(wire.material.color.getHex()).toBe(0xff2a2a)
+    expect(internet.label.visible).toBe(false)
+    expect(internet.labelOff.visible).toBe(true)
+    expect(internet.labelOff.userData.text).toBe(INTERNET_OFF_LABEL)
+    expect(INTERNET_OFF_LABEL).toBe('NO CONNECTION')
+
+    const geometry = wire.geometry
+    const before = Array.from(geometry.attributes.position.array)
+    internet.update(0.5, false)
+    const after = Array.from(geometry.attributes.position.array)
+    expect(after).not.toEqual(before)
+    expect(wire.material.color.getHex()).toBe(INTERNET_OFF_COLOR)
+
+    internet.setOnline(true)
+    expect(internet.online()).toBe(true)
+    expect(wire.material.color.getHex()).toBe(WEB)
+    expect(internet.label.visible).toBe(true)
+    expect(internet.labelOff.visible).toBe(false)
+    expect(INTERNET_LABEL).toBe('INTERNET')
+    internet.dispose()
   })
 })

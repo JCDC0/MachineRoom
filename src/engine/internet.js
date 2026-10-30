@@ -1,12 +1,14 @@
 import * as THREE from 'three'
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME } from './hub.js'
-import { WEB, easeRate, seeded, still, textSprite } from './sprites.js'
+import { RED, WEB, easeRate, seeded, still, textSprite } from './sprites.js'
 
 export const INTERNET_RADIUS = 260
 export const INTERNET_LIFT = 720
 export const INTERNET_HOME = new THREE.Vector3(HUB_CENTER.x, ORCHESTRATOR_HOME.y + INTERNET_LIFT, HUB_CENTER.z)
 export const INTERNET_LABEL = 'INTERNET'
+export const INTERNET_OFF_LABEL = 'NO CONNECTION'
+export const INTERNET_OFF_COLOR = RED
 export const INTERNET_SEED = 20261025
 export const MORPH_SWING = 0.11
 export const MORPH_RATE = 0.8
@@ -51,8 +53,16 @@ export function createInternet(scene, texture = null) {
   group.add(shape)
 
   const label = textSprite(INTERNET_LABEL, { scale: 1.1, color: 'rgba(255,255,255,.55)' })
+  label.name = 'internet-label'
   label.position.set(0, -INTERNET_RADIUS - 90, 0)
   group.add(label)
+
+  const labelOff = textSprite(INTERNET_OFF_LABEL, { scale: 1.1, color: 'rgba(255,42,42,.9)' })
+  labelOff.name = 'internet-label-off'
+  labelOff.position.copy(label.position)
+  labelOff.userData.text = INTERNET_OFF_LABEL
+  labelOff.visible = false
+  group.add(labelOff)
 
   let halo = null
   if (texture) {
@@ -70,6 +80,18 @@ export function createInternet(scene, texture = null) {
   let elapsed = 0
   let glow = 0
   let frozen = false
+  let online = true
+
+  function setOnline(next) {
+    const value = next !== false
+    if (value === online) return online
+    online = value
+    material.color.setHex(online ? WEB : INTERNET_OFF_COLOR)
+    if (halo) halo.material.color.setHex(online ? WEB : INTERNET_OFF_COLOR)
+    label.visible = online
+    labelOff.visible = !online
+    return online
+  }
 
   function offsetsFor(time) {
     return morphOffsets(INTERNET_SEED, attribute.count, time)
@@ -93,6 +115,7 @@ export function createInternet(scene, texture = null) {
     material.opacity = BASE_OPACITY + glow * GLOW_OPACITY
     if (halo) halo.material.opacity = glow * HALO_OPACITY
     label.material.opacity = LABEL_REST + glow * (1 - LABEL_REST)
+    labelOff.material.opacity = LABEL_REST + glow * (1 - LABEL_REST)
     if (isStill) {
       if (!frozen) {
         frozen = true
@@ -115,5 +138,5 @@ export function createInternet(scene, texture = null) {
     })
   }
 
-  return { group, position: group.position, radius: INTERNET_RADIUS, update, dispose, glow: () => glow }
+  return { group, position: group.position, radius: INTERNET_RADIUS, update, dispose, glow: () => glow, setOnline, online: () => online, label, labelOff }
 }
