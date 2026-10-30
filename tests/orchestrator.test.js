@@ -907,6 +907,92 @@ describe('waking the orchestrator', () => {
     expect(main.calls()).toHaveLength(0)
   })
 
+  it('never wakes an orchestrator on a session reader run or a run without a record that the room started', async () => {
+    const rig = makeRig()
+    rig.send('Hello')
+    await waitIdle(rig, 1)
+    const callsBefore = rig.calls().length
+    const messagesBefore = rig.answer().messages.length
+
+    rig.orchestrator.onFrame(frame('session-1:1', 'succeeded', 'opencode-session'))
+    rig.orchestrator.onFrame(frame('session-2:1', 'succeeded', 'claude-session'))
+    rig.orchestrator.onFrame(frame('non-room-1', 'succeeded', 'unrecorded-agent'))
+    await sleep(300)
+
+    expect(rig.calls().length).toBe(callsBefore)
+    expect(rig.answer().messages.length).toBe(messagesBefore)
+  })
+
+  it('wakes the main orchestrator when startedBy names a sub that no longer exists', async () => {
+    const main = makeRig()
+    const log = join(main.runs, 'opencode7-del-1.log')
+    writeFileSync(log, 'done\n')
+    appendFileSync(
+      join(main.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log, startedBy: 'deleted-team' })}\n`
+    )
+
+    main.orchestrator.onFrame(frame('run-opencode7-del-1', 'succeeded'))
+    await waitFor(() => main.calls().length === 1, 15000, 'the main orchestrator to wake for deleted sub run')
+    await waitIdle(main, 1)
+
+    const roomMessage = main.answer().messages.find((m) => m.from === 'room' && m.text.includes('Run opencode7-del-1 on lane opencode7 ended: succeeded.'))
+    expect(roomMessage).toBeDefined()
+  })
+
+  it('wakes once for each real end when a run reopens, and suppresses duplicate turns for the same outcome', async () => {
+    const rig = makeRig()
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+    expect(rig.calls()).toHaveLength(1)
+
+    const log1 = join(rig.runs, 'opencode7-reopen-1.log')
+    writeFileSync(log1, 'partial\n')
+
+    rig.orchestrator.onFrame({
+      type: 'heartbeat.run.status',
+      payload: { runId: 'run-opencode7-reopen-1', agentId: 'agent-opencode7', status: 'failed', error: 'no record' },
+    })
+    await waitFor(() => rig.calls().length === 2, 15000, 'the failed no record turn to start')
+    await waitIdle(rig, 2)
+
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 1, killed: false, log: log1 })}\n`
+    )
+
+    rig.orchestrator.onFrame({
+      type: 'heartbeat.run.status',
+      payload: { runId: 'run-opencode7-reopen-1', agentId: 'agent-opencode7', status: 'failed' },
+    })
+    await sleep(300)
+    expect(rig.calls()).toHaveLength(2)
+    const messages = rig.answer().messages.filter((m) => m.from === 'room')
+    expect(messages.some((m) => m.text.includes('Run opencode7-reopen-1 on lane opencode7 ended: failed.'))).toBe(true)
+
+    const log2 = join(rig.runs, 'opencode7-reopen-2.log')
+    writeFileSync(log2, 'partial\n')
+    rig.orchestrator.onFrame({
+      type: 'heartbeat.run.status',
+      payload: { runId: 'run-opencode7-reopen-2', agentId: 'agent-opencode7', status: 'failed', error: 'no record' },
+    })
+    await waitFor(() => rig.calls().length === 3, 15000, 'the failed no record turn for run 2')
+    await waitIdle(rig, 3)
+
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:05:00.000Z', minutes: 1, exitCode: 0, killed: false, log: log2 })}\n`
+    )
+
+    rig.orchestrator.onFrame({
+      type: 'heartbeat.run.status',
+      payload: { runId: 'run-opencode7-reopen-2', agentId: 'agent-opencode7', status: 'succeeded' },
+    })
+    await waitFor(() => rig.calls().length === 4, 15000, 'the succeeded turn after reopen')
+    await waitIdle(rig, 4)
+    expect(rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-reopen-2 on lane opencode7 ended: succeeded.'))).toBe(true)
+  })
+
   it('adds a room message with the run record and starts a turn', async () => {
     const rig = makeRig()
     rig.send('Hello')
@@ -1285,6 +1371,40 @@ describe('the orchestrator conversation file', () => {
     expect(valueAfter(args, '--resume')).toBe(saved.sessionId)
     expect(restored.answer().messages.some((message) => message.text === RESTART_MESSAGE)).toBe(true)
   })
+
+  it('keeps a waiting message from a sub or the room as well as the owner after restart', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('First job')
+    await waitFor(() => rig.calls().length === 1)
+    rig.orchestrator.deliver('sub:team-1', 'Report from team-1')
+    rig.orchestrator.deliver('room', 'Wake from room')
+    await sleep(120)
+    expect(rig.calls()).toHaveLength(1)
+    const pid = rig.calls()[0].pid
+    rig.orchestrator.close()
+    await waitFor(() => {
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+
+    const saved = stateFile(rig)
+    expect(saved.pending).toHaveLength(2)
+    const pendingMessages = saved.pending.map((id) => saved.messages.find((m) => m.id === id))
+    expect(pendingMessages.some((m) => m.from === 'sub:team-1' && m.text === 'Report from team-1')).toBe(true)
+    expect(pendingMessages.some((m) => m.from === 'room' && m.text === 'Wake from room')).toBe(true)
+
+    const restored = restoreRig(rig)
+    await waitFor(() => restored.calls().length === 1, 15000, 'the restored waiting message to start')
+    await waitFor(() => restored.answer().state === 'idle')
+    const prompt = restored.calls()[0].args[1]
+    expect(prompt).toContain('Report from team-1')
+    expect(prompt).toContain('Wake from room')
+  })
 })
 
 describe('the orchestrator chat file', () => {
@@ -1353,6 +1473,57 @@ describe('the orchestrator chat file', () => {
     const restored = restoreRig(rig)
     expect(readFileSync(file, 'utf8')).toBe(before)
     expect(restored.answer().messages.some((message) => message.text === 'Keep me')).toBe(true)
+  })
+
+  it('retries a failed rename on EPERM and EBUSY and cleans up the temporary file', () => {
+    const rig = makeRig()
+    rig.orchestrator.close()
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const tmpFile = `${file}.tmp`
+
+    let attempts = 0
+    const renameRetryThenSucceed = (from, to) => {
+      attempts += 1
+      if (attempts < 3) {
+        const error = new Error('EBUSY: resource busy or locked')
+        error.code = 'EBUSY'
+        throw error
+      }
+      renameSync(from, to)
+    }
+
+    const retryingOrchestrator = createOrchestrator({
+      projectRoot: rig.projectRoot,
+      runsFolder: rig.runs,
+      lanes: rig.lanes,
+      promptFile: rig.promptFile,
+      rename: renameRetryThenSucceed,
+    })
+    cleanups.push(async () => retryingOrchestrator.close())
+    expect(attempts).toBe(3)
+    expect(existsSync(file)).toBe(true)
+    expect(existsSync(tmpFile)).toBe(false)
+    retryingOrchestrator.close()
+
+    let failingAttempts = 0
+    const renameAlwaysFails = () => {
+      failingAttempts += 1
+      const error = new Error('EPERM: operation not permitted')
+      error.code = 'EPERM'
+      throw error
+    }
+
+    const failingOrchestrator = createOrchestrator({
+      projectRoot: rig.projectRoot,
+      runsFolder: rig.runs,
+      lanes: rig.lanes,
+      promptFile: rig.promptFile,
+      rename: renameAlwaysFails,
+    })
+    cleanups.push(async () => failingOrchestrator.close())
+    expect(failingAttempts).toBe(5)
+    expect(existsSync(tmpFile)).toBe(false)
+    failingOrchestrator.close()
   })
 
   it('refuses a second orchestrator on the same project and takes a stale lock', () => {

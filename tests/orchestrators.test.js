@@ -1369,6 +1369,22 @@ describe('starting lanes from a sub orchestrator', () => {
     expect(messagesOf(rig.registry, 'frontend').filter((message) => message.from === 'room')).toHaveLength(1)
   })
 
+  it('wakes the main orchestrator when startedBy names a sub that no longer exists', async () => {
+    const rig = makeRig(makeBase({ ladder: { subs: [FRONTEND] } }))
+    rig.registry.main.send({ text: 'Hello', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+
+    const removed = rig.registry.ladderChange({ ladder: { subs: [] }, by: 'owner', confirmed: true }, true)
+    expect(removed.status).toBe(200)
+
+    appendRecord(rig, { logName: 'opencode-K1-20261030-140000', startedBy: 'frontend' })
+    rig.registry.onFrame(frame('opencode-K1-20261030-140000'))
+    await waitFor(() =>
+      messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text.includes('Run opencode-K1-20261030-140000'))
+    )
+    await waitIdle(rig.registry, 'orchestrator', 2)
+  })
+
   it('warns a restricted sub and the main about files outside the scope', async () => {
     const files = makeBase({ ladder: { subs: [FRONTEND] }, branch: 'trunk' })
     const worktree = makeWorktree(files.projectRoot, files.base)

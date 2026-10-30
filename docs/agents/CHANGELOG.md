@@ -9,6 +9,8 @@
 - One hand-made DOM, `tests/helpers/uiDom.js`, serves every UI test; `tests/helpers/handDom.js` and the copies inside the UI test files are gone, and every test moved to it without an assertion change (task T29).
 - Room and lane locks treat a holder as stale when created after the lock file, and stopLane passes its injected list and kill down to stopDescendants and stopLeftovers (task Q16b, V11 Z5 and Z8).
 
+- The orchestrator keeps waiting sub and room messages across restarts, ignores session reader runs, wakes the main orchestrator for runs from removed subs, deduplicates reopened runs, and retries failed state renames on EPERM or EBUSY (task Q16a, V11 Z3, Z4, Z6, Z7, Z9).
+
 - A chat button or sub chip opens the orchestrator chat on a narrow window and closes the sessions overlay, from a listener in Hud, with `tests/chat-open-ui.test.js` (task U90, Z1).
 
 - The conversation preview keeps the newest click by request ticket, so a slower answer or failure from an earlier conversation cannot replace it or clear it, with `tests/sidebar-preview-ui.test.js` (task U90, Z2).
