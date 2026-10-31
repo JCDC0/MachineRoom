@@ -31,6 +31,13 @@
     transparent 2px,
     transparent 4px
   );
+  --stripes-yellow: repeating-linear-gradient(
+    45deg,
+    rgb(229 255 0 / 0.12) 0px,
+    rgb(229 255 0 / 0.12) 2px,
+    transparent 2px,
+    transparent 8px
+  );
   color-scheme: dark;
 }
 
@@ -5591,9 +5598,8 @@ body:has(#hud-orchestrator-chat) .waiting {
 }
 
 .mr-card.is-active .mr-card-face {
+  background: var(--stripes-yellow), var(--corner-ticks), rgb(0 0 0 / 0.88);
   border-color: var(--white);
-  outline: 2px dashed var(--yellow);
-  outline-offset: 5px;
 }
 
 .mr-card.is-active .mr-card-tab {
@@ -5602,6 +5608,20 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .mr-card.is-pinned .mr-card-tab {
   border-color: var(--yellow);
+}
+
+.mr-card.is-selected .mr-card-face {
+  border: 2px solid var(--yellow);
+  box-shadow: 0 0 28px rgb(229 255 0 / 0.38);
+}
+
+.mr-card.is-selected .mr-card-tab {
+  border-color: var(--yellow);
+  background: rgb(229 255 0 / 0.2);
+}
+
+.mr-card.is-selected .mr-card-name {
+  color: var(--yellow);
 }
 
 .mr-card.is-flash-white .mr-card-face {
@@ -5721,9 +5741,8 @@ body:has(#hud-orchestrator-chat) .waiting {
   color: var(--red);
 }
 
-.mr-item.is-active {
-  outline: 2px dashed var(--yellow);
-  outline-offset: -1px;
+.mr-item.is-active:not(.is-failed) {
+  background: var(--stripes-yellow);
 }
 
 .mr-item.is-flash-white {

@@ -336,6 +336,7 @@ export function createCards(cssScene, options = {}) {
   const homes = new Map()
   const pinned = new Set()
   const sprayed = new Set()
+  let selected = null
   const flashes = new Map()
   let flashVersion = 0
   const rowFrame = createRowFrameKey()
@@ -383,6 +384,13 @@ export function createCards(cssScene, options = {}) {
     }
   }
 
+  function togglePop(path) {
+    if (sprayed.has(path)) sprayed.delete(path)
+    else sprayed.add(path)
+    sprayVersion += 1
+    planKey = ''
+  }
+
   function nearestCard(path) {
     let at = path
     while (at !== '' && (!cards.has(at) || cards.get(at).leaving)) at = dirname(at)
@@ -418,10 +426,8 @@ export function createCards(cssScene, options = {}) {
     for (const corner of BRACKETS) element.append(el('div', `mr-card-bracket is-${corner}`))
     head.addEventListener('click', (event) => {
       event.stopPropagation()
-      if (sprayed.has(path)) sprayed.delete(path)
-      else sprayed.add(path)
-      sprayVersion += 1
-      planKey = ''
+      if (event.detail > 1) return
+      togglePop(path)
     })
     const object = new CSS3DObject(element)
     const parent = path === '' ? null : nearestCard(dirname(path))
@@ -993,6 +999,8 @@ export function createCards(cssScene, options = {}) {
       if (active.dirs.has(card.path)) className += ' is-active'
       else if (active.path.has(card.path)) className += ' is-path'
       if (pinned.has(card.path) || sprayed.has(card.path)) className += ' is-pinned'
+      const selectedNow = selected !== null && selected === card.path
+      if (selectedNow) className += ' is-selected'
       if (tone) className += ` is-flash-${tone}`
       const lit = dimmed && Boolean(dimLit?.has(card.path))
       if (dimmed) className += lit ? ' is-lit' : ' is-dim'
@@ -1002,7 +1010,7 @@ export function createCards(cssScene, options = {}) {
         card.element.className = className
       }
 
-      const dimGoal = dimmed && !lit ? 1 : 0
+      const dimGoal = dimmed && !lit && !selectedNow ? 1 : 0
       if (isStill) {
         card.dimLevel = dimGoal
       } else if (card.dimLevel < dimGoal) {
@@ -1084,9 +1092,18 @@ export function createCards(cssScene, options = {}) {
     }
   }
 
+  function setSelected(path) {
+    const next = typeof path === 'string' ? path : null
+    if (next === selected) return false
+    selected = next
+    return true
+  }
+
   return {
     cards,
     pin,
+    togglePop,
+    setSelected,
     center,
     bottom,
     halfWidth,

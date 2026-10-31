@@ -49,6 +49,8 @@ function fakeElement(tag = 'div') {
     scrollHeight: 0,
     scrollTop: 0,
     textContent: '',
+    removed: false,
+    listeners,
     ownerDocument: { defaultView: { Element: function Element() {} } },
     append(...items) {
       node.children.push(...items)
@@ -70,6 +72,9 @@ function fakeElement(tag = 'div') {
       if (!list) return
       const index = list.indexOf(fn)
       if (index !== -1) list.splice(index, 1)
+    },
+    fire(type, event = {}) {
+      for (const fn of [...(listeners.get(type) ?? [])]) fn({ target: node, stopPropagation() {}, ...event })
     },
     remove() {
       node.removed = true
@@ -138,6 +143,7 @@ let roomFrame = null
 let roomSurface
 let roomGl
 let roomCss
+const madeElements = []
 
 beforeAll(() => {
   savedWindow = globalThis.window
@@ -155,7 +161,11 @@ beforeAll(() => {
     removeEventListener() {},
   }
   globalThis.document = {
-    createElement: (tag) => (tag === 'canvas' ? fakeCanvas() : fakeElement(tag)),
+    createElement: (tag) => {
+      const node = tag === 'canvas' ? fakeCanvas() : fakeElement(tag)
+      madeElements.push(node)
+      return node
+    },
     querySelectorAll: () => [],
     body: fakeElement('body'),
   }
@@ -186,11 +196,12 @@ afterAll(() => {
   globalThis.ResizeObserver = savedResize
 })
 
-async function makeRoom(files, agents) {
+async function makeRoom(files, agents, handlers = {}) {
   const { createRoom } = await import('../src/engine/room.js')
   const roster = agents.map((key) => ({ key, name: key }))
   const state = createState(makeTree({ root: 'demo', files }), roster)
   let current = state
+  madeElements.length = 0
   const room = createRoom({
     surface: roomSurface,
     gl: roomGl,
@@ -198,12 +209,45 @@ async function makeRoom(files, agents) {
     rootName: 'demo',
     agents: roster,
     getState: () => current,
+    onInspect: handlers.onInspect ?? (() => {}),
   })
   return {
     room,
     state,
     setState(next) {
       current = next
+    },
+  }
+}
+
+function cssRoot() {
+  return roomCss.children.at(-1)
+}
+
+function fireCss(type, event) {
+  cssRoot().fire(type, event)
+}
+
+function cardElement(path) {
+  return madeElements.find((node) => node.dataset?.path === path && String(node.className).split(' ')[0] === 'mr-card')
+}
+
+function cardParts(card) {
+  const face = card.children.find((node) => node.className === 'mr-card-face')
+  return {
+    head: face.children.find((node) => node.className === 'mr-card-head'),
+    row: face.children.find((node) => String(node.className).startsWith('mr-card-items'))?.children[0] ?? null,
+  }
+}
+
+function cardTarget(card, part = '') {
+  const parts = cardParts(card)
+  return {
+    closest(selector) {
+      if (selector.includes('.mr-item')) return part === 'row' ? parts.row : null
+      if (selector.includes('.mr-card-head')) return part === 'head' ? parts.head : null
+      if (selector.includes('.mr-card')) return card
+      return null
     },
   }
 }
@@ -540,5 +584,96 @@ describe('the camera hold on a live room', () => {
     tickRoom(3)
     expect(room.soundAt('').distance).toBeCloseTo(before, 3)
     room.dispose()
+  })
+})
+
+describe('a double click on a folder card', () => {
+  it('holds the camera on the folder and opens the inspector', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'], { onInspect: (detail) => inspected.push(detail) })
+    try {
+      tickRoom(1)
+      const card = cardElement('src')
+      expect(card).toBeTruthy()
+      fireCss('dblclick', { target: cardTarget(card) })
+      expect(room.holding()).toBe('src')
+      expect(inspected).toEqual([{ kind: 'folder', id: 'src' }])
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('does nothing on a row', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'], { onInspect: (detail) => inspected.push(detail) })
+    try {
+      tickRoom(1)
+      const card = cardElement('src')
+      fireCss('dblclick', { target: cardTarget(card, 'row') })
+      expect(room.holding()).toBe(null)
+      expect(inspected).toEqual([])
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('leaves the pop as it was after a double click on the head', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['src/a.js', 'src/kid/b.js', 'docs/c.md'], ['claude'], { onInspect: (detail) => inspected.push(detail) })
+    try {
+      tickRoom(1)
+      const card = cardElement('src')
+      const head = cardParts(card).head
+      expect(card.className).not.toContain('is-pinned')
+      head.fire('click', { detail: 1 })
+      tickRoom(1)
+      expect(card.className).toContain('is-pinned')
+      head.fire('click', { detail: 2 })
+      tickRoom(1)
+      expect(card.className).toContain('is-pinned')
+      fireCss('dblclick', { target: cardTarget(card, 'head') })
+      tickRoom(1)
+      expect(card.className).not.toContain('is-pinned')
+      expect(room.holding()).toBe('src')
+      expect(inspected).toEqual([{ kind: 'folder', id: 'src' }])
+    } finally {
+      room.dispose()
+    }
+  })
+})
+
+describe('the selected folder', () => {
+  it('carries is-selected on the held card and clears it on park', async () => {
+    const { room } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
+    try {
+      tickRoom(1)
+      const card = cardElement('src')
+      expect(room.anchor('src')).toBe(true)
+      tickRoom(1)
+      expect(card.className).toContain('is-selected')
+      room.park()
+      tickRoom(1)
+      expect(card.className).not.toContain('is-selected')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('keeps is-active while an agent works on it', async () => {
+    const { room, state } = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
+    try {
+      const agent = state.agents.get('claude')
+      agent.status = 'working'
+      agent.focus = ['src/a.js']
+      tickRoom(2)
+      const card = cardElement('src')
+      expect(card.className).toContain('is-active')
+      expect(room.anchor('src')).toBe(true)
+      tickRoom(1)
+      expect(card.className).toContain('is-active')
+      expect(card.className).toContain('is-selected')
+    } finally {
+      room.dispose()
+    }
   })
 })

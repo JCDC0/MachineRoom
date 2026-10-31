@@ -633,6 +633,24 @@ describe('cardPlan', () => {
   })
 })
 
+describe('the selected card', () => {
+  it('marks one card with is-selected and clears the mark with null', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 1 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const card = cards.cards.get('src')
+    expect(cards.setSelected('src')).toBe(true)
+    cards.update(state, 0.016, camera())
+    expect(card.element.className).toContain('is-selected')
+    expect(cards.setSelected('src')).toBe(false)
+    expect(cards.setSelected(null)).toBe(true)
+    cards.update(state, 0.016, camera())
+    expect(card.element.className).not.toContain('is-selected')
+    cards.dispose()
+  })
+})
+
 describe('existingFiles', () => {
   const tree = makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js', 'docs/notes.md'], created: ['src/b.js'] })
   const agents = [{ key: 'hermes', name: 'Hermes' }]
