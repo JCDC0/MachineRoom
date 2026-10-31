@@ -150,7 +150,7 @@ summary:focus-visible,
   left: 0;
   right: 0;
   z-index: 4;
-  height: 24px;
+  height: calc(var(--lens-bow, 28px) + 24px);
   color: rgb(255 255 255 / 0.35);
   pointer-events: none;
 }
@@ -169,7 +169,7 @@ summary:focus-visible,
 
 .mr-inspector {
   position: absolute;
-  top: 76px;
+  top: calc(76px + var(--lens-bow, 28px));
   right: 46px;
   bottom: 26px;
   z-index: 6;
@@ -680,7 +680,7 @@ summary:focus-visible,
 .lens-corner.is-center {
   display: none;
   left: 50%;
-  top: calc(6% + 16px);
+  top: calc(6% + 16px + var(--lens-bow, 28px));
   transform: translateX(-50%);
   align-items: center;
   max-width: 60%;
@@ -689,7 +689,7 @@ summary:focus-visible,
 
 .lens-corner.is-right {
   right: 24px;
-  top: 40px;
+  top: calc(40px + var(--lens-bow, 28px));
   align-items: flex-end;
 }
 
@@ -3302,7 +3302,7 @@ summary:focus-visible,
   .waiting {
     position: absolute;
     left: 50%;
-    bottom: calc(6% + 16px);
+    bottom: calc(6% + 16px + var(--lens-bow, 28px));
     transform: translateX(-50%);
     width: min(512px, calc(100% - 96px));
     min-width: 0;
@@ -6486,12 +6486,12 @@ body:has(#hud-orchestrator-chat) .waiting {
 
   .lens-corner.is-left {
     left: 12px;
-    top: 24px;
+    top: calc(24px + var(--lens-bow, 28px));
   }
 
   .lens-corner.is-right {
     right: 12px;
-    top: 24px;
+    top: calc(24px + var(--lens-bow, 28px));
   }
 
   .lens-corner.is-bottom {
@@ -7745,6 +7745,7 @@ body:has(#hud-orchestrator-chat) .waiting {
     padding: 4px calc(var(--space) * 2);
     border-left: 0;
     border-right: 0;
+    border-top: 0;
     min-height: var(--transport-h);
   }
 
@@ -8291,7 +8292,7 @@ body:has(#hud-orchestrator-chat) .waiting {
 /* The lens rails: height on the left, zoom on the right */
 .lens-rail {
   position: absolute;
-  top: 16%;
+  top: calc(16% + var(--lens-bow, 28px));
   bottom: 16%;
   z-index: 4;
   width: 32px;
@@ -9926,7 +9927,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   padding: 6px;
 }
 
-/* U46: the straight lens edges and marks, and the live link tag in the transport row */
+/* U46: the lens edges and marks, and the live link tag in the transport row; U101: the edges bow inward */
 .lens-edge.is-top {
   top: 0;
 }
@@ -9948,6 +9949,10 @@ body:has(#hud-orchestrator-chat) .waiting {
   stroke-width: 1;
 }
 
+.lens-edge-line {
+  fill: none;
+}
+
 .lens-edge-label {
   fill: currentColor;
   font-family: var(--mono);
@@ -9967,11 +9972,11 @@ body:has(#hud-orchestrator-chat) .waiting {
 }
 
 .lens-edge.is-top .lens-edge-cross {
-  top: 2px;
+  top: calc(var(--lens-bow, 28px) + 2px);
 }
 
 .lens-edge.is-bottom .lens-edge-cross {
-  bottom: 2px;
+  bottom: calc(var(--lens-bow, 28px) + 2px);
 }
 
 .lens-edge-corner {
@@ -10322,10 +10327,6 @@ body:has(#hud-orchestrator-chat) .waiting {
 
 .stage.is-disconnected .lens-edge-label {
   fill: var(--red);
-}
-
-.hud.is-disconnected .hud-menu {
-  border-bottom: 1px solid var(--red);
 }
 
 .hud.is-disconnected .transport {

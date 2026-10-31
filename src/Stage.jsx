@@ -71,6 +71,7 @@ export function labelsFromFamily(answer) {
 }
 
 export const LENS_EDGE_HEIGHT = 24
+export const LENS_BOW = 28
 export const LENS_DEFAULT_WIDTH = 1440
 export const LENS_PIXELS_PER_DEGREE = 6
 export const LENS_TICK_DEGREES = 5
@@ -80,6 +81,20 @@ export const LENS_CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 function spanOf(width) {
   const value = Number(width)
   return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+export function lensBowAt(x, width, bow = LENS_BOW) {
+  const span = spanOf(width)
+  const point = Number(x)
+  if (span <= 0 || !Number.isFinite(point)) return 0
+  return bow * (1 - (2 * point / span - 1) ** 2)
+}
+
+export function lensClipPath(width, height, bow = LENS_BOW) {
+  const span = spanOf(width)
+  const tall = spanOf(height)
+  if (span <= 0 || tall <= 0) return ''
+  return `M 0 0 Q ${span / 2} ${2 * bow} ${span} 0 L ${span} ${tall} Q ${span / 2} ${tall - 2 * bow} 0 ${tall} Z`
 }
 
 function bearingDegrees(bearing) {
@@ -173,7 +188,12 @@ function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
     observer.observe(node)
     return () => observer.disconnect()
   }, [])
-  const lineY = top ? 0.5 : LENS_EDGE_HEIGHT - 0.5
+  const lineY = top ? 0.5 : LENS_EDGE_HEIGHT + LENS_BOW - 0.5
+  const band = LENS_EDGE_HEIGHT + LENS_BOW
+  const curveY = (x) => (top ? lensBowAt(x, width) : band - lensBowAt(x, width))
+  const rule = top
+    ? `M 0 ${lineY} Q ${width / 2} ${lineY + LENS_BOW * 2} ${width} ${lineY}`
+    : `M 0 ${lineY} Q ${width / 2} ${lineY - LENS_BOW * 2} ${width} ${lineY}`
   return (
     <div className={`lens-edge is-${side}${disconnected ? ' is-disconnected' : ''}`} ref={ref} aria-hidden="true">
       <span className="lens-edge-corner is-left" />
@@ -182,20 +202,21 @@ function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
       <svg
         className="lens-edge-rule"
         width="100%"
-        height={LENS_EDGE_HEIGHT}
+        height={band}
         aria-hidden="true"
       >
-        <line className="lens-edge-line" x1="0" x2="100%" y1={lineY} y2={lineY} />
+        <path className="lens-edge-line" d={rule} />
         {lensEdgeTicks(width, yaw, side).map((tick) => {
           const length = tick.tall ? 11 : 5
+          const curve = curveY(tick.x)
           return (
             <line
               key={`tick-${tick.x}`}
               className={`lens-edge-tick${tick.tall ? ' is-tall' : ''}`}
               x1={tick.x + 0.5}
               x2={tick.x + 0.5}
-              y1={top ? 1 : LENS_EDGE_HEIGHT - 1}
-              y2={top ? length : LENS_EDGE_HEIGHT - length}
+              y1={top ? curve + 1 : curve - 1}
+              y2={top ? curve + length : curve - length}
             />
           )
         })}
@@ -204,7 +225,7 @@ function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
             key={`label-${label.x}`}
             className={`lens-edge-label${label.cardinal ? ' is-cardinal' : ''}`}
             x={label.x + 4}
-            y={top ? 22 : 9}
+            y={top ? curveY(label.x) + 22 : curveY(label.x) - 15}
           >
             {label.text}
           </text>
@@ -1038,6 +1059,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const chromaPlacement = chromaOn
     ? mapPlacement({ width: lensSize.width, height: lensSize.height })
     : null
+  const clipLens = lensSize.width > 0 && lensSize.height > 0
+  const layersStyle = {}
+  if (chromaFilter) layersStyle.filter = chromaFilter
+  if (clipLens) layersStyle.clipPath = 'url(#mr-lens-clip)'
 
   const lens = lensStatus(snapshot.agents, log)
   const project = lensProject(data.tree.rootName)
@@ -1053,7 +1078,20 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
-      <div className={`stage${bridgeDown ? ' is-disconnected' : ''}`} style={lensShare === null ? undefined : { '--lens-h-user': lensHeightValue(lensShare) }}>
+      <div className={`stage${bridgeDown ? ' is-disconnected' : ''}`} style={{ '--lens-bow': `${LENS_BOW}px`, ...(lensShare === null ? null : { '--lens-h-user': lensHeightValue(lensShare) }) }}>
+        {clipLens && (
+          <svg
+            className="lens-clip-defs"
+            aria-hidden="true"
+            style={{ position: 'absolute', width: 0, height: 0, pointerEvents: 'none', overflow: 'hidden' }}
+          >
+            <defs>
+              <clipPath id="mr-lens-clip" clipPathUnits="userSpaceOnUse">
+                <path d={lensClipPath(lensSize.width, lensSize.height)} />
+              </clipPath>
+            </defs>
+          </svg>
+        )}
         <div className={`lens${bridgeDown ? ' is-disconnected' : ''}`}>
           <LensEdge side="top" yaw={lensYaw} disconnected={bridgeDown} />
           <LensEdge side="bottom" yaw={lensYaw} pitch={lensPitch} disconnected={bridgeDown} />
@@ -1061,7 +1099,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
             <div
               className="surface-layers"
               ref={layersRef}
-              style={chromaFilter ? { filter: chromaFilter } : undefined}
+              style={layersStyle}
             >
               <div className="layer" ref={cssRef} aria-hidden="true" />
               <div className="layer is-over" ref={glRef} aria-hidden="true" />

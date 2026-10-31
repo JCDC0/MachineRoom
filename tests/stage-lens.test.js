@@ -2,12 +2,15 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import Stage, {
+  LENS_BOW,
   compassBearingLabel,
   compassBottomHeading,
   compassBottomLabel,
   compassHeading,
   isBridgeDown,
   labelsFromFamily,
+  lensBowAt,
+  lensClipPath,
   lensEdgeLabels,
   lensEdgeTicks,
 } from '../src/Stage.jsx'
@@ -63,7 +66,7 @@ function stageHtml(extra = {}, props = {}) {
 }
 
 describe('Stage lens labels', () => {
-  it('keeps the project, clock, straight edges and waiting card inside the lens', () => {
+  it('keeps the project, clock, curved edges and waiting card inside the lens', () => {
     const html = stageHtml()
     const lens = html.indexOf('class="lens"')
     const labels = html.indexOf('class="lens-labels"')
@@ -84,6 +87,11 @@ describe('Stage lens labels', () => {
     expect(html).toContain('class="lens-edge-cross">+<')
     expect(html.match(/class="lens-edge-corner is-left"/g)).toHaveLength(2)
     expect(html.match(/class="lens-edge-corner is-right"/g)).toHaveLength(2)
+    expect(html).toContain('--lens-bow:28px')
+    expect(html).toContain('height="52"')
+    expect(html).toContain('class="lens-edge-line" d="M 0 0.5 Q 0 56.5 0 0.5"')
+    expect(html).toContain('class="lens-edge-line" d="M 0 51.5 Q 0 -4.5 0 51.5"')
+    expect(html).not.toContain('<line class="lens-edge-line"')
     expect(html).not.toContain('mr-lens-clip')
     expect(html).not.toContain('lens-brackets')
   })
@@ -246,6 +254,36 @@ describe('lens edge compass tape', () => {
       bearing: 270,
     })
     expect(lensEdgeTicks(0, 0, 'bottom')).toEqual([])
+  })
+})
+
+describe('lens bow', () => {
+  it('is 0 at each end and LENS_BOW at the middle', () => {
+    expect(LENS_BOW).toBe(28)
+    expect(lensBowAt(0, 1200)).toBe(0)
+    expect(lensBowAt(1200, 1200)).toBe(0)
+    expect(lensBowAt(600, 1200)).toBe(LENS_BOW)
+    expect(lensBowAt(300, 1200)).toBeCloseTo(21)
+    expect(lensBowAt(600, 0)).toBe(0)
+    expect(lensBowAt(0, 0)).toBe(0)
+  })
+
+  it('moves a tick at the middle LENS_BOW further in than one at the end', () => {
+    const ticks = lensEdgeTicks(1200, 0)
+    const middle = ticks.find((tick) => tick.x === 600)
+    const end = ticks.find((tick) => tick.x === 0)
+    expect(middle).toBeTruthy()
+    expect(end).toBeTruthy()
+    expect(lensBowAt(middle.x, 1200) - lensBowAt(end.x, 1200)).toBe(LENS_BOW)
+  })
+
+  it('bows the top and bottom clip edges toward the centre', () => {
+    const path = lensClipPath(1200, 600)
+    expect(path).toBe('M 0 0 Q 600 56 1200 0 L 1200 600 Q 600 544 0 600 Z')
+    expect(path).toContain('Q 600 56')
+    expect(path).toContain('Q 600 544')
+    expect(lensClipPath(0, 600)).toBe('')
+    expect(lensClipPath(1200, 0)).toBe('')
   })
 })
 

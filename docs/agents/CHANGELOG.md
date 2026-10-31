@@ -3,6 +3,7 @@
 ## Unreleased
 
 - A double click on a folder card holds the camera on that folder and opens its inspector, the selected folder carries a solid yellow border and glow, and an agent's folder and file carry faint yellow stripes instead of a dashed outline (task U99).
+- The lens's top and bottom edges bow inward again, the room is clipped to the curve, the compass tapes follow it, and the top middle label, the waiting card and the clock move past the bow while the straight menu and transport borders go (task U101).
 - A drag or double click in the lens no longer selects text; the waiting card and the inspector stay selectable.
 - A folder below the root draws at most 10 child folders as cards, the ones with the most files, and a clicked folder caps its children the same way, while the root keeps every folder (task U96).
 
