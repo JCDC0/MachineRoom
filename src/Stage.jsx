@@ -282,9 +282,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [effects, setEffects] = useState(() => loadEffectSettings(store()))
   const [chromaMap, setChromaMap] = useState('')
   const [lensSize, setLensSize] = useState({ width: 0, height: 0 })
-  const [parkCentre, setParkCentre] = useState(null)
   const layersRef = useRef(null)
-  const parkRef = useRef(null)
   const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensShare ?? null)
   const [lensYaw, setLensYaw] = useState(0)
   const [lensPitch, setLensPitch] = useState(0)
@@ -457,20 +455,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         if (Number.isFinite(yaw)) setLensYaw((now) => (Math.abs(yaw - now) > 0.0005 ? yaw : now))
         const pitch = roomRef.current?.pitch?.()
         if (Number.isFinite(pitch)) setLensPitch((now) => (Math.abs(pitch - now) > 0.0005 ? pitch : now))
-        const park = roomRef.current?.parkScreen?.()
-        if (park) {
-          const last = parkRef.current
-          const radius = park.radius ?? 0
-          const moved =
-            !last ||
-            Math.abs(park.x - last.x) >= 2 ||
-            Math.abs(park.y - last.y) >= 2 ||
-            Math.abs(radius - (last.radius ?? 0)) >= 2
-          if (moved) {
-            parkRef.current = park
-            setParkCentre(park)
-          }
-        }
         player.tick(ms)
         const beat = sound.beat()
         if (beat > 0) roomRef.current?.setBeat(beat)
@@ -1048,13 +1032,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const chromaChannels = aberrationChannels(effects.aberration?.strength)
   const chromaFilter = chromaOn && chromaMap ? 'url(#mr-screen-filter)' : undefined
   const chromaPlacement = chromaOn
-    ? mapPlacement({
-        width: lensSize.width,
-        height: lensSize.height,
-        centerX: parkCentre?.x ?? lensSize.width / 2,
-        centerY: parkCentre?.y ?? lensSize.height / 2,
-        radius: parkCentre?.radius ?? 0,
-      })
+    ? mapPlacement({ width: lensSize.width, height: lensSize.height })
     : null
 
   const lens = lensStatus(snapshot.agents, log)

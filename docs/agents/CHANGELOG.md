@@ -6,6 +6,9 @@
 - A folder below the root draws at most 10 child folders as cards, the ones with the most files, and a clicked folder caps its children the same way, while the root keeps every folder (task U96).
 
 - A clicked card row drops the old path line and carries a yellow highlight instead, and still opens the inspector (task U96).
+- The park return from a double click, `0`, Escape and Center eases yaw, pitch, target and distance over 2200 ms (`PARK_EASE_MS`), takes the whole turn nearest the current yaw, ends on a drag or a zoom and still jumps under reduced motion (task U98).
+
+- Chromatic aberration is centred on the middle of the lens, with a map square the size of the lens diagonal, so a low strength keeps a steady fringe however far the camera moves from the ring (task U98).
 
 - The inspector clears the lens clock, follows the connection when the window goes offline, closes on Open chat, and below 900 pixels is opaque and hides the floating chat while it shows.
 

@@ -11,6 +11,7 @@ export const CARD_NAME_FONT = 15
 export const CARD_NAME_MIN = 11
 export const FOLLOW_HOLD_MS = 4000
 export const FOLLOW_EASE_MS = 1200
+export const PARK_EASE_MS = 2200
 export const ANCHOR_DIST = 700
 const FOLLOW_WIDE_MIN = 900
 const FOLLOW_CLOSE_MIN = 620
@@ -30,6 +31,8 @@ export function viewBasis(yaw, pitch) {
 }
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
+const TURN = Math.PI * 2
+const nearestTurn = (yaw, base) => base + Math.round((yaw - base) / TURN) * TURN
 const finiteRadius = (value) => (Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null)
 const radiusX = (s) => {
   const value = finiteRadius(s?.rx)
@@ -189,6 +192,7 @@ export function createCameraRig(camera, surface) {
     const dy = event.clientY - drag.y
     drag.moved += Math.abs(dx) + Math.abs(dy)
     adjusted = true
+    transition = null
     drag.x = event.clientX
     drag.y = event.clientY
     goal.yaw -= dx * 0.005
@@ -203,6 +207,7 @@ export function createCameraRig(camera, surface) {
 
   function zoomBy(deltaY) {
     adjusted = true
+    transition = null
     goal.dist = THREE.MathUtils.clamp(goal.dist * Math.exp(deltaY * 0.001), MIN_DIST, MAX_DIST)
     if (heldDist !== null) heldDist = goal.dist
   }
@@ -234,10 +239,13 @@ export function createCameraRig(camera, surface) {
     view.dist = goal.dist
   }
 
-  function startTransition(duration = FOLLOW_EASE_MS) {
+  function startTransition(duration = FOLLOW_EASE_MS, turn = false) {
     transition = {
       fromTarget: view.target.clone(),
       fromDist: view.dist,
+      fromYaw: view.yaw,
+      fromPitch: view.pitch,
+      turn,
       start: performance.now(),
       duration: still() ? 0 : duration,
     }
@@ -252,6 +260,7 @@ export function createCameraRig(camera, surface) {
     if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
     const isStill = still()
     const rate = easeRate(delta, 5, isStill)
+    let turning = false
     if (transition) {
       if (isStill) {
         view.target.copy(goal.target)
@@ -262,14 +271,21 @@ export function createCameraRig(camera, surface) {
         const eased = easeInOut(t)
         view.target.lerpVectors(transition.fromTarget, goal.target, eased)
         view.dist = transition.fromDist + (goal.dist - transition.fromDist) * eased
+        if (transition.turn) {
+          turning = true
+          view.yaw = transition.fromYaw + (goal.yaw - transition.fromYaw) * eased
+          view.pitch = transition.fromPitch + (goal.pitch - transition.fromPitch) * eased
+        }
         if (t >= 1) transition = null
       }
     } else {
       view.target.lerp(goal.target, rate)
       view.dist += (goal.dist - view.dist) * rate
     }
-    view.yaw += (goal.yaw - view.yaw) * rate
-    view.pitch += (goal.pitch - view.pitch) * rate
+    if (!turning) {
+      view.yaw += (goal.yaw - view.yaw) * rate
+      view.pitch += (goal.pitch - view.pitch) * rate
+    }
     const horizontal = Math.cos(view.pitch) * view.dist
     camera.position.set(
       view.target.x + Math.sin(view.yaw) * horizontal,
@@ -304,6 +320,7 @@ export function createCameraRig(camera, surface) {
     zoomShare: () => shareFromDistance(goal.dist),
     setZoomShare(share) {
       adjusted = true
+      transition = null
       goal.dist = distanceFromShare(share)
       if (heldDist !== null) heldDist = goal.dist
     },
@@ -360,9 +377,10 @@ export function createCameraRig(camera, surface) {
       transition = null
       adjusted = false
       goal.target.copy(overviewTarget)
-      goal.yaw = OVERVIEW.yaw
+      goal.yaw = nearestTurn(view.yaw, OVERVIEW.yaw)
       goal.pitch = OVERVIEW.pitch
       goal.dist = overviewDist
+      startTransition(PARK_EASE_MS, true)
     },
     dispose() {
       surface.removeEventListener('pointerdown', down)

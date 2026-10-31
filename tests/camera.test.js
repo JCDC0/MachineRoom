@@ -1,6 +1,6 @@
 import * as THREE from 'three'
-import { describe, expect, it } from 'vitest'
-import { ANCHOR_DIST, CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, createCameraRig, fitView, minTextScale, projectPoint, viewBasis } from '../src/engine/camera.js'
+import { describe, expect, it, vi } from 'vitest'
+import { ANCHOR_DIST, CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, PARK_EASE_MS, createCameraRig, fitView, minTextScale, projectPoint, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -123,6 +123,141 @@ describe('camera rig yaw and pitch', () => {
       rig.snap()
       expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw)
       expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch)
+    } finally {
+      close()
+    }
+  })
+})
+
+function clockAt(start = 1000) {
+  let now = start
+  const spy = vi.spyOn(performance, 'now').mockImplementation(() => now)
+  return {
+    advance(ms) {
+      now += ms
+    },
+    restore() {
+      spy.mockRestore()
+    },
+  }
+}
+
+describe('camera rig park turn', () => {
+  it('does not jump the yaw on the frame after overview()', () => {
+    const { rig, drag, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-400, -20)
+      rig.snap()
+      const yaw = rig.yaw()
+      const pitch = rig.pitch()
+      expect(yaw).toBeCloseTo(OVERVIEW.yaw + 2)
+      rig.overview()
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(yaw, 6)
+      expect(rig.pitch()).toBeCloseTo(pitch, 6)
+      expect(rig.yaw()).not.toBeCloseTo(OVERVIEW.yaw, 3)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('arrives at the overview by the end of PARK_EASE_MS', () => {
+    const { rig, drag, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-400, -20)
+      rig.snap()
+      const yaw = rig.yaw()
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeLessThan(yaw)
+      expect(rig.yaw()).toBeGreaterThan(OVERVIEW.yaw)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw, 6)
+      expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch, 6)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('ends the turn when the owner drags during it', () => {
+    const { rig, drag, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-400, 0)
+      rig.snap()
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(400)
+      rig.update(0.016)
+      drag(-100, 0)
+      clock.advance(PARK_EASE_MS)
+      for (let step = 0; step < 200; step += 1) rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw + 0.5, 2)
+      expect(rig.yaw()).not.toBeCloseTo(OVERVIEW.yaw, 1)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('ends the turn when the owner zooms during it', () => {
+    const { rig, camera, drag, wheel, close } = openRig()
+    const clock = clockAt()
+    try {
+      const target = new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
+      drag(-400, 0)
+      rig.snap()
+      rig.overview()
+      rig.update(0.016)
+      wheel(-600)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(target)).toBeLessThan(OVERVIEW.dist - 40)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('takes the shortest turn home after several turns', () => {
+    const { rig, drag, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-8000, 0)
+      rig.snap()
+      const start = rig.yaw()
+      const turns = Math.round((start - OVERVIEW.yaw) / (Math.PI * 2))
+      const goal = OVERVIEW.yaw + turns * Math.PI * 2
+      expect(turns).toBeGreaterThan(5)
+      expect(Math.abs(goal - start)).toBeLessThanOrEqual(Math.PI)
+      rig.overview()
+      clock.advance(PARK_EASE_MS)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(goal, 6)
+      expect(Math.abs(rig.yaw() - start)).toBeLessThanOrEqual(Math.PI + 1e-6)
+      expect(rig.yaw()).not.toBeCloseTo(OVERVIEW.yaw, 3)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('jumps home at once under reduced motion', () => {
+    const { rig, drag, close } = openRig({ still: true })
+    try {
+      drag(-400, -20)
+      rig.snap()
+      expect(rig.yaw()).not.toBeCloseTo(OVERVIEW.yaw)
+      rig.overview()
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw, 6)
+      expect(rig.pitch()).toBeCloseTo(OVERVIEW.pitch, 6)
     } finally {
       close()
     }
