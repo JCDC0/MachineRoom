@@ -1099,11 +1099,28 @@ export function createCards(cssScene, options = {}) {
     return true
   }
 
+  function clearSelection({ pins = true, pops = true } = {}) {
+    inspected = null
+    selected = null
+    if (pins) {
+      pinned.clear()
+      pinnedVersion += 1
+      planKey = ''
+    }
+    if (pops) {
+      sprayed.clear()
+      sprayVersion += 1
+      planKey = ''
+    }
+    rowRevision += 1
+  }
+
   return {
     cards,
     pin,
     togglePop,
     setSelected,
+    clearSelection,
     center,
     bottom,
     halfWidth,

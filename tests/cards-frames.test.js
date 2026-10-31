@@ -216,6 +216,33 @@ describe('a clicked row', () => {
   })
 })
 
+describe('clearing the selection', () => {
+  it('drops the inspected row, the selected card, the pins and the pops', () => {
+    const state = makeState(['src/a.js', 'src/kid/b.js'], ['src/a.js'])
+    const { cards } = makeCards(1)
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const card = cards.cards.get('src')
+    const entry = card.rows.find((row) => row.item.path === 'src/a.js')
+    entry.row.fire('click')
+    cards.setSelected('src')
+    cards.togglePop('src')
+    cards.update(state, 0.016, camera())
+    expect(entry.row.className).toContain('is-inspected')
+    expect(card.element.className).toContain('is-selected')
+    expect(card.element.className).toContain('is-pinned')
+
+    cards.clearSelection()
+    cards.update(state, 0.016, camera())
+
+    const kept = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(kept.row.className).not.toContain('is-inspected')
+    expect(card.element.className).not.toContain('is-selected')
+    expect(card.element.className).not.toContain('is-pinned')
+    cards.dispose()
+  })
+})
+
 describe('idle frames', () => {
   it('does not walk the rows when nothing changed', () => {
     const state = makeState()
