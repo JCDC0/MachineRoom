@@ -320,6 +320,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       onInspect({ kind: 'git', id: 'git' })
       return
     }
+    cards.setSelected(null)
     endFollow()
     onDismiss()
   })
@@ -337,6 +338,17 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (anchor(path)) onInspect({ kind: 'folder', id: path })
   }
   cssRenderer.domElement.addEventListener('click', onCardClick, true)
+
+  function onCardDoubleClick(event) {
+    const card = event.target?.closest?.('.mr-card')
+    if (!card) return
+    if (event.target?.closest?.('.mr-item')) return
+    const path = card.dataset.path ?? ''
+    const opened = anchor(path)
+    if (event.target?.closest?.('.mr-card-head')) cards.togglePop(path)
+    if (opened) onInspect({ kind: 'folder', id: path })
+  }
+  cssRenderer.domElement.addEventListener('dblclick', onCardDoubleClick, true)
 
   function onCardWheel(event) {
     const card = event.target?.closest?.('.mr-card')
@@ -383,6 +395,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function releaseHold() {
     heldPath = null
+    cards.setSelected(null)
   }
 
   function releaseLostHold() {
@@ -415,6 +428,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     followCard = null
     pendingFollow = null
     heldPath = target
+    cards.setSelected(target)
     rig.hold(() => card.object.position, ANCHOR_DIST)
     onPick(null)
     return true
@@ -492,6 +506,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     followCard = null
     pendingFollow = null
     heldPath = target
+    cards.setSelected(kind === 'folder' ? target : null)
     if (kind === 'file' && target === dirname(id)) {
       rig.hold(() => cards.slotPosition(target, id, inspectPoint), ANCHOR_DIST)
     } else {
@@ -959,6 +974,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       }
       texture.dispose()
       cssRenderer.domElement.removeEventListener('click', onCardClick, true)
+      cssRenderer.domElement.removeEventListener('dblclick', onCardDoubleClick, true)
       cssRenderer.domElement.removeEventListener('wheel', onCardWheel)
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored)
