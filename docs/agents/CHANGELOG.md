@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- A folder below the root draws at most 10 child folders as cards, the ones with the most files, and a clicked folder caps its children the same way, while the root keeps every folder (task U96).
+
+- A clicked card row drops the old path line and carries a yellow highlight instead, and still opens the inspector (task U96).
+
 - The inspector clears the lens clock, follows the connection when the window goes offline, closes on Open chat, and below 900 pixels is opaque and hides the floating chat while it shows.
 
 - `GET /api/file` serves a read-only preview inside the project root, with the page Origin check, the real path check, refused `.git`, `.worktrees`, `.env`, `.pem` and `.key` names, a binary answer, a 256 KB cut and masked keys (task S21).

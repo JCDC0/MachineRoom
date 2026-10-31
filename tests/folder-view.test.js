@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { viewInput } from '../src/engine/cards.js'
-import { planFolderView } from '../src/model/folderView.js'
+import { MAX_CHILD_CARDS, planFolderView } from '../src/model/folderView.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadRecording, loadScenario } from './helpers.js'
 
@@ -335,26 +335,75 @@ describe('planFolderView', () => {
     }
   })
 
-  it('caps the always folders at 300 and keeps the rest in its rows', () => {
-    const files = Array.from({ length: 500 }, (_, i) => `big/f${String(i).padStart(3, '0')}/a.js`)
+  it('draws ten of 300 child folders at depth 2, the largest, and lists the rest', () => {
+    const large = new Set()
+    const files = []
+    for (let i = 0; i < 300; i += 1) {
+      const folder = `big/c${String(i).padStart(3, '0')}`
+      files.push(`${folder}/a.js`)
+      if (i % 30 === 0) {
+        large.add(folder)
+        files.push(`${folder}/b.js`)
+      }
+    }
 
-    const plan = planFolderView({ files, alwaysDepth: 2 })
+    const plan = planFolderView({ files, alwaysDepth: 2, limitItems: false })
     const folders = byPath(plan)
+    const drawn = paths(plan).filter((path) => path.startsWith('big/c'))
 
-    expect(plan).toHaveLength(300)
-    expect(paths(plan)).toEqual(['', 'big', ...Array.from({ length: 298 }, (_, i) => `big/f${String(i).padStart(3, '0')}`)])
+    expect(MAX_CHILD_CARDS).toBe(10)
+    expect(drawn).toEqual([...large].sort())
+    expect(drawn).toHaveLength(10)
     expect(folders.get('big').state).toBe('files')
     expect(folders.get('big').pinned).toBe(true)
-    expect(folders.get('big').hiddenFolders).toBe(202)
+    expect(folders.get('big').items).toHaveLength(290)
+    expect(folders.get('big').hiddenFolders).toBe(290)
     expect(folders.get('big').back).toBe(3)
-    expect(folders.get('big').items).toEqual([
-      { path: 'big/f298', kind: 'dir' },
-      { path: 'big/f299', kind: 'dir' },
-      { path: 'big/f300', kind: 'dir' },
-    ])
-    expect(folders.get('big').hiddenItems).toBe(199)
-    expect(folders.has('big/f297')).toBe(true)
-    expect(folders.has('big/f298')).toBe(false)
+  })
+
+  it('caps a clicked crowded folder at ten of its largest children', () => {
+    const large = new Set()
+    const files = []
+    for (let i = 0; i < 300; i += 1) {
+      const folder = `lib/c${String(i).padStart(3, '0')}`
+      files.push(`${folder}/a.js`)
+      if (i % 30 === 0) {
+        large.add(folder)
+        files.push(`${folder}/b.js`)
+      }
+    }
+
+    const plan = planFolderView({ files, focus: ['lib'], expanded: ['lib'], alwaysDepth: 0, limitItems: false })
+    const view = byPath(plan).get('lib')
+    const drawn = paths(plan).filter((path) => path.startsWith('lib/c'))
+
+    expect(drawn).toEqual([...large].sort())
+    expect(drawn).toHaveLength(10)
+    expect(view.items).toHaveLength(290)
+    expect(view.hiddenFolders).toBe(290)
+  })
+
+  it("still draws a focus path inside a crowded folder's hidden children", () => {
+    const files = Array.from({ length: 300 }, (_, i) => `big/c${String(i).padStart(3, '0')}/a.js`)
+
+    const plan = planFolderView({ files, focus: ['big/c299/a.js'], alwaysDepth: 2, limitItems: false })
+    const big = byPath(plan).get('big')
+
+    expect(paths(plan)).toContain('big/c299')
+    expect(big.items.some((item) => item.path === 'big/c299')).toBe(false)
+    expect(big.items).toHaveLength(289)
+    expect(big.hiddenFolders).toBe(289)
+  })
+
+  it('draws all 30 top-level folders at the root', () => {
+    const files = Array.from({ length: 30 }, (_, i) => `top${String(i).padStart(2, '0')}/a.js`)
+    const pinned = planFolderView({ files, alwaysDepth: 2 })
+    const clicked = planFolderView({ files, focus: [''], expanded: [''], alwaysDepth: 0 })
+
+    for (const plan of [pinned, clicked]) {
+      const top = paths(plan).filter((path) => path !== '' && !path.includes('/'))
+      expect(top).toHaveLength(30)
+    }
   })
 
   it('keeps the children with the most files when the cap cuts a depth', () => {

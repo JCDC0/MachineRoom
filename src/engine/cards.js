@@ -519,8 +519,7 @@ export function createCards(cssScene, options = {}) {
       const row = el('div', `mr-item is-${item.kind}`)
       const label = el('span', 'mr-item-name', visibleText(item.kind === 'dir' ? `${basename(item.path)}/` : basename(item.path)))
       const note = el('span', 'mr-item-note')
-      const detail = el('div', 'mr-item-detail')
-      row.append(label, note, detail)
+      row.append(label, note)
       row.addEventListener('click', (event) => {
         event.stopPropagation()
         inspected = inspected === item.path ? null : item.path
@@ -535,21 +534,17 @@ export function createCards(cssScene, options = {}) {
       return {
         row,
         note,
-        detail,
         item,
         file: null,
         baseClass: `mr-item is-${item.kind}`,
-        visiblePath: visibleText(item.path),
         rowClass: '',
         noteText: '',
-        detailText: '',
         lastReads: -1,
         lastWrites: -1,
         lastFailed: null,
         lastYellow: null,
         mark: '',
         short: '',
-        cachedNote: item.kind === 'file' ? 'not touched' : '',
       }
     })
     card.rowPaths = paths
@@ -566,9 +561,7 @@ export function createCards(cssScene, options = {}) {
     entry.lastYellow = null
     entry.mark = ''
     entry.short = ''
-    entry.cachedNote = entry.item.kind === 'file' ? 'not touched' : ''
     entry.noteText = null
-    entry.detailText = null
     entry.rowClass = null
   }
 
@@ -1040,24 +1033,11 @@ export function createCards(cssScene, options = {}) {
               else if (file.reads > 0) mark = 'read'
               entry.mark = mark
 
-              const parts = []
               const shortParts = []
-              if (file.reads) {
-                parts.push(`read ${file.reads}`)
-                shortParts.push(`r ${file.reads}`)
-              }
-              if (file.writes) {
-                parts.push(`written ${file.writes}`)
-                shortParts.push(`w ${file.writes}`)
-              }
-              if (file.failed) {
-                parts.push('failed')
-                shortParts.push('failed')
-              } else if (file.yellow) {
-                parts.push('finished')
-                shortParts.push('finished')
-              }
-              entry.cachedNote = parts.join(' · ') || 'not touched'
+              if (file.reads) shortParts.push(`r ${file.reads}`)
+              if (file.writes) shortParts.push(`w ${file.writes}`)
+              if (file.failed) shortParts.push('failed')
+              else if (file.yellow) shortParts.push('finished')
               entry.short = shortParts.join(' · ')
             }
           }
@@ -1076,11 +1056,6 @@ export function createCards(cssScene, options = {}) {
         if (entry.noteText !== entry.short) {
           entry.noteText = entry.short
           entry.note.textContent = entry.short
-        }
-        const detail = inspected === path ? `${entry.visiblePath}  ${entry.cachedNote}` : ''
-        if (entry.detailText !== detail) {
-          entry.detailText = detail
-          entry.detail.textContent = detail
         }
       }
     }
