@@ -332,6 +332,116 @@ summary:focus-visible,
   max-height: 140px;
 }
 
+.mr-inspector-changes,
+.mr-inspector-graph {
+  list-style: none;
+  margin: 0 0 var(--space);
+  padding: 0;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  scrollbar-width: thin;
+}
+
+.mr-inspector-changes {
+  max-height: 200px;
+}
+
+.mr-inspector-graph {
+  max-height: 420px;
+}
+
+.mr-inspector-change-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mr-inspector-change-btn:hover:not(:disabled) {
+  color: var(--text);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.mr-inspector-change-btn:disabled {
+  color: var(--text-dim);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mr-inspector-change-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.mr-inspector-change-status {
+  flex: none;
+  color: var(--text-dim);
+}
+
+.mr-inspector-graph-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  min-height: 24px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.mr-inspector-graph-svg {
+  flex: none;
+  display: block;
+}
+
+.mr-inspector-graph-edge {
+  stroke: rgb(255 255 255 / 0.35);
+  stroke-width: 1;
+}
+
+.mr-inspector-graph-edge.is-bottom {
+  stroke: rgb(255 255 255 / 0.55);
+}
+
+.mr-inspector-graph-dot {
+  stroke: none;
+}
+
+.mr-inspector-graph-subject {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.mr-inspector-graph-ref {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 2px;
+  color: var(--text-dim);
+  font-size: 10px;
+  line-height: 14px;
+}
+
+.mr-inspector-graph-ref.is-current {
+  border-color: rgb(229 255 0 / 0.6);
+  color: #e5ff00;
+}
+
 .mr-inspector-chat-list {
   max-height: 220px;
 }

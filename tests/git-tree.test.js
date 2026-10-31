@@ -1,12 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import * as THREE from 'three'
-import { INTERNET_HOME, INTERNET_RADIUS } from '../src/engine/internet.js'
+import { HUB_CENTER } from '../src/engine/hub.js'
 import {
   GIT_BASE_STEP,
+  GIT_HIT_MARGIN,
   GIT_MAX_HEIGHT,
   GIT_MAX_LABELS,
+  GIT_ROOT_GAP,
   GIT_START,
-  GIT_START_LIFT,
   createGitTree,
   layoutGitTree,
 } from '../src/engine/gitTree.js'
@@ -56,14 +57,14 @@ function linearCommits(count) {
 }
 
 describe('layoutGitTree', () => {
-  it('stands above the top of the INTERNET sphere on its axis', () => {
-    expect(GIT_START.x).toBe(INTERNET_HOME.x)
-    expect(GIT_START.z).toBe(INTERNET_HOME.z)
-    expect(GIT_START.y).toBe(INTERNET_HOME.y + INTERNET_RADIUS + GIT_START_LIFT)
-    expect(GIT_START_LIFT).toBe(200)
+  it('stands beneath the root card on the hub axis', () => {
+    expect(GIT_START.x).toBe(HUB_CENTER.x)
+    expect(GIT_START.z).toBe(HUB_CENTER.z)
+    expect(GIT_START.y).toBe(0)
+    expect(GIT_ROOT_GAP).toBe(120)
   })
 
-  it('draws a linear history straight up the trunk with the newest highest', () => {
+  it('draws a linear history straight down the trunk with the newest at the top', () => {
     const commits = linearCommits(3)
     const layout = layoutGitTree(commits, [{ name: 'main', head: 'c2', current: true }])
     const places = bySha(layout)
@@ -73,8 +74,9 @@ describe('layoutGitTree', () => {
       expect(place.z).toBe(GIT_START.z)
       expect(place.trunk).toBe(true)
     }
-    expect(places.c2.y).toBeGreaterThan(places.c1.y)
-    expect(places.c1.y).toBeGreaterThan(places.c0.y)
+    expect(places.c2.y).toBe(GIT_START.y)
+    expect(places.c1.y).toBeLessThan(places.c2.y)
+    expect(places.c0.y).toBeLessThan(places.c1.y)
     expect(layout.headSha).toBe('c2')
     expect(layout.headIndex).toBe(0)
     expect(layout.links).toHaveLength(2)
@@ -144,7 +146,7 @@ describe('layoutGitTree', () => {
     expect(layout.labels.map((label) => label.name)).toContain('feature')
   })
 
-  it('gives an empty history an empty tree above the sphere', () => {
+  it('gives an empty history an empty tree beneath the root card', () => {
     const layout = layoutGitTree([], [])
     expect(layout.start.y).toBe(GIT_START.y)
     expect(layout.commits).toEqual([])
@@ -163,6 +165,7 @@ describe('layoutGitTree', () => {
     const lowest = Math.min(...layout.commits.map((place) => place.y))
     const highest = Math.max(...layout.commits.map((place) => place.y))
     expect(layout.commits).toHaveLength(200)
+    expect(highest).toBe(GIT_START.y)
     expect(highest - lowest).toBeLessThanOrEqual(GIT_MAX_HEIGHT + 1e-9)
     expect(layout.step).toBeLessThan(GIT_BASE_STEP)
     expect(layout.headIndex).toBe(0)
@@ -259,6 +262,38 @@ describe('createGitTree', () => {
     expect(new Set(atHead).size).toBe(atHead.length)
     expect(tree.setState({ git: false })).toBe(true)
     expect(tree.layout()).toBe(null)
+    tree.dispose()
+  })
+
+  it('sits 120 below the card bottom it is given and answers the world centre', () => {
+    const scene = new THREE.Scene()
+    const tree = createGitTree(scene)
+    tree.setState(sampleState())
+    const height = tree.layout().height
+    expect(tree.setTop(-500)).toBe(true)
+    expect(tree.group.position.y).toBe(-620)
+    expect(tree.center()).toBe(tree.center())
+    expect(tree.center().y).toBeCloseTo(-620 - height / 2, 6)
+    expect(tree.setTop(-500)).toBe(false)
+    expect(tree.group.position.y).toBe(-620)
+    expect(tree.setTop(-400)).toBe(true)
+    expect(tree.group.position.y).toBe(-520)
+    expect(tree.center().y).toBeCloseTo(-520 - height / 2, 6)
+    tree.dispose()
+  })
+
+  it('hides a hit box with a 60 unit margin around the whole tree', () => {
+    const scene = new THREE.Scene()
+    const tree = createGitTree(scene)
+    tree.setState(sampleState())
+    expect(tree.hitBox.visible).toBe(false)
+    const points = [...tree.layout().commits, ...tree.layout().labels]
+    const ys = points.map((point) => point.y)
+    const height = Math.max(...ys) - Math.min(...ys) + GIT_HIT_MARGIN * 2
+    expect(tree.hitBox.scale.y).toBeCloseTo(height, 6)
+    expect(tree.hitBox.scale.x).toBeGreaterThan(GIT_HIT_MARGIN * 2)
+    expect(tree.hitBox.scale.z).toBeGreaterThanOrEqual(GIT_HIT_MARGIN * 2)
+    expect(tree.ready()).toBe(true)
     tree.dispose()
   })
 

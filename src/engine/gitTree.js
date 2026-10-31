@@ -1,8 +1,8 @@
 import * as THREE from 'three'
-import { INTERNET_HOME, INTERNET_RADIUS } from './internet.js'
+import { HUB_CENTER } from './hub.js'
 import { WHITE, YELLOW, still, textSprite } from './sprites.js'
 
-export const GIT_START_LIFT = 200
+export const GIT_ROOT_GAP = 120
 export const GIT_BASE_STEP = 64
 export const GIT_MAX_HEIGHT = 900
 export const GIT_LEAN_STEP = 76
@@ -11,10 +11,11 @@ export const GIT_LABEL_LIFT = 18
 export const GIT_LABEL_STACK = 44
 export const GIT_LABEL_OFFSET = 34
 export const GIT_FOCUS_DIST = 1700
+export const GIT_HIT_MARGIN = 60
 export const GIT_START = {
-  x: INTERNET_HOME.x,
-  y: INTERNET_HOME.y + INTERNET_RADIUS + GIT_START_LIFT,
-  z: INTERNET_HOME.z,
+  x: HUB_CENTER.x,
+  y: 0,
+  z: HUB_CENTER.z,
 }
 
 const TAU = Math.PI * 2
@@ -104,7 +105,7 @@ export function layoutGitTree(commits, branches = []) {
   function put(sha, x, z, trunk) {
     const commit = bySha.get(sha)
     if (!commit || places.has(sha)) return places.get(sha) ?? null
-    const place = placeAt(x, GIT_START.y + commit.level * step, z, commit.level, trunk)
+    const place = placeAt(x, GIT_START.y - (total - 1 - commit.level) * step, z, commit.level, trunk)
     places.set(sha, place)
     return place
   }
@@ -255,7 +256,14 @@ export function createGitTree(scene) {
   points.frustumCulled = false
   group.add(points)
 
-  const focusTarget = new THREE.Vector3(GIT_START.x, GIT_START.y + GIT_MAX_HEIGHT / 2, GIT_START.z)
+  const hitGeometry = new THREE.BoxGeometry(1, 1, 1)
+  const hitMaterial = new THREE.MeshBasicMaterial()
+  const hitBox = new THREE.Mesh(hitGeometry, hitMaterial)
+  hitBox.name = 'git-tree-hit'
+  hitBox.visible = false
+  group.add(hitBox)
+
+  const worldCenter = new THREE.Vector3(GIT_START.x, GIT_START.y, GIT_START.z)
   const pulseColor = new THREE.Color()
   const labelSprites = []
   let key = ''
@@ -266,6 +274,54 @@ export function createGitTree(scene) {
   let colorAttribute = null
   let elapsed = 0
   let frozen = false
+  let top = null
+
+  function placeCenter() {
+    const height = layout?.height ?? 0
+    worldCenter.set(GIT_START.x, group.position.y + GIT_START.y - height / 2, GIT_START.z)
+  }
+
+  function setTop(y) {
+    const next = Number(y)
+    if (!Number.isFinite(next) || next === top) return false
+    top = next
+    group.position.y = next - GIT_ROOT_GAP
+    placeCenter()
+    return true
+  }
+
+  function fitHitBox(next) {
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    let minZ = Infinity
+    let maxZ = -Infinity
+    for (const place of next.commits) {
+      minX = Math.min(minX, place.x)
+      maxX = Math.max(maxX, place.x)
+      minY = Math.min(minY, place.y)
+      maxY = Math.max(maxY, place.y)
+      minZ = Math.min(minZ, place.z)
+      maxZ = Math.max(maxZ, place.z)
+    }
+    for (const label of next.labels) {
+      minX = Math.min(minX, label.x)
+      maxX = Math.max(maxX, label.x)
+      minY = Math.min(minY, label.y)
+      maxY = Math.max(maxY, label.y)
+      minZ = Math.min(minZ, label.z)
+      maxZ = Math.max(maxZ, label.z)
+    }
+    if (!Number.isFinite(minX)) {
+      hitBox.position.set(GIT_START.x, GIT_START.y, GIT_START.z)
+      hitBox.scale.set(1, 1, 1)
+      return
+    }
+    const margin = GIT_HIT_MARGIN * 2
+    hitBox.position.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2)
+    hitBox.scale.set(Math.max(1, maxX - minX + margin), Math.max(1, maxY - minY + margin), Math.max(1, maxZ - minZ + margin))
+  }
 
   function clearLabels() {
     for (const sprite of labelSprites) {
@@ -296,7 +352,8 @@ export function createGitTree(scene) {
     headIndex = -1
     colorArray = null
     colorAttribute = null
-    focusTarget.set(GIT_START.x, GIT_START.y, GIT_START.z)
+    fitHitBox({ commits: [], labels: [] })
+    placeCenter()
     frozen = false
     elapsed = 0
   }
@@ -308,7 +365,7 @@ export function createGitTree(scene) {
     pointGeometry.dispose()
     layout = next
     headIndex = next.headIndex
-    focusTarget.set(next.start.x, next.start.y + next.height / 2, next.start.z)
+    placeCenter()
     frozen = false
     elapsed = 0
 
@@ -357,6 +414,7 @@ export function createGitTree(scene) {
 
     lines.visible = count > 0
     points.visible = count > 0
+    fitHitBox(next)
     builds += 1
   }
 
@@ -397,6 +455,8 @@ export function createGitTree(scene) {
     lineMaterial.dispose()
     pointGeometry.dispose()
     pointMaterial.dispose()
+    hitGeometry.dispose()
+    hitMaterial.dispose()
     layout = null
     colorArray = null
     colorAttribute = null
@@ -407,10 +467,12 @@ export function createGitTree(scene) {
 
   return {
     group,
+    hitBox,
     setState,
+    setTop,
     update,
     ready,
-    center: () => focusTarget,
+    center: () => worldCenter,
     layout: () => layout,
     builds: () => builds,
     dispose,

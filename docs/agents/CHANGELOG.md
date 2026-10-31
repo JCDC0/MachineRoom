@@ -9,6 +9,13 @@
 - The park return from a double click, `0`, Escape and Center eases yaw, pitch, target and distance over 2200 ms (`PARK_EASE_MS`), takes the whole turn nearest the current yaw, ends on a drag or a zoom and still jumps under reduced motion (task U98).
 
 - Chromatic aberration is centred on the middle of the lens, with a map square the size of the lens diagonal, so a low strength keeps a steady fringe however far the camera moves from the ring (task U98).
+- The project's git tree hangs beneath the root project card with the newest commit at the top, follows the card's bottom as it grows or pops, and takes a single click or a double click through a hidden hit box (task U97).
+
+- `GET /api/git` reads `git status --porcelain -z` into `changes`, at most 200, and `changeCount`, and `dirty` comes from the count (task U97).
+
+- The inspector gains `Source control`, with the branch, `Changes N`, the changed paths and their status letters, and a commit graph drawn from `gitGraphRows`, read on open, every 10 seconds and on a `git` notice (task U97).
+
+- `Show the tree` opens the Source control panel as well as holding the camera on the tree (task U97).
 
 - The inspector clears the lens clock, follows the connection when the window goes offline, closes on Open chat, and below 900 pixels is opaque and hides the floating chat while it shows.
 

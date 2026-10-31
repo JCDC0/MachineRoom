@@ -158,6 +158,17 @@ describe('a card depth mesh', () => {
     cards.update(state, 0.016, camera())
     expect(root.occluder.position.distanceTo(root.object.position)).toBe(0)
   })
+
+  it('answers the bottom edge of the root card', () => {
+    const state = makeState()
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const root = cards.cards.get('')
+    expect(root.height).toBeGreaterThan(0)
+    expect(cards.bottom('')).toBeCloseTo(root.object.position.y - (root.height * root.scale) / 2, 6)
+    expect(cards.bottom('')).toBeLessThan(root.object.position.y)
+  })
 })
 
 describe('rows after a seek', () => {
