@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A drag or double click in the lens no longer selects text; the waiting card and the inspector stay selectable.
+
 - The inspector clears the lens clock, follows the connection when the window goes offline, closes on Open chat, and below 900 pixels is opaque and hides the floating chat while it shows.
 
 - `GET /api/file` serves a read-only preview inside the project root, with the page Origin check, the real path check, refused `.git`, `.worktrees`, `.env`, `.pem` and `.key` names, a binary answer, a 256 KB cut and masked keys (task S21).

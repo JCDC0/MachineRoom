@@ -130,6 +130,12 @@ summary:focus-visible,
   flex: 0 0 auto;
   height: var(--lens-h);
   background: var(--black);
+  user-select: none;
+}
+
+.lens .waiting-card,
+.lens .mr-inspector {
+  user-select: text;
 }
 
 .lens-edge {
