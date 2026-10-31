@@ -5,6 +5,8 @@ const DEFAULT_MAX_ITEMS = 10
 const DEFAULT_MAX_ALWAYS = 300
 const MAX_ALWAYS_DEPTH = 3
 
+export const MAX_CHILD_CARDS = 10
+
 function clean(raw) {
   if (typeof raw === 'string' && raw !== '.' && !raw.includes('\\') && !raw.includes('//') && !raw.startsWith('./') && !raw.endsWith('/')) return raw
   const value = normalise(raw).replace(/^\.\//, '').replace(/\/+$/, '')
@@ -109,7 +111,8 @@ function alwaysPlan(index, depth, maxAlways) {
       const children = [...(index.children.get(parent) ?? [])].sort(
         (a, b) => (index.fileCount.get(b) ?? 0) - (index.fileCount.get(a) ?? 0) || byName(a, b),
       )
-      for (const child of children) {
+      const kept = parent === '' ? children : children.slice(0, MAX_CHILD_CARDS)
+      for (const child of kept) {
         if (budget <= 0) break
         pinned.add(child)
         next.push(child)
@@ -187,15 +190,23 @@ export function planFolderView({
       (a, b) => rankOf(a, focusFolders, touchedFolders) - rankOf(b, focusFolders, touchedFolders) || byName(a, b),
     )
 
+  const expandedChildren = (path) =>
+    [...children.get(path)].sort(
+      (a, b) =>
+        rankOf(a, focusFolders, touchedFolders) - rankOf(b, focusFolders, touchedFolders) ||
+        (index.fileCount.get(b) ?? 0) - (index.fileCount.get(a) ?? 0) ||
+        byName(a, b),
+    )
+
   const drawn = new Set([''])
   focusFolders.forEach((path) => drawn.add(path))
   const pinned = alwaysPlan(index, alwaysLevel, alwaysLimit)
   pinned.forEach((path) => drawn.add(path))
   focusFolders.forEach((path) => {
-    const limit = expandedPaths.has(path) ? Number.POSITIVE_INFINITY : folderLimit
-    sortedChildren(path)
-      .slice(0, limit)
-      .forEach((child) => drawn.add(child))
+    const expanded = expandedPaths.has(path)
+    const limit = expanded ? (path === '' ? Number.POSITIVE_INFINITY : MAX_CHILD_CARDS) : folderLimit
+    const order = expanded ? expandedChildren(path) : sortedChildren(path)
+    order.slice(0, limit).forEach((child) => drawn.add(child))
   })
 
   const itemsFor = (path) => {

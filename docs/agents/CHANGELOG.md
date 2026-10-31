@@ -3,6 +3,9 @@
 ## Unreleased
 
 - A drag or double click in the lens no longer selects text; the waiting card and the inspector stay selectable.
+- A folder below the root draws at most 10 child folders as cards, the ones with the most files, and a clicked folder caps its children the same way, while the root keeps every folder (task U96).
+
+- A clicked card row drops the old path line and carries a yellow highlight instead, and still opens the inspector (task U96).
 
 - The inspector clears the lens clock, follows the connection when the window goes offline, closes on Open chat, and below 900 pixels is opaque and hides the floating chat while it shows.
 

@@ -5623,23 +5623,13 @@ body:has(#hud-orchestrator-chat) .waiting {
   background: var(--scanlines-red), rgb(255 42 42 / 0.18);
 }
 
-.mr-item-detail {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: -1px;
-  z-index: 2;
-  padding: 4px 8px;
-  border: 1px solid var(--yellow);
-  border-radius: 2px;
-  background: var(--black);
-  color: var(--white);
-  font-size: 11px;
-  white-space: nowrap;
+.mr-item.is-inspected {
+  background: rgb(229 255 0 / 0.16);
+  box-shadow: inset 2px 0 0 var(--yellow);
 }
 
-.mr-item.is-inspected .mr-item-detail {
-  display: block;
+.mr-item.is-inspected .mr-item-name {
+  color: var(--yellow);
 }
 
 .mr-card-more {

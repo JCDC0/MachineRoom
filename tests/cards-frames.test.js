@@ -35,6 +35,9 @@ function fakeElement(tag = 'div') {
       if (!listeners.has(type)) listeners.set(type, [])
       listeners.get(type).push(fn)
     },
+    fire(type) {
+      for (const fn of listeners.get(type) ?? []) fn({ stopPropagation() {} })
+    },
     removeEventListener(type, fn) {
       const list = listeners.get(type)
       if (!list) return
@@ -177,6 +180,28 @@ describe('rows after a seek', () => {
     expect(kept.row.className).not.toContain('is-written')
     expect(kept.note.textContent).toBe('')
     expect(kept.mark).toBe('')
+  })
+})
+
+describe('a clicked row', () => {
+  it('marks the row inspected, opens the inspector and adds no detail line', () => {
+    const state = makeState()
+    const seen = []
+    const cards = createCards(fakeScene(), {
+      glScene: fakeScene(),
+      alwaysDepth: 1,
+      onInspect: (path) => seen.push(path),
+    })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    entry.row.fire('click')
+    cards.update(state, 0.016, camera())
+
+    expect(entry.row.className).toContain('is-inspected')
+    expect(entry.row.children.map((child) => child.className)).not.toContain('mr-item-detail')
+    expect(seen).toEqual(['src/a.js'])
+    cards.dispose()
   })
 })
 
