@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The lens's top and bottom edges bow inward again, the room is clipped to the curve, the compass tapes follow it, and the top middle label, the waiting card and the clock move past the bow while the straight menu and transport borders go (task U101).
 - A drag or double click in the lens no longer selects text; the waiting card and the inspector stay selectable.
 - A folder below the root draws at most 10 child folders as cards, the ones with the most files, and a clicked folder caps its children the same way, while the root keeps every folder (task U96).
 
