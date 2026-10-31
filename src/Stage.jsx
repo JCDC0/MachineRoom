@@ -432,6 +432,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
 
   function closeInspector() {
+    roomRef.current?.clearSelection({ pins: false, pops: false })
     setInspector(null)
   }
 
@@ -911,7 +912,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       if (event.key === 'Escape') {
         if (document.querySelector(OPEN_PANEL)) return
         if (inspectorRef.current) {
-          setInspector(null)
+          closeInspector()
           return
         }
         parkRoom()

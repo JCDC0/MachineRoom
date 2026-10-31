@@ -232,6 +232,26 @@ function cardElement(path) {
   return madeElements.find((node) => node.dataset?.path === path && String(node.className).split(' ')[0] === 'mr-card')
 }
 
+function liveCards() {
+  return madeElements.filter((node) => String(node.className).split(' ')[0] === 'mr-card' && !node.removed)
+}
+
+function liveRows() {
+  const rows = []
+  for (const card of liveCards()) {
+    const face = card.children.find((node) => node.className === 'mr-card-face')
+    const items = face?.children.find((node) => String(node.className).startsWith('mr-card-items'))
+    if (items) rows.push(...items.children)
+  }
+  return rows
+}
+
+function cardRow(card, name) {
+  const face = card.children.find((node) => node.className === 'mr-card-face')
+  const items = face?.children.find((node) => String(node.className).startsWith('mr-card-items'))
+  return items?.children.find((row) => row.children[0]?.textContent === name) ?? null
+}
+
 function cardParts(card) {
   const face = card.children.find((node) => node.className === 'mr-card-face')
   return {
@@ -672,6 +692,74 @@ describe('the selected folder', () => {
       tickRoom(1)
       expect(card.className).toContain('is-active')
       expect(card.className).toContain('is-selected')
+    } finally {
+      room.dispose()
+    }
+  })
+})
+
+describe('returning to the room', () => {
+  it('clears the inspected row, the selected folder, the pins and the popped folders on park', async () => {
+    const { room, state } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md', 'docs/deep/more/e.md'], ['claude'])
+    try {
+      state.agents.get('claude').focus = ['docs/d.md']
+      tickRoom(1)
+      expect(room.focusPath('lib/a/x.js')).toBe(true)
+      tickRoom(1)
+      const parent = cardElement('lib/a')
+      const row = cardRow(parent, 'x.js')
+      row.fire('click')
+      tickRoom(1)
+      expect(room.anchor('lib/a')).toBe(true)
+      tickRoom(1)
+      expect(row.className).toContain('is-inspected')
+      expect(parent.className).toContain('is-selected')
+      expect(parent.className).toContain('is-pinned')
+      cardParts(cardElement('docs/deep')).head.fire('click', { detail: 1 })
+      tickRoom(1)
+      expect(cardElement('docs/deep/more')).toBeTruthy()
+
+      room.park()
+      tickRoom(1)
+
+      expect(liveRows().some((item) => item.className.includes('is-inspected'))).toBe(false)
+      expect(liveCards().some((card) => card.className.includes('is-selected'))).toBe(false)
+      expect(liveCards().some((card) => card.className.includes('is-pinned'))).toBe(false)
+      expect(cardElement('docs/deep/more').removed).toBe(true)
+      expect(cardElement('docs').className).toContain('is-active')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears the row and the folder but keeps a pin and a pop when the inspector closes', async () => {
+    const { room } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md', 'docs/deep/more/e.md'], ['claude'])
+    try {
+      tickRoom(1)
+      expect(room.focusPath('lib/a/x.js')).toBe(true)
+      tickRoom(1)
+      const parent = cardElement('lib/a')
+      const row = cardRow(parent, 'x.js')
+      row.fire('click')
+      tickRoom(1)
+      expect(room.anchor('lib/a')).toBe(true)
+      tickRoom(1)
+      expect(parent.className).toContain('is-selected')
+      expect(parent.className).toContain('is-pinned')
+      cardParts(cardElement('docs/deep')).head.fire('click', { detail: 1 })
+      tickRoom(1)
+      const popped = cardElement('docs/deep/more')
+      expect(popped).toBeTruthy()
+      expect(room.holding()).toBe('lib/a')
+
+      room.clearSelection({ pins: false, pops: false })
+      tickRoom(1)
+
+      expect(row.className).not.toContain('is-inspected')
+      expect(parent.className).not.toContain('is-selected')
+      expect(parent.className).toContain('is-pinned')
+      expect(popped.removed).toBe(false)
+      expect(room.holding()).toBe('lib/a')
     } finally {
       room.dispose()
     }

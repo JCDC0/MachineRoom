@@ -320,7 +320,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       onInspect({ kind: 'git', id: 'git' })
       return
     }
-    cards.setSelected(null)
+    cards.clearSelection()
     endFollow()
     onDismiss()
   })
@@ -531,7 +531,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return true
   }
 
+  function clearSelection(options) {
+    cards.clearSelection(options)
+  }
+
   function park() {
+    clearSelection()
     releaseHold()
     followFocus.setFollowing(false)
     followFocus.clear()
@@ -894,6 +899,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     openTerminals: (open) => terminals.openAll(open),
     openTerminalKeys: () => terminals.openKeys(),
     anchor,
+    clearSelection,
     park,
     holding: () => heldPath,
     agentAt,

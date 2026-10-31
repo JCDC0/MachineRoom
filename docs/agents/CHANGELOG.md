@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Returning to the room clears the inspected row, the selected folder, the pins and the popped folders, and closing the inspector clears the row and the folder but keeps the pins, the popped folders and the camera (task U99b).
 - A double click on a folder card holds the camera on that folder and opens its inspector, the selected folder carries a solid yellow border and glow, and an agent's folder and file carry faint yellow stripes instead of a dashed outline (task U99).
 - The lens's top and bottom edges bow inward again, the room is clipped to the curve, the compass tapes follow it, and the top middle label, the waiting card and the clock move past the bow while the straight menu and transport borders go (task U101).
 - The git tree runs horizontally under the root card as a timeline, oldest commit left and newest right, with other branches fanning out below the trunk and branch name labels above their tips (task U100).
