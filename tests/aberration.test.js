@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   ABERRATION_MAX_PX,
-  ABERRATION_REACH,
   RADIAL_MAP_SIZE,
   aberrationChannels,
   mapPlacement,
@@ -81,9 +80,9 @@ describe('radial aberration map', () => {
 })
 
 describe('aberration map placement', () => {
-  it('centres the map on the middle of the lens', () => {
-    const placed = mapPlacement({ width: 1280, height: 800, centerX: 640, centerY: 400 })
-    const side = 2 * Math.hypot(640, 400)
+  it('puts a square of the lens diagonal on the middle of the lens', () => {
+    const placed = mapPlacement({ width: 1280, height: 800 })
+    const side = Math.hypot(1280, 800)
 
     expect(placed.width).toBeCloseTo(side, 6)
     expect(placed.height).toBeCloseTo(side, 6)
@@ -91,110 +90,42 @@ describe('aberration map placement', () => {
     expect(placed.y + placed.height / 2).toBeCloseTo(400, 6)
   })
 
-  it('centres the map on a corner', () => {
-    const placed = mapPlacement({ width: 1280, height: 800, centerX: 0, centerY: 0 })
-    const side = 2 * Math.hypot(1280, 800)
+  it('covers every corner of a wide lens', () => {
+    const width = 1247
+    const height = 460
+    const placed = mapPlacement({ width, height })
+    const side = Math.hypot(width, height)
 
     expect(placed.width).toBeCloseTo(side, 6)
     expect(placed.height).toBeCloseTo(side, 6)
-    expect(placed.x + placed.width / 2).toBeCloseTo(0, 6)
-    expect(placed.y + placed.height / 2).toBeCloseTo(0, 6)
+    expect(placed.x).toBeCloseTo((width - side) / 2, 6)
+    expect(placed.y).toBeCloseTo((height - side) / 2, 6)
+    expect(placed.x).toBeLessThan(0)
+    expect(placed.y).toBeLessThan(0)
+    expect(placed.x + placed.width).toBeGreaterThan(width)
+    expect(placed.y + placed.height).toBeGreaterThan(height)
   })
 
-  it('grows the side to reach every corner of the lens', () => {
-    const placed = mapPlacement({ width: 740, height: 520, centerX: 690, centerY: 40 })
-    const side = 2 * Math.hypot(690, 480)
+  it('stays on the lens when a ring centre and radius are passed', () => {
+    const lens = { width: 1247, height: 460 }
+    const placed = mapPlacement({ ...lens, centerX: 3383, centerY: 42329, radius: 9000 })
 
-    expect(placed.width).toBeCloseTo(side, 6)
-    expect(placed.x).toBeLessThanOrEqual(0)
-    expect(placed.y).toBeLessThanOrEqual(0)
-    expect(placed.x + placed.width).toBeGreaterThanOrEqual(740)
-    expect(placed.y + placed.height).toBeGreaterThanOrEqual(520)
-    expect(placed.x + placed.width / 2).toBeCloseTo(690, 6)
-    expect(placed.y + placed.height / 2).toBeCloseTo(40, 6)
+    expect(placed).toEqual(mapPlacement(lens))
+    expect(placed.x + placed.width / 2).toBeCloseTo(lens.width / 2, 6)
+    expect(placed.y + placed.height / 2).toBeCloseTo(lens.height / 2, 6)
   })
 
   it('answers the map size for a zero-size region', () => {
-    expect(mapPlacement({ width: 0, height: 0, centerX: 0, centerY: 0 })).toEqual({
+    const whole = {
       x: -RADIAL_MAP_SIZE / 2,
       y: -RADIAL_MAP_SIZE / 2,
       width: RADIAL_MAP_SIZE,
       height: RADIAL_MAP_SIZE,
-    })
-    expect(mapPlacement({ width: 0, height: 0, centerX: 120, centerY: 80 })).toEqual({
-      x: 120 - RADIAL_MAP_SIZE / 2,
-      y: 80 - RADIAL_MAP_SIZE / 2,
-      width: RADIAL_MAP_SIZE,
-      height: RADIAL_MAP_SIZE,
-    })
-  })
-})
+    }
 
-describe('aberration map placement on the ring', () => {
-  it('keeps a ring at the middle of the lens in place and still covers the lens', () => {
-    const placed = mapPlacement({ width: 1247, height: 460, centerX: 623.5, centerY: 230, radius: 300 })
-    const side = 2 * 300 * ABERRATION_REACH
-
-    expect(placed.width).toBeCloseTo(side, 6)
-    expect(placed.height).toBeCloseTo(side, 6)
-    expect(placed.x + placed.width / 2).toBeCloseTo(623.5, 6)
-    expect(placed.y + placed.height / 2).toBeCloseTo(230, 6)
-    expect(placed.x).toBeLessThanOrEqual(0)
-    expect(placed.y).toBeLessThanOrEqual(0)
-    expect(placed.x + placed.width).toBeGreaterThanOrEqual(1247)
-    expect(placed.y + placed.height).toBeGreaterThanOrEqual(460)
-  })
-
-  it('caps the square at the limit and pulls it back over a ring far to the right', () => {
-    const width = 1247
-    const height = 460
-    const placed = mapPlacement({ width, height, centerX: 3383, centerY: 42329, radius: 9000 })
-    const cap = 2 * Math.hypot(width, height)
-
-    expect(placed.width).toBeCloseTo(cap, 6)
-    expect(placed.height).toBeCloseTo(cap, 6)
-    expect(placed.x).toBeLessThanOrEqual(0)
-    expect(placed.x + placed.width).toBeGreaterThanOrEqual(width)
-    expect(placed.x).toBeCloseTo(0, 6)
-    expect(placed.x + placed.width / 2).toBeCloseTo(cap / 2, 6)
-  })
-
-  it('pulls a ring below the lens back up over it at the limit', () => {
-    const width = 1247
-    const height = 460
-    const placed = mapPlacement({ width, height, centerX: 620, centerY: 3300, radius: 9000, limit: 1.5 })
-    const cap = 1.5 * Math.hypot(width, height)
-
-    expect(placed.width).toBeCloseTo(cap, 6)
-    expect(placed.y).toBeLessThanOrEqual(0)
-    expect(placed.y + placed.height).toBeGreaterThanOrEqual(height)
-    expect(placed.y).toBeCloseTo(0, 6)
-    expect(placed.y + placed.height / 2).toBeCloseTo(cap / 2, 6)
-    expect(placed.x + placed.width / 2).toBeCloseTo(620, 6)
-  })
-
-  it('falls back to the lens-covering square with no ring radius', () => {
-    const size = { width: 740, height: 520, centerX: 690, centerY: 40 }
-    const placed = mapPlacement({ ...size, radius: 0 })
-    const side = 2 * Math.hypot(690, 480)
-
-    expect(placed).toEqual(mapPlacement(size))
-    expect(placed.width).toBeCloseTo(side, 6)
-    expect(placed.height).toBeCloseTo(side, 6)
-    expect(placed.x).toBeCloseTo(690 - side / 2, 6)
-    expect(placed.y).toBeCloseTo(40 - side / 2, 6)
-  })
-
-  it('keeps the lens-covering square while the ring is small on screen', () => {
-    const placed = mapPlacement({ width: 1247, height: 460, centerX: 623.5, centerY: 230, radius: 90 })
-    const side = 2 * Math.hypot(623.5, 230)
-
-    expect(placed.width).toBeCloseTo(side, 6)
-    expect(placed.height).toBeCloseTo(side, 6)
-    expect(placed.x).toBeLessThanOrEqual(0)
-    expect(placed.y).toBeLessThanOrEqual(0)
-    expect(placed.x + placed.width).toBeGreaterThanOrEqual(1247)
-    expect(placed.y + placed.height).toBeGreaterThanOrEqual(460)
+    expect(mapPlacement({ width: 0, height: 0 })).toEqual(whole)
+    expect(mapPlacement({ width: 0, height: 720 })).toEqual(whole)
+    expect(mapPlacement()).toEqual(whole)
   })
 })
 

@@ -1,6 +1,5 @@
 export const RADIAL_MAP_SIZE = 256
 export const ABERRATION_MAX_PX = 12
-export const ABERRATION_REACH = 2.5
 
 const mapUrls = new Map()
 
@@ -33,48 +32,24 @@ export function radialMapPixels(size = RADIAL_MAP_SIZE) {
   return { size: side, data }
 }
 
-export function mapPlacement({ width = 0, height = 0, centerX = 0, centerY = 0, radius = 0, limit = 2 } = {}) {
+export function mapPlacement({ width = 0, height = 0 } = {}) {
   const regionWidth = Number.isFinite(Number(width)) && Number(width) > 0 ? Number(width) : 0
   const regionHeight = Number.isFinite(Number(height)) && Number(height) > 0 ? Number(height) : 0
-  const x = Number.isFinite(Number(centerX)) ? Number(centerX) : 0
-  const y = Number.isFinite(Number(centerY)) ? Number(centerY) : 0
   if (!(regionWidth > 0) || !(regionHeight > 0)) {
     return {
-      x: x - RADIAL_MAP_SIZE / 2,
-      y: y - RADIAL_MAP_SIZE / 2,
+      x: -RADIAL_MAP_SIZE / 2,
+      y: -RADIAL_MAP_SIZE / 2,
       width: RADIAL_MAP_SIZE,
       height: RADIAL_MAP_SIZE,
     }
   }
-  const ring = Number.isFinite(Number(radius)) && Number(radius) > 0 ? Number(radius) : 0
-  const far = Math.max(
-    Math.hypot(x, y),
-    Math.hypot(regionWidth - x, y),
-    Math.hypot(x, regionHeight - y),
-    Math.hypot(regionWidth - x, regionHeight - y)
-  )
-  if (!(ring > 0)) {
-    const side = far * 2
-    return { x: x - side / 2, y: y - side / 2, width: side, height: side }
-  }
-  const ratio = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 2
-  const side = Math.min(
-    Math.max(ring * ABERRATION_REACH * 2, far * 2),
-    Math.hypot(regionWidth, regionHeight) * ratio
-  )
+  const side = Math.hypot(regionWidth, regionHeight)
   return {
-    x: coverAxis(x, side, regionWidth) - side / 2,
-    y: coverAxis(y, side, regionHeight) - side / 2,
+    x: regionWidth / 2 - side / 2,
+    y: regionHeight / 2 - side / 2,
     width: side,
     height: side,
   }
-}
-
-function coverAxis(center, side, length) {
-  const low = length - side / 2
-  const high = side / 2
-  if (!(low <= high)) return length / 2
-  return Math.min(high, Math.max(low, center))
 }
 
 export function aberrationChannels(strength) {

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The park return from a double click, `0`, Escape and Center eases yaw, pitch, target and distance over 2200 ms (`PARK_EASE_MS`), takes the whole turn nearest the current yaw, ends on a drag or a zoom and still jumps under reduced motion (task U98).
+
+- Chromatic aberration is centred on the middle of the lens, with a map square the size of the lens diagonal, so a low strength keeps a steady fringe however far the camera moves from the ring (task U98).
+
 - The inspector clears the lens clock, follows the connection when the window goes offline, closes on Open chat, and below 900 pixels is opaque and hides the floating chat while it shows.
 
 - `GET /api/file` serves a read-only preview inside the project root, with the page Origin check, the real path check, refused `.git`, `.worktrees`, `.env`, `.pem` and `.key` names, a binary answer, a 256 KB cut and masked keys (task S21).
