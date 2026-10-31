@@ -3,6 +3,7 @@ import { WHITE, seeded, still, textSprite } from './sprites.js'
 
 export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
+export const LATTICE_FLOORS = 2
 const TICK = 50
 export const DUST = 1800
 export const DUST_INNER = 4500
@@ -178,14 +179,15 @@ function applyDustOpacity() {
 
 export function latticeLines(step = LATTICE_STEP, cells = LATTICE_CELLS) {
   const extent = step * cells
+  const bottom = -LATTICE_FLOORS * step
   const values = []
   for (let a = -cells; a <= cells; a++) {
     for (let b = -cells; b <= cells; b++) {
       const u = a * step
       const v = b * step
-      values.push(-extent, u, v, extent, u, v)
-      values.push(u, -extent, v, u, extent, v)
-      values.push(u, v, -extent, u, v, extent)
+      if (a >= -LATTICE_FLOORS) values.push(-extent, u, v, extent, u, v)
+      values.push(u, bottom, v, u, extent, v)
+      if (b >= -LATTICE_FLOORS) values.push(u, v, -extent, u, v, extent)
     }
   }
   return values
@@ -193,13 +195,17 @@ export function latticeLines(step = LATTICE_STEP, cells = LATTICE_CELLS) {
 
 export function latticeTicks(step = LATTICE_STEP, cells = LATTICE_CELLS) {
   const values = []
+  const bottom = -LATTICE_FLOORS * step
   for (let x = -cells; x <= cells; x++) {
-    for (let y = -cells; y <= cells; y++) {
+    for (let y = -LATTICE_FLOORS; y <= cells; y++) {
       for (let z = -cells; z <= cells; z++) {
         const px = x * step
         const py = y * step
         const pz = z * step
-        values.push(px - TICK, py, pz, px + TICK, py, pz, px, py - TICK, pz, px, py + TICK, pz, px, py, pz - TICK, px, py, pz + TICK)
+        values.push(px - TICK, py, pz, px + TICK, py, pz)
+        values.push(px, py, pz - TICK, px, py, pz + TICK)
+        if (py > bottom) values.push(px, py - TICK, pz, px, py + TICK, pz)
+        else values.push(px, py, pz, px, py + TICK, pz)
       }
     }
   }
@@ -209,7 +215,7 @@ export function latticeTicks(step = LATTICE_STEP, cells = LATTICE_CELLS) {
 export function labelPoints(step = LATTICE_STEP, cells = LATTICE_CELLS) {
   const points = []
   for (let x = -cells; x <= cells; x++) {
-    for (let y = -2; y <= 2; y++) {
+    for (let y = -LATTICE_FLOORS; y <= 2; y++) {
       for (let z = -cells; z <= cells; z++) {
         const far = Math.max(Math.abs(x), Math.abs(z))
         if (far >= 2 && (x * 7 + y * 3 + z * 5) % 9 === 0) points.push([x * step, y * step, z * step])
