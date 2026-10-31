@@ -160,7 +160,11 @@ describe('the commit graph rows', () => {
     expect(rows.map((row) => row.width)).toEqual([1, 1, 1])
     expect(rows[0].short).toBe('c2c2c2c')
     expect(rows[0].edges).toEqual([{ kind: 'bottom', from: 0, to: 0 }])
-    expect(rows[2].edges).toEqual([])
+    expect(rows[1].edges).toEqual([
+      { kind: 'top', from: 0, to: 0 },
+      { kind: 'bottom', from: 0, to: 0 },
+    ])
+    expect(rows[2].edges).toEqual([{ kind: 'top', from: 0, to: 0 }])
     expect(rows[0].refs).toEqual(['main'])
   })
 

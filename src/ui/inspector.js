@@ -116,7 +116,7 @@ export function gitGraphRows(commits = []) {
         lanes.push(null)
       }
     }
-    const edges = []
+    const edges = lanes[lane] === sha ? [{ kind: 'top', from: lane, to: lane }] : []
     for (let index = 0; index < lanes.length; index += 1) {
       if (index === lane) continue
       if (lanes[index] === sha) {
