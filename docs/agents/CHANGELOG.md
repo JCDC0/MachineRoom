@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The git tree runs horizontally under the root card as a timeline, oldest commit left and newest right, with other branches fanning out below the trunk and branch name labels above their tips (task U100).
+
 - A drag or double click in the lens no longer selects text; the waiting card and the inspector stay selectable.
 - A folder below the root draws at most 10 child folders as cards, the ones with the most files, and a clicked folder caps its children the same way, while the root keeps every folder (task U96).
 

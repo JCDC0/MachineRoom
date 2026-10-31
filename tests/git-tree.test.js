@@ -4,8 +4,8 @@ import { HUB_CENTER } from '../src/engine/hub.js'
 import {
   GIT_BASE_STEP,
   GIT_HIT_MARGIN,
-  GIT_MAX_HEIGHT,
   GIT_MAX_LABELS,
+  GIT_MAX_WIDTH,
   GIT_ROOT_GAP,
   GIT_START,
   createGitTree,
@@ -62,31 +62,38 @@ describe('layoutGitTree', () => {
     expect(GIT_START.z).toBe(HUB_CENTER.z)
     expect(GIT_START.y).toBe(0)
     expect(GIT_ROOT_GAP).toBe(120)
+    expect(GIT_MAX_WIDTH).toBe(1400)
   })
 
-  it('draws a linear history straight down the trunk with the newest at the top', () => {
+  it('draws a linear history along the trunk with the newest on the right', () => {
     const commits = linearCommits(3)
     const layout = layoutGitTree(commits, [{ name: 'main', head: 'c2', current: true }])
     const places = bySha(layout)
     expect(layout.commits).toHaveLength(3)
     for (const place of layout.commits) {
-      expect(place.x).toBe(GIT_START.x)
+      expect(place.y).toBe(GIT_START.y)
       expect(place.z).toBe(GIT_START.z)
       expect(place.trunk).toBe(true)
     }
-    expect(places.c2.y).toBe(GIT_START.y)
-    expect(places.c1.y).toBeLessThan(places.c2.y)
-    expect(places.c0.y).toBeLessThan(places.c1.y)
+    expect(places.c2.x).toBeGreaterThan(places.c1.x)
+    expect(places.c1.x).toBeGreaterThan(places.c0.x)
+    expect(places.c2.x).toBe(GIT_START.x + layout.step)
+    expect(places.c0.x).toBe(GIT_START.x - layout.step)
+    expect(places.c2.x).toBeCloseTo(GIT_START.x + layout.width / 2, 6)
+    expect(places.c0.x).toBeCloseTo(GIT_START.x - layout.width / 2, 6)
     expect(layout.headSha).toBe('c2')
     expect(layout.headIndex).toBe(0)
     expect(layout.links).toHaveLength(2)
     expect(layout.links.every((link) => link.trunk)).toBe(true)
-    expect(layout.height).toBeGreaterThan(0)
-    expect(layout.height).toBeLessThanOrEqual(GIT_MAX_HEIGHT)
+    expect(layout.width).toBeGreaterThan(0)
+    expect(layout.width).toBeLessThanOrEqual(GIT_MAX_WIDTH)
     expect(layout.labels[0]).toMatchObject({ name: 'main', current: true })
+    expect(layout.labels[0].x).toBe(places.c2.x)
+    expect(layout.labels[0].y).toBeGreaterThan(places.c2.y)
+    expect(layout.labels[0].z).toBe(places.c2.z)
   })
 
-  it('leans another branch out from the commit where it leaves the trunk', () => {
+  it('leans another branch out below the trunk from the commit where it leaves', () => {
     const commits = [
       commit('c2', ['c1'], 4),
       commit('f2', ['c1'], 3),
@@ -97,15 +104,26 @@ describe('layoutGitTree', () => {
       { name: 'main', head: 'c2', current: true },
     ])
     const places = bySha(layout)
-    expect(places.c2.x).toBe(GIT_START.x)
+    expect(places.c2.x).toBe(GIT_START.x + layout.step)
+    expect(places.c2.y).toBe(GIT_START.y)
     expect(places.c2.z).toBe(GIT_START.z)
-    expect(places.f2.x).not.toBe(GIT_START.x)
+    expect(places.c1.x).toBe(GIT_START.x - layout.step)
+    expect(places.c1.y).toBe(GIT_START.y)
+    expect(places.c1.z).toBe(GIT_START.z)
+    expect(places.f2.x).toBe(GIT_START.x)
+    expect(places.f2.y).toBeLessThan(GIT_START.y)
+    expect(places.f2.z).toBeCloseTo(GIT_START.z, 6)
+    expect(places.f2.trunk).toBe(false)
     expect(layout.links.some((link) => link.sha === 'f2' && link.parent === 'c1')).toBe(true)
     expect(layout.tips.map((tip) => tip.name)).toEqual(['main', 'feature'])
     expect(layout.labels.map((label) => label.name)).toEqual(['main', 'feature'])
+    const featureLabel = layout.labels.find((label) => label.name === 'feature')
+    expect(featureLabel.x).toBe(places.f2.x)
+    expect(featureLabel.y).toBeGreaterThan(places.f2.y)
+    expect(featureLabel.z).toBe(places.f2.z)
   })
 
-  it('gives every other branch its angle in name order', () => {
+  it('gives every other branch its angle in name order over the half circle below the trunk', () => {
     const commits = [
       commit('c2', ['c1'], 5),
       commit('a1', ['c1'], 4),
@@ -120,8 +138,13 @@ describe('layoutGitTree', () => {
     const places = bySha(layout)
     expect(places.a1.x).toBeGreaterThan(GIT_START.x)
     expect(places.b1.x).toBeLessThan(GIT_START.x)
-    expect(places.a1.z).toBeCloseTo(GIT_START.z, 6)
-    expect(places.b1.z).toBeCloseTo(GIT_START.z, 6)
+    expect(places.a1.y).toBeLessThan(GIT_START.y)
+    expect(places.b1.y).toBeLessThan(GIT_START.y)
+    expect(places.a1.z).toBeGreaterThan(GIT_START.z)
+    expect(places.b1.z).toBeLessThan(GIT_START.z)
+    expect(places.a1.y).toBeCloseTo(places.b1.y, 6)
+    expect(layout.tips.find((tip) => tip.name === 'alpha').angle).toBeCloseTo(Math.PI / 4, 6)
+    expect(layout.tips.find((tip) => tip.name === 'beta').angle).toBeCloseTo((Math.PI * 3) / 4, 6)
   })
 
   it('draws every parent of a merge, the second parent off the trunk', () => {
@@ -138,38 +161,50 @@ describe('layoutGitTree', () => {
     const places = bySha(layout)
     expect(layout.links).toHaveLength(4)
     expect(layout.links.some((link) => link.sha === 'm2' && link.parent === 'f1')).toBe(true)
-    expect(places.m2.x).toBe(GIT_START.x)
-    expect(places.m1.x).toBe(GIT_START.x)
-    expect(places.c1.x).toBe(GIT_START.x)
-    expect(places.f1.x).not.toBe(GIT_START.x)
+    expect(places.m2.y).toBe(GIT_START.y)
+    expect(places.m1.y).toBe(GIT_START.y)
+    expect(places.c1.y).toBe(GIT_START.y)
+    expect(places.m2.z).toBe(GIT_START.z)
+    expect(places.m1.z).toBe(GIT_START.z)
+    expect(places.c1.z).toBe(GIT_START.z)
+    expect(places.m2.x).toBeGreaterThan(places.m1.x)
+    expect(places.m1.x).toBeGreaterThan(places.c1.x)
+    expect(places.f1.trunk).toBe(false)
+    expect(places.f1.y).toBeLessThan(GIT_START.y)
     expect(layout.labels[0]).toMatchObject({ name: 'main', current: true })
     expect(layout.labels.map((label) => label.name)).toContain('feature')
   })
 
   it('gives an empty history an empty tree beneath the root card', () => {
     const layout = layoutGitTree([], [])
+    expect(layout.start.x).toBe(GIT_START.x)
     expect(layout.start.y).toBe(GIT_START.y)
+    expect(layout.start.z).toBe(GIT_START.z)
     expect(layout.commits).toEqual([])
     expect(layout.links).toEqual([])
     expect(layout.tips).toEqual([])
     expect(layout.labels).toEqual([])
-    expect(layout.height).toBe(0)
+    expect(layout.width).toBe(0)
     expect(layout.step).toBe(0)
     expect(layout.headSha).toBe(null)
     expect(layout.headIndex).toBe(-1)
   })
 
-  it('keeps 200 commits within the height cap by shrinking the step', () => {
+  it('keeps 200 commits within the width cap by shrinking the step', () => {
     const commits = linearCommits(200)
     const layout = layoutGitTree(commits, [{ name: 'main', head: 'c199', current: true }])
-    const lowest = Math.min(...layout.commits.map((place) => place.y))
-    const highest = Math.max(...layout.commits.map((place) => place.y))
+    const places = bySha(layout)
+    const left = Math.min(...layout.commits.map((place) => place.x))
+    const right = Math.max(...layout.commits.map((place) => place.x))
     expect(layout.commits).toHaveLength(200)
-    expect(highest).toBe(GIT_START.y)
-    expect(highest - lowest).toBeLessThanOrEqual(GIT_MAX_HEIGHT + 1e-9)
+    expect(places.c199.x).toBe(right)
+    expect(right - left).toBeLessThanOrEqual(GIT_MAX_WIDTH + 1e-9)
+    expect(right).toBeCloseTo(GIT_START.x + GIT_MAX_WIDTH / 2, 6)
+    expect(left).toBeCloseTo(GIT_START.x - GIT_MAX_WIDTH / 2, 6)
+    expect(layout.width).toBeCloseTo(GIT_MAX_WIDTH, 6)
     expect(layout.step).toBeLessThan(GIT_BASE_STEP)
     expect(layout.headIndex).toBe(0)
-    expect(layout.commits.every((place) => place.x === GIT_START.x && place.z === GIT_START.z)).toBe(true)
+    expect(layout.commits.every((place) => place.y === GIT_START.y && place.z === GIT_START.z)).toBe(true)
   })
 
   it('gives the same places for the same input', () => {
@@ -265,34 +300,40 @@ describe('createGitTree', () => {
     tree.dispose()
   })
 
-  it('sits 120 below the card bottom it is given and answers the world centre', () => {
+  it('sits 120 below the card bottom it is given and answers the middle of the trunk', () => {
     const scene = new THREE.Scene()
     const tree = createGitTree(scene)
     tree.setState(sampleState())
-    const height = tree.layout().height
+    const trunk = tree.layout().commits.filter((place) => place.trunk)
+    const middle = (Math.min(...trunk.map((place) => place.x)) + Math.max(...trunk.map((place) => place.x))) / 2
     expect(tree.setTop(-500)).toBe(true)
     expect(tree.group.position.y).toBe(-620)
     expect(tree.center()).toBe(tree.center())
-    expect(tree.center().y).toBeCloseTo(-620 - height / 2, 6)
+    expect(tree.center().x).toBeCloseTo(middle, 6)
+    expect(tree.center().y).toBeCloseTo(-620, 6)
+    expect(tree.center().z).toBeCloseTo(GIT_START.z, 6)
     expect(tree.setTop(-500)).toBe(false)
     expect(tree.group.position.y).toBe(-620)
     expect(tree.setTop(-400)).toBe(true)
     expect(tree.group.position.y).toBe(-520)
-    expect(tree.center().y).toBeCloseTo(-520 - height / 2, 6)
+    expect(tree.center().y).toBeCloseTo(-520, 6)
     tree.dispose()
   })
 
-  it('hides a hit box with a 60 unit margin around the whole tree', () => {
+  it('hides a hit box with a 60 unit margin around every commit and label', () => {
     const scene = new THREE.Scene()
     const tree = createGitTree(scene)
     tree.setState(sampleState())
     expect(tree.hitBox.visible).toBe(false)
     const points = [...tree.layout().commits, ...tree.layout().labels]
-    const ys = points.map((point) => point.y)
-    const height = Math.max(...ys) - Math.min(...ys) + GIT_HIT_MARGIN * 2
-    expect(tree.hitBox.scale.y).toBeCloseTo(height, 6)
+    for (const axis of ['x', 'y', 'z']) {
+      const values = points.map((point) => point[axis])
+      const low = Math.min(...values)
+      const high = Math.max(...values)
+      expect(tree.hitBox.scale[axis]).toBeCloseTo(high - low + GIT_HIT_MARGIN * 2, 6)
+      expect(tree.hitBox.position[axis]).toBeCloseTo((low + high) / 2, 6)
+    }
     expect(tree.hitBox.scale.x).toBeGreaterThan(GIT_HIT_MARGIN * 2)
-    expect(tree.hitBox.scale.z).toBeGreaterThanOrEqual(GIT_HIT_MARGIN * 2)
     expect(tree.ready()).toBe(true)
     tree.dispose()
   })
