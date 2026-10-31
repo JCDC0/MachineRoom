@@ -4,12 +4,11 @@ import { WHITE, YELLOW, still, textSprite } from './sprites.js'
 
 export const GIT_ROOT_GAP = 120
 export const GIT_BASE_STEP = 64
-export const GIT_MAX_HEIGHT = 900
+export const GIT_MAX_WIDTH = 1400
 export const GIT_LEAN_STEP = 76
 export const GIT_MAX_LABELS = 12
 export const GIT_LABEL_LIFT = 18
 export const GIT_LABEL_STACK = 44
-export const GIT_LABEL_OFFSET = 34
 export const GIT_FOCUS_DIST = 1700
 export const GIT_HIT_MARGIN = 60
 export const GIT_START = {
@@ -18,7 +17,6 @@ export const GIT_START = {
   z: HUB_CENTER.z,
 }
 
-const TAU = Math.PI * 2
 const HEAD_COLOR = new THREE.Color(YELLOW)
 const REST_COLOR = new THREE.Color(WHITE)
 const REST_OPACITY = 0.45
@@ -96,16 +94,20 @@ export function layoutGitTree(commits, branches = []) {
   const ordered = readCommits(commits)
   const named = readBranches(branches)
   const total = ordered.length
-  const step = total > 1 ? Math.min(GIT_BASE_STEP, GIT_MAX_HEIGHT / (total - 1)) : 0
-  const height = total > 1 ? step * (total - 1) : 0
+  const step = total > 1 ? Math.min(GIT_BASE_STEP, GIT_MAX_WIDTH / (total - 1)) : 0
+  const width = total > 1 ? step * (total - 1) : 0
   const bySha = new Map(ordered.map((commit, index) => [commit.sha, { ...commit, level: total - 1 - index }]))
   const places = new Map()
   const currentBranch = named.find((branch) => branch.current) ?? null
 
-  function put(sha, x, z, trunk) {
+  function xAt(level) {
+    return GIT_START.x + (level - (total - 1) / 2) * step
+  }
+
+  function put(sha, x, y, z, trunk) {
     const commit = bySha.get(sha)
     if (!commit || places.has(sha)) return places.get(sha) ?? null
-    const place = placeAt(x, GIT_START.y - (total - 1 - commit.level) * step, z, commit.level, trunk)
+    const place = placeAt(x, y, z, commit.level, trunk)
     places.set(sha, place)
     return place
   }
@@ -115,7 +117,7 @@ export function layoutGitTree(commits, branches = []) {
   let at = trunkHead
   while (at && bySha.has(at) && !places.has(at)) {
     const commit = bySha.get(at)
-    put(at, GIT_START.x, GIT_START.z, true)
+    put(at, xAt(commit.level), GIT_START.y, GIT_START.z, true)
     at = firstParent(commit)
   }
 
@@ -123,7 +125,7 @@ export function layoutGitTree(commits, branches = []) {
   const angles = new Map()
   const branchTotal = leanBranches.length
   leanBranches.forEach((branch, index) => {
-    const angle = branchTotal > 0 ? (TAU * index) / branchTotal : 0
+    const angle = branchTotal > 0 ? (Math.PI * (index + 0.5)) / branchTotal : 0
     angles.set(branch.name, angle)
     const chain = []
     let sha = branch.head
@@ -133,16 +135,17 @@ export function layoutGitTree(commits, branches = []) {
     }
     const depth = chain.length
     chain.forEach((item, chainIndex) => {
+      const commit = bySha.get(item)
       const radius = GIT_LEAN_STEP * (depth - chainIndex)
-      put(item, GIT_START.x + Math.cos(angle) * radius, GIT_START.z + Math.sin(angle) * radius, false)
+      put(item, xAt(commit.level), GIT_START.y - Math.sin(angle) * radius, GIT_START.z + Math.cos(angle) * radius, false)
     })
   })
 
   const leftover = ordered.filter((commit) => !places.has(commit.sha)).sort((a, b) => (a.sha < b.sha ? -1 : a.sha > b.sha ? 1 : 0))
   leftover.forEach((commit, index) => {
-    const angle = leftover.length > 0 ? (TAU * index) / leftover.length : 0
+    const angle = leftover.length > 0 ? (Math.PI * (index + 0.5)) / leftover.length : 0
     const radius = GIT_LEAN_STEP * 2 + step
-    put(commit.sha, GIT_START.x + Math.cos(angle) * radius, GIT_START.z + Math.sin(angle) * radius, false)
+    put(commit.sha, xAt(commit.level), GIT_START.y - Math.sin(angle) * radius, GIT_START.z + Math.cos(angle) * radius, false)
   })
 
   const commitPlaces = ordered.map((commit) => {
@@ -191,9 +194,9 @@ export function layoutGitTree(commits, branches = []) {
       name: tip.name,
       sha: tip.sha,
       current: tip.current,
-      x: tip.x + Math.cos(tip.angle) * GIT_LABEL_OFFSET,
+      x: tip.x,
       y: tip.y + GIT_LABEL_LIFT + below * GIT_LABEL_STACK,
-      z: tip.z + Math.sin(tip.angle) * GIT_LABEL_OFFSET,
+      z: tip.z,
     }
   })
 
@@ -202,7 +205,7 @@ export function layoutGitTree(commits, branches = []) {
   return {
     start: { x: GIT_START.x, y: GIT_START.y, z: GIT_START.z },
     step,
-    height,
+    width,
     headSha: trunkHead || null,
     headIndex,
     commits: commitPlaces,
@@ -223,6 +226,17 @@ function stateKey(state) {
 function stateLayout(state) {
   if (!state || state.git !== true) return layoutGitTree([], [])
   return layoutGitTree(state.commits, state.branches)
+}
+
+function trunkMiddle(layout) {
+  let min = Infinity
+  let max = -Infinity
+  for (const place of layout.commits) {
+    if (!place.trunk) continue
+    min = Math.min(min, place.x)
+    max = Math.max(max, place.x)
+  }
+  return Number.isFinite(min) ? (min + max) / 2 : GIT_START.x
 }
 
 export function createGitTree(scene) {
@@ -275,10 +289,10 @@ export function createGitTree(scene) {
   let elapsed = 0
   let frozen = false
   let top = null
+  let centerX = GIT_START.x
 
   function placeCenter() {
-    const height = layout?.height ?? 0
-    worldCenter.set(GIT_START.x, group.position.y + GIT_START.y - height / 2, GIT_START.z)
+    worldCenter.set(centerX, group.position.y + GIT_START.y, GIT_START.z)
   }
 
   function setTop(y) {
@@ -352,6 +366,7 @@ export function createGitTree(scene) {
     headIndex = -1
     colorArray = null
     colorAttribute = null
+    centerX = GIT_START.x
     fitHitBox({ commits: [], labels: [] })
     placeCenter()
     frozen = false
@@ -365,6 +380,7 @@ export function createGitTree(scene) {
     pointGeometry.dispose()
     layout = next
     headIndex = next.headIndex
+    centerX = trunkMiddle(next)
     placeCenter()
     frozen = false
     elapsed = 0
