@@ -9,15 +9,18 @@ import {
   CONTEXT_NOT_REPORTED,
   agentStateWord,
   breadcrumbRows,
+  cutPath,
   effortForAgent,
   explorerRows,
   formatBytes,
   formatTime,
+  gitGraphRows,
   inspectTarget,
   internetStatus,
   previewLines,
   touchRows,
 } from './inspector.js'
+import { shortSha } from './repository.js'
 
 function Row({ label, children }) {
   return (
@@ -41,6 +44,7 @@ function titleOf(target, lane, tree) {
   if (!target) return ''
   if (target.kind === 'agent') return lane?.name || lane?.key || target.id
   if (target.kind === 'internet') return 'INTERNET'
+  if (target.kind === 'git') return 'Source control'
   if (target.kind === 'folder') {
     return target.id === '' ? tree?.rootName || 'Project' : basename(target.id)
   }
@@ -117,6 +121,8 @@ export default function Inspector({
   const [preview, setPreview] = useState(null)
   const [connection, setConnection] = useState(null)
   const [chat, setChat] = useState(null)
+  const [git, setGit] = useState(null)
+  const [gitError, setGitError] = useState('')
 
   useEffect(() => {
     if (item?.kind !== 'file' || !bridge || !client || typeof client.fileInfo !== 'function') {
@@ -174,6 +180,40 @@ export default function Inspector({
   }, [item?.kind, bridge, client])
 
   useEffect(() => {
+    if (item?.kind !== 'git' || !bridge || !client || typeof client.gitState !== 'function') {
+      setGit(null)
+      setGitError('')
+      return undefined
+    }
+    let active = true
+    let ticket = 0
+    async function read() {
+      ticket += 1
+      const mine = ticket
+      try {
+        const answer = await client.gitState()
+        if (!active || mine !== ticket) return
+        setGit(answer && typeof answer === 'object' ? answer : null)
+        setGitError('')
+      } catch (failure) {
+        if (!active || mine !== ticket) return
+        setGit(null)
+        setGitError(failure?.message || 'The bridge refused the source control read.')
+      }
+    }
+    read()
+    const timer = setInterval(read, 10000)
+    const unsubscribe = client.subscribe?.((notice) => {
+      if (notice?.topic === 'git') read()
+    })
+    return () => {
+      active = false
+      clearInterval(timer)
+      if (typeof unsubscribe === 'function') unsubscribe()
+    }
+  }, [item?.kind, bridge, client])
+
+  useEffect(() => {
     if (item?.kind !== 'agent' || !orchestratorAgent || !bridge || !client || typeof client.orchestrator !== 'function') {
       setChat(null)
       return undefined
@@ -211,6 +251,16 @@ export default function Inspector({
     const found = roster.find((agent) => sameAgent(agent, key))
     return found?.name || String(key)
   })
+  const gitReady = item?.kind === 'git' && git?.git === true
+  const graphRows = gitReady ? gitGraphRows(git.commits) : []
+  const graphWidth = Math.max(1, ...graphRows.map((row) => row.width))
+  const changeRows = gitReady && Array.isArray(git.changes) ? git.changes : []
+  const changeCount = gitReady ? Number(git.changeCount ?? changeRows.length) || 0 : 0
+  const branchText = gitReady
+    ? git.detached === true || !git.branch
+      ? `Detached at ${shortSha(git.head) || 'HEAD'}`
+      : git.branch
+    : ''
 
   if (!item) return null
 
@@ -387,6 +437,88 @@ export default function Inspector({
                   </li>
                 ))}
               </ul>
+            )}
+          </>
+        )}
+
+        {item.kind === 'git' && (
+          <>
+            {gitError && <p className="mr-inspector-error mono">{gitError}</p>}
+            {git?.git === false && <p className="mr-inspector-note mono">This folder is not a git repository.</p>}
+            {gitReady && (
+              <>
+                <dl className="mr-inspector-rows">
+                  <Row label="Branch">{branchText}</Row>
+                </dl>
+                <h3 className="mr-inspector-subtitle mono">{`Changes ${changeCount}`}</h3>
+                {changeRows.length === 0 ? (
+                  <p className="mr-inspector-note mono">No uncommitted changes.</p>
+                ) : (
+                  <ul className="mr-inspector-changes" aria-label="Changes">
+                    {changeRows.map((change, index) => (
+                      <li className="mr-inspector-change" key={`${change.path}-${index}`}>
+                        <button
+                          type="button"
+                          className="mr-inspector-change-btn mono"
+                          onClick={() => onSelect({ kind: 'file', id: change.path })}
+                          disabled={change.status === 'D'}
+                        >
+                          <span className="mr-inspector-change-path">{cutPath(change.path)}</span>
+                          <span className="mr-inspector-change-status">{change.status}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <h3 className="mr-inspector-subtitle mono">Graph</h3>
+                {graphRows.length === 0 ? (
+                  <p className="mr-inspector-note mono">No commits.</p>
+                ) : (
+                  <ol className="mr-inspector-graph" aria-label="Commit graph">
+                    {graphRows.map((row) => (
+                      <li className="mr-inspector-graph-row" key={row.sha}>
+                        <svg
+                          className="mr-inspector-graph-svg"
+                          width={graphWidth * 12}
+                          height={24}
+                          viewBox={`0 0 ${graphWidth * 12} 24`}
+                          aria-hidden="true"
+                        >
+                          {row.edges.map((edge, index) => (
+                            <line
+                              key={`${edge.kind}-${index}`}
+                              className={`mr-inspector-graph-edge is-${edge.kind}`}
+                              x1={edge.from * 12 + 6}
+                              y1={edge.kind === 'bottom' ? 12 : 0}
+                              x2={edge.to * 12 + 6}
+                              y2={edge.kind === 'top' ? 12 : 24}
+                            />
+                          ))}
+                          <circle
+                            className="mr-inspector-graph-dot"
+                            cx={row.lane * 12 + 6}
+                            cy={12}
+                            r={3}
+                            fill={row.sha === git.head ? '#e5ff00' : '#ffffff'}
+                          />
+                        </svg>
+                        <span className="mr-inspector-graph-subject">{row.subject}</span>
+                        {row.refs.map((ref) => (
+                          <span
+                            className={`mr-inspector-graph-ref${ref === git.branch ? ' is-current' : ''}`}
+                            key={ref}
+                          >
+                            {ref}
+                          </span>
+                        ))}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {git.truncated === true && (
+                  <p className="mr-inspector-note mono">Showing the newest 200 commits.</p>
+                )}
+              </>
             )}
           </>
         )}

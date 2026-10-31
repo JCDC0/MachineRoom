@@ -731,6 +731,12 @@ export function createCards(cssScene, options = {}) {
     return ((card?.scale ?? CARD_SCALES.closed) * CARD_W) / 2
   }
 
+  function bottom(dir) {
+    const card = nearestCard(dir)
+    if (!card) return rootHome.y
+    return card.object.position.y - (card.height * card.scale) / 2
+  }
+
   function sideOf(dir) {
     const card = nearestCard(dir)
     const spot = card ? homes.get(card.path) : null
@@ -1107,6 +1113,7 @@ export function createCards(cssScene, options = {}) {
     cards,
     pin,
     center,
+    bottom,
     halfWidth,
     sideOf,
     topPoint,

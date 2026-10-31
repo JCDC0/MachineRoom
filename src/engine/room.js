@@ -297,6 +297,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return raycaster.intersectObject(internet.group, true).length > 0
   }
 
+  function gitAt(event) {
+    if (!gitTree.ready()) return false
+    const rect = gl.getBoundingClientRect()
+    if (!rect.width || !rect.height) return false
+    pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointer, camera)
+    return raycaster.intersectObject(gitTree.hitBox, false).length > 0
+  }
+
   rig.setClickHandler((event) => {
     const key = agentAt(event)
     if (key !== null) {
@@ -306,6 +315,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (internetAt(event)) {
       inspectObject({ kind: 'internet', id: 'internet' })
       onInspect({ kind: 'internet', id: 'internet' })
+      return
+    }
+    if (gitAt(event)) {
+      onInspect({ kind: 'git', id: 'git' })
       return
     }
     endFollow()
@@ -457,6 +470,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       pendingFollow = null
       rig.hold(() => internet.position, ANCHOR_DIST)
       inspected = { kind: 'internet', id: 'internet' }
+      return true
+    }
+    if (kind === 'git') {
+      if (!focusGitTree()) return false
+      inspected = { kind: 'git', id: 'git' }
       return true
     }
     if (kind !== 'folder' && kind !== 'file') return false
@@ -721,6 +739,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     space.update(delta)
     hub.update(now / 1000, delta, camera, height)
     internet.update(delta, agentSet.webActive() > 0)
+    gitTree.setTop(cards.bottom(''))
     gitTree.update(delta)
     if (cards.update(state, delta, camera, mask)) {
       const holdLost = releaseLostHold()
@@ -826,7 +845,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     followFocus.clear()
     followCard = null
     pendingFollow = null
-    onPick(null)
     rig.hold(() => gitTree.center(), GIT_FOCUS_DIST)
     return true
   }
@@ -872,6 +890,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     park,
     holding: () => heldPath,
     agentAt,
+    gitAt,
     overview() {
       park()
     },

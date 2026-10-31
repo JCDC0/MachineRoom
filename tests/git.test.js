@@ -18,6 +18,7 @@ import {
   ORIGIN_SWITCH_PROBLEM,
   TURN_RUNNING_PROBLEM,
   WORKTREE_HOLDS_BRANCH_PROBLEM,
+  parseStatus,
   resetGitCache,
 } from '../server/git.js'
 import { createClient } from '../src/control/client.js'
@@ -144,6 +145,24 @@ async function listenForChange(url, topic, onOpen = () => {}) {
   }
 }
 
+describe('parseStatus', () => {
+  it('reads a rename, an untracked file and a name with a space', () => {
+    const text = 'R  src/new name.js\0src/old name.js\0?? notes/todo list.md\0 M src/a.js\0D  gone.txt\0'
+    expect(parseStatus(text)).toEqual([
+      { path: 'src/new name.js', status: 'R' },
+      { path: 'notes/todo list.md', status: 'U' },
+      { path: 'src/a.js', status: 'M' },
+      { path: 'gone.txt', status: 'D' },
+    ])
+  })
+
+  it('takes the second letter unless it is a space, then the first', () => {
+    expect(parseStatus('AM staged-then-changed.js\0')).toEqual([{ path: 'staged-then-changed.js', status: 'M' }])
+    expect(parseStatus('M  staged.js\0')).toEqual([{ path: 'staged.js', status: 'M' }])
+    expect(parseStatus('')).toEqual([])
+  })
+})
+
 describe('the git route on a folder with no git', () => {
   it('returns git false for a non-git folder', async () => {
     const plainFolder = makeTempDir('mr-no-git-')
@@ -241,6 +260,27 @@ describe('the git route reading state on a real repository', () => {
     const { client } = await startBridge({ projectRoot: repo })
     const state = await client.gitState()
     expect(state.dirty).toBe(true)
+    expect(state.changeCount).toBe(1)
+    expect(state.changes).toEqual([{ path: 'extra.txt', status: 'U' }])
+  })
+
+  it('lists a rename, a delete and a file with a space as changes', async () => {
+    const repo = makeRepo()
+    writeFileSync(join(repo, 'tracked.txt'), 'tracked\n')
+    testGit(repo, ['add', 'tracked.txt'])
+    testGit(repo, ['commit', '-m', 'add tracked'])
+    testGit(repo, ['mv', 'README.md', 'read me.md'])
+    testGit(repo, ['rm', '--quiet', 'tracked.txt'])
+    writeFileSync(join(repo, 'new notes.txt'), 'new\n')
+
+    const { client } = await startBridge({ projectRoot: repo })
+    const state = await client.gitState()
+    expect(state.dirty).toBe(true)
+    expect(state.changeCount).toBe(3)
+    const byPath = Object.fromEntries(state.changes.map((change) => [change.path, change.status]))
+    expect(byPath['read me.md']).toBe('R')
+    expect(byPath['tracked.txt']).toBe('D')
+    expect(byPath['new notes.txt']).toBe('U')
   })
 })
 

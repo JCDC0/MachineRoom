@@ -75,6 +75,10 @@ async function mount(root, props) {
   await settle(10)
 }
 
+function isDisabled(button) {
+  return button.disabled === true || button.getAttribute('disabled') !== null
+}
+
 describe('the inspector panel', () => {
   it('shows the agent rows, the state word, the log and the chat', async () => {
     const client = makeClient()
@@ -247,6 +251,98 @@ describe('the inspector panel', () => {
       })
       expect(container.textContent).toContain('No connection')
       expect(container.textContent).toContain('OpenCode')
+    })
+  })
+
+  it('shows the branch, the changes and the commit graph for the git target', async () => {
+    const onSelect = vi.fn()
+    let reads = 0
+    const state = {
+      git: true,
+      branch: 'main',
+      detached: false,
+      head: 'a1b2c3d4e5f6',
+      dirty: true,
+      changeCount: 2,
+      changes: [
+        { path: 'src/ui/Inspector.jsx', status: 'M' },
+        { path: 'src/gone.js', status: 'D' },
+      ],
+      branches: [{ name: 'main', head: 'a1b2c3d4e5f6', current: true }],
+      commits: [
+        { sha: 'a1b2c3d4e5f6', parents: ['b2c3d4e5f6a1'], subject: 'Add source control', refs: ['main'], time: 3 },
+        { sha: 'b2c3d4e5f6a1', parents: [], subject: 'Start the room', refs: [], time: 2 },
+      ],
+      truncated: true,
+    }
+    const client = makeClient({
+      gitState: async () => {
+        reads += 1
+        return state
+      },
+    })
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'git', id: 'git' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [],
+        onSelect,
+      })
+
+      expect(reads).toBe(1)
+      expect(container.querySelector('.mr-inspector-title').textContent).toBe('Source control')
+      expect(container.textContent).toContain('Branch')
+      expect(container.textContent).toContain('main')
+      expect(container.textContent).toContain('Changes 2')
+      expect(container.textContent).toContain('Showing the newest 200 commits.')
+
+      const changes = container.querySelectorAll('.mr-inspector-change-btn')
+      expect(changes).toHaveLength(2)
+      expect(changes[0].querySelector('.mr-inspector-change-path').textContent).toBe('src/ui/Inspector.jsx')
+      expect(changes[0].querySelector('.mr-inspector-change-status').textContent).toBe('M')
+      expect(isDisabled(changes[1])).toBe(true)
+      await click(root, changes[0])
+      expect(onSelect).toHaveBeenCalledWith({ kind: 'file', id: 'src/ui/Inspector.jsx' })
+
+      const rows = container.querySelectorAll('.mr-inspector-graph-row')
+      expect(rows).toHaveLength(2)
+      expect(rows[0].textContent).toContain('Add source control')
+      expect(rows[0].querySelector('circle').getAttribute('fill')).toBe('#e5ff00')
+      expect(rows[1].querySelector('circle').getAttribute('fill')).toBe('#ffffff')
+      const ref = container.querySelector('.mr-inspector-graph-ref')
+      expect(ref.textContent).toBe('main')
+      expect(ref.className).toContain('is-current')
+    })
+  })
+
+  it('says when the folder is not a git repository and shows nothing without the method', async () => {
+    const plain = makeClient({ gitState: async () => ({ git: false }) })
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'git', id: 'git' },
+        live: true,
+        bridge: true,
+        client: plain,
+        lanes: [],
+      })
+      expect(container.textContent).toContain('This folder is not a git repository.')
+    })
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'git', id: 'git' },
+        live: false,
+        bridge: false,
+        client: makeClient(),
+        lanes: [],
+      })
+      expect(container.querySelector('.mr-inspector-title').textContent).toBe('Source control')
+      expect(container.textContent).not.toContain('This folder is not a git repository.')
+      expect(container.textContent).not.toContain('Changes')
     })
   })
 })

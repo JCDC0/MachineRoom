@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   agentStateWord,
   breadcrumbRows,
+  cutPath,
   effortForAgent,
   explorerRows,
   formatBytes,
+  gitGraphRows,
   inspectTarget,
   internetStatus,
   previewLines,
@@ -89,10 +91,11 @@ describe('the folder explorer rows', () => {
 })
 
 describe('the inspector helpers', () => {
-  it('accepts only the four kinds and keeps a folder root', () => {
+  it('accepts only the five kinds and keeps a folder root', () => {
     expect(inspectTarget({ kind: 'folder', id: '' })).toEqual({ kind: 'folder', id: '' })
     expect(inspectTarget({ kind: 'file', id: 'src/a.js' })).toEqual({ kind: 'file', id: 'src/a.js' })
     expect(inspectTarget({ kind: 'internet' })).toEqual({ kind: 'internet', id: 'internet' })
+    expect(inspectTarget({ kind: 'git' })).toEqual({ kind: 'git', id: 'git' })
     expect(inspectTarget({ kind: 'agent', id: '' })).toBeNull()
     expect(inspectTarget({ kind: 'planet', id: 'x' })).toBeNull()
     expect(inspectTarget(null)).toBeNull()
@@ -135,5 +138,60 @@ describe('the inspector helpers', () => {
       })
     ).toBe('high')
     expect(effortForAgent({ key: 'opencode', harness: 'opencode' })).toBe('default')
+  })
+
+  it('cuts a long path from the left so the file name shows', () => {
+    expect(cutPath('src/a.js')).toBe('src/a.js')
+    const cut = cutPath('src/very/deep/folder/with/a/long/file/Inspector.jsx', 30)
+    expect(cut.startsWith('...')).toBe(true)
+    expect(cut.endsWith('Inspector.jsx')).toBe(true)
+    expect(cut.length).toBeLessThanOrEqual(30)
+  })
+})
+
+describe('the commit graph rows', () => {
+  it('keeps a line in one lane', () => {
+    const rows = gitGraphRows([
+      { sha: 'c2c2c2c2aa', parents: ['c1c1c1c1aa'], subject: 'second', refs: ['main'] },
+      { sha: 'c1c1c1c1aa', parents: ['c0c0c0c0aa'], subject: 'first', refs: [] },
+      { sha: 'c0c0c0c0aa', parents: [], subject: 'root', refs: [] },
+    ])
+    expect(rows.map((row) => row.lane)).toEqual([0, 0, 0])
+    expect(rows.map((row) => row.width)).toEqual([1, 1, 1])
+    expect(rows[0].short).toBe('c2c2c2c')
+    expect(rows[0].edges).toEqual([{ kind: 'bottom', from: 0, to: 0 }])
+    expect(rows[2].edges).toEqual([])
+    expect(rows[0].refs).toEqual(['main'])
+  })
+
+  it('joins a branch back with a top edge', () => {
+    const rows = gitGraphRows([
+      { sha: 'main1', parents: ['base1'], subject: 'main work', refs: ['main'] },
+      { sha: 'feat1', parents: ['base1'], subject: 'feature work', refs: ['feature'] },
+      { sha: 'base1', parents: [], subject: 'root', refs: [] },
+    ])
+    expect(rows.map((row) => row.lane)).toEqual([0, 1, 0])
+    expect(rows[1].edges).toContainEqual({ kind: 'through', from: 0, to: 0 })
+    expect(rows[2].edges).toContainEqual({ kind: 'top', from: 1, to: 0 })
+    expect(rows[2].width).toBe(2)
+  })
+
+  it('draws both parents of a merge and frees the second lane at their join', () => {
+    const rows = gitGraphRows([
+      { sha: 'merge1', parents: ['main1', 'feat1'], subject: 'merge', refs: ['main'] },
+      { sha: 'main1', parents: ['base1'], subject: 'main work', refs: [] },
+      { sha: 'feat1', parents: ['base1'], subject: 'feature work', refs: [] },
+      { sha: 'base1', parents: [], subject: 'root', refs: [] },
+    ])
+    expect(rows[0].edges).toEqual([
+      { kind: 'bottom', from: 0, to: 0 },
+      { kind: 'bottom', from: 0, to: 1 },
+    ])
+    expect(rows[1].lane).toBe(0)
+    expect(rows[1].edges).toContainEqual({ kind: 'through', from: 1, to: 1 })
+    expect(rows[2].lane).toBe(1)
+    expect(rows[2].edges).toContainEqual({ kind: 'through', from: 0, to: 0 })
+    expect(rows[3].edges).toContainEqual({ kind: 'top', from: 1, to: 0 })
+    expect(rows[3].width).toBe(2)
   })
 })

@@ -7,6 +7,7 @@ export const GIT_TIMEOUT_MS = 10000
 export const CACHE_TTL_MS = 1000
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const MAX_COMMITS = 200
+export const MAX_CHANGES = 200
 
 export const ORIGIN_SWITCH_PROBLEM = 'A request to switch branches needs a page Origin.'
 export const ORIGIN_BRANCH_PROBLEM = 'A request to create a branch needs a page Origin.'
@@ -34,6 +35,25 @@ function pathKey(p) {
 function samePath(a, b) {
   if (!a || !b) return false
   return pathKey(a) === pathKey(b)
+}
+
+export function parseStatus(text) {
+  const raw = typeof text === 'string' ? text : ''
+  const parts = raw.split('\0')
+  const changes = []
+  for (let index = 0; index < parts.length; index += 1) {
+    const entry = parts[index]
+    if (!entry || entry.length < 3) continue
+    const code = entry.slice(0, 2)
+    const path = entry.slice(3)
+    if (!path) continue
+    const first = code[0]
+    const second = code[1]
+    const status = code === '??' ? 'U' : second !== ' ' ? second : first
+    changes.push({ path, status })
+    if (first === 'R' || first === 'C' || second === 'R' || second === 'C') index += 1
+  }
+  return changes
 }
 
 export function defaultGitRunner(cwd, args, { timeout = GIT_TIMEOUT_MS, env = process.env } = {}) {
@@ -143,13 +163,18 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
     head = null
   }
 
-  let dirty = false
+  let changes = []
+  let changeCount = 0
   try {
-    const status = await runner(resolved, ['status', '--porcelain'])
-    dirty = status.trim().length > 0
+    const status = await runner(resolved, ['status', '--porcelain', '-z'])
+    const parsed = parseStatus(status)
+    changeCount = parsed.length
+    changes = parsed.slice(0, MAX_CHANGES)
   } catch {
-    dirty = false
+    changes = []
+    changeCount = 0
   }
+  const dirty = changeCount > 0
 
   const heldBranches = await otherWorktreeBranches(runner, resolved)
 
@@ -234,6 +259,8 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
     detached,
     head,
     dirty,
+    changes,
+    changeCount,
     branches,
     commits,
     truncated,

@@ -2,7 +2,7 @@ import { basename, visibleText } from '../model/paths.js'
 import { effortLabel, orchestratorEffort } from './agentStrip.js'
 
 export const INSPECT_EVENT = 'machineroom:inspect'
-export const INSPECT_KINDS = ['agent', 'folder', 'file', 'internet']
+export const INSPECT_KINDS = ['agent', 'folder', 'file', 'internet', 'git']
 export const CONTEXT_NOT_REPORTED = 'context not reported'
 export const TOO_LARGE = 'Too large, showing the first 256 KB.'
 export const BINARY_FILE = 'Binary file.'
@@ -29,6 +29,7 @@ export function inspectTarget(detail) {
   const kind = text(detail.kind).toLowerCase()
   if (!INSPECT_KINDS.includes(kind)) return null
   if (kind === 'internet') return { kind, id: 'internet' }
+  if (kind === 'git') return { kind, id: 'git' }
   if (typeof detail.id !== 'string') return null
   const id = visibleText(detail.id).trim()
   if (kind !== 'folder' && id === '') return null
@@ -86,6 +87,73 @@ export function breadcrumbRows(path = '', rootName = '') {
   for (const part of parts) {
     at = at === '' ? part : `${at}/${part}`
     rows.push({ path: at, name: part })
+  }
+  return rows
+}
+
+export function cutPath(path, limit = 44) {
+  const clean = text(path)
+  const keep = Math.max(1, Math.floor(Number(limit) || 44) - 3)
+  if (clean.length <= keep + 3) return clean
+  return `...${clean.slice(-keep)}`
+}
+
+export function gitGraphRows(commits = []) {
+  const list = Array.isArray(commits) ? commits : []
+  const lanes = []
+  const rows = []
+  for (const commit of list) {
+    const sha = typeof commit?.sha === 'string' ? commit.sha : ''
+    if (sha === '') continue
+    const parents = Array.isArray(commit.parents)
+      ? commit.parents.filter((parent) => typeof parent === 'string' && parent !== '')
+      : []
+    let lane = lanes.indexOf(sha)
+    if (lane === -1) {
+      lane = lanes.indexOf(null)
+      if (lane === -1) {
+        lane = lanes.length
+        lanes.push(null)
+      }
+    }
+    const edges = []
+    for (let index = 0; index < lanes.length; index += 1) {
+      if (index === lane) continue
+      if (lanes[index] === sha) {
+        edges.push({ kind: 'top', from: index, to: lane })
+        lanes[index] = null
+      } else if (lanes[index] !== null) {
+        edges.push({ kind: 'through', from: index, to: index })
+      }
+    }
+    const first = parents[0] ?? null
+    lanes[lane] = first
+    if (first !== null) edges.push({ kind: 'bottom', from: lane, to: lane })
+    for (let index = 1; index < parents.length; index += 1) {
+      const parent = parents[index]
+      let target = lanes.indexOf(parent)
+      if (target === -1) {
+        target = lanes.indexOf(null)
+        if (target === -1) {
+          target = lanes.length
+          lanes.push(null)
+        }
+      }
+      lanes[target] = parent
+      edges.push({ kind: 'bottom', from: lane, to: target })
+    }
+    while (lanes.length > 0 && lanes[lanes.length - 1] === null) lanes.pop()
+    let width = Math.max(lane + 1, lanes.length)
+    for (const edge of edges) width = Math.max(width, edge.from + 1, edge.to + 1)
+    rows.push({
+      sha,
+      short: sha.slice(0, 7),
+      subject: typeof commit.subject === 'string' ? commit.subject : '',
+      refs: Array.isArray(commit.refs) ? commit.refs.filter((ref) => typeof ref === 'string' && ref !== '') : [],
+      lane,
+      width,
+      edges,
+    })
   }
   return rows
 }

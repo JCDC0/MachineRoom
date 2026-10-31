@@ -457,6 +457,33 @@ describe('the camera hold on a live room', () => {
     }
   })
 
+  it('inspects the git tree and keeps the panel open', async () => {
+    const { room } = await makeRoom(['src/a.js'], ['claude'])
+    try {
+      room.setGitState({
+        git: true,
+        branch: 'main',
+        detached: false,
+        head: 'c2',
+        dirty: false,
+        branches: [{ name: 'main', head: 'c2', current: true }],
+        commits: [
+          { sha: 'c2', parents: ['c1'], subject: 'second', time: 2, refs: ['main'] },
+          { sha: 'c1', parents: [], subject: 'first', time: 1, refs: [] },
+        ],
+        truncated: false,
+      })
+      tickRoom(2)
+      expect(room.inspect({ kind: 'git', id: 'git' })).toBe(true)
+      expect(room.inspecting()).toEqual({ kind: 'git', id: 'git' })
+      tickRoom(2)
+      expect(room.holding()).toBe(null)
+      room.park()
+    } finally {
+      room.dispose()
+    }
+  })
+
   it('releases the hold and refits when the held card leaves the plan', async () => {
     const first = await makeRoom(['src/a.js', 'docs/b.md'], ['claude'])
     expect(first.room.anchor('src')).toBe(true)
