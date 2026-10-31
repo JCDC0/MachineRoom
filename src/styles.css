@@ -362,6 +362,7 @@ summary:focus-visible,
   background: none;
   color: inherit;
   font: inherit;
+  text-transform: none;
   font-size: 11px;
   text-align: left;
   cursor: pointer;
