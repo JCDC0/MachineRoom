@@ -13,6 +13,7 @@ import Stage, {
   lensClipPath,
   lensEdgeLabels,
   lensEdgeTicks,
+  seamPose,
 } from '../src/Stage.jsx'
 import Hud from '../src/ui/Hud.jsx'
 import { stageClassName } from '../src/ui/idleView.js'
@@ -300,6 +301,71 @@ describe('lens bow', () => {
     expect(path).toContain('Q 600 544')
     expect(lensClipPath(0, 600)).toBe('')
     expect(lensClipPath(1200, 0)).toBe('')
+  })
+})
+
+describe('seam pose', () => {
+  const width = 1200
+  const endAngle = (Math.atan((4 * LENS_BOW) / width) * 180) / Math.PI
+
+  it('bows the top controls down and tilts them along the curve at each end and the middle', () => {
+    const left = seamPose(0, width, 'top')
+    expect(left.y).toBe(0)
+    expect(left.angle).toBeCloseTo(endAngle, 10)
+
+    const middle = seamPose(width / 2, width, 'top')
+    expect(middle.y).toBe(LENS_BOW)
+    expect(middle.angle).toBe(0)
+
+    const right = seamPose(width, width, 'top')
+    expect(right.y).toBe(0)
+    expect(right.angle).toBeCloseTo(-endAngle, 10)
+  })
+
+  it('bows the bottom controls up and tilts them the other way', () => {
+    const left = seamPose(0, width, 'bottom')
+    expect(left.y).toBe(0)
+    expect(left.angle).toBeCloseTo(-endAngle, 10)
+
+    const middle = seamPose(width / 2, width, 'bottom')
+    expect(middle.y).toBe(-LENS_BOW)
+    expect(middle.angle).toBe(0)
+
+    const right = seamPose(width, width, 'bottom')
+    expect(right.y).toBe(0)
+    expect(right.angle).toBeCloseTo(endAngle, 10)
+  })
+
+  it('mirrors the curve about the middle', () => {
+    for (const x of [0, 180, 300, 600, 900, 1020, 1200]) {
+      const left = seamPose(x, width, 'top')
+      const right = seamPose(width - x, width, 'top')
+      expect(left.y).toBeCloseTo(right.y, 10)
+      expect(left.angle + right.angle).toBeCloseTo(0, 10)
+    }
+  })
+
+  it('makes the bottom the opposite of the top at the same x', () => {
+    for (const x of [0, 300, 600, 900, 1200]) {
+      const top = seamPose(x, width, 'top')
+      const bottom = seamPose(x, width, 'bottom')
+      expect(bottom.y).toBeCloseTo(-top.y, 10)
+      expect(bottom.angle).toBeCloseTo(-top.angle, 10)
+    }
+  })
+
+  it('takes its y from lensBowAt and its bow from the argument', () => {
+    for (const x of [0, 180, 300, 600, 900, 1020, 1200]) {
+      expect(seamPose(x, width, 'top').y).toBeCloseTo(lensBowAt(x, width), 10)
+      expect(seamPose(x, width, 'bottom').y).toBeCloseTo(-lensBowAt(x, width), 10)
+    }
+    expect(seamPose(300, width, 'top', 14).y).toBeCloseTo(10.5, 10)
+    expect(seamPose(600, width, 'top', 14).y).toBe(14)
+  })
+
+  it('answers a level pose without a width', () => {
+    expect(seamPose(0, 0, 'top')).toEqual({ y: 0, angle: 0 })
+    expect(seamPose(300, 0, 'bottom')).toEqual({ y: 0, angle: 0 })
   })
 })
 
