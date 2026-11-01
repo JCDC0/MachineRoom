@@ -13,8 +13,9 @@ export function idleAllowed({ width, scrollY, panelOpen, focusedInput, following
   return true
 }
 
-export function stageClassName({ disconnected = false, idle = false } = {}) {
+export function stageClassName({ disconnected = false, idle = false, scrolled = false } = {}) {
   const classes = ['stage']
+  if (scrolled) classes.push('is-scrolled')
   if (disconnected) classes.push('is-disconnected')
   if (idle && !disconnected) classes.push('is-idle')
   return classes.join(' ')

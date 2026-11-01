@@ -327,6 +327,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [following, setFollowing] = useState(false)
   const [idle, setIdle] = useState(false)
   const idleRef = useRef(false)
+  const [scrolled, setScrolled] = useState(false)
   const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
@@ -1172,6 +1173,19 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     }
   }, [bridgeDown])
 
+  useEffect(() => {
+    let current = (window.scrollY ?? window.pageYOffset ?? 0) > 0
+    setScrolled(current)
+    function onScroll() {
+      const next = (window.scrollY ?? window.pageYOffset ?? 0) > 0
+      if (next === current) return
+      current = next
+      setScrolled(next)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
   const chromaChannels = aberrationChannels(effects.aberration?.strength)
   const chromaFilter = chromaOn && chromaMap ? 'url(#mr-screen-filter)' : undefined
@@ -1197,7 +1211,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
-      <div className={stageClassName({ disconnected: bridgeDown, idle })} style={{ '--lens-bow': `${LENS_BOW}px`, ...(lensShare === null ? null : { '--lens-h-user': lensHeightValue(lensShare) }) }}>
+      <div className={stageClassName({ disconnected: bridgeDown, idle, scrolled })} style={{ '--lens-bow': `${LENS_BOW}px`, ...(lensShare === null ? null : { '--lens-h-user': lensHeightValue(lensShare) }) }}>
         {clipLens && (
           <svg
             className="lens-clip-defs"
@@ -1223,7 +1237,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
               <div className="layer" ref={cssRef} aria-hidden="true" />
               <div className="layer is-over" ref={glRef} aria-hidden="true" />
             </div>
-            <div className="screen-effects-overlay" aria-hidden="true">
+            <div className="screen-effects-overlay" aria-hidden="true" style={clipLens ? { clipPath: 'url(#mr-lens-clip)' } : undefined}>
               <div
                 className="screen-vignette"
                 style={{ opacity: effects.vignette?.on ? effects.vignette.strength : 0 }}

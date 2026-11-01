@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { easeInOut, easeRate, still } from './sprites.js'
 
 const MIN_DIST = 500
-const MAX_DIST = 26000
+const MAX_DIST = 8000
 
 export const OVERVIEW = { x: 0, y: 200, z: 0, yaw: 0.42, pitch: 0.3, dist: 2600 }
 export const FOV = 50
