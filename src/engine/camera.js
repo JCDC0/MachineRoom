@@ -244,6 +244,12 @@ export function createCameraRig(camera, surface) {
     view.dist = goal.dist
   }
 
+  function aimOverview() {
+    if (adjusted || follow) return
+    goal.target.copy(overviewTarget)
+    goal.dist = overviewDist
+  }
+
   function startTransition(duration = FOLLOW_EASE_MS, turn = false) {
     transition = {
       fromTarget: view.target.clone(),
@@ -376,13 +382,18 @@ export function createCameraRig(camera, surface) {
       goal.yaw = view.yaw
       goal.pitch = view.pitch
     },
+    setFit(target, distance) {
+      overviewTarget.copy(target)
+      overviewDist = THREE.MathUtils.clamp(distance, MIN_DIST, MAX_DIST)
+      aimOverview()
+    },
     setOverviewDistance(distance) {
       overviewDist = THREE.MathUtils.clamp(distance, MIN_DIST, MAX_DIST)
-      if (!adjusted && !follow) goal.dist = overviewDist
+      aimOverview()
     },
     setOverviewTarget(position) {
       overviewTarget.copy(position)
-      if (!adjusted && !follow) goal.target.copy(overviewTarget)
+      aimOverview()
     },
     overview() {
       follow = null
