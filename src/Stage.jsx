@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { createAssistantRunner, createDispatcher } from './assistant/dispatch.js'
 import { createClient } from './control/client.js'
 import { createMockClient } from './control/mock.js'
@@ -62,6 +62,8 @@ const DEMO_SUBS = [
 const SEAM_MIN_WIDTH = 900
 const SEAM_TOP = '.hud-band-project, .hud-band-switch, .hud-modes button, .hud-action, .hud-health-chip'
 const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-orchestrator, .transport-chip, .transport-chip-overflow, .transport-context, .transport-tail > .mono, .transport.is-live > .mono, .transport:not(.is-live) > button, .transport:not(.is-live) > .mono, .speeds button'
+const SEAM_QUIET = ['hud-dropdown', 'hud-band-list', 'hud-health-popover']
+export const LENS_MOVE = 0.0005
 
 export function labelsFromFamily(answer) {
   const nodes = Array.isArray(answer?.nodes) ? answer.nodes : []
@@ -116,6 +118,129 @@ export function lensClipPath(width, height, bow = LENS_BOW) {
   const tall = spanOf(height)
   if (span <= 0 || tall <= 0) return ''
   return `M 0 0 Q ${span / 2} ${2 * bow} ${span} 0 L ${span} ${tall} Q ${span / 2} ${tall - 2 * bow} 0 ${tall} Z`
+}
+
+function seamQuiet(node) {
+  for (let current = node; current; current = current.parentNode) {
+    const value = typeof current.className === 'string' ? current.className : ''
+    if (value && value.split(/\s+/).some((name) => SEAM_QUIET.includes(name))) return true
+  }
+  return false
+}
+
+export function createSeamSync({
+  window: win = typeof window === 'undefined' ? null : window,
+  document: doc = typeof document === 'undefined' ? null : document,
+  Resize = null,
+  Mutation = null,
+} = {}) {
+  if (!win || !doc) return { measure() {}, stop() {} }
+  const ResizeClass = Resize ?? win.ResizeObserver
+  const MutationClass = Mutation ?? win.MutationObserver
+  const boxes = { lens: null, menu: null, transport: null }
+  const watched = { menu: null, transport: null }
+  const poses = new WeakMap()
+  const posed = new Set()
+  let frame = 0
+
+  function schedule() {
+    if (frame) return
+    frame = win.requestAnimationFrame(() => {
+      frame = 0
+      measure()
+    })
+  }
+
+  function onMutations(records) {
+    for (const record of records ?? []) {
+      if (seamQuiet(record.target)) continue
+      schedule()
+      return
+    }
+  }
+
+  const resize = typeof ResizeClass === 'function' ? new ResizeClass(schedule) : null
+  const mutations = typeof MutationClass === 'function' ? new MutationClass(onMutations) : null
+
+  function observeBox(key, node) {
+    if (!node || boxes[key] === node) return
+    if (boxes[key]) resize?.unobserve(boxes[key])
+    boxes[key] = node
+    resize?.observe(node)
+  }
+
+  function observeMutations(key, node) {
+    if (!node || watched[key] === node) return
+    watched[key] = node
+    mutations?.observe(node, { childList: true, subtree: true })
+  }
+
+  function write(node, pose) {
+    const last = poses.get(node)
+    if (last && last.y === pose.y && last.angle === pose.angle) return
+    poses.set(node, pose)
+    posed.add(node)
+    node.style.setProperty('--seam-y', `${pose.y}px`)
+    node.style.setProperty('--seam-r', `${pose.angle}deg`)
+  }
+
+  function clear(nodes = posed) {
+    for (const node of nodes) {
+      node.style.removeProperty('--seam-y')
+      node.style.removeProperty('--seam-r')
+      poses.delete(node)
+      posed.delete(node)
+    }
+  }
+
+  function measure() {
+    const lens = doc.querySelector('.lens')
+    const menu = doc.querySelector('.hud-menu')
+    const transport = doc.querySelector('.transport')
+    observeBox('lens', lens)
+    observeBox('menu', menu)
+    observeBox('transport', transport)
+    observeMutations('menu', menu)
+    observeMutations('transport', transport)
+    if (!lens || !menu || !transport || !(Number(win.innerWidth) >= SEAM_MIN_WIDTH)) {
+      clear()
+      return
+    }
+    const lensRect = lens.getBoundingClientRect()
+    const width = Number(lensRect.width) || 0
+    const next = new Map()
+    for (const node of menu.querySelectorAll(SEAM_TOP)) next.set(node, 'top')
+    for (const node of transport.querySelectorAll(SEAM_BOTTOM)) next.set(node, 'bottom')
+    for (const node of posed) {
+      if (!next.has(node)) clear([node])
+    }
+    for (const [node, edge] of next) {
+      const rect = node.getBoundingClientRect()
+      const x = Math.max(0, Math.min(width, (rect.left + rect.right) / 2 - lensRect.left))
+      write(node, seamPose(x, width, edge))
+    }
+  }
+
+  return {
+    measure,
+    stop() {
+      if (frame) win.cancelAnimationFrame(frame)
+      frame = 0
+      resize?.disconnect()
+      mutations?.disconnect()
+      clear()
+    },
+  }
+}
+
+export function lensPoseStep(now, yaw, pitch, move = LENS_MOVE) {
+  const pose = now && typeof now === 'object' ? now : { yaw: 0, pitch: 0 }
+  const heading = Number.isFinite(yaw) ? yaw : pose.yaw
+  const tilt = Number.isFinite(pitch) ? pitch : pose.pitch
+  const nextYaw = Math.abs(heading - pose.yaw) > move ? heading : pose.yaw
+  const nextPitch = Math.abs(tilt - pose.pitch) > move ? tilt : pose.pitch
+  if (nextYaw === pose.yaw && nextPitch === pose.pitch) return pose
+  return { yaw: nextYaw, pitch: nextPitch }
 }
 
 function bearingDegrees(bearing) {
@@ -256,6 +381,31 @@ function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
   )
 }
 
+export const LensCompass = memo(function LensCompass({ updateRef, disconnected = false }) {
+  const [pose, setPose] = useState({ yaw: 0, pitch: 0 })
+  const poseRef = useRef(pose)
+
+  useEffect(() => {
+    if (!updateRef) return undefined
+    updateRef.current = (yaw, pitch) => {
+      const next = lensPoseStep(poseRef.current, yaw, pitch)
+      if (next === poseRef.current) return
+      poseRef.current = next
+      setPose(next)
+    }
+    return () => {
+      updateRef.current = null
+    }
+  }, [updateRef])
+
+  return (
+    <>
+      <LensEdge side="top" yaw={pose.yaw} disconnected={disconnected} />
+      <LensEdge side="bottom" yaw={pose.yaw} pitch={pose.pitch} disconnected={disconnected} />
+    </>
+  )
+})
+
 function textBoxFocused() {
   const active = typeof document === 'undefined' ? null : document.activeElement
   if (!active) return false
@@ -336,8 +486,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [lensSize, setLensSize] = useState({ width: 0, height: 0 })
   const layersRef = useRef(null)
   const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensShare ?? null)
-  const [lensYaw, setLensYaw] = useState(0)
-  const [lensPitch, setLensPitch] = useState(0)
+  const compassRef = useRef(null)
   const [zoom, setZoom] = useState({ share: 0, multiplier: 1 })
 
   function changeLensShare(next, save = true) {
@@ -373,58 +522,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     if (typeof document === 'undefined' || typeof window === 'undefined') return undefined
-    let topNodes = []
-    let bottomNodes = []
-    const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => measure()) : null
-    const mutations = typeof MutationObserver === 'function' ? new MutationObserver(() => measure()) : null
-
-    function clear(nodes) {
-      for (const node of nodes) {
-        node.style.removeProperty('--seam-y')
-        node.style.removeProperty('--seam-r')
-      }
-    }
-
-    function measure() {
-      const lens = document.querySelector('.lens')
-      const menu = document.querySelector('.hud-menu')
-      const transport = document.querySelector('.transport')
-      if (!lens || !menu || !transport) {
-        clear(topNodes)
-        clear(bottomNodes)
-        return
-      }
-      resize?.observe(menu)
-      resize?.observe(transport)
-      resize?.observe(lens)
-      mutations?.observe(menu, { childList: true, subtree: true })
-      mutations?.observe(transport, { childList: true, subtree: true })
-      if (window.innerWidth < SEAM_MIN_WIDTH) {
-        clear(topNodes)
-        clear(bottomNodes)
-        return
-      }
-      const lensRect = lens.getBoundingClientRect()
-      const width = lensRect.width
-      topNodes = Array.from(menu.querySelectorAll(SEAM_TOP))
-      bottomNodes = Array.from(transport.querySelectorAll(SEAM_BOTTOM))
-      for (const [nodes, edge] of [[topNodes, 'top'], [bottomNodes, 'bottom']]) {
-        for (const node of nodes) {
-          const rect = node.getBoundingClientRect()
-          const x = Math.max(0, Math.min(width, (rect.left + rect.right) / 2 - lensRect.left))
-          const pose = seamPose(x, width, edge)
-          node.style.setProperty('--seam-y', `${pose.y}px`)
-          node.style.setProperty('--seam-r', `${pose.angle}deg`)
-        }
-      }
-    }
-
-    measure()
-
-    return () => {
-      resize?.disconnect()
-      mutations?.disconnect()
-    }
+    const sync = createSeamSync({ window, document })
+    sync.measure()
+    return () => sync.stop()
   }, [])
 
   useEffect(() => {
@@ -561,9 +661,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           lastFrameRef.current = now
         }
         const yaw = roomRef.current?.yaw?.()
-        if (Number.isFinite(yaw)) setLensYaw((now) => (Math.abs(yaw - now) > 0.0005 ? yaw : now))
         const pitch = roomRef.current?.pitch?.()
-        if (Number.isFinite(pitch)) setLensPitch((now) => (Math.abs(pitch - now) > 0.0005 ? pitch : now))
+        compassRef.current?.(yaw, pitch)
         player.tick(ms)
         const beat = sound.beat()
         if (beat > 0) roomRef.current?.setBeat(beat)
@@ -1226,8 +1325,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           </svg>
         )}
         <div className={`lens${bridgeDown ? ' is-disconnected' : ''}`}>
-          <LensEdge side="top" yaw={lensYaw} disconnected={bridgeDown} />
-          <LensEdge side="bottom" yaw={lensYaw} pitch={lensPitch} disconnected={bridgeDown} />
+          <LensCompass updateRef={compassRef} disconnected={bridgeDown} />
           <div className="lens-frame" ref={surfaceRef} onDoubleClick={onEmptyDoubleClick}>
             <div
               className="surface-layers"
