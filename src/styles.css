@@ -500,6 +500,7 @@ summary:focus-visible,
   border: 0;
   padding: 2px 0;
   font: inherit;
+  text-transform: none;
   text-align: left;
   cursor: pointer;
 }
