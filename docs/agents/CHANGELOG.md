@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The seam effect observes the menu, the transport and the lens once each, measures at most once an animation frame, ignores changes inside the log dropdown, band list and health popover, and writes `--seam-y` and `--seam-r` only when a pose changes (task U108).
+- The compass tapes keep their yaw and pitch in a memoised `LensCompass`, fed through a ref from `beforeFrame`, so a turn re-renders only the two tapes (task U108).
 - The ARCHITECTURE guide describes the horizontal git tree timeline and notes that only below 900 pixels does the transport border turn red while disconnected (task T31).
 
 - The band outside the curved lens seam is plain black, with the vignette and grain clipped to the curve and the lens frame's inner glow gone, and at 900 pixels and wider the menu row and transport are transparent until the page scrolls under the menu (task U106).
