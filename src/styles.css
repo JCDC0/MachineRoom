@@ -159,7 +159,6 @@ summary:focus-visible,
   position: absolute;
   inset: 0;
   overflow: hidden;
-  box-shadow: inset 0 0 64px rgb(255 255 255 / 0.05);
   cursor: grab;
 }
 
@@ -7743,10 +7742,17 @@ body:has(#hud-orchestrator-chat) .waiting {
   .transport {
     margin: 0;
     padding: 4px calc(var(--space) * 2);
-    border-left: 0;
-    border-right: 0;
-    border-top: 0;
+    background: none;
+    border: 0;
     min-height: var(--transport-h);
+  }
+
+  .hud-menu {
+    background: transparent;
+  }
+
+  .stage.is-scrolled .hud-menu {
+    background: var(--black);
   }
 
   .hud-lower {

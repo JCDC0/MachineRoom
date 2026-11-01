@@ -510,6 +510,14 @@ describe('fitView', () => {
     expect(fitView([{ x: 0, y: 0, z: 0, r: 10 }]).dist).toBe(FIT_MIN)
   })
 
+  it('caps the fit at 8000', () => {
+    const wide = [
+      { x: 0, y: 0, z: 0, r: 500 },
+      { x: 40000, y: 0, z: 0, r: 500 },
+    ]
+    expect(fitView(wide, { width: 400, height: 300 }).dist).toBe(8000)
+  })
+
   it('fits the wide lens, not the taller window behind it', () => {
     const lens = fitView(faces, { width: 1280, height: 464, min: 0 })
     const windowView = fitView(faces, { width: 1280, height: 800, min: 0 })

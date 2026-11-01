@@ -80,12 +80,12 @@ describe('lens rails', () => {
   })
 
   it('maps the zoom share to a camera distance on a log scale', () => {
-    expect(distanceFromShare(0)).toBeCloseTo(26000)
+    expect(distanceFromShare(0)).toBeCloseTo(8000)
     expect(distanceFromShare(1)).toBeCloseTo(500)
-    expect(shareFromDistance(26000)).toBeCloseTo(0)
+    expect(shareFromDistance(8000)).toBeCloseTo(0)
     expect(shareFromDistance(500)).toBeCloseTo(1)
     expect(shareFromDistance(distanceFromShare(0.37))).toBeCloseTo(0.37)
-    expect(distanceFromShare(0.5)).toBeCloseTo(Math.sqrt(500 * 26000))
+    expect(distanceFromShare(0.5)).toBeCloseTo(Math.sqrt(500 * 8000))
   })
 
   it('keeps the lens share in the saved settings', () => {

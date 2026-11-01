@@ -7,7 +7,7 @@ import {
   DUST_INNER,
   DUST_OUTER,
   LATTICE_CELLS,
-  LATTICE_FLOORS,
+  LATTICE_LAYER,
   LATTICE_STEP,
   MOTE_INNER,
   MOTE_OUTER,
@@ -48,7 +48,9 @@ function radii(layer) {
 
 describe('lattice', () => {
   const extent = LATTICE_STEP * LATTICE_CELLS
-  const lowest = -2 * LATTICE_STEP
+  const low = -LATTICE_LAYER * LATTICE_STEP
+  const high = LATTICE_LAYER * LATTICE_STEP
+  const layers = [low, high]
 
   function segments(values) {
     const out = []
@@ -72,55 +74,47 @@ describe('lattice', () => {
     return out
   }
 
-  it('keeps two floors under the hub', () => {
-    expect(LATTICE_FLOORS).toBe(2)
-    expect(Math.min(...yValues(latticeLines()))).toBe(-2 * LATTICE_STEP)
+  it('keeps one layer above the hub and one below', () => {
+    expect(LATTICE_LAYER).toBe(1)
+    const levels = [...new Set(yValues(latticeLines()))].sort((a, b) => a - b)
+    expect(levels).toEqual(layers)
   })
 
-  it('puts no line, tick or label under the lowest floor', () => {
-    for (const values of [latticeLines(), latticeTicks()]) {
-      for (const y of yValues(values)) expect(y).toBeGreaterThanOrEqual(lowest)
-    }
-    for (const [, y] of labelPoints()) expect(y).toBeGreaterThanOrEqual(lowest)
-  })
-
-  it('draws a grid on both floor levels', () => {
+  it('draws a grid on both layers and none at the hub level', () => {
     const values = latticeLines()
-    for (const level of [-LATTICE_STEP, -2 * LATTICE_STEP]) {
+    for (const level of layers) {
       const { alongX, alongZ } = gridAt(values, level)
       expect(alongX).toHaveLength(2 * LATTICE_CELLS + 1)
       expect(alongZ).toHaveLength(2 * LATTICE_CELLS + 1)
     }
+    const hub = gridAt(values, 0)
+    expect(hub.alongX).toHaveLength(0)
+    expect(hub.alongZ).toHaveLength(0)
   })
 
-  it('still draws a grid on the top level and on every level above the hub', () => {
-    const values = latticeLines()
-    for (let level = 0; level <= extent; level += LATTICE_STEP) {
-      const { alongX, alongZ } = gridAt(values, level)
-      expect(alongX).toHaveLength(2 * LATTICE_CELLS + 1)
-      expect(alongZ).toHaveLength(2 * LATTICE_CELLS + 1)
-    }
-    const top = gridAt(values, extent)
-    expect(top.alongX.length).toBeGreaterThan(0)
-    expect(top.alongZ.length).toBeGreaterThan(0)
-  })
-
-  it('runs every vertical line from the lowest floor to the top', () => {
+  it('runs every vertical line from the lower layer to the upper layer and no further', () => {
     const verticals = segments(latticeLines()).filter(([a, b]) => a[0] === b[0] && a[2] === b[2] && a[1] !== b[1])
     expect(verticals).toHaveLength((2 * LATTICE_CELLS + 1) ** 2)
     for (const [a, b] of verticals) {
-      expect(Math.min(a[1], b[1])).toBe(lowest)
-      expect(Math.max(a[1], b[1])).toBe(extent)
+      expect(Math.min(a[1], b[1])).toBe(low)
+      expect(Math.max(a[1], b[1])).toBe(high)
     }
   })
 
-  it('draws ticks from the lowest floor to the top and none under it', () => {
+  it('draws ticks only on the two layers', () => {
     const values = latticeTicks()
-    const levels = new Set(yValues(values))
-    expect(Math.min(...levels)).toBe(lowest)
-    expect(levels.has(0)).toBe(true)
-    expect(levels.has(extent)).toBe(true)
-    expect(levels.has(lowest)).toBe(true)
+    const levels = [...new Set(yValues(values))].sort((a, b) => a - b)
+    expect(levels).toEqual(layers)
+    for (const level of layers) {
+      expect(segments(values).some(([a, b]) => a[1] === level && b[1] === level)).toBe(true)
+    }
+  })
+
+  it('labels only the two layers', () => {
+    const points = labelPoints()
+    expect(points.length).toBeGreaterThan(0)
+    const levels = [...new Set(points.map(([, y]) => y))].sort((a, b) => a - b)
+    expect(levels).toEqual(layers)
   })
 })
 
