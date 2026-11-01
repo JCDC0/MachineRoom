@@ -5565,7 +5565,6 @@ body:has(#hud-orchestrator-chat) .waiting {
   line-height: 1.2;
   text-transform: uppercase;
   white-space: nowrap;
-  transform-origin: left top;
 }
 
 .mr-card-meta {

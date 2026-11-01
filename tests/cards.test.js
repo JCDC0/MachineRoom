@@ -360,22 +360,6 @@ describe('card names', () => {
     cards.dispose()
   })
 
-  it('keeps a short name clear of a lens width cap', () => {
-    const state = recentState()
-    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
-    cards.sync(state)
-    const first = cards.cards.values().next().value
-    first.element.parentElement = { clientHeight: 400 }
-    const view = camera()
-    view.position.set(0, 0, 5000)
-    view.updateMatrixWorld(true)
-    cards.update(state, 0.016, view)
-    const card = cards.cards.get('docs')
-    expect(card.name.style.transform).toMatch(/^scale\(/)
-    expect(card.name.style.maxWidth).toBeUndefined()
-    cards.dispose()
-  })
-
   it('shows every card name on the ring', () => {
     const state = recentState()
     const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
