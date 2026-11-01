@@ -15,7 +15,9 @@ import {
 import { agentTasks } from '../src/model/liveTasks.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const BASE_TIME = Date.parse('2026-10-24T10:00:00Z')
+// The cost route counts this calendar month, so a fixed date fails once its month ends.
+const THIS_MONTH = new Date()
+const BASE_TIME = Date.UTC(THIS_MONTH.getUTCFullYear(), THIS_MONTH.getUTCMonth(), 15, 10)
 const iso = (minutesAgo) => new Date(BASE_TIME - minutesAgo * 60000).toISOString()
 
 const AGENTS = [
