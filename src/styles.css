@@ -9137,6 +9137,43 @@ body:has(#hud-orchestrator-chat) .waiting {
   }
 }
 
+/* U105: the header and transport controls ride the lens seam */
+@media (min-width: 900px) {
+  .hud-band-project,
+  .hud-band-switch,
+  .hud-modes button,
+  .hud-action,
+  .hud-health-chip,
+  .transport-badge,
+  .transport-center,
+  .transport-orchestrator,
+  .transport-chip,
+  .transport-chip-overflow,
+  .transport-context,
+  .transport-tail > .mono,
+  .transport.is-live > .mono,
+  .transport:not(.is-live) > button,
+  .transport:not(.is-live) > .mono,
+  .speeds button {
+    transform: translateY(var(--seam-y, 0)) rotate(var(--seam-r, 0));
+  }
+
+  .transport-badge,
+  .transport-center,
+  .transport-orchestrator,
+  .transport-chip,
+  .transport-chip-overflow,
+  .transport-context,
+  .transport-tail > .mono,
+  .transport.is-live > .mono,
+  .transport:not(.is-live) > button,
+  .transport:not(.is-live) > .mono,
+  .speeds button {
+    position: relative;
+    z-index: 5;
+  }
+}
+
 /* U81: Build a team at the top of the Agents tab */
 .mr-team {
   flex: 0 0 auto;

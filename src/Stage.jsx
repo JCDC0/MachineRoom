@@ -59,6 +59,9 @@ const DEMO_SUBS = [
   { id: 'frontend', name: 'Frontend', lanes: ['opencode'], scope: ['src/**'], restricted: true, setBy: 'owner' },
   { id: 'backend', name: 'Backend', lanes: ['claude'], scope: ['server/**'], restricted: true, setBy: 'owner' },
 ]
+const SEAM_MIN_WIDTH = 900
+const SEAM_TOP = '.hud-band-project, .hud-band-switch, .hud-modes button, .hud-action, .hud-health-chip'
+const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-orchestrator, .transport-chip, .transport-chip-overflow, .transport-context, .transport-tail > .mono, .transport.is-live > .mono, .transport:not(.is-live) > button, .transport:not(.is-live) > .mono, .speeds button'
 
 export function labelsFromFamily(answer) {
   const nodes = Array.isArray(answer?.nodes) ? answer.nodes : []
@@ -91,6 +94,21 @@ export function lensBowAt(x, width, bow = LENS_BOW) {
   const point = Number(x)
   if (span <= 0 || !Number.isFinite(point)) return 0
   return bow * (1 - (2 * point / span - 1) ** 2)
+}
+
+export function seamPose(x, width, edge, bow = LENS_BOW) {
+  const span = spanOf(width)
+  const point = Number(x)
+  const sign = edge === 'bottom' ? -1 : 1
+  const y = lensBowAt(point, span, bow)
+  const slope = span > 0 && Number.isFinite(point)
+    ? (-8 * bow * (point - span / 2)) / (span * span)
+    : 0
+  const angle = (Math.atan(slope) * 180) / Math.PI
+  return {
+    y: y === 0 ? 0 : sign * y,
+    angle: angle === 0 ? 0 : sign * angle,
+  }
 }
 
 export function lensClipPath(width, height, bow = LENS_BOW) {
@@ -350,6 +368,62 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     const observer = new ResizeObserver(read)
     observer.observe(node)
     return () => observer.disconnect()
+  }, [])
+
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return undefined
+    let topNodes = []
+    let bottomNodes = []
+    const resize = typeof ResizeObserver === 'function' ? new ResizeObserver(() => measure()) : null
+    const mutations = typeof MutationObserver === 'function' ? new MutationObserver(() => measure()) : null
+
+    function clear(nodes) {
+      for (const node of nodes) {
+        node.style.removeProperty('--seam-y')
+        node.style.removeProperty('--seam-r')
+      }
+    }
+
+    function measure() {
+      const lens = document.querySelector('.lens')
+      const menu = document.querySelector('.hud-menu')
+      const transport = document.querySelector('.transport')
+      if (!lens || !menu || !transport) {
+        clear(topNodes)
+        clear(bottomNodes)
+        return
+      }
+      resize?.observe(menu)
+      resize?.observe(transport)
+      resize?.observe(lens)
+      mutations?.observe(menu, { childList: true, subtree: true })
+      mutations?.observe(transport, { childList: true, subtree: true })
+      if (window.innerWidth < SEAM_MIN_WIDTH) {
+        clear(topNodes)
+        clear(bottomNodes)
+        return
+      }
+      const lensRect = lens.getBoundingClientRect()
+      const width = lensRect.width
+      topNodes = Array.from(menu.querySelectorAll(SEAM_TOP))
+      bottomNodes = Array.from(transport.querySelectorAll(SEAM_BOTTOM))
+      for (const [nodes, edge] of [[topNodes, 'top'], [bottomNodes, 'bottom']]) {
+        for (const node of nodes) {
+          const rect = node.getBoundingClientRect()
+          const x = Math.max(0, Math.min(width, (rect.left + rect.right) / 2 - lensRect.left))
+          const pose = seamPose(x, width, edge)
+          node.style.setProperty('--seam-y', `${pose.y}px`)
+          node.style.setProperty('--seam-r', `${pose.angle}deg`)
+        }
+      }
+    }
+
+    measure()
+
+    return () => {
+      resize?.disconnect()
+      mutations?.disconnect()
+    }
   }, [])
 
   useEffect(() => {
