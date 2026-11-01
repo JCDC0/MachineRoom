@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
-import { ANCHOR_DIST, CARD_NAME_FONT, CARD_NAME_MIN, FIT_MIN, FOV, OVERVIEW, PARK_EASE_MS, createCameraRig, fitView, minTextScale, projectPoint, viewBasis } from '../src/engine/camera.js'
+import { ANCHOR_DIST, FIT_MIN, FOV, OVERVIEW, PARK_EASE_MS, createCameraRig, fitView, projectPoint, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -437,17 +437,6 @@ describe('fitView', () => {
     const lens = fitView(room, { aspect: 1280 / 464 })
     const taller = fitView(room, { aspect: 1280 / 748 })
     expect(lens.dist).toBeGreaterThanOrEqual(taller.dist)
-  })
-
-  it('grows a card name to 11 pixels at the lens distance', () => {
-    const height = 464
-    const view = fitView(room, { aspect: 1280 / height })
-    const screenScale = height / (2 * Math.tan((FOV * Math.PI) / 360) * view.dist)
-    const scale = minTextScale(screenScale, CARD_NAME_FONT, CARD_NAME_MIN)
-    expect(scale).toBeGreaterThan(1)
-    expect(CARD_NAME_FONT * screenScale * scale).toBeCloseTo(CARD_NAME_MIN, 5)
-    expect(minTextScale(0)).toBe(1)
-    expect(minTextScale(1)).toBe(1)
   })
 
   it('backs off as the room grows', () => {

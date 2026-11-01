@@ -7,8 +7,6 @@ const MAX_DIST = 26000
 export const OVERVIEW = { x: 0, y: 200, z: 0, yaw: 0.42, pitch: 0.3, dist: 2600 }
 export const FOV = 50
 export const FIT_MIN = 900
-export const CARD_NAME_FONT = 15
-export const CARD_NAME_MIN = 11
 export const FOLLOW_HOLD_MS = 4000
 export const FOLLOW_EASE_MS = 1200
 export const PARK_EASE_MS = 2200
@@ -90,7 +88,7 @@ export function fitView(spheres, { yaw = OVERVIEW.yaw, pitch = OVERVIEW.pitch, f
   return { target, dist: Math.min(dist, MAX_DIST) }
 }
 
-export function minTextScale(screenScale, font = CARD_NAME_FONT, min = CARD_NAME_MIN) {
+export function minTextScale(screenScale, font, min) {
   const value = Number(screenScale)
   if (!Number.isFinite(value) || value <= 0 || !(font > 0) || !(min > 0)) return 1
   return Math.max(1, min / (font * value))
