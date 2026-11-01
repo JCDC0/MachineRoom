@@ -3,6 +3,7 @@
 ## Unreleased
 
 - A folder card's name draws at the card's own font size and shrinks and grows with the card, with no 11 pixel minimum (task U104).
+- After a minute with no input at 900 pixels and wider, the room turns slowly around the hub and the menu row, transport, rails and lens corner text slide away until the next pointer, wheel, key, scroll or touch (task U102).
 - Returning to the room clears the inspected row, the selected folder, the pins and the popped folders, and closing the inspector clears the row and the folder but keeps the pins, the popped folders and the camera (task U99b).
 - The faint lattice stops two floors under the hub, at `-LATTICE_STEP` and `-2 * LATTICE_STEP`, and draws nothing lower (task U103).
 - A double click on a folder card holds the camera on that folder and opens its inspector, the selected folder carries a solid yellow border and glow, and an agent's folder and file carry faint yellow stripes instead of a dashed outline (task U99).

@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { describe, expect, it, vi } from 'vitest'
-import { ANCHOR_DIST, FIT_MIN, FOV, OVERVIEW, PARK_EASE_MS, createCameraRig, fitView, projectPoint, viewBasis } from '../src/engine/camera.js'
+import { ANCHOR_DIST, FIT_MIN, FOV, IDLE_SPIN, OVERVIEW, PARK_EASE_MS, createCameraRig, fitView, projectPoint, viewBasis } from '../src/engine/camera.js'
 
 const dot = (a, b) => a.x * b.x + a.y * b.y + a.z * b.z
 
@@ -329,6 +329,119 @@ describe('camera rig hold', () => {
       expect(camera.position.distanceTo(point)).not.toBeCloseTo(zoomed, 3)
       camera.getWorldDirection(facing)
       expect(facing.dot(point.clone().sub(camera.position).normalize())).toBeCloseTo(1, 5)
+    } finally {
+      close()
+    }
+  })
+})
+
+describe('camera idle spin', () => {
+  it('is free at rest and stops being free under a hold or a follow', () => {
+    const { rig, close } = openRig()
+    try {
+      expect(rig.free()).toBe(true)
+      rig.hold(() => new THREE.Vector3(0, 200, 0), ANCHOR_DIST)
+      expect(rig.free()).toBe(false)
+      rig.stopFollow()
+      expect(rig.free()).toBe(true)
+      rig.focus(() => new THREE.Vector3(0, 200, 0), 1200)
+      expect(rig.free()).toBe(false)
+    } finally {
+      close()
+    }
+  })
+
+  it('turns the yaw while the rig is free', () => {
+    const { rig, close } = openRig()
+    try {
+      const start = rig.yaw()
+      rig.setSpin(true)
+      for (let step = 0; step < 60; step += 1) rig.update(1 / 60)
+      rig.snap()
+      expect(rig.yaw()).toBeGreaterThan(start)
+      expect(rig.yaw() - start).toBeCloseTo(IDLE_SPIN, 5)
+    } finally {
+      close()
+    }
+  })
+
+  it('turns spin off under a hold', () => {
+    const { rig, close } = openRig()
+    try {
+      rig.setSpin(true)
+      for (let step = 0; step < 30; step += 1) rig.update(1 / 60)
+      rig.hold(() => new THREE.Vector3(700, 260, -500), ANCHOR_DIST)
+      expect(rig.free()).toBe(false)
+      rig.stopFollow()
+      expect(rig.free()).toBe(true)
+      rig.snap()
+      const yaw = rig.yaw()
+      for (let step = 0; step < 60; step += 1) rig.update(1 / 60)
+      expect(rig.yaw()).toBeCloseTo(yaw, 6)
+    } finally {
+      close()
+    }
+  })
+
+  it('turns spin off under a follow', () => {
+    const { rig, close } = openRig()
+    try {
+      rig.setSpin(true)
+      for (let step = 0; step < 30; step += 1) rig.update(1 / 60)
+      rig.focus(() => new THREE.Vector3(700, 260, -500), 1200)
+      expect(rig.free()).toBe(false)
+      rig.stopFollow()
+      rig.snap()
+      const yaw = rig.yaw()
+      for (let step = 0; step < 60; step += 1) rig.update(1 / 60)
+      expect(rig.yaw()).toBeCloseTo(yaw, 6)
+    } finally {
+      close()
+    }
+  })
+
+  it('eases to a stop without a jump back to the overview', () => {
+    const { rig, close } = openRig()
+    try {
+      rig.setSpin(true)
+      for (let step = 0; step < 120; step += 1) rig.update(1 / 60)
+      const spun = rig.yaw()
+      expect(spun).not.toBeCloseTo(OVERVIEW.yaw)
+      rig.setSpin(false)
+      for (let step = 0; step < 120; step += 1) rig.update(1 / 60)
+      expect(rig.yaw()).toBeGreaterThanOrEqual(spun - 1e-6)
+      expect(rig.yaw() - spun).toBeLessThan(0.01)
+      expect(Math.abs(rig.yaw() - OVERVIEW.yaw)).toBeGreaterThan(0.05)
+    } finally {
+      close()
+    }
+  })
+
+  it('still returns to the overview on overview()', () => {
+    const { rig, close } = openRig()
+    const clock = clockAt()
+    try {
+      rig.setSpin(true)
+      for (let step = 0; step < 30; step += 1) rig.update(1 / 60)
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw, 5)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('does not set adjusted while it spins', () => {
+    const { rig, close } = openRig()
+    try {
+      rig.setSpin(true)
+      for (let step = 0; step < 60; step += 1) rig.update(1 / 60)
+      rig.setSpin(false)
+      rig.setOverviewDistance(1800)
+      expect(rig.zoomMultiplier()).toBeCloseTo(1, 2)
     } finally {
       close()
     }

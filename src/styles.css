@@ -10345,6 +10345,45 @@ body:has(#hud-orchestrator-chat) .waiting {
   border-color: var(--red);
 }
 
+/* U102: the calm view, after a minute with no input at 900 pixels and wider. */
+.hud-menu,
+.transport,
+.lens-rail,
+.lens-labels {
+  transition: transform 300ms ease, opacity 300ms ease;
+}
+
+.stage.is-idle .hud-menu,
+.stage.is-idle .transport {
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 800ms ease-out, opacity 800ms ease-out;
+}
+
+.stage.is-idle .hud-menu {
+  transform: translateY(-100%);
+}
+
+.stage.is-idle .transport {
+  transform: translateY(100%);
+}
+
+.stage.is-idle .lens-rail,
+.stage.is-idle .lens-labels {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 800ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage.is-idle .hud-menu,
+  .stage.is-idle .transport,
+  .stage.is-idle .lens-rail,
+  .stage.is-idle .lens-labels {
+    transition: none;
+  }
+}
+
 /* U64: MCP servers and tools management in Settings. */
 .mr-mcp {
   gap: var(--space);

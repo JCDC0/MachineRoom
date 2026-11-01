@@ -11,6 +11,7 @@ export const FOLLOW_HOLD_MS = 4000
 export const FOLLOW_EASE_MS = 1200
 export const PARK_EASE_MS = 2200
 export const ANCHOR_DIST = 700
+export const IDLE_SPIN = 0.04
 const FOLLOW_WIDE_MIN = 900
 const FOLLOW_CLOSE_MIN = 620
 const MIDDLE_EDGE = 1 / 6
@@ -167,7 +168,12 @@ export function createCameraRig(camera, surface) {
   let overviewDist = OVERVIEW.dist
   const overviewTarget = new THREE.Vector3(OVERVIEW.x, OVERVIEW.y, OVERVIEW.z)
   let adjusted = false
+  let spin = false
   const drift = { x: 0, y: 0, sx: 0, sy: 0 }
+
+  function free() {
+    return !follow && heldDist === null
+  }
 
   function hover(event) {
     const rect = surface.getBoundingClientRect()
@@ -227,6 +233,7 @@ export function createCameraRig(camera, surface) {
     heldDist = null
     transition = null
     adjusted = false
+    spin = false
     goal.target.copy(overviewTarget)
     goal.yaw = OVERVIEW.yaw
     goal.pitch = OVERVIEW.pitch
@@ -255,6 +262,7 @@ export function createCameraRig(camera, surface) {
       goal.target.copy(spot.target)
       goal.dist = spot.dist
     }
+    if (spin && free()) goal.yaw += IDLE_SPIN * delta
     if (![goal.target.x, goal.target.y, goal.target.z, goal.dist, goal.yaw, goal.pitch].every(Number.isFinite)) reset()
     const isStill = still()
     const rate = easeRate(delta, 5, isStill)
@@ -313,6 +321,10 @@ export function createCameraRig(camera, surface) {
     update,
     snap,
     zoomBy,
+    free,
+    setSpin(on) {
+      spin = Boolean(on)
+    },
     yaw: () => view.yaw,
     pitch: () => view.pitch,
     zoomShare: () => shareFromDistance(goal.dist),
@@ -330,12 +342,14 @@ export function createCameraRig(camera, surface) {
       transition = null
       heldDist = null
       follow = () => ({ target: position(), dist })
+      spin = false
       goal.dist = dist
       goal.pitch = pitch ?? Math.max(goal.pitch, 0.5)
     },
     hold(point, dist = ANCHOR_DIST) {
       heldDist = dist
       follow = () => ({ target: point(), dist: heldDist })
+      spin = false
       startTransition()
     },
     followSpheres(spheres, mode = 'wide', duration = FOLLOW_EASE_MS) {
@@ -350,6 +364,7 @@ export function createCameraRig(camera, surface) {
         })
         return { target: next.target, dist: next.dist }
       }
+      spin = false
       startTransition(duration)
     },
     stopFollow() {
@@ -374,6 +389,7 @@ export function createCameraRig(camera, surface) {
       heldDist = null
       transition = null
       adjusted = false
+      spin = false
       goal.target.copy(overviewTarget)
       goal.yaw = nearestTurn(view.yaw, OVERVIEW.yaw)
       goal.pitch = OVERVIEW.pitch
