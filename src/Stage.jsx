@@ -31,6 +31,8 @@ import { aberrationChannels, mapPlacement, radialMapDataUrl } from './ui/aberrat
 import { startGrain } from './ui/grain.js'
 import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
+import { still } from './engine/sprites.js'
+import { createIdleWatch, idleAllowed, stageClassName } from './ui/idleView.js'
 import { LiveBadgeContext, OrchestratorsContext } from './ui/Transport.jsx'
 import { orchestratorAnswerList } from './ui/transportOrchestrators.js'
 import Waiting from './ui/Waiting.jsx'
@@ -40,6 +42,7 @@ import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, l
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
 const OPEN_PANEL = '.control-drawer, .hud-drawer:not([hidden]), .hud-settings, .hud-dropdown, .mr-side-overlay, .hud-help-backdrop, .hud-band-list, .hud-menu.is-open, .mr-assistant, .mr-guide-backdrop, .mr-launcher, .mr-setup-backdrop'
+const IDLE_PANEL = `${OPEN_PANEL}, .mr-inspector, .brief-confirm-card, .mr-side-confirm-card, .endpoints-confirm`
 const BADGE = {
   position: 'absolute',
   bottom: 96,
@@ -235,6 +238,13 @@ function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
   )
 }
 
+function textBoxFocused() {
+  const active = typeof document === 'undefined' ? null : document.activeElement
+  if (!active) return false
+  const tag = String(active.tagName ?? '').toUpperCase()
+  return tag === 'INPUT' || tag === 'TEXTAREA' || active.isContentEditable === true
+}
+
 export default function Stage({ data, mode = 'replay', liveAvailable = false, onMode, fps = false, recorder = null }) {
   const surfaceRef = useRef(null)
   const glRef = useRef(null)
@@ -297,6 +307,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const inspectorRef = useRef(null)
   inspectorRef.current = inspector
   const [following, setFollowing] = useState(false)
+  const [idle, setIdle] = useState(false)
+  const idleRef = useRef(false)
   const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
@@ -503,6 +515,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     })
     roomRef.current = room
     room.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles })
+    room.setIdle(idleRef.current)
     setFineDust(effects.dust)
     if (latestBoardRef.current) {
       room.setCosts(latestBoardRef.current)
@@ -1054,6 +1067,37 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
   const orchestratorActivity = orchestratorDoing(snapshot.agents)
 
+  useEffect(() => {
+    function apply(on) {
+      idleRef.current = on
+      setIdle(on)
+      roomRef.current?.setIdle?.(on)
+    }
+    if (bridgeDown) {
+      apply(false)
+      return undefined
+    }
+    const watch = createIdleWatch({
+      isAllowed: () =>
+        idleAllowed({
+          width: window.innerWidth,
+          scrollY: window.scrollY ?? window.pageYOffset ?? 0,
+          panelOpen: Boolean(inspectorRef.current) || Boolean(document.querySelector(IDLE_PANEL)),
+          focusedInput: textBoxFocused(),
+          following: Boolean(followRef.current),
+          holding: roomRef.current?.free ? !roomRef.current.free() : true,
+          still: still(),
+        }),
+      onIdle: apply,
+    })
+    return () => {
+      watch.stop()
+      idleRef.current = false
+      setIdle(false)
+      roomRef.current?.setIdle?.(false)
+    }
+  }, [bridgeDown])
+
   const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
   const chromaChannels = aberrationChannels(effects.aberration?.strength)
   const chromaFilter = chromaOn && chromaMap ? 'url(#mr-screen-filter)' : undefined
@@ -1079,7 +1123,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
-      <div className={`stage${bridgeDown ? ' is-disconnected' : ''}`} style={{ '--lens-bow': `${LENS_BOW}px`, ...(lensShare === null ? null : { '--lens-h-user': lensHeightValue(lensShare) }) }}>
+      <div className={stageClassName({ disconnected: bridgeDown, idle })} style={{ '--lens-bow': `${LENS_BOW}px`, ...(lensShare === null ? null : { '--lens-h-user': lensHeightValue(lensShare) }) }}>
         {clipLens && (
           <svg
             className="lens-clip-defs"

@@ -15,6 +15,7 @@ import Stage, {
   lensEdgeTicks,
 } from '../src/Stage.jsx'
 import Hud from '../src/ui/Hud.jsx'
+import { stageClassName } from '../src/ui/idleView.js'
 import { makeTree } from '../src/model/paths.js'
 
 const liveStatus = vi.hoisted(() => ({ status: 'connecting' }))
@@ -152,6 +153,21 @@ describe('disconnected borders', () => {
     expect(isBridgeDown({}, { status: 'live' }, { ok: true })).toBe(false)
     expect(isBridgeDown({}, { status: 'live' }, null)).toBe(false)
     expect(isBridgeDown(null, { status: 'reconnecting' }, { ok: false })).toBe(false)
+  })
+})
+
+describe('stage idle class', () => {
+  it('marks the stage is-idle only when the calm view is on and the room is connected', () => {
+    expect(stageClassName()).toBe('stage')
+    expect(stageClassName({ idle: true })).toBe('stage is-idle')
+    expect(stageClassName({ idle: true, disconnected: true })).toBe('stage is-disconnected')
+    expect(stageClassName({ disconnected: true })).toBe('stage is-disconnected')
+  })
+
+  it('renders no is-idle class before the timer', () => {
+    const html = stageHtml()
+    expect(html).toContain('class="stage"')
+    expect(html).not.toContain('class="stage is-idle"')
   })
 })
 
