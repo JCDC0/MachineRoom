@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The ARCHITECTURE guide describes the horizontal git tree timeline and notes that only below 900 pixels does the transport border turn red while disconnected (task T31).
+
 - The band outside the curved lens seam is plain black, with the vignette and grain clipped to the curve and the lens frame's inner glow gone, and at 900 pixels and wider the menu row and transport are transparent until the page scrolls under the menu (task U106).
 - The lattice draws one layer above the hub at `+LATTICE_STEP` and one below at `-LATTICE_STEP`, with vertical lines that stop at them and no layer anywhere else (task U106).
 - The camera's furthest zoom drops from 26000 to 8000 units, so the wheel, the Zoom rail and `fitView` stay inside the lattice (task U106).
