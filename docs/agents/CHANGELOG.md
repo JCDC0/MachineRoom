@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add `docs/agents/AUDIT-2026-11.md`, the co-orchestrator review of the unpushed work from U96 to U105 and `server/git.js`, with three proposed backend briefs (task Q17).
 - At 900 pixels and wider each menu row and transport control follows the bowed lens edge through the pure `seamPose` and the `--seam-y` and `--seam-r` set from its own centre, while the dropdowns, the scrubber and the lower half stay level (task U105).
 - A folder card's name draws at the card's own font size and shrinks and grows with the card, with no 11 pixel minimum (task U104).
 - After a minute with no input at 900 pixels and wider, the room turns slowly around the hub and the menu row, transport, rails and lens corner text slide away until the next pointer, wheel, key, scroll or touch (task U102).
