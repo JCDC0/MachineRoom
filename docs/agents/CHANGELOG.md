@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The git route resolves its checkout root through git rev-parse, includes detached commits, guards concurrent writes and status failures with 409, and drops stale in-flight cache writes (task S22).
 - The ARCHITECTURE guide describes the horizontal git tree timeline and notes that only below 900 pixels does the transport border turn red while disconnected (task T31).
 
 - The band outside the curved lens seam is plain black, with the vignette and grain clipped to the curve and the lens frame's inner glow gone, and at 900 pixels and wider the menu row and transport are transparent until the page scrolls under the menu (task U106).

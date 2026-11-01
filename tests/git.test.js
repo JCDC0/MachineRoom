@@ -16,9 +16,14 @@ import {
   LANE_RUN_OPEN_PROBLEM,
   ORIGIN_BRANCH_PROBLEM,
   ORIGIN_SWITCH_PROBLEM,
+  STATUS_FAILED_PROBLEM,
   TURN_RUNNING_PROBLEM,
   WORKTREE_HOLDS_BRANCH_PROBLEM,
+  WRITE_IN_FLIGHT_PROBLEM,
+  defaultGitRunner,
+  invalidateGitCache,
   parseStatus,
+  readGitState,
   resetGitCache,
 } from '../server/git.js'
 import { createClient } from '../src/control/client.js'
@@ -253,6 +258,50 @@ describe('the git route reading state on a real repository', () => {
     expect(state.branches.every((b) => b.current === false)).toBe(true)
   })
 
+  it('includes a detached commit in commits when HEAD is detached', async () => {
+    const repo = makeRepo()
+    testGit(repo, ['checkout', '--detach', 'HEAD'])
+    writeFileSync(join(repo, 'detached.txt'), 'detached work\n')
+    testGit(repo, ['add', 'detached.txt'])
+    testGit(repo, ['commit', '-m', 'detached commit'])
+
+    const { client } = await startBridge({ projectRoot: repo })
+    const state = await client.gitState()
+    expect(state.git).toBe(true)
+    expect(state.detached).toBe(true)
+    expect(state.branch).toBeNull()
+    expect(state.commits.length).toBeGreaterThanOrEqual(2)
+    expect(state.commits[0].sha).toBe(state.head)
+    expect(state.commits[0].subject).toBe('detached commit')
+    expect(state.commits[0].refs).toEqual([])
+  })
+
+  it('allows switching and does not hold its own branch when opened on a subfolder', async () => {
+    const repo = makeRepo()
+    testGit(repo, ['branch', 'feat'])
+    const sub = join(repo, 'packages', 'app')
+    mkdirSync(sub, { recursive: true })
+    const wt = makeTempDir('mr-sub-wt-')
+    cleanups.push(() => removeTempDir(wt))
+    testGit(repo, ['worktree', 'add', wt, 'feat'])
+
+    const { client } = await startBridge({ projectRoot: sub })
+    const state = await client.gitState()
+    expect(state.git).toBe(true)
+    expect(state.branch).toBe('main')
+    const mainBranch = state.branches.find((b) => b.name === 'main')
+    const featBranch = state.branches.find((b) => b.name === 'feat')
+    expect(mainBranch.worktree).toBe(false)
+    expect(featBranch.worktree).toBe(true)
+
+    testGit(repo, ['branch', 'feat2'])
+    const nextState = await client.switchBranch({ branch: 'feat2', confirmed: true })
+    expect(nextState.branch).toBe('feat2')
+
+    const backState = await client.switchBranch({ branch: 'main', confirmed: true })
+    expect(backState.branch).toBe('main')
+  })
+
   it('marks checkout as dirty when files are modified or uncommitted', async () => {
     const repo = makeRepo()
     writeFileSync(join(repo, 'extra.txt'), 'uncommitted work\n')
@@ -381,6 +430,64 @@ describe('switch branch refusals', () => {
     const res = await postJson(url, '/api/git/switch', { branch: 'feat', confirmed: true })
     expect(res.status).toBe(409)
     expect(res.body.error).toBe(WORKTREE_HOLDS_BRANCH_PROBLEM)
+  })
+
+  it('refuses switch with 409 when git status fails', async () => {
+    const repo = makeRepo()
+    testGit(repo, ['branch', 'feat'])
+
+    const failingRunner = async (cwd, args, opts) => {
+      if (Array.isArray(args) && args[0] === 'status') {
+        throw new Error('git status failed')
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+
+    const { url } = await startBridge({ projectRoot: repo, gitRunner: failingRunner })
+    const res = await postJson(url, '/api/git/switch', { branch: 'feat', confirmed: true })
+    expect(res.status).toBe(409)
+    expect(res.body.error).toBe(STATUS_FAILED_PROBLEM)
+
+    const diskBranch = testGit(repo, ['branch', '--show-current']).trim()
+    expect(diskBranch).toBe('main')
+  })
+
+  it('refuses a concurrent write with 409 while a write is running', async () => {
+    const repo = makeRepo()
+    testGit(repo, ['branch', 'feat-1'])
+    testGit(repo, ['branch', 'feat-2'])
+
+    let releaseFirst
+    const firstBlocked = new Promise((res) => {
+      releaseFirst = res
+    })
+
+    const slowRunner = async (cwd, args, opts) => {
+      if (Array.isArray(args) && args[0] === 'switch' && args[2] === 'feat-1') {
+        await firstBlocked
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+
+    const { url } = await startBridge({ projectRoot: repo, gitRunner: slowRunner })
+    const switchPromise = postJson(url, '/api/git/switch', { branch: 'feat-1', confirmed: true })
+
+    await new Promise((r) => setTimeout(r, 50))
+
+    const branchRes = await postJson(url, '/api/git/branch', { name: 'feat-3', from: 'main', confirmed: true })
+    expect(branchRes.status).toBe(409)
+    expect(branchRes.body.error).toBe(WRITE_IN_FLIGHT_PROBLEM)
+
+    const switch2Res = await postJson(url, '/api/git/switch', { branch: 'feat-2', confirmed: true })
+    expect(switch2Res.status).toBe(409)
+    expect(switch2Res.body.error).toBe(WRITE_IN_FLIGHT_PROBLEM)
+
+    releaseFirst()
+    const switchRes = await switchPromise
+    expect(switchRes.status).toBe(200)
+
+    const branchLaterRes = await postJson(url, '/api/git/branch', { name: 'feat-3', from: 'main', confirmed: true })
+    expect(branchLaterRes.status).toBe(200)
   })
 })
 
@@ -554,6 +661,41 @@ describe('caching and throttling', () => {
 
     await client.gitState()
     expect(gitCalls).toBe(firstCallCount)
+  })
+
+  it('does not write older state to cache when invalidated while in flight', async () => {
+    const repo = makeRepo()
+    let releaseRead
+    const readBlocked = new Promise((res) => {
+      releaseRead = res
+    })
+
+    const slowRunner = async (cwd, args, opts) => {
+      if (Array.isArray(args) && args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        await readBlocked
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+
+    const readPromise = readGitState(repo, { runner: slowRunner, force: true })
+
+    await new Promise((r) => setTimeout(r, 50))
+    invalidateGitCache(repo)
+
+    releaseRead()
+    const state = await readPromise
+    expect(state.git).toBe(true)
+
+    let newReadCalled = false
+    const detectRunner = async (cwd, args, opts) => {
+      if (Array.isArray(args) && args[0] === 'rev-parse' && args[1] === '--is-inside-work-tree') {
+        newReadCalled = true
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+
+    await readGitState(repo, { runner: detectRunner })
+    expect(newReadCalled).toBe(true)
   })
 })
 

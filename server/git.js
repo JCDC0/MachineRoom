@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { statSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { gitPath } from './programPath.js'
 
@@ -22,10 +22,15 @@ export const BAD_BRANCH_NAME_PROBLEM = 'That branch name is not valid.'
 export const BRANCH_TAKEN_PROBLEM = 'That branch already exists.'
 export const BAD_FROM_BRANCH_PROBLEM = 'Choose a known branch to branch from.'
 export const NOT_GIT_PROBLEM = 'That folder is not a git repository.'
+export const STATUS_FAILED_PROBLEM = 'Could not check for uncommitted changes.'
+export const WRITE_IN_FLIGHT_PROBLEM = 'Another git change is running.'
 
 function pathKey(p) {
   try {
-    const norm = resolve(String(p ?? ''))
+    let norm = resolve(String(p ?? ''))
+    try {
+      norm = realpathSync.native(norm)
+    } catch {}
     return process.platform === 'win32' ? norm.toLowerCase() : norm
   } catch {
     return ''
@@ -86,9 +91,11 @@ export function defaultGitRunner(cwd, args, { timeout = GIT_TIMEOUT_MS, env = pr
 }
 
 const cacheByProject = new Map()
+const writesInFlight = new Set()
 
 export function resetGitCache() {
   cacheByProject.clear()
+  writesInFlight.clear()
 }
 
 export function invalidateGitCache(folder) {
@@ -110,6 +117,15 @@ export async function isGitCheckout(folder, runner = defaultGitRunner) {
     return inside.trim() === 'true'
   } catch {
     return false
+  }
+}
+
+async function gitTopLevel(folder, runner = defaultGitRunner) {
+  try {
+    const top = (await runner(folder, ['rev-parse', '--show-toplevel'])).trim()
+    return top ? resolve(top) : resolve(folder)
+  } catch {
+    return resolve(folder)
   }
 }
 
@@ -176,7 +192,8 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
   }
   const dirty = changeCount > 0
 
-  const heldBranches = await otherWorktreeBranches(runner, resolved)
+  const topLevel = await gitTopLevel(resolved, runner)
+  const heldBranches = await otherWorktreeBranches(runner, topLevel)
 
   const branches = []
   const branchRefs = new Map()
@@ -226,14 +243,16 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
   let truncated = false
   try {
     if (branches.length > 0 || head) {
-      const logOut = await runner(resolved, [
+      const logArgs = [
         'log',
         '--branches',
+        ...(head ? ['HEAD'] : []),
         '--topo-order',
         '--format=%x1e%H%x00%P%x00%s%x00%cI',
         '-n',
         String(MAX_COMMITS + 1),
-      ])
+      ]
+      const logOut = await runner(resolved, logArgs)
       const records = logOut.split('\x1e').map((r) => r.trim()).filter(Boolean)
       truncated = records.length > MAX_COMMITS
       const kept = records.slice(0, MAX_COMMITS)
@@ -280,7 +299,10 @@ export async function readGitState(projectRoot, { runner = defaultGitRunner, for
   const inflight = (async () => {
     try {
       const state = await computeGitState(projectRoot, runner)
-      cacheByProject.set(key, { state, at: Date.now(), inflight: null })
+      const current = cacheByProject.get(key)
+      if (current?.inflight === inflight) {
+        cacheByProject.set(key, { state, at: Date.now(), inflight: null })
+      }
       return state
     } finally {
       const entry = cacheByProject.get(key)
@@ -397,43 +419,59 @@ export function createGitApi({
         return true
       }
 
-      if (isTurnRunning()) {
-        sendJson(req, res, 409, { error: TURN_RUNNING_PROBLEM })
+      const topLevel = await gitTopLevel(resolved, gitRunner)
+      const lockKey = pathKey(topLevel)
+      if (writesInFlight.has(lockKey)) {
+        sendJson(req, res, 409, { error: WRITE_IN_FLIGHT_PROBLEM })
         return true
       }
 
-      if (laneRunOpen()) {
-        sendJson(req, res, 409, { error: LANE_RUN_OPEN_PROBLEM })
-        return true
-      }
-
-      let dirty = false
+      writesInFlight.add(lockKey)
       try {
-        const status = await gitRunner(resolved, ['status', '--porcelain'])
-        dirty = status.trim().length > 0
-      } catch {}
-      if (dirty) {
-        sendJson(req, res, 409, { error: CHECKOUT_DIRTY_PROBLEM })
-        return true
-      }
+        if (isTurnRunning()) {
+          sendJson(req, res, 409, { error: TURN_RUNNING_PROBLEM })
+          return true
+        }
 
-      if ((await otherWorktreeBranches(gitRunner, resolved)).has(branch)) {
-        sendJson(req, res, 409, { error: WORKTREE_HOLDS_BRANCH_PROBLEM })
-        return true
-      }
+        if (laneRunOpen()) {
+          sendJson(req, res, 409, { error: LANE_RUN_OPEN_PROBLEM })
+          return true
+        }
 
-      try {
-        await gitRunner(resolved, ['switch', '--', branch])
-      } catch {
-        sendJson(req, res, 500, { error: 'The bridge could not switch branches.' })
-        return true
-      }
+        let dirty = false
+        try {
+          const status = await gitRunner(resolved, ['status', '--porcelain'])
+          dirty = status.trim().length > 0
+        } catch {
+          sendJson(req, res, 409, { error: STATUS_FAILED_PROBLEM })
+          return true
+        }
+        if (dirty) {
+          sendJson(req, res, 409, { error: CHECKOUT_DIRTY_PROBLEM })
+          return true
+        }
 
-      invalidateGitCache(resolved)
-      const nextState = await readGitState(resolved, { runner: gitRunner, force: true, ttlMs })
-      notify?.({ topic: 'git' })
-      sendJson(req, res, 200, nextState)
-      return true
+        if ((await otherWorktreeBranches(gitRunner, topLevel)).has(branch)) {
+          sendJson(req, res, 409, { error: WORKTREE_HOLDS_BRANCH_PROBLEM })
+          return true
+        }
+
+        try {
+          await gitRunner(resolved, ['switch', '--', branch])
+        } catch {
+          sendJson(req, res, 500, { error: 'The bridge could not switch branches.' })
+          return true
+        }
+
+        invalidateGitCache(resolved)
+        if (topLevel && !samePath(topLevel, resolved)) invalidateGitCache(topLevel)
+        const nextState = await readGitState(resolved, { runner: gitRunner, force: true, ttlMs })
+        notify?.({ topic: 'git' })
+        sendJson(req, res, 200, nextState)
+        return true
+      } finally {
+        writesInFlight.delete(lockKey)
+      }
     }
 
     if (path === '/api/git/branch') {
@@ -498,18 +536,31 @@ export function createGitApi({
         return true
       }
 
-      try {
-        await gitRunner(resolved, ['branch', '--', name, `refs/heads/${from}`])
-      } catch {
-        sendJson(req, res, 500, { error: 'The bridge could not create that branch.' })
+      const topLevel = await gitTopLevel(resolved, gitRunner)
+      const lockKey = pathKey(topLevel)
+      if (writesInFlight.has(lockKey)) {
+        sendJson(req, res, 409, { error: WRITE_IN_FLIGHT_PROBLEM })
         return true
       }
 
-      invalidateGitCache(resolved)
-      const nextState = await readGitState(resolved, { runner: gitRunner, force: true, ttlMs })
-      notify?.({ topic: 'git' })
-      sendJson(req, res, 200, nextState)
-      return true
+      writesInFlight.add(lockKey)
+      try {
+        try {
+          await gitRunner(resolved, ['branch', '--', name, `refs/heads/${from}`])
+        } catch {
+          sendJson(req, res, 500, { error: 'The bridge could not create that branch.' })
+          return true
+        }
+
+        invalidateGitCache(resolved)
+        if (topLevel && !samePath(topLevel, resolved)) invalidateGitCache(topLevel)
+        const nextState = await readGitState(resolved, { runner: gitRunner, force: true, ttlMs })
+        notify?.({ topic: 'git' })
+        sendJson(req, res, 200, nextState)
+        return true
+      } finally {
+        writesInFlight.delete(lockKey)
+      }
     }
 
     return false
