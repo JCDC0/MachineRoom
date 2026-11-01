@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cardClickEndsFollow, createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek } from '../src/engine/room.js'
+import { cardClickEndsFollow, createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek, inspectorNamesPath } from '../src/engine/room.js'
 
 function state(status, focus, recent = []) {
   return {
@@ -119,6 +119,23 @@ describe('cardClickEndsFollow', () => {
     expect(cardClickEndsFollow(target('.hud'))).toBe(false)
     expect(cardClickEndsFollow(null)).toBe(false)
     expect(cardClickEndsFollow({})).toBe(false)
+  })
+})
+
+describe('inspectorNamesPath', () => {
+  it('names the card itself, a folder below it and a file on it', () => {
+    expect(inspectorNamesPath({ kind: 'folder', id: 'lib/a' }, 'lib/a')).toBe(true)
+    expect(inspectorNamesPath({ kind: 'folder', id: 'lib/a/c' }, 'lib/a')).toBe(true)
+    expect(inspectorNamesPath({ kind: 'file', id: 'lib/a/x.js' }, 'lib/a')).toBe(true)
+    expect(inspectorNamesPath({ kind: 'folder', id: 'lib/a' }, 'lib')).toBe(true)
+  })
+
+  it('leaves a sibling, a lookalike name and another kind alone', () => {
+    expect(inspectorNamesPath({ kind: 'folder', id: 'lib/b' }, 'lib/a')).toBe(false)
+    expect(inspectorNamesPath({ kind: 'file', id: 'lib/ax.js' }, 'lib/a')).toBe(false)
+    expect(inspectorNamesPath({ kind: 'agent', id: 'claude' }, 'lib/a')).toBe(false)
+    expect(inspectorNamesPath({ kind: 'internet', id: 'internet' }, 'lib/a')).toBe(false)
+    expect(inspectorNamesPath(null, 'lib/a')).toBe(false)
   })
 })
 

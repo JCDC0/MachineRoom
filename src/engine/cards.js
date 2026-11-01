@@ -525,14 +525,14 @@ export function createCards(cssScene, options = {}) {
       row.append(label, note)
       row.addEventListener('click', (event) => {
         event.stopPropagation()
-        inspected = inspected === item.path ? null : item.path
-        rowRevision += 1
         if (item.kind === 'dir') {
           pinned.add(item.path)
           pinnedVersion += 1
           planKey = ''
         }
-        if (inspected) onInspect(item.path)
+        onInspect(item.path)
+        inspected = item.path
+        rowRevision += 1
       })
       return {
         row,
@@ -1082,6 +1082,14 @@ export function createCards(cssScene, options = {}) {
     return true
   }
 
+  function setInspected(path) {
+    const next = typeof path === 'string' ? path : null
+    if (next === inspected) return false
+    inspected = next
+    rowRevision += 1
+    return true
+  }
+
   function clearSelection({ pins = true, pops = true } = {}) {
     inspected = null
     selected = null
@@ -1103,6 +1111,7 @@ export function createCards(cssScene, options = {}) {
     pin,
     togglePop,
     setSelected,
+    setInspected,
     clearSelection,
     center,
     bottom,

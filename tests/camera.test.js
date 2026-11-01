@@ -264,6 +264,62 @@ describe('camera rig park turn', () => {
   })
 })
 
+describe('camera rig park with a moving fit', () => {
+  it('keeps the 2200 ms turn and eases to the goal a fit sets during it', () => {
+    const { rig, camera, drag, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-400, -20)
+      rig.snap()
+      const yaw = rig.yaw()
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo((yaw + OVERVIEW.yaw) / 2, 5)
+      const target = new THREE.Vector3(120, 240, -80)
+      rig.setFit(target, 3000)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo((yaw + OVERVIEW.yaw) / 2, 5)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw, 6)
+      expect(camera.position.distanceTo(target)).toBeCloseTo(3000, 1)
+      expect(rig.zoomMultiplier()).toBeCloseTo(1, 6)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('keeps the turn when two fits change the goal in a row', () => {
+    const { rig, drag, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-400, 0)
+      rig.snap()
+      const yaw = rig.yaw()
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS / 4)
+      rig.setOverviewTarget(new THREE.Vector3(0, 300, 0))
+      rig.setOverviewDistance(3200)
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS / 4)
+      rig.setFit(new THREE.Vector3(0, 180, 0), 2800)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeLessThan(yaw)
+      expect(rig.yaw()).toBeGreaterThan(OVERVIEW.yaw)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw, 6)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+})
+
 describe('camera rig hold', () => {
   it('eases into a held point instead of jumping to it', () => {
     const { rig, camera, close } = openRig()

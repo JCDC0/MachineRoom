@@ -210,6 +210,8 @@ async function makeRoom(files, agents, handlers = {}) {
     agents: roster,
     getState: () => current,
     onInspect: handlers.onInspect ?? (() => {}),
+    onDismiss: handlers.onDismiss ?? (() => {}),
+    onPick: handlers.onPick ?? (() => {}),
   })
   return {
     room,
@@ -760,6 +762,264 @@ describe('returning to the room', () => {
       expect(parent.className).toContain('is-pinned')
       expect(popped.removed).toBe(false)
       expect(room.holding()).toBe('lib/a')
+    } finally {
+      room.dispose()
+    }
+  })
+})
+
+describe('the inspected row and the inspector', () => {
+  it('keeps the row on a second click and clears it on another target', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md'], ['claude'], {
+      onInspect: (detail) => inspected.push(detail),
+    })
+    try {
+      tickRoom(1)
+      expect(room.focusPath('lib/a/x.js')).toBe(true)
+      tickRoom(1)
+      const card = cardElement('lib/a')
+      const row = cardRow(card, 'x.js')
+      row.fire('click')
+      tickRoom(1)
+      expect(row.className).toContain('is-inspected')
+      expect(inspected.at(-1)).toEqual({ kind: 'file', id: 'lib/a/x.js' })
+
+      row.fire('click')
+      tickRoom(1)
+      expect(row.className).toContain('is-inspected')
+      expect(inspected.at(-1)).toEqual({ kind: 'file', id: 'lib/a/x.js' })
+
+      expect(room.inspect({ kind: 'file', id: 'docs/d.md' })).toBe(true)
+      tickRoom(1)
+      expect(row.className).not.toContain('is-inspected')
+
+      expect(room.inspect({ kind: 'file', id: 'lib/a/x.js' })).toBe(true)
+      tickRoom(1)
+      expect(row.className).toContain('is-inspected')
+
+      expect(room.inspect({ kind: 'agent', id: 'claude' })).toBe(true)
+      tickRoom(1)
+      expect(row.className).not.toContain('is-inspected')
+      expect(room.inspecting()).toEqual({ kind: 'agent', id: 'claude' })
+
+      expect(room.inspect({ kind: 'file', id: 'lib/a/x.js' })).toBe(true)
+      tickRoom(1)
+      expect(row.className).toContain('is-inspected')
+      expect(room.inspect({ kind: 'internet', id: 'internet' })).toBe(true)
+      tickRoom(1)
+      expect(row.className).not.toContain('is-inspected')
+
+      room.setGitState({
+        git: true,
+        branch: 'main',
+        detached: false,
+        head: 'c2',
+        dirty: false,
+        branches: [{ name: 'main', head: 'c2', current: true }],
+        commits: [
+          { sha: 'c2', parents: ['c1'], subject: 'second', time: 2, refs: ['main'] },
+          { sha: 'c1', parents: [], subject: 'first', time: 1, refs: [] },
+        ],
+        truncated: false,
+      })
+      tickRoom(2)
+      expect(room.inspect({ kind: 'file', id: 'lib/a/x.js' })).toBe(true)
+      tickRoom(1)
+      expect(row.className).toContain('is-inspected')
+      expect(room.inspect({ kind: 'git', id: 'git' })).toBe(true)
+      tickRoom(1)
+      expect(row.className).not.toContain('is-inspected')
+      expect(room.inspecting()).toEqual({ kind: 'git', id: 'git' })
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears the row and the selected folder when another card opens the inspector', async () => {
+    const { room } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md'], ['claude'])
+    try {
+      tickRoom(1)
+      expect(room.focusPath('lib/a/x.js')).toBe(true)
+      tickRoom(1)
+      const held = cardElement('lib/a')
+      const row = cardRow(held, 'x.js')
+      row.fire('click')
+      tickRoom(1)
+      expect(row.className).toContain('is-inspected')
+
+      fireCss('click', { target: cardTarget(cardElement('docs')) })
+      tickRoom(1)
+      expect(row.className).not.toContain('is-inspected')
+      expect(cardElement('docs').className).toContain('is-selected')
+      expect(held.className).not.toContain('is-selected')
+      expect(liveCards().filter((card) => card.className.includes('is-selected'))).toHaveLength(1)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('keeps the selected folder on its own head and clears it on another card', async () => {
+    const { room } = await makeRoom(['lib/a/x.js', 'docs/d.md'], ['claude'])
+    try {
+      tickRoom(1)
+      expect(room.anchor('lib/a')).toBe(true)
+      tickRoom(1)
+      const held = cardElement('lib/a')
+      expect(held.className).toContain('is-selected')
+
+      fireCss('click', { target: cardTarget(held, 'head') })
+      tickRoom(1)
+      expect(held.className).toContain('is-selected')
+      expect(room.holding()).toBe('lib/a')
+
+      fireCss('click', { target: cardTarget(cardElement('docs'), 'head') })
+      tickRoom(1)
+      expect(held.className).not.toContain('is-selected')
+      expect(liveCards().some((card) => card.className.includes('is-selected'))).toBe(false)
+      expect(room.holding()).toBe('lib/a')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears the selected folder on a single click on the git tree', async () => {
+    const inspected = []
+    const { room } = await makeRoom(['lib/a/x.js', 'docs/d.md'], ['claude'], {
+      onInspect: (detail) => inspected.push(detail),
+    })
+    try {
+      room.setGitState({
+        git: true,
+        branch: 'main',
+        detached: false,
+        head: 'c2',
+        dirty: false,
+        branches: [{ name: 'main', head: 'c2', current: true }],
+        commits: [
+          { sha: 'c2', parents: ['c1'], subject: 'second', time: 2, refs: ['main'] },
+          { sha: 'c1', parents: [], subject: 'first', time: 1, refs: [] },
+        ],
+        truncated: false,
+      })
+      tickRoom(2)
+      expect(room.anchor('lib/a')).toBe(true)
+      tickRoom(1)
+      expect(cardElement('lib/a').className).toContain('is-selected')
+
+      expect(room.inspectGitTree()).toBe(true)
+      tickRoom(1)
+      expect(cardElement('lib/a').className).not.toContain('is-selected')
+      expect(inspected.at(-1)).toEqual({ kind: 'git', id: 'git' })
+      expect(room.inspecting()).toEqual({ kind: 'git', id: 'git' })
+      expect(room.holding()).toBe('lib/a')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears the row and closes the inspector when the held card leaves the plan', async () => {
+    const dismissed = []
+    const first = await makeRoom(['lib/a/x.js', 'docs/d.md'], ['claude'], { onDismiss: () => dismissed.push('card') })
+    try {
+      expect(first.room.inspect({ kind: 'file', id: 'lib/a/x.js' })).toBe(true)
+      tickRoom(1)
+      const row = cardRow(cardElement('lib/a'), 'x.js')
+      expect(row.className).toContain('is-inspected')
+
+      const files = ['docs/d.md']
+      const next = createState(makeTree({ root: 'demo', files }), [{ key: 'claude', name: 'claude' }])
+      first.setState(next)
+      first.room.reset(next)
+      tickRoom(1)
+
+      expect(first.room.holding()).toBe(null)
+      expect(first.room.inspecting()).toBe(null)
+      expect(dismissed).toEqual(['card'])
+      expect(liveRows().some((item) => item.className.includes('is-inspected'))).toBe(false)
+    } finally {
+      first.room.dispose()
+    }
+  })
+
+  it('keeps an inspector that names another target when a held card leaves', async () => {
+    const dismissed = []
+    const first = await makeRoom(['lib/a/x.js', 'docs/d.md'], ['claude'], { onDismiss: () => dismissed.push('card') })
+    try {
+      expect(first.room.anchor('lib/a')).toBe(true)
+      tickRoom(1)
+      first.room.inspectGitTree()
+      tickRoom(1)
+
+      const files = ['docs/d.md']
+      const next = createState(makeTree({ root: 'demo', files }), [{ key: 'claude', name: 'claude' }])
+      first.setState(next)
+      first.room.reset(next)
+      tickRoom(1)
+
+      expect(first.room.holding()).toBe(null)
+      expect(dismissed).toEqual([])
+      expect(first.room.inspecting()).toEqual({ kind: 'git', id: 'git' })
+    } finally {
+      first.room.dispose()
+    }
+  })
+
+  it('releases a held card when lowering the folder depth removes it', async () => {
+    const dismissed = []
+    const { room } = await makeRoom(['lib/a/x.js', 'docs/d.md'], ['claude'], { onDismiss: () => dismissed.push('card') })
+    try {
+      tickRoom(1)
+      expect(room.inspect({ kind: 'folder', id: 'lib/a' })).toBe(true)
+      tickRoom(1)
+      expect(room.holding()).toBe('lib/a')
+      expect(cardElement('lib/a').className).toContain('is-selected')
+
+      room.setOptions({ alwaysDepth: 0 })
+      tickRoom(1)
+      expect(room.holding()).toBe(null)
+      expect(dismissed).toEqual(['card'])
+      expect(liveCards().some((card) => card.className.includes('is-selected'))).toBe(false)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('releases a held agent that leaves the roster without follow', async () => {
+    const dismissed = []
+    const { room } = await makeRoom(['lib/a/x.js'], ['claude', 'hermes'], { onDismiss: () => dismissed.push('agent') })
+    try {
+      expect(room.inspect({ kind: 'agent', id: 'claude' })).toBe(true)
+      tickRoom(1)
+      expect(room.free()).toBe(false)
+      expect(room.inspecting()).toEqual({ kind: 'agent', id: 'claude' })
+
+      room.setRoster([{ key: 'hermes', name: 'hermes' }])
+      tickRoom(1)
+      expect(room.free()).toBe(true)
+      expect(room.focused()).toBe(null)
+      expect(room.inspecting()).toBe(null)
+      expect(dismissed).toEqual(['agent'])
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('stops following an agent that leaves the roster', async () => {
+    const picks = []
+    const { room } = await makeRoom(['lib/a/x.js'], ['claude', 'hermes'], { onPick: (key) => picks.push(key) })
+    try {
+      room.focus('claude')
+      room.setFollow('wide')
+      expect(room.following()).toBeTruthy()
+      expect(room.focused()).toBe('claude')
+
+      room.setRoster([{ key: 'hermes', name: 'hermes' }])
+      tickRoom(1)
+      expect(room.following()).toBe(false)
+      expect(room.focused()).toBe(null)
+      expect(room.free()).toBe(true)
+      expect(picks.at(-1)).toBe(null)
     } finally {
       room.dispose()
     }

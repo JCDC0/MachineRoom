@@ -19,7 +19,6 @@ import { createVoid } from './void.js'
 const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
 const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
-const overviewCentre = new THREE.Vector3()
 
 function workingMask(state) {
   const lit = new Set()
@@ -133,6 +132,14 @@ export function nearestDrawnPath(path, drawn) {
   return drawn.has('') ? '' : null
 }
 
+export function inspectorNamesPath(detail, path) {
+  if (!detail || (detail.kind !== 'folder' && detail.kind !== 'file')) return false
+  if (typeof detail.id !== 'string' || typeof path !== 'string') return false
+  const dir = detail.kind === 'file' ? dirname(detail.id) : detail.id
+  if (dir === path) return true
+  return path !== '' && dir.startsWith(`${path}/`)
+}
+
 export function createLater(delay = 250) {
   const pending = new Set()
   function later(fn) {
@@ -241,8 +248,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       if (shift < REFIT_SHIFT && Math.abs(next.dist - fitted.dist) < fitted.dist * REFIT_RATIO) return
     }
     fitted = next
-    rig.setOverviewTarget(overviewCentre.set(next.target.x, next.target.y, next.target.z))
-    rig.setOverviewDistance(next.dist)
+    rig.setFit(next.target, next.dist)
   }
 
   const pulses = Array.from({ length: 32 }, () => {
@@ -317,10 +323,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       return
     }
     if (gitAt(event)) {
-      onInspect({ kind: 'git', id: 'git' })
+      inspectGitTree()
       return
     }
-    cards.clearSelection()
+    clearSelection()
     endFollow()
     onDismiss()
   })
@@ -332,10 +338,15 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const path = card.dataset.path ?? ''
     if (event.target?.closest?.('.mr-card-head')) {
       endFollow()
+      if (heldPath !== path) cards.setSelected(null)
+      setInspected({ kind: 'folder', id: path })
       onInspect({ kind: 'folder', id: path })
       return
     }
-    if (anchor(path)) onInspect({ kind: 'folder', id: path })
+    if (anchor(path)) {
+      setInspected({ kind: 'folder', id: path })
+      onInspect({ kind: 'folder', id: path })
+    }
   }
   cssRenderer.domElement.addEventListener('click', onCardClick, true)
 
@@ -346,7 +357,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const path = card.dataset.path ?? ''
     const opened = anchor(path)
     if (event.target?.closest?.('.mr-card-head')) cards.togglePop(path)
-    if (opened) onInspect({ kind: 'folder', id: path })
+    if (opened) {
+      setInspected({ kind: 'folder', id: path })
+      onInspect({ kind: 'folder', id: path })
+    }
   }
   cssRenderer.domElement.addEventListener('dblclick', onCardDoubleClick, true)
 
@@ -402,7 +416,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (heldPath === null) return false
     const card = cards.cards.get(heldPath)
     if (card?.view && !card.leaving) return false
+    const lost = heldPath
     releaseHold()
+    const named = inspectorNamesPath(inspected, lost)
+    cards.setInspected(null)
+    if (named) {
+      inspected = null
+      onDismiss()
+    }
     rig.overview()
     return true
   }
@@ -459,6 +480,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     }
   }
 
+  function setInspected(detail) {
+    inspected = detail
+    cards.setInspected(detail?.kind === 'file' ? detail.id : null)
+  }
+
   function inspectObject(detail) {
     if (!detail || typeof detail !== 'object') return false
     const kind = detail.kind
@@ -472,7 +498,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       followCard = null
       pendingFollow = null
       rig.hold(() => view.group.position, ANCHOR_DIST)
-      inspected = { kind, id }
+      setInspected({ kind, id })
       return true
     }
     if (kind === 'internet') {
@@ -482,12 +508,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       followCard = null
       pendingFollow = null
       rig.hold(() => internet.position, ANCHOR_DIST)
-      inspected = { kind: 'internet', id: 'internet' }
+      setInspected({ kind: 'internet', id: 'internet' })
       return true
     }
     if (kind === 'git') {
       if (!focusGitTree()) return false
-      inspected = { kind: 'git', id: 'git' }
+      setInspected({ kind: 'git', id: 'git' })
       return true
     }
     if (kind !== 'folder' && kind !== 'file') return false
@@ -512,7 +538,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     } else {
       rig.hold(() => cards.center(target), ANCHOR_DIST)
     }
-    inspected = { kind, id }
+    setInspected({ kind, id })
     return true
   }
 
@@ -533,6 +559,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function clearSelection(options) {
     cards.clearSelection(options)
+    inspected = null
   }
 
   function park() {
@@ -833,6 +860,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (!isFile && path !== '' && !state.dirs.has(path)) return false
     releaseHold()
     endFollow()
+    if (!isFile) {
+      inspected = null
+      cards.setInspected(null)
+    }
     const dir = isFile ? dirname(path) : path
     followFocus.clear()
     cards.pin(dir)
@@ -865,6 +896,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     followCard = null
     pendingFollow = null
     rig.hold(() => gitTree.center(), GIT_FOCUS_DIST)
+    return true
+  }
+
+  function inspectGitTree() {
+    cards.setSelected(null)
+    setInspected({ kind: 'git', id: 'git' })
+    onInspect({ kind: 'git', id: 'git' })
     return true
   }
 
@@ -929,6 +967,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       return gitTree.setState(state)
     },
     focusGitTree,
+    inspectGitTree,
     setOnline(next) {
       internet.setOnline(next)
       agentSet.setOnline(next)
@@ -936,6 +975,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     setOptions(options = {}) {
       if (!cards.setOptions(options)) return
       cards.sync(getState())
+      releaseLostHold()
       relink()
       refit(true)
     },
@@ -956,8 +996,18 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       agentSet.setRoster(list, terminals)
       const focused = followFocus.focused()
       if (focused && !agentSet.views.has(focused)) {
-        followFocus.clear()
         if (followFocus.following()) endFollow()
+        followFocus.clear()
+        followFocus.setFollowing(false)
+        followCard = null
+        pendingFollow = null
+        const named = inspected?.kind === 'agent' && inspected.id === focused
+        cards.setInspected(null)
+        if (named) {
+          inspected = null
+          onDismiss()
+        }
+        rig.overview()
       }
     },
     dispose() {
