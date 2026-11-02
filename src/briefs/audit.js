@@ -2,7 +2,7 @@ export const LEAK_KINDS = ['key', 'email', 'userpath', 'profile', 'graded']
 
 export const SAMPLE_WIDTH = 80
 
-const SK_TOKEN = /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{20,}/g
+const SK_TOKEN = /(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}/g
 const GOOGLE_KEY = /(?<![A-Za-z0-9_-])AIza[0-9A-Za-z_-]{35}/g
 const GITHUB_TOKEN = /(?<![A-Za-z0-9_])(?:ghp_|gho_|github_pat_)\w{20,}/g
 const AWS_TOKEN = /(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}/g
@@ -251,7 +251,8 @@ function openToken(word) {
     const before = index === 0 ? '' : word[index - 1]
     if (index > 0 && before !== '-' && before !== '_') continue
     const rest = word.slice(index)
-    if (index === 0 && (OPEN_SK.test(rest) || OPEN_GOOGLE.test(rest))) return index
+    if (OPEN_SK.test(rest)) return index
+    if (index === 0 && OPEN_GOOGLE.test(rest)) return index
     if (before !== '_' && (OPEN_GITHUB.test(rest) || isHeadOf(GITHUB_HEADS, rest) || isHeadOf(SETTING_NAMES, rest))) return index
     if (OPEN_AWS.test(rest)) return index
   }
