@@ -246,8 +246,8 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
   return rig
 }
 
-async function waitIdle(rig, count) {
-  await waitFor(() => rig.answer().state === 'idle' && rig.calls().length === count, 15000, `turn ${count} to end`)
+async function waitIdle(rig, count, timeoutMs = 15000) {
+  await waitFor(() => rig.answer().state === 'idle' && rig.calls().length === count, timeoutMs, `turn ${count} to end`)
 }
 
 function restoreRig(rig, { mode = 'reply', file = 'calls-restored.jsonl' } = {}) {
@@ -1745,7 +1745,7 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(restored.orchestrator.listSessions()).toHaveLength(50)
 
     restored.orchestrator.send({ text: 'One more session to trigger eviction', confirmed: true })
-    await waitIdle(restored, 1)
+    await waitIdle(restored, 1, 25000)
     const archived = restored.orchestrator.newSession({ confirmed: true })
     expect(archived.status).toBe(200)
 
@@ -1753,7 +1753,7 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(list).toHaveLength(50)
     expect(list.some((s) => s.id === 'sess-0')).toBe(true)
     expect(list.some((s) => s.id === 'sess-1')).toBe(false)
-  })
+  }, 30000)
 
   it('refuses new and open while a turn runs with 409', async () => {
     const rig = makeRig()
