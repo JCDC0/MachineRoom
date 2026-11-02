@@ -7771,6 +7771,7 @@ body:has(#hud-orchestrator-chat) .waiting {
     bottom: calc(-1 * var(--lens-bow, 28px));
     left: 0;
     z-index: -1;
+    border-radius: 0 0 50% 50% / 0 0 var(--lens-bow, 28px) var(--lens-bow, 28px);
     background: var(--black);
     pointer-events: none;
   }
@@ -7778,6 +7779,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   .hud-lower {
     flex: 1 1 auto;
     min-height: 0;
+    padding-top: var(--lens-bow, 28px);
     display: grid;
     grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px;
     border-top: 1px solid var(--line);

@@ -332,6 +332,7 @@ describe('HUD concept style structure', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('.stage.is-scrolled .hud-menu::before')
     expect(css).toMatch(/\.stage\.is-scrolled \.hud-menu::before \{[^}]*bottom: calc\(-1 \* var\(--lens-bow, 28px\)\);[^}]*z-index: -1;[^}]*pointer-events: none;/)
+    expect(css).toMatch(/\.hud-lower \{[^}]*padding-top: var\(--lens-bow, 28px\);/)
     expect(css).toContain('.mr-card-gap + .mr-item')
     expect(css).toContain('.mr-card-gap {')
   })
