@@ -48,6 +48,8 @@ function isVersionDomain(domain) {
 }
 
 function isPlaceholder(value) {
+  // A real key holds a letter or digit, and prose can put punctuation right after the name.
+  if (!/[A-Za-z0-9]/.test(value)) return true
   if (value === '') return true
   if (value.startsWith('<')) return true
   if (value.startsWith('{{') && value.endsWith('}}')) return true

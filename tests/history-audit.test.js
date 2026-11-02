@@ -73,6 +73,7 @@ describe('findLeaks keys', () => {
     expect(findLeaks('ANTHROPIC_API_KEY=xxx')).toEqual([])
     expect(findLeaks('OPENAI_API_KEY=<your key>')).toEqual([])
     expect(findLeaks('OPENAI_API_KEY=')).toEqual([])
+    expect(findLeaks('The prefixes `OPENROUTER_API_KEY=`, a space')).toEqual([])
     expect(findLeaks('OPENROUTER_API_KEY=""')).toEqual([])
     expect(findLeaks('OPENAI_API_KEY=sk-...')).toEqual([])
     expect(findLeaks('OPENROUTER_API_KEY=${OPENROUTER_API_KEY}')).toEqual([])
