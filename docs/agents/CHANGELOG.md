@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The folder picker keeps Close and Escape from cancelling the reload while a folder is opening (task U117).
 - The autocompact save card says whether it is turning autocompact on or off (task U117).
 - The plus on a lane adds it to the checked lanes, so the sub orchestrator card keeps the whole selection (task U117).
 - Meters, Team and Tasks say when a manual Refresh failed instead of leaving the old numbers on screen (task U117).

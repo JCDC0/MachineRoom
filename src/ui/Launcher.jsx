@@ -97,14 +97,14 @@ export default function Launcher({ client = null, live = false }) {
   useEffect(() => {
     if (!open || typeof window === 'undefined') return undefined
     function onKey(event) {
-      if (event.key !== 'Escape') return
+      if (event.key !== 'Escape' || opening !== null) return
       event.preventDefault()
       event.stopPropagation()
       close()
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [open, close])
+  }, [open, close, opening])
 
   async function probeProject() {
     if (typeof client?.health === 'function') {
@@ -182,7 +182,7 @@ export default function Launcher({ client = null, live = false }) {
         <h2 id="mr-launcher-title" className="mr-launcher-title">
           Which folder do you want to work in?
         </h2>
-        <button type="button" className="mr-launcher-close" onClick={close}>
+        <button type="button" className="mr-launcher-close" disabled={busy} onClick={close}>
           Close
         </button>
       </header>
