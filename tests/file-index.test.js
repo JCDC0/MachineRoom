@@ -311,6 +311,11 @@ describe('indexFor', () => {
     expect(indexFor(list).pathsWithBase('index.js')).toEqual(['src/index.js', 'test/index.js'])
     expect(indexFor(list).pathsWithBase('none.js')).toEqual([])
   })
+
+  it('does not add a repeated path to base name matches', () => {
+    const list = ['src/index.js', 'src/index.js']
+    expect(indexFor(list).pathsWithBase('index.js')).toEqual(['src/index.js'])
+  })
 })
 
 describe('touchesForCommand with the file index', () => {

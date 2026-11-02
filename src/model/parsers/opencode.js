@@ -95,7 +95,7 @@ export function createOpencodeParser(ctx) {
   function report(name, input, status, output, id, time) {
     const lower = String(name ?? '').toLowerCase()
     const mcp = MCP_TOOL.test(lower)
-    const tool = mcp ? 'mcp' : Object.hasOwn(TOOLS, name) ? TOOLS[name] : 'other'
+    const tool = mcp ? 'mcp' : Object.hasOwn(TOOLS, lower) ? TOOLS[lower] : 'other'
     const callId = id ?? `opencode-${(counter += 1)}`
     let touches = []
     let label = `${name} ${shorten(JSON.stringify(input), 48)}`

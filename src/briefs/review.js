@@ -1,5 +1,5 @@
 import { findLeaks } from './audit.js'
-import { parseBriefs } from './briefs.js'
+import { briefFileList, parseBriefs } from './briefs.js'
 import { pathAllowed } from './plan.js'
 
 export const CHANGELOG = 'docs/agents/CHANGELOG.md'
@@ -54,14 +54,9 @@ export function forbiddenHits(paths, forbidden) {
 }
 
 export function briefFiles(text) {
-  const found = /\bFiles:\s*(.*)$/s.exec(String(text ?? ''))
-  if (!found) return null
-  const files = []
-  for (const match of found[1].matchAll(/`([^`]+)`/g)) {
-    const value = match[1].trim()
-    if (value.includes('/') || /\.\w+$/.test(value)) files.push(value)
-  }
-  return files
+  const source = String(text ?? '')
+  if (!/\bFiles:/i.test(source)) return null
+  return briefFileList(source)
 }
 
 function globPattern(pattern) {

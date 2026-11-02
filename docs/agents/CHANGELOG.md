@@ -25,6 +25,7 @@
 - A subagent's home follows its parent's home when the ladder or roster moves it (task U116).
 - A family label change redraws the name sprite above the agent as well as its callout (task U116).
 - Delete `rowMark`, `rowNote`, `cards.onPath`, `cards.moving`, `agents.hubCenter`, `followFocus.end` and `cardClickEndsFollow` with their tests (task U116).
+- The parser, file index, review and log checks resolve subagent lifecycles, clear finished labels, share unquoted brief paths and reject broken tool lines, while dead mock writes and the record-events script are removed (task Q26).
 
 - A full audit of the engine, the page, the bridge, the logic and the design, ranked and checked in `AUDIT-2026-11-SUMMARY.md` (tasks Q20, Q21, Q23, Q24 and Q25).
 - The scrolled menu strip curves with the lens and no longer covers the top of the lower half.

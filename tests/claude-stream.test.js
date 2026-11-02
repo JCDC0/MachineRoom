@@ -167,6 +167,20 @@ describe('claude stream-json', () => {
     ])
   })
 
+  it('ends a synchronous child that made no tool call when its call ends', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines(
+        assistant([use('task-empty', 'Task', { description: 'Read notes', subagent_type: 'Explore' })]),
+        result('task-empty')
+      ),
+      6500
+    )
+    expect(out.filter((activity) => activity.type === 'agent.end')).toEqual([
+      { time: 6500, type: 'agent.end', agent: 'claude~1', ok: true },
+    ])
+  })
+
   it('keeps a background child open when its lines arrive before its result', () => {
     const parser = createClaudeParser(ctx)
     const out = parser.push(

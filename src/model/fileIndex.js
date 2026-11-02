@@ -33,13 +33,13 @@ function createEntry() {
 
 function learn(held, path, at) {
   const text = String(path)
+  if (held.known.has(text)) return
+  held.known.add(text)
   if (text.length > held.entry.longest) held.entry.longest = text.length
   const base = baseName(text)
   const matches = held.bases.get(base)
   if (matches) matches.push(path)
   else held.bases.set(base, [path])
-  if (held.known.has(text)) return
-  held.known.add(text)
   held.ranks.set(text, at)
   held.entry.paths.push(path)
 }

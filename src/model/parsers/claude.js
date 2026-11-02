@@ -182,7 +182,9 @@ export function createClaudeParser(ctx) {
     out.push({ ...toolEnd({ time, id, ok }), agent: call.owner })
     if (call.task) {
       const child = children.get(id)
-      if (child && (!ok || (!call.background && heard.has(child)))) out.push({ time, type: 'agent.end', agent: child, ok })
+      if (child && (!ok || (!call.background && (call.name.toLowerCase() === 'task' || heard.has(child))))) {
+        out.push({ time, type: 'agent.end', agent: child, ok })
+      }
     }
   }
 

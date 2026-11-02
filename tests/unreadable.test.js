@@ -33,6 +33,21 @@ describe('unreadableLines', () => {
     expect(unreadableLines('claude', chunk(noId))).toEqual([noId])
   })
 
+  it('keeps a well formed standard Claude tool call and returns a broken one', () => {
+    const goodStream = {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: {} }] },
+    }
+    expect(unreadableLines('claude', chunk(json(goodStream)))).toEqual([])
+    const cut = '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_1"'
+    expect(unreadableLines('claude', chunk(cut))).toEqual([cut])
+    const noName = {
+      type: 'assistant',
+      message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_1' }] },
+    }
+    expect(unreadableLines('claude', chunk(json(noName)))).toEqual([json(noName)])
+  })
+
   it('keeps a well formed Hermes line and returns one whose shape changed', () => {
     const good = `  ${BAR} ${BOOK} read      strings.js  1.2s`
     expect(unreadableLines('hermes', chunk(good))).toEqual([])

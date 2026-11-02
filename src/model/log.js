@@ -33,10 +33,15 @@ export function createLogger(agents) {
         return { agent, text: shorten(activity.text, TEXT_LIMIT), tone: 'error' }
       case 'agent.message':
         return { agent, text: `${activity.agent} > ${activity.to}: ${activity.kind}`, tone: 'dim' }
-      case 'run.end':
+      case 'run.end': {
+        const prefix = activity.runId != null ? `${activity.runId}:` : ''
+        for (const key of labels.keys()) {
+          if (!prefix || key.startsWith(prefix)) labels.delete(key)
+        }
         return activity.ok
           ? { agent, text: 'finished', tone: 'done' }
           : { agent, text: shorten(`failed ${activity.error ?? ''}`.trim(), TEXT_LIMIT), tone: 'error' }
+      }
       default:
         return null
     }

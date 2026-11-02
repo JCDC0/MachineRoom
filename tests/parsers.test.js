@@ -133,6 +133,12 @@ describe('hermes parser', () => {
     expect(out[0].label).toBe('read index.js')
   })
 
+  it('recognizes a known relative path with no directory through indexFor', () => {
+    const parser = createHermesParser({ ...ctx, files: ['root.js', 'src/index.js'] })
+    const out = parser.push('  \u250a \ud83d\udcd6 read      root.js  0.4s\n', 1000)
+    expect(out[0].touches).toEqual([{ path: 'root.js', mode: 'read', kind: 'file' }])
+  })
+
   it('maps a web search and a web fetch line to the web kind with no touch', () => {
     const parser = createHermesParser(ctx)
     const searched = parser.push('  \u250a \ud83d\udd0d search    hermes web tools  1.4s\n', 3000)
@@ -285,6 +291,12 @@ describe('opencode parser', () => {
     const out = parser.push(lines({ type: 'tool_use', part: { id: 'call_3', tool: 'subagent', state: { status: 'completed', input: { agent: 'general' } } } }), 8000)
     expect(out[0].label).toBe('subagent')
     expect(out[0].touches).toEqual([])
+  })
+
+  it('looks up a tool name with mixed case', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(lines({ type: 'tool_use', part: { id: 'call_4', tool: 'Read', state: { status: 'completed', input: { path: 'src/math.js' } } } }), 8000)
+    expect(out[0].tool).toBe('read')
   })
 })
 

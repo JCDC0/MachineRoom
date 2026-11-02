@@ -17,8 +17,9 @@ describe('resolveIssue', () => {
 
   it('reloads once for a task that was created after the list was read', async () => {
     const client = fast()
-    const stale = await client.issues()
-    const created = await client.createIssue({ title: 'Fresh task', assigneeAgentId: 'agent-opencode' })
+    const all = await client.issues()
+    const created = all[0]
+    const stale = all.slice(1)
     const reload = vi.fn(() => client.issues())
     const result = await resolveIssue(created.identifier, stale, reload)
     expect(reload).toHaveBeenCalledTimes(1)
