@@ -336,7 +336,7 @@ export function createOrchestrators({
       if (!next || !config || !sameConfig(config, subConfig(next))) {
         instances.delete(id)
         configs.delete(id)
-        instance.close()
+        instance.close({ removed: true })
       }
     }
     for (const [id, sub] of wanted) {

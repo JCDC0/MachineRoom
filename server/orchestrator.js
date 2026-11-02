@@ -1609,8 +1609,9 @@ export function createOrchestrator({
     maybeStartTurn()
   }
 
-  function close() {
+  function close(options = {}) {
     stopped = true
+    if (options?.removed === true) state = 'idle'
     const turn = running
     if (turn) {
       turn.killed = true

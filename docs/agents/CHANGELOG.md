@@ -8,6 +8,7 @@
 - A long queued turn keeps the messages that do not fit in its prompt and runs them in the next turn instead of dropping them (task S26).
 - Deleting the open conversation clears its messages, its waiting queue, its session and its summary (task S26).
 - A stop that lands after a turn's child has exited well keeps the reply and records the run as not killed (task S26).
+- A sub removed during its turn is stopped, saved idle and restores idle when it is added back (task S26).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
 - The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).
