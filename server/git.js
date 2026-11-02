@@ -103,6 +103,17 @@ export function invalidateGitCache(folder) {
   else cacheByProject.clear()
 }
 
+export function beginRepoWrite(folder) {
+  const key = pathKey(folder)
+  if (!key || writesInFlight.has(key)) return ''
+  writesInFlight.add(key)
+  return key
+}
+
+export function endRepoWrite(key) {
+  if (key) writesInFlight.delete(key)
+}
+
 export async function isGitCheckout(folder, runner = defaultGitRunner) {
   if (!folder) return false
   let resolved
@@ -347,6 +358,18 @@ export function createGitApi({
     }
   }
 
+  async function branchExistsLoose(folder, branchName) {
+    try {
+      const refs = await gitRunner(folder, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'])
+      return String(refs)
+        .split(/\r?\n/)
+        .map((name) => name.trim())
+        .some((name) => name !== '' && name.toLowerCase() === branchName.toLowerCase())
+    } catch {
+      return false
+    }
+  }
+
   async function checkRefFormat(folder, branchName) {
     try {
       await gitRunner(folder, ['check-ref-format', '--branch', branchName])
@@ -420,13 +443,12 @@ export function createGitApi({
       }
 
       const topLevel = await gitTopLevel(resolved, gitRunner)
-      const lockKey = pathKey(topLevel)
-      if (writesInFlight.has(lockKey)) {
+      const lockKey = beginRepoWrite(topLevel)
+      if (!lockKey) {
         sendJson(req, res, 409, { error: WRITE_IN_FLIGHT_PROBLEM })
         return true
       }
 
-      writesInFlight.add(lockKey)
       try {
         if (isTurnRunning()) {
           sendJson(req, res, 409, { error: TURN_RUNNING_PROBLEM })
@@ -470,7 +492,7 @@ export function createGitApi({
         sendJson(req, res, 200, nextState)
         return true
       } finally {
-        writesInFlight.delete(lockKey)
+        endRepoWrite(lockKey)
       }
     }
 
@@ -537,18 +559,18 @@ export function createGitApi({
       }
 
       const topLevel = await gitTopLevel(resolved, gitRunner)
-      const lockKey = pathKey(topLevel)
-      if (writesInFlight.has(lockKey)) {
+      const lockKey = beginRepoWrite(topLevel)
+      if (!lockKey) {
         sendJson(req, res, 409, { error: WRITE_IN_FLIGHT_PROBLEM })
         return true
       }
 
-      writesInFlight.add(lockKey)
       try {
         try {
           await gitRunner(resolved, ['branch', '--', name, `refs/heads/${from}`])
         } catch {
-          sendJson(req, res, 500, { error: 'The bridge could not create that branch.' })
+          const taken = await branchExistsLoose(resolved, name)
+          sendJson(req, res, taken ? 400 : 500, { error: taken ? BRANCH_TAKEN_PROBLEM : 'The bridge could not create that branch.' })
           return true
         }
 
@@ -559,7 +581,7 @@ export function createGitApi({
         sendJson(req, res, 200, nextState)
         return true
       } finally {
-        writesInFlight.delete(lockKey)
+        endRepoWrite(lockKey)
       }
     }
 

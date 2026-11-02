@@ -280,6 +280,32 @@ describe('review routes', () => {
     expect(readCount).toBe(1)
   })
 
+  it('finds a lane run that is older than twenty records of other lanes', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const agentsDir = join(makeTempDir(), 'docs', 'agents')
+    mkdirSync(agentsDir, { recursive: true })
+    writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify({ opencode: { name: 'OpenCode', worktree } }))
+    const records = [
+      { lane: 'opencode', startedAt: '2026-10-01T10:00:00.000Z', briefs: ['S27'] },
+      ...Array.from({ length: 24 }, (_, index) => ({
+        lane: 'hermes',
+        startedAt: `2026-10-02T10:${String(index).padStart(2, '0')}:00.000Z`,
+      })),
+    ]
+    const answers = []
+    const api = createReviewsApi({
+      projectRoot: repo,
+      briefsDir: agentsDir,
+      sendJson: (req, res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({}),
+      orchestrators: () => null,
+      readRuns: () => records,
+    })
+    expect(await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/reviews'))).toBe(true)
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.lanes[0].lastRun).toMatchObject({ lane: 'opencode', briefs: ['S27'] })
+  })
+
   it('answers the diff of a lane with its files and its patch', async () => {
     const { worktree } = makeLaneRepo()
     const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } })

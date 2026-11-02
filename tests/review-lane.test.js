@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { main, parseReviewArgs, removeReviewTree, reviewLane, reviewTempBase } from '../scripts/review-lane.mjs'
+import { branchMovedProblem, branchProblem, main, parseReviewArgs, removeReviewTree, reviewLane, reviewTempBase } from '../scripts/review-lane.mjs'
 import {
   briefCheck,
   briefFiles,
@@ -559,5 +559,22 @@ describe('the review worktree folder', () => {
 
   it('uses an explicit temp root when one is given', () => {
     expect(reviewTempBase(REPO_ROOT, SYSTEM_TEMP)).toBe(SYSTEM_TEMP)
+  })
+})
+
+describe('the branch a review reads', () => {
+  it('accepts any name git accepts and refuses main and a name git refuses', () => {
+    const gitSays = (name) => name !== 'bad..name'
+    expect(branchProblem('feat/café', gitSays)).toBeNull()
+    expect(branchProblem('feat/x', gitSays)).toBeNull()
+    expect(branchProblem('main', gitSays)).toBe('The lane worktree is on main.')
+    expect(branchProblem('', gitSays)).toBe('The lane worktree is not on a branch.')
+    expect(branchProblem('bad..name', gitSays)).toBe('The branch name bad..name is not a plain ref.')
+    expect(branchProblem('feat/café', () => false)).toBe('The branch name feat/café is not a plain ref.')
+  })
+
+  it('fails the review when the branch moves after the head is read', () => {
+    expect(branchMovedProblem('feat/x', 'aaa', 'aaa')).toBe('')
+    expect(branchMovedProblem('feat/x', 'aaa', 'bbb')).toContain('The branch feat/x moved from aaa to bbb')
   })
 })

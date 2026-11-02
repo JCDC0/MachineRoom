@@ -60,7 +60,7 @@ function writeProject(dir) {
   )
 }
 
-function writeRunner(dir, out, waitMs = 0) {
+function writeRunner(dir, out, waitMs = 0, exitCode = 0) {
   const path = join(dir, 'runner.mjs')
   const lines = [
     "import { writeFileSync } from 'node:fs'",
@@ -69,6 +69,7 @@ function writeRunner(dir, out, waitMs = 0) {
     "console.log('args ' + args.join(' '))",
   ]
   if (waitMs > 0) lines.push(`await new Promise((resolve) => setTimeout(resolve, ${waitMs}))`)
+  if (exitCode !== 0) lines.push(`process.exit(${exitCode})`)
   writeFileSync(path, lines.join('\n'))
   return path
 }
@@ -110,6 +111,20 @@ async function startBridge({ projectRoot, runnerPath }) {
 }
 
 describe('the runs route with a task', () => {
+  it('writes a failed record when the runner refuses before it writes one', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const out = join(runnerDir, 'args.json')
+    const { url } = await startBridge({ projectRoot: project, runnerPath: writeRunner(runnerDir, out, 0, 3) })
+    const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Fix the typo.', confirmed: true })
+    expect(res.status).toBe(202)
+    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+    const file = join(runsFolder(), 'runs.jsonl')
+    const records = readFileSync(file, 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+    expect(records.at(-1)).toMatchObject({ lane: 'opencode', exitCode: 3 })
+    expect(records.at(-1).note).toContain('args opencode --project')
+  })
+
   it('starts run-lane with --project and --task on the bridge project', async () => {
     const project = tempDir('mr-project-dispatch-')
     const runnerDir = tempDir('mr-project-runner-')

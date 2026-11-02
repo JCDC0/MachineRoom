@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
 import { mainCheckoutOf } from './lanes-source.js'
 import { gitPath } from './programPath.js'
-import { readRunRecords, runsFile } from './runs.js'
+import { beginRepoWrite, endRepoWrite, invalidateGitCache, WRITE_IN_FLIGHT_PROBLEM } from './git.js'
+import { readAllRunRecords, runsFile } from './runs.js'
 
 const GIT_TIMEOUT_MS = 10 * 1000
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
@@ -165,7 +166,8 @@ export function createReviewsApi({
   sendJson,
   readJsonBody,
   orchestrators,
-  readRuns = readRunRecords,
+  readRuns = readAllRunRecords,
+  notify = () => {},
 }) {
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
@@ -210,7 +212,13 @@ export function createReviewsApi({
 
   function lastRunFor(lane, runs = null) {
     const list = runs ?? readRuns(runsFile())
-    return list.find((record) => record && record.lane === lane) ?? null
+    const matches = list.filter((record) => record && record.lane === lane)
+    if (matches.length === 0) return null
+    return matches.reduce((newest, record) => {
+      const time = Number.isFinite(Date.parse(record.startedAt ?? '')) ? Date.parse(record.startedAt) : 0
+      const best = Number.isFinite(Date.parse(newest.startedAt ?? '')) ? Date.parse(newest.startedAt) : 0
+      return time >= best ? record : newest
+    })
   }
 
   function laneFolder(lanes, lane) {
@@ -470,16 +478,26 @@ export function createReviewsApi({
           sendJson(req, res, 409, { error: 'A merge is already running.' })
           return true
         }
+        const lockKey = beginRepoWrite(resolvedRoot)
+        if (!lockKey) {
+          sendJson(req, res, 409, { error: WRITE_IN_FLIGHT_PROBLEM })
+          return true
+        }
         merging = true
         let answer
         try {
           answer = onProject
             ? await fastForwardLane(lane, worktree, head)
             : await mergeLane(lane, worktree, head, message)
+          if (answer.status === 200) {
+            invalidateGitCache(resolvedRoot)
+            notify({ topic: 'git' })
+          }
         } catch {
           answer = { status: 500, body: { error: 'The merge failed.' } }
         } finally {
           merging = false
+          endRepoWrite(lockKey)
         }
         sendJson(req, res, answer.status, answer.body)
         return true

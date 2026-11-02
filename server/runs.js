@@ -1,10 +1,10 @@
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
 import { outcomeTable } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
@@ -245,6 +245,31 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     notify({ topic: 'runs' })
   }
 
+  function recordsSize() {
+    try {
+      return statSync(recordsPath()).size
+    } catch {
+      return 0
+    }
+  }
+
+  function recordRefusal(item, exitCode) {
+    if (recordsSize() !== item.sizeBefore) return
+    const note = item.entry.lastLines.join(' ').trim()
+    const record = runRecord({
+      lane: item.entry.lane,
+      briefs: item.entry.briefs,
+      startedAt: item.entry.startedAt,
+      minutes: 0,
+      exitCode,
+      killed: false,
+      note: note !== '' ? note.slice(0, 200) : 'the runner refused to start or could not start',
+    })
+    try {
+      appendFileSync(recordsPath(), `${JSON.stringify(record)}\n`)
+    } catch {}
+  }
+
   function startRun(lane, briefs, projectRun = null, startedBy = '', reasoning = '') {
     const entry = { lane, briefs: [...briefs], startedAt: new Date().toISOString(), lastLines: [] }
     if (projectRun?.queue) {
@@ -253,7 +278,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const startedArgs = startedBy ? ['--started-by', startedBy] : []
     const reasoningArgs = reasoning ? ['--reasoning', reasoning] : []
-    const item = { entry, tail: '' }
+    const item = { entry, tail: '', sizeBefore: recordsSize() }
     const args = projectRun
       ? projectRun.queue
         ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...startedArgs, ...reasoningArgs]
@@ -295,8 +320,15 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     child.stdout?.on('data', take)
     child.stderr?.on('data', take)
-    child.on('error', () => finish(item))
-    child.on('close', () => finish(item))
+    child.on('error', (error) => {
+      entry.lastLines.push(`start failed: ${String(error?.message ?? error)}`)
+      if (entry.lastLines.length > LAST_LINE_LIMIT) entry.lastLines.shift()
+      finish(item)
+    })
+    child.on('close', (code) => {
+      if (!stopped && (code ?? 0) !== 0) recordRefusal(item, code ?? 1)
+      finish(item)
+    })
     if (startedBy) {
       try {
         onMessage({ from: startedBy === 'orchestrator' ? 'orchestrator' : `sub-${startedBy}`, to: lane, kind: 'dispatch' })

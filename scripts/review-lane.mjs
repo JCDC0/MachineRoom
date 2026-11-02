@@ -30,7 +30,7 @@ import { laneEnv } from './candidate.mjs'
 export const USAGE = 'Use: npm run review-lane -- LANE [--json] [--keep]'
 export const TEST_TIMEOUT_MS = 20 * 60 * 1000
 export const BUILD_TIMEOUT_MS = 10 * 60 * 1000
-const PLAIN_BRANCH = /^[A-Za-z0-9._][A-Za-z0-9._/-]*$/
+
 const OUTPUT_LIMIT = 2 * 1024 * 1024
 const TAIL_LINES = 15
 
@@ -178,7 +178,7 @@ export function reviewTempBase(root, tempRoot = null) {
   return tempRoot ?? dirname(resolve(root))
 }
 
-async function mergedResult({ root, branch, keep, env, execPath, onStep, tempRoot = null }) {
+async function mergedResult({ root, branch, head, keep, env, execPath, onStep, tempRoot = null }) {
   const name = 'merged result'
   const modules = join(root, 'node_modules')
   if (!existsSync(modules)) return check(name, 'FAIL', 'The main checkout has no node_modules. Run npm install there first.')
@@ -195,7 +195,7 @@ async function mergedResult({ root, branch, keep, env, execPath, onStep, tempRoo
     if (!added.ok) {
       result = check(name, 'FAIL', `A worktree of main could not be made: ${added.stderr}`)
     } else {
-      const merged = git(tree, [...quiet, '-c', 'user.name=review-lane', '-c', 'user.email=', 'merge', '--no-ff', '--no-commit', `refs/heads/${branch}`])
+      const merged = git(tree, [...quiet, '-c', 'user.name=review-lane', '-c', 'user.email=', 'merge', '--no-ff', '--no-commit', head])
       if (!merged.ok) {
         const conflicts = (gitText(tree, ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '--diff-filter=U']) ?? '').split('\n').filter(Boolean)
         const details = conflicts.map((file) => ({ status: 'FAIL', where: file, text: 'a merge conflict' }))
@@ -243,11 +243,17 @@ function commitList(root, range) {
     })
 }
 
-function branchProblem(branch) {
+export function branchProblem(branch, validRef = null) {
   if (!branch) return 'The lane worktree is not on a branch.'
   if (branch === 'main') return 'The lane worktree is on main.'
-  if (!PLAIN_BRANCH.test(branch) || branch.includes('..')) return `The branch name ${branch} is not a plain ref.`
+  if (branch.includes('..')) return `The branch name ${branch} is not a plain ref.`
+  if (typeof validRef === 'function' && !validRef(branch)) return `The branch name ${branch} is not a plain ref.`
   return null
+}
+
+export function branchMovedProblem(branch, expected, actual) {
+  if (!expected || !actual || expected === actual) return ''
+  return `The branch ${branch} moved from ${expected} to ${actual} while the review ran, so the merge tested a head that the checks did not read. Read the lane again.`
 }
 
 export async function reviewLane({ root, lane, keep = false, env = process.env, runsPath = runsFile(), execPath = process.execPath, onStep = () => {}, tempRoot = null }) {
@@ -272,10 +278,11 @@ export async function reviewLane({ root, lane, keep = false, env = process.env, 
   if (samePath(worktree, root)) return stop('The lane worktree is the main checkout.')
   const branch = (gitText(worktree, ['branch', '--show-current']) ?? '').trim()
   report.branch = branch
-  const problem = branchProblem(branch)
+  const problem = branchProblem(branch, (name) => git(root, ['check-ref-format', '--branch', name]).ok)
   if (problem) return stop(problem)
-  const head = `refs/heads/${branch}`
-  if (!git(root, ['rev-parse', '--verify', '--quiet', head]).ok) return stop(`The branch ${branch} is not in the main checkout's repository.`)
+  const ref = `refs/heads/${branch}`
+  const head = (gitText(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) ?? '').trim()
+  if (!head) return stop(`The branch ${branch} is not in the main checkout's repository.`)
   if (!git(root, ['rev-parse', '--verify', '--quiet', 'refs/heads/main']).ok) return stop('The repository has no main branch.')
 
   const ahead = Number((gitText(root, ['rev-list', '--count', `refs/heads/main..${head}`]) ?? '0').trim())
@@ -333,7 +340,12 @@ export async function reviewLane({ root, lane, keep = false, env = process.env, 
   report.checks.push(fromResult('TASKS.md', tasksCheck(gitText(root, ['show', `${head}:docs/agents/TASKS.md`]))))
 
   if (ahead === 0) report.checks.push(check('merged result', 'FAIL', 'Not run: there is nothing to merge.'))
-  else report.checks.push(await mergedResult({ root, branch, keep, env, execPath, onStep, tempRoot }))
+  else {
+    report.checks.push(await mergedResult({ root, branch, head, keep, env, execPath, onStep, tempRoot }))
+    const after = (gitText(root, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]) ?? '').trim()
+    const moved = branchMovedProblem(branch, head, after)
+    if (moved !== '') report.checks.push(check('branch moved', 'FAIL', moved))
+  }
   return report
 }
 
