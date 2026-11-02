@@ -505,6 +505,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
             <select
               id="endpoints-provider"
               value={provider}
+              disabled={busy || confirm !== null}
               onChange={(event) => chooseProvider(event.target.value)}
             >
               {providers.map((entry) => (
@@ -519,6 +520,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               type="text"
               maxLength={40}
               value={name}
+              disabled={busy || confirm !== null}
               onChange={(event) => setName(event.target.value)}
             />
           </div>
@@ -528,6 +530,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               id="endpoints-base-url"
               type="text"
               value={baseUrl}
+              disabled={busy || confirm !== null}
               onChange={(event) => setBaseUrl(event.target.value)}
             />
           </div>
@@ -536,6 +539,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
             <select
               id="endpoints-key"
               value={keyName}
+              disabled={busy || confirm !== null}
               onChange={(event) => setKeyName(event.target.value)}
             >
               <option value="">No key (local server)</option>
@@ -550,18 +554,19 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               id="endpoints-models"
               rows={4}
               value={modelText}
+              disabled={busy || confirm !== null}
               onChange={(event) => setModelText(event.target.value)}
             />
             <div className="endpoints-actions">
               <ModelRefresh
                 onRefresh={() => fetchModels(name.trim(), endpoints.some((entry) => entry.name === name.trim()))}
                 loading={modelsBusy}
-                disabled={busy || name.trim() === ''}
+                disabled={busy || confirm !== null || name.trim() === ''}
               />
-              <button type="button" className="hud-settings-switch" disabled={busy} onClick={askSave}>
+              <button type="button" className="hud-settings-switch" disabled={busy || confirm !== null} onClick={askSave}>
                 Save
               </button>
-              <button type="button" className="hud-settings-switch" disabled={busy} onClick={() => setFormOpen(false)}>
+              <button type="button" className="hud-settings-switch" disabled={busy || confirm !== null} onClick={() => setFormOpen(false)}>
                 Cancel
               </button>
             </div>
