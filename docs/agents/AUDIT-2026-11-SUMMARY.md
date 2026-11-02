@@ -121,3 +121,7 @@ The `styles.css` deletion goes last, alone, so it cannot collide with the others
 - Settings and Log were not looked at by eye.
 - No frame time was measured with 10 real agents. The figures for that case come from reading the code.
 - Why the session eviction test timed out once (T32) is still not known.
+
+## Later hunts
+
+Four more lanes then hunted what the first five did not reach: `AUDIT-2026-11-PANELS.md`, `AUDIT-2026-11-ORCHESTRATOR.md`, `AUDIT-2026-11-RUNNER.md` and `AUDIT-2026-11-CONTRACT.md`. Their findings go to briefs U117, S26, S27 and S28.

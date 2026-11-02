@@ -27,8 +27,12 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11.md`: history. The November 2026 co-orchestrator review of the unpushed work from U96 to U105 and `server/git.js`, with three proposed backend briefs.
 - `AUDIT-2026-11-BACKEND.md`: history. The November 2026 audit of the bridge and the runner, with the orchestrator's corrections.
 - `AUDIT-2026-11-CORE.md`: history. The November 2026 audit of the pure logic and the tests, with the orchestrator's corrections.
+- `AUDIT-2026-11-CONTRACT.md`: history. The November 2026 hunt of the page and the bridge against each other, with a table of every write route and its guard.
 - `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
 - `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
+- `AUDIT-2026-11-ORCHESTRATOR.md`: history. The November 2026 hunt of the orchestrator's turns, wakes and ladder.
+- `AUDIT-2026-11-PANELS.md`: history. The November 2026 hunt of the page's panels.
+- `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
 - `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
