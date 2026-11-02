@@ -314,7 +314,7 @@ export default function DispatchPanel({
     if (!targetResult?.brief || loading || loadError || pickedTargetRef.current) return
     pickedTargetRef.current = true
     pickBrief(targetResult.brief.id)
-  })
+  }, [targetResult?.brief?.id, loading, loadError])
 
   async function handleConfirmRun() {
     if (!selectedBriefId || !runLane || typeof client?.startRun !== 'function') return

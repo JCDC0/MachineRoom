@@ -337,6 +337,63 @@ export function isBridgeDown(live, snapshot, health) {
   return Boolean(live) && (['reconnecting', 'disconnected'].includes(snapshot?.status) || health?.ok === false)
 }
 
+function sameAgent(left, right) {
+  return (
+    left.key === right.key &&
+    left.name === right.name &&
+    left.id === right.id &&
+    left.harness === right.harness &&
+    left.model === right.model &&
+    left.status === right.status &&
+    left.label === right.label &&
+    left.runs === right.runs &&
+    left.parent === right.parent &&
+    left.depth === right.depth
+  )
+}
+
+function shownField(snapshot, field) {
+  const value = Number(snapshot?.[field])
+  if (!Number.isFinite(value)) return snapshot?.[field]
+  return snapshot?.live ? Math.floor(value / 1000) : value
+}
+
+export function sameSnapshot(left, right) {
+  if (left === right) return true
+  if (!left || !right) return false
+  if (
+    shownField(left, 'position') !== shownField(right, 'position') ||
+    shownField(left, 'duration') !== shownField(right, 'duration') ||
+    left.playing !== right.playing ||
+    left.speed !== right.speed ||
+    left.live !== right.live ||
+    left.status !== right.status
+  ) {
+    return false
+  }
+  const before = Array.isArray(left.agents) ? left.agents : []
+  const after = Array.isArray(right.agents) ? right.agents : []
+  if (before.length !== after.length) return false
+  for (let index = 0; index < before.length; index += 1) {
+    const one = before[index]
+    const two = after[index]
+    if (one === two) continue
+    if (!one || !two) return false
+    if (!sameAgent(one, two)) return false
+  }
+  return true
+}
+
+export function snapshotSink(player, setSnapshot, initial) {
+  let last = initial
+  return function publish() {
+    const next = player.snapshot()
+    if (last !== undefined && sameSnapshot(last, next)) return
+    last = next
+    setSnapshot(next)
+  }
+}
+
 function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
   const ref = useRef(null)
   const [width, setWidth] = useState(0)
@@ -734,8 +791,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       if (SPEEDS.includes(saved)) player.setSpeed(saved)
     }
     player.play()
-    const timer = setInterval(() => setSnapshot(player.snapshot()), 120)
-    const unsubscribe = player.subscribe(() => setSnapshot(player.snapshot()))
+    const publish = snapshotSink(player, setSnapshot, snapshot)
+    const timer = setInterval(publish, 120)
+    const unsubscribe = player.subscribe(publish)
     return () => {
       clearInterval(timer)
       unsubscribe()

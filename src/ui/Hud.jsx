@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useContext, useEffect, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
 import { name } from './brand.js'
-import Transport from './Transport.jsx'
+import Transport, { OrchestratorsContext, openConversation } from './Transport.jsx'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import AgentDock from './AgentDock.jsx'
 import Assistant from './Assistant.jsx'
@@ -239,6 +239,7 @@ export default function Hud({
   )
   const [orchestratorNonce, setOrchestratorNonce] = useState(0)
   const [orchestratorInfo, setOrchestratorInfo] = useState(null)
+  const sharedOrchestrators = useContext(OrchestratorsContext)
   const [guideOpen, setGuideOpen] = useState(
     () => typeof window !== 'undefined' && shouldShowGuide()
   )
@@ -421,6 +422,11 @@ export default function Hud({
   }, [client, chatTab, mode, wide, orchestratorNonce])
 
   useEffect(() => {
+    if (Array.isArray(sharedOrchestrators)) {
+      setOrchestratorInfo(sharedOrchestrators.find((entry) => entry.id === 'orchestrator') ?? null)
+      setOrchestratorList(sharedOrchestrators)
+      return undefined
+    }
     if (!client || typeof client.orchestrators !== 'function' || (!chatAvailable && !wide)) {
       setOrchestratorInfo(null)
       return undefined
@@ -455,7 +461,7 @@ export default function Hud({
       clearInterval(timer)
       if (typeof unsubscribe === 'function') unsubscribe()
     }
-  }, [chatAvailable, client, wide, orchestratorNonce])
+  }, [chatAvailable, client, sharedOrchestrators, wide, orchestratorNonce])
 
   useEffect(() => {
     if (chatTab === 'orchestrator') return
@@ -532,8 +538,12 @@ export default function Hud({
         toggleLog()
       } else if (chatAvailable && event.key === '/') {
         event.preventDefault()
-        if (floatingChat) setChatOpen(true)
-        else setChatFocus((value) => value + 1)
+        if (floatingChat) {
+          setChatOpen(true)
+        } else {
+          setChatFocus((value) => value + 1)
+          openConversation()
+        }
       } else if (client && (event.key === 'c' || event.key === 'C')) {
         event.preventDefault()
         setControlOpen((open) => {
@@ -754,8 +764,12 @@ export default function Hud({
               aria-expanded={floatingChat ? chatOpen : undefined}
               aria-controls={floatingChat ? 'hud-orchestrator-chat' : undefined}
               onClick={() => {
-                if (floatingChat) setChatOpen((open) => !open)
-                else setChatFocus((value) => value + 1)
+                if (floatingChat) {
+                  setChatOpen((open) => !open)
+                } else {
+                  setChatFocus((value) => value + 1)
+                  openConversation()
+                }
               }}
             >
               <span>Orchestrator</span>
@@ -1014,6 +1028,7 @@ export default function Hud({
                 open
                 inline
                 focusRequest={chatFocus}
+                orchestrators={orchestratorList}
                 selected={chatTab}
                 onSelect={setChatTab}
                 onAutocompact={changeAutocompact}
@@ -1168,6 +1183,7 @@ export default function Hud({
         <OrchestratorChat
           client={client}
           open={chatOpen}
+          orchestrators={orchestratorList}
           selected={chatTab}
           onSelect={setChatTab}
           onClose={() => setChatOpen(false)}

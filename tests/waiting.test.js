@@ -15,6 +15,43 @@ function elementByClass(node, className) {
 }
 
 describe('Waiting close button', () => {
+  it('says the chat is in the lower half at 900 pixels and wider', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { innerWidth: 1200 }
+    try {
+      const html = renderToString(
+        createElement(Waiting, {
+          status: 'live',
+          agents: [{ key: 'orchestrator', name: 'Orchestrator', status: 'idle' }],
+        })
+      )
+      expect(html).toContain(
+        'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat sits in the lower half, under the transport.'
+      )
+      expect(html).not.toContain('bottom right')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
+  })
+
+  it('keeps the bottom right sentence below 900 pixels', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { innerWidth: 800 }
+    try {
+      const html = renderToString(
+        createElement(Waiting, {
+          status: 'live',
+          agents: [{ key: 'orchestrator', name: 'Orchestrator', status: 'idle' }],
+        })
+      )
+      expect(html).toContain('the chat opens at the bottom right.')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
+  })
+
   it('renders a close button at the right end of the header', () => {
     const html = renderToString(createElement(Waiting, { status: 'live' }))
     expect(html).toContain('class="waiting-close mono"')

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
+- The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).
+- The waiting card names where the conversation is at 900 pixels and wider (task U115).
+- The working count in the lens corner counts every top-level agent, the orchestrator and each sub included (task U115).
+- The room's orchestrator list serves the HUD and the chat, which no longer poll separately, and the target brief effect has its dependency list (task U115).
+
 - A full audit of the engine, the page, the bridge, the logic and the design, ranked and checked in `AUDIT-2026-11-SUMMARY.md` (tasks Q20, Q21, Q23, Q24 and Q25).
 - The scrolled menu strip curves with the lens and no longer covers the top of the lower half.
 - The architecture, README and guides agree with the code again: the layout lists every current file, the candidate and recording steps name the real commands, the probe counts match, and the finished plan items are gone (task Q22).

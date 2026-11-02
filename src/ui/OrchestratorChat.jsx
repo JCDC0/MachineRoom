@@ -103,6 +103,7 @@ export default function OrchestratorChat({
   onClose,
   inline = false,
   focusRequest = 0,
+  orchestrators = null,
   onAutocompact = () => ({ ok: true }),
   onOrchestratorChange = () => {},
   selected: selectedTab = undefined,
@@ -238,6 +239,7 @@ export default function OrchestratorChat({
       return undefined
     }
     setUnavailable(false)
+    if (Array.isArray(orchestrators)) return undefined
     let stopped = false
 
     async function readList() {
@@ -259,7 +261,12 @@ export default function OrchestratorChat({
       clearInterval(timer)
       readListRef.current = null
     }
-  }, [open, client])
+  }, [open, client, orchestrators])
+
+  useEffect(() => {
+    if (!Array.isArray(orchestrators)) return
+    setList(initialList(orchestrators))
+  }, [orchestrators])
 
   useEffect(() => {
     if (!open || selected === TEAM_TAB) return undefined
