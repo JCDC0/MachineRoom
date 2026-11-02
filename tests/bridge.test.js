@@ -385,6 +385,25 @@ describe('the file tree', () => {
     expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
   })
 
+  it('sends a file added between the tree read and the stream connect', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
+    const accept = { Accept: `application/json; shape=${FOLDER_SHAPE}` }
+    const read = await getJson(`${url}/api/tree`, { headers: accept })
+
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    await waitFor(
+      async () => (await getJson(`${url}/api/tree`, { headers: accept })).body.version > read.body.version,
+      { what: 'the tree version to rise' }
+    )
+
+    const sse = await openSse(url, {}, `?history=1&tree=${FOLDER_SHAPE}&since=${read.body.version}`)
+    cleanups.push(() => sse.close())
+    const event = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
+  })
+
   it('sends the whole list to a stream whose since is unknown', async () => {
     const dir = tempDir()
     writeFileSync(join(dir, 'a.js'), '1\n')
@@ -459,6 +478,12 @@ describe('frames from a lane log', () => {
     const next = await again.next((item) => item.event === 'frame')
     expect(next.id).toBe(history[1].id)
     expect(JSON.parse(next.data)).toEqual(JSON.parse(history[1].data))
+
+    const after = await openSse(url, {}, `?history=1&after=${history[0].id}`)
+    cleanups.push(() => after.close())
+    const resumed = await after.next((item) => item.event === 'frame')
+    expect(resumed.id).toBe(history[1].id)
+    expect(JSON.parse(resumed.data)).toEqual(JSON.parse(history[1].data))
   })
 
   it('sends no history to a client that does not ask', async () => {

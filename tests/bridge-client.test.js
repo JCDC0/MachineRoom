@@ -126,6 +126,35 @@ describe('openBridge', () => {
     expect(sources.at(-1).closed).toBe(true)
   })
 
+  it('reopens after the last frame it saw instead of the whole history', () => {
+    const timers = []
+    const sources = []
+    class Counting extends FakeSource {
+      constructor(url) {
+        super(url)
+        sources.push(this)
+      }
+    }
+    const link = openBridge({
+      url: 'http://bridge',
+      EventSourceImpl: Counting,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+      setTimer: (fn, ms) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      clearTimer: () => {},
+    })
+    sources.at(-1).emit('frame', JSON.stringify({ id: 7, type: 'heartbeat.run.log' }))
+    sources.at(-1).readyState = 2
+    sources.at(-1).onerror()
+    timers.at(-1).fn()
+    expect(sources.at(-1).url).toBe('http://bridge/events?after=7&tree=folders')
+    link.close()
+  })
+
   it('does not open the stream again once closed', () => {
     const timers = []
     const link = openBridge({

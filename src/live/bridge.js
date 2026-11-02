@@ -27,13 +27,18 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
   let timer = null
   let delay = REOPEN_START
   let closed = false
+  let lastId = null
   const version = since ?? treeVersionFor(url)
-  const streamUrl = `${url}/events?history=1&tree=${FOLDER_SHAPE}${version === undefined ? '' : `&since=${version}`}`
+
+  function streamUrl() {
+    const start = lastId === null ? 'history=1' : `after=${encodeURIComponent(lastId)}`
+    return `${url}/events?${start}&tree=${FOLDER_SHAPE}${version === undefined ? '' : `&since=${version}`}`
+  }
 
   function open() {
     timer = null
     onStatus('connecting')
-    const current = new EventSourceImpl(streamUrl)
+    const current = new EventSourceImpl(streamUrl())
     source = current
     current.onopen = () => {
       delay = REOPEN_START
@@ -50,11 +55,15 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
       delay = Math.min(delay * 2, REOPEN_LIMIT)
     }
     current.addEventListener('frame', (event) => {
+      let frame
       try {
-        onFrame(JSON.parse(event.data))
+        frame = JSON.parse(event.data)
       } catch {
         return
       }
+      const id = typeof event.lastEventId === 'string' && event.lastEventId !== '' ? event.lastEventId : frame?.id
+      if (typeof id === 'string' || typeof id === 'number') lastId = String(id)
+      onFrame(frame)
     })
     current.addEventListener('tree', (event) => {
       let tree

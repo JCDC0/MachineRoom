@@ -887,7 +887,10 @@ export function createBridge(options = {}) {
       })
       res.flushHeaders()
 
-      const lastEventId = req.headers['last-event-id'] !== undefined ? String(req.headers['last-event-id']).trim() : ''
+      const lastEventId =
+        req.headers['last-event-id'] !== undefined
+          ? String(req.headers['last-event-id']).trim()
+          : String(url.searchParams.get('after') ?? '').trim()
       const wantsHistory = url.searchParams.get('history') === '1'
       if (lastEventId) {
         const index = history.findIndex((item) => item.id === lastEventId)
@@ -914,7 +917,15 @@ export function createBridge(options = {}) {
         const sinceText = url.searchParams.get('since')
         const sinceVersion = sinceText && /^\d+$/.test(sinceText) ? Number(sinceText) : null
         const sinceFiles = sinceVersion === null ? null : treeVersions.get(sinceVersion)
-        if (sinceFiles) treeSent.set(res, sinceFiles)
+        if (sinceFiles) {
+          treeSent.set(res, sinceFiles)
+          if (lastTree) {
+            const shape = url.searchParams.get('tree') === FOLDER_SHAPE ? FOLDER_SHAPE : null
+            const event = treeEvent(lastTree, sinceFiles, shape)
+            if (event) res.write(event)
+            treeSent.set(res, lastTree.files)
+          }
+        }
       }
       req.on('close', () => {
         clients.delete(res)
