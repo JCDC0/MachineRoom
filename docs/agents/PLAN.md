@@ -44,8 +44,6 @@ What was checked live:
 
 Not checked live yet:
 
-- The owner's own sessions with `--sessions`. The readers are tested, but the room has not been watched with a real session.
-- The context share and the Autocompact summary. The route and the switch are tested, but no real session has been compacted yet.
 - The room by eye: checked on 2026-10-30 at 1280 by 800, 900 by 700 and 768 by 1024 on the demo ladder replay, with the narrow window lens fixed at once; a live room at those sizes is still to see.
 - The owner's Claude Code sessions with `--sessions`. The reader is tested, but left unchecked live to save Claude quota.
 

@@ -53,7 +53,7 @@ Press Ctrl+C in the terminal to stop the room.
 - The tunnel: while an agent works, one solid line runs from it to the row of the file it touches. It goes from the agent to the root card and then down the same lit folder links the yellow line runs through; when the root has no lit link to the file's folder, it is the straight line. It is yellow, with yellow stripes and small packets running toward the file. Four yellow corner brackets sit around that card.
 - Colours:
   - White is activity. A read or write flashes the file row and its card white.
-  - Yellow is active. The folder and the file an agent works on right now carry a dashed yellow outline, and the tunnel is yellow.
+  - Yellow is active. The folder and the file an agent works on right now carry faint yellow stripes, and the tunnel is yellow.
   - Green is finished work. A run that ends well turns the agent, its chip and the files it wrote green.
   - Red is failure. A failed tool call, test or run flashes red and leaves the file red until it is written again. A failed run turns the agent, its chip and the tunnel red.
 - Terminal chips: a chip beside each agent, joined by a thin line. It shows the name and a status word: yellow working, red error, green done. Click it, or the Log button in the agent dock, to read its log. `T` opens the focused agent's chip, or every chip when no agent is focused. An agent whose latest tool call is a shell command or another command also shows a cyan `CONSOLE` above its head with the last five log lines; it stays for 6 seconds after the call ends.
@@ -132,7 +132,7 @@ Every lane run writes its log to `<runs>`, which is `%TEMP%\machineroom-runs` on
 - `<log name>.meta.json` beside a run on a project, with the lane, the project folder and the session id, and the queue branch when there is one.
 - `runs.jsonl` has one record for each run: lane, model, start, minutes, exit code, cost, tokens, log and branch. A queue run puts its queue branch in `branch` and in `queue`. A stopped run can carry `stoppedLeftovers` with the number of processes the runner had to stop.
 - `outcomes.jsonl` has the outcomes you record with `npm run outcome`.
-- The orchestrator's chat and session live in `orchestrator-<hash>.json`, each sub orchestrator has its own chat file beside it, and each turn writes `orchestrator-chat-<stamp>.log`.
+- The orchestrator's chat and session live in `orchestrator-<hash>.json`, each sub orchestrator has its own chat file beside it, and each turn writes a `...-chat-<stamp>.log` beside the chat file.
 
 The runner prints `log:` and `record:` at the end of a run.
 

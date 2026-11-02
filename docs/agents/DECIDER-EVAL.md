@@ -13,7 +13,7 @@ The design and the list of candidate models are in `CONTROL-PLANE.md` under "The
 | `src/decider/baseline.js` | The two baselines: our plain rules, and a small language model asked the same questions |
 | `src/decider/eval.js` | `runEval`, `planEval`, `formatReport` |
 | `scripts/decide-eval.mjs` | The command line |
-| `tests/probes/` | The probe sets: 98 assistant phrases (57 plain, 41 indirect) and 40 coding tasks |
+| `tests/probes/` | The probe sets: 96 assistant phrases (55 plain, 41 indirect) and 40 coding tasks |
 | `tests/fakeDecisions.js` | A fake Decisions server used by the tests |
 
 Nothing here is used by the app yet. D2 to D5 build on it.
@@ -49,14 +49,14 @@ Each set has two tables. The first has one row per candidate:
 - **Answered**, **Median ms**, **Cost per 1k calls**.
 - **Repeat flips**: share of answers that change when the same question is asked again. Hosted Jev changes about 1 in 100.
 
-The second table is accuracy per question. The baselines are in the same tables: `plain rules` (our `interpret`, assistant only) and `majority answer` (always the most common label). On the shipped probes the plain rules get all of the plain group right and 39 percent of the indirect group, and the majority answer gets 20 percent of the assistant `action` and 53 percent of the routing `tier`. A decision model that does not clearly beat these is not worth a call.
+The second table is accuracy per question. The baselines are in the same tables: `plain rules` (our `interpret`, assistant only) and `majority answer` (always the most common label). On the shipped probes the plain rules get all of the plain group right and 49 percent of the indirect group, and the majority answer gets 17 percent of the assistant `action` and 53 percent of the routing `tier`. A decision model that does not clearly beat these is not worth a call.
 
 ## How to choose
 
 Take the model that passes all of these, and among those the one with the highest coverage at 5 percent error:
 
 1. Answered at least 98 percent of calls.
-2. Assistant: `action` right at least 90 percent, and the indirect group clearly above the rules (39 percent).
+2. Assistant: `action` right at least 90 percent, and the indirect group clearly above the rules (49 percent).
 3. Routing: `tier` right at least 70 percent, and each yes or no question above the majority answer.
 4. Repeat flips under 3 percent, calibration error under 0.15.
 

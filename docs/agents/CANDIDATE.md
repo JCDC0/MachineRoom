@@ -18,7 +18,7 @@ The build and the candidate room run the lane's code before anyone merged it, so
 ## Options
 
 - `--port <n>` use another port when 5175 is taken. The script says `Port 5175 is in use. Pass --port.` when it is.
-- `--paperclip <url>`, `--company <id>` and `--root <folder>` are passed to the candidate room, the same way `npm run serve` takes them.
+- `--root <folder>` is passed to the candidate room, the same way `npm run serve` takes it.
 - `--help` prints the usage and starts nothing.
 
 ## Merge and restart
