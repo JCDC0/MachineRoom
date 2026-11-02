@@ -525,6 +525,15 @@ describe('frames from a lane log', () => {
     const notice = await sse.next((e) => e.event === 'change')
     expect(JSON.parse(notice.data)).toEqual({ topic: 'agents' })
   })
+
+  it('sends a runs notice when a run starts from a lane log, so Reviews reloads', async () => {
+    const loop = await laneBridge()
+    const sse = await openSse(loop.url)
+    cleanups.push(() => sse.close())
+    loop.writeLog('opencode-Y1-20261024-124500', `${toolLine('docs/a.md', { id: 'call-1' })}\n`)
+    const notice = await sse.next((e) => e.event === 'change' && JSON.parse(e.data).topic === 'runs')
+    expect(JSON.parse(notice.data)).toEqual({ topic: 'runs' })
+  })
 })
 
 describe('the assistant route', () => {

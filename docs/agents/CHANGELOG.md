@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A lane run that starts or ends from a terminal sends the runs notice, so Reviews and Dispatch reload (task S28).
 - The Agents list carries each lane's model, so the Agents tab shows it (task S28).
 - A file added between the page's tree read and its stream connect reaches the page at connect, and a reconnect resumes after the last frame the page saw instead of replaying the history (task S28).
 - A key after a dash or an underscore is masked whole, and the split masker holds the same key head the mask looks for (task S28).

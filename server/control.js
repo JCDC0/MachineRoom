@@ -81,7 +81,7 @@ export function changeEvents(frame) {
   if (type === 'agent.status') return [{ topic: 'agents' }]
   if (RUN_NOTICES.has(type)) {
     const costs = type === 'heartbeat.run.status' && ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(payload.status) ? [{ topic: 'costs' }] : []
-    return [{ topic: 'agents' }, { topic: 'issues' }, ...costs, { topic: 'liveRuns' }]
+    return [{ topic: 'agents' }, { topic: 'issues' }, ...costs, { topic: 'liveRuns' }, { topic: 'runs' }]
   }
   if (type !== 'activity.logged') return []
   const action = String(payload.action ?? '')
