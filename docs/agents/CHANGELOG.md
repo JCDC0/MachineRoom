@@ -14,6 +14,7 @@
 - A sub is rebuilt when its list of siblings changes, so its instructions name the other subs (task S26).
 - A room turn held by the 30 turns an hour cap starts when the oldest turns fall out of the hour (task S26).
 - An approved proposal whose ladder write fails removes the new lane again and keeps the proposal (task S26).
+- A chat file that could not be written reports its error in the chat answer and the message response, and the next save retries it (task S26).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
 - The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).

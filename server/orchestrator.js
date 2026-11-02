@@ -10,7 +10,6 @@ import {
   renameSync,
   rmSync,
   statSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -75,6 +74,7 @@ export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
 export const OPENCODE_EFFORT_LEVELS = ['low', 'medium', 'high', 'max']
 export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
+export const CHAT_SAVE_PROBLEM = 'The chat file could not be saved.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
 export const STOPPED_REPLY = 'The orchestrator stopped.'
 export const NO_NEW_REPORT = 'No new report.'
@@ -510,6 +510,7 @@ export function createOrchestrator({
   const sessions = []
   let summary = ''
   let pendingCompaction = null
+  let persistError = null
   const completedRuns = new Map()
 
   function subExists(id) {
@@ -538,6 +539,7 @@ export function createOrchestrator({
   }
 
   function persist() {
+    let failure = null
     try {
       mkdirSync(folder, { recursive: true })
       const waiting = pending
@@ -588,18 +590,19 @@ export function createOrchestrator({
             renamed = true
             break
           } catch (error) {
+            failure = error
             if (error?.code !== 'EPERM' && error?.code !== 'EBUSY') break
             if (attempt < 4) pauseSync(25)
           }
         }
-      } finally {
-        if (!renamed) {
-          try {
-            unlinkSync(temporary)
-          } catch {}
-        }
+      } catch (error) {
+        failure = error
       }
-    } catch {}
+      if (renamed) failure = null
+    } catch (error) {
+      failure = error
+    }
+    persistError = failure ? CHAT_SAVE_PROBLEM : null
   }
 
   function quarantine() {
@@ -1181,6 +1184,7 @@ export function createOrchestrator({
       defaultCompactRules: DEFAULT_COMPACT_RULES,
       autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
       effort: effort ?? null,
+      saveError: persistError,
       messages: messages.map((message) => ({ ...message })),
     }
   }
@@ -1196,6 +1200,7 @@ export function createOrchestrator({
     const message = addMessage('owner', text)
     pending.push(message)
     maybeStartTurn()
+    if (persistError) return { status: 500, body: { error: persistError, id: message.id } }
     return { status: 202, body: { id: message.id } }
   }
 

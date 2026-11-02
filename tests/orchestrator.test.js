@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { EventEmitter } from 'node:events'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
@@ -15,6 +15,7 @@ import {
   compactPrompt,
   COMPACTED_MESSAGE,
   COMPACT_FAILED_MESSAGE,
+  CHAT_SAVE_PROBLEM,
   COMPACT_PROMPT,
   DEFAULT_COMPACT_RULES,
   DEFAULT_AUTOCOMPACT_MODE,
@@ -1667,7 +1668,51 @@ describe('the orchestrator chat file', () => {
     expect(restored.answer().messages.some((message) => message.text === 'Keep me')).toBe(true)
   })
 
-  it('retries a failed rename on EPERM and EBUSY and cleans up the temporary file', () => {
+  it('reports a chat file that could not be saved and clears the error on the next save', () => {
+    const base = makeTempDir('mr-save-error-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    let failing = true
+    const child = new EventEmitter()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = () => {}
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => child,
+      rename: (from, to) => {
+        if (failing) {
+          const error = new Error('EPERM: operation not permitted')
+          error.code = 'EPERM'
+          throw error
+        }
+        renameSync(from, to)
+      },
+    })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    const sent = orchestrator.send({ text: 'Keep me', confirmed: true })
+    expect(sent.status).toBe(500)
+    expect(sent.body).toEqual({ error: CHAT_SAVE_PROBLEM, id: sent.body.id })
+    expect(orchestrator.answer().saveError).toBe(CHAT_SAVE_PROBLEM)
+
+    failing = false
+    expect(orchestrator.setAutocompact({ on: true, confirmed: true }).status).toBe(200)
+    expect(orchestrator.answer().saveError).toBeNull()
+  })
+
+  it('retries a failed rename on EPERM and EBUSY and keeps the temporary for the next save', () => {
     const rig = makeRig()
     rig.orchestrator.close()
     const file = chatFileFor(rig.projectRoot, rig.runs)
@@ -1714,7 +1759,7 @@ describe('the orchestrator chat file', () => {
     })
     cleanups.push(async () => failingOrchestrator.close())
     expect(failingAttempts).toBe(5)
-    expect(existsSync(tmpFile)).toBe(false)
+    expect(existsSync(tmpFile)).toBe(true)
     failingOrchestrator.close()
   })
 
