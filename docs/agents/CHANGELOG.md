@@ -17,7 +17,7 @@
 - A folder card of any size lists every item by scrolling, with no spread that overflows the call stack at 200,000 items (task U116).
 - A card keeps a path to index map, so the strip and the camera hold find a row without a scan per frame (task U116).
 - Folder links are built when the layout changes and the parent map is reused, not rebuilt for every working agent on every frame (task U116).
-- The touch log keeps at most 200 paths with 50 touches each and drops the least recently touched path (task U116).
+- The touch log keeps at most 2000 paths with 50 touches each and drops the least recently touched path (task U116).
 - A finished subagent leaves the state 7.5 seconds after it ends on replay time, so a seek draws the same room, and `retired` holds no finished child (task U116).
 - A card that leaves forgets its home, so `homes` holds only the drawn cards (task U116).
 - The internet sphere computes its phases and swings once and only reads them per frame (task U116).

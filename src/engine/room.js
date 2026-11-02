@@ -113,7 +113,7 @@ export function followAfterSeek(state, following) {
   return { followCard: null, pendingFollow: null, path: following ? touchedPath(state) : null }
 }
 
-export const TOUCH_PATH_LIMIT = 200
+export const TOUCH_PATH_LIMIT = 2000
 export const TOUCH_ENTRY_LIMIT = 50
 
 export function noteTouch(log, path, entry, pathLimit = TOUCH_PATH_LIMIT, entryLimit = TOUCH_ENTRY_LIMIT) {
