@@ -460,7 +460,13 @@ export default function Inspector({
                         <button
                           type="button"
                           className="mr-inspector-change-btn mono"
-                          onClick={() => onSelect({ kind: 'file', id: change.path })}
+                          onClick={() =>
+                            onSelect(
+                              typeof change.path === 'string' && change.path.endsWith('/')
+                                ? { kind: 'folder', id: change.path.slice(0, -1) }
+                                : { kind: 'file', id: change.path }
+                            )
+                          }
                           disabled={change.status === 'D'}
                         >
                           <span className="mr-inspector-change-path">{cutPath(change.path)}</span>

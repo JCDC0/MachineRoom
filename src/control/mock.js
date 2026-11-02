@@ -632,6 +632,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     detached: false,
     head: '4f3c9a1b7d2e8f0a6c5b4d3e2f1a0b9c8d7e6f5a',
     dirty: false,
+    changes: [],
+    changeCount: 0,
     branches: SAMPLE_GIT_BRANCHES.map((b) => ({ ...b })),
     commits: SAMPLE_GIT_COMMITS.map((c) => ({ ...c, parents: [...c.parents], refs: [...c.refs] })),
     truncated: false,

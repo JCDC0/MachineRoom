@@ -127,8 +127,18 @@ export function gitGraphRows(commits = []) {
       }
     }
     const first = parents[0] ?? null
-    lanes[lane] = first
-    if (first !== null) edges.push({ kind: 'bottom', from: lane, to: lane })
+    if (first !== null) {
+      const target = lanes.indexOf(first)
+      if (target !== -1 && target !== lane) {
+        lanes[lane] = null
+        edges.push({ kind: 'bottom', from: lane, to: target })
+      } else {
+        lanes[lane] = first
+        edges.push({ kind: 'bottom', from: lane, to: lane })
+      }
+    } else {
+      lanes[lane] = null
+    }
     for (let index = 1; index < parents.length; index += 1) {
       const parent = parents[index]
       let target = lanes.indexOf(parent)

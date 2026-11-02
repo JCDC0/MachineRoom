@@ -316,4 +316,12 @@ describe('mock orchestrators and the ladder', () => {
     expect(updatedList[0].harness).toBe('opencode')
     expect(updatedList[0].model).toBe('opencode-go/qwen3.8-flash')
   })
+
+  it('answers gitState with changes and changeCount', async () => {
+    const state = await fast().gitState()
+    expect(state.git).toBe(true)
+    expect(state.branch).toBe('main')
+    expect(state.changes).toEqual([])
+    expect(state.changeCount).toBe(0)
+  })
 })

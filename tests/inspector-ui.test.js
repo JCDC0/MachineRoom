@@ -263,10 +263,11 @@ describe('the inspector panel', () => {
       detached: false,
       head: 'a1b2c3d4e5f6',
       dirty: true,
-      changeCount: 2,
+      changeCount: 3,
       changes: [
         { path: 'src/ui/Inspector.jsx', status: 'M' },
         { path: 'src/gone.js', status: 'D' },
+        { path: 'dist/', status: 'U' },
       ],
       branches: [{ name: 'main', head: 'a1b2c3d4e5f6', current: true }],
       commits: [
@@ -296,16 +297,18 @@ describe('the inspector panel', () => {
       expect(container.querySelector('.mr-inspector-title').textContent).toBe('Source control')
       expect(container.textContent).toContain('Branch')
       expect(container.textContent).toContain('main')
-      expect(container.textContent).toContain('Changes 2')
+      expect(container.textContent).toContain('Changes 3')
       expect(container.textContent).toContain('Showing the newest 200 commits.')
 
       const changes = container.querySelectorAll('.mr-inspector-change-btn')
-      expect(changes).toHaveLength(2)
+      expect(changes).toHaveLength(3)
       expect(changes[0].querySelector('.mr-inspector-change-path').textContent).toBe('src/ui/Inspector.jsx')
       expect(changes[0].querySelector('.mr-inspector-change-status').textContent).toBe('M')
       expect(isDisabled(changes[1])).toBe(true)
       await click(root, changes[0])
       expect(onSelect).toHaveBeenCalledWith({ kind: 'file', id: 'src/ui/Inspector.jsx' })
+      await click(root, changes[2])
+      expect(onSelect).toHaveBeenCalledWith({ kind: 'folder', id: 'dist' })
 
       const rows = container.querySelectorAll('.mr-inspector-graph-row')
       expect(rows).toHaveLength(2)
