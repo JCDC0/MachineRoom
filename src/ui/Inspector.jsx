@@ -219,13 +219,16 @@ export default function Inspector({
       return undefined
     }
     let active = true
+    let ticket = 0
     const id = orchestratorId(item.id)
     async function read() {
+      ticket += 1
+      const mine = ticket
       try {
         const answer = await client.orchestrator(id === 'orchestrator' ? undefined : id)
-        if (active) setChat({ chat: normalizeChat(answer), error: '' })
+        if (active && mine === ticket) setChat({ chat: normalizeChat(answer), error: '' })
       } catch (failure) {
-        if (active) setChat({ chat: null, error: failure?.message || 'Could not read the chat.' })
+        if (active && mine === ticket) setChat({ chat: null, error: failure?.message || 'Could not read the chat.' })
       }
     }
     read()
