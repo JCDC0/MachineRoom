@@ -58,10 +58,14 @@ function openRig({ still = false } = {}) {
   const wheel = (deltaY) => {
     surfaceListeners.wheel({ deltaY, target: { closest: () => null }, preventDefault() {} })
   }
+  const rest = () => {
+    for (const handler of listeners.pointerup ?? []) handler({ clientX: 500, clientY: 400 })
+    for (const handler of listeners.pointermove ?? []) handler({ clientX: 500, clientY: 400 })
+  }
   const close = () => {
     globalThis.window = saved
   }
-  return { rig, drag, wheel, close, camera }
+  return { rig, drag, wheel, rest, close, camera }
 }
 
 describe('camera rig yaw and pitch', () => {
@@ -286,6 +290,77 @@ describe('camera rig park with a moving fit', () => {
       expect(rig.yaw()).toBeCloseTo(OVERVIEW.yaw, 6)
       expect(camera.position.distanceTo(target)).toBeCloseTo(3000, 1)
       expect(rig.zoomMultiplier()).toBeCloseTo(1, 6)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('keeps the view still in the frame after a mid-turn setFit', () => {
+    const { rig, camera, drag, rest, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-400, -20)
+      rest()
+      rig.update(1)
+      rig.snap()
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      const before = camera.position.clone()
+      const yaw = rig.yaw()
+      const pitch = rig.pitch()
+      rig.setFit(new THREE.Vector3(60, 210, -40), 2700)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(before)).toBeLessThan(0.001)
+      expect(rig.yaw()).toBeCloseTo(yaw, 8)
+      expect(rig.pitch()).toBeCloseTo(pitch, 8)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('moves the view by a small bound in the frame after a mid-turn setFit', () => {
+    const { rig, camera, close } = openRig()
+    const clock = clockAt()
+    try {
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      const before = camera.position.clone()
+      rig.setFit(new THREE.Vector3(60, 210, -40), 2700)
+      clock.advance(16)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(before)).toBeLessThan(8)
+    } finally {
+      clock.restore()
+      close()
+    }
+  })
+
+  it('keeps the view still in the frame after a mid-turn target or distance change', () => {
+    const { rig, camera, drag, rest, close } = openRig()
+    const clock = clockAt()
+    try {
+      drag(-400, -20)
+      rest()
+      rig.update(1)
+      rig.snap()
+      rig.overview()
+      rig.update(0.016)
+      clock.advance(PARK_EASE_MS / 2)
+      rig.update(0.016)
+      const before = camera.position.clone()
+      rig.setOverviewTarget(new THREE.Vector3(30, 240, -20))
+      rig.update(0.016)
+      expect(camera.position.distanceTo(before)).toBeLessThan(0.001)
+      const targetMoved = camera.position.clone()
+      rig.setOverviewDistance(3200)
+      rig.update(0.016)
+      expect(camera.position.distanceTo(targetMoved)).toBeLessThan(0.001)
     } finally {
       clock.restore()
       close()

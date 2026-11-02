@@ -244,10 +244,23 @@ export function createCameraRig(camera, surface) {
     view.dist = goal.dist
   }
 
+  function rebaseTransition() {
+    if (!transition || still()) return
+    const t = transition.duration <= 0 ? 1 : Math.min(1, (performance.now() - transition.start) / transition.duration)
+    if (!(t > 0) || t >= 1) return
+    const eased = easeInOut(t)
+    const rest = 1 - eased
+    if (!(rest > 0)) return
+    transition.fromTarget.copy(view.target).addScaledVector(goal.target, -eased).divideScalar(rest)
+    transition.fromDist = (view.dist - goal.dist * eased) / rest
+  }
+
   function aimOverview() {
     if (adjusted || follow) return
+    const moved = !goal.target.equals(overviewTarget) || goal.dist !== overviewDist
     goal.target.copy(overviewTarget)
     goal.dist = overviewDist
+    if (moved) rebaseTransition()
   }
 
   function startTransition(duration = FOLLOW_EASE_MS, turn = false) {

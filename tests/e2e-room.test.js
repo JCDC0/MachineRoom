@@ -144,6 +144,7 @@ let roomSurface
 let roomGl
 let roomCss
 const madeElements = []
+const windowListeners = new Map()
 
 beforeAll(() => {
   savedWindow = globalThis.window
@@ -152,13 +153,22 @@ beforeAll(() => {
   savedCancel = globalThis.cancelAnimationFrame
   savedResize = globalThis.ResizeObserver
 
+  windowListeners.clear()
   globalThis.window = {
     innerWidth: 1200,
     innerHeight: 800,
     devicePixelRatio: 1,
     matchMedia: () => ({ matches: true, addEventListener() {}, removeEventListener() {} }),
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener(type, fn) {
+      if (!windowListeners.has(type)) windowListeners.set(type, [])
+      windowListeners.get(type).push(fn)
+    },
+    removeEventListener(type, fn) {
+      const list = windowListeners.get(type)
+      if (!list) return
+      const index = list.indexOf(fn)
+      if (index !== -1) list.splice(index, 1)
+    },
   }
   globalThis.document = {
     createElement: (tag) => {
@@ -228,6 +238,15 @@ function cssRoot() {
 
 function fireCss(type, event) {
   cssRoot().fire(type, event)
+}
+
+function fireWindow(type, event) {
+  for (const fn of [...(windowListeners.get(type) ?? [])]) fn(event)
+}
+
+function clickEmpty() {
+  roomSurface.fire('pointerdown', { clientX: 600, clientY: 790, target: { closest: () => null } })
+  fireWindow('pointerup', { clientX: 600, clientY: 790 })
 }
 
 function cardElement(path) {
@@ -734,6 +753,36 @@ describe('returning to the room', () => {
     }
   })
 
+  it('fits the cards left after it clears the popped folders on park', async () => {
+    const files = []
+    for (const top of ['alpha', 'beta', 'gamma', 'delta', 'src']) files.push(`${top}/f.js`)
+    files.push('docs/deep/f.js')
+    const tops = ['alpha', 'beta', 'gamma', 'delta', 'src', 'docs']
+    const first = await makeRoom(files, ['claude'])
+    let parked = 0
+    try {
+      tickRoom(1)
+      for (const top of tops) cardParts(cardElement(top)).head.fire('click', { detail: 1 })
+      tickRoom(1)
+      for (const top of tops) expect(cardElement(top).className).toContain('is-pinned')
+
+      first.room.park()
+      tickRoom(1)
+      parked = first.room.soundAt('').overviewDistance
+      expect(liveCards().some((card) => card.className.includes('is-pinned'))).toBe(false)
+    } finally {
+      first.room.dispose()
+    }
+
+    const fresh = await makeRoom(files, ['claude'])
+    try {
+      tickRoom(1)
+      expect(fresh.room.soundAt('').overviewDistance).toBeCloseTo(parked, 6)
+    } finally {
+      fresh.room.dispose()
+    }
+  })
+
   it('clears the row and the folder but keeps a pin and a pop when the inspector closes', async () => {
     const { room } = await makeRoom(['lib/a/x.js', 'lib/a/c/y.js', 'docs/d.md', 'docs/deep/more/e.md'], ['claude'])
     try {
@@ -1005,21 +1054,98 @@ describe('the inspected row and the inspector', () => {
     }
   })
 
-  it('stops following an agent that leaves the roster', async () => {
+  it('keeps room-wide follow when the focused agent leaves the roster', async () => {
     const picks = []
-    const { room } = await makeRoom(['lib/a/x.js'], ['claude', 'hermes'], { onPick: (key) => picks.push(key) })
+    const { room, state } = await makeRoom(['lib/a/x.js'], ['claude', 'hermes'], { onPick: (key) => picks.push(key) })
     try {
+      state.agents.get('claude').status = 'working'
+      state.agents.get('claude').focus = ['lib/a/x.js']
+      tickRoom(1)
       room.focus('claude')
       room.setFollow('wide')
       expect(room.following()).toBeTruthy()
+      expect(room.focused()).toBe(null)
+      expect(room.free()).toBe(false)
+
+      room.setRoster([{ key: 'hermes', name: 'hermes' }])
+      tickRoom(1)
+      expect(room.following()).toBeTruthy()
+      expect(room.focused()).toBe(null)
+      expect(room.free()).toBe(false)
+      expect(picks).toEqual([])
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears a focused agent on a click on empty space', async () => {
+    const { room } = await makeRoom(['lib/a/x.js'], ['claude', 'hermes'])
+    try {
+      tickRoom(1)
+      room.focus('claude')
+      expect(room.focused()).toBe('claude')
+      expect(room.free()).toBe(false)
+      clickEmpty()
+      expect(room.focused()).toBe(null)
+      expect(room.free()).toBe(true)
+      const before = room.soundAt('').distance
+      room.setRoster([{ key: 'hermes', name: 'hermes' }])
+      tickRoom(3)
+      expect(room.free()).toBe(true)
+      expect(room.soundAt('').distance).toBeCloseTo(before, 3)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears a focused agent on a card head click', async () => {
+    const { room } = await makeRoom(['lib/a/x.js', 'docs/d.md'], ['claude'])
+    try {
+      tickRoom(1)
+      room.focus('claude')
+      expect(room.focused()).toBe('claude')
+      fireCss('click', { target: cardTarget(cardElement('docs'), 'head') })
+      expect(room.focused()).toBe(null)
+      expect(room.free()).toBe(true)
+      expect(room.inspecting()).toEqual({ kind: 'folder', id: 'docs' })
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears a focused agent when the git tree is inspected', async () => {
+    const { room } = await makeRoom(['lib/a/x.js'], ['claude'])
+    try {
+      room.focus('claude')
+      expect(room.focused()).toBe('claude')
+      expect(room.inspectGitTree()).toBe(true)
+      expect(room.focused()).toBe(null)
+      expect(room.free()).toBe(true)
+      expect(room.inspecting()).toEqual({ kind: 'git', id: 'git' })
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('keeps an inspected row when another agent leaves the roster', async () => {
+    const dismissed = []
+    const { room } = await makeRoom(['lib/a/x.js', 'docs/d.md'], ['claude', 'hermes'], {
+      onDismiss: () => dismissed.push('agent'),
+    })
+    try {
+      expect(room.inspect({ kind: 'file', id: 'lib/a/x.js' })).toBe(true)
+      tickRoom(1)
+      const row = cardRow(cardElement('lib/a'), 'x.js')
+      expect(row.className).toContain('is-inspected')
+      room.focus('claude')
       expect(room.focused()).toBe('claude')
 
       room.setRoster([{ key: 'hermes', name: 'hermes' }])
       tickRoom(1)
-      expect(room.following()).toBe(false)
       expect(room.focused()).toBe(null)
-      expect(room.free()).toBe(true)
-      expect(picks.at(-1)).toBe(null)
+      expect(room.inspecting()).toEqual({ kind: 'file', id: 'lib/a/x.js' })
+      expect(dismissed).toEqual([])
+      expect(row.className).toContain('is-inspected')
     } finally {
       room.dispose()
     }
