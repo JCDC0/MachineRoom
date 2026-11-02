@@ -33,9 +33,9 @@ function stoppedHalfWay(laneKey) {
   return new Error(`Another start of the ${laneKey} lane stopped half way. Start it again.`)
 }
 
-function take(path, folder) {
+function take(path, folder, projectRun = false) {
   try {
-    writeFileSync(path, laneLockText({ pid: process.pid, folder }), { flag: 'wx' })
+    writeFileSync(path, laneLockText({ pid: process.pid, folder, projectRun }), { flag: 'wx' })
     return true
   } catch (error) {
     if (error?.code === 'EEXIST') return false
@@ -62,24 +62,24 @@ function clearTakeover(takeover, laneKey, lock, holderAlive = processAlive) {
   throw stoppedHalfWay(laneKey)
 }
 
-export function takeLaneLock(folder, laneKey, { beforeRetry = () => {}, worktree = '', platform = process.platform, list = listProcesses, stat = statSync } = {}) {
+export function takeLaneLock(folder, laneKey, { beforeRetry = () => {}, worktree = '', projectRun = false, platform = process.platform, list = listProcesses, stat = statSync } = {}) {
   const holderAlive = (pid, file) => isHolderAlive(pid, file, { platform, list, stat })
   const path = join(folder, `${laneKey}.lock`)
   const takeover = `${path}.takeover`
   if (existsSync(takeover)) clearTakeover(takeover, laneKey, path, holderAlive)
-  if (take(path, worktree)) return path
+  if (take(path, worktree, projectRun)) return path
   const holderText = readHolder(path)
   const holder = laneLockPids(holderText).pid
   if (holderAlive(holder, path)) throw running(laneKey, holder, path)
   beforeRetry()
-  const mine = take(takeover, worktree)
+  const mine = take(takeover, worktree, projectRun)
   if (!mine) clearTakeover(takeover, laneKey, path, holderAlive)
   try {
     const current = readHolder(path)
     if (current !== holderText) throw running(laneKey, laneLockPids(current).pid || holder, path)
     if (holderAlive(laneLockPids(current).pid, path)) throw running(laneKey, laneLockPids(current).pid, path)
     rmSync(path, { force: true })
-    if (!take(path, worktree)) throw running(laneKey, laneLockPids(readHolder(path)).pid, path)
+    if (!take(path, worktree, projectRun)) throw running(laneKey, laneLockPids(readHolder(path)).pid, path)
     return path
   } finally {
     if (mine) rmSync(takeover, { force: true })
@@ -90,7 +90,7 @@ export function writeLaneChild(path, childPid) {
   if (!Number.isInteger(childPid) || childPid <= 0) return false
   const holder = readLaneLock(path)
   if (holder.pid !== process.pid) return false
-  writeFileSync(path, laneLockText({ pid: holder.pid, child: childPid, folder: holder.folder }))
+  writeFileSync(path, laneLockText({ pid: holder.pid, child: childPid, folder: holder.folder, projectRun: holder.projectRun }))
   return true
 }
 

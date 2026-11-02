@@ -164,7 +164,8 @@ describe('a stopped lane stays stopped', () => {
     const lock = readLaneLock(join(runs, 'fake.lock'))
     expect(lock.pid).toBeGreaterThan(0)
     expect(lock.child).toBeGreaterThan(0)
-    expect(lock.folder).toBe('')
+    expect(lock.folder).toBe(project)
+    expect(lock.projectRun).toBe(true)
 
     const stopped = await runLane(['--stop', 'fake'], env)
     expect(stopped.code).toBe(0)
@@ -547,6 +548,98 @@ describe('stopLane creation time rules', () => {
       expect(lines).toContain('stopped: 100 (the run)')
       expect(lines).toContain('leftover: stopped 300')
       expect(lines).toContain('leftover: stopped 400')
+    } finally {
+      console.log = log
+    }
+  })
+
+  it('keeps the lock when a process could not be stopped', () => {
+    const { runs, env } = setup('mr-stop-failed-')
+    const lockPath = join(runs, 'fake.lock')
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200 }))
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [
+            { pid: 100, ppid: 1, created: 9000 },
+            { pid: 200, ppid: 100, created: 9500 },
+          ],
+          kill: () => false,
+        })
+        expect(code).toBe(1)
+      })
+      expect(readFileSync(lockPath, 'utf8')).toContain('"pid":100')
+      expect(lines).toContain('could not stop: 200 (the harness)')
+      expect(lines).toContain('kept the fake lock: 2 processes could not be stopped, so the lane stays busy')
+    } finally {
+      console.log = log
+    }
+  })
+
+  it('keeps a newer lock that a run took while the stop ran', () => {
+    const { runs, env } = setup('mr-stop-newer-')
+    const lockPath = join(runs, 'fake.lock')
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200 }))
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [
+            { pid: 100, ppid: 1, created: 9000 },
+            { pid: 200, ppid: 100, created: 9500 },
+          ],
+          kill: () => {
+            writeFileSync(lockPath, laneLockText({ pid: 300, child: 400 }))
+            return true
+          },
+        })
+        expect(code).toBe(0)
+      })
+      expect(readFileSync(lockPath, 'utf8')).toContain('"pid":300')
+      expect(lines).toContain('kept the fake lock: a newer run took it while the stop ran')
+    } finally {
+      console.log = log
+    }
+  })
+
+  it('stops a project run by its descendants and leaves a process that only names the project', () => {
+    const { runs, env } = setup('mr-stop-project-')
+    const lockPath = join(runs, 'fake.lock')
+    const projectPath = 'C:\\fake\\project'
+    writeFileSync(lockPath, laneLockText({ pid: 100, child: 200, folder: projectPath, projectRun: true }))
+    const killed = []
+    const lines = []
+    const log = console.log
+    console.log = (msg) => lines.push(msg)
+    try {
+      withEnv(env, () => {
+        const code = stopLane('fake', {
+          platform: 'win32',
+          stat: () => ({ mtimeMs: 10000 }),
+          list: () => [
+            { pid: 100, ppid: 1, created: 9000 },
+            { pid: 200, ppid: 100, created: 9500 },
+            { pid: 300, ppid: 200, created: 9600 },
+            { pid: 400, ppid: 1, created: 9700, command: 'code C:\\fake\\project' },
+          ],
+          kill: ({ pid }) => {
+            killed.push(pid)
+            return true
+          },
+        })
+        expect(code).toBe(0)
+      })
+      expect(killed).toEqual([200, 100, 300])
+      expect(lines).not.toContain('leftover: stopped 400')
     } finally {
       console.log = log
     }

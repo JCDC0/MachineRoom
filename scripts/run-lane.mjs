@@ -7,7 +7,7 @@ import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
-import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, childEnvironment, commandFor, createLaneLog, DEFAULT_MINUTES, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneCommandProblem, laneStats, laneStopProblem, laneWithOverrides, ORCHESTRATOR_LANE_PROBLEM, parseRunArgs, projectProblems, projectRunGit, readinessLine, retryStartProblem, runListLine, runRecord, sessionToolLines, startFailureText, summarizeRun, unattendedPrompt, worktreeFor, WORKTREES_FOLDER } from '../src/briefs/run.js'
 import { outcomeTable } from '../server/outcomes.js'
 import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, listProcesses } from '../server/processTree.js'
 import { gitPath } from '../server/programPath.js'
@@ -44,13 +44,20 @@ function lanesFile() {
 
 function stopLeftovers({ worktree, childPid = 0, label = 'leftover', excludePids = [], list = listProcesses, kill = killTree } = {}) {
   const folder = String(worktree ?? '').trim()
-  if (!folder && !(childPid > 0)) return 0
+  if (!folder && !(childPid > 0)) return { found: 0, stopped: 0, failed: 0 }
   const found = leftoverProcesses(list(), { childPid, worktree: folder, ownPid: process.pid, excludePids })
+  let stopped = 0
+  let failed = 0
   for (const item of found) {
-    if (kill({ pid: item.pid })) console.log(`${label}: stopped ${item.pid}`)
-    else console.log(`${label}: could not stop ${item.pid}`)
+    if (kill({ pid: item.pid })) {
+      console.log(`${label}: stopped ${item.pid}`)
+      stopped += 1
+    } else {
+      console.log(`${label}: could not stop ${item.pid}`)
+      failed += 1
+    }
   }
-  return found.length
+  return { found: found.length, stopped, failed }
 }
 
 function harnessDescendants(childPid, { excludePids = [], processes = null } = {}) {
@@ -61,6 +68,7 @@ function harnessDescendants(childPid, { excludePids = [], processes = null } = {
 function stopDescendants(descendants, options = 'leftover') {
   const { label = 'leftover', kill = killTree } = typeof options === 'string' ? { label: options } : options ?? {}
   let stopped = 0
+  let failed = 0
   for (const item of Array.isArray(descendants) ? descendants : []) {
     const killed = kill({ pid: item.pid })
     if (killed || !processAlive(item.pid)) {
@@ -68,9 +76,10 @@ function stopDescendants(descendants, options = 'leftover') {
       stopped += 1
     } else {
       console.log(`${label}: could not stop ${item.pid}`)
+      failed += 1
     }
   }
-  return stopped
+  return { stopped, failed }
 }
 
 function refuseRunningLane(laneKey, worktree, folder = runsFolder()) {
@@ -99,9 +108,22 @@ function stopArgument(argv) {
   return lane
 }
 
+function lockText(path) {
+  try {
+    return readFileSync(path, 'utf8')
+  } catch {
+    return ''
+  }
+}
+
 export function stopLane(laneKey, { platform = process.platform, list = listProcesses, kill = killTree, stat = statSync } = {}) {
   const folder = runsFolder()
   const path = join(folder, `${laneKey}.lock`)
+  const before = lockText(path)
+  if (before.trim() === '') {
+    console.log(`Nothing was running for the ${laneKey} lane.`)
+    return 0
+  }
   let lockMtime = null
   try {
     lockMtime = stat(path).mtimeMs
@@ -109,31 +131,46 @@ export function stopLane(laneKey, { platform = process.platform, list = listProc
     lockMtime = null
   }
   const holder = readLaneLock(path)
-  let lane = null
-  try {
-    lane = JSON.parse(readFileSync(lanesFile(), 'utf8'))?.[laneKey] ?? null
-  } catch {
-    lane = null
-  }
-  const worktree = holder.folder || (typeof lane?.worktree === 'string' ? lane.worktree : '')
+  const worktree = holder.folder
   const processes = list()
   const byPid = new Map((Array.isArray(processes) ? processes : []).map((item) => [item.pid, item]))
   const rootPid = Number.isInteger(holder.child) && holder.child > 0 ? holder.child : holder.pid
   const isStranger = (pid) => isLockHolderStale(pid, lockMtime, { platform, processes: byPid })
   const descendants = isStranger(rootPid) ? [] : harnessDescendants(rootPid, { excludePids: [holder.pid ?? 0], processes })
   let stopped = 0
+  let failed = 0
   for (const [pid, name] of [[holder.child, 'the harness'], [holder.pid, 'the run']]) {
     if (!Number.isInteger(pid) || pid <= 0 || pid === process.pid) continue
     if (isStranger(pid)) {
       console.log(`stale: ${pid} was not this run`)
-    } else if ((platform !== 'win32' || processes.length === 0 || byPid.has(pid)) && kill({ pid })) {
-      console.log(`stopped: ${pid} (${name})`)
-      stopped += 1
+    } else if (platform !== 'win32' || processes.length === 0 || byPid.has(pid)) {
+      if (kill({ pid })) {
+        console.log(`stopped: ${pid} (${name})`)
+        stopped += 1
+      } else {
+        console.log(`could not stop: ${pid} (${name})`)
+        failed += 1
+      }
     }
   }
-  const stoppedDescendants = stopDescendants(descendants, { kill })
-  const leftovers = stopLeftovers({ worktree, excludePids: [holder.pid ?? 0], list, kill })
-  if (stopped === 0 && leftovers === 0 && stoppedDescendants === 0) console.log(`Nothing was running for the ${laneKey} lane.`)
+  const descendantsResult = stopDescendants(descendants, { kill })
+  stopped += descendantsResult.stopped
+  failed += descendantsResult.failed
+  const byName = holder.projectRun !== true
+  const leftovers = stopLeftovers({ worktree: byName ? worktree : '', excludePids: [holder.pid ?? 0], list, kill })
+  stopped += leftovers.stopped
+  failed += leftovers.failed
+  if (stopped === 0 && leftovers.found === 0 && descendants.length === 0 && failed === 0) {
+    console.log(`Nothing was running for the ${laneKey} lane.`)
+  }
+  if (lockText(path) !== before) {
+    console.log(`kept the ${laneKey} lock: a newer run took it while the stop ran`)
+    return 0
+  }
+  if (failed > 0) {
+    console.log(`kept the ${laneKey} lock: ${failed} ${failed === 1 ? 'process' : 'processes'} could not be stopped, so the lane stays busy`)
+    return 1
+  }
   rmSync(path, { force: true })
   return 0
 }
@@ -251,6 +288,16 @@ export function prepareWorktree(project, lane) {
     const head = spawnSync(gitPath(), ['rev-parse', 'HEAD'], { cwd: project, encoding: 'utf8', windowsHide: true })
     const sha = String(head.stdout ?? '').trim()
     if (head.status !== 0 || !sha) throw new Error(`Could not read the project's HEAD in ${project}.`)
+    const current = spawnSync(gitPath(), ['branch', '--show-current'], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
+    if (current.status !== 0) throw new Error(`Could not read the worktree branch in ${plan.path}.`)
+    if (String(current.stdout ?? '').trim() === '') {
+      const counted = spawnSync(gitPath(), ['rev-list', '--count', `${sha}..HEAD`], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
+      const count = counted.status === 0 ? Number.parseInt(String(counted.stdout ?? '').trim(), 10) : null
+      if (!Number.isInteger(count) || count < 0) throw new Error(`Could not read the commits in the worktree ${plan.path}.`)
+      if (count > 0) {
+        throw new Error(`The worktree ${plan.path} is detached with ${count} ${count === 1 ? 'commit' : 'commits'} that the project's HEAD does not have, so make a branch for them or remove the worktree first.`)
+      }
+    }
     const moved = spawnSync(gitPath(), ['switch', '--detach', sha], { cwd: plan.path, encoding: 'utf8', windowsHide: true })
     if (moved.status !== 0) throw new Error(`Could not move the worktree ${plan.path} to the project's HEAD: ${String(moved.stderr ?? '').trim()}`)
   }
@@ -714,12 +761,14 @@ async function runQueueProject({ options, lane, lanes }) {
   }
   const folder = runsFolder()
   mkdirSync(folder, { recursive: true })
+  const laneProblem = laneCommandProblem(lane)
+  if (laneProblem !== '') throw new Error(laneProblem)
   const lockTarget = options.worktree ? worktreeFor(project, options.lane) || project : project
   refuseRunningLane(options.lane, options.worktree ? lockTarget : '', folder)
   const projectLock = takeProjectLock(folder, lockTarget)
   let lock
   try {
-    lock = takeLaneLock(folder, options.lane, { worktree: options.worktree ? lockTarget : '' })
+    lock = takeLaneLock(folder, options.lane, { worktree: lockTarget, projectRun: !options.worktree })
   } catch (error) {
     releaseLaneLock(projectLock)
     throw error
@@ -730,10 +779,16 @@ async function runQueueProject({ options, lane, lanes }) {
     const target = options.worktree ? prepareWorktree(project, options.lane) : plan
     const startBranch = gitRead(target.path, ['branch', '--show-current']) ?? ''
     let pending = null
-    const finishPending = () => {
+    let testsFailed = false
+    const finishPending = (status = '') => {
       if (!pending) return
       const item = pending
       pending = null
+      const queueStatus = status || (testsFailed ? 'failed: tests' : '')
+      if (queueStatus !== '') {
+        item.record.queueStatus = queueStatus
+        if (queueStatus === 'failed: tests') item.record.exitCode = 1
+      }
       writeProjectRecord(item)
     }
     try {
@@ -755,10 +810,22 @@ async function runQueueProject({ options, lane, lanes }) {
           if (run.code !== 0 || run.killed) finishPending()
           return { code: run.code, killed: run.killed }
         },
-        runTests: test ? async () => runTestCommand(test, target.path, options.minutes) : null,
+        runTests: test ? async () => {
+          const outcome = await runTestCommand(test, target.path, options.minutes)
+          testsFailed = outcome?.ok !== true
+          return outcome
+        } : null,
       })
       formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? target.path : '' }).forEach((line) => console.log(line))
       return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
+    } catch (error) {
+      finishPending('failed: the queue stopped')
+      const back = gitRead(target.path, ['switch', startBranch])
+      const where = back === null
+        ? `The project stays on ${branch}, where the queue stopped.`
+        : `The project is back on ${startBranch}; the queue branch ${branch} keeps what it made.`
+      console.log(`queue: stopped. ${where}`)
+      throw error
     } finally {
       finishPending()
     }
@@ -778,6 +845,8 @@ async function main() {
   if (options.outcomes) return outcomeRuns(options)
   const lanesPath = lanesFile()
   const lanesJson = JSON.parse(readFileSync(lanesPath, 'utf8'))
+  const badKey = Object.keys(lanesJson ?? {}).find((key) => !/^[A-Za-z0-9_-]+$/.test(key))
+  if (badKey !== undefined) throw new Error(`The lane name ${badKey} in ${lanesPath} needs only letters, digits, dashes and underscores, so it can name a worktree and a branch.`)
   const lanes = readAllLanes({ lanesJson, runsFolder: runsFolder() })
   if (!Object.hasOwn(lanes, options.lane)) throw new Error(`There is no lane named ${options.lane}.`)
   const lane = laneWithOverrides(lanes[options.lane], options)
@@ -824,7 +893,7 @@ async function main() {
     const projectLock = takeProjectLock(folder, project)
     let lock
     try {
-      lock = takeLaneLock(folder, options.lane, { worktree: '' })
+      lock = takeLaneLock(folder, options.lane, { worktree: project, projectRun: true })
     } catch (error) {
       releaseLaneLock(projectLock)
       throw error
@@ -1020,9 +1089,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         killTree(child)
       }
       const descendants = harnessDescendants(child.pid)
-      stopped += stopDescendants(descendants)
-      const folder = project ? (options.worktree ? project : '') : lane.worktree
-      stopped += stopLeftovers({ worktree: folder, childPid: child.pid ?? 0 })
+      stopped += stopDescendants(descendants).stopped
+      stopped += stopLeftovers({ worktree: '', childPid: child.pid ?? 0 }).stopped
       extraStopped += stopped
       try {
         child.stdout?.destroy()
@@ -1106,7 +1174,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     process.removeListener('SIGTERM', onTerm)
     process.removeListener('SIGHUP', onHup)
     process.removeListener('exit', onExit)
-    const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 })
+    const stoppedLeftovers = stopLeftovers({ worktree: '', childPid: child.pid ?? 0 }).stopped
     const totalStoppedLeftovers = stoppedLeftovers + extraStopped
     laneLog.flush()
     await new Promise((done) => log.end(done))
@@ -1129,7 +1197,8 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     }
 
     const worktree = project || lane.worktree
-    const summary = summarizeRun({ harness, log: readLog(logPath), worktree })
+    const logText = readLog(logPath)
+    const summary = summarizeRun({ harness, log: logText, worktree })
     formatSummary(summary).forEach((line) => console.log(line))
 
     const git = project
@@ -1142,6 +1211,28 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
           branch: gitRead(lane.worktree, ['branch', '--show-current']) ?? '',
           commits: (gitRead(lane.worktree, ['log', '--oneline', 'refs/heads/main..HEAD']) ?? '').split(/\r?\n/).filter(Boolean),
         }
+
+    const startFailed = result.code !== 0 && summary.toolCalls === 0 && minutes < 1
+    const startFailure = startFailed ? startFailureText({ harness, log: logText }) : ''
+    if (startFailure !== '') console.log(`start failed: ${startFailure}`)
+    const retryProblem = retryStartProblem({
+      exitCode: result.code,
+      minutes,
+      toolCalls: summary.toolCalls,
+      commits: git.commits,
+      log: logText,
+    })
+    if (retryProblem === '' && options?.retried !== true) {
+      console.log('retrying this run once, because it made no tool call, no commit and printed the readiness sentence')
+      const retryName = `${name}-retry`
+      return await startLane({
+        options: { ...options, retried: true },
+        lane, lanes, wanted, prompt,
+        logPath: join(dirname(logPath), `${retryName}.log`),
+        usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord,
+      })
+    }
     const record = laneRunRecord({
       lane: options.lane,
       briefs: project ? [] : wanted.map((brief) => brief.id),
@@ -1159,6 +1250,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       commits: git.commits,
       stoppedLeftovers: totalStoppedLeftovers > 0 ? totalStoppedLeftovers : undefined,
       note: leftoversCleaned ? 'leftovers were stopped' : undefined,
+      startFailed: startFailure !== '' ? true : undefined,
       ...(start ? { startBranch: start.startBranch } : {}),
       ...(options.startedBy ? { startedBy: options.startedBy } : {}),
       ...(project ? { project, task } : {}),
