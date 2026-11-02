@@ -16,7 +16,7 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 - Three OpenCode lanes (`opencode`, `opencode2`, `opencode3`), three AGY lanes (`agy`, `agy2`, `agy3`, Flash, backend work) and `claude` are live, each with its own worktree. `opencode4` to `opencode10` and Hermes are retired.
 - Merged on 2026-10-30: the Direct API in Settings (H17, U85), the eye-check fixes (U86 to U88), the chat send and the undefined-name test (U89, T27), a stop that never kills a stranger (H19), an OpenCode run that stops with its process tree (H18), the run and wake fixes from the version 9 audit (Q15a, Q15b), the team-test fixes (O22 to O26), the MCP server and ACP agent checks (L6), and the test hunts (T26). The doc passes D15 and D16 are in the same list.
 - The briefs in flight when the owner paused the lanes on 2026-10-27 were U71, U72 and U73. All three are merged (0.1.391, 0.1.392 and 0.1.395), so do not rerun them. Their partial edits may still be the five `git stash list` entries named `opencode partial work`, `opencode2 partial work`, `opencode3 partial work`, `U71 partial 2` and `U73 partial`; leave them unless a merged fix is missing. A stray `opencode.exe` service from an old run is not harmless if it holds a session: see the OpenCode service lesson below.
-- Next: the open briefs T28, H20, L8, A10 and A11, then the open list in `docs/agents/PLAN.md`: the live room by eye, the open audit findings, and the owner's licence and release (P4).
+- Next: the findings of the November audits, then the open list in `docs/agents/PLAN.md`: the live room by eye, the open audit findings, and the owner's licence and release (P4).
 
 ## Standing rules from the owner
 
