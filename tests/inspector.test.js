@@ -168,16 +168,23 @@ describe('the commit graph rows', () => {
     expect(rows[0].refs).toEqual(['main'])
   })
 
-  it('joins a branch back with a top edge', () => {
+  it('joins a branch whose first parent another lane waits for into that lane and trims the width', () => {
     const rows = gitGraphRows([
       { sha: 'main1', parents: ['base1'], subject: 'main work', refs: ['main'] },
       { sha: 'feat1', parents: ['base1'], subject: 'feature work', refs: ['feature'] },
-      { sha: 'base1', parents: [], subject: 'root', refs: [] },
+      { sha: 'base1', parents: ['base0'], subject: 'fork point', refs: [] },
+      { sha: 'base0', parents: [], subject: 'root', refs: [] },
     ])
-    expect(rows.map((row) => row.lane)).toEqual([0, 1, 0])
+    expect(rows.map((row) => row.lane)).toEqual([0, 1, 0, 0])
     expect(rows[1].edges).toContainEqual({ kind: 'through', from: 0, to: 0 })
-    expect(rows[2].edges).toContainEqual({ kind: 'top', from: 1, to: 0 })
-    expect(rows[2].width).toBe(2)
+    expect(rows[1].edges).toContainEqual({ kind: 'bottom', from: 1, to: 0 })
+    expect(rows[1].width).toBe(2)
+    expect(rows[2].edges).toEqual([
+      { kind: 'top', from: 0, to: 0 },
+      { kind: 'bottom', from: 0, to: 0 },
+    ])
+    expect(rows[2].width).toBe(1)
+    expect(rows[3].width).toBe(1)
   })
 
   it('draws both parents of a merge and frees the second lane at their join', () => {
@@ -195,7 +202,8 @@ describe('the commit graph rows', () => {
     expect(rows[1].edges).toContainEqual({ kind: 'through', from: 1, to: 1 })
     expect(rows[2].lane).toBe(1)
     expect(rows[2].edges).toContainEqual({ kind: 'through', from: 0, to: 0 })
-    expect(rows[3].edges).toContainEqual({ kind: 'top', from: 1, to: 0 })
-    expect(rows[3].width).toBe(2)
+    expect(rows[2].edges).toContainEqual({ kind: 'bottom', from: 1, to: 0 })
+    expect(rows[3].edges).toEqual([{ kind: 'top', from: 0, to: 0 }])
+    expect(rows[3].width).toBe(1)
   })
 })
