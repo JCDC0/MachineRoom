@@ -103,7 +103,7 @@ describe('guide steps', () => {
     expect(GUIDE_STEPS[3].text).toContain('chat sits at the bottom right')
     expect(GUIDE_STEPS[3].text).toContain('runs with --lanes')
     expect(GUIDE_STEPS[3].text).toContain('click ORCHESTRATOR')
-    expect(GUIDE_STEPS[3].text).toContain('Attach adds a sub orchestrator')
+    expect(GUIDE_STEPS[3].text).not.toContain('Attach')
     expect(GUIDE_STEPS[3].text).toContain('tabs switch between them')
 
     expect(GUIDE_STEPS[4].text).toContain('C opens the control drawer')
@@ -262,6 +262,14 @@ describe('HUD entry points', () => {
     expect(html).toContain('>Close</button>')
   })
 
+  it('points the tour at the Settings button in the menu row', () => {
+    const html = renderToString(createElement(Hud, { snapshot: SNAPSHOT, speeds: [1] }))
+    expect(html).toContain('class="hud-action"')
+    expect(html).toContain('aria-label="Settings"')
+    expect(LIVE_TOUR_STEPS[4].selector).toBe('.hud-action[aria-label="Settings"]')
+    expect(html).not.toContain('hud-strip-settings')
+  })
+
   it('has the line from an agent in the legend', () => {
     const html = renderToString(createElement(Hud, { snapshot: SNAPSHOT, speeds: [1] }))
     expect(html).toContain('Line from an agent: the file it is working on')
@@ -398,7 +406,7 @@ describe('tour steps, selector lookup and card placement', () => {
       '.mr-term[data-agent="orchestrator"]',
       '.hud-strip-model',
       '.hud-strip-compact',
-      '.hud-strip-settings',
+      '.hud-action[aria-label="Settings"]',
       '.hud-sessions-button',
     ])
     expect(TOUR_STEPS[0].text).toContain('This lens')

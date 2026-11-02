@@ -20,7 +20,7 @@ export const GUIDE_STEPS = [
   },
   {
     label: 'The chat',
-    text: 'The orchestrator chat sits at the bottom right when the room runs with --lanes: press / or click ORCHESTRATOR, Attach adds a sub orchestrator, and its tabs switch between them.',
+    text: 'The orchestrator chat sits at the bottom right when the room runs with --lanes: press / or click ORCHESTRATOR, and its tabs switch between them.',
   },
   {
     label: 'The keys',
@@ -94,8 +94,8 @@ export const LIVE_TOUR_STEPS = [
   },
   {
     label: 'Settings',
-    selector: '.hud-strip-settings',
-    text: 'This Settings button at the foot of the sidebar opens the folder depth and the screen effects.',
+    selector: '.hud-action[aria-label="Settings"]',
+    text: 'This Settings button in the menu row opens the folder depth and the screen effects.',
   },
   {
     label: 'New conversation',
