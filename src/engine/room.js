@@ -429,7 +429,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function endFollow() {
-    if (!followFocus.end()) return
+    if (!followFocus.following() && followFocus.focused() === null) return
+    followFocus.setFollowing(false)
+    followFocus.clear()
     followCard = null
     pendingFollow = null
     rig.stopFollow()
@@ -564,6 +566,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function park() {
     clearSelection()
+    cards.sync(getState())
     releaseHold()
     followFocus.setFollowing(false)
     followFocus.clear()
@@ -900,6 +903,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   }
 
   function inspectGitTree() {
+    if (followFocus.focused() !== null) rig.stopFollow()
+    followFocus.clear()
     cards.setSelected(null)
     setInspected({ kind: 'git', id: 'git' })
     onInspect({ kind: 'git', id: 'git' })
@@ -950,6 +955,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     setFollow(mode) {
       releaseHold()
       followFocus.setFollowing(mode)
+      followFocus.clear()
       followCard = null
       pendingFollow = null
       rig.stopFollow()
@@ -996,18 +1002,19 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       agentSet.setRoster(list, terminals)
       const focused = followFocus.focused()
       if (focused && !agentSet.views.has(focused)) {
+        const onAgent = !rig.free()
         if (followFocus.following()) endFollow()
         followFocus.clear()
         followFocus.setFollowing(false)
         followCard = null
         pendingFollow = null
         const named = inspected?.kind === 'agent' && inspected.id === focused
-        cards.setInspected(null)
         if (named) {
+          cards.setInspected(null)
           inspected = null
           onDismiss()
         }
-        rig.overview()
+        if (onAgent) rig.overview()
       }
     },
     dispose() {
