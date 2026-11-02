@@ -24,7 +24,7 @@ describe('lens labels', () => {
 })
 
 describe('lensStatus', () => {
-  it('counts the working lanes out of every lane', () => {
+  it('counts the working agents out of every top level agent', () => {
     const agents = [
       { key: 'orchestrator', status: 'working', depth: 0 },
       { key: 'opencode', status: 'working', depth: 0 },
@@ -32,19 +32,28 @@ describe('lensStatus', () => {
       { key: 'opencode~1', status: 'working', depth: 1 },
     ]
     const status = lensStatus(agents, [])
-    expect(status.working).toBe(1)
-    expect(status.total).toBe(2)
-    expect(status.share).toBeCloseTo(1 / 2)
+    expect(status.working).toBe(2)
+    expect(status.total).toBe(3)
+    expect(status.share).toBeCloseTo(2 / 3)
   })
 
-  it('leaves the main and sub orchestrators out of the count', () => {
+  it('counts the main and sub orchestrators so a working one shows', () => {
     const agents = [
       { key: 'orchestrator', name: 'Orchestrator', status: 'working', depth: 0 },
       { key: 'sub-frontend', name: 'Frontend', status: 'working', depth: 0, subOrchestrator: true },
       { key: 'sub-backend', status: 'working', depth: 0 },
       { key: 'opencode', status: 'idle', depth: 0 },
     ]
-    expect(lensStatus(agents, [])).toMatchObject({ working: 0, total: 1, share: 0 })
+    expect(lensStatus(agents, [])).toMatchObject({ working: 3, total: 4, share: 3 / 4 })
+  })
+
+  it('never reads working 0 of a total that leaves out a working agent', () => {
+    const agents = [
+      { key: 'orchestrator', name: 'Orchestrator', status: 'working', depth: 0 },
+      { key: 'opencode', name: 'OpenCode', status: 'idle', depth: 0 },
+      { key: 'claude', name: 'Claude Code', status: 'idle', depth: 0 },
+    ]
+    expect(lensStatus(agents, [])).toMatchObject({ working: 1, total: 3 })
   })
 
   it('has no share when there are no lanes', () => {

@@ -9,7 +9,7 @@ import {
 import { OPEN_CHAT_EVENT, orchestratorChips } from './transportOrchestrators.js'
 
 export const LiveBadgeContext = createContext('live')
-export const OrchestratorsContext = createContext([])
+export const OrchestratorsContext = createContext(null)
 
 export function liveBadgeText(status, kind = 'live') {
   const state = status === 'live' ? 'connected' : status || 'connecting'
@@ -31,7 +31,7 @@ function reducedMotion() {
   )
 }
 
-function openConversation() {
+export function openConversation() {
   if (typeof document === 'undefined') return
   const main = document.querySelector('.hud-lower-main')
   if (main && typeof main.scrollIntoView === 'function') {
