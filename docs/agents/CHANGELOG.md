@@ -1,7 +1,8 @@
 # Changelog
 
 ## Unreleased
-
+- `worktrees --clean` treats a lane as running while either the run or its harness child is alive, and keeps a worktree that holds an ignored file besides `node_modules` (task S27).
+- `worktrees` reads the runs folder from `MACHINEROOM_RUNS`, as the bridge and the lane source do (task S27).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
 - The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).

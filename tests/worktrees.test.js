@@ -8,10 +8,12 @@ import {
   cleanDecision,
   collectWorktrees,
   lockHolder,
+  lockHolders,
   parseWorktreeList,
   parseWorktreesArgs,
   removeNodeModulesLink,
   runWorktrees,
+  runsFolder,
   statusChanges,
   worktreeLane,
   worktreeLine,
@@ -359,5 +361,61 @@ describe('the lane worktrees of a real project', () => {
     const code = runWorktrees({ argv: ['--project', folder], log: () => {}, error: (line) => errors.push(line) })
     expect(code).toBe(1)
     expect(errors[0]).toContain('is not a git project')
+  })
+})
+
+describe('locks and ignored files in a lane worktree', () => {
+  it('treats a lane as running while either the run or its harness is alive', () => {
+    const text = JSON.stringify({ pid: 999999, child: process.pid, folder: '/work/sample' })
+    const holders = lockHolders(text)
+    expect(holders.pids).toEqual([999999, process.pid])
+    expect(holders.folder).toBe('/work/sample')
+    expect(holders.projectRun).toBe(false)
+    expect(lockHolders(JSON.stringify({ pid: process.pid, child: 999999, projectRun: true }))).toMatchObject({
+      pids: [process.pid, 999999],
+      projectRun: true,
+    })
+    expect(cleanDecision({ running: lockHolders(text).pids.some((pid) => pid === process.pid) }).remove).toBe(false)
+  })
+
+  it('keeps a worktree whose lock names only a live harness child', () => {
+    const { project, runs, clean } = makeLaneWorktrees()
+    writeFileSync(join(runs, 'clean.lock'), JSON.stringify({ pid: 999999, child: process.pid, folder: clean }))
+    const lines = []
+    const code = runWorktrees({ argv: ['--project', project, '--clean'], runs, log: (line) => lines.push(line), error: () => {} })
+    expect(code).toBe(0)
+    expect(existsSync(clean)).toBe(true)
+    expect(lines.find((line) => line.startsWith('clean | '))).toContain(`left: the lane is running (process ${process.pid})`)
+  }, 60000)
+
+  it('keeps a worktree that holds an ignored file besides node_modules', () => {
+    const { project, runs, clean } = makeLaneWorktrees()
+    const exclude = join(project, '.git', 'info', 'exclude')
+    writeFileSync(exclude, `${readFileSync(exclude, 'utf8')}*.local\n`)
+    writeFileSync(join(clean, 'notes.local'), 'keep me\n')
+    const listed = collectWorktrees({ project, runs })
+    const row = listed.worktrees.find((item) => item.lane === 'clean')
+    expect(row).toMatchObject({ dirty: false, merged: true, ignored: 1 })
+    const lines = []
+    runWorktrees({ argv: ['--project', project, '--clean'], runs, log: (line) => lines.push(line), error: () => {} })
+    expect(existsSync(clean)).toBe(true)
+    expect(existsSync(join(clean, 'notes.local'))).toBe(true)
+    expect(lines.find((line) => line.startsWith('clean | '))).toContain('left: it holds 1 ignored file')
+  }, 60000)
+})
+
+describe('the runs folder', () => {
+  it('honours MACHINEROOM_RUNS as the bridge and the lane source do', () => {
+    const custom = join(tmpdir(), 'machineroom-s27-runs')
+    const env = { ...process.env, MACHINEROOM_RUNS: custom, TEMP: join(tmpdir(), 'machineroom-s27-temp') }
+    expect(runsFolder(env)).toBe(custom)
+    const previous = process.env.MACHINEROOM_RUNS
+    process.env.MACHINEROOM_RUNS = custom
+    try {
+      expect(runsFolder()).toBe(custom)
+    } finally {
+      if (previous === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previous
+    }
   })
 })

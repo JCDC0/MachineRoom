@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process'
 import { lstatSync, readFileSync, rmdirSync, unlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { WORKTREES_FOLDER, laneLockPids } from '../src/briefs/run.js'
+import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
 
 export const USAGE = 'Use: npm run worktrees -- --project FOLDER [--clean] [--json]'
@@ -12,9 +12,7 @@ export const GIT_TIMEOUT_MS = 30 * 1000
 const BRANCH_PREFIX = 'refs/heads/'
 const GIT_MAX_BUFFER = 8 * 1024 * 1024
 
-export function runsFolder(env = process.env) {
-  return join(env.TEMP || tmpdir(), 'machineroom-runs')
-}
+export { runsFolder }
 
 export function parseWorktreesArgs(argv) {
   const options = { project: '', clean: false, json: false, help: false }
@@ -110,17 +108,40 @@ export function worktreeLane(project, worktree, { platform = process.platform } 
   return lane && !lane.includes('/') ? lane : ''
 }
 
+function isNodeModules(name) {
+  return name === 'node_modules' || name.startsWith('node_modules/') || name.startsWith('node_modules\\')
+}
+
 export function statusChanges(text) {
   return String(text ?? '').split(/\r?\n/).filter((line) => {
     if (!line.trim()) return false
+    if (line.startsWith('!! ')) return false
     const name = line.slice(3).trim().replace(/^"|"$/g, '')
-    return !(name === 'node_modules' || name.startsWith('node_modules/') || name.startsWith('node_modules\\'))
+    return !isNodeModules(name)
+  })
+}
+
+export function ignoredChanges(text) {
+  return String(text ?? '').split(/\r?\n/).filter((line) => {
+    if (!line.startsWith('!! ')) return false
+    const name = line.slice(3).trim().replace(/^"|"$/g, '')
+    return !isNodeModules(name)
   })
 }
 
 export function lockHolder(text) {
   const pid = laneLockPids(text).pid
   return Number.isInteger(pid) && pid > 0 ? pid : null
+}
+
+export function lockHolders(text) {
+  const holder = laneLockPids(text)
+  const pids = [holder.pid, holder.child].filter((pid) => Number.isInteger(pid) && pid > 0)
+  return {
+    pids,
+    folder: holder.folder,
+    projectRun: holder.projectRun === true,
+  }
 }
 
 function processAlive(pid) {
@@ -133,11 +154,15 @@ function processAlive(pid) {
   }
 }
 
-export function cleanDecision({ dirty = false, ahead = 0, merged = true, running = false, locked = false, prunable = false } = {}) {
+export function cleanDecision({ dirty = false, ahead = 0, merged = true, running = false, locked = false, prunable = false, ignored = 0 } = {}) {
   if (running) return { remove: false, reason: 'the lane is running' }
   if (locked) return { remove: false, reason: 'the worktree is locked' }
   if (prunable) return { remove: false, reason: 'the worktree folder is gone' }
   if (dirty) return { remove: false, reason: 'it has uncommitted changes' }
+  const ignoredCount = Number.isFinite(ignored) && ignored > 0 ? Math.floor(ignored) : 0
+  if (ignoredCount > 0) {
+    return { remove: false, reason: `it holds ${ignoredCount} ignored ${ignoredCount === 1 ? 'file' : 'files'}` }
+  }
   const count = Number.isFinite(ahead) && ahead > 0 ? Math.floor(ahead) : 0
   if (count > 0) return { remove: false, reason: `it has ${count} ${count === 1 ? 'commit' : 'commits'} not merged` }
   if (!merged) return { remove: false, reason: 'its commits are not merged' }
@@ -218,23 +243,26 @@ export function collectWorktrees({ project, runs = runsFolder(), platform = proc
   for (const entry of parseWorktreeList(list.stdout)) {
     const lane = worktreeLane(folder, entry.path, { platform })
     if (!lane) continue
-    const status = git(entry.path, ['status', '--porcelain', '--untracked-files=all'])
+    const status = git(entry.path, ['status', '--porcelain', '--untracked-files=all', '--ignored'])
     const dirty = !status.ok || statusChanges(status.stdout).length > 0
+    const ignored = status.ok ? ignoredChanges(status.stdout).length : 0
     const counted = entry.head === '' ? { ok: false, stdout: '' } : git(folder, ['rev-list', '--count', `${base}..${entry.head}`])
     const count = counted.ok ? Number.parseInt(counted.stdout.trim(), 10) : null
     const ahead = Number.isInteger(count) && count > 0 ? count : 0
     const merged = entry.head !== '' && counted.ok && git(folder, ['merge-base', '--is-ancestor', entry.head, base]).ok
-    const holder = lockHolder(readLock(join(runs, `${lane}.lock`)))
-    const running = holder !== null && processAlive(holder)
+    const holders = lockHolders(readLock(join(runs, `${lane}.lock`)))
+    const alive = holders.pids.filter(processAlive)
+    const running = alive.length > 0
     rows.push({
       lane,
       path: resolve(entry.path),
       branch: entry.detached || entry.branch === '' ? 'detached' : entry.branch,
       ahead,
       dirty,
+      ignored,
       merged,
       running,
-      pid: running ? holder : null,
+      pid: running ? alive[0] : null,
       locked: entry.locked,
       prunable: entry.prunable,
     })
