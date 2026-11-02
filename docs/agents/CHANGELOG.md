@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Chat tab says its conversation list is unavailable when the bridge refuses the read, instead of loading forever (task U117).
 - F, T, 0, [ and ] no longer reach the room while the Control drawer or another panel is open (task U117).
 - The player no longer writes a music flag that nothing reads, and the saved sound settings drop it (task U117).
 - The web search key hint says the slot is empty until this form saves a key in it (task U117).
