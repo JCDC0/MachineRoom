@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { keyFromFile, writeKey } from './family.js'
 
@@ -143,16 +143,20 @@ export function readEndpoints(runsFolder) {
   return endpoints
 }
 
-export function saveEndpoints(runsFolder, endpoints) {
+export function saveEndpoints(runsFolder, endpoints, { rename = renameSync } = {}) {
   const file = endpointsFile(runsFolder)
   mkdirSync(dirname(file), { recursive: true })
   const content = `${JSON.stringify({ endpoints: endpoints.map((entry) => ({ ...entry, models: [...entry.models] })) }, null, 2)}\n`
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, 'utf8')
   try {
-    renameSync(temporary, file)
+    rename(temporary, file)
   } catch {
     writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
   }
 }
 

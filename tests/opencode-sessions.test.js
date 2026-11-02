@@ -118,6 +118,38 @@ function chunkOf(frame) {
 }
 
 describe('the OpenCode session reader', () => {
+  it('forgets a finished session after an hour without replaying it, and still reads what comes later', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 5000 }
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder: join(dir, 'runs'), clock })
+    reader.tick()
+    addSession(dbPath, { id: 'ses-1', directory: projectRoot })
+    addMessage(dbPath, { id: 'm-user', sessionId: 'ses-1', type: 'user', seq: 1, time: 2000 })
+    addMessage(dbPath, {
+      id: 'm-assistant',
+      sessionId: 'ses-1',
+      type: 'assistant',
+      seq: 2,
+      time: 2001,
+      data: { content: [toolItem({ id: 'call-1', name: 'read', input: { filePath: 'a.txt' } })] },
+    })
+    addMessage(dbPath, { id: 'm-idle', sessionId: 'ses-1', type: 'idle', seq: 3, time: 2002, data: { outcome: 'succeeded' } })
+    reader.tick()
+    const before = frames.length
+    expect(logFrames(frames)).toHaveLength(1)
+
+    clock.value += 60 * 60 * 1000
+    reader.tick()
+    reader.tick()
+    expect(frames).toHaveLength(before)
+
+    addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 4, time: 9000 })
+    reader.tick()
+    expect(frames.length).toBeGreaterThan(before)
+    expect(frames[before].payload.runId).toBe('ses-1:4')
+  })
+
   it('reads a turn with a read and an edit, then ends it on idle', () => {
     const { dir, dbPath } = makeDatabase()
     const projectRoot = join(dir, 'project')

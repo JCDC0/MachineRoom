@@ -27,6 +27,7 @@
 - Delete `rowMark`, `rowNote`, `cards.onPath`, `cards.moving`, `agents.hubCenter`, `followFocus.end` and `cardClickEndsFollow` with their tests (task U116).
 - The parser, file index, review and log checks resolve subagent lifecycles, clear finished labels, share unquoted brief paths and reject broken tool lines, while dead mock writes and the record-events script are removed (task Q26).
 
+- The bridge's process, write and read faults (task S25): an orchestrator stop with no Origin needs its token; the assistant runs OpenCode with `--standalone` and stops its tree on a time limit; opening a project answers 409 while a lane run is open; every saved settings file goes through a temporary file that does not stay behind; reviews read `runs.jsonl` once a request and costs reuse the read until the file changes; idle Claude sessions leave the second by second check; OpenCode sessions forget their rows an hour after they go quiet and prepare their queries once; `mr-agent`'s shell tool stops the whole tree on its time limit; a closed music response stops its file stream.
 - A full audit of the engine, the page, the bridge, the logic and the design, ranked and checked in `AUDIT-2026-11-SUMMARY.md` (tasks Q20, Q21, Q23, Q24 and Q25).
 - The scrolled menu strip curves with the lens and no longer covers the top of the lower half.
 - The architecture, README and guides agree with the code again: the layout lists every current file, the candidate and recording steps name the real commands, the probe counts match, and the finished plan items are gone (task Q22).

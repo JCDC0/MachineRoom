@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -141,6 +141,18 @@ describe('active lanes file and hash', () => {
     expect(readActiveLanesChoice(file)).toEqual([])
     writeActiveLanes(file, ['opencode'])
     expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(['opencode'])
+  })
+
+  it('cleans up temporary file if writeActiveLanes rename fails', () => {
+    const runs = tempDir('mr-choice-')
+    const file = join(runs, 'active-lanes-atomic.json')
+    const renameFails = () => {
+      throw new Error('disk failure')
+    }
+    writeActiveLanes(file, ['opencode'], { rename: renameFails })
+    expect(existsSync(file)).toBe(true)
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual(['opencode'])
+    expect(existsSync(`${file}.tmp`)).toBe(false)
   })
 })
 

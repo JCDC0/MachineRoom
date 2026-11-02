@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { readEndpoints } from './endpoints.js'
@@ -43,7 +43,7 @@ export function readHarnessModelsCache(runsFolder) {
   }
 }
 
-export function saveHarnessModelsCache(runsFolder, cache) {
+export function saveHarnessModelsCache(runsFolder, cache, { rename = renameSync } = {}) {
   if (!runsFolder) return
   const file = cacheFileFor(runsFolder)
   mkdirSync(dirname(file), { recursive: true })
@@ -51,9 +51,13 @@ export function saveHarnessModelsCache(runsFolder, cache) {
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, 'utf8')
   try {
-    renameSync(temporary, file)
+    rename(temporary, file)
   } catch {
     writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
   }
 }
 

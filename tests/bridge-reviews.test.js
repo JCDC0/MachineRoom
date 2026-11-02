@@ -249,6 +249,37 @@ describe('review routes', () => {
     expect(lanes[2]).toEqual({ lane: 'agy', worktree: plain, error: 'That folder is not a git repository.' })
   })
 
+  it('reads runs.jsonl once per reviews request across all lanes', async () => {
+    let readCount = 0
+    const dir = makeTempDir()
+    const agentsDir = join(dir, 'docs', 'agents')
+    mkdirSync(agentsDir, { recursive: true })
+    writeFileSync(
+      join(agentsDir, 'lanes.json'),
+      JSON.stringify({
+        lane1: { name: 'Lane 1' },
+        lane2: { name: 'Lane 2' },
+        lane3: { name: 'Lane 3' },
+      })
+    )
+    const answers = []
+    const api = createReviewsApi({
+      projectRoot: dir,
+      briefsDir: agentsDir,
+      sendJson: (req, res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({}),
+      orchestrators: () => null,
+      readRuns: () => {
+        readCount += 1
+        return []
+      },
+    })
+    const handled = await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/reviews'))
+    expect(handled).toBe(true)
+    expect(answers[0].status).toBe(200)
+    expect(readCount).toBe(1)
+  })
+
   it('answers the diff of a lane with its files and its patch', async () => {
     const { worktree } = makeLaneRepo()
     const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } })

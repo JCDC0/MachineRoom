@@ -15,6 +15,7 @@ import {
   ORIGIN_FORGET_PROBLEM,
   ORIGIN_PROBLEM,
   TURN_RUNNING_PROBLEM,
+  LANES_RUNNING_PROBLEM,
   createProjectsApi,
   readProjectsFile,
   recentProjects,
@@ -535,6 +536,29 @@ describe('projects api', () => {
     expect(handled).toBe(true)
     expect(answers[0].status).toBe(409)
     expect(answers[0].body.error).toBe(TURN_RUNNING_PROBLEM)
+  })
+
+  it('refuses when a lane run is open with 409', async () => {
+    const env = createEnvironment()
+    const answers = []
+    const api = createProjectsApi({
+      projectRoot: env.root,
+      runsFolder: env.runs,
+      runs: { isRunning: () => true },
+      onOpenProject: () => {},
+      sendJson: (_req, _res, status, body) => {
+        answers.push({ status, body })
+      },
+      readJsonBody: async () => ({ path: env.siblingGit, confirmed: true }),
+    })
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/projects/open')
+    )
+    expect(handled).toBe(true)
+    expect(answers[0].status).toBe(409)
+    expect(answers[0].body.error).toBe(LANES_RUNNING_PROBLEM)
   })
 
   it('answers 501 when bridge started without onOpenProject', async () => {

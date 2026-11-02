@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { killTree } from './processTree.js'
 
@@ -121,7 +121,7 @@ export function readMcpServers(runsDir) {
   return servers
 }
 
-export function writeMcpServers(runsDir, servers) {
+export function writeMcpServers(runsDir, servers, { rename = renameSync } = {}) {
   const file = mcpFile(runsDir)
   mkdirSync(dirname(file), { recursive: true })
   const list = Array.isArray(servers)
@@ -131,9 +131,13 @@ export function writeMcpServers(runsDir, servers) {
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, 'utf8')
   try {
-    renameSync(temporary, file)
+    rename(temporary, file)
   } catch {
     writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
   }
 }
 

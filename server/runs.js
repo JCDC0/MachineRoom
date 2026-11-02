@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -103,9 +103,20 @@ function queuePath(lane, folder = dirname(runsFile())) {
   return join(folder, `${lane}-queue-${stamp()}.queue.txt`)
 }
 
-function writeQueue(file, tasks) {
+export function writeQueue(file, tasks, { rename = renameSync } = {}) {
   mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, tasks.map((task) => task.trim()).join('\n---\n'))
+  const content = tasks.map((task) => task.trim()).join('\n---\n')
+  const temporary = `${file}.tmp`
+  writeFileSync(temporary, content, 'utf8')
+  try {
+    rename(temporary, file)
+  } catch {
+    writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
+  }
 }
 
 let mainCheckoutPromise = null
@@ -604,5 +615,5 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return true
   }
 
-  return { handle, stopAll, isRunning: (lane) => running.has(lane) }
+  return { handle, stopAll, isRunning: (lane) => (lane !== undefined ? running.has(lane) : running.size > 0) }
 }

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -372,5 +372,32 @@ describe('the search provider route', () => {
     mkdirSync(folder, { recursive: true })
     writeSearchChoice(folder, { provider: 'duckduckgo', url: '', keyName: '' })
     expect(readSearchChoice(folder)).toEqual({ provider: 'duckduckgo', url: '', keyName: '' })
+  })
+
+  it('writes search.json atomically via rename and cleans up on fallback', () => {
+    const folder = tempDir('mr-search-atomic-')
+    mkdirSync(folder, { recursive: true })
+    let renamed = false
+    writeSearchChoice(folder, { provider: 'duckduckgo', url: '', keyName: '' }, {
+      rename: (from, to) => {
+        renamed = true
+        expect(from.endsWith('.tmp')).toBe(true)
+        expect(to.endsWith('search.json')).toBe(true)
+        renameSync(from, to)
+      },
+    })
+    expect(renamed).toBe(true)
+    expect(existsSync(join(folder, 'search.json'))).toBe(true)
+    expect(existsSync(join(folder, 'search.json.tmp'))).toBe(false)
+
+    writeSearchChoice(folder, { provider: 'searxng', url: 'https://example.com', keyName: '' }, {
+      rename: () => {
+        const err = new Error('EPERM')
+        err.code = 'EPERM'
+        throw err
+      },
+    })
+    expect(existsSync(join(folder, 'search.json'))).toBe(true)
+    expect(existsSync(join(folder, 'search.json.tmp'))).toBe(false)
   })
 })

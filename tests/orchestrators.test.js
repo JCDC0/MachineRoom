@@ -7,7 +7,7 @@ import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource } from '../server/lanes-source.js'
 import { chatFileFor, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT } from '../server/orchestrator.js'
-import { availableHarnesses, branchChanges, createOrchestrators, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
+import { availableHarnesses, branchChanges, createOrchestrators, NO_TOKEN_PROBLEM, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
@@ -899,7 +899,7 @@ describe('the orchestrator registry', () => {
     expect(instruction).toContain('Your parent is `orchestrator`')
     expect(instruction).toContain('Your scope: `src/ui/**`')
 
-    expect((await postJson(`${rig.url}/api/orchestrator/stop`, { id: 'frontend', confirmed: true })).body).toEqual({ ok: true })
+    expect((await pagePost(`${rig.url}/api/orchestrator/stop`, { id: 'frontend', confirmed: true })).body).toEqual({ ok: true })
     expect((await getJson(`${rig.url}/api/orchestrator?id=frontend`)).body.state).toBe('paused')
 
     const removed = await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'owner', confirmed: true })
@@ -1082,6 +1082,27 @@ describe('the orchestrator registry', () => {
     }, mainToken)
     expect(sent.status).toBe(202)
     expect(rig.chat('frontend').messages.some((message) => message.from === 'orchestrator' && message.text === 'Do the goal')).toBe(true)
+  })
+
+  it('requires a valid token or origin for orchestrator stop', async () => {
+    const rig = await makeBridge(makeBase())
+    const mainToken = rig.bridge.orchestrators().token('orchestrator')
+
+    const noOriginNoToken = await tokenPost(`${rig.url}/api/orchestrator/stop`, { confirmed: true }, '')
+    expect(noOriginNoToken.status).toBe(403)
+    expect(noOriginNoToken.body.error).toBe(NO_TOKEN_PROBLEM)
+
+    const badToken = await tokenPost(`${rig.url}/api/orchestrator/stop`, { confirmed: true }, 'bad-token')
+    expect(badToken.status).toBe(403)
+    expect(badToken.body.error).toBe(NO_TOKEN_PROBLEM)
+
+    const validToken = await tokenPost(`${rig.url}/api/orchestrator/stop`, { confirmed: true }, mainToken)
+    expect(validToken.status).toBe(200)
+    expect(validToken.body).toEqual({ ok: true })
+
+    const pageCall = await pagePost(`${rig.url}/api/orchestrator/stop`, { confirmed: true })
+    expect(pageCall.status).toBe(200)
+    expect(pageCall.body).toEqual({ ok: true })
   })
 
   it('sends one order frame for a main message to a sub and one report frame for its reply', async () => {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { readEndpoints } from './endpoints.js'
 import { MODELS, modelsFor } from './models.js'
@@ -191,16 +191,20 @@ export function readAgentsConfig(runsDir) {
   }
 }
 
-export function saveAgentsConfig(runsDir, config) {
+export function saveAgentsConfig(runsDir, config, { rename = renameSync } = {}) {
   const file = agentsConfigFile(runsDir)
   mkdirSync(dirname(file), { recursive: true })
   const content = `${JSON.stringify(config, null, 2)}\n`
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, 'utf8')
   try {
-    renameSync(temporary, file)
+    rename(temporary, file)
   } catch {
     writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
   }
 }
 

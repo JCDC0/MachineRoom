@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createAssistantApi, resolveOpencodeBinary } from '../server/assistant.js'
+import { createAssistantApi, resolveOpencodeBinary, runOpencode } from '../server/assistant.js'
 
 const slashes = (path) => path.split('/').join('\\')
 
@@ -75,5 +75,43 @@ describe('assistant route prompt checks', () => {
 
   it('accepts an ordinary prompt', async () => {
     expect(await post('You route one request')).toEqual({ status: 200, body: { text: 'ok' } })
+  })
+})
+
+describe('runOpencode process control', () => {
+  it('passes --standalone to the binary arguments', async () => {
+    let passedArgs = null
+    await runOpencode({
+      model: 'opencode/test-model',
+      prompt: 'hello world',
+      binary: 'opencode',
+      execFileImpl: (bin, args, opts, cb) => {
+        passedArgs = args
+        cb(null, 'answer')
+        return {}
+      },
+    })
+    expect(passedArgs).toContain('--standalone')
+    expect(passedArgs).toEqual(['run', '--standalone', '-m', 'opencode/test-model', '--format', 'json', 'hello world'])
+  })
+
+  it('stops the process tree on timeout', async () => {
+    let killedChild = null
+    const childObj = { pid: 9999 }
+    const promise = runOpencode({
+      model: 'opencode/test-model',
+      prompt: 'hello world',
+      binary: 'opencode',
+      timeoutMs: 10,
+      execFileImpl: (bin, args, opts, cb) => {
+        setTimeout(() => cb(new Error('killed')), 30)
+        return childObj
+      },
+      killTreeImpl: (child) => {
+        killedChild = child
+      },
+    })
+    await expect(promise).rejects.toThrow('the assistant run failed')
+    expect(killedChild).toBe(childObj)
   })
 })

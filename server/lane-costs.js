@@ -1,4 +1,32 @@
+import { statSync } from 'node:fs'
 import { readAllRunRecords, runsFile } from './runs.js'
+
+const recordCaches = new Map()
+
+export function clearRunRecordsCache() {
+  recordCaches.clear()
+}
+
+export function cachedRunRecords(file = runsFile()) {
+  let stat
+  try {
+    stat = statSync(file)
+  } catch {
+    recordCaches.delete(file)
+    return []
+  }
+  const cached = recordCaches.get(file)
+  if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
+    return cached.records
+  }
+  const records = readAllRunRecords(file)
+  recordCaches.set(file, {
+    size: stat.size,
+    mtimeMs: stat.mtimeMs,
+    records,
+  })
+  return records
+}
 
 function monthStart(time) {
   const date = new Date(time)
@@ -73,6 +101,7 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
   }
 }
 
-export function readLaneCosts({ agents = [], file = runsFile(), now = Date.now() } = {}) {
-  return laneCosts({ records: readAllRunRecords(file), agents, now })
+export function readLaneCosts({ agents = [], file = runsFile(), now = Date.now(), records = null } = {}) {
+  const runRecords = records ?? cachedRunRecords(file)
+  return laneCosts({ records: runRecords, agents, now })
 }
