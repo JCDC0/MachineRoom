@@ -24,6 +24,8 @@ export const CARD_NAME_PAD = 28
 export const FILE_LIMIT_MIN = 4
 export const FILE_LIMIT_MAX = 20
 export const FILE_LIMIT_DEFAULT = 6
+export const VIRTUAL_MIN_ROWS = 60
+export const VIRTUAL_OVERSCAN = 4
 const NAME_WIDE = new Set(['M', 'W'])
 const NAME_NARROW = new Set(['I', 'J'])
 const FLASH_MS = 1100
@@ -133,6 +135,26 @@ export function cardRows(view) {
   const total = view.items.length + (view.hiddenItems > 0 ? 1 : 0)
   if (Number.isFinite(view.maxFiles)) return Math.min(total, clampFileLimit(view.maxFiles))
   return total
+}
+
+export function rowWindow(total, scrollTop, viewport, { rowHeight = ROW_H, overscan = VIRTUAL_OVERSCAN, threshold = VIRTUAL_MIN_ROWS } = {}) {
+  const count = Math.max(0, Math.floor(Number(total) || 0))
+  const height = Number(rowHeight) > 0 ? Number(rowHeight) : ROW_H
+  if (count <= Math.max(0, Math.floor(Number(threshold) || 0))) {
+    return { virtual: false, first: 0, last: count, top: 0, bottom: 0 }
+  }
+  const view = Math.max(0, Number(viewport) || 0)
+  const at = Math.min(Math.max(0, count * height - view), Math.max(0, Number(scrollTop) || 0))
+  const pad = Math.max(0, Math.floor(Number(overscan) || 0))
+  const first = Math.max(0, Math.floor(at / height) - pad)
+  const last = Math.min(count, Math.ceil((at + view) / height) + pad)
+  return {
+    virtual: true,
+    first,
+    last,
+    top: first * height,
+    bottom: (count - last) * height,
+  }
 }
 
 export function cardMetaText(view) {
@@ -356,6 +378,7 @@ export function createCards(cssScene, options = {}) {
   let inspected = null
   let rowRevision = 0
   let lastRowFrameKey = null
+  let lastState = null
 
   let lastExistingFiles = -1
   let lastLatest = -1
@@ -417,6 +440,14 @@ export function createCards(cssScene, options = {}) {
       },
       { passive: true },
     )
+    items.addEventListener(
+      'scroll',
+      () => {
+        const card = cards.get(path)
+        if (card?.virtual) paintWindow(card, lastState)
+      },
+      { passive: true },
+    )
     const band = el('div', 'mr-card-band')
     const face = el('div', 'mr-card-face')
     face.append(head, items, band)
@@ -452,6 +483,13 @@ export function createCards(cssScene, options = {}) {
       rootName,
       rows: [],
       rowPaths: [],
+      wanted: [],
+      drawn: new Map(),
+      virtual: false,
+      window: null,
+      rowHeight: 0,
+      limitRows: 0,
+      hiddenRows: 0,
       view: null,
       backCount: -1,
       occluderKey: '',
@@ -504,6 +542,105 @@ export function createCards(cssScene, options = {}) {
     )
   }
 
+  function rowLook(state, path, kind) {
+    const file = kind === 'file' && state ? state.files.get(path) : null
+    let mark = ''
+    let short = ''
+    if (file) {
+      if (file.failed) mark = 'failed'
+      else if (file.yellow) mark = 'finished'
+      else if (file.writes > 0) mark = 'written'
+      else if (file.reads > 0) mark = 'read'
+      const shortParts = []
+      if (file.reads) shortParts.push(`r ${file.reads}`)
+      if (file.writes) shortParts.push(`w ${file.writes}`)
+      if (file.failed) shortParts.push('failed')
+      else if (file.yellow) shortParts.push('finished')
+      short = shortParts.join(' · ')
+    }
+    const hit = flashes.get(path)
+    const tone = hit && hit.until > performance.now() ? hit.tone : null
+    let rowClass = `mr-item is-${kind}`
+    if (mark) rowClass += ` is-${mark}`
+    if (active.files.has(path) || active.dirs.has(path)) rowClass += ' is-active'
+    if (tone) rowClass += ` is-flash-${tone}`
+    if (inspected === path) rowClass += ' is-inspected'
+    return { file, mark, short, rowClass }
+  }
+
+  function makeRow(item, state) {
+    const look = rowLook(state, item.path, item.kind)
+    const row = el('div', look.rowClass)
+    const label = el('span', 'mr-item-name', visibleText(item.kind === 'dir' ? `${basename(item.path)}/` : basename(item.path)))
+    const note = el('span', 'mr-item-note', look.short)
+    row.append(label, note)
+    row.addEventListener('click', (event) => {
+      event.stopPropagation()
+      if (item.kind === 'dir') {
+        pinned.add(item.path)
+        pinnedVersion += 1
+        planKey = ''
+      }
+      onInspect(item.path)
+      inspected = item.path
+      rowRevision += 1
+    })
+    return {
+      row,
+      note,
+      item,
+      file: look.file,
+      baseClass: `mr-item is-${item.kind}`,
+      rowClass: look.rowClass,
+      noteText: look.short,
+      lastReads: look.file ? look.file.reads : -1,
+      lastWrites: look.file ? look.file.writes : -1,
+      lastFailed: look.file ? look.file.failed : null,
+      lastYellow: look.file ? look.file.yellow : null,
+      mark: look.mark,
+      short: look.short,
+    }
+  }
+
+  function rowHeightOf(card) {
+    if (card.rowHeight > 0) return card.rowHeight
+    const sample = card.rows[0]?.row
+    const measured = Number(sample?.offsetHeight)
+    card.rowHeight = measured > 0 ? measured : ROW_H
+    return card.rowHeight
+  }
+
+  function paintWindow(card, state, force = false) {
+    const total = card.wanted.length
+    if (total === 0) return false
+    const height = rowHeightOf(card)
+    const viewport = Math.min(total, card.limitRows > 0 ? card.limitRows : total) * height
+    const scrollTop = Number(card.items.scrollTop) || 0
+    const next = rowWindow(total, scrollTop, viewport, { rowHeight: height })
+    if (!force && card.window && card.window.first === next.first && card.window.last === next.last) return false
+    card.window = next
+    const rows = []
+    for (let index = next.first; index < next.last; index += 1) {
+      const item = card.wanted[index]
+      if (!item) break
+      rows.push(makeRow(item, state))
+    }
+    card.rows = rows
+    card.drawn = new Map(rows.map((entry) => [entry.item.path, entry]))
+    if (!card.gapTop) card.gapTop = el('div', 'mr-card-gap')
+    if (!card.gapBottom) card.gapBottom = el('div', 'mr-card-gap')
+    const top = `${next.top}px`
+    const bottom = `${next.bottom}px`
+    if (card.gapTop.style.height !== top) card.gapTop.style.height = top
+    if (card.gapBottom.style.height !== bottom) card.gapBottom.style.height = bottom
+    const more = card.hiddenRows > 0 ? [el('div', 'mr-card-more', `+ ${card.hiddenRows} more`)] : []
+    card.items.replaceChildren(card.gapTop, ...rows.map((entry) => entry.row), card.gapBottom, ...more)
+    const kept = Math.min(scrollTop, Math.max(0, total * height - viewport))
+    if ((Number(card.items.scrollTop) || 0) !== kept) card.items.scrollTop = kept
+    rowRevision += 1
+    return true
+  }
+
   function paintRows(card, view) {
     const wanted = view.state === 'files' ? view.items : []
     const limit = clampFileLimit(view.maxFiles ?? maxFilesLevel)
@@ -516,44 +653,27 @@ export function createCards(cssScene, options = {}) {
     const paths = wanted.map((item) => item.path)
     const hidden = view.state === 'files' ? view.hiddenItems : 0
     const key = `${paths.join('\n')}|${hidden}`
-    if (key === card.rowKey) return
+    const limitChanged = card.limitRows !== limit
+    card.limitRows = limit
+    if (key === card.rowKey) {
+      if (card.virtual && limitChanged) paintWindow(card, lastState, true)
+      return
+    }
     card.rowKey = key
-    card.rows = wanted.map((item) => {
-      const row = el('div', `mr-item is-${item.kind}`)
-      const label = el('span', 'mr-item-name', visibleText(item.kind === 'dir' ? `${basename(item.path)}/` : basename(item.path)))
-      const note = el('span', 'mr-item-note')
-      row.append(label, note)
-      row.addEventListener('click', (event) => {
-        event.stopPropagation()
-        if (item.kind === 'dir') {
-          pinned.add(item.path)
-          pinnedVersion += 1
-          planKey = ''
-        }
-        onInspect(item.path)
-        inspected = item.path
-        rowRevision += 1
-      })
-      return {
-        row,
-        note,
-        item,
-        file: null,
-        baseClass: `mr-item is-${item.kind}`,
-        rowClass: '',
-        noteText: '',
-        lastReads: -1,
-        lastWrites: -1,
-        lastFailed: null,
-        lastYellow: null,
-        mark: '',
-        short: '',
-      }
-    })
     card.rowPaths = paths
-    const more = hidden > 0 ? [el('div', 'mr-card-more', `+ ${hidden} more`)] : []
-    card.items.replaceChildren(...card.rows.map((entry) => entry.row), ...more)
-    rowRevision += 1
+    card.wanted = wanted
+    card.hiddenRows = hidden
+    card.window = null
+    card.virtual = wanted.length > VIRTUAL_MIN_ROWS
+    if (card.virtual) {
+      paintWindow(card, lastState, true)
+    } else {
+      card.rows = wanted.map((item) => makeRow(item, lastState))
+      card.drawn = new Map(card.rows.map((entry) => [entry.item.path, entry]))
+      const more = hidden > 0 ? [el('div', 'mr-card-more', `+ ${hidden} more`)] : []
+      card.items.replaceChildren(...card.rows.map((entry) => entry.row), ...more)
+      rowRevision += 1
+    }
   }
 
   function resetRow(entry) {
@@ -614,6 +734,7 @@ export function createCards(cssScene, options = {}) {
   }
 
   function recompute(state) {
+    lastState = state
     const unchanged =
       planKey !== '' &&
       pinnedVersion === lastPinnedVersion &&
@@ -750,14 +871,26 @@ export function createCards(cssScene, options = {}) {
     const card = cards.get(dir)
     out.copy(center(dir))
     const index = card ? card.rowPaths.indexOf(file) : -1
-    if (index !== -1) {
-      const row = Math.min(index, Math.max(0, cardRows(card.view) - 1))
-      out.addScaledVector(up, rowOffset(cardRows(card.view), row) * card.scale)
-    }
+    if (index === -1) return out
+    if (card.virtual && !card.drawn.has(file)) return out
+    const rows = cardRows(card.view)
+    if (!(rows > 0)) return out
+    const scroll = card.virtual ? Math.max(0, Number(card.items.scrollTop) || 0) : 0
+    const steps = Math.floor(scroll / ROW_H)
+    const rest = scroll - steps * ROW_H
+    const slot = index - steps
+    let offset = rowOffset(rows, Math.min(rows - 1, Math.max(0, slot)))
+    if (slot >= 0 && slot < rows) offset -= rest
+    out.addScaledVector(up, offset * card.scale)
     return out
   }
 
   function edgePoint(dir, file, side, out) {
+    const card = cards.get(dir)
+    if (card?.virtual && !card.drawn.has(file)) {
+      out.copy(center(dir))
+      return out.addScaledVector(right, side * halfWidth(dir))
+    }
     slotPosition(dir, file, out)
     return out.addScaledVector(right, side * halfWidth(dir))
   }
@@ -864,6 +997,7 @@ export function createCards(cssScene, options = {}) {
   }
 
   function update(state, delta, camera, mask = null) {
+    lastState = state
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)

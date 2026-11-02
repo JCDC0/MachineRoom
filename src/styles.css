@@ -5707,6 +5707,14 @@ body:has(#hud-orchestrator-chat) .waiting {
   border-top: 1px solid rgb(255 255 255 / 0.16);
 }
 
+.mr-card-gap {
+  height: 0;
+}
+
+.mr-card-gap + .mr-item {
+  border-top: 1px solid rgb(255 255 255 / 0.16);
+}
+
 .mr-item-name {
   overflow: hidden;
   color: rgb(255 255 255 / 0.6);
@@ -7753,6 +7761,18 @@ body:has(#hud-orchestrator-chat) .waiting {
 
   .stage.is-scrolled .hud-menu {
     background: var(--black);
+  }
+
+  .stage.is-scrolled .hud-menu::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: calc(-1 * var(--lens-bow, 28px));
+    left: 0;
+    z-index: -1;
+    background: var(--black);
+    pointer-events: none;
   }
 
   .hud-lower {
