@@ -90,7 +90,7 @@ function placeAt(x, y, z, level, trunk) {
   return { x, y, z, level, trunk }
 }
 
-export function layoutGitTree(commits, branches = []) {
+export function layoutGitTree(commits, branches = [], head = '') {
   const ordered = readCommits(commits)
   const named = readBranches(branches)
   const total = ordered.length
@@ -99,6 +99,7 @@ export function layoutGitTree(commits, branches = []) {
   const bySha = new Map(ordered.map((commit, index) => [commit.sha, { ...commit, level: total - 1 - index }]))
   const places = new Map()
   const currentBranch = named.find((branch) => branch.current) ?? null
+  const detachedHead = typeof head === 'string' && bySha.has(head) ? head : ''
 
   function xAt(level) {
     return GIT_START.x + (level - (total - 1) / 2) * step
@@ -113,6 +114,7 @@ export function layoutGitTree(commits, branches = []) {
   }
 
   let trunkHead = currentBranch?.head && bySha.has(currentBranch.head) ? currentBranch.head : ''
+  if (!trunkHead) trunkHead = detachedHead
   if (!trunkHead && ordered.length > 0) trunkHead = ordered[0].sha
   let at = trunkHead
   while (at && bySha.has(at) && !places.has(at)) {
@@ -141,7 +143,10 @@ export function layoutGitTree(commits, branches = []) {
     })
   })
 
-  const leftover = ordered.filter((commit) => !places.has(commit.sha)).sort((a, b) => (a.sha < b.sha ? -1 : a.sha > b.sha ? 1 : 0))
+  const leftover = ordered
+    .filter((commit) => !places.has(commit.sha))
+    .reverse()
+    .map((commit) => bySha.get(commit.sha))
   leftover.forEach((commit, index) => {
     const angle = leftover.length > 0 ? (Math.PI * (index + 0.5)) / leftover.length : 0
     const radius = GIT_LEAN_STEP * 2 + step
@@ -219,13 +224,14 @@ function stateKey(state) {
   if (!state || state.git !== true) return ''
   const commits = Array.isArray(state.commits) ? state.commits : []
   const branches = Array.isArray(state.branches) ? state.branches : []
+  const head = typeof state.head === 'string' ? state.head : ''
   const named = branches.map((branch) => `${branch?.name}:${branch?.head}:${branch?.current === true}`).join(',')
-  return `${commits.map((commit) => (typeof commit?.sha === 'string' ? commit.sha : '')).join(',')}|${named}`
+  return `${head}|${commits.map((commit) => (typeof commit?.sha === 'string' ? commit.sha : '')).join(',')}|${named}`
 }
 
 function stateLayout(state) {
   if (!state || state.git !== true) return layoutGitTree([], [])
-  return layoutGitTree(state.commits, state.branches)
+  return layoutGitTree(state.commits, state.branches, state.head)
 }
 
 function trunkMiddle(layout) {

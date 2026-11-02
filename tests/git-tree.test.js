@@ -175,6 +175,87 @@ describe('layoutGitTree', () => {
     expect(layout.labels.map((label) => label.name)).toContain('feature')
   })
 
+  it('builds a detached checkout trunk from the head it stands on', () => {
+    const commits = [
+      commit('c4', ['c3'], 5),
+      commit('c3', ['c2'], 4),
+      commit('c2', ['c1'], 3),
+      commit('c1', [], 1),
+    ]
+    const layout = layoutGitTree(commits, [{ name: 'main', head: 'c4', current: false }], 'c2')
+    const places = bySha(layout)
+    expect(layout.headSha).toBe('c2')
+    expect(layout.headIndex).toBe(2)
+    expect(places.c2.trunk).toBe(true)
+    expect(places.c1.trunk).toBe(true)
+    expect(places.c3.trunk).toBe(false)
+    expect(places.c4.trunk).toBe(false)
+  })
+
+  it('starts a branch that forks from another branch beside that commit', () => {
+    const commits = [
+      commit('b2b', ['b1b'], 5),
+      commit('b1b', ['b1a'], 4),
+      commit('b1a', ['root'], 3),
+      commit('root', [], 1),
+    ]
+    const layout = layoutGitTree(commits, [
+      { name: 'alpha', head: 'b1b', current: false },
+      { name: 'beta', head: 'b2b', current: false },
+      { name: 'main', head: 'root', current: true },
+    ])
+    const places = bySha(layout)
+    expect(places.b2b.trunk).toBe(false)
+    expect(places.b2b.x).toBe(places.b1b.x + layout.step)
+    expect(places.b2b.x).toBeGreaterThan(places.root.x)
+    expect(places.b2b.y).toBeLessThan(GIT_START.y)
+    expect(layout.links.some((link) => link.sha === 'b2b' && link.parent === 'b1b')).toBe(true)
+  })
+
+  it('places leftover commits oldest first so a parent has a place before its child', () => {
+    const commits = [
+      commit('m2', ['m1', 'a2'], 6),
+      commit('m1', ['base'], 5),
+      commit('a2', ['z1'], 4),
+      commit('z1', ['base'], 3),
+      commit('base', [], 1),
+    ]
+    const layout = layoutGitTree(commits, [{ name: 'main', head: 'm2', current: true }])
+    const places = bySha(layout)
+    expect(Number.isFinite(places.z1.x)).toBe(true)
+    expect(Number.isFinite(places.a2.x)).toBe(true)
+    expect(places.z1.x).toBeLessThan(places.a2.x)
+    expect(places.z1.z).toBeGreaterThan(places.a2.z)
+    expect(layout.links.some((link) => link.sha === 'a2' && link.parent === 'z1')).toBe(true)
+  })
+
+  it('lays a normal history out exactly as it did before', () => {
+    const commits = [
+      commit('c3', ['c2'], 6),
+      commit('f2', ['f1'], 5),
+      commit('f1', ['c2'], 4),
+      commit('c2', ['c1'], 3),
+      commit('c1', [], 1),
+    ]
+    const layout = layoutGitTree(commits, [
+      { name: 'feature', head: 'f2', current: false },
+      { name: 'main', head: 'c3', current: true },
+    ])
+    const places = bySha(layout)
+    expect(layout.step).toBe(64)
+    expect(layout.width).toBe(256)
+    expect(layout.headSha).toBe('c3')
+    expect(layout.headIndex).toBe(0)
+    expect(places.c3).toMatchObject({ x: 128, y: 0, level: 4, trunk: true })
+    expect(places.c2).toMatchObject({ x: -64, y: 0, level: 1, trunk: true })
+    expect(places.c1).toMatchObject({ x: -128, y: 0, level: 0, trunk: true })
+    expect(places.f2).toMatchObject({ x: 64, y: -152, level: 3, trunk: false })
+    expect(places.f1).toMatchObject({ x: 0, y: -76, level: 2, trunk: false })
+    expect(places.f2.z).toBeCloseTo(GIT_START.z, 6)
+    expect(places.f1.z).toBeCloseTo(GIT_START.z, 6)
+    expect(layout.links).toHaveLength(4)
+  })
+
   it('gives an empty history an empty tree beneath the root card', () => {
     const layout = layoutGitTree([], [])
     expect(layout.start.x).toBe(GIT_START.x)
@@ -297,6 +378,48 @@ describe('createGitTree', () => {
     expect(new Set(atHead).size).toBe(atHead.length)
     expect(tree.setState({ git: false })).toBe(true)
     expect(tree.layout()).toBe(null)
+    tree.dispose()
+  })
+
+  it('follows a detached head and keeps it the yellow one', () => {
+    const scene = new THREE.Scene()
+    const tree = createGitTree(scene)
+    const state = {
+      git: true,
+      branch: null,
+      detached: true,
+      head: 'c2',
+      dirty: false,
+      branches: [{ name: 'main', head: 'c4', current: false }],
+      commits: [
+        commit('c4', ['c3'], 5),
+        commit('c3', ['c2'], 4),
+        commit('c2', ['c1'], 3),
+        commit('c1', [], 1),
+      ],
+      truncated: false,
+    }
+    const yellow = new THREE.Color(0xe5ff00)
+    const white = new THREE.Color(0xffffff)
+    const points = tree.group.children.find((child) => child.isPoints)
+    function colorOf(sha) {
+      const index = tree.layout().commits.findIndex((place) => place.sha === sha)
+      const colors = points.geometry.getAttribute('color').array
+      return [colors[index * 3], colors[index * 3 + 1], colors[index * 3 + 2]]
+    }
+    function expectColor(actual, expected) {
+      expect(actual[0]).toBeCloseTo(expected.r, 6)
+      expect(actual[1]).toBeCloseTo(expected.g, 6)
+      expect(actual[2]).toBeCloseTo(expected.b, 6)
+    }
+    tree.setState(state)
+    expect(tree.layout().headSha).toBe('c2')
+    expectColor(colorOf('c2'), yellow)
+    expectColor(colorOf('c4'), white)
+    expect(tree.setState({ ...state, head: 'c3' })).toBe(true)
+    expect(tree.layout().headSha).toBe('c3')
+    expectColor(colorOf('c3'), yellow)
+    expectColor(colorOf('c2'), white)
     tree.dispose()
   })
 
