@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Build a team card and Add sub orchestrator stop with a sentence when the ladder changed while the card was open, instead of creating a different team (task U117).
 - A chat read keeps the newest answer, so an older poll that answers last cannot drop the message the owner just sent (task U117).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).

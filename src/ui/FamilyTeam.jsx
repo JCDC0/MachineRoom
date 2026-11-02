@@ -18,6 +18,20 @@ function countLine(count, one, many) {
   return count === 1 ? `1 ${one}` : `${count} ${many}`
 }
 
+export function sameTeamPlan(left, right) {
+  const one = Array.isArray(left) ? left : []
+  const two = Array.isArray(right) ? right : []
+  if (one.length !== two.length) return false
+  return one.every((team, index) => {
+    const other = two[index]
+    return (
+      team?.id === other?.id &&
+      team?.name === other?.name &&
+      (team?.lanes ?? []).join('\n') === (other?.lanes ?? []).join('\n')
+    )
+  })
+}
+
 export function FamilyTeam({ client = null }) {
   const canTeam =
     typeof client?.setLadder === 'function' && typeof client?.setAgentLabel === 'function'
@@ -240,6 +254,9 @@ export function FamilyTeam({ client = null }) {
       run: async () => {
         const fresh = planTeams(await readLadder())
         if (fresh.problem) throw new Error(fresh.problem)
+        if (!sameTeamPlan(fresh.teams, next.teams)) {
+          throw new Error('The team changed while the card was open. Open it again.')
+        }
         await client.setLadder({ subs: fresh.subs })
         try {
           for (const team of fresh.teams) {
