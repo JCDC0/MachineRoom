@@ -3,6 +3,8 @@
 ## Unreleased
 
 - A replaced menu or transport and a control that grows wider schedule a seam measure from the `.hud` parent and the measured controls, while a clock tick writes no pose (task U113).
+- The session eviction test gives waitIdle a timeout parameter and allows 25 seconds for the turn with 50 sessions under load (task T32).
+
 - A detached checkout draws its trunk from the commit it stands on and keeps that head yellow, a branch that forks from another branch starts beside that branch's commit, and leftover commits are placed oldest first (task U110).
 - The idle view arms its 60 second timer again when the live link returns or the page becomes visible, so it starts without new input after a disconnect or a hidden page (task U109).
 - Source control selects a folder when an uncommitted path ends in a slash, gitGraphRows joins an existing parent lane, trims trailing empty lanes and follows the rows, and mock gitState answers changes and changeCount (task S24).
