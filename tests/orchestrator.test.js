@@ -1265,6 +1265,28 @@ describe('waking the orchestrator', () => {
     expect(prompt).toContain('The owner is here')
   }, 60000)
 
+  it('keeps the queued messages that a long turn could not fit and runs them next', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('Start')
+    await waitFor(() => rig.calls().length === 1, 5000, 'the held turn')
+    const long = (tag) => `${tag} ${'a'.repeat(7996)}`
+    for (const tag of ['Q1', 'Q2', 'Q3', 'Q4']) rig.send(long(tag))
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 3)
+
+    const second = rig.calls()[1].args[1]
+    expect(second).toContain('Q3')
+    expect(second).toContain('Q4')
+    expect(second).not.toContain('Q1')
+    expect(second).not.toContain('Q2')
+
+    const third = rig.calls()[2].args[1]
+    expect(third).toContain('Q1')
+    expect(third).toContain('Q2')
+    expect(third).not.toContain('Q4')
+  })
+
   it('kills the turn on stop, pauses and clears the pause on the next owner message', async () => {
     const rig = makeRig()
     rig.behaviour.mode = 'hold'

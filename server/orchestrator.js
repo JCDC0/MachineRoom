@@ -363,17 +363,19 @@ function blockFor(message) {
   return `${label}: ${message.text}`
 }
 
-function turnText(messages) {
-  if (messages.length === 1 && messages[0].from === 'owner') return messages[0].text
+function fitTurnText(messages) {
+  if (messages.length === 1 && messages[0].from === 'owner') return { text: messages[0].text, used: [...messages] }
   const blocks = []
+  const used = []
   let size = 0
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const block = blockFor(messages[index])
     if (blocks.length > 0 && size + block.length + 2 > PROMPT_LIMIT) break
     blocks.unshift(block)
+    used.unshift(messages[index])
     size += block.length + 2
   }
-  return blocks.join('\n\n')
+  return { text: blocks.join('\n\n'), used }
 }
 
 function recordLine(record) {
@@ -856,7 +858,13 @@ export function createOrchestrator({
     const keepText = manualCompacting ? (options.keep || '') : (pendingCompaction?.keep || '')
     const compaction = manualCompacting || Boolean(pendingCompaction)
     pendingCompaction = null
-    const turnMessages = compaction ? [] : pending.splice(0, pending.length)
+    const queued = compaction ? [] : pending.splice(0, pending.length)
+    const fit = compaction ? { text: '', used: [] } : fitTurnText(queued)
+    const turnMessages = fit.used
+    if (!compaction && turnMessages.length < queued.length) {
+      pending.unshift(...queued.slice(0, queued.length - turnMessages.length))
+      persist()
+    }
     const hasOwner = turnMessages.some((message) => message.from === 'owner')
     if (!hasOwner) roomTurns.push(now())
     const first = !sessionId
@@ -897,7 +905,7 @@ export function createOrchestrator({
       setState('idle')
       return
     }
-    const message = compaction ? compactPrompt(keepText, compactRules) : turnText(turnMessages)
+    const message = compaction ? compactPrompt(keepText, compactRules) : fit.text
     const baseInstruction = instructionFor(
       promptFile,
       root,
