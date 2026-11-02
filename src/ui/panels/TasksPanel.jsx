@@ -32,6 +32,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
   const [liveRuns, setLiveRuns] = useState(() => (Array.isArray(initialLiveRuns) ? initialLiveRuns : []))
   const [loading, setLoading] = useState(() => initialIssues == null)
   const [loadError, setLoadError] = useState(null)
+  const [refreshError, setRefreshError] = useState(null)
   const [selectedIssueId, setSelectedIssueId] = useState(null)
   const [notice, setNotice] = useState(null)
   const lastHandledNonceRef = useRef(null)
@@ -52,6 +53,7 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
 
   async function loadData({ isInitial = false } = {}) {
     if (!canRead) return
+    setRefreshError(null)
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
@@ -64,9 +66,8 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
       setIssues(issueList)
       setAgents(agentList)
     } catch (err) {
-      if (isInitial) {
-        setLoadError(err.message || 'Could not load tasks.')
-      }
+      if (isInitial) setLoadError(err.message || 'Could not load tasks.')
+      else setRefreshError(err?.message || 'Could not refresh tasks.')
     } finally {
       if (isInitial) {
         setLoading(false)
@@ -232,6 +233,8 @@ export default function TasksPanel({ client, controlTarget = null, initialIssues
         <span className="panel-count mono">{issues.length} tasks</span>
         <button type="button" onClick={() => loadData({ isInitial: false })}>Refresh</button>
       </div>
+
+      {refreshError && <p className="panel-error-message" role="alert">{refreshError}</p>}
 
       {issues.length === 0 ? (
         <div className="panel-state is-dim mono">No tasks found.</div>
