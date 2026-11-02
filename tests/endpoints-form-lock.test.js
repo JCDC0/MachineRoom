@@ -73,3 +73,56 @@ describe('the custom endpoint form', () => {
     })
   })
 })
+
+describe('an endpoint write and its reload', () => {
+  it('says the endpoint was saved when only the reload failed', async () => {
+    let reads = 0
+    const client = {
+      providers: async () => PROVIDERS,
+      endpoints: async () => {
+        reads += 1
+        if (reads > 1) throw {}
+        return []
+      },
+      keys: async () => [{ name: 'openrouter' }],
+      saveEndpoint: async () => ({ ok: true }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(EndpointsPanel, {
+            client,
+            initialProviders: PROVIDERS,
+            initialEndpoints: [],
+            initialOpen: true,
+            initialKeys: ['openrouter'],
+          })
+        )
+      })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+
+      await typeInto(container.querySelector('#endpoints-name'), 'Work')
+      await typeInto(container.querySelector('#endpoints-models'), 'alpha')
+      await act(async () => {
+        const select = container.querySelector('#endpoints-key')
+        select.value = 'openrouter'
+        select.dispatchEvent({ type: 'change', bubbles: true, cancelable: true })
+      })
+      await act(async () => {
+        buttonWithText(container.querySelector('.endpoints-form'), 'Save').click()
+      })
+      await act(async () => {
+        buttonWithText(container.querySelector('.endpoints-confirm'), 'Save endpoint').click()
+      })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+
+      expect(container.textContent).toContain('Saved Work.')
+      expect(container.textContent).toContain('The endpoint was saved, but the list could not be read.')
+      expect(container.textContent).not.toContain('Could not save the endpoint.')
+    })
+  })
+})

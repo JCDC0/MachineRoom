@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An endpoint save, delete, model refresh or quick key that lands but cannot reload the list says so, apart from a refused write (task U117).
 - The custom endpoint form is locked while its Save card is up, so the card and the call carry the same values (task U117).
 - Remove on an MCP server asks first, on a card that names the server and says its command and settings are lost (task U117).
 - The Build a team card and Add sub orchestrator stop with a sentence when the ladder changed while the card was open, instead of creating a different team (task U117).
