@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useDialogFocus } from './dialogFocus.js'
 import {
   LAUNCHER_EVENT,
   LAUNCHER_TIMEOUT_TEXT,
@@ -26,6 +27,12 @@ export default function Launcher({ client = null, live = false }) {
   const projectsRef = useRef(null)
   const attemptRef = useRef(0)
   const aliveRef = useRef(true)
+  const panelRef = useRef(null)
+
+  useDialogFocus(open, {
+    containerRef: panelRef,
+    getInitialFocus: () => panelRef.current?.querySelector?.('.mr-launcher-row.is-current') ?? null,
+  })
 
   useEffect(() => {
     aliveRef.current = true
@@ -170,7 +177,7 @@ export default function Launcher({ client = null, live = false }) {
   const openingName = opening?.name || pathName(opening?.path) || 'the folder'
 
   return (
-    <section className="mr-launcher" role="dialog" aria-modal="true" aria-labelledby="mr-launcher-title">
+    <section ref={panelRef} className="mr-launcher" role="dialog" aria-modal="true" aria-labelledby="mr-launcher-title">
       <header className="mr-launcher-head">
         <h2 id="mr-launcher-title" className="mr-launcher-title">
           Which folder do you want to work in?
@@ -189,7 +196,6 @@ export default function Launcher({ client = null, live = false }) {
             <button
               type="button"
               className="mr-launcher-row is-current"
-              autoFocus
               onClick={() => pick({ path: currentPath, name: currentName })}
             >
               <span className="mr-launcher-name">{keepWorkingLabel(currentName)}</span>

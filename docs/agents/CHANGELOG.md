@@ -7,6 +7,13 @@
 - The waiting card names where the conversation is at 900 pixels and wider (task U115).
 - The working count in the lens corner counts every top-level agent, the orchestrator and each sub included (task U115).
 - The room's orchestrator list serves the HUD and the chat, which no longer poll separately, and the target brief effect has its dependency list (task U115).
+- The room and HUD key handlers return at once when another control already handled the key, so a drawer tab keeps its arrows and a key on a review row's Merge stays there (task U114).
+- A `One lane per task` split run stops from a Stop button on its card, or on the progress line after the card closes, before the next task starts, and the card says how many started while the runs already started keep running (task U114).
+- Help, the setup card, the folder picker and the sidebar confirm move focus in on opening, hold Tab and Shift+Tab inside, and give focus back on closing through the drawer's shared `useDialogFocus` helper (task U114).
+- The event log follows a new line only while it was already at the bottom (task U114).
+- The health popover is a group rather than a dialog, so the room's keys keep working while it is open (task U114).
+- The review row's expand action is its own button beside Merge, so a key on Merge no longer opens or closes the diff (task U114).
+- A test checks that the Settings button's `aria-controls` names the settings panel it opens; the id was already on `Settings.jsx` (task U114).
 
 - A full audit of the engine, the page, the bridge, the logic and the design, ranked and checked in `AUDIT-2026-11-SUMMARY.md` (tasks Q20, Q21, Q23, Q24 and Q25).
 - The scrolled menu strip curves with the lens and no longer covers the top of the lower half.

@@ -9,7 +9,7 @@ import {
 } from './briefs.js'
 import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
-import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
+import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
 
 export default function DispatchPanel({
   client,
@@ -453,14 +453,8 @@ export default function DispatchPanel({
     !projectProblem &&
     !splitActive &&
     (projectSplitRun || (Boolean(projectLane) && !projectLaneRunning))
-  const splitStarted = splitAnswers.filter((answer) => answer.ok).length
-  const splitProgress = splitRun.pairs.length === 0
-    ? ''
-    : splitActive
-      ? `Starting ${splitRun.pairs.length} tasks, ${splitAnswers.length} started.`
-      : splitRun.failed
-        ? `Started ${splitStarted} of ${splitRun.pairs.length} tasks.`
-        : `Started ${splitRun.pairs.length} tasks.`
+  const splitProgress = splitRun.pairs.length === 0 ? '' : splitRunProgress(splitRun)
+  const splitStopped = splitRun.done && splitRun.cancelled
 
   return (
     <div className="dispatch-form">
@@ -590,6 +584,19 @@ export default function DispatchPanel({
             </div>
           )}
 
+          {splitActive && !projectShowConfirm && (
+            <div className="panel-actions">
+              <button
+                type="button"
+                className="brief-cancel-btn"
+                disabled={splitRun.cancelled}
+                onClick={cancelSplitRun}
+              >
+                {splitRun.cancelled ? 'Stopping' : 'Stop'}
+              </button>
+            </div>
+          )}
+
           {projectShowConfirm && projectSplitPlan && (
             <div className="brief-confirm-card" role="region" aria-label="Confirm project runs">
               <div className="brief-confirm-meta mono">
@@ -648,11 +655,22 @@ export default function DispatchPanel({
                 </>
               )}
               <div className="brief-confirm-actions">
+                {splitActive && (
+                  <button
+                    type="button"
+                    className="brief-cancel-btn"
+                    disabled={splitRun.cancelled}
+                    onClick={cancelSplitRun}
+                  >
+                    {splitRun.cancelled ? 'Stopping' : 'Stop'}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="brief-confirm-btn"
                   disabled={
                     splitActive ||
+                    splitStopped ||
                     Boolean(projectSplitPlan.problem) ||
                     splitAnswers.length >= projectSplitPlan.pairs.length
                   }
@@ -660,10 +678,12 @@ export default function DispatchPanel({
                 >
                   {splitActive
                     ? 'Starting'
-                    : splitAnswers.length >= projectSplitPlan.pairs.length &&
-                        projectSplitPlan.pairs.length > 0
-                      ? 'Done'
-                      : 'Confirm'}
+                    : splitStopped
+                      ? 'Stopped'
+                      : splitAnswers.length >= projectSplitPlan.pairs.length &&
+                          projectSplitPlan.pairs.length > 0
+                        ? 'Done'
+                        : 'Confirm'}
                 </button>
                 <button
                   type="button"

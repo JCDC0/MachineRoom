@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDialogFocus } from '../dialogFocus.js'
 import DispatchPanel from './DispatchPanel.jsx'
 import TasksPanel from './TasksPanel.jsx'
 import MetersPanel from './MetersPanel.jsx'
@@ -39,7 +40,7 @@ export default function ControlDrawer({
     return 'dispatch'
   })
   const tabRefs = useRef({})
-  const triggerRef = useRef(null)
+  const drawerRef = useRef(null)
   const lastTargetNonceRef = useRef(controlTarget?.nonce ?? null)
 
   useEffect(() => {
@@ -65,22 +66,12 @@ export default function ControlDrawer({
     }
   }, [controlTarget, tabs])
 
-  useEffect(() => {
-    if (open) {
-      const active = document.activeElement
-      triggerRef.current =
-        active?.getAttribute?.('aria-controls') === 'hud-control-drawer'
-          ? active
-          : document.querySelector('[aria-controls="hud-control-drawer"]') || active
-      const currentTabEl = tabRefs.current[activeTab]
-      currentTabEl?.focus()
-    } else if (triggerRef.current) {
-      if (typeof triggerRef.current.focus === 'function') {
-        triggerRef.current.focus()
-      }
-      triggerRef.current = null
-    }
-  }, [open])
+  useDialogFocus(open, {
+    containerRef: drawerRef,
+    getInitialFocus: () => tabRefs.current[activeTab] ?? null,
+    openerSelector: 'hud-control-drawer',
+    trap: false,
+  })
 
   useEffect(() => {
     function onKeyDown(event) {
@@ -124,6 +115,7 @@ export default function ControlDrawer({
   return (
     <aside
       id="hud-control-drawer"
+      ref={drawerRef}
       className="control-drawer"
       aria-label="Control panels"
     >

@@ -1,7 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createClient } from '../src/control/client.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
+  cancelSplitRun,
+  clearSplitRun,
   formatCost,
   NO_IDLE_LANE_PROBLEM,
   planLaneTasks,
@@ -19,7 +21,10 @@ import {
   recordLine,
   resultWord,
   runStartLine,
+  splitRunProgress,
+  splitRunSnapshot,
   splitTasks,
+  startSplitRun,
   timeSinceStart,
 } from '../src/ui/panels/runs.js'
 
@@ -316,6 +321,53 @@ describe('projectSplitLabel', () => {
 describe('PROJECT_SPLIT_DELAY', () => {
   it('is three seconds', () => {
     expect(PROJECT_SPLIT_DELAY).toBe(3000)
+  })
+})
+
+describe('cancelSplitRun', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    clearSplitRun()
+  })
+
+  it('stops before the next start and keeps the runs already started', async () => {
+    vi.useFakeTimers()
+    const calls = []
+    const client = {
+      startRun: async (lane) => {
+        calls.push(lane)
+        return { lane, queue: true, tasks: 1 }
+      },
+    }
+    const pairs = [
+      { lane: 'alpha', task: 'One.' },
+      { lane: 'beta', task: 'Two.' },
+      { lane: 'gamma', task: 'Three.' },
+    ]
+
+    const run = startSplitRun({ client, pairs })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls).toEqual(['alpha'])
+    expect(splitRunSnapshot().active).toBe(true)
+
+    expect(cancelSplitRun()).toBe(true)
+    expect(splitRunSnapshot().cancelled).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
+    await run
+
+    expect(calls).toEqual(['alpha'])
+    const snapshot = splitRunSnapshot()
+    expect(snapshot.active).toBe(false)
+    expect(snapshot.done).toBe(true)
+    expect(snapshot.cancelled).toBe(true)
+    expect(splitRunProgress(snapshot)).toBe(
+      'Stopped after starting 1 of 3 tasks. The runs already started keep running.'
+    )
+  })
+
+  it('says nothing is stopping when no split run is active', () => {
+    expect(cancelSplitRun()).toBe(false)
+    expect(splitRunProgress({ pairs: [], answers: [] })).toBe('Started 0 tasks.')
   })
 })
 
