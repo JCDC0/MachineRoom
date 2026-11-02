@@ -246,6 +246,17 @@ function createReadJsonBody(sendJson) {
   }
 }
 
+export function trimHistory(history) {
+  while (history.length > HISTORY_LIMIT) {
+    const index = history.findIndex((item) => !item.pinned)
+    if (index === -1) break
+    history.splice(index, 1)
+  }
+  if (history.length > HISTORY_LIMIT) {
+    history.splice(0, history.length - HISTORY_LIMIT)
+  }
+}
+
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const treeReader = options.readTree ?? readTree
@@ -700,14 +711,6 @@ export function createBridge(options = {}) {
     )
   }
 
-  function trimHistory() {
-    while (history.length > HISTORY_LIMIT) {
-      const index = history.findIndex((item) => !item.pinned)
-      if (index === -1) return
-      history.splice(index, 1)
-    }
-  }
-
   function emit(parsed) {
     if (typeof parsed.id === 'number' && parsed.id > nextId) {
       nextId = parsed.id
@@ -725,7 +728,7 @@ export function createBridge(options = {}) {
         if (item.runId === runId) item.pinned = false
       }
     }
-    trimHistory()
+    trimHistory(history)
     if (endsRun) gitApi.invalidateCache()
     const notices = changeEvents(parsed)
     if (endsRun) notices.push({ topic: 'git' })

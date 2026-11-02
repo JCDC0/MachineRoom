@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The kept history stays at 500 frames even when every frame is a run start, and a pinned start survives while an unpinned frame can go (task S28).
 - A lane run that starts or ends from a terminal sends the runs notice, so Reviews and Dispatch reload (task S28).
 - The Agents list carries each lane's model, so the Agents tab shows it (task S28).
 - A file added between the page's tree read and its stream connect reaches the page at connect, and a reconnect resumes after the last frame the page saw instead of replaying the history (task S28).

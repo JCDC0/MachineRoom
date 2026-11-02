@@ -4,7 +4,7 @@ import { request as httpRequest } from 'node:http'
 import { basename, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree } from '../server/index.js'
+import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree, trimHistory } from '../server/index.js'
 import { getJson, postJson, readFrames, startLaneBridge, waitFor, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -484,6 +484,26 @@ describe('frames from a lane log', () => {
     const resumed = await after.next((item) => item.event === 'frame')
     expect(resumed.id).toBe(history[1].id)
     expect(JSON.parse(resumed.data)).toEqual(JSON.parse(history[1].data))
+  })
+
+  it('bounds the kept history even when every frame is a run start', () => {
+    const history = Array.from({ length: 600 }, (_, index) => ({ id: String(index), pinned: true }))
+    trimHistory(history)
+    expect(history).toHaveLength(500)
+    expect(history[0].id).toBe('100')
+    expect(history.at(-1).id).toBe('599')
+  })
+
+  it('drops an unpinned frame before an open run start', () => {
+    const history = [
+      { id: 'start', pinned: true },
+      { id: 'log', pinned: false },
+    ]
+    for (let index = 0; index < 500; index += 1) history.push({ id: `n${index}`, pinned: false })
+    trimHistory(history)
+    expect(history).toHaveLength(500)
+    expect(history[0].id).toBe('start')
+    expect(history.some((entry) => entry.id === 'log')).toBe(false)
   })
 
   it('sends no history to a client that does not ask', async () => {
