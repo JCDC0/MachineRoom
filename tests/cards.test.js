@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import {
   CARD_NAME_MAX,
@@ -428,6 +428,44 @@ describe('the strings the room draws', () => {
     expect(links).toContainEqual({ from: 'lib', to: 'lib/a' })
     expect(links.some((link) => link.to === '')).toBe(false)
     expect(links.some((link) => link.from === null)).toBe(false)
+    cards.dispose()
+  })
+
+  it('answers the same link array until a card enters or leaves', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const links = cards.visibleLinks()
+    for (let frame = 0; frame < 5; frame += 1) expect(cards.visibleLinks()).toBe(links)
+    cards.update(state, 0.016, camera())
+    expect(cards.visibleLinks()).toBe(links)
+    cards.setOptions({ alwaysDepth: 0 })
+    cards.update(state, 0.016, camera())
+    expect(cards.visibleLinks()).not.toBe(links)
+    cards.dispose()
+  })
+})
+
+describe('the homes of the cards', () => {
+  it('forgets the home of a card that leaves', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    expect(cards.cards.has('lib/a')).toBe(true)
+    expect(cards.homes().has('lib/a')).toBe(true)
+
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1000)
+    cards.setOptions({ alwaysDepth: 0 })
+    cards.update(state, 0.016, camera())
+    clock.mockReturnValue(2000)
+    cards.update(state, 0.016, camera())
+    clock.mockRestore()
+
+    expect(cards.cards.has('lib/a')).toBe(false)
+    expect(cards.homes().has('lib/a')).toBe(false)
+    expect(cards.homes().size).toBe(cards.cards.size)
     cards.dispose()
   })
 })

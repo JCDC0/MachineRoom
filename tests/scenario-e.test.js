@@ -52,14 +52,28 @@ describe('scenario E: an orchestrator and subagents', () => {
       ['opencode', 'opencode~2'],
       ['hermes', 'hermes~1'],
     ])
-    expect(spawns.map((activity) => state.agents.get(activity.child).parent)).toEqual(['opencode', 'opencode', 'hermes'])
+    const live = createState(tree, agents)
+    const parents = []
+    for (const activity of activities) {
+      apply(live, activity)
+      if (activity.type === 'agent.spawn') parents.push(live.agents.get(activity.child).parent)
+    }
+    expect(parents).toEqual(['opencode', 'opencode', 'hermes'])
     expect(ends.map((activity) => activity.agent)).toEqual(['opencode~1', 'opencode~2', 'hermes~1'])
   })
 
   it('ends every child and one run fails', () => {
-    for (const child of ['opencode~1', 'opencode~2', 'hermes~1']) {
-      expect(state.agents.get(child).status).toBe('done')
+    const live = createState(tree, agents)
+    const ended = []
+    for (const activity of activities) {
+      apply(live, activity)
+      if (activity.type === 'agent.end') ended.push([activity.agent, live.agents.get(activity.agent).status])
     }
+    expect(ended).toEqual([
+      ['opencode~1', 'done'],
+      ['opencode~2', 'done'],
+      ['hermes~1', 'done'],
+    ])
     const failed = activities.filter((activity) => activity.type === 'run.end' && !activity.ok)
     expect(failed).toHaveLength(1)
     expect(failed[0].agent).toBe('claude')

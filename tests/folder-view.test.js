@@ -156,6 +156,20 @@ describe('planFolderView', () => {
     for (const view of full) expect(view.hiddenItems).toBe(0)
   })
 
+  it('lists a folder of 200,000 files without a spread and keeps every one', () => {
+    const count = 200000
+    const files = new Array(count)
+    for (let index = 0; index < count; index += 1) files[index] = `src/f${index}.js`
+
+    const plan = planFolderView({ files, alwaysDepth: 2, limitItems: false })
+    const src = byPath(plan).get('src')
+
+    expect(src.items).toHaveLength(count)
+    expect(src.hiddenItems).toBe(0)
+    expect(src.items[0]).toEqual({ path: 'src/f0.js', kind: 'file' })
+    expect(src.items.some((item) => item.path === `src/f${count - 1}.js`)).toBe(true)
+  })
+
   it('opens both branches when two agents work on two files', () => {
     const files = [
       'docs/notes.md',

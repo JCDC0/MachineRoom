@@ -441,6 +441,25 @@ describe('litChain', () => {
     expect(chain).toBe(out)
     expect(out).toEqual(['', 'src'])
   })
+
+  it('keeps one parent map until the links or the mask change', () => {
+    const cache = {}
+    litChain('src/ui', links, mask, [], cache)
+    const parents = cache.parents
+    expect(parents.get('src/ui')).toBe('src')
+
+    litChain('src', links, mask, [], cache)
+    expect(cache.parents).toBe(parents)
+
+    const otherMask = { ...mask }
+    litChain('src', links, otherMask, [], cache)
+    const next = cache.parents
+    expect(next).not.toBe(parents)
+
+    const changed = [...links, { from: 'src/ui', to: 'src/ui/view.js' }]
+    litChain('src/ui', changed, otherMask, [], cache)
+    expect(cache.parents).not.toBe(next)
+  })
 })
 
 describe('speckPolyline', () => {

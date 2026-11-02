@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- A folder card of any size lists every item by scrolling, with no spread that overflows the call stack at 200,000 items (task U116).
+- A card keeps a path to index map, so the strip and the camera hold find a row without a scan per frame (task U116).
+- Folder links are built when the layout changes and the parent map is reused, not rebuilt for every working agent on every frame (task U116).
+- The touch log keeps at most 200 paths with 50 touches each and drops the least recently touched path (task U116).
+- A finished subagent leaves the state 7.5 seconds after it ends on replay time, so a seek draws the same room, and `retired` holds no finished child (task U116).
+- A card that leaves forgets its home, so `homes` holds only the drawn cards (task U116).
+- The internet sphere computes its phases and swings once and only reads them per frame (task U116).
+- An equal ladder leaves the hub geometry and a run pulse alone, so the 60 second poll no longer cancels a glow (task U116).
+- A subagent's home follows its parent's home when the ladder or roster moves it (task U116).
+- A family label change redraws the name sprite above the agent as well as its callout (task U116).
+- Delete `rowMark`, `rowNote`, `cards.onPath`, `cards.moving`, `agents.hubCenter`, `followFocus.end` and `cardClickEndsFollow` with their tests (task U116).
+
 - A full audit of the engine, the page, the bridge, the logic and the design, ranked and checked in `AUDIT-2026-11-SUMMARY.md` (tasks Q20, Q21, Q23, Q24 and Q25).
 - The scrolled menu strip curves with the lens and no longer covers the top of the lower half.
 - The architecture, README and guides agree with the code again: the layout lists every current file, the candidate and recording steps name the real commands, the probe counts match, and the finished plan items are gone (task Q22).

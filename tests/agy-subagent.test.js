@@ -85,10 +85,12 @@ describe('a real agy run with a subagent', () => {
   it('keeps the subagent working while the parent reads', () => {
     const state = createState(tree, agents)
     let together = null
+    let ended = null
     for (const activity of activities) {
       apply(state, activity)
       const parent = state.agents.get('agy')
       const child = state.agents.get('agy~1')
+      if (child?.status === 'done' && !ended) ended = { status: child.status, parent: child.parent, depth: child.depth }
       if (!together && parent?.status === 'working' && child?.status === 'working' && parent.focus[0]) {
         together = { parentFocus: [...parent.focus], childFocus: [...child.focus] }
       }
@@ -96,7 +98,8 @@ describe('a real agy run with a subagent', () => {
     expect(together).not.toBeNull()
     expect(together.parentFocus).toEqual(['src/strings.js'])
     expect(together.childFocus).toEqual([])
-    expect(state.agents.get('agy~1')).toMatchObject({ status: 'done', parent: 'agy', depth: 1 })
+    expect(ended).toMatchObject({ status: 'done', parent: 'agy', depth: 1 })
+    expect(state.agents.has('agy~1')).toBe(false)
     expect(state.agents.get('agy')).toMatchObject({ status: 'done', runs: 1 })
   })
 })

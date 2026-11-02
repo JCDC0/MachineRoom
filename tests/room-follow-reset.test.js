@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cardClickEndsFollow, createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek, inspectorNamesPath } from '../src/engine/room.js'
+import { createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek, inspectorNamesPath, noteTouch, TOUCH_ENTRY_LIMIT, TOUCH_PATH_LIMIT } from '../src/engine/room.js'
 
 function state(status, focus, recent = []) {
   return {
@@ -80,16 +80,6 @@ describe('the working mask', () => {
 })
 
 describe('the follow focus', () => {
-  it('clears the focused agent when follow ends', () => {
-    const room = createFollowFocus()
-    room.focus('agent3')
-    room.setFollowing('wide')
-    expect(room.focused()).toBe('agent3')
-    expect(room.end()).toBe(true)
-    expect(room.following()).toBe(false)
-    expect(room.focused()).toBeNull()
-  })
-
   it('clears the focused agent when focus names no agent view', () => {
     const room = createFollowFocus()
     room.focus('agent3')
@@ -97,28 +87,47 @@ describe('the follow focus', () => {
     expect(room.focused()).toBeNull()
   })
 
-  it('keeps the focused agent when follow is already off', () => {
+  it('keeps the focused agent when follow is off', () => {
     const room = createFollowFocus()
     room.focus('agent3')
-    expect(room.end()).toBe(false)
+    expect(room.following()).toBe(false)
     expect(room.focused()).toBe('agent3')
   })
 })
 
-describe('cardClickEndsFollow', () => {
-  const target = (...names) => ({
-    closest: (selector) => (names.some((name) => selector.includes(name)) ? {} : null),
+describe('the touch log', () => {
+  const touch = (key = 'a') => ({ key, mode: 'read', time: 1 })
+
+  it('keeps at most the path limit and drops the least recently touched path', () => {
+    const log = new Map()
+    for (let index = 0; index < TOUCH_PATH_LIMIT; index += 1) noteTouch(log, `src/f${index}.js`, touch())
+    expect(log.size).toBe(TOUCH_PATH_LIMIT)
+    noteTouch(log, 'src/f0.js', touch())
+    noteTouch(log, 'src/fresh.js', touch())
+    expect(log.size).toBe(TOUCH_PATH_LIMIT)
+    expect(log.has('src/f1.js')).toBe(false)
+    expect(log.has('src/f0.js')).toBe(true)
+    expect(log.has('src/fresh.js')).toBe(true)
   })
 
-  it('ends follow on a card head and on a card row', () => {
-    expect(cardClickEndsFollow(target('.mr-card-head'))).toBe(true)
-    expect(cardClickEndsFollow(target('.mr-item'))).toBe(true)
+  it('keeps the newest entries for one path', () => {
+    const log = new Map()
+    for (let index = 0; index < TOUCH_ENTRY_LIMIT + 10; index += 1) {
+      noteTouch(log, 'src/a.js', { key: 'a', mode: 'read', time: index })
+    }
+    const list = log.get('src/a.js')
+    expect(list).toHaveLength(TOUCH_ENTRY_LIMIT)
+    expect(list[0].time).toBe(10)
+    expect(list.at(-1).time).toBe(TOUCH_ENTRY_LIMIT + 9)
   })
 
-  it('leaves follow on for a click on the HUD and for no target', () => {
-    expect(cardClickEndsFollow(target('.hud'))).toBe(false)
-    expect(cardClickEndsFollow(null)).toBe(false)
-    expect(cardClickEndsFollow({})).toBe(false)
+  it('takes its own limits for a small test log', () => {
+    const log = new Map()
+    noteTouch(log, 'a', touch(), 2, 2)
+    noteTouch(log, 'b', touch(), 2, 2)
+    noteTouch(log, 'a', touch(), 2, 2)
+    noteTouch(log, 'c', touch(), 2, 2)
+    expect([...log.keys()]).toEqual(['a', 'c'])
   })
 })
 
