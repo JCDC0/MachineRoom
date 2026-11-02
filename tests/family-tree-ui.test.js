@@ -372,6 +372,23 @@ describe('FamilyTree rows', () => {
     })
   })
 
+  it('keeps every checked lane when the plus on a lane opens the form', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      for (const label of ['OpenCode', 'OpenCode 2']) {
+        const check = rowByLabel(container, label).querySelector('.mr-family-check')
+        await act(async () => {
+          check.checked = true
+          check.click()
+        })
+      }
+      expect(container.textContent).toContain('2 selected')
+      await click(root, rowByLabel(container, 'Claude').querySelector('.mr-family-add'))
+      expect(container.textContent).toContain('3 selected')
+    })
+  })
+
   it('removes a lane from its trash button behind a danger confirm', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {

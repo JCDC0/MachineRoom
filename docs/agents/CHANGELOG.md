@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The plus on a lane adds it to the checked lanes, so the sub orchestrator card keeps the whole selection (task U117).
 - Meters, Team and Tasks say when a manual Refresh failed instead of leaving the old numbers on screen (task U117).
 - Record time saves on Enter and when Settings closes without a blur, so a typed value is kept (task U117).
 - An endpoint save, delete, model refresh or quick key that lands but cannot reload the list says so, apart from a refused write (task U117).

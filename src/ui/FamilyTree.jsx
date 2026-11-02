@@ -965,7 +965,8 @@ export function FamilyTree({ client = null, tasks = null }) {
         clearSelection()
         return
       }
-      openGroupForm([node.id], true)
+      const next = selectedLanes.includes(node.id) ? selectedLanes : [...selectedLanes, node.id]
+      openGroupForm(next, true)
       return
     }
     if (childFor === node.id) {
