@@ -559,6 +559,7 @@ export function createOrchestrator({
         currentSessionId,
         currentTitle,
         summary,
+        completedRuns: [...completedRuns.entries()].slice(-200).map(([runId, value]) => [runId, { status: value.status, messageId: value.messageId ?? null }]),
         sessions: sessions.map((s) => ({
           id: s.id,
           title: s.title,
@@ -768,6 +769,18 @@ export function createOrchestrator({
       )
       if (message && !pending.includes(message)) pending.push(message)
     }
+    const finished = Array.isArray(saved.completedRuns) ? saved.completedRuns : []
+    for (const entry of finished) {
+      if (!Array.isArray(entry) || entry.length !== 2) continue
+      const [runId, value] = entry
+      if (typeof runId !== 'string' || !runId || !value || typeof value !== 'object') continue
+      if (value.status !== 'succeeded' && value.status !== 'failed') continue
+      completedRuns.set(runId, {
+        status: value.status,
+        messageId: typeof value.messageId === 'string' && value.messageId ? value.messageId : null,
+      })
+    }
+    while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
   }
 
   function setState(next) {
@@ -1559,13 +1572,10 @@ export function createOrchestrator({
     }
     const prevRun = runId ? completedRuns.get(runId) : null
     if (prevRun) {
+      if (prevRun.status === status) return
       const pendingIndex = pending.findIndex((item) => item.id === prevRun.messageId)
       if (pendingIndex !== -1) {
         pending.splice(pendingIndex, 1)
-      } else if (prevRun.status === status) {
-        addMessage('room', text)
-        completedRuns.set(runId, { status, messageId: null })
-        return
       }
     }
     try {
@@ -1576,6 +1586,7 @@ export function createOrchestrator({
     if (runId) {
       completedRuns.set(runId, { status, messageId: message.id })
       while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
+      persist()
     }
     maybeStartTurn()
   }

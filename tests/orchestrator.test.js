@@ -1022,6 +1022,31 @@ describe('waking the orchestrator', () => {
     expect(rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-reopen-2 on lane opencode7 ended: succeeded.'))).toBe(true)
   })
 
+  it('remembers a reported run end across a restart and adds no duplicate line', async () => {
+    const rig = makeRig()
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    const log = join(rig.runs, 'opencode7-restart-1.log')
+    writeFileSync(log, 'done\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode7-restart-1', 'succeeded'))
+    await waitIdle(rig, 2)
+    const line = (message) => message.from === 'room' && message.text.includes('Run opencode7-restart-1')
+    expect(rig.answer().messages.filter(line)).toHaveLength(1)
+
+    rig.orchestrator.close()
+    const restored = restoreRig(rig)
+    restored.orchestrator.onFrame(frame('run-opencode7-restart-1', 'succeeded'))
+    await sleep(300)
+
+    expect(restored.calls()).toHaveLength(0)
+    expect(restored.answer().messages.filter(line)).toHaveLength(1)
+  })
+
   it('adds a room message with the run record and starts a turn', async () => {
     const rig = makeRig()
     rig.send('Hello')
