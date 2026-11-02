@@ -12,6 +12,7 @@ import {
   contextTokensFromLog,
   compactPrompt,
   COMPACTED_MESSAGE,
+  COMPACT_FAILED_MESSAGE,
   COMPACT_PROMPT,
   DEFAULT_COMPACT_RULES,
   DEFAULT_AUTOCOMPACT_MODE,
@@ -864,6 +865,29 @@ describe('autocompact', () => {
     expect(calls[1].args[1]).toContain(COMPACT_PROMPT)
     expect(calls[1].args[1]).toContain('Keep these in the summary:\nKeep the tests and bridge passing.')
     expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+  })
+
+  it('keeps the open session and says so when a compact fails', async () => {
+    const rig = makeRig()
+    rig.send('First turn')
+    await waitIdle(rig, 1)
+    const sessionId = valueAfter(rig.calls()[0].args, '--session-id')
+    expect(sessionId).toBeTruthy()
+
+    rig.behaviour.mode = 'fail'
+    expect(rig.orchestrator.compact({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
+    await waitIdle(rig, 2)
+
+    const messages = rig.answer().messages
+    expect(messages.some((message) => message.from === 'room' && message.text === COMPACT_FAILED_MESSAGE)).toBe(true)
+    expect(messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
+
+    rig.behaviour.mode = 'reply'
+    rig.send('After the failed compact')
+    await waitIdle(rig, 3)
+    const resume = rig.calls()[2].args
+    expect(resume).toContain('--resume')
+    expect(valueAfter(resume, '--resume')).toBe(sessionId)
   })
 
   it('sets a model listed for its harness and refuses unlisted models', async () => {

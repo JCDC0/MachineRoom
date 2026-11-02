@@ -44,6 +44,7 @@ export const DEFAULT_COMPACT_RULES =
 export const COMPACT_PROMPT =
   'Write a summary of the work so far, the open runs and the next steps, in at most 40 lines. Reply with the summary only.'
 export const COMPACTED_MESSAGE = 'The session was compacted. The next turn starts a new session with the summary.'
+export const COMPACT_FAILED_MESSAGE = 'The compact failed. The session is still open.'
 export const CONFIRM_MESSAGE_PROBLEM = 'Confirm the message first.'
 export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
 export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first.'
@@ -1094,11 +1095,16 @@ export function createOrchestrator({
       } catch {}
     }
     if (turn.compacting) {
-      summary = failed ? '' : String(report ?? '').trim()
-      sessionId = null
-      contextTokens = null
-      if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
-      addMessage('room', COMPACTED_MESSAGE)
+      if (failed) {
+        if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
+        addMessage('room', COMPACT_FAILED_MESSAGE)
+      } else {
+        summary = String(report ?? '').trim()
+        sessionId = null
+        contextTokens = null
+        if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
+        addMessage('room', COMPACTED_MESSAGE)
+      }
       if (!stopped) maybeStartTurn()
       return
     }
