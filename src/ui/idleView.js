@@ -27,9 +27,10 @@ export function createIdleWatch({
   target = typeof window === 'undefined' ? null : window,
   doc = typeof document === 'undefined' ? null : document,
 } = {}) {
-  if (!target) return { stop() {} }
+  if (!target) return { arm() {}, halt() {}, stop() {} }
   let timer = null
   let idle = false
+  let paused = false
 
   function clear() {
     if (timer === null) return
@@ -37,15 +38,21 @@ export function createIdleWatch({
     timer = null
   }
 
+  function endIdle() {
+    if (!idle) return
+    idle = false
+    onIdle(false)
+  }
+
   function restart() {
     clear()
-    if (doc?.hidden) return
+    if (paused || doc?.hidden) return
     timer = setTimeout(check, IDLE_AFTER_MS)
   }
 
   function check() {
     timer = null
-    if (doc?.hidden) return
+    if (paused || doc?.hidden) return
     if (!isAllowed()) {
       restart()
       return
@@ -55,20 +62,25 @@ export function createIdleWatch({
   }
 
   function wake() {
-    if (idle) {
-      idle = false
-      onIdle(false)
-    }
+    endIdle()
     restart()
+  }
+
+  function arm() {
+    paused = false
+    restart()
+  }
+
+  function halt() {
+    paused = true
+    clear()
+    endIdle()
   }
 
   function onVisibility() {
     if (doc?.hidden) {
       clear()
-      if (idle) {
-        idle = false
-        onIdle(false)
-      }
+      endIdle()
       return
     }
     restart()
@@ -80,6 +92,8 @@ export function createIdleWatch({
   restart()
 
   return {
+    arm,
+    halt,
     stop() {
       clear()
       for (const type of IDLE_EVENTS) target.removeEventListener(type, wake, LISTEN)

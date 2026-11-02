@@ -179,6 +179,7 @@ describe('idle watch', () => {
     const doc = fakeDoc()
     const { watch, seen } = watchWith(target, doc)
     expect(target.count()).toBe(IDLE_EVENTS.length)
+    expect(doc.count()).toBe(1)
     watch.stop()
     expect(target.count()).toBe(0)
     expect(doc.count()).toBe(0)
@@ -214,6 +215,71 @@ describe('idle watch', () => {
       doc.emit('visibilitychange')
       vi.advanceTimersByTime(IDLE_AFTER_MS)
       expect(seen).toEqual([true, false, true])
+      target.emit('pointermove')
+      expect(seen).toEqual([true, false, true, false])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('arms the timer again when the link returns, with no new input', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc()
+    const { watch, seen } = watchWith(target, doc)
+    try {
+      vi.advanceTimersByTime(IDLE_AFTER_MS)
+      expect(seen).toEqual([true])
+      watch.halt()
+      expect(seen).toEqual([true, false])
+      vi.advanceTimersByTime(IDLE_AFTER_MS * 2)
+      expect(seen).toEqual([true, false])
+      watch.arm()
+      vi.advanceTimersByTime(IDLE_AFTER_MS - 1)
+      expect(seen).toEqual([true, false])
+      vi.advanceTimersByTime(1)
+      expect(seen).toEqual([true, false, true])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('arms the timer again when the 60 second timer ends while the page is hidden', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc()
+    const { watch, seen } = watchWith(target, doc)
+    try {
+      vi.advanceTimersByTime(IDLE_AFTER_MS - 1)
+      doc.hidden = true
+      vi.advanceTimersByTime(1)
+      expect(seen).toEqual([])
+      vi.advanceTimersByTime(IDLE_AFTER_MS * 2)
+      expect(seen).toEqual([])
+      doc.hidden = false
+      doc.emit('visibilitychange')
+      vi.advanceTimersByTime(IDLE_AFTER_MS - 1)
+      expect(seen).toEqual([])
+      vi.advanceTimersByTime(1)
+      expect(seen).toEqual([true])
+    } finally {
+      watch.stop()
+    }
+  })
+
+  it('keeps a halted watch halted when the page hides and shows again', () => {
+    const target = fakeTarget()
+    const doc = fakeDoc()
+    const { watch, seen } = watchWith(target, doc)
+    try {
+      watch.halt()
+      doc.hidden = true
+      doc.emit('visibilitychange')
+      doc.hidden = false
+      doc.emit('visibilitychange')
+      vi.advanceTimersByTime(IDLE_AFTER_MS * 2)
+      expect(seen).toEqual([])
+      watch.arm()
+      vi.advanceTimersByTime(IDLE_AFTER_MS)
+      expect(seen).toEqual([true])
     } finally {
       watch.stop()
     }
