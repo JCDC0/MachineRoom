@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A hunt that ran 464 real run logs through the parsers (task Q30).
+- `mr-agent`'s shell tool stops the whole tree on Linux too, since `exec` dropped its process group.
 - The history audit no longer reads punctuation after a key name as a key.
 - List the fixes and features left for later under Later work in `AUDIT-2026-11-SUMMARY.md`.
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).

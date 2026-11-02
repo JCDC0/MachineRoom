@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { exec } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -469,27 +469,38 @@ function shellTool(args, cwd) {
   const env = childEnvironment(process.env, cwd)
   return new Promise((done) => {
     let timedOut = false
-    const child = exec(
-      command,
-      { cwd, env, detached: process.platform !== 'win32', maxBuffer: 4 * 1024 * 1024, windowsHide: true },
-      (error, stdout, stderr) => {
-        clearTimeout(timer)
-        const output = `${stdout ?? ''}${stderr ?? ''}`.slice(0, SHELL_OUTPUT_LIMIT)
-        if (timedOut) {
-          done({ text: output || `The command ran past ${timeoutMs / 1000} seconds.`, isError: true })
-          return
-        }
-        if (error) {
-          done({ text: output || `The command failed: ${error.message}`, isError: true })
-          return
-        }
-        done({ text: output || '(no output)', isError: false })
-      },
-    )
+    let finished = false
+    const output = { stdout: '', stderr: '' }
+    // exec drops detached, and killTree needs its own process group to reach the shell's children on Linux.
+    const child = spawn(command, {
+      cwd,
+      env,
+      shell: true,
+      detached: process.platform !== 'win32',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    for (const name of ['stdout', 'stderr']) {
+      child[name].setEncoding('utf8')
+      child[name].on('data', (text) => {
+        if (output[name].length < SHELL_OUTPUT_LIMIT) output[name] += text
+      })
+    }
     const timer = setTimeout(() => {
       timedOut = true
       killTree(child)
     }, timeoutMs)
+    function finish(failure) {
+      if (finished) return
+      finished = true
+      clearTimeout(timer)
+      const text = `${output.stdout}${output.stderr}`.slice(0, SHELL_OUTPUT_LIMIT)
+      if (timedOut) done({ text: text || `The command ran past ${timeoutMs / 1000} seconds.`, isError: true })
+      else if (failure) done({ text: text || `The command failed: ${failure}`, isError: true })
+      else done({ text: text || '(no output)', isError: false })
+    }
+    child.on('error', (error) => finish(error.message))
+    child.on('close', (code, signal) => finish(code === 0 ? '' : `exit ${code ?? signal}`))
   })
 }
 

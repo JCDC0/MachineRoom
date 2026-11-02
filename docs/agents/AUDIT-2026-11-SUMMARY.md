@@ -130,12 +130,13 @@ Four more lanes then hunted what the first five did not reach: `AUDIT-2026-11-PA
 
 Written on 2026-11-03, when AGY's quota ran out. Pick it up from here when AGY has quota again. The features and design changes above still wait for the owner's yes.
 
-In progress when this was pushed, on their own branches and not on main: S26, S27, S28 and U117, and the log hunt Q30. Read each lane's report before planning more, because each brief says which findings it did not reach.
+In progress when this was pushed, on their own branches and not on main: S26, S27, S28 and U117. Read each lane's report before planning more, because each brief says which findings it did not reach.
 
 For AGY, on the backend:
 
 - Whatever S26 and S27 did not reach in `AUDIT-2026-11-ORCHESTRATOR.md` and `AUDIT-2026-11-RUNNER.md`.
-- Fix briefs from Q30's findings in `AUDIT-2026-11-LOGS.md`, once it merges.
+- The nine parser findings in `AUDIT-2026-11-LOGS.md`. The first two matter most: an AGY error step never ends and is never marked failed, and a read-only command that quotes a failure word turns its file red.
+- `server/assistant.js` starts OpenCode with `execFile`, which has no process group on Linux, so its time limit stops only that process there. `mr-agent` had the same fault and now uses `spawn` with `detached`.
 - B7's rest: `server/opencode-sessions.js` still queries every known session once a second, even one that went quiet long ago. S25 only dropped their rows from memory.
 - B11 and B13 in `AUDIT-2026-11-BACKEND.md`, which nobody has checked.
 - A test for the music stream fix from S25 (`res.on('close')` in `server/music.js`), which has none.
