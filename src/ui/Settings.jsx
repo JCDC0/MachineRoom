@@ -19,6 +19,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   const current = effectSettings(effects)
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
   const [recordDraft, setRecordDraft] = useState(() => String(loadSettings(store()).recordMinutes))
+  const recordDraftRef = useRef(recordDraft)
   const seenDirectApi = useRef(0)
 
   useEffect(() => {
@@ -54,11 +55,18 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   }
 
   function commitRecordMinutes() {
-    const minutes = clampRecordMinutes(recordDraft)
+    const minutes = clampRecordMinutes(recordDraftRef.current)
     setRecordDraft(String(minutes))
     const saved = saveSettings(store(), { recordMinutes: minutes })
     onSettingsChange?.({ ...current, recordMinutes: saved.recordMinutes })
   }
+
+  useEffect(() => {
+    return () => {
+      const minutes = clampRecordMinutes(recordDraftRef.current)
+      saveSettings(store(), { recordMinutes: minutes })
+    }
+  }, [])
 
   if (!open) return null
 
@@ -192,8 +200,16 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                 step="1"
                 value={recordDraft}
                 aria-label="Record time in minutes"
-                onChange={(event) => setRecordDraft(event.target.value)}
+                onChange={(event) => {
+                  recordDraftRef.current = event.target.value
+                  setRecordDraft(event.target.value)
+                }}
                 onBlur={commitRecordMinutes}
+                onKeyDown={(event) => {
+                  if (event.key !== 'Enter') return
+                  event.preventDefault()
+                  commitRecordMinutes()
+                }}
               />
               <span className="hud-settings-value mono">min</span>
             </div>

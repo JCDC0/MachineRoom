@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Record time saves on Enter and when Settings closes without a blur, so a typed value is kept (task U117).
 - An endpoint save, delete, model refresh or quick key that lands but cannot reload the list says so, apart from a refused write (task U117).
 - The custom endpoint form is locked while its Save card is up, so the card and the call carry the same values (task U117).
 - Remove on an MCP server asks first, on a card that names the server and says its command and settings are lost (task U117).
