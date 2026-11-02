@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The control client drops its two backup methods and their request limit, since the bridge has no backup route (task S28).
 - The kept history stays at 500 frames even when every frame is a run start, and a pinned start survives while an unpinned frame can go (task S28).
 - A lane run that starts or ends from a terminal sends the runs notice, so Reviews and Dispatch reload (task S28).
 - The Agents list carries each lane's model, so the Agents tab shows it (task S28).
