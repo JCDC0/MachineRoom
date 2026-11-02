@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useDialogFocus } from './dialogFocus.js'
 import {
   SETUP_LATER,
   SETUP_QUESTION,
@@ -31,6 +32,7 @@ export default function SetupCard({
   const [closed, setClosed] = useState(() => setupPostponed())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const cardRef = useRef(null)
   const onCheckRef = useRef(onCheck)
   onCheckRef.current = onCheck
 
@@ -66,6 +68,8 @@ export default function SetupCard({
   const info = setupFromAnswer(state)
   const needed = setupNeeded(state)
   const canSave = Boolean(client && typeof client.setActiveLanes === 'function')
+
+  useDialogFocus(!closed && needed && Boolean(info), { containerRef: cardRef })
 
   function change(delta) {
     if (!info) return
@@ -108,6 +112,7 @@ export default function SetupCard({
     <div className="mr-setup-backdrop">
       <section
         className="mr-setup"
+        ref={cardRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="mr-setup-title"

@@ -279,31 +279,36 @@ export default function ReviewsPanel({
                 key={row.lane}
                 className={`review-card ${isSelected ? 'is-selected' : ''} ${row.error ? 'is-error' : ''}`}
               >
-                <div
-                  className="review-row"
-                  role={row.error ? undefined : 'button'}
-                  tabIndex={row.error ? undefined : 0}
-                  aria-expanded={row.error ? undefined : isSelected}
-                  onClick={() => handleRowClick(review)}
-                  onKeyDown={(e) => {
-                    if (row.error) return
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault()
-                      handleRowClick(review)
-                    }
-                  }}
-                >
+                <div className="review-row" onClick={() => handleRowClick(review)}>
                   <div className="review-row-head">
                     <span className="review-lane">{row.lane}</span>
                     {row.branch && <span className="review-branch mono">{row.branch}</span>}
-                    {row.canMerge && (
-                      <button
-                        type="button"
-                        className="review-merge-btn"
-                        onClick={(e) => handleOpenConfirm(e, review, row)}
+                    {!row.error && (
+                      <span
+                        className="review-row-actions"
+                        style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--space)' }}
                       >
-                        Merge
-                      </button>
+                        <button
+                          type="button"
+                          className="review-expand-btn"
+                          aria-expanded={isSelected}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRowClick(review)
+                          }}
+                        >
+                          {isSelected ? 'Hide' : 'Diff'}
+                        </button>
+                        {row.canMerge && (
+                          <button
+                            type="button"
+                            className="review-merge-btn"
+                            onClick={(e) => handleOpenConfirm(e, review, row)}
+                          >
+                            Merge
+                          </button>
+                        )}
+                      </span>
                     )}
                   </div>
 

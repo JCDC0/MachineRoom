@@ -58,8 +58,10 @@ export const PROJECT_QUEUE_TEXT_LIMIT = PROJECT_TASK_LIMIT * PROJECT_TASK_COUNT_
 export const PROJECT_CONFIRM_LIMIT = 120
 export const PROJECT_SPLIT_DELAY = 3000
 
-const EMPTY_SPLIT_RUN = Object.freeze({ active: false, pairs: [], answers: [], failed: false, done: false })
+const EMPTY_SPLIT_RUN = Object.freeze({ active: false, pairs: [], answers: [], failed: false, done: false, cancelled: false })
 let splitRun = EMPTY_SPLIT_RUN
+let splitCancelRequested = false
+let splitWaitCancel = null
 const splitRunListeners = new Set()
 
 export function splitRunSnapshot() {
@@ -86,6 +88,43 @@ export function clearSplitRun() {
   return true
 }
 
+export function cancelSplitRun() {
+  if (!splitRun.active) return false
+  splitCancelRequested = true
+  const wake = splitWaitCancel
+  splitWaitCancel = null
+  if (wake) wake()
+  publishSplitRun({ ...splitRun, cancelled: true })
+  return true
+}
+
+function splitWait(ms) {
+  return new Promise((resolve) => {
+    let timer = null
+    const done = () => {
+      splitWaitCancel = null
+      if (timer) clearTimeout(timer)
+      resolve()
+    }
+    timer = setTimeout(done, ms)
+    splitWaitCancel = done
+  })
+}
+
+export function splitRunProgress(run) {
+  const pairs = Array.isArray(run?.pairs) ? run.pairs : []
+  const answers = Array.isArray(run?.answers) ? run.answers : []
+  const started = answers.filter((answer) => answer?.ok).length
+  if (run?.active) {
+    return `${run.cancelled ? 'Stopping' : 'Starting'} ${pairs.length} tasks, ${answers.length} started.`
+  }
+  if (run?.cancelled) {
+    return `Stopped after starting ${started} of ${pairs.length} tasks. The runs already started keep running.`
+  }
+  if (run?.failed) return `Started ${started} of ${pairs.length} tasks.`
+  return `Started ${pairs.length} tasks.`
+}
+
 export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY } = {}) {
   if (splitRun.active) return false
   const list = (Array.isArray(pairs) ? pairs : []).filter(
@@ -93,10 +132,16 @@ export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY
   )
   if (list.length === 0) return false
   if (typeof client?.startRun !== 'function') return false
-  publishSplitRun({ active: true, pairs: list, answers: [], failed: false, done: false })
+  splitCancelRequested = false
+  publishSplitRun({ active: true, pairs: list, answers: [], failed: false, done: false, cancelled: false })
   const answers = []
   let failed = false
+  let cancelled = false
   for (let index = 0; index < list.length; index += 1) {
+    if (splitCancelRequested) {
+      cancelled = true
+      break
+    }
     const pair = list[index]
     try {
       const answer = await client.startRun(pair.lane, { tasks: [pair.task], worktree: true })
@@ -105,14 +150,21 @@ export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY
       failed = true
       answers.push({ ok: false, message: err?.message || 'Could not start run.' })
     }
-    publishSplitRun({ active: true, pairs: list, answers: [...answers], failed, done: false })
+    publishSplitRun({ active: true, pairs: list, answers: [...answers], failed, done: false, cancelled: splitCancelRequested })
     if (index < list.length - 1) {
-      await new Promise((resolve) => {
-        setTimeout(resolve, delay)
-      })
+      if (splitCancelRequested) {
+        cancelled = true
+        break
+      }
+      await splitWait(delay)
+      if (splitCancelRequested) {
+        cancelled = true
+        break
+      }
     }
   }
-  publishSplitRun({ active: false, pairs: list, answers, failed, done: true })
+  splitCancelRequested = false
+  publishSplitRun({ active: false, pairs: list, answers, failed, done: true, cancelled })
   return true
 }
 

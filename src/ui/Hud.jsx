@@ -2,6 +2,8 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
 import { name } from './brand.js'
 import Transport from './Transport.jsx'
+import { useDialogFocus } from './dialogFocus.js'
+import { useLogFollow } from './logScroll.js'
 import ControlDrawer from './panels/ControlDrawer.jsx'
 import AgentDock from './AgentDock.jsx'
 import Assistant from './Assistant.jsx'
@@ -72,9 +74,9 @@ function formatTime(ms) {
   return `${minutes}:${seconds}`
 }
 
-function EventLogBody({ entries, bodyRef = null }) {
+function EventLogBody({ entries, bodyRef = null, onScroll = null }) {
   return (
-    <div className="hud-log-body mono" ref={bodyRef}>
+    <div className="hud-log-body mono" ref={bodyRef} onScroll={onScroll}>
       {entries.length === 0 ? (
         <div className="log-line is-dim">No events recorded.</div>
       ) : (
@@ -257,11 +259,13 @@ export default function Hud({
   const chatAvailable = orchestratorOn(health)
   const wide = wideLayout(viewportWidth)
   const floatingChat = !wide || mode === 'replay'
-  const logBodyRef = useRef(null)
-  const lowerLogRef = useRef(null)
   const settingsCountRef = useRef(Number(settingsRequest) || 0)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
+  const helpRef = useRef(null)
   const visibleLog = log.slice(-50)
+  const logFollow = useLogFollow(logOpen, visibleLog.length)
+  const lowerFollow = useLogFollow(wide && mode === 'replay', visibleLog.length)
+  useDialogFocus(helpOpen, { containerRef: helpRef, openerSelector: 'hud-help-dialog' })
   const visibleShortcuts = (client ? SHORTCUTS : SHORTCUTS.filter(([k]) => k !== 'C')).map(
     ([keys, description]) =>
       chatAvailable && keys === '/' ? [keys, 'Talk to the orchestrator'] : [keys, description]
@@ -525,6 +529,7 @@ export default function Hud({
         if (wide) setDrawer(null)
         return
       }
+      if (event.defaultPrevented) return
       if (hudKeyBlocked(event.target)) return
       if (event.ctrlKey || event.metaKey || event.altKey) return
       if (event.key === 'l' || event.key === 'L') {
@@ -549,18 +554,6 @@ export default function Hud({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [client, chatAvailable, floatingChat, wide, drawer, logOpen])
-
-  useEffect(() => {
-    if (logOpen && logBodyRef.current) {
-      logBodyRef.current.scrollTop = logBodyRef.current.scrollHeight
-    }
-  }, [logOpen, visibleLog.length])
-
-  useEffect(() => {
-    if (wide && mode === 'replay' && lowerLogRef.current) {
-      lowerLogRef.current.scrollTop = lowerLogRef.current.scrollHeight
-    }
-  }, [wide, mode, visibleLog.length])
 
   function renderAgentRow(row, indent = 0) {
     const { agent, depth, number, group, visible } = row
@@ -809,7 +802,7 @@ export default function Hud({
               {notice.title}
             </button>
             {healthOpen && (
-              <div className="hud-health-popover" role="dialog" aria-label="Health details">
+              <div className="hud-health-popover" role="group" aria-label="Health details">
                 <ul className="hud-health-lines mono">
                   {notice.lines.map((line, index) => (
                     <li key={index}>{line}</li>
@@ -881,7 +874,7 @@ export default function Hud({
                 <span className="hud-log-title">Event Log</span>
                 <span className="hud-log-count mono">{visibleLog.length}</span>
               </header>
-              <EventLogBody entries={visibleLog} bodyRef={logBodyRef} />
+              <EventLogBody entries={visibleLog} bodyRef={logFollow.ref} onScroll={logFollow.onScroll} />
             </aside>
           )}
         </div>
@@ -970,7 +963,7 @@ export default function Hud({
               Close
             </button>
           </header>
-          <EventLogBody entries={visibleLog} bodyRef={logBodyRef} />
+          <EventLogBody entries={visibleLog} bodyRef={logFollow.ref} onScroll={logFollow.onScroll} />
         </aside>
       )}
 
@@ -995,7 +988,7 @@ export default function Hud({
             {mode === 'replay' ? (
               <div className="hud-lower-replay">
                 <div className="hud-lower-log">
-                  <EventLogBody entries={visibleLog} bodyRef={lowerLogRef} />
+                  <EventLogBody entries={visibleLog} bodyRef={lowerFollow.ref} onScroll={lowerFollow.onScroll} />
                 </div>
                 <div className="hud-lower-replay-foot">
                   <p className="hud-lower-note">{REPLAY_LINE}</p>
@@ -1022,7 +1015,7 @@ export default function Hud({
             ) : (
               <div className="hud-lower-replay">
                 <div className="hud-lower-log">
-                  <EventLogBody entries={visibleLog} bodyRef={lowerLogRef} />
+                  <EventLogBody entries={visibleLog} bodyRef={lowerFollow.ref} onScroll={lowerFollow.onScroll} />
                 </div>
                 <div className="hud-lower-replay-foot">
                   <p className="hud-lower-note">The orchestrator is not connected.</p>
@@ -1112,6 +1105,7 @@ export default function Hud({
         <div className="hud-help-backdrop" onClick={() => setHelpOpen(false)}>
           <section
             id="hud-help-dialog"
+            ref={helpRef}
             className="hud-help"
             role="dialog"
             aria-modal="true"

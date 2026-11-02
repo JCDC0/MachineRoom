@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from 'react'
+import { useDialogFocus } from './dialogFocus.js'
 import FamilyTeam from './FamilyTeam.jsx'
 import FamilyTree from './FamilyTree.jsx'
 import RepositoryPanel from './RepositoryPanel.jsx'
@@ -40,6 +41,9 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const [showAll, setShowAll] = useState(false)
   const [renaming, setRenaming] = useState(null)
   const previewReqRef = useRef(0)
+  const confirmRef = useRef(null)
+
+  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
   useEffect(() => {
     if (!connected) return undefined
@@ -604,7 +608,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
         {tab === 'agents' ? renderAgents() : null}
       </div>
       {confirm ? (
-        <div className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
+        <div className="mr-side-confirm" ref={confirmRef} role="dialog" aria-modal="true" aria-label={confirm.label}>
           <section className="mr-side-confirm-card">
             <p className="mr-side-confirm-text">{busy && confirm.busyText ? confirm.busyText : confirm.text}</p>
             <div className="mr-side-confirm-actions">

@@ -65,6 +65,50 @@ const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-orchestrato
 const SEAM_QUIET = ['hud-dropdown', 'hud-band-list', 'hud-health-popover']
 export const LENS_MOVE = 0.0005
 
+export function handleRoomKey(event, view = {}) {
+  if (!event || event.defaultPrevented) return
+  if (hudKeyBlocked(event.target)) return
+  if (event.target?.closest?.('button') && (event.code === 'Space' || event.key === 'Enter')) return
+  const player = view.player
+  if (!player) return
+  const room = view.room?.current ?? null
+  const follow = view.follow?.current
+  if (event.key === 'Escape') {
+    if (document.querySelector(OPEN_PANEL)) return
+    if (view.inspector?.current) {
+      view.closeInspector?.()
+      return
+    }
+    view.parkRoom?.()
+  } else if (event.code === 'Space') {
+    event.preventDefault()
+    player.toggle()
+  } else if (event.key === 'f' || event.key === 'F') {
+    view.setFollow?.(follow === 'wide' ? 'close' : follow ? false : 'wide')
+  } else if (event.key === 't' || event.key === 'T') {
+    view.setOpenChips?.(room?.toggleTerminal(room.focused()) ?? NONE)
+  } else if (event.key === '0') {
+    view.parkRoom?.()
+  } else if (/^[1-9]$/.test(event.key)) {
+    const agent = view.agents?.[Number(event.key) - 1]
+    if (agent) {
+      view.setFollow?.(false)
+      room?.focus(agent.key)
+      view.setFocused?.(agent.key)
+    }
+  } else if (event.key === 'ArrowRight') {
+    player.seek(player.position + 5000)
+  } else if (event.key === 'ArrowLeft') {
+    player.seek(player.position - 5000)
+  } else if (event.key === ']') {
+    const index = SPEEDS.indexOf(player.speed)
+    view.changeSpeed?.(SPEEDS[Math.min(SPEEDS.length - 1, index + 1)])
+  } else if (event.key === '[') {
+    const index = SPEEDS.indexOf(player.speed)
+    view.changeSpeed?.(SPEEDS[Math.max(0, index - 1)])
+  }
+}
+
 export function labelsFromFamily(answer) {
   const nodes = Array.isArray(answer?.nodes) ? answer.nodes : []
   if (nodes.length === 0) return null
@@ -1115,43 +1159,19 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   useEffect(() => {
     function onKey(event) {
-      if (hudKeyBlocked(event.target)) return
-      if (event.target.closest('button') && (event.code === 'Space' || event.key === 'Enter')) return
-      const room = roomRef.current
-      if (event.key === 'Escape') {
-        if (document.querySelector(OPEN_PANEL)) return
-        if (inspectorRef.current) {
-          closeInspector()
-          return
-        }
-        parkRoom()
-      } else if (event.code === 'Space') {
-        event.preventDefault()
-        player.toggle()
-      } else if (event.key === 'f' || event.key === 'F') {
-        setFollow(followRef.current === 'wide' ? 'close' : followRef.current ? false : 'wide')
-      } else if (event.key === 't' || event.key === 'T') {
-        setOpenChips(room?.toggleTerminal(room.focused()) ?? NONE)
-      } else if (event.key === '0') {
-        parkRoom()
-      } else if (/^[1-9]$/.test(event.key)) {
-        const agent = agents[Number(event.key) - 1]
-        if (agent) {
-          setFollow(false)
-          room?.focus(agent.key)
-          setFocused(agent.key)
-        }
-      } else if (event.key === 'ArrowRight') {
-        player.seek(player.position + 5000)
-      } else if (event.key === 'ArrowLeft') {
-        player.seek(player.position - 5000)
-      } else if (event.key === ']') {
-        const index = SPEEDS.indexOf(player.speed)
-        changeSpeed(SPEEDS[Math.min(SPEEDS.length - 1, index + 1)])
-      } else if (event.key === '[') {
-        const index = SPEEDS.indexOf(player.speed)
-        changeSpeed(SPEEDS[Math.max(0, index - 1)])
-      }
+      handleRoomKey(event, {
+        player,
+        room: roomRef,
+        follow: followRef,
+        inspector: inspectorRef,
+        agents,
+        closeInspector,
+        parkRoom,
+        setFollow,
+        setOpenChips,
+        setFocused,
+        changeSpeed,
+      })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
