@@ -1517,7 +1517,7 @@ export function createOrchestrator({
       if (startedBy !== key && (!recordedStarter || subExists(recordedStarter))) return
     }
     const named = recordedStarter ? (recordedStarter === key || (key === ORCHESTRATOR_KEY && !subExists(recordedStarter))) : false
-    if ((!named && !givenWork()) || state === 'paused') return
+    if (!named && !givenWork()) return
     if (named) ownsRun = true
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
     const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`

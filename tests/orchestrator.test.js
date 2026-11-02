@@ -1082,6 +1082,32 @@ describe('waking the orchestrator', () => {
     expect(rig.calls()).toHaveLength(3)
   })
 
+  it('keeps a run end that arrives while paused and runs it after the next owner message', async () => {
+    const rig = makeRig()
+    rig.send('Start')
+    await waitIdle(rig, 1)
+    rig.orchestrator.stop({ confirmed: true })
+
+    const log = join(rig.runs, 'opencode7-paused-1.log')
+    writeFileSync(log, 'done\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode7-paused-1', 'succeeded'))
+    await sleep(200)
+
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer().state).toBe('paused')
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text.includes('Run opencode7-paused-1'))).toBe(true)
+
+    rig.send('Resume the room')
+    await waitIdle(rig, 2)
+    const prompt = rig.calls()[1].args[1]
+    expect(prompt).toContain('Run opencode7-paused-1 on lane opencode7 ended: succeeded.')
+    expect(prompt).toContain('Resume the room')
+  })
+
   it('adds an Error line to the wake message when a failed run has an error in its log', async () => {
     const rig = makeRig()
     rig.send('Hello')
