@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The idle view arms its 60 second timer again when the live link returns or the page becomes visible, so it starts without new input after a disconnect or a hidden page (task U109).
 - The seam effect observes the menu, the transport and the lens once each, measures at most once an animation frame, ignores changes inside the log dropdown, band list and health popover, and writes `--seam-y` and `--seam-r` only when a pose changes (task U108).
 - The compass tapes keep their yaw and pitch in a memoised `LensCompass`, fed through a ref from `beforeFrame`, so a turn re-renders only the two tapes (task U108).
 - The git route resolves its checkout root through git rev-parse, includes detached commits, guards concurrent writes and status failures with 409, and drops stale in-flight cache writes (task S22).

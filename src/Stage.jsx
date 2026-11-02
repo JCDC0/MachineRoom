@@ -477,6 +477,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [following, setFollowing] = useState(false)
   const [idle, setIdle] = useState(false)
   const idleRef = useRef(false)
+  const idleWatchRef = useRef(null)
+  const bridgeDownRef = useRef(false)
   const [scrolled, setScrolled] = useState(false)
   const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
@@ -1238,6 +1240,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const idleSoFar = snapshot.agents.every((agent) => agent.runs === 0)
   const linkTrouble = ['connecting', 'reconnecting', 'disconnected'].includes(snapshot.status)
   const bridgeDown = isBridgeDown(live, snapshot, health)
+  bridgeDownRef.current = bridgeDown
   const showWaiting = Boolean(live) && (idleSoFar || linkTrouble)
   const orchestratorActivity = orchestratorDoing(snapshot.agents)
 
@@ -1247,12 +1250,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       setIdle(on)
       roomRef.current?.setIdle?.(on)
     }
-    if (bridgeDown) {
-      apply(false)
-      return undefined
-    }
     const watch = createIdleWatch({
       isAllowed: () =>
+        !bridgeDownRef.current &&
         idleAllowed({
           width: window.innerWidth,
           scrollY: window.scrollY ?? window.pageYOffset ?? 0,
@@ -1264,12 +1264,19 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         }),
       onIdle: apply,
     })
+    idleWatchRef.current = watch
     return () => {
       watch.stop()
+      idleWatchRef.current = null
       idleRef.current = false
       setIdle(false)
       roomRef.current?.setIdle?.(false)
     }
+  }, [])
+
+  useEffect(() => {
+    if (bridgeDown) idleWatchRef.current?.halt()
+    else idleWatchRef.current?.arm()
   }, [bridgeDown])
 
   useEffect(() => {
