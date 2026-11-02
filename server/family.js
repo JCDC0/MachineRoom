@@ -10,7 +10,9 @@ import {
   isHarnessAvailable,
   modelAllowed,
   modelUnavailableProblem,
+  readAgentsConfig,
   readAllLanes,
+  saveAgentsConfig,
 } from './agents-config.js'
 import { activeLanesFileFor, eligibleLanes, projectHash, readActiveLanesChoice } from './active-lanes.js'
 import { readEndpoints } from './endpoints.js'
@@ -601,7 +603,7 @@ export function createFamilyApi(options = {}) {
           if (!targetSub.lanes.includes(createdLane.key)) {
             targetSub.lanes.push(createdLane.key)
           }
-          orchs.ladderChange(
+          const ladderResult = orchs.ladderChange(
             {
               confirmed: true,
               by: 'owner',
@@ -609,6 +611,25 @@ export function createFamilyApi(options = {}) {
             },
             true
           )
+          if (ladderResult.status !== 200) {
+            const config = readAgentsConfig(runsDir)
+            const created = config.agents.findIndex((agent) => agent.key === createdLane.key)
+            if (created !== -1) {
+              config.agents.splice(created, 1)
+              saveAgentsConfig(runsDir, config)
+            }
+            const active = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+            if (active && typeof active.isChosen === 'function' && active.isChosen() && typeof active.removeActiveLane === 'function') {
+              active.removeActiveLane(createdLane.key)
+            }
+            if (typeof notify === 'function') {
+              notify({ topic: 'agents' })
+            }
+            sendJson(req, res, ladderResult.status, {
+              error: ladderResult.body?.error ?? 'The ladder change failed.',
+            })
+            return true
+          }
         }
       }
 
