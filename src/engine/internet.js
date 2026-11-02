@@ -77,6 +77,13 @@ export function createInternet(scene, texture = null) {
 
   const attribute = geometry.attributes.position
   const array = attribute.array
+  const phases = new Float64Array(attribute.count)
+  const swings = new Float64Array(attribute.count)
+  const random = seeded(INTERNET_SEED)
+  for (let index = 0; index < attribute.count; index += 1) {
+    phases[index] = random() * Math.PI * 2
+    swings[index] = 0.55 + random() * 0.45
+  }
   let elapsed = 0
   let glow = 0
   let frozen = false
@@ -93,14 +100,10 @@ export function createInternet(scene, texture = null) {
     return online
   }
 
-  function offsetsFor(time) {
-    return morphOffsets(INTERNET_SEED, attribute.count, time)
-  }
-
   function apply(time) {
-    const offsets = offsetsFor(time)
+    const clock = Number.isFinite(Number(time)) ? Number(time) : 0
     for (let index = 0; index < attribute.count; index += 1) {
-      const factor = 1 + offsets[index] * MORPH_SWING
+      const factor = 1 + Math.sin(clock * MORPH_RATE + phases[index]) * swings[index] * MORPH_SWING
       array[index * 3] = base[index * 3] * factor
       array[index * 3 + 1] = base[index * 3 + 1] * factor
       array[index * 3 + 2] = base[index * 3 + 2] * factor

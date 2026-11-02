@@ -336,6 +336,7 @@ function runRoom(frames, agents, tree) {
   const activities = []
   const layouts = []
   const sends = new Map()
+  const children = new Map()
   let largest = 0
   const parked = new Map()
   const roster = agents.filter((agent) => !isOrchestrator(agent))
@@ -344,6 +345,12 @@ function runRoom(frames, agents, tree) {
   function step(activity) {
     apply(state, activity)
     activities.push(activity)
+    for (const agent of state.agents.values()) {
+      if (!agent.parent) continue
+      const seen = children.get(agent.key)
+      if (seen) seen.status = agent.status
+      else children.set(agent.key, { parent: agent.parent, status: agent.status })
+    }
     const { drawn, placed } = layoutRoom(state, homes)
     largest = Math.max(largest, placed.size)
 
@@ -415,7 +422,7 @@ function runRoom(frames, agents, tree) {
     for (const activity of pipeline.push(frame)) step(activity)
   }
   for (const activity of pipeline.flush()) step(activity)
-  return { state, activities, layouts, largest }
+  return { state, activities, layouts, largest, children }
 }
 
 describe('the nearest drawn card', () => {
@@ -461,9 +468,8 @@ describe('the room, played from a recorded lane run', () => {
     expect(spawns.map((activity) => activity.child)).toEqual(['opencode~1', 'opencode~2'])
     expect(spawns.map((activity) => activity.name)).toEqual(['Count the exported functions', 'Check the test names'])
     for (const key of ['opencode~1', 'opencode~2']) {
-      const child = first.state.agents.get(key)
-      expect(child, `${key} is in the state`).toBeTruthy()
-      expect(child).toMatchObject({ parent: 'opencode', status: 'done' })
+      expect(first.children.get(key), `${key} is seen in the state`).toMatchObject({ parent: 'opencode', status: 'done' })
+      expect(first.state.agents.has(key), `${key} has left the state`).toBe(false)
     }
 
     const flood = Array.from({ length: PACKET_POOL * 3 }, (_, index) => first.state.latest - index * 4)

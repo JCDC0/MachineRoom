@@ -104,6 +104,7 @@ export function textSprite(text, {
 } = {}) {
   const material = new THREE.SpriteMaterial({ transparent: true, depthWrite: false })
   const sprite = new THREE.Sprite(material)
+  let label = String(text ?? '')
 
   function draw() {
     const canvas = document.createElement('canvas')
@@ -113,7 +114,7 @@ export function textSprite(text, {
       if ('letterSpacing' in context) context.letterSpacing = `${spacing}px`
     }
     prepare()
-    canvas.width = Math.ceil(context.measureText(text).width) + pad * 2
+    canvas.width = Math.ceil(context.measureText(label).width) + pad * 2
     canvas.height = 40
     if (background) {
       context.fillStyle = background
@@ -121,7 +122,7 @@ export function textSprite(text, {
     }
     prepare()
     context.fillStyle = color
-    context.fillText(text, pad, 30)
+    context.fillText(label, pad, 30)
     if (material.map) material.map.dispose()
     material.map = new THREE.CanvasTexture(canvas)
     material.needsUpdate = true
@@ -130,6 +131,13 @@ export function textSprite(text, {
 
   draw()
   sprite.userData.redraw = draw
+  sprite.userData.setText = (next) => {
+    const value = String(next ?? '')
+    if (value === label) return false
+    label = value
+    draw()
+    return true
+  }
   return sprite
 }
 

@@ -3,6 +3,7 @@ import { ancestors, dirname } from './paths.js'
 const LINE_LIMIT = 80
 export const CALL_LIMIT = 500
 export const MAX_DEPTH = 3
+export const CHILD_LIFE_MS = 7500
 
 function makeAgent(key, name, parent = null, depth = 0, runId = null, source = null) {
   return {
@@ -143,8 +144,21 @@ function finish(agent, activity) {
   if (!activity.ok) agent.error = activity.error ?? 'failed'
 }
 
+function pruneChildren(state) {
+  const parents = new Set()
+  for (const agent of state.agents.values()) if (agent.parent) parents.add(agent.parent)
+  for (const [key, agent] of state.agents) {
+    if (!agent.parent || parents.has(key)) continue
+    if (agent.status !== 'done' && agent.status !== 'error') continue
+    if (!Number.isFinite(agent.endedAt)) continue
+    if (state.latest - agent.endedAt < CHILD_LIFE_MS) continue
+    state.agents.delete(key)
+  }
+}
+
 export function apply(state, activity) {
   if (Number.isFinite(activity.time) && activity.time > (state.latest ?? 0)) state.latest = activity.time
+  pruneChildren(state)
   const agent = state.agents.get(activity.agent)
   if (!agent) return
   switch (activity.type) {

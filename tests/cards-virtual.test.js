@@ -151,6 +151,26 @@ describe('a card with 61 items', () => {
   })
 })
 
+describe('the row index of a card', () => {
+  it('maps every path to its place in one pass', () => {
+    const { cards, card } = setup(80)
+    expect(card.rowIndex).toBeInstanceOf(Map)
+    expect(card.rowIndex.size).toBe(card.rowPaths.length)
+    for (const path of ['src/f0.js', 'src/f70.js', 'src/f71.js', 'src/f79.js']) {
+      expect(card.rowIndex.get(path)).toBe(card.rowPaths.indexOf(path))
+    }
+
+    const index = card.rowIndex.get('src/f71.js')
+    card.items.scrollTop = index * ROW_H
+    card.items.fire('scroll')
+    const at = cards.slotPosition('src', 'src/f71.js', new THREE.Vector3())
+    const center = cards.center('src')
+    expect(at.y).not.toBe(center.y)
+    expect(at.y - center.y).toBeCloseTo(rowOffset(4, 0) * card.scale, 6)
+    cards.dispose()
+  })
+})
+
 describe('a row that scrolls out of view', () => {
   function crowded() {
     const made = setup(80)

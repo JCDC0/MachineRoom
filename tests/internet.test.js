@@ -113,4 +113,23 @@ describe('the internet shape when the room is offline', () => {
     expect(INTERNET_LABEL).toBe('INTERNET')
     internet.dispose()
   })
+
+  it('breathes every vertex from the phase and swing it computed once', () => {
+    const internet = createInternet(new THREE.Scene())
+    const wire = internet.group.children.find((child) => child.isMesh)
+    const attribute = wire.geometry.attributes.position
+    const base = Float32Array.from(attribute.array)
+    const offsets = morphOffsets(20261025, attribute.count, 0.4)
+
+    internet.update(0.4, false)
+
+    for (let index = 0; index < attribute.count; index += 1) {
+      const factor = 1 + offsets[index] * MORPH_SWING
+      const at = index * 3
+      expect(attribute.array[at]).toBe(Math.fround(base[at] * factor))
+      expect(attribute.array[at + 1]).toBe(Math.fround(base[at + 1] * factor))
+      expect(attribute.array[at + 2]).toBe(Math.fround(base[at + 2] * factor))
+    }
+    internet.dispose()
+  })
 })

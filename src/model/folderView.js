@@ -228,8 +228,8 @@ export function planFolderView({
 
   return [...drawn].sort(byName).map((path) => {
     const all = itemsFor(path)
-    const items = []
-    if (!limitItems) items.push(...all)
+    let items = []
+    if (!limitItems) items = all.slice()
     else {
       let folderCount = 0
       all.forEach((item) => {

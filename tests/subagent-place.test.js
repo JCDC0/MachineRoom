@@ -236,6 +236,29 @@ describe('a child view', () => {
   })
 })
 
+describe('a child view under a moved parent', () => {
+  it('takes its home from its parent home after a roster change', () => {
+    const { agents, state, terminals, world } = childHarness()
+    apply(state, { time: 1000, type: 'agent.spawn', agent: 'a', child: 'a~1', name: 'Scout', label: 'task', runId: 'r1' })
+    agents.update(state, 0.016, 1000, world, terminals)
+    const parent = agents.views.get('a')
+    const child = agents.views.get('a~1')
+    const before = child.home.clone()
+
+    agents.setRoster([
+      { key: 'b', name: 'Beta' },
+      { key: 'a', name: 'Alpha' },
+    ])
+
+    const place = childPlace(parent.home, 0)
+    expect(child.home.x).toBeCloseTo(place.x)
+    expect(child.home.y).toBeCloseTo(place.y)
+    expect(child.home.z).toBeCloseTo(place.z)
+    expect(child.home.equals(before)).toBe(false)
+    agents.dispose()
+  })
+})
+
 describe('a child view under reduced motion', () => {
   let savedWindow
 

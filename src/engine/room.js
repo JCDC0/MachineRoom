@@ -89,12 +89,6 @@ export function createFollowFocus() {
       following = value
     },
     following: () => following,
-    end() {
-      if (!following) return false
-      following = false
-      focused = null
-      return true
-    },
     focused: () => focused,
   }
 }
@@ -119,8 +113,20 @@ export function followAfterSeek(state, following) {
   return { followCard: null, pendingFollow: null, path: following ? touchedPath(state) : null }
 }
 
-export function cardClickEndsFollow(target) {
-  return Boolean(target?.closest?.('.mr-card-head, .mr-item'))
+export const TOUCH_PATH_LIMIT = 200
+export const TOUCH_ENTRY_LIMIT = 50
+
+export function noteTouch(log, path, entry, pathLimit = TOUCH_PATH_LIMIT, entryLimit = TOUCH_ENTRY_LIMIT) {
+  const list = log.get(path) ?? []
+  log.delete(path)
+  list.push(entry)
+  if (list.length > entryLimit) list.splice(0, list.length - entryLimit)
+  log.set(path, list)
+  if (log.size > pathLimit) {
+    const oldest = log.keys().next().value
+    if (oldest !== undefined) log.delete(oldest)
+  }
+  return list
 }
 
 export function nearestDrawnPath(path, drawn) {
@@ -233,6 +239,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const key = links.map((link) => `${link.from}>${link.to}`).join('\n')
     if (key === linkKey) return
     linkKey = key
+    world.links = links
     strings.build(links, centerOf, false)
   }
 
@@ -466,10 +473,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       const time = Number.isFinite(activity.time) ? activity.time : Date.now()
       for (const touch of activity.touches ?? []) {
         if (touch.kind !== 'file' || typeof touch.path !== 'string') continue
-        const list = touchLog.get(touch.path) ?? []
-        list.push({ key: agent, mode: touch.mode === 'read' ? 'read' : 'write', time })
-        if (list.length > 50) list.shift()
-        touchLog.set(touch.path, list)
+        noteTouch(touchLog, touch.path, { key: agent, mode: touch.mode === 'read' ? 'read' : 'write', time })
       }
       return
     }
@@ -804,7 +808,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     labels.update(delta)
     messages.update(now)
     world.mask = mask
-    world.links = mask.dimmed ? cards.visibleLinks() : []
     agentSet.update(state, delta, now, world, terminals)
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'

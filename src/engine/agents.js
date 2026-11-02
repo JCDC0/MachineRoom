@@ -2,7 +2,8 @@ import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
-import { HUB_CENTER, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
+import { CHILD_LIFE_MS } from '../model/state.js'
+import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_SHAPE, PREFERRED, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
@@ -20,9 +21,8 @@ export const UNSEEN_SCALE = 0.7
 export const PRESENCE_GROW_MS = 600
 const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
-export const CHILD_HOLD_MS = 6000
 const CHILD_FADE_MS = 1500
-const CHILD_LIFE_MS = CHILD_HOLD_MS + CHILD_FADE_MS
+export const CHILD_HOLD_MS = CHILD_LIFE_MS - CHILD_FADE_MS
 const STRIP_OPACITY = 0.75
 export const PACKET_POOL = 24
 export const PACKET_DURATION = 450
@@ -153,7 +153,7 @@ export function stripPoints(from, to, out = []) {
   return points
 }
 
-export function litChain(dir, links, mask, out = []) {
+export function litChain(dir, links, mask, out = [], cache = null) {
   const chain = out ?? []
   chain.length = 0
   const target = typeof dir === 'string' ? dir : ''
@@ -162,10 +162,20 @@ export function litChain(dir, links, mask, out = []) {
     if (target === '') chain.push('')
     return chain
   }
-  const parents = new Map()
-  for (const link of links) {
-    if (!link || !linkOnPath(link, mask)) continue
-    if (!parents.has(link.to)) parents.set(link.to, link.from)
+  let parents
+  if (cache && cache.links === links && cache.mask === mask && cache.parents) {
+    parents = cache.parents
+  } else {
+    parents = new Map()
+    for (const link of links) {
+      if (!link || !linkOnPath(link, mask)) continue
+      if (!parents.has(link.to)) parents.set(link.to, link.from)
+    }
+    if (cache) {
+      cache.links = links
+      cache.mask = mask
+      cache.parents = parents
+    }
   }
   const back = []
   let at = target
@@ -481,12 +491,13 @@ export function createAgents(scene, roster, cssScene = null) {
   let agentByKey = new Map(currentRoster.map((agent) => [agent.key, agent]))
   let rosterKeys = new Set(currentRoster.map((agent) => agent.key))
   const usedShapes = new Set(shapes)
-  const retired = new Map()
+  let retired = new WeakSet()
   const pendingChipRemovals = new Set()
   let currentLadder = null
   let currentLabels = null
   let sectorList = []
   let slotAngles = sectorSlotAngles(null, parkedKeys)
+  const chainCache = { links: null, mask: null, parents: null }
 
   function subIdOf(agent) {
     const key = String(agent?.key ?? '')
@@ -640,7 +651,7 @@ export function createAgents(scene, roster, cssScene = null) {
     view.packets.visible = true
   }
 
-  function addView(agent, { index, shapeName, home, scale = 1, parentKey = null, subOrchestrator = false }) {
+  function addView(agent, { index, shapeName, home, scale = 1, parentKey = null, subOrchestrator = false, childIndex = 0 }) {
     const group = new THREE.Group()
     const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(WHITE, 0.35))
     const orchestrator = parentKey === null && isOrchestrator(agent)
@@ -687,6 +698,7 @@ export function createAgents(scene, roster, cssScene = null) {
       sessionReader: parentKey === null && isSessionReader(agent),
       readerIndex: 0,
       parentKey,
+      childIndex,
       shapeName,
       group,
       shape,
@@ -777,17 +789,19 @@ export function createAgents(scene, roster, cssScene = null) {
       if (!entry.parent || rosterKeys.has(entry.key) || views.has(entry.key)) continue
       const parentView = views.get(entry.parent)
       if (!parentView) continue
-      if (retired.get(entry.key) === entry) continue
+      if (retired.has(entry)) continue
       if (entry.status !== 'working' && entry.status !== 'queued' && !childEndIsFresh(entry, state)) continue
       const shapeName = nextSpareShape([...usedShapes])
       usedShapes.add(shapeName)
-      const place = childPlace(parentView.home, childIndex(state, entry))
+      const index = childIndex(state, entry)
+      const place = childPlace(parentView.home, index)
       addView(entry, {
         index: -1,
         shapeName,
         home: new THREE.Vector3(place.x, place.y, place.z),
         scale: parentView.scale * CHILD_SCALE,
         parentKey: entry.parent,
+        childIndex: index,
       })
     }
   }
@@ -819,6 +833,13 @@ export function createAgents(scene, roster, cssScene = null) {
         view.index = parkedKeys.indexOf(view.key)
         view.home.copy(laneHome(view.key, view.index))
       }
+    }
+    for (const view of views.values()) {
+      if (!view.parentKey) continue
+      const parent = views.get(view.parentKey)
+      if (!parent) continue
+      const place = childPlace(parent.home, view.childIndex ?? 0)
+      view.home.set(place.x, place.y, place.z)
     }
   }
 
@@ -907,6 +928,7 @@ export function createAgents(scene, roster, cssScene = null) {
     for (const view of views.values()) {
       const name = currentLabels && !view.parentKey ? labelFor(view.key, currentLabels) ?? view.key : view.name
       view.callout.title.textContent = name.toUpperCase()
+      view.label.userData.setText?.(nameLabel(name))
     }
   }
 
@@ -1141,7 +1163,7 @@ export function createAgents(scene, roster, cssScene = null) {
       if (stripVisible) {
         stripStart.copy(view.group.position)
         if (pointer) {
-          const chain = litChain(pointer.dir, world.links, world.mask, view.chain)
+          const chain = litChain(pointer.dir, world.links, world.mask, view.chain, chainCache)
           setPath(view.strip, speckPolyline(stripStart, chain, world.center, view.touch, view.path))
         } else {
           setPath(view.strip, stripPoints(stripStart, view.touch, view.path))
@@ -1180,7 +1202,7 @@ export function createAgents(scene, roster, cssScene = null) {
       }
     }
     for (const item of ended) {
-      if (item.entry) retired.set(item.view.key, item.entry)
+      if (item.entry) retired.add(item.entry)
       terminals.setVisible?.(item.view.key, false)
       terminals.setOpen?.(item.view.key, false)
       removeView(item.view, terminals)
@@ -1188,7 +1210,7 @@ export function createAgents(scene, roster, cssScene = null) {
   }
 
   function snap(state, world) {
-    retired.clear()
+    retired = new WeakSet()
     syncViews(state)
     for (const view of views.values()) {
       view.aim = null
@@ -1220,7 +1242,7 @@ export function createAgents(scene, roster, cssScene = null) {
     placeViews()
     if (still()) {
       for (const view of views.values()) {
-        if (!view.parentKey) view.group.position.copy(view.home)
+        view.group.position.copy(view.home)
       }
     }
     let mainView = null
@@ -1240,5 +1262,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, dispose, beat, webStart, webEnd, webActive, setOnline, hubCenter: HUB_CENTER }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, dispose, beat, webStart, webEnd, webActive, setOnline }
 }

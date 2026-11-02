@@ -114,3 +114,47 @@ describe('agents a harness spawns', () => {
     expect(byKey.get('opencode~1~1')).toMatchObject({ parent: 'opencode~1', depth: 2 })
   })
 })
+
+describe('a finished child leaves the state on replay time', () => {
+  it('keeps it for 7,499 ms after its end and drops it at 7,500', () => {
+    const state = createState(tree, agents)
+    apply(state, spawn('opencode~1', 'opencode', 1000))
+    apply(state, end('opencode~1', true, 2000))
+    apply(state, { type: 'run.start', agent: 'opencode', runId: 'r2', time: 9499, order: 9499 })
+    expect(state.agents.has('opencode~1')).toBe(true)
+    apply(state, { type: 'run.start', agent: 'opencode', runId: 'r3', time: 9500, order: 9500 })
+    expect(state.agents.has('opencode~1')).toBe(false)
+  })
+
+  it('keeps a finished parent until its children have left', () => {
+    const state = createState(tree, agents)
+    apply(state, spawn('opencode~1', 'opencode', 1000))
+    apply(state, spawn('opencode~1~1', 'opencode~1', 1500))
+    apply(state, runEnd(true, 2000))
+    apply(state, { type: 'run.start', agent: 'opencode', runId: 'r2', time: 10000, order: 10000 })
+    expect(state.agents.has('opencode~1~1')).toBe(false)
+    expect(state.agents.has('opencode~1')).toBe(true)
+    apply(state, { type: 'run.start', agent: 'opencode', runId: 'r3', time: 10001, order: 10001 })
+    expect(state.agents.has('opencode~1')).toBe(false)
+  })
+
+  it('draws the same agents after a seek and after a play', () => {
+    const activities = [
+      { type: 'run.start', agent: 'opencode', runId: 'r1', time: 0, order: 0 },
+      spawn('opencode~1', 'opencode', 1000),
+      end('opencode~1', true, 2000),
+      { type: 'run.start', agent: 'opencode', runId: 'r2', time: 10000, order: 10000 },
+    ]
+    const sought = createPlayer({ activities, tree, agents })
+    sought.seek(sought.duration)
+    const afterSeek = [...sought.state.agents.keys()].sort()
+
+    const played = createPlayer({ activities, tree, agents })
+    played.play()
+    played.tick(1000000)
+    const afterPlay = [...played.state.agents.keys()].sort()
+
+    expect(afterPlay).toEqual(afterSeek)
+    expect(afterSeek).toEqual(['opencode'])
+  })
+})

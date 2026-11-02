@@ -240,6 +240,12 @@ function buildSlots(angles) {
   })
 }
 
+function ladderKeyOf(ladder, parkedKeys) {
+  return sectorArcs(ladder, parkedKeys)
+    .map((arc) => `${arc.id}|${arc.name}|${arc.lanes.join(',')}|${arc.start}|${arc.end}`)
+    .join(';')
+}
+
 function buildSectors(ladder, parkedKeys, group) {
   const lines = []
   const labels = []
@@ -306,6 +312,8 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   const centreRing = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(24, 32)), lineMaterial(WHITE, 0.14))
 
   let currentLadder = hasSubs(ladder) ? ladder : null
+  let ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys)
+  let buildCount = 0
   let slotAngles = []
   let slots = []
   let sectorLines = []
@@ -344,6 +352,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   }
 
   function rebuild() {
+    buildCount += 1
     slotAngles = anglesFor(currentLadder)
     clearGroup(tickGroup)
     tickGroup.add(buildTicks(slotAngles))
@@ -363,11 +372,15 @@ export function createHub(scene, agentsOrCount, ladder = null) {
       line.material.opacity = line.userData.baseOpacity ?? RING_OPACITY
     }
     boost = 0
+    ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys)
   }
 
   function setLadder(next) {
-    currentLadder = hasSubs(next) ? next : null
+    const ladder = hasSubs(next) ? next : null
+    if (ladderKeyOf(ladder, parkedKeys) === ladderKeyValue) return false
+    currentLadder = ladder
     rebuild()
+    return true
   }
 
   function setRoster(next) {
@@ -435,5 +448,5 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   if (currentLadder) rebuild()
 
-  return { group, pulse, setSlot, setLadder, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, dispose }
+  return { group, pulse, setSlot, setLadder, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, builds: () => buildCount, dispose }
 }

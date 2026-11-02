@@ -283,6 +283,27 @@ describe('how a sector returns to rest', () => {
   })
 })
 
+describe('an equal ladder', () => {
+  it('leaves the hub geometry and a run pulse alone', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    const builds = hub.builds()
+    const same = { subs: LADDER.subs.map((sub) => ({ ...sub, lanes: [...sub.lanes] })) }
+    expect(hub.setLadder(same)).toBe(false)
+    expect(hub.builds()).toBe(builds)
+
+    hub.pulse(0xffffff, 1)
+    const line = arcCentre(hub.group.getObjectByName('sector:frontend'))
+    const base = line.userData.baseOpacity
+    expect(hub.setLadder({ subs: same.subs.map((sub) => ({ ...sub })) })).toBe(false)
+    hub.update(0, 0.016)
+    expect(line.material.opacity).toBeGreaterThan(base)
+
+    expect(hub.setLadder(null)).toBe(true)
+    expect(hub.builds()).toBe(builds + 1)
+    hub.dispose()
+  })
+})
+
 describe('the hub arc of a working sector', () => {
   it('brightens to full white and returns over one second without touching the rest of the ring', () => {
     const hub = createHub(new THREE.Scene(), ROSTER, LADDER)

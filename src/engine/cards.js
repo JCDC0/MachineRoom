@@ -331,25 +331,6 @@ function occluderGeometry(view, rootName = 'root') {
   return geometry
 }
 
-function rowMark(file) {
-  if (!file) return ''
-  if (file.failed) return 'failed'
-  if (file.yellow) return 'finished'
-  if (file.writes > 0) return 'written'
-  if (file.reads > 0) return 'read'
-  return ''
-}
-
-function rowNote(file) {
-  if (!file) return ''
-  const parts = []
-  if (file.reads) parts.push(`read ${file.reads}`)
-  if (file.writes) parts.push(`written ${file.writes}`)
-  if (file.failed) parts.push('failed')
-  else if (file.yellow) parts.push('finished')
-  return parts.join(' · ') || 'not touched'
-}
-
 export function createCards(cssScene, options = {}) {
   const { glScene = null, rootName = 'root', onInspect = () => {}, alwaysDepth = 2 } = options
   const cards = new Map()
@@ -373,12 +354,11 @@ export function createCards(cssScene, options = {}) {
   let layoutKey = ''
   let overviewLayoutKey = ''
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
-  let movingNow = false
-  let wasMoving = false
   let inspected = null
   let rowRevision = 0
   let lastRowFrameKey = null
   let lastState = null
+  let linksCache = null
 
   let lastExistingFiles = -1
   let lastLatest = -1
@@ -419,6 +399,7 @@ export function createCards(cssScene, options = {}) {
   }
 
   function makeCard(path) {
+    linksCache = null
     const width = cardBaseWidth(path, rootName)
     const title = cardTitle(path, rootName)
     const element = el('div', 'mr-card is-closed')
@@ -483,6 +464,7 @@ export function createCards(cssScene, options = {}) {
       rootName,
       rows: [],
       rowPaths: [],
+      rowIndex: null,
       wanted: [],
       drawn: new Map(),
       virtual: false,
@@ -516,10 +498,12 @@ export function createCards(cssScene, options = {}) {
   }
 
   function removeCard(card) {
+    linksCache = null
     cssScene.remove(card.object)
     glScene?.remove(card.occluder)
     card.occluder.geometry.dispose()
     card.element.remove()
+    homes.delete(card.path)
     cards.delete(card.path)
   }
 
@@ -661,6 +645,7 @@ export function createCards(cssScene, options = {}) {
     }
     card.rowKey = key
     card.rowPaths = paths
+    card.rowIndex = new Map(paths.map((path, index) => [path, index]))
     card.wanted = wanted
     card.hiddenRows = hidden
     card.window = null
@@ -769,6 +754,7 @@ export function createCards(cssScene, options = {}) {
       if (drawn.has(card.path) || card.leaving) continue
       if (!isStill && !(card.view && isPinnedView(card.view))) {
         card.leaving = true
+        linksCache = null
         card.fade = { from: card.opacity, to: 0, start: now }
       } else {
         removeCard(card)
@@ -780,6 +766,7 @@ export function createCards(cssScene, options = {}) {
       const pinnedView = isPinnedView(view)
       if (card.leaving) {
         card.leaving = false
+        linksCache = null
         if (!isStill && !pinnedView) {
           card.fade = { from: card.opacity, to: 1, start: now }
         } else {
@@ -870,7 +857,7 @@ export function createCards(cssScene, options = {}) {
   function slotPosition(dir, file, out) {
     const card = cards.get(dir)
     out.copy(center(dir))
-    const index = card ? card.rowPaths.indexOf(file) : -1
+    const index = card?.rowIndex ? card.rowIndex.get(file) ?? -1 : -1
     if (index === -1) return out
     if (card.virtual && !card.drawn.has(file)) return out
     const rows = cardRows(card.view)
@@ -943,6 +930,7 @@ export function createCards(cssScene, options = {}) {
   }
 
   function visibleLinks() {
+    if (linksCache) return linksCache
     const links = []
     for (const card of cards.values()) {
       if (card.path === '' || card.leaving) continue
@@ -953,6 +941,7 @@ export function createCards(cssScene, options = {}) {
       const parent = cards.get(dirname(card.path)) ?? nearestCard(dirname(card.path))
       if (parent) links.push({ from: parent.path, to: card.path })
     }
+    linksCache = links
     return links
   }
 
@@ -1009,7 +998,6 @@ export function createCards(cssScene, options = {}) {
     const dimLit = mask?.lit ?? null
     const targeted = mask?.targeted ?? null
     const dimStep = delta / (DIM_FADE_MS / 1000)
-    movingNow = false
     let flashesEnded = false
     for (const [path, hit] of flashes) {
       if (hit.until <= now) {
@@ -1056,7 +1044,6 @@ export function createCards(cssScene, options = {}) {
       let posChanged = false
       if (position.distanceToSquared(card.home) > 0.25) {
         position.lerp(card.home, ease)
-        movingNow = true
         posChanged = true
       } else if (!position.equals(card.home)) {
         position.copy(card.home)
@@ -1190,9 +1177,6 @@ export function createCards(cssScene, options = {}) {
         }
       }
     }
-    const isMoving = movingNow
-    movingNow = movingNow || wasMoving
-    wasMoving = isMoving
     return changed || removed
   }
 
@@ -1259,17 +1243,16 @@ export function createCards(cssScene, options = {}) {
       flash(file, tone === 'red' ? 'red' : 'white', name)
       flash(dir, tone === 'red' ? 'red' : 'white', name)
     },
-    onPath: (path) => active.path.has(path),
     flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
     sync,
     setOptions,
     update,
     visibleLinks,
+    homes: () => homes,
     overviewSpheres: overview,
     cardSphere,
     screenFrame,
     dispose,
-    moving: () => movingNow,
     vectors: () => ({ right, up, back }),
   }
 }
