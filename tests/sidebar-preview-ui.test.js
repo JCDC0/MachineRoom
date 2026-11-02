@@ -46,6 +46,21 @@ function rowByTitle(container, title) {
   )
 }
 
+describe('a conversation list that cannot be read', () => {
+  it('says the list is unavailable instead of loading it forever', async () => {
+    const client = makeClient({
+      orchestratorSessions: async () => {
+        throw new Error('The bridge refused the read.')
+      },
+    })
+    await withDom(async ({ container, root }) => {
+      await mount(root, { client, live: true, project: 'C:\project' })
+      expect(container.textContent).toContain('Conversations are not available.')
+      expect(container.textContent).not.toContain('Loading conversations...')
+    })
+  })
+})
+
 describe('the conversation preview', () => {
   it('keeps the newest conversation when an older preview answers later', async () => {
     let answerAlpha = null

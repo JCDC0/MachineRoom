@@ -33,6 +33,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
   const [tab, setTab] = useState(() => normalizeSidebarTab(loadSettings().sidebarTab))
   const [projects, setProjects] = useState(null)
   const [sessions, setSessions] = useState(null)
+  const [sessionsError, setSessionsError] = useState(false)
   const [readError, setReadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -68,6 +69,7 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
       })
       if (values.projects) setProjects(values.projects)
       if (values.sessions) setSessions(values.sessions)
+      if (results[1].status === 'rejected') setSessionsError(true)
       const failed = results.find((result) => result.status === 'rejected')
       if (failed) setReadError(messageOf(failed.reason))
     })
@@ -453,7 +455,9 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
             </div>
             <div className="mr-side-conversations">
               {!sessions ? (
-                <p className="mr-side-note">Loading conversations...</p>
+                <p className="mr-side-note">
+                  {sessionsError ? 'Conversations are not available.' : 'Loading conversations...'}
+                </p>
               ) : rows.total === 0 ? (
                 <p className="mr-side-note">No conversations yet.</p>
               ) : (

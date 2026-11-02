@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- F, T, 0, [ and ] no longer reach the room while the Control drawer or another panel is open (task U117).
 - The player no longer writes a music flag that nothing reads, and the saved sound settings drop it (task U117).
 - The web search key hint says the slot is empty until this form saves a key in it (task U117).
 - The live tour points at the Settings button in the menu row, and the replay guide no longer names Attach (task U117).
