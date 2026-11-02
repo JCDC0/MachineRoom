@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { CLIENT_METHODS, createMockClient } from '../src/control/mock.js'
@@ -13,6 +13,7 @@ import SearchSettings, {
   searchChoiceSummary,
 } from '../src/ui/SearchSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
+import { withDom } from './helpers/uiDom.js'
 
 describe('the web search settings helpers', () => {
   it('reads a saved choice and falls back to off', () => {
@@ -129,6 +130,25 @@ describe('the web search section', () => {
     expect(html).toContain('Web search')
     expect(html).toContain('DuckDuckGo')
     expect(html).toContain('Save')
+  })
+
+  it('says a key slot is empty until this form saved a key', async () => {
+    const make = (keyName) => ({
+      searchProvider: async () => ({ provider: 'tavily', url: '', keyName }),
+      keys: async () => ({ keys: [] }),
+      setSearchProvider: async () => ({ provider: 'tavily', url: '', keyName }),
+      setKey: async () => ({ ok: true }),
+    })
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(SearchSettings, { client: make('') }))
+      })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      expect(container.textContent).toContain('No key saved in the key slot Tavily yet.')
+      expect(container.textContent).not.toContain('Saved in the key slot Tavily.')
+    })
   })
 
   it('renders its own provider picker', () => {

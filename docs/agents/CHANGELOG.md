@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The web search key hint says the slot is empty until this form saves a key in it (task U117).
 - The live tour points at the Settings button in the menu row, and the replay guide no longer names Attach (task U117).
 - The folder picker keeps Close and Escape from cancelling the reload while a folder is opening (task U117).
 - The autocompact save card says whether it is turning autocompact on or off (task U117).
