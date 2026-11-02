@@ -247,7 +247,12 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
 }
 
 async function waitIdle(rig, count, timeoutMs = 15000) {
-  await waitFor(() => rig.answer().state === 'idle' && rig.calls().length === count, timeoutMs, `turn ${count} to end`)
+  try {
+    await waitFor(() => rig.answer().state === 'idle' && rig.calls().length === count, timeoutMs, `turn ${count} to end`)
+  } catch (error) {
+    error.message += ` State ${rig.answer().state}, ${rig.calls().length} calls.`
+    throw error
+  }
 }
 
 function restoreRig(rig, { mode = 'reply', file = 'calls-restored.jsonl' } = {}) {
