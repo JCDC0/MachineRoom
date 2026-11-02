@@ -13,6 +13,8 @@ const AGENT = {
   role: null,
 }
 const DEFAULT_QUIET_MS = 30000
+const DEFAULT_IDLE_MS = 30 * 60 * 1000
+const DEFAULT_IDLE_POLL_MS = 30 * 1000
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 1024 * 1024
 const RESULT_TEXT_LIMIT = 2000
@@ -86,9 +88,13 @@ export function createClaudeSessionsReader(options = {}) {
   const runsFolder = options.runsFolder ? resolve(options.runsFolder) : ''
   const now = options.now ?? Date.now
   const quietMs = Number.isFinite(Number(options.quietMs)) ? Number(options.quietMs) : DEFAULT_QUIET_MS
+  const idleMs = Number.isFinite(Number(options.idleMs)) ? Number(options.idleMs) : DEFAULT_IDLE_MS
+  const idlePollMs = Number.isFinite(Number(options.idlePollMs)) ? Number(options.idlePollMs) : Math.min(idleMs, DEFAULT_IDLE_POLL_MS)
   const emit = options.emit ?? (() => {})
   const projectsFolder = join(home, '.claude', 'projects', claudeProjectSlug(projectRoot))
   const sessions = new Map()
+  const evicted = new Map()
+  let lastEvictedCheck = 0
   let primed = false
   let stopped = false
   let ticking = false
@@ -256,7 +262,10 @@ export function createClaudeSessionsReader(options = {}) {
     const run = session.run
     if (!run?.open) return
     const grew = readStream(child.stream, (line) => handleLine(session, line, child.callId))
-    if (grew) run.lastGrowth = now()
+    if (grew) {
+      session.lastGrowth = now()
+      run.lastGrowth = now()
+    }
   }
 
   function registerChild(session, json) {
@@ -292,6 +301,7 @@ export function createClaudeSessionsReader(options = {}) {
       }
       if (json.type === 'user' && json.toolUseResult) registerChild(session, json)
     }
+    session.lastGrowth = now()
     const run = session.run
     if (!run?.open) return
     run.lastGrowth = now()
@@ -311,11 +321,11 @@ export function createClaudeSessionsReader(options = {}) {
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue
       const id = entry.name.slice(0, -6)
-      if (sessions.has(id)) continue
+      if (sessions.has(id) || evicted.has(id)) continue
       if (skippedIds === null) skippedIds = skippedSessions()
       const path = join(projectsFolder, entry.name)
       if (skippedIds.has(id)) {
-        sessions.set(id, { id, path, skipped: true, stream: null, children: new Map(), number: 0, run: null })
+        sessions.set(id, { id, path, skipped: true, stream: null, children: new Map(), number: 0, run: null, lastGrowth: now() })
         continue
       }
       let size = 0
@@ -326,7 +336,28 @@ export function createClaudeSessionsReader(options = {}) {
           size = 0
         }
       }
-      sessions.set(id, { id, path, skipped: false, stream: newStream(path, size), children: new Map(), number: 0, run: null })
+      sessions.set(id, { id, path, skipped: false, stream: newStream(path, size), children: new Map(), number: 0, run: null, lastGrowth: now() })
+    }
+  }
+
+  function scanEvicted() {
+    if (evicted.size === 0) return
+    const current = now()
+    if (current - lastEvictedCheck < idlePollMs) return
+    lastEvictedCheck = current
+    for (const [id, session] of evicted.entries()) {
+      if (session.skipped) continue
+      let size
+      try {
+        size = statSync(session.path).size
+      } catch {
+        continue
+      }
+      if (size !== session.stream.offset) {
+        evicted.delete(id)
+        session.lastGrowth = current
+        sessions.set(id, session)
+      }
     }
   }
 
@@ -335,15 +366,21 @@ export function createClaudeSessionsReader(options = {}) {
     ticking = true
     try {
       scan()
+      scanEvicted()
       primed = true
-      for (const session of sessions.values()) {
+      for (const [id, session] of [...sessions.entries()]) {
         if (session.skipped) continue
         if (readStream(session.stream, (line) => handleLine(session, line, ''))) {
+          session.lastGrowth = now()
           if (session.run?.open) session.run.lastGrowth = now()
         }
         for (const child of session.children.values()) readChild(session, child)
         const run = session.run
         if (run?.open && now() - run.lastGrowth >= quietMs) endRun(session, 'succeeded')
+        if (!run?.open && now() - session.lastGrowth >= idleMs) {
+          sessions.delete(id)
+          evicted.set(id, session)
+        }
       }
     } finally {
       ticking = false
@@ -354,5 +391,5 @@ export function createClaudeSessionsReader(options = {}) {
     stopped = true
   }
 
-  return { agent: AGENT, agents: [AGENT], tick, stop }
+  return { agent: AGENT, agents: [AGENT], tick, stop, sessions: () => sessions, evicted: () => evicted }
 }

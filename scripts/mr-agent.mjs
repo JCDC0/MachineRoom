@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { keyFromFile } from '../server/family.js'
+import { killTree } from '../server/processTree.js'
 import { SEARCH_OFF, fetchPage, readSearchChoice, searchWeb } from '../server/search.js'
 import { childEnvironment } from '../src/briefs/run.js'
 import { callMcpTool, listAllMcpTools, mcpResultText, mcpRunsDir } from './mcp-bridge.mjs'
@@ -462,17 +463,20 @@ function searchTool(args, cwd) {
 }
 
 function shellTool(args, cwd) {
+  const timeoutMs = Number(process.env.MR_AGENT_SHELL_TIMEOUT_MS) || SHELL_TIMEOUT_MS
   const command = typeof args.command === 'string' ? args.command : ''
   if (command.trim() === '') return Promise.resolve({ text: 'run_shell needs a command.', isError: true })
   const env = childEnvironment(process.env, cwd)
   return new Promise((done) => {
-    exec(
+    let timedOut = false
+    const child = exec(
       command,
-      { cwd, env, timeout: SHELL_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, windowsHide: true },
+      { cwd, env, detached: process.platform !== 'win32', maxBuffer: 4 * 1024 * 1024, windowsHide: true },
       (error, stdout, stderr) => {
+        clearTimeout(timer)
         const output = `${stdout ?? ''}${stderr ?? ''}`.slice(0, SHELL_OUTPUT_LIMIT)
-        if (error?.killed) {
-          done({ text: output || `The command ran past ${SHELL_TIMEOUT_MS / 1000} seconds.`, isError: true })
+        if (timedOut) {
+          done({ text: output || `The command ran past ${timeoutMs / 1000} seconds.`, isError: true })
           return
         }
         if (error) {
@@ -482,6 +486,10 @@ function shellTool(args, cwd) {
         done({ text: output || '(no output)', isError: false })
       },
     )
+    const timer = setTimeout(() => {
+      timedOut = true
+      killTree(child)
+    }, timeoutMs)
   })
 }
 

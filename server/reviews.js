@@ -165,6 +165,7 @@ export function createReviewsApi({
   sendJson,
   readJsonBody,
   orchestrators,
+  readRuns = readRunRecords,
 }) {
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
@@ -207,8 +208,9 @@ export function createReviewsApi({
     return { lanes: parsed }
   }
 
-  function lastRunFor(lane) {
-    return readRunRecords(runsFile()).find((record) => record && record.lane === lane) ?? null
+  function lastRunFor(lane, runs = null) {
+    const list = runs ?? readRuns(runsFile())
+    return list.find((record) => record && record.lane === lane) ?? null
   }
 
   function laneFolder(lanes, lane) {
@@ -230,7 +232,7 @@ export function createReviewsApi({
     return onProject ? projectBase() : MAIN_BASE
   }
 
-  async function laneReview(lane, worktree, base) {
+  async function laneReview(lane, worktree, base, runs = null) {
     const branch = (await git(worktree, ['branch', '--show-current'])).trim()
     const head = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
     const log = await git(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
@@ -249,7 +251,7 @@ export function createReviewsApi({
       files: stat.files.length,
       added: stat.added,
       deleted: stat.deleted,
-      lastRun: lastRunFor(lane),
+      lastRun: lastRunFor(lane, runs),
     }
   }
 
@@ -496,13 +498,14 @@ export function createReviewsApi({
       sendJson(req, res, 409, { error: 'The project is not on a branch.' })
       return true
     }
+    const runs = readRuns(runsFile())
     const entries = []
     for (const lane of Object.keys(read.lanes)) {
       const worktree = laneFolder(read.lanes, lane)
       if (!worktree) continue
       if (onProject && !existsSync(worktree)) continue
       try {
-        entries.push(await laneReview(lane, worktree, base))
+        entries.push(await laneReview(lane, worktree, base, runs))
       } catch (error) {
         entries.push({ lane, worktree, error: worktreeError(error) })
       }

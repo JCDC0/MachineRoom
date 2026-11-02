@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -7,7 +7,7 @@ import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
-import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi } from '../server/runs.js'
+import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi, writeQueue } from '../server/runs.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   PROJECT_CONFIRM_LIMIT,
@@ -559,5 +559,23 @@ describe('the project run helpers', () => {
     }
     expect(projectTaskProblem('x')).toBeNull()
     expect(projectTaskProblem('x'.repeat(4000))).toBeNull()
+  })
+})
+
+describe('writeQueue', () => {
+  it('writes tasks to file and cleans up temporary file on rename failure', () => {
+    const dir = tempDir('mr-queue-')
+    const file = join(dir, 'test.queue.txt')
+    writeQueue(file, ['task 1', 'task 2'])
+    expect(readFileSync(file, 'utf8')).toBe('task 1\n---\ntask 2')
+    expect(existsSync(`${file}.tmp`)).toBe(false)
+
+    const renameFails = () => {
+      throw new Error('disk failure')
+    }
+    const fallbackFile = join(dir, 'fallback.queue.txt')
+    writeQueue(fallbackFile, ['task a', 'task b'], { rename: renameFails })
+    expect(readFileSync(fallbackFile, 'utf8')).toBe('task a\n---\ntask b')
+    expect(existsSync(`${fallbackFile}.tmp`)).toBe(false)
   })
 })

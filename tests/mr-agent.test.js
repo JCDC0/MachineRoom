@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { createServer } from 'node:http'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -286,6 +286,25 @@ describe('mr-agent', () => {
     })
     expect(result.code).toBe(1)
     expect(result.stderr.trim()).toBe('The endpoint Local was not found.')
+  })
+
+  it('stops the whole shell tree on the time limit', async () => {
+    const folder = tempDir()
+    const leftover = join(folder, 'leftover.txt')
+    writeFileSync(join(folder, 'child.cjs'), `setTimeout(() => require('fs').writeFileSync(${JSON.stringify(leftover)}, 'x'), 2500)`)
+    writeFileSync(join(folder, 'parent.cjs'), `require('child_process').spawn(process.execPath, ['child.cjs'], { stdio: 'inherit' })`)
+    const command = `"${process.execPath}" parent.cjs`
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({ calls: [{ name: 'run_shell', arguments: { command } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MR_AGENT_SHELL_TIMEOUT_MS: '700' } })
+    expect(result.code).toBe(0)
+    const users = jsonLines(result.stdout).filter((line) => line.type === 'user')
+    expect(users[0].message.content[0].is_error).toBe(true)
+    await new Promise((done) => setTimeout(done, 3000))
+    expect(existsSync(leftover)).toBe(false)
   })
 
   it('cuts long shell output to 8000 characters', async () => {

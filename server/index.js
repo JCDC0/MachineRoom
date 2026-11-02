@@ -454,6 +454,8 @@ export function createBridge(options = {}) {
     runsFolder: bridgeRunsFolder,
     onOpenProject: options.onOpenProject,
     orchestrators: () => orchestrators,
+    runs: () => runs,
+    lanesSource: () => lanesSourceObject,
     sendJson,
     readJsonBody,
     now: options.now,

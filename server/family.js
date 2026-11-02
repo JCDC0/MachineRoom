@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import {
   HARNESS_EFFORTS,
@@ -58,15 +58,19 @@ export function readLabels(file) {
   }
 }
 
-export function saveLabels(file, labels) {
+export function saveLabels(file, labels, { rename = renameSync } = {}) {
   mkdirSync(dirname(file), { recursive: true })
   const content = `${JSON.stringify(labels, null, 2)}\n`
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, 'utf8')
   try {
-    renameSync(temporary, file)
+    rename(temporary, file)
   } catch {
     writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
   }
 }
 
@@ -115,16 +119,20 @@ export function readKeys(runsFolder) {
   }
 }
 
-export function saveKeys(runsFolder, keys) {
+export function saveKeys(runsFolder, keys, { rename = renameSync } = {}) {
   const file = keysFileFor(runsFolder)
   mkdirSync(dirname(file), { recursive: true })
   const content = `${JSON.stringify(keys, null, 2)}\n`
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, { mode: 0o600, encoding: 'utf8' })
   try {
-    renameSync(temporary, file)
+    rename(temporary, file)
   } catch {
     writeFileSync(file, content, { mode: 0o600, encoding: 'utf8' })
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
   }
 }
 
@@ -164,16 +172,20 @@ export function readProposals(runsFolder) {
   }
 }
 
-export function saveProposals(runsFolder, proposals) {
+export function saveProposals(runsFolder, proposals, { rename = renameSync } = {}) {
   const file = proposalsFileFor(runsFolder)
   mkdirSync(dirname(file), { recursive: true })
   const content = `${JSON.stringify(proposals, null, 2)}\n`
   const temporary = `${file}.tmp`
   writeFileSync(temporary, content, 'utf8')
   try {
-    renameSync(temporary, file)
+    rename(temporary, file)
   } catch {
     writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
   }
 }
 

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readAllLanes } from './lanes-source.js'
@@ -53,11 +53,21 @@ export function readActiveLanesChoice(file) {
   }
 }
 
-export function writeActiveLanes(file, lanes) {
+export function writeActiveLanes(file, lanes, { rename = renameSync } = {}) {
   const list = Array.isArray(lanes) ? lanes : []
-  const content = list.length > 0 ? list : { lanes: [] }
+  const content = `${JSON.stringify(list.length > 0 ? list : { lanes: [] }, null, 2)}\n`
   mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, `${JSON.stringify(content, null, 2)}\n`)
+  const temporary = `${file}.tmp`
+  writeFileSync(temporary, content, 'utf8')
+  try {
+    rename(temporary, file)
+  } catch {
+    writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
+  }
 }
 
 export function eligibleLanes(lanesConfig = {}) {

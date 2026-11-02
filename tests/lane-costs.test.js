@@ -1,9 +1,9 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
-import { laneCosts, readLaneCosts } from '../server/lane-costs.js'
+import { cachedRunRecords, laneCosts, readLaneCosts } from '../server/lane-costs.js'
 import { boardLines } from '../src/engine/board.js'
 import { costBoard } from '../src/model/costs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
@@ -107,6 +107,30 @@ describe('laneCosts', () => {
       record('opencode', '2026-10-24T08:00:00.000Z', 0.5),
       record('opencode2', '2026-10-24T08:00:00.000Z', 0.25),
     ])
+
+    const costs = readLaneCosts({ agents: AGENTS, file, now: NOW })
+    expect(costs.byAgent.map((row) => row.costCents)).toEqual([50, 25, 0])
+    expect(costs.summary.spendCents).toBe(75)
+  })
+
+  it('reuses cached read keyed on size and modified time, and picks up a newly finished run', () => {
+    const folder = tempDir()
+    const file = join(folder, 'runs.jsonl')
+    writeRuns(file, [
+      record('opencode', '2026-10-24T08:00:00.000Z', 0.5),
+    ])
+
+    const first = cachedRunRecords(file)
+    expect(first.length).toBe(1)
+    expect(first[0].costUsd).toBe(0.5)
+
+    const cachedAgain = cachedRunRecords(file)
+    expect(cachedAgain).toBe(first)
+
+    appendFileSync(file, JSON.stringify(record('opencode2', '2026-10-24T09:00:00.000Z', 0.25)) + '\n', 'utf8')
+    const updated = cachedRunRecords(file)
+    expect(updated).not.toBe(first)
+    expect(updated.length).toBe(2)
 
     const costs = readLaneCosts({ agents: AGENTS, file, now: NOW })
     expect(costs.byAgent.map((row) => row.costCents)).toEqual([50, 25, 0])

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
@@ -18,6 +18,7 @@ export const NOT_FOUND_PROBLEM = 'That folder does not exist.'
 export const NOT_FOLDER_PROBLEM = 'That path is not a folder.'
 export const NOT_IN_LIST_PROBLEM = 'That project is not in the recent projects list.'
 export const TURN_RUNNING_PROBLEM = 'An orchestrator turn is running. Stop it or wait, then open the project.'
+export const LANES_RUNNING_PROBLEM = 'A lane run is open. Stop it or wait, then open the project.'
 export const NOT_SUPPORTED_PROBLEM = 'Open another project with machineroom FOLDER.'
 
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
@@ -131,6 +132,10 @@ function saveProjectsFile(projectsFile, recent) {
       renameSync(temporary, projectsFile)
     } catch {
       writeFileSync(projectsFile, content, 'utf8')
+    } finally {
+      try {
+        unlinkSync(temporary)
+      } catch {}
     }
   } catch {}
 }
@@ -263,6 +268,8 @@ export function createProjectsApi({
   runsFolder,
   onOpenProject,
   orchestrators,
+  runs,
+  lanesSource,
   sendJson,
   readJsonBody,
   now = Date.now,
@@ -333,6 +340,14 @@ export function createProjectsApi({
       const turnRunning = Boolean(orchs?.list?.().some((item) => item.state === 'working'))
       if (turnRunning) {
         sendJson(req, res, 409, { error: TURN_RUNNING_PROBLEM })
+        return true
+      }
+
+      const runsApi = typeof runs === 'function' ? runs() : runs
+      const laneSource = typeof lanesSource === 'function' ? lanesSource() : lanesSource
+      const laneRunning = Boolean(runsApi?.isRunning?.()) || Boolean(laneSource?.openRuns?.().length)
+      if (laneRunning) {
+        sendJson(req, res, 409, { error: LANES_RUNNING_PROBLEM })
         return true
       }
 

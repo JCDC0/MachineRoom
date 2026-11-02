@@ -1816,10 +1816,10 @@ describe('the orchestrator routes', () => {
     })
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'x'.repeat(8001), confirmed: true })).status).toBe(400)
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 42, confirmed: true })).status).toBe(400)
-    expect((await postJson(`${url}/api/orchestrator/stop`, {})).body).toEqual({
+    expect((await pagePostJson(`${url}/api/orchestrator/stop`, {})).body).toEqual({
       error: 'Confirm the stop first.',
     })
-    expect((await postJson(`${url}/api/orchestrator/stop`, { confirmed: true })).body).toEqual({ ok: true })
+    expect((await pagePostJson(`${url}/api/orchestrator/stop`, { confirmed: true })).body).toEqual({ ok: true })
     expect((await getJson(`${url}/api/orchestrator`)).body.state).toBe('paused')
   })
 

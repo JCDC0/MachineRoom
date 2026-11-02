@@ -1,5 +1,5 @@
 import { createServer } from 'node:http'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
@@ -516,5 +516,23 @@ describe('POST /api/endpoints/quick', () => {
     expect(answers[0].body.endpoint.keyName).toBe('single_slot')
     const savedKeys = readKeys(runsDir)
     expect(savedKeys.single_slot).toBe(updatedValue)
+  })
+
+  it('removes the temporary file when rename fails', () => {
+    const runsDir = makeTempDir('mr-fallback-tmp-')
+    cleanups.push(async () => removeTempDir(runsDir))
+    saveEndpoints(
+      runsDir,
+      [{ name: 'OpenRouter', provider: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', keyName: 'k1', models: ['alpha'] }],
+      {
+        rename: () => {
+          const err = new Error('EBUSY')
+          err.code = 'EBUSY'
+          throw err
+        },
+      }
+    )
+    expect(existsSync(join(runsDir, 'endpoints.json'))).toBe(true)
+    expect(existsSync(join(runsDir, 'endpoints.json.tmp'))).toBe(false)
   })
 })

@@ -1,5 +1,5 @@
 import { lookup as dnsLookup } from 'node:dns/promises'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isIP } from 'node:net'
 import { dirname, join } from 'node:path'
 
@@ -59,10 +59,21 @@ export function readSearchChoice(runsFolder) {
   }
 }
 
-export function writeSearchChoice(runsFolder, choice) {
+export function writeSearchChoice(runsFolder, choice, { rename = renameSync } = {}) {
   const file = searchFileFor(runsFolder)
   mkdirSync(dirname(file), { recursive: true })
-  writeFileSync(file, `${JSON.stringify(choice, null, 2)}\n`)
+  const content = `${JSON.stringify(choice, null, 2)}\n`
+  const temporary = `${file}.tmp`
+  writeFileSync(temporary, content, 'utf8')
+  try {
+    rename(temporary, file)
+  } catch {
+    writeFileSync(file, content, 'utf8')
+  } finally {
+    try {
+      unlinkSync(temporary)
+    } catch {}
+  }
 }
 
 export function httpAddress(value) {

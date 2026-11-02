@@ -559,6 +559,13 @@ export function createOrchestrators({
     }
     if (path === '/api/orchestrator/stop') {
       if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        const actor = idForToken(token)
+        if (!actor) {
+          sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
+          return true
+        }
+      }
       const body = await readJsonBody(req, res)
       if (body === null) return true
       const instance = find(body.id)

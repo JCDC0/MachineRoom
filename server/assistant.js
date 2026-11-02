@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { win32 } from 'node:path'
+import { killTree } from './processTree.js'
 import { programPath } from './programPath.js'
 
 export const DEFAULT_ASSISTANT_MODEL = 'opencode/deepseek-v4.1-flash-free'
@@ -81,25 +82,40 @@ export function resolveOpencodeBinary({ env = process.env, platform = process.pl
   return programPath('opencode', { platform, env, check })
 }
 
-export function runOpencode({ model, prompt, timeoutMs }) {
+export function runOpencode({
+  model,
+  prompt,
+  timeoutMs,
+  binary = resolveOpencodeBinary(),
+  execFileImpl = execFile,
+  killTreeImpl = killTree,
+}) {
   return new Promise((resolve, reject) => {
-    const binary = resolveOpencodeBinary()
     if (!binary) {
       reject(new Error('the assistant run failed'))
       return
     }
-    execFile(
+    let timer = null
+    let timedOut = false
+    const child = execFileImpl(
       binary,
-      ['run', '-m', model, '--format', 'json', prompt],
-      { timeout: timeoutMs, maxBuffer: 1024 * 1024, windowsHide: true },
+      ['run', '--standalone', '-m', model, '--format', 'json', prompt],
+      { maxBuffer: 1024 * 1024, windowsHide: true },
       (error, stdout) => {
-        if (error) {
+        if (timer) clearTimeout(timer)
+        if (error || timedOut) {
           reject(new Error('the assistant run failed'))
           return
         }
         resolve(extractReplyText(stdout))
       }
     )
+    if (timeoutMs && timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true
+        killTreeImpl(child)
+      }, timeoutMs)
+    }
   })
 }
 

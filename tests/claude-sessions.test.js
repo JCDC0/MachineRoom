@@ -71,13 +71,15 @@ function jsonLines(items) {
   return items.map((item) => `${JSON.stringify(item)}\n`).join('')
 }
 
-function makeReader({ projectRoot, home, runs, frames, now, quietMs }) {
+function makeReader({ projectRoot, home, runs, frames, now, quietMs, idleMs, idlePollMs }) {
   const reader = createClaudeSessionsReader({
     projectRoot,
     home,
     runsFolder: runs,
     now,
     quietMs,
+    idleMs,
+    idlePollMs,
     emit: (frame) => frames.push(frame),
   })
   cleanups.push(() => reader.stop())
@@ -489,5 +491,49 @@ describe('sessions source', () => {
 
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
     expect(agents).toEqual([AGENT])
+  })
+
+  it('evicts idle session after 30 minutes with no growth and picks it up when it grows again', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    let currentTime = 1000000
+    const now = () => currentTime
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames, now, idleMs: 30 * 60 * 1000, idlePollMs: 1000 })
+    reader.tick()
+
+    const read = join(projectRoot, 'src', 'math.js')
+    const initialItems = [
+      sessionLine('user', { role: 'user', content: 'Turn 1' }, {}, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [readUse('t1', read)], stop_reason: 'end_turn' }, {}, projectRoot),
+    ]
+    const file = join(sessionsFolder, 'sess-idle.jsonl')
+    writeFileSync(file, jsonLines(initialItems))
+    reader.tick()
+
+    expect(reader.sessions().has('sess-idle')).toBe(true)
+    expect(reader.evicted().has('sess-idle')).toBe(false)
+
+    currentTime += 30 * 60 * 1000
+    reader.tick()
+
+    expect(reader.sessions().has('sess-idle')).toBe(false)
+    expect(reader.evicted().has('sess-idle')).toBe(true)
+
+    reader.tick()
+    expect(reader.sessions().has('sess-idle')).toBe(false)
+
+    currentTime += 1000
+    const moreItems = [
+      sessionLine('user', { role: 'user', content: 'Turn 2' }, {}, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [readUse('t2', read)], stop_reason: 'end_turn' }, {}, projectRoot),
+    ]
+    appendFileSync(file, jsonLines(moreItems))
+
+    reader.tick()
+
+    expect(reader.sessions().has('sess-idle')).toBe(true)
+    expect(reader.evicted().has('sess-idle')).toBe(false)
+    const logs = logFrames(frames)
+    expect(logs.length).toBe(2)
   })
 })

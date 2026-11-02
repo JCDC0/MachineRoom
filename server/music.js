@@ -168,6 +168,7 @@ export function createMusicApi({ folder, env, sendJson, corsHeaders = () => ({})
       if (!res.headersSent) res.writeHead(500)
       res.destroy()
     })
+    res.on('close', () => stream.destroy())
     stream.pipe(res)
     return true
   }

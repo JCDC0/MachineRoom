@@ -65,6 +65,8 @@ function namesRunLog(folder, title) {
   return existsSync(join(folder, `${title}.log`))
 }
 
+const DEFAULT_RETENTION_MS = 60 * 60 * 1000
+
 export function createOpencodeSessionsReader(options = {}) {
   const rootKey = pathKey(options.projectRoot)
   const runs = resolve(String(options.runsFolder || defaultRunsFolder()))
@@ -73,10 +75,14 @@ export function createOpencodeSessionsReader(options = {}) {
   const quietMs = Number.isFinite(rawQuiet) ? rawQuiet : DEFAULT_QUIET_MS
   const now = typeof options.now === 'function' ? options.now : Date.now
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
+  const rawRetention = Number(options.retentionMs)
+  const retentionMs = Number.isFinite(rawRetention) ? rawRetention : DEFAULT_RETENTION_MS
   const sessions = new Map()
   const open = new Map()
-  const sent = new Set()
+  const sent = new Map()
   let db = null
+  let sessionStmt = null
+  let messageStmt = null
   let primed = false
   let stopped = false
 
@@ -99,18 +105,26 @@ export function createOpencodeSessionsReader(options = {}) {
     return db
   }
 
+  function prepareStatements() {
+    if (!db) return
+    if (!sessionStmt) {
+      sessionStmt = db.prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2')
+    }
+    if (!messageStmt) {
+      messageStmt = db.prepare(
+        'SELECT id, session_id, type, seq, time_created, time_updated, data FROM session_message WHERE session_id = ? AND time_updated >= ? ORDER BY time_updated ASC, seq ASC'
+      )
+    }
+  }
+
   function sessionRows() {
-    return db
-      .prepare('SELECT id, parent_id, directory, title, time_updated FROM session_v2')
-      .all()
+    if (!sessionStmt) prepareStatements()
+    return sessionStmt.all()
   }
 
   function messageRows(sessionId, since) {
-    return db
-      .prepare(
-        'SELECT id, session_id, type, seq, time_created, time_updated, data FROM session_message WHERE session_id = ? AND time_updated >= ? ORDER BY time_updated ASC, seq ASC'
-      )
-      .all(sessionId, since)
+    if (!messageStmt) prepareStatements()
+    return messageStmt.all(sessionId, since)
   }
 
   function includedSessions(rows) {
@@ -151,7 +165,7 @@ export function createOpencodeSessionsReader(options = {}) {
         handled.set(row.id, row.time_updated)
         if (Number.isFinite(row.time_updated) && row.time_updated > since) since = row.time_updated
       }
-      sessions.set(id, { handled, since, rootId })
+      sessions.set(id, { handled, since, rootId, lastSeen: now() })
     }
     primed = true
   }
@@ -260,10 +274,14 @@ export function createOpencodeSessionsReader(options = {}) {
       const status = state.status
       if (status !== 'completed' && status !== 'error') return
       const itemId = typeof item.id === 'string' && item.id ? item.id : `${row.id}:${index}`
-      const key = `${sessionId}:${itemId}`
-      if (sent.has(key)) return
+      let seen = sent.get(sessionId)
+      if (!seen) {
+        seen = new Set()
+        sent.set(sessionId, seen)
+      }
+      if (seen.has(itemId)) return
       const run = ensureRun(rootId, row)
-      sent.add(key)
+      seen.add(itemId)
       const line = JSON.stringify({
         type: 'tool_use',
         timestamp: at,
@@ -309,6 +327,7 @@ export function createOpencodeSessionsReader(options = {}) {
       const last = info.handled.get(row.id)
       if (last !== undefined && row.time_updated <= last) continue
       info.handled.set(row.id, row.time_updated)
+      info.lastSeen = now()
       if (Number.isFinite(row.time_updated) && row.time_updated > info.since) info.since = row.time_updated
       handleRow(sessionId, info.rootId, row)
     }
@@ -319,7 +338,7 @@ export function createOpencodeSessionsReader(options = {}) {
     for (const [id, rootId] of included) {
       let info = sessions.get(id)
       if (!info) {
-        info = { handled: new Map(), since: -1, rootId }
+        info = { handled: new Map(), since: -1, rootId, lastSeen: now() }
         sessions.set(id, info)
       }
       info.rootId = rootId
@@ -334,6 +353,18 @@ export function createOpencodeSessionsReader(options = {}) {
     }
   }
 
+  function forgetFinished() {
+    const at = now()
+    for (const [id, info] of sessions) {
+      if (info.handled.size === 0 && !sent.has(id)) continue
+      if (open.has(info.rootId) || at - info.lastSeen < retentionMs) continue
+      info.handled.clear()
+      sent.delete(id)
+      // The query reads rows at or after since, so without the step the newest row would be handled again.
+      info.since += 1
+    }
+  }
+
   function tick() {
     if (stopped) return
     if (!openDatabase()) return
@@ -341,6 +372,7 @@ export function createOpencodeSessionsReader(options = {}) {
       if (!primed) prime()
       scan()
       quietEnds()
+      forgetFinished()
     } catch {}
   }
 
