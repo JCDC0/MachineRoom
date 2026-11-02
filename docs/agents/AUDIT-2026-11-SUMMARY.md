@@ -36,7 +36,7 @@ Checked means Claude read the code and the fault is there. Reported means a lane
 | 16 | C7, C8, C9, C10, C11 | Small parser faults: a capitalized OpenCode tool name reads as `other`, repeated paths break a base name match, and Copilot sends run events the pipeline also sends. | Small | Checked in part |
 | 17 | B1 | `POST /api/orchestrator/stop` takes no token, so a local process can stop a turn. Other sites are already refused and it needs `confirmed`, so this is low, not high. | Small | Checked |
 
-Fixed while auditing: the scrolled menu strip from U111 hid the top of the lower half. The fix is in commit f784648, not pushed yet.
+Fixed while auditing: the scrolled menu strip from U111 hid the top of the lower half. The fix is in commit f784648.
 
 ## What the lanes got wrong
 
@@ -125,3 +125,28 @@ The `styles.css` deletion goes last, alone, so it cannot collide with the others
 ## Later hunts
 
 Four more lanes then hunted what the first five did not reach: `AUDIT-2026-11-PANELS.md`, `AUDIT-2026-11-ORCHESTRATOR.md`, `AUDIT-2026-11-RUNNER.md` and `AUDIT-2026-11-CONTRACT.md`. Their findings go to briefs U117, S26, S27 and S28.
+
+## Later work
+
+Written on 2026-11-03, when AGY's quota ran out. Pick it up from here when AGY has quota again. The features and design changes above still wait for the owner's yes.
+
+In progress when this was pushed, on their own branches and not on main: S26, S27, S28 and U117, and the log hunt Q30. Read each lane's report before planning more, because each brief says which findings it did not reach.
+
+For AGY, on the backend:
+
+- Whatever S26 and S27 did not reach in `AUDIT-2026-11-ORCHESTRATOR.md` and `AUDIT-2026-11-RUNNER.md`.
+- Fix briefs from Q30's findings in `AUDIT-2026-11-LOGS.md`, once it merges.
+- B7's rest: `server/opencode-sessions.js` still queries every known session once a second, even one that went quiet long ago. S25 only dropped their rows from memory.
+- B11 and B13 in `AUDIT-2026-11-BACKEND.md`, which nobody has checked.
+- A test for the music stream fix from S25 (`res.on('close')` in `server/music.js`), which has none.
+
+For AGY 3 on Argon: review the merged fixes U114 to U116, S25, Q26, S26 to S28 and U117, with narrow reading and no subagents.
+
+For OpenCode, because AGY lanes may not touch `src/engine` or `src/styles.css`:
+
+- The engine's efficiency findings E3, E4, E6 and E11 to E14.
+- The unused class names in `styles.css`, last and alone, checked by eye.
+
+For the orchestrator, at 1440 by 900 in a browser: keys behind the Control drawer, dialog focus, `/` scrolling to the chat, the waiting card, the corner counter, a subagent fading with `?replay&fixture=scenario-e` at 8x, Settings and Log by eye, and the chat when its list read fails.
+
+Known in this push: finding 5 of `AUDIT-2026-11-CONTRACT.md` is not fixed yet, so a key that follows an `x-` or `_` prefix can reach a page unmasked. S28 fixes it. Until then `tests/mask-split.test.js` fails on any local recording that holds such a key, and recordings are not in git, so CI does not see them.

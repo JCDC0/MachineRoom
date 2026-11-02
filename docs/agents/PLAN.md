@@ -2,6 +2,8 @@
 
 ## Where we are
 
+The fixes and features left over from the November 2026 audits are listed under Later work in `AUDIT-2026-11-SUMMARY.md`.
+
 Version 0.1.401. The room follows its own sources: lane runs, task queues and the owner's Claude Code and OpenCode sessions. Paperclip is gone. The app is a lens over a dock, and the bridge can run an orchestrator and a ladder of sub orchestrators.
 
 What works:
