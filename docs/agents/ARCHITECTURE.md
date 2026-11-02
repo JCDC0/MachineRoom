@@ -25,6 +25,12 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-10-V10.md`: history. The audit of the page's handlers and effects, and the faults a click shows that a render test does not.
 - `AUDIT-2026-10-V11.md`: history. The backend audit from version 9 to 0.1.401, covering process lifecycle, locks, wakes and test seams.
 - `AUDIT-2026-11.md`: history. The November 2026 co-orchestrator review of the unpushed work from U96 to U105 and `server/git.js`, with three proposed backend briefs.
+- `AUDIT-2026-11-BACKEND.md`: history. The November 2026 audit of the bridge and the runner, with the orchestrator's corrections.
+- `AUDIT-2026-11-CORE.md`: history. The November 2026 audit of the pure logic and the tests, with the orchestrator's corrections.
+- `AUDIT-2026-11-DESIGN.md`: history. The November 2026 design review of how the room shows its work, with features and a full design.
+- `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
+- `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
+- `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
 - `CANDIDATE.md`: current. How to build and serve one lane's worktree beside the stable room.
 - `CHANGELOG.md`: history. One line per change under the version it shipped in.
 - `CONTROL-PLANE.md`: plan. The control plane design from the Paperclip era; parts are replaced by the lane records.

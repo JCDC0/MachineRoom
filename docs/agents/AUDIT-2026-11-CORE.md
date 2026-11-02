@@ -97,3 +97,14 @@ The slowest test suites by runtime and timeout budget:
 
 - Full dynamic execution of `scripts/scale-probe.mjs` was omitted because the brief instructs to read only and run no full test suite.
 - Deep analysis of CSS and three.js rendering pipelines in `src/engine/` was excluded, as visual and room display reviews belong to Task Q25 and the OpenCode lanes.
+
+## Orchestrator's corrections
+
+Claude checked this audit against the code on 2026-11-03.
+
+- Finding 1 is low, not high: the lane source rewrites a worktree path to the root before the page parses it, so only a session started inside a worktree can reach it.
+- Finding 2 is medium, not high: a parent's run end ends its children, so the child is stuck only until then.
+- Finding 3 is medium, not high, and is the same growth as finding 8 of the engine audit.
+- Finding 4 is not a fault: one page shows one project, and `extendIndex` rebuilds when the list stops matching.
+- What to delete, item 4: `cardFirst` is called by `src/ui/Assistant.jsx`. With `CONFIRMED` empty it does nothing, so it can be simplified, not just removed.
+- Finding 16 was not confirmed: `tests/helpers/uiDom.js` sets `preventDefault` on some events, so check which before changing it.

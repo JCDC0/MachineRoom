@@ -241,3 +241,13 @@ In `server/runs.js`:
 - Long-running multi-hour stress testing under heavy Windows file locking contention.
 - Live verification of remote MCP servers over HTTP with active authentication.
 - Live browser rendering and 3D room interactions (left to OpenCode lanes per house rules).
+
+## Orchestrator's corrections
+
+Claude checked this audit against the code on 2026-11-03.
+
+- B1 is low, not high. Other sites are refused by the origin gate and the route needs `confirmed`, so only a local process with no token gets through. The code quoted under B1 is not in the file; the route is at `server/orchestrators.js:560`.
+- B12 is not proved: `server/mcp.js` has no `fetch(` call of the kind it describes.
+- B14 is wrong: `resolveWorktree` does not exist, and the lines named hold other code.
+- What to delete is wrong in all three items. The code named in `server/files.js` and `server/endpoints.js` is in use, and `server/runs.js` has no Paperclip fields.
+- Not checked: B7's claim that the SQL is prepared every second, B11's timings and B13.
