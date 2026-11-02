@@ -1457,6 +1457,11 @@ export function createOrchestrator({
     if (currentSessionId === sid) {
       currentSessionId = null
       currentTitle = null
+      messages.length = 0
+      pending.length = 0
+      sessionId = null
+      summary = ''
+      contextTokens = null
     }
     persist()
     notify()

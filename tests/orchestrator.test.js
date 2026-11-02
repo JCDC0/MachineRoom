@@ -1819,6 +1819,30 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(rig.orchestrator.listSessions().some((s) => s.id === list2[0].id)).toBe(false)
   })
 
+  it('deletes the open conversation and starts a clean one', async () => {
+    const rig = makeRig()
+    rig.send('The conversation to delete')
+    await waitIdle(rig, 1)
+    rig.orchestrator.newSession({ confirmed: true })
+    const archived = rig.orchestrator.listSessions()[0]
+    expect(rig.orchestrator.openSession(archived.id, { confirmed: true }).status).toBe(200)
+    expect(rig.answer().messages).toHaveLength(2)
+
+    expect(rig.orchestrator.deleteSession(archived.id, { confirmed: true }).status).toBe(200)
+    expect(rig.orchestrator.listSessions()).toHaveLength(0)
+    expect(rig.answer().messages).toHaveLength(0)
+
+    rig.send('A new clean start')
+    await waitIdle(rig, 2)
+    expect(rig.calls()[1].args).not.toContain('--resume')
+    expect(rig.calls()[1].args).toContain('--session-id')
+
+    rig.orchestrator.newSession({ confirmed: true })
+    const list = rig.orchestrator.listSessions()
+    expect(list).toHaveLength(1)
+    expect(list[0].title).toBe('A new clean start')
+  })
+
   it('evicts the oldest unpinned session when reaching 50 sessions', async () => {
     const rig = makeRig()
     const filePath = chatFileFor(rig.projectRoot, rig.runs)
