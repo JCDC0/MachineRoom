@@ -490,6 +490,7 @@ export function createOrchestrator({
   const messages = []
   const pending = []
   const roomTurns = []
+  let roomTimer = null
   let ladder = null
   let sessionId = null
   let ownsRun = false
@@ -834,6 +835,16 @@ export function createOrchestrator({
     return roomTurns.length < ORCHESTRATOR_ROOM_TURNS
   }
 
+  function scheduleRoomTurn() {
+    if (roomTimer || roomTurns.length === 0) return
+    const wait = Math.max(0, roomTurns[0] + ORCHESTRATOR_ROOM_WINDOW_MS - now()) + 10
+    roomTimer = setTimeout(() => {
+      roomTimer = null
+      maybeStartTurn()
+    }, wait)
+    roomTimer.unref?.()
+  }
+
   function maybeStartTurn() {
     if (stopped || running || state === 'paused') return
     if (pendingCompaction) {
@@ -844,7 +855,10 @@ export function createOrchestrator({
     const ordered = pending.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
     if (!ordered) {
       if (!givenWork()) return
-      if (!roomTurnAllowed()) return
+      if (!roomTurnAllowed()) {
+        scheduleRoomTurn()
+        return
+      }
     }
     startTurn()
   }
@@ -855,6 +869,10 @@ export function createOrchestrator({
   }
 
   function startTurn(options = null) {
+    if (roomTimer) {
+      clearTimeout(roomTimer)
+      roomTimer = null
+    }
     const manualCompacting = Boolean(options?.compacting)
     const keepText = manualCompacting ? (options.keep || '') : (pendingCompaction?.keep || '')
     const compaction = manualCompacting || Boolean(pendingCompaction)
@@ -1616,6 +1634,10 @@ export function createOrchestrator({
   function close(options = {}) {
     stopped = true
     if (options?.removed === true) state = 'idle'
+    if (roomTimer) {
+      clearTimeout(roomTimer)
+      roomTimer = null
+    }
     const turn = running
     if (turn) {
       turn.killed = true

@@ -26,6 +26,7 @@ import {
   NO_NEW_REPORT,
   NO_REPORT,
   RESTART_MESSAGE,
+  ORCHESTRATOR_ROOM_WINDOW_MS,
   SESSION_PENDING_PROBLEM,
 } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
@@ -1332,6 +1333,48 @@ describe('waking the orchestrator', () => {
     expect(orchestrator.answer().messages.at(-1).text).toBe('All done.')
     expect(orchestrator.answer().messages.some((message) => /^The orchestrator stopped/.test(message.text))).toBe(false)
     expect(readLines(join(runs, 'runs.jsonl')).at(-1)).toMatchObject({ exitCode: 0, killed: false })
+  })
+
+  it('starts the waiting room turn when the hourly cap frees a slot', async () => {
+    const base = makeTempDir('mr-room-cap-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const started = Date.now()
+    const roomTurns = Array.from({ length: 30 }, (_, index) => started - ORCHESTRATOR_ROOM_WINDOW_MS + 300 + index)
+    writeFileSync(
+      chatFileFor(projectRoot, runs),
+      `${JSON.stringify({ project: projectRoot, sessionId: 'session-1', state: 'idle', messages: [], pending: [], roomTurns })}\n`
+    )
+    let spawned = false
+    const spawnFake = () => {
+      spawned = true
+      const child = new EventEmitter()
+      child.stdout = new PassThrough()
+      child.stderr = new PassThrough()
+      child.kill = () => {}
+      setTimeout(() => {
+        child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+        child.stdout.write(
+          JSON.stringify({ type: 'result', subtype: 'success', result: 'Room turn done.', usage: { input_tokens: 1, output_tokens: 1 } }) + '\n'
+        )
+        child.emit('close', 0)
+      }, 10)
+      return child
+    }
+    const orchestrator = createOrchestrator({ projectRoot, runsFolder: runs, lanes: LANES, promptFile, spawn: spawnFake })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    orchestrator.onFrame(frame('run-opencode7-cap-wait', 'succeeded'))
+    expect(spawned).toBe(false)
+    await waitFor(() => spawned, 5000, 'the capped room turn to start')
   })
 
   it('kills the turn on stop, pauses and clears the pause on the next owner message', async () => {
