@@ -114,7 +114,7 @@ export function mapAgent(raw, spendCents) {
     adapterType: String(raw?.adapterType ?? ''),
     role: String(raw?.role ?? 'general'),
     status: AGENT_STATUS[raw?.status] ?? 'idle',
-    model: typeof raw?.adapterConfig?.model === 'string' && raw.adapterConfig.model ? raw.adapterConfig.model : null,
+    model: (typeof raw?.adapterConfig?.model === 'string' && raw.adapterConfig.model) || (typeof raw?.model === 'string' && raw.model) || null,
     reasoningEffort: effortOf(raw),
     maxTurnsPerRun: setting(raw, 'maxTurnsPerRun'),
     timeoutSec: setting(raw, 'timeoutSec'),

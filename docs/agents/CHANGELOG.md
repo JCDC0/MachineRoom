@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Agents list carries each lane's model, so the Agents tab shows it (task S28).
 - A file added between the page's tree read and its stream connect reaches the page at connect, and a reconnect resumes after the last frame the page saw instead of replaying the history (task S28).
 - A key after a dash or an underscore is masked whole, and the split masker holds the same key head the mask looks for (task S28).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
