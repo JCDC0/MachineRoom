@@ -138,7 +138,8 @@ export function createSeamSync({
   const ResizeClass = Resize ?? win.ResizeObserver
   const MutationClass = Mutation ?? win.MutationObserver
   const boxes = { lens: null, menu: null, transport: null }
-  const watched = { menu: null, transport: null }
+  const watched = { hud: null, menu: null, transport: null }
+  const controls = new Set()
   const poses = new WeakMap()
   const posed = new Set()
   let frame = 0
@@ -153,6 +154,7 @@ export function createSeamSync({
 
   function onMutations(records) {
     for (const record of records ?? []) {
+      if (record.type && record.type !== 'childList') continue
       if (seamQuiet(record.target)) continue
       schedule()
       return
@@ -172,7 +174,20 @@ export function createSeamSync({
   function observeMutations(key, node) {
     if (!node || watched[key] === node) return
     watched[key] = node
-    mutations?.observe(node, { childList: true, subtree: true })
+    mutations?.observe(node, key === 'hud' ? { childList: true } : { childList: true, subtree: true })
+  }
+
+  function observeControls(next) {
+    for (const node of controls) {
+      if (next.has(node)) continue
+      resize?.unobserve(node)
+      controls.delete(node)
+    }
+    for (const node of next.keys()) {
+      if (controls.has(node)) continue
+      controls.add(node)
+      resize?.observe(node)
+    }
   }
 
   function write(node, pose) {
@@ -197,12 +212,15 @@ export function createSeamSync({
     const lens = doc.querySelector('.lens')
     const menu = doc.querySelector('.hud-menu')
     const transport = doc.querySelector('.transport')
+    const hud = doc.querySelector('.hud')
     observeBox('lens', lens)
     observeBox('menu', menu)
     observeBox('transport', transport)
+    observeMutations('hud', hud)
     observeMutations('menu', menu)
     observeMutations('transport', transport)
     if (!lens || !menu || !transport || !(Number(win.innerWidth) >= SEAM_MIN_WIDTH)) {
+      observeControls(new Map())
       clear()
       return
     }
@@ -211,6 +229,7 @@ export function createSeamSync({
     const next = new Map()
     for (const node of menu.querySelectorAll(SEAM_TOP)) next.set(node, 'top')
     for (const node of transport.querySelectorAll(SEAM_BOTTOM)) next.set(node, 'bottom')
+    observeControls(next)
     for (const node of posed) {
       if (!next.has(node)) clear([node])
     }
@@ -228,6 +247,7 @@ export function createSeamSync({
       frame = 0
       resize?.disconnect()
       mutations?.disconnect()
+      controls.clear()
       clear()
     },
   }

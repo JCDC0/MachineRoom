@@ -85,6 +85,8 @@ function fakeNode({ className = '', width = 0, left = 0, controls = () => [] } =
     nodeType: 1,
     className,
     parentNode: null,
+    width,
+    left,
     props: [],
     reads: 0,
     style: {
@@ -97,7 +99,7 @@ function fakeNode({ className = '', width = 0, left = 0, controls = () => [] } =
     },
     getBoundingClientRect() {
       node.reads += 1
-      return { left, right: left + width, width, top: 0, bottom: 0, height: 0 }
+      return { left: node.left, right: node.left + node.width, width: node.width, top: 0, bottom: 0, height: 0 }
     },
     querySelectorAll: () => controls(),
   }
@@ -107,14 +109,18 @@ function fakeNode({ className = '', width = 0, left = 0, controls = () => [] } =
 function setup(width = 1200) {
   const menuControls = []
   const transportControls = []
-  const lens = fakeNode({ className: 'lens', width })
-  const menu = fakeNode({ className: 'hud-menu', controls: () => menuControls })
-  const transport = fakeNode({ className: 'transport', controls: () => transportControls })
+  const nodes = {
+    lens: fakeNode({ className: 'lens', width }),
+    hud: fakeNode({ className: 'hud' }),
+    menu: fakeNode({ className: 'hud-menu', controls: () => menuControls }),
+    transport: fakeNode({ className: 'transport', controls: () => transportControls }),
+  }
   const doc = {
     querySelector(selector) {
-      if (selector === '.lens') return lens
-      if (selector === '.hud-menu') return menu
-      if (selector === '.transport') return transport
+      if (selector === '.lens') return nodes.lens
+      if (selector === '.hud') return nodes.hud
+      if (selector === '.hud-menu') return nodes.menu
+      if (selector === '.transport') return nodes.transport
       return null
     },
   }
@@ -128,9 +134,10 @@ function setup(width = 1200) {
   return {
     sync,
     win,
-    lens,
-    menu,
-    transport,
+    nodes,
+    lens: nodes.lens,
+    menu: nodes.menu,
+    transport: nodes.transport,
     menuControls,
     transportControls,
     resize: () => FakeResizeObserver.all.at(-1),
@@ -180,7 +187,7 @@ describe('seam sync', () => {
     seam.sync.measure()
 
     expect(seam.resize().observeCalls).toBe(3)
-    expect(seam.mutation().observeCalls).toBe(2)
+    expect(seam.mutation().observeCalls).toBe(3)
     expect(seam.mutation().options).toEqual({ childList: true, subtree: true })
   })
 
@@ -215,6 +222,69 @@ describe('seam sync', () => {
       { name: '--seam-y', value: '-28px' },
       { name: '--seam-r', value: '0deg' },
     ])
+  })
+
+  it('measures a replaced menu and transport from their parent change', () => {
+    const seam = setup()
+    seam.sync.measure()
+    const menuChip = fakeNode({ className: 'hud-action', width: 60, left: 570 })
+    const transportChip = fakeNode({ className: 'transport-chip', width: 80, left: 560 })
+    const oldMenu = seam.menu
+    const oldTransport = seam.transport
+    seam.nodes.menu = fakeNode({ className: 'hud-menu', controls: () => [menuChip] })
+    seam.nodes.transport = fakeNode({ className: 'transport', controls: () => [transportChip] })
+
+    seam.mutation().fire([{ type: 'childList', target: seam.nodes.hud }])
+    seam.win.flush()
+
+    expect(menuChip.props).toEqual([
+      { name: '--seam-y', value: '28px' },
+      { name: '--seam-r', value: '0deg' },
+    ])
+    expect(transportChip.props).toEqual([
+      { name: '--seam-y', value: '-28px' },
+      { name: '--seam-r', value: '0deg' },
+    ])
+    expect(seam.resize().targets.has(seam.nodes.menu)).toBe(true)
+    expect(seam.resize().targets.has(seam.nodes.transport)).toBe(true)
+    expect(seam.mutation().targets.has(seam.nodes.menu)).toBe(true)
+    expect(seam.mutation().targets.has(seam.nodes.transport)).toBe(true)
+    expect(seam.resize().targets.has(oldMenu)).toBe(false)
+    expect(seam.resize().targets.has(oldTransport)).toBe(false)
+  })
+
+  it('reposes the controls after one widens', () => {
+    const seam = setup()
+    const title = fakeNode({ className: 'hud-band-switch', width: 120, left: 80 })
+    const chip = fakeNode({ className: 'transport-chip', width: 80, left: 400 })
+    seam.menuControls.push(title)
+    seam.transportControls.push(chip)
+    seam.sync.measure()
+    const before = chip.props.slice()
+    chip.props.length = 0
+
+    title.width = 300
+    chip.left = 580
+    expect(seam.resize().targets.has(title)).toBe(true)
+    seam.resize().fire()
+    seam.win.flush()
+
+    expect(chip.props).toHaveLength(2)
+    expect(chip.props).not.toEqual(before)
+  })
+
+  it('writes no pose when the clock ticks', () => {
+    const seam = setup()
+    const clock = fakeNode({ className: 'mono', width: 100, left: 900 })
+    seam.transportControls.push(clock)
+    seam.sync.measure()
+    clock.props.length = 0
+
+    seam.mutation().fire([{ type: 'characterData', target: clock }])
+    expect(seam.win.frames.size).toBe(0)
+
+    seam.sync.measure()
+    expect(clock.props).toEqual([])
   })
 
   it('drops the pending measure and the poses on stop', () => {
