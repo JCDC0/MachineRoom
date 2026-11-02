@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process'
+import { EventEmitter } from 'node:events'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -1285,6 +1287,50 @@ describe('waking the orchestrator', () => {
     expect(third).toContain('Q1')
     expect(third).toContain('Q2')
     expect(third).not.toContain('Q4')
+  })
+
+  it('does not report a stopped turn when stop lands after the child exited well', async () => {
+    const base = makeTempDir('mr-stop-race-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const child = new EventEmitter()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = () => {}
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => child,
+    })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    expect(orchestrator.send({ text: 'Finish first', confirmed: true }).status).toBe(202)
+    child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+    child.stdout.write(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'All done.',
+        usage: { input_tokens: 12, output_tokens: 3 },
+      }) + '\n'
+    )
+    child.emit('close', 0)
+    expect(orchestrator.stop({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
+
+    await waitFor(() => orchestrator.answer().messages.some((message) => message.from === 'orchestrator'))
+    expect(orchestrator.answer().messages.at(-1).text).toBe('All done.')
+    expect(orchestrator.answer().messages.some((message) => /^The orchestrator stopped/.test(message.text))).toBe(false)
+    expect(readLines(join(runs, 'runs.jsonl')).at(-1)).toMatchObject({ exitCode: 0, killed: false })
   })
 
   it('kills the turn on stop, pauses and clears the pause on the next owner message', async () => {

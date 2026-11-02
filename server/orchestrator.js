@@ -997,6 +997,7 @@ export function createOrchestrator({
     const finish = (code, error) => {
       if (ending) return
       ending = true
+      turn.exited = true
       stream.end(() => completeTurn(turn, code, error))
     }
     let child
@@ -1193,8 +1194,12 @@ export function createOrchestrator({
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
     if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
     if (running && !running.done) {
-      running.killed = true
-      killTree(running.child)
+      if (running.exited) {
+        running.stopping = true
+      } else {
+        running.killed = true
+        killTree(running.child)
+      }
     }
     setState('paused')
     return { status: 200, body: { ok: true } }
