@@ -446,8 +446,8 @@ describe('storage helpers', () => {
 
 
 describe('soundSettings', () => {
-  it('starts beeps on at a low volume, music off and dance on', () => {
-    expect(soundSettings()).toEqual({ on: true, volume: 0.3, music: false, musicVolume: 0.5, dance: true })
+  it('starts beeps on at a low volume and dance on', () => {
+    expect(soundSettings()).toEqual({ on: true, volume: 0.3, musicVolume: 0.5, dance: true })
     expect(soundSettings(null)).toEqual(soundSettings())
     expect(soundSettings('invalid')).toEqual(soundSettings())
   })
@@ -456,18 +456,21 @@ describe('soundSettings', () => {
     expect(soundSettings({ on: false, volume: 2, music: true, musicVolume: -1, dance: false })).toEqual({
       on: false,
       volume: 1,
-      music: true,
       musicVolume: 0,
       dance: false,
     })
     expect(soundSettings({ on: 'yes', volume: 'loud', dance: 'no' })).toEqual(soundSettings())
   })
 
+  it('drops a music flag that no player reads', () => {
+    expect(soundSettings({ music: true })).not.toHaveProperty('music')
+  })
+
   it('saves the sound block under machineroom.settings and keeps the rest', () => {
     const storage = makeStorage()
     saveSettings(storage, { speed: 2 })
-    const updated = saveSoundSettings(storage, { on: false, volume: 0.8, music: true, dance: false })
-    expect(updated).toEqual({ on: false, volume: 0.8, music: true, musicVolume: 0.5, dance: false })
+    const updated = saveSoundSettings(storage, { on: false, volume: 0.8, dance: false })
+    expect(updated).toEqual({ on: false, volume: 0.8, musicVolume: 0.5, dance: false })
     expect(loadSoundSettings(storage)).toEqual(updated)
     const loaded = loadSettings(storage)
     expect(loaded.speed).toBe(2)

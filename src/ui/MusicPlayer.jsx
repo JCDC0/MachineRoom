@@ -99,7 +99,6 @@ export default function MusicPlayer() {
         return
       }
       setPlaying(false)
-      saveSoundSettings(store(), { music: false })
     })
   })
 
@@ -121,18 +120,13 @@ export default function MusicPlayer() {
     if (playing) {
       sound.pauseMusic()
       setPlaying(false)
-      saveSoundSettings(store(), { music: false })
       return
     }
     sound.arm()
     const started = sound.playMusic(trackUrl(list.base, list.tracks[index]))
     setPlaying(true)
-    saveSoundSettings(store(), { music: true })
     started.then((ok) => {
-      if (!ok) {
-        setPlaying(false)
-        saveSoundSettings(store(), { music: false })
-      }
+      if (!ok) setPlaying(false)
     })
   }
 
