@@ -328,6 +328,14 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.hud-dock[hidden]')
   })
 
+  it('paints the scrolled menu past the bow and keeps a virtual row gap out of the way', () => {
+    const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+    expect(css).toContain('.stage.is-scrolled .hud-menu::before')
+    expect(css).toMatch(/\.stage\.is-scrolled \.hud-menu::before \{[^}]*bottom: calc\(-1 \* var\(--lens-bow, 28px\)\);[^}]*z-index: -1;[^}]*pointer-events: none;/)
+    expect(css).toContain('.mr-card-gap + .mr-item')
+    expect(css).toContain('.mr-card-gap {')
+  })
+
   it('narrows the right column below 1100 pixels and keeps a log path whole', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('@media (min-width: 900px) and (max-width: 1099px)')

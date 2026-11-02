@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A card with more than 60 items draws only the rows in its scroll window plus four on each side, between two spacers that keep the scrollbar's height and position, and redraws them on the list's scroll event, with every mark, flash and inspected row read from its path when drawn (task U111).
+- At 900 pixels and wider the scrolled menu paints its black through a `::before` as tall as the menu plus `--lens-bow`, behind its children and with no pointer events (task U111).
 - The seam effect observes the menu, the transport and the lens once each, measures at most once an animation frame, ignores changes inside the log dropdown, band list and health popover, and writes `--seam-y` and `--seam-r` only when a pose changes (task U108).
 - The compass tapes keep their yaw and pitch in a memoised `LensCompass`, fed through a ref from `beforeFrame`, so a turn re-renders only the two tapes (task U108).
 - The git route resolves its checkout root through git rev-parse, includes detached commits, guards concurrent writes and status failures with 409, and drops stale in-flight cache writes (task S22).

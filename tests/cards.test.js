@@ -22,6 +22,7 @@ import {
   fadeProgress,
   openChain,
   rowOffset,
+  rowWindow,
   viewInput,
   viewKey,
 } from '../src/engine/cards.js'
@@ -289,6 +290,50 @@ describe('the file limit', () => {
     expect(past.equals(last)).toBe(true)
     expect(cards.slotPosition('src', 'src/f0.js', new THREE.Vector3()).equals(last)).toBe(false)
     cards.dispose()
+  })
+})
+
+describe('the row window', () => {
+  it('draws every row of a list of 60 or fewer', () => {
+    expect(rowWindow(0, 0, 220)).toEqual({ virtual: false, first: 0, last: 0, top: 0, bottom: 0 })
+    expect(rowWindow(60, 0, 220)).toEqual({ virtual: false, first: 0, last: 60, top: 0, bottom: 0 })
+  })
+
+  it('at the top draws the first rows and one spacer below for the rest', () => {
+    const win = rowWindow(100, 0, 220)
+    expect(win).toMatchObject({ virtual: true, first: 0, last: 14, top: 0 })
+    expect(win.bottom).toBe((100 - 14) * ROW_H)
+  })
+
+  it('in the middle draws the rows in view plus four on each side, with a spacer above and below', () => {
+    const win = rowWindow(100, 1100, 220)
+    expect(win.first).toBe(46)
+    expect(win.last).toBe(64)
+    expect(win.top).toBe(46 * ROW_H)
+    expect(win.bottom).toBe((100 - 64) * ROW_H)
+  })
+
+  it('at the end fills the viewport and leaves no spacer below', () => {
+    const win = rowWindow(100, 1980, 220)
+    expect(win.first).toBe(86)
+    expect(win.last).toBe(100)
+    expect(win.top).toBe(86 * ROW_H)
+    expect(win.bottom).toBe(0)
+  })
+
+  it('keeps the spacers and the drawn rows as tall as the whole list', () => {
+    for (const top of [0, 500, 1100, 3000]) {
+      const win = rowWindow(100, top, 220)
+      expect(win.top + win.bottom + (win.last - win.first) * ROW_H).toBe(100 * ROW_H)
+    }
+  })
+
+  it('turns on at 61 rows and reads the row height it is given', () => {
+    expect(rowWindow(60, 0, 220).virtual).toBe(false)
+    expect(rowWindow(61, 0, 220).virtual).toBe(true)
+    const win = rowWindow(100, 0, 220, { rowHeight: 20 })
+    expect(win.last).toBe(15)
+    expect(win.top + win.bottom + (win.last - win.first) * 20).toBe(100 * 20)
   })
 })
 
