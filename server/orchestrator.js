@@ -68,6 +68,7 @@ export const SESSION_TITLE_PROBLEM = 'Write a title from 1 to 80 characters.'
 export const SESSION_PINNED_PROBLEM = 'Say whether pinned is true or false.'
 export const SESSION_STARRED_PROBLEM = 'Say whether starred is true or false.'
 export const SESSION_CHANGE_PROBLEM = 'Choose a field to change: pinned, starred or title.'
+export const SESSION_PENDING_PROBLEM = 'Messages are waiting for a turn. Wait for them to run or stop the orchestrator first.'
 export const SESSIONS_LIMIT = 50
 export const SESSION_MESSAGES_LIMIT = 200
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
@@ -1356,10 +1357,9 @@ export function createOrchestrator({
   }
 
   function archiveCurrentSession() {
-    const hasOwner = messages.some((m) => m.from === 'owner')
-    if (!hasOwner) return null
+    if (messages.length === 0) return null
     const firstOwner = messages.find((m) => m.from === 'owner')
-    const defaultTitle = firstOwner.text.trim().slice(0, 60)
+    const defaultTitle = (firstOwner ?? messages[0]).text.trim().slice(0, 60)
     const title = currentTitle || defaultTitle
     if (currentSessionId) {
       const existing = sessions.find((s) => s.id === currentSessionId)
@@ -1393,6 +1393,7 @@ export function createOrchestrator({
   function newSession(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     archiveCurrentSession()
     currentSessionId = null
     currentTitle = null
@@ -1409,6 +1410,7 @@ export function createOrchestrator({
   function openSession(sid, body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     const target = sessions.find((s) => s.id === sid)
     if (!target) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
     archiveCurrentSession()

@@ -26,6 +26,7 @@ import {
   NO_NEW_REPORT,
   NO_REPORT,
   RESTART_MESSAGE,
+  SESSION_PENDING_PROBLEM,
 } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
@@ -1884,6 +1885,39 @@ describe('orchestrator reasoning effort and sessions', () => {
     const deleted = rig.orchestrator.deleteSession(list2[0].id, { confirmed: true })
     expect(deleted.status).toBe(200)
     expect(rig.orchestrator.listSessions().some((s) => s.id === list2[0].id)).toBe(false)
+  })
+
+  it('refuses a session switch while messages wait and archives a conversation with no owner line', async () => {
+    const rig = makeRig()
+    rig.send('Start')
+    await waitIdle(rig, 1)
+    rig.orchestrator.stop({ confirmed: true })
+    const log = join(rig.runs, 'opencode7-waiting-1.log')
+    writeFileSync(log, 'done\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode7-waiting-1', 'succeeded'))
+    expect(rig.orchestrator.newSession({ confirmed: true })).toEqual({
+      status: 409,
+      body: { error: SESSION_PENDING_PROBLEM },
+    })
+    expect(rig.answer().messages.some((message) => message.text.includes('Run opencode7-waiting-1'))).toBe(true)
+    rig.orchestrator.close()
+
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    saved.messages = [{ id: 'm1', from: 'room', text: 'A room wake', at: '2026-10-25T12:00:00.000Z' }]
+    saved.pending = []
+    saved.state = 'idle'
+    writeFileSync(file, `${JSON.stringify(saved)}\n`)
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const list = restored.orchestrator.listSessions()
+    expect(list).toHaveLength(1)
+    expect(list[0].title).toBe('A room wake')
+    expect(list[0].count).toBe(1)
   })
 
   it('deletes the open conversation and starts a clean one', async () => {
