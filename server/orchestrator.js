@@ -1302,6 +1302,7 @@ export function createOrchestrator({
 
   function setModel(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_MODEL_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
     const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
     if (!nextModel) return { status: 400, body: { error: MODEL_PROBLEM } }
     const allowed = modelAllowed(harness, nextModel, folder)
@@ -1340,6 +1341,7 @@ export function createOrchestrator({
 
   function setEffort(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_EFFORT_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
     const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
     if (body.effort === null) {
       effort = null

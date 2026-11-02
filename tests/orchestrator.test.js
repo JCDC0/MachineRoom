@@ -1804,6 +1804,27 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(opencodeNoXhigh.status).toBe(400)
   })
 
+  it('refuses a model or effort change while a turn runs and credits the turn to its own model', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('A running turn')
+    await waitFor(() => rig.calls().length === 1, 5000, 'the held turn')
+
+    expect(rig.orchestrator.setModel({ model: 'claude-sonnet-5-5', confirmed: true })).toEqual({
+      status: 409,
+      body: { error: 'A turn is already running.' },
+    })
+    expect(rig.orchestrator.setEffort({ effort: 'high', confirmed: true })).toEqual({
+      status: 409,
+      body: { error: 'A turn is already running.' },
+    })
+
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 1)
+    expect(rig.answer().model).toBe('opus')
+    expect(recordsOf(rig).at(-1)).toMatchObject({ model: 'opus' })
+  })
+
   it('archives sessions, lists pinned first, resumes an open session, and updates fields', async () => {
     const rig = makeRig()
     rig.send('First conversation task')
