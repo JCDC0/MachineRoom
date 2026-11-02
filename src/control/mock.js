@@ -5,7 +5,9 @@ import { briefMarkdown, planPrompt } from '../briefs/plan.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
 import { readLadder } from '../model/hierarchy.js'
 import { chooseRoute } from '../policy/route.js'
-import { CANNOT_TAKE_TASKS, cleanAgentDraft, cleanAgentPatch, fieldProblem, hireSummary, taskDraftProblem } from './agents.js'
+
+export const AGENT_REFUSAL = 'Agents come from docs/agents/lanes.json.'
+export const LANE_TASK_REFUSAL = 'Lane runs start from Dispatch, not from a task.'
 
 function laneHasHarness(lanes, harness) {
   return Object.values(lanes ?? {}).some((lane) => lane?.cli?.harness === harness)
@@ -110,7 +112,6 @@ const SAMPLE_LADDER = {
   ],
 }
 
-const DECISIONS = { approve: 'approved', reject: 'rejected', 'request-revision': 'revision_requested' }
 const RUN_ID = /^[A-Z]\d+[a-z]?$/
 const RUN_RECENT_LIMIT = 20
 const TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
@@ -488,14 +489,6 @@ const SAMPLE_OUTCOMES = [
   { branch: 'feat/t7-run-a-brief', outcome: 'rejected', grade: 'C', fixes: 0 },
 ]
 
-function overridesOf(draft) {
-  const overrides = {}
-  for (const key of ['model', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed']) {
-    if (draft[key] !== undefined && draft[key] !== null && draft[key] !== '') overrides[key] = draft[key]
-  }
-  return Object.keys(overrides).length ? overrides : null
-}
-
 function seed(at) {
   const iso = (minutesAgo) => new Date(at - minutesAgo * 60000).toISOString()
   return {
@@ -614,12 +607,9 @@ function seed(at) {
 export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now = Date.now, requireApproval = true } = {}) {
   const state = seed(now())
   state.agents = state.agents.map((agent) => ({ ...AGENT_DEFAULTS, ...agent }))
-  const terminated = new Set()
   let briefsText = SAMPLE_BRIEFS
-  let approvalCounter = 3
   const failures = new Map()
   let issueCounter = 22
-  let commentCounter = 3
   let orchestratorMessageCounter = 3
   const listeners = new Set()
   const runsState = { project: 'MachineRoom', running: [], recent: [] }
@@ -868,131 +858,38 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     createIssue: (draft) =>
       call('createIssue', () => {
-        if (!draft?.title?.trim()) throw new Error('A title is required.')
-        const assignee = agentById(draft.assigneeAgentId)
-        if (!assignee) throw new Error('Choose an agent for this task.')
-        if (CANNOT_TAKE_TASKS.includes(assignee.status) || terminated.has(assignee.id)) throw new Error('That agent cannot take tasks yet.')
-        const problem = taskDraftProblem(draft)
-        if (problem) throw new Error(problem)
-        issueCounter += 1
-        const stamp = new Date(now()).toISOString()
-        const issue = {
-          id: `issue-${issueCounter}`,
-          identifier: `JC-${issueCounter}`,
-          title: draft.title.trim(),
-          description: draft.description ?? '',
-          status: 'todo',
-          priority: draft.priority ?? 'medium',
-          assigneeAgentId: draft.assigneeAgentId,
-          parentId: null,
-          overrides: overridesOf(draft),
-          createdAt: stamp,
-          updatedAt: stamp,
-        }
-        state.issues.unshift(issue)
-        emit({ topic: 'issues' })
-        return issue
+        throw new Error(LANE_TASK_REFUSAL)
       }),
 
     comments: (issueId) => call('comments', () => (Object.hasOwn(state.comments, issueId) ? state.comments[issueId] : [])),
 
-    postComment: (issueId, body) =>
+    postComment: () =>
       call('postComment', () => {
-        if (!body?.trim()) throw new Error('Write a comment first.')
-        if (!state.issues.some((issue) => issue.id === issueId)) throw new Error('That task no longer exists.')
-        commentCounter += 1
-        const comment = { id: `comment-${commentCounter}`, issueId, authorAgentId: null, authorName: 'You', body: body.trim(), createdAt: new Date(now()).toISOString() }
-        state.comments[issueId] = [...(Object.hasOwn(state.comments, issueId) ? state.comments[issueId] : []), comment]
-        emit({ topic: 'comments', id: issueId })
-        return comment
+        throw new Error(LANE_TASK_REFUSAL)
       }),
 
     approvals: () => call('approvals', () => state.approvals),
 
-    decideApproval: (id, decision, note) =>
+    decideApproval: () =>
       call('decideApproval', () => {
-        const approval = state.approvals.find((item) => item.id === id)
-        if (!approval) throw new Error('That approval no longer exists.')
-        if (!Object.hasOwn(DECISIONS, decision)) throw new Error(`Unknown decision: ${decision}`)
-        if (approval.status !== 'pending') throw new Error('That approval is already decided.')
-        approval.status = DECISIONS[decision]
-        if (note) approval.decisionNote = note
-        const hired = approval.type === 'hire_agent' && approval.agentId ? agentById(approval.agentId) : null
-        if (hired && hired.status === 'pending_approval') {
-          if (approval.status === 'approved') hired.status = 'idle'
-          else if (approval.status === 'rejected') {
-            hired.status = 'error'
-            terminated.add(hired.id)
-          }
-          emit({ topic: 'agents' })
-        }
-        emit({ topic: 'approvals' })
-        return approval
+        throw new Error('That approval no longer exists.')
       }),
 
     costs: () => call('costs', () => state.costs),
 
-    setAgentBudget: (agentId, budgetMonthlyCents) =>
+    setAgentBudget: () =>
       call('setAgentBudget', () => {
-        const agent = agentById(agentId)
-        if (!agent) throw new Error('That agent no longer exists.')
-        const problem = fieldProblem('budgetMonthlyCents', budgetMonthlyCents)
-        if (problem) throw new Error(problem)
-        agent.budgetMonthlyCents = budgetMonthlyCents
-        emit({ topic: 'agents' })
-        emit({ topic: 'costs' })
-        return agent
+        throw new Error(AGENT_REFUSAL)
       }),
 
-    hireAgent: (draft) =>
+    hireAgent: () =>
       call('hireAgent', () => {
-        const clean = cleanAgentDraft(draft)
-        const key = slug(clean.name)
-        if (!key) throw new Error('The name needs letters or numbers.')
-        if (state.agents.some((agent) => agent.key === key)) throw new Error('An agent with that name already exists.')
-        if (clean.reportsToAgentId && !agentById(clean.reportsToAgentId)) throw new Error('The agent it reports to no longer exists.')
-        const agent = { id: `agent-${key}`, key, ...clean, status: requireApproval ? 'pending_approval' : 'idle', spentMonthlyCents: 0 }
-        state.agents.push(agent)
-        let approval = null
-        if (requireApproval) {
-          approvalCounter += 1
-          approval = {
-            id: `approval-${approvalCounter}`,
-            type: 'hire_agent',
-            status: 'pending',
-            summary: hireSummary(agent),
-            requestedByAgentId: null,
-            agentId: agent.id,
-            createdAt: new Date(now()).toISOString(),
-          }
-          state.approvals.unshift(approval)
-          emit({ topic: 'approvals' })
-        }
-        emit({ topic: 'agents' })
-        return { agent, approval }
+        throw new Error(AGENT_REFUSAL)
       }),
 
-    updateAgent: (agentId, patch) =>
+    updateAgent: () =>
       call('updateAgent', () => {
-        const agent = agentById(agentId)
-        if (!agent) throw new Error('That agent no longer exists.')
-        if (terminated.has(agent.id)) throw new Error('That agent was terminated.')
-        if (agent.status === 'pending_approval') throw new Error('Approve the hire first.')
-        const { status, ...changes } = cleanAgentPatch(patch)
-        if (changes.reportsToAgentId === agent.id) throw new Error('An agent cannot report to itself.')
-        if (changes.reportsToAgentId && !agentById(changes.reportsToAgentId)) throw new Error('The agent it reports to no longer exists.')
-        if ('name' in changes && state.agents.some((other) => other.id !== agent.id && other.key === slug(changes.name))) throw new Error('An agent with that name already exists.')
-        const allowed = changes.subagentsAllowed ?? agent.subagentsAllowed
-        if ('subagentDepth' in changes && !allowed) throw new Error('Turn subagents on to set a depth.')
-        Object.assign(agent, changes)
-        if ('subagentsAllowed' in changes) {
-          if (!allowed) agent.subagentDepth = 0
-          else if (!('subagentDepth' in changes) && agent.subagentDepth === 0) agent.subagentDepth = 1
-        }
-        if (status) agent.status = status === 'paused' ? 'paused' : 'idle'
-        emit({ topic: 'agents' })
-        if ('budgetMonthlyCents' in changes) emit({ topic: 'costs' })
-        return agent
+        throw new Error(AGENT_REFUSAL)
       }),
 
     models: () => call('models', () => state.models),

@@ -97,6 +97,14 @@ describe('the brief check', () => {
     expect(briefFiles('No list.')).toBeNull()
   })
 
+  it('reads paths with no backticks after Files:', () => {
+    expect(briefFiles('Do it. Files: src/a.js, src/model/log.js and tests/*.test.js.')).toEqual([
+      'src/a.js',
+      'src/model/log.js',
+      'tests/*.test.js',
+    ])
+  })
+
   it('always allows the changelog and matches globs without case', () => {
     expect(unlistedFiles(['docs/agents/CHANGELOG.md', 'SRC/UI/Hud.jsx', 'src/b.js'], ['src/ui/**'])).toEqual(['src/b.js'])
   })

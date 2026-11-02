@@ -12,9 +12,25 @@ const CHECKS = {
     return !HERMES_PROGRESS.some((pattern) => pattern.test(line))
   },
   claude(line) {
-    if (!line.includes('acpx.tool_call')) return false
-    const json = parseJson(line)
-    return !json || json.type !== 'acpx.tool_call' || !json.toolCallId
+    if (line.includes('acpx.tool_call')) {
+      const json = parseJson(line)
+      return !json || json.type !== 'acpx.tool_call' || !json.toolCallId
+    }
+    if (OPENCODE_TOOL_USE.test(line)) {
+      const json = parseJson(line)
+      if (!json) return true
+      if (json.type === 'assistant') {
+        const content = json.message?.content
+        if (!Array.isArray(content)) return true
+        const uses = content.filter((item) => item?.type === 'tool_use')
+        return uses.length === 0 || uses.some((item) => !item.id || !item.name)
+      }
+      if (json.type === 'tool_use') {
+        return !json.id || !json.name
+      }
+      return true
+    }
+    return false
   },
   opencode(line) {
     if (!OPENCODE_TOOL_USE.test(line)) return false

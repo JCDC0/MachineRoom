@@ -1,3 +1,4 @@
+import { indexFor } from '../fileIndex.js'
 import { basename, dirname, resolveKnown } from '../paths.js'
 import { commandTouch, createLineReader, fileTouch, labelFor, shorten, toolEnd, toolStart } from './common.js'
 
@@ -25,7 +26,7 @@ export function createHermesParser(ctx) {
       const named = resolveKnown(detail, ctx.files, bare ? near : undefined)
       const touched = fileTouch(ctx, named, tool)
       touches = touched.touches
-      if (touched.relative && (ctx.files.includes(touched.relative) || dirname(touched.relative) !== '')) {
+      if (touched.relative && (indexFor(ctx.files).has(touched.relative) || dirname(touched.relative) !== '')) {
         near = dirname(touched.relative)
       }
       label = labelFor(tool, touched.relative, named)

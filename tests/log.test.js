@@ -45,6 +45,15 @@ describe('createLogger', () => {
     })
   })
 
+  it('clears remembered tool labels when the run ends', () => {
+    entryFor({ ...base, type: 'tool.start', id: 'orphan', label: 'orphan command' })
+    entryFor({ ...base, type: 'run.end', ok: true })
+    expect(entryFor({ ...base, type: 'tool.end', id: 'orphan', ok: false })).toMatchObject({
+      text: 'failed tool call',
+      tone: 'error',
+    })
+  })
+
   it('ignores activity types it does not know', () => {
     expect(entryFor({ ...base, type: 'something.else' })).toBeNull()
   })
