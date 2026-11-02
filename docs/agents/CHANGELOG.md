@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The architecture, README and guides agree with the code again: the layout lists every current file, the candidate and recording steps name the real commands, the probe counts match, and the finished plan items are gone (task Q22).
 - A replaced menu or transport and a control that grows wider schedule a seam measure from the `.hud` parent and the measured controls, while a clock tick writes no pose (task U113).
 - The session eviction test allows 25 seconds for its turn and a `waitIdle` timeout names the state and the call count, since the one failure could not be reproduced and its cause is not known (task T32).
 
