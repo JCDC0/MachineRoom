@@ -123,13 +123,31 @@ describe('the mock web search provider', () => {
 })
 
 describe('the web search section', () => {
-  it('mounts in Settings', () => {
+  it('mounts in Settings with the page client', () => {
+    const client = {
+      providers: async () => [],
+      endpoints: async () => [],
+      keys: async () => [],
+      searchProvider: async () => ({ provider: '', url: '', keyName: '' }),
+      mcpServers: async () => [],
+    }
     const html = renderToString(
-      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+      createElement(Settings, { client, effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
     )
     expect(html).toContain('Web search')
     expect(html).toContain('DuckDuckGo')
     expect(html).toContain('Save')
+  })
+
+  it('leaves the section out when the page has no client', () => {
+    const html = renderToString(
+      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+    )
+    expect(html).not.toContain('Web search')
+  })
+
+  it('renders nothing itself without a client', () => {
+    expect(renderToString(createElement(SearchSettings))).toBe('')
   })
 
   it('says a key slot is empty until this form saved a key', async () => {

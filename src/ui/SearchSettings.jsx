@@ -1,7 +1,4 @@
 import { useEffect, useState } from 'react'
-import { createClient } from '../control/client.js'
-import { store } from '../storage.js'
-import { loadSettings } from './settings.js'
 
 export const SEARCH_PROVIDERS = [
   { key: 'searxng', label: 'SearXNG' },
@@ -73,27 +70,7 @@ export function searchChoiceSummary(choice) {
   return `${provider}, key slot ${String(choice?.keyName ?? '').trim() || 'none'}`
 }
 
-function bridgeBase() {
-  let saved = { bridge: '' }
-  try {
-    saved = loadSettings(store())
-  } catch {}
-  if (typeof window === 'undefined') return ''
-  const dev = window.location.port === '5173'
-  if (!dev) return ''
-  let linked = ''
-  try {
-    linked = new URLSearchParams(window.location.search).get('bridge') ?? ''
-  } catch {}
-  return String(linked || saved.bridge || '').replace(/\/+$/, '')
-}
-
-function makeClient() {
-  return createClient({ baseUrl: bridgeBase() })
-}
-
-export default function SearchSettings({ client: givenClient = null }) {
-  const [client] = useState(() => givenClient ?? makeClient())
+export default function SearchSettings({ client = null }) {
   const [form, setForm] = useState({ ...SEARCH_EMPTY })
   const [savedChoice, setSavedChoice] = useState({ ...SEARCH_EMPTY })
   const [loading, setLoading] = useState(true)
@@ -105,7 +82,8 @@ export default function SearchSettings({ client: givenClient = null }) {
   const [keyConfirm, setKeyConfirm] = useState(false)
 
   useEffect(() => {
-    if (!client || typeof client.searchProvider !== 'function') {
+    if (!client) return undefined
+    if (typeof client.searchProvider !== 'function') {
       setLoading(false)
       setFailed('Web search settings need a newer bridge.')
       return undefined
@@ -130,6 +108,8 @@ export default function SearchSettings({ client: givenClient = null }) {
       active = false
     }
   }, [client])
+
+  if (!client) return null
 
   const problem = searchChoiceProblem(form)
   const needsUrl = form.provider === 'searxng'

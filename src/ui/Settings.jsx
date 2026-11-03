@@ -272,7 +272,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
 
         <EndpointsPanel client={client} />
         <McpSettings client={client} />
-        <SearchSettings />
+        <SearchSettings client={client} />
       </div>
     </section>
   )
