@@ -6,6 +6,7 @@ import MetersPanel from './MetersPanel.jsx'
 import AgentBuilder from './AgentBuilder.jsx'
 import ReviewsPanel from './ReviewsPanel.jsx'
 import PanelBoundary from './PanelBoundary.jsx'
+import { cancelSplitRun } from './runs.js'
 
 export default function ControlDrawer({
   client,
@@ -72,6 +73,19 @@ export default function ControlDrawer({
     openerSelector: 'hud-control-drawer',
     trap: false,
   })
+
+  const wasOpenRef = useRef(open)
+
+  useEffect(() => {
+    if (wasOpenRef.current && !open) cancelSplitRun()
+    wasOpenRef.current = open
+  }, [open])
+
+  useEffect(() => {
+    return () => {
+      cancelSplitRun()
+    }
+  }, [])
 
   useEffect(() => {
     function onKeyDown(event) {

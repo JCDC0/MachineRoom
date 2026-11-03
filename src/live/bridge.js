@@ -28,10 +28,10 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
   let delay = REOPEN_START
   let closed = false
   let lastId = null
-  const version = since ?? treeVersionFor(url)
 
   function streamUrl() {
     const start = lastId === null ? 'history=1' : `after=${encodeURIComponent(lastId)}`
+    const version = since ?? treeVersionFor(url)
     return `${url}/events?${start}&tree=${FOLDER_SHAPE}${version === undefined ? '' : `&since=${version}`}`
   }
 

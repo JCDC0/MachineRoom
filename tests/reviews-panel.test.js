@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
@@ -11,6 +11,7 @@ import {
   patchLines,
   reviewRow,
 } from '../src/ui/panels/reviews.js'
+import { settle, withDom } from './helpers/uiDom.js'
 
 const MOVED_BRANCH_ERROR = 'The branch moved since you read the diff. Open it again.'
 
@@ -168,6 +169,37 @@ describe('reviews helpers', () => {
 })
 
 describe('ReviewsPanel and ControlDrawer', () => {
+  it('shows the sentence of a failed manual Refresh', async () => {
+    let fail = false
+    const client = {
+      reviews: async () => {
+        if (fail) throw new Error('The bridge is offline.')
+        return []
+      },
+      subscribe: () => () => {},
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(ReviewsPanel, { client }))
+      })
+      await settle()
+      expect(container.textContent).toContain('No lanes to review.')
+
+      fail = true
+      const refresh = container
+        .querySelectorAll('button')
+        .find((button) => button.textContent.trim() === 'Refresh')
+      expect(refresh).not.toBeNull()
+      await act(async () => {
+        refresh.click()
+      })
+      await settle()
+
+      expect(container.textContent).toContain('The bridge is offline.')
+      expect(container.querySelector('[role="alert"]')).not.toBeNull()
+    })
+  })
+
   it('renders the Reviews tab and heading with renderToString and the mock client', () => {
     const client = createMockClient({ latencyMs: 0 })
     const drawerHtml = renderToString(

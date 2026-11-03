@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- On a reconnect the page asks the bridge for the tree since the newest version it holds (task U126).
+- A failed manual Refresh in Reviews shows its sentence (task U126).
+- A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).
+- Closing the Control drawer or changing the project stops a running `One lane per task` loop (task U126).
 - An empty live room says why it is empty above the waiting card, and a replay never shows the line (task U124).
 - Settings lists the saved key names with a delete card, and never shows a value (task U124).
 - `opencode4` and `opencode5` are live lanes again, on the same DeepSeek V4.1 Flash model as the other OpenCode lanes.

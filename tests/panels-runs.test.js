@@ -369,6 +369,38 @@ describe('cancelSplitRun', () => {
     expect(cancelSplitRun()).toBe(false)
     expect(splitRunProgress({ pairs: [], answers: [] })).toBe('Started 0 tasks.')
   })
+
+  it('clears a stopped run and starts the next one uncancelled', async () => {
+    vi.useFakeTimers()
+    const calls = []
+    const client = {
+      startRun: async (lane) => {
+        calls.push(lane)
+        return { lane, queue: true, tasks: 1 }
+      },
+    }
+    const pairs = [
+      { lane: 'alpha', task: 'One.' },
+      { lane: 'beta', task: 'Two.' },
+      { lane: 'gamma', task: 'Three.' },
+    ]
+
+    const first = startSplitRun({ client, pairs })
+    await vi.advanceTimersByTimeAsync(0)
+    cancelSplitRun()
+    await first
+    expect(clearSplitRun()).toBe(true)
+    expect(splitRunSnapshot().active).toBe(false)
+
+    calls.length = 0
+    const second = startSplitRun({ client, pairs })
+    await vi.advanceTimersByTimeAsync(3000)
+    await vi.advanceTimersByTimeAsync(3000)
+    await second
+
+    expect(calls).toEqual(['alpha', 'beta', 'gamma'])
+    expect(splitRunSnapshot().cancelled).toBe(false)
+  })
 })
 
 describe('projectWorktreeName', () => {

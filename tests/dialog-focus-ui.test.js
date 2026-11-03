@@ -1,11 +1,18 @@
-import { act, createElement } from 'react'
+import { act, createElement, useRef } from 'react'
 import { describe, expect, it } from 'vitest'
 import Launcher from '../src/ui/Launcher.jsx'
 import SetupCard from '../src/ui/SetupCard.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
 import ControlDrawer from '../src/ui/panels/ControlDrawer.jsx'
+import { useDialogFocus } from '../src/ui/dialogFocus.js'
 import { createMockClient } from '../src/control/mock.js'
 import { click, settle, withDom } from './helpers/uiDom.js'
+
+function TestDialog({ open, children }) {
+  const ref = useRef(null)
+  useDialogFocus(open, { containerRef: ref })
+  return createElement('section', { ref }, children)
+}
 
 const LANES = [
   { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'model-a', active: true },
@@ -29,6 +36,42 @@ function openerFor(dom) {
 }
 
 describe('dialog focus', () => {
+  it('keeps Tab inside a dialog with no focusable child', async () => {
+    await withDom(async ({ container, root, dom, window }) => {
+      const outside = openerFor(dom)
+      await act(async () => {
+        root.render(createElement(TestDialog, { open: true }, createElement('p', null, 'Waiting')))
+      })
+      const dialog = container.querySelector('section')
+      expect(dialog.getAttribute('tabindex')).toBe('-1')
+      expect(dom.document.activeElement).toBe(dialog)
+
+      outside.focus()
+      expect(dom.document.activeElement).toBe(outside)
+      await press(window, 'Tab')
+      expect(dom.document.activeElement).toBe(dialog)
+    })
+  })
+
+  it('brings Tab back into the dialog when focus starts outside', async () => {
+    await withDom(async ({ container, root, dom, window }) => {
+      const outside = openerFor(dom)
+      await act(async () => {
+        root.render(createElement(TestDialog, { open: true }, createElement('button', null, 'Inside')))
+      })
+      const inside = container.querySelector('button')
+      expect(dom.document.activeElement).toBe(inside)
+
+      outside.focus()
+      await press(window, 'Tab')
+      expect(dom.document.activeElement).toBe(inside)
+
+      outside.focus()
+      await press(window, 'Tab', true)
+      expect(dom.document.activeElement).toBe(inside)
+    })
+  })
+
   it('moves into the setup card, holds Tab and gives focus back', async () => {
     await withDom(async ({ container, root, dom, window }) => {
       const opener = openerFor(dom)

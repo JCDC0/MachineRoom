@@ -83,6 +83,8 @@ function publishSplitRun(next) {
 
 export function clearSplitRun() {
   if (splitRun.active) return false
+  splitCancelRequested = false
+  splitWaitCancel = null
   if (splitRun === EMPTY_SPLIT_RUN) return true
   publishSplitRun(EMPTY_SPLIT_RUN)
   return true
@@ -133,6 +135,7 @@ export async function startSplitRun({ client, pairs, delay = PROJECT_SPLIT_DELAY
   if (list.length === 0) return false
   if (typeof client?.startRun !== 'function') return false
   splitCancelRequested = false
+  splitWaitCancel = null
   publishSplitRun({ active: true, pairs: list, answers: [], failed: false, done: false, cancelled: false })
   const answers = []
   let failed = false
