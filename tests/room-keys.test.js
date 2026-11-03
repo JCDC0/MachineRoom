@@ -80,6 +80,21 @@ describe('the room key handler', () => {
     expect(calls).toEqual([])
   })
 
+  it('still takes room keys while the lower half drawer is open', () => {
+    const { calls, view } = makeView()
+    const saved = globalThis.document
+    globalThis.document = { querySelector: (selector) => (selector.includes('.hud-drawer') ? {} : null) }
+    try {
+      for (const key of ['f', 't', '0', '[', ']']) {
+        handleRoomKey({ key, defaultPrevented: false, target: null, preventDefault() {} }, view)
+      }
+    } finally {
+      if (saved === undefined) delete globalThis.document
+      else globalThis.document = saved
+    }
+    expect(calls.length).toBeGreaterThan(0)
+  })
+
   it('leaves typing and a button key alone', () => {
     const { calls, view } = makeView()
     const field = { closest: (selector) => (selector.includes('input') ? {} : null) }

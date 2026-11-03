@@ -41,7 +41,8 @@ import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, l
 
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
-const OPEN_PANEL = '.control-drawer, .hud-drawer:not([hidden]), .hud-settings, .hud-dropdown, .mr-side-overlay, .hud-help-backdrop, .hud-band-list, .hud-menu.is-open, .mr-assistant, .mr-guide-backdrop, .mr-launcher, .mr-setup-backdrop'
+const COVER_PANEL = '.control-drawer, .hud-settings, .hud-dropdown, .mr-side-overlay, .hud-help-backdrop, .hud-band-list, .hud-menu.is-open, .mr-assistant, .mr-guide-backdrop, .mr-launcher, .mr-setup-backdrop'
+const OPEN_PANEL = `${COVER_PANEL}, .hud-drawer:not([hidden])`
 const IDLE_PANEL = `${OPEN_PANEL}, .mr-inspector, .brief-confirm-card, .mr-side-confirm-card, .endpoints-confirm`
 const BADGE = {
   position: 'absolute',
@@ -68,7 +69,7 @@ export const LENS_MOVE = 0.0005
 export function handleRoomKey(event, view = {}) {
   if (!event || event.defaultPrevented) return
   if (hudKeyBlocked(event.target)) return
-  if (typeof document !== 'undefined' && document.querySelector(OPEN_PANEL)) return
+  if (typeof document !== 'undefined' && document.querySelector(COVER_PANEL)) return
   if (event.target?.closest?.('button') && (event.code === 'Space' || event.key === 'Enter')) return
   const player = view.player
   if (!player) return
