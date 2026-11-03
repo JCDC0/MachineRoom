@@ -36,7 +36,8 @@ export function openCostsDrawer(doc = typeof document === 'undefined' ? null : d
   if (!find) return false
   const entry = find(COSTS_ENTRY_SELECTOR)
   if (!entry || typeof entry.click !== 'function') return false
-  entry.click()
+  const expanded = typeof entry.getAttribute === 'function' ? entry.getAttribute('aria-expanded') : null
+  if (expanded !== 'true') entry.click()
   const drawer = find(COSTS_DRAWER_SELECTOR)
   if (drawer && typeof drawer.scrollIntoView === 'function') {
     drawer.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' })

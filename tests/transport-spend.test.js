@@ -70,6 +70,25 @@ describe('the spend click', () => {
     expect(calls[1]).toMatchObject({ block: 'center' })
   })
 
+  it('leaves an open Costs drawer open and still brings it into view', () => {
+    const calls = []
+    const documentStub = {
+      querySelector(selector) {
+        if (selector === COSTS_ENTRY_SELECTOR) {
+          return {
+            getAttribute: (name) => (name === 'aria-expanded' ? 'true' : null),
+            click: () => calls.push('click'),
+          }
+        }
+        if (selector === COSTS_DRAWER_SELECTOR) return { scrollIntoView: (options) => calls.push(options) }
+        return null
+      },
+    }
+    expect(openCostsDrawer(documentStub)).toBe(true)
+    expect(calls).not.toContain('click')
+    expect(calls[0]).toMatchObject({ block: 'center' })
+  })
+
   it('does nothing without a document or the Overview entry', () => {
     expect(openCostsDrawer(null)).toBe(false)
     expect(openCostsDrawer({})).toBe(false)
