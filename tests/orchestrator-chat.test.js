@@ -2,7 +2,7 @@ import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
-import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
+import OrchestratorChat, { pruneOrchestratorRecord } from '../src/ui/OrchestratorChat.jsx'
 import Waiting from '../src/ui/Waiting.jsx'
 import { buttonWithText, click, withDom } from './helpers/uiDom.js'
 import {
@@ -467,6 +467,18 @@ describe('projectBaseName', () => {
   })
 })
 
+describe('pruneOrchestratorRecord', () => {
+  it('drops every mark for a sub that left the list and keeps main', () => {
+    const record = { orchestrator: { messages: ['main'] }, frontend: { messages: ['old'] }, gone: { messages: ['old'] } }
+    const next = pruneOrchestratorRecord(record, ['orchestrator', 'frontend'])
+    expect(Object.keys(next)).toEqual(['orchestrator', 'frontend'])
+    expect(next.frontend).toBe(record.frontend)
+    expect(next).not.toBe(record)
+    expect(pruneOrchestratorRecord(record, ['orchestrator', 'frontend', 'gone'])).toBe(record)
+    expect(pruneOrchestratorRecord({}, [])).toEqual({})
+  })
+})
+
 describe('chatBlocks', () => {
   it('turns paragraphs into blocks and keeps their lines', () => {
     expect(chatBlocks('One line\ntwo lines\n\nSecond para')).toEqual([
@@ -619,6 +631,50 @@ describe('OrchestratorChat panel', () => {
     expect(html).toContain('class="mr-orch-block is-heading"')
     expect(html).toContain('>Stop</button>')
     expect(html).toContain('aria-label="Send"')
+  })
+
+  it('forgets a sub that left the list and reads it again when it comes back', async () => {
+    const main = { id: 'orchestrator', name: 'Main', state: 'idle' }
+    const sub = { id: 'sub-frontend', name: 'Frontend', state: 'idle' }
+    const oldChat = { state: 'idle', messages: [{ id: 'm1', from: 'owner', text: 'Old frontend line.' }] }
+    let reads = 0
+    const client = {
+      orchestrator: async (id) => {
+        if (id !== 'sub-frontend') return { state: 'idle', messages: [] }
+        reads += 1
+        if (reads === 1) return oldChat
+        return new Promise(() => {})
+      },
+      orchestratorCommands: async () => [],
+      orchestrators: async () => [],
+      subscribe: () => () => {},
+    }
+    const chat = (selected, orchestrators) =>
+      createElement(OrchestratorChat, {
+        open: true,
+        client,
+        selected,
+        orchestrators,
+        onSelect: () => {},
+      })
+
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(chat('sub-frontend', [main, sub]))
+      })
+      expect(container.textContent).toContain('Old frontend line.')
+
+      await act(async () => {
+        root.render(chat('orchestrator', [main]))
+      })
+      expect(container.textContent).not.toContain('Frontend')
+
+      await act(async () => {
+        root.render(chat('sub-frontend', [main, sub]))
+      })
+      expect(container.textContent).not.toContain('Old frontend line.')
+      expect(container.textContent).toContain('Reading the chat.')
+    })
   })
 
   it('takes the chosen tab from outside', () => {
