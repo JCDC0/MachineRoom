@@ -441,7 +441,8 @@ function ensureContext() {
     engine.musicGain.gain.value = 1
     engine.analyser = engine.context.createAnalyser()
     engine.analyser.fftSize = 256
-    engine.analyser.smoothingTimeConstant = 0.75
+    // At 0.75 a kick's rise spread over too many readings to pass the sharp onset test, so drum tracks seldom locked.
+    engine.analyser.smoothingTimeConstant = 0.4
     engine.bins = new Uint8Array(engine.analyser.frequencyBinCount)
     engine.musicGain.connect(engine.analyser)
     engine.analyser.connect(engine.context.destination)
