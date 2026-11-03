@@ -20,7 +20,9 @@ import {
   TURN_RUNNING_PROBLEM,
   WORKTREE_HOLDS_BRANCH_PROBLEM,
   WRITE_IN_FLIGHT_PROBLEM,
+  beginRepoWrite,
   defaultGitRunner,
+  endRepoWrite,
   invalidateGitCache,
   parseStatus,
   readGitState,
@@ -558,6 +560,28 @@ describe('create branch refusals', () => {
     expect(res.body.error).toBe(BRANCH_TAKEN_PROBLEM)
 
     await expect(client.createBranch({ name: 'main', from: 'main', confirmed: true })).rejects.toThrow(BRANCH_TAKEN_PROBLEM)
+  })
+
+  it('answers the existing-branch message when only the case differs', async () => {
+    const repo = makeRepo()
+    testGit(repo, ['branch', 'Feature'])
+    const { url } = await startBridge({ projectRoot: repo })
+    const res = await postJson(url, '/api/git/branch', { name: 'feature', from: 'main', confirmed: true })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBe(BRANCH_TAKEN_PROBLEM)
+  })
+
+  it('takes one write lock for a switch, a branch and a merge', async () => {
+    const repo = makeRepo()
+    const key = beginRepoWrite(repo)
+    expect(key).not.toBe('')
+    expect(beginRepoWrite(repo)).toBe('')
+    const { url } = await startBridge({ projectRoot: repo })
+    const res = await postJson(url, '/api/git/branch', { name: 'feat-lock', from: 'main', confirmed: true })
+    expect(res.status).toBe(409)
+    expect(res.body.error).toBe(WRITE_IN_FLIGHT_PROBLEM)
+    endRepoWrite(key)
+    expect(beginRepoWrite(repo)).not.toBe('')
   })
 
   it('refuses when from is not a known branch with 400', async () => {

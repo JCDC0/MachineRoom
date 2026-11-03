@@ -40,6 +40,18 @@
 - The Agents list carries each lane's model, so the Agents tab shows it (task S28).
 - A file added between the page's tree read and its stream connect reaches the page at connect, and a reconnect resumes after the last frame the page saw instead of replaying the history (task S28).
 - A key after a dash or an underscore is masked whole, and the split masker holds the same key head the mask looks for (task S28).
+- `worktrees --clean` treats a lane as running while either the run or its harness child is alive, and keeps a worktree that holds an ignored file besides `node_modules` (task S27).
+- `worktrees` reads the runs folder from `MACHINEROOM_RUNS`, as the bridge and the lane source do (task S27).
+- `--stop` keeps a lane's lock when a process could not be stopped or a newer run took it, and a project run's lock names its project folder so its stop no longer touches the lane worktree (task S27).
+- A run's normal end stops only its own descendants, so an editor opened on the lane worktree survives (task S27).
+- `prepareWorktree` refuses a detached worktree with commits the project's head does not have, instead of stranding them (task S27).
+- A queue checks the lane's command line before it makes its branch, goes back to the start branch with a failed record when it throws, and records `exitCode: 1` and `queueStatus: failed: tests` for a task whose tests fail (task S27).
+- A harness that fails before its first tool call in under a minute prints its failure sentence and marks the record `startFailed`; one that printed the readiness sentence is retried once (task S27).
+- The git switch, branch and review merge take one repo-wide write lock, and a merge invalidates the git state (task S27).
+- A lane name must be one safe path component, so `../escape` and a name with a space are refused before a worktree or a branch is made (task S27).
+- `bump` writes the three version files through temporary files and puts back what it wrote when a later write fails (task S27).
+- `review-lane` reads the branch as one commit sha for every check and the merge, refuses only a name git refuses, and fails when the branch moved (task S27).
+- A lane's last run in the reviews answer is found in every record, and a branch create whose name differs only by case answers `That branch already exists` (task S27).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
 - The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).

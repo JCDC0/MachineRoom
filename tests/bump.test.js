@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -137,5 +137,37 @@ describe('bump', () => {
     const refused = spawnSync(process.execPath, [SCRIPT, '0.1.113'], { cwd: dir, encoding: 'utf8', windowsHide: true })
     expect(refused.status).toBe(1)
     expect(refused.stderr.trim()).toBe('The version must be higher than 0.1.113. 0.1.113 is not.')
+  })
+})
+
+describe('a bump that fails half way', () => {
+  it('puts back the files it already wrote and leaves no temporary file', () => {
+    const dir = project()
+    let renames = 0
+    const result = bump(dir, ['0.1.113'], {
+      rename: (from, to) => {
+        renames += 1
+        if (renames === 2) throw new Error('the disk refused')
+        renameSync(from, to)
+      },
+    })
+    expect(result.code).toBe(1)
+    expect(result.lines[0]).toContain('The ones already written were put back.')
+    expect(files(dir)).toEqual({ pkg: PKG, lock: LOCK, architecture: ARCHITECTURE })
+    expect(existsSync(join(dir, 'package.json.bump-tmp'))).toBe(false)
+    expect(existsSync(join(dir, 'package-lock.json.bump-tmp'))).toBe(false)
+    expect(existsSync(join(dir, 'docs', 'agents', 'ARCHITECTURE.md.bump-tmp'))).toBe(false)
+  })
+
+  it('says nothing was changed when the first write fails', () => {
+    const dir = project()
+    const result = bump(dir, ['0.1.113'], {
+      write: () => {
+        throw new Error('the disk is full')
+      },
+    })
+    expect(result.code).toBe(1)
+    expect(result.lines).toEqual(['The version files could not be written (the disk is full). Nothing was changed.'])
+    expect(files(dir)).toEqual({ pkg: PKG, lock: LOCK, architecture: ARCHITECTURE })
   })
 })

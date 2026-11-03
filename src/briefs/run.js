@@ -25,10 +25,20 @@ export function unattendedPrompt(prompt) {
   return `${prompt}\n\n${UNATTENDED_NOTE}`
 }
 
+export function laneCommandProblem(lane) {
+  if (!lane || typeof lane !== 'object') return 'There is no lane to run.'
+  const cli = lane.cli
+  if (!cli) return `The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`
+  const harness = cli.harness
+  if (!Object.hasOwn(harnessByKey, harness)) return `The runner does not know the ${harness} command line.`
+  return ''
+}
+
 export function commandFor({ lane, prompt, env = {}, usageFile, title, cwd, sessionId, mcpConfig } = {}) {
   if (!lane || typeof lane !== 'object') throw new Error('There is no lane to run.')
+  const startProblem = laneCommandProblem(lane)
+  if (startProblem !== '') throw new Error(startProblem)
   const cli = lane.cli
-  if (!cli) throw new Error(`The lane ${lane.name ?? 'this one'} has no command line, so the runner cannot start it.`)
   const harness = cli.harness
   if (!Object.hasOwn(harnessByKey, harness)) throw new Error(`The runner does not know the ${harness} command line.`)
   const folder = typeof cwd === 'string' && cwd.trim() !== '' ? cwd : lane.worktree
@@ -267,6 +277,7 @@ export function worktreeFor(project, lane) {
   const folder = String(project ?? '').trim().replace(/[\\/]+$/, '')
   const key = String(lane ?? '').trim()
   if (!folder || !key || /^[a-zA-Z]:$/.test(folder)) return ''
+  if (!/^[A-Za-z0-9_-]+$/.test(key)) return ''
   const sep = folder.includes('\\') ? '\\' : '/'
   return `${folder}${sep}${WORKTREES_FOLDER}${sep}${key}`
 }
@@ -409,33 +420,34 @@ export function parseRunArgs(argv) {
   return { lane, briefs, dryRun, minutes, list, ...(force ? { force: true } : {}), ...overrides, ...(startedBy ? { startedBy } : {}) }
 }
 
-export function laneLockText({ pid, child, folder } = {}) {
+export function laneLockText({ pid, child, folder, projectRun } = {}) {
   const own = Number.isInteger(pid) && pid > 0 ? pid : 0
   if (own === 0) return ''
   const entry = { pid: own }
   if (Number.isInteger(child) && child > 0) entry.child = child
   const name = typeof folder === 'string' ? folder.trim() : ''
   if (name !== '') entry.folder = name
+  if (projectRun === true) entry.projectRun = true
   return `${JSON.stringify(entry)}\n`
 }
 
 export function laneLockPids(text) {
   const raw = String(text ?? '').trim()
-  if (raw === '') return { pid: null, child: null, folder: '' }
+  if (raw === '') return { pid: null, child: null, folder: '', projectRun: false }
   if (!raw.startsWith('{')) {
     const match = /^\s*(\d+)\s*$/.exec(raw)
-    return { pid: match ? Number(match[1]) : null, child: null, folder: '' }
+    return { pid: match ? Number(match[1]) : null, child: null, folder: '', projectRun: false }
   }
   let parsed
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return { pid: null, child: null, folder: '' }
+    return { pid: null, child: null, folder: '', projectRun: false }
   }
   const pid = Number.isInteger(parsed?.pid) && parsed.pid > 0 ? parsed.pid : null
   const child = Number.isInteger(parsed?.child) && parsed.child > 0 ? parsed.child : null
   const folder = typeof parsed?.folder === 'string' ? parsed.folder : ''
-  return { pid, child, folder }
+  return { pid, child, folder, projectRun: parsed?.projectRun === true }
 }
 
 export function laneStopProblem({ lane, pid, leftover = false } = {}) {
@@ -848,6 +860,32 @@ export function summarizeRun({ harness, log, worktree } = {}) {
   return summaryOf(descriptor.key, activities, descriptor.report(log), descriptor.usage(log))
 }
 
+export const READINESS_FAILURE = /Standalone server exited before reporting readiness/i
+
+export function readinessLine(log) {
+  const line = String(log ?? '')
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .find((item) => READINESS_FAILURE.test(item))
+  return line ?? ''
+}
+
+export function startFailureText({ harness, log } = {}) {
+  const descriptor = Object.hasOwn(harnessByKey, harness) ? harnessByKey[harness] : null
+  const said = typeof descriptor?.failure === 'function' ? descriptor.failure(String(log ?? '')) : ''
+  if (typeof said === 'string' && said.trim() !== '') return said.trim()
+  return readinessLine(log)
+}
+
+export function retryStartProblem({ exitCode, minutes, toolCalls, commits, log } = {}) {
+  if (exitCode === 0) return 'the run ended well'
+  if (!(toolCalls === 0)) return 'the run made a tool call'
+  if (!(typeof minutes === 'number' && Number.isFinite(minutes) && minutes < 1)) return 'the run lasted a minute or more'
+  if (Array.isArray(commits) && commits.length > 0) return 'the run made a commit'
+  if (readinessLine(log) === '') return 'the log has no readiness sentence'
+  return ''
+}
+
 function reportLines(head) {
   if (head.length === 0) return ['report: none']
   const count = head.length === 1 ? '1 line' : `${head.length} lines`
@@ -884,7 +922,7 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy, stoppedLeftovers, queue } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy, stoppedLeftovers, queue, startFailed, note } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -908,6 +946,8 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
     if (Number.isInteger(queue?.index)) record.queueIndex = queue.index
   }
   if (Number.isInteger(stoppedLeftovers) && stoppedLeftovers > 0) record.stoppedLeftovers = stoppedLeftovers
+  if (startFailed === true) record.startFailed = true
+  if (typeof note === 'string' && note.trim() !== '') record.note = note.trim().slice(0, 200)
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project
   if (typeof task === 'string' && task !== '') record.task = maskKeys(task).text.slice(0, 200)

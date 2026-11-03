@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { cpSync, mkdirSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -515,4 +515,65 @@ describe('scripts/run-lane.mjs with --queue', { timeout: 30000 }, () => {
       remove(parent)
     }
   })
+})
+
+describe('a queue that stops', () => {
+  function laneFile(parent, lane) {
+    const file = join(parent, 'lanes.json')
+    writeFileSync(file, `${JSON.stringify({ [lane.name]: lane })}\n`)
+    return file
+  }
+
+  it('refuses a lane with no command line before it makes the queue branch', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'One task.\n')
+      const lanes = laneFile(parent, { name: 'bad', worktree: join(parent, 'worktree') })
+      const result = await runLane(['bad', '--project', repo, '--queue', file], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanes,
+      })
+      expect(result.code).toBe(1)
+      expect(result.stderr).toContain('The lane bad has no command line, so the runner cannot start it.')
+      expect(git(repo, ['branch', '--show-current']).trim()).toBe('main')
+      expect(git(repo, ['branch', '--list', 'machineroom/queue-*']).trim()).toBe('')
+      expect(existsSync(join(runs, 'runs.jsonl'))).toBe(false)
+    } finally {
+      remove(parent)
+    }
+  }, 40000)
+
+  it('writes a failed task record when the tests fail after the harness exits well', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'Write the lane note.\n')
+      copyFileSync(fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url)), join(repo, 'run'))
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const lanes = laneFile(parent, {
+        name: 'fake',
+        worktree: join(parent, 'worktree'),
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      })
+      const result = await runLane(['fake', '--project', repo, '--queue', file, '--test', 'node -e "process.exit(1)"'], {
+        TEMP: parent,
+        MACHINEROOM_RUNS: runs,
+        MACHINEROOM_LANES_FILE: lanes,
+      })
+      expect(result.code).toBe(1)
+      expect(result.stdout).toContain('1. failed: tests')
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests' })
+      expect(records.at(-1).commits).toEqual([])
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
 })

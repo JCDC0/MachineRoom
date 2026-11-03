@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -86,20 +86,56 @@ export function bumpTexts({ pkg, lock, architecture }, version) {
   }
 }
 
-export function bump(root, argv) {
+export function bump(root, argv, { write = writeFileSync, rename = renameSync, remove = unlinkSync } = {}) {
   const args = (Array.isArray(argv) ? argv : []).map(String).filter((arg) => arg.trim() !== '')
   if (args.length !== 1 || args[0].startsWith('-')) return { code: 1, lines: [USAGE] }
   const files = { pkg: join(root, 'package.json'), lock: join(root, 'package-lock.json'), architecture: join(root, ARCHITECTURE) }
   let result
+  let originals
   try {
     const texts = { pkg: readFileSync(files.pkg, 'utf8'), lock: readFileSync(files.lock, 'utf8'), architecture: readFileSync(files.architecture, 'utf8') }
+    originals = texts
     result = bumpTexts(texts, args[0])
   } catch (error) {
     return { code: 1, lines: [error.code === 'ENOENT' ? `${error.path} could not be read. Nothing was changed.` : error.message] }
   }
-  writeFileSync(files.pkg, result.pkg)
-  writeFileSync(files.lock, result.lock)
-  writeFileSync(files.architecture, result.architecture)
+  const planned = [
+    { file: files.pkg, text: result.pkg, original: originals.pkg },
+    { file: files.lock, text: result.lock, original: originals.lock },
+    { file: files.architecture, text: result.architecture, original: originals.architecture },
+  ]
+  const temps = []
+  const written = []
+  try {
+    for (const item of planned) {
+      const temp = `${item.file}.bump-tmp`
+      write(temp, item.text)
+      temps.push({ temp, item })
+    }
+    for (const { temp, item } of temps) {
+      rename(temp, item.file)
+      written.push(item)
+    }
+  } catch (error) {
+    for (const { temp } of temps) {
+      try {
+        remove(temp)
+      } catch {}
+    }
+    for (const item of written) {
+      try {
+        write(item.file, item.original)
+      } catch {}
+    }
+    return {
+      code: 1,
+      lines: [
+        written.length > 0
+          ? `The version files could not all be written (${String(error?.message ?? error)}). The ones already written were put back.`
+          : `The version files could not be written (${String(error?.message ?? error)}). Nothing was changed.`,
+      ],
+    }
+  }
   return { code: 0, lines: result.lines }
 }
 

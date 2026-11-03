@@ -180,6 +180,18 @@ describe('the worktree on a real repository', () => {
     expect(prepareWorktree(project, 'opencode')).toEqual({ path, made: false })
   })
 
+  it('refuses a detached worktree that holds commits the project does not have', () => {
+    const base = tempDir()
+    const project = initRepo(base)
+    const path = prepareWorktree(project, 'opencode').path
+    writeFileSync(join(path, 'extra.txt'), 'keep me\n')
+    git(path, ['add', 'extra.txt'])
+    git(path, ['-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'detached work'])
+    expect(() => prepareWorktree(project, 'opencode')).toThrow(`The worktree ${path} is detached with 1 commit that the project's HEAD does not have`)
+    expect(git(path, ['rev-parse', '--abbrev-ref', 'HEAD']).trim()).toBe('HEAD')
+    expect(git(path, ['log', '--oneline', '-1']).trim()).toContain('detached work')
+  })
+
   it('refuses a worktree that belongs to another project', () => {
     const base = tempDir()
     const project = initRepo(base)

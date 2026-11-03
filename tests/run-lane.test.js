@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
-import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { startLane } from '../scripts/run-lane.mjs'
@@ -791,14 +791,14 @@ describe('laneLockText and laneLockPids', () => {
   })
 
   it('reads the new line and the old plain pid', () => {
-    expect(laneLockPids('{"pid":12,"child":34,"folder":"C:\\\\work\\\\lane"}')).toEqual({ pid: 12, child: 34, folder: 'C:\\work\\lane' })
-    expect(laneLockPids('{"pid":12}')).toEqual({ pid: 12, child: null, folder: '' })
-    expect(laneLockPids('12')).toEqual({ pid: 12, child: null, folder: '' })
-    expect(laneLockPids('12\r\n')).toEqual({ pid: 12, child: null, folder: '' })
-    expect(laneLockPids('')).toEqual({ pid: null, child: null, folder: '' })
-    expect(laneLockPids('{"pid":-1,"child":"x"}')).toEqual({ pid: null, child: null, folder: '' })
-    expect(laneLockPids('{ broken')).toEqual({ pid: null, child: null, folder: '' })
-    expect(laneLockPids(null)).toEqual({ pid: null, child: null, folder: '' })
+    expect(laneLockPids('{"pid":12,"child":34,"folder":"C:\\\\work\\\\lane"}')).toEqual({ pid: 12, child: 34, folder: 'C:\\work\\lane', projectRun: false })
+    expect(laneLockPids('{"pid":12}')).toEqual({ pid: 12, child: null, folder: '', projectRun: false })
+    expect(laneLockPids('12')).toEqual({ pid: 12, child: null, folder: '', projectRun: false })
+    expect(laneLockPids('12\r\n')).toEqual({ pid: 12, child: null, folder: '', projectRun: false })
+    expect(laneLockPids('')).toEqual({ pid: null, child: null, folder: '', projectRun: false })
+    expect(laneLockPids('{"pid":-1,"child":"x"}')).toEqual({ pid: null, child: null, folder: '', projectRun: false })
+    expect(laneLockPids('{ broken')).toEqual({ pid: null, child: null, folder: '', projectRun: false })
+    expect(laneLockPids(null)).toEqual({ pid: null, child: null, folder: '', projectRun: false })
   })
 })
 
@@ -1295,7 +1295,7 @@ describe('scripts/run-lane.mjs', () => {
 
       const emptyTemp = join(folder, 'empty')
       mkdirSync(emptyTemp, { recursive: true })
-      const empty = await runLane(['--outcomes'], { TEMP: emptyTemp })
+      const empty = await runLane(['--outcomes'], { TEMP: emptyTemp, MACHINEROOM_RUNS: join(emptyTemp, 'machineroom-runs') })
       expect(empty.code).toBe(0)
       expect(empty.stdout.trim()).toBe('No runs yet.')
     } finally {
@@ -1685,5 +1685,40 @@ describe('the record of a project run on a git project', { timeout: 30000 }, () 
     } finally {
       rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
+  })
+})
+
+describe('a harness that fails before it starts', () => {
+  it('reads the readiness sentence from the log', () => {
+    const log = 'booting\n{"type":"text"}\nStandalone server exited before reporting readiness\n'
+    expect(readinessLine(log)).toContain('Standalone server exited')
+    expect(readinessLine('nothing here')).toBe('')
+    expect(startFailureText({ harness: 'opencode', log })).toContain('Standalone server exited')
+  })
+
+  it('retries only a short run with no tool call, no commit and the readiness sentence', () => {
+    const log = 'Standalone server exited before reporting readiness\n'
+    const quiet = { exitCode: 1, minutes: 0, toolCalls: 0, commits: [], log }
+    expect(retryStartProblem(quiet)).toBe('')
+    expect(retryStartProblem({ ...quiet, exitCode: 0 })).toBe('the run ended well')
+    expect(retryStartProblem({ ...quiet, toolCalls: 1 })).toBe('the run made a tool call')
+    expect(retryStartProblem({ ...quiet, minutes: 1 })).toBe('the run lasted a minute or more')
+    expect(retryStartProblem({ ...quiet, commits: ['abc1234 subject'] })).toBe('the run made a commit')
+    expect(retryStartProblem({ ...quiet, log: 'plain stop' })).toBe('the log has no readiness sentence')
+  })
+
+  it('refuses a lane with no command line before a queue makes its branch', () => {
+    expect(laneCommandProblem({ name: 'Bad lane' })).toBe('The lane Bad lane has no command line, so the runner cannot start it.')
+    expect(() => commandFor({ lane: { name: 'Bad lane' }, prompt })).toThrow('The lane Bad lane has no command line, so the runner cannot start it.')
+    expect(laneCommandProblem(lanes.hermes)).toBe('')
+  })
+})
+
+describe('a lane key used in a path and a branch', () => {
+  it('takes only one safe path component', () => {
+    expect(worktreeFor('/work/sample', 'opencode')).toBe('/work/sample/.worktrees/opencode')
+    expect(worktreeFor('/work/sample', '../escape')).toBe('')
+    expect(worktreeFor('/work/sample', 'Bad lane')).toBe('')
+    expect(worktreeFor('/work/sample', 'a/b')).toBe('')
   })
 })
