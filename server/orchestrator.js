@@ -461,6 +461,7 @@ export function createOrchestrator({
   harnesses = harnessByKey,
   hasSub = null,
   rename = renameSync,
+  siblings: siblingsOption = [],
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -511,6 +512,7 @@ export function createOrchestrator({
   let summary = ''
   let pendingCompaction = null
   let persistError = null
+  let siblings = Array.isArray(siblingsOption) ? [...siblingsOption] : []
   const completedRuns = new Map()
 
   function subExists(id) {
@@ -936,7 +938,8 @@ export function createOrchestrator({
       token,
       scratchFolder
     )
-    const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
+    const extra = typeof extraInstructions === 'function' ? extraInstructions() : extraInstructions
+    const instruction = extra ? `${baseInstruction}\n\n${extra}` : baseInstruction
     let program = binFor(harness)
     let args
     if (harness === 'opencode') {
@@ -1553,6 +1556,14 @@ export function createOrchestrator({
     notify()
   }
 
+  function getSiblings() {
+    return [...siblings]
+  }
+
+  function setSiblings(list) {
+    siblings = Array.isArray(list) ? [...list] : []
+  }
+
   function onFrame(frame) {
     if (stopped) return
     if (frame?.type !== 'heartbeat.run.status') return
@@ -1681,6 +1692,8 @@ export function createOrchestrator({
     deleteSession,
     getLadder,
     setLadder,
+    getSiblings,
+    setSiblings,
     onFrame,
     close,
     token,

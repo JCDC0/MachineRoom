@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changing sibling sub orchestrators leaves a running sub running and passes the new siblings without restarting (task S31).
+
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

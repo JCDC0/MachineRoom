@@ -935,7 +935,7 @@ describe('the orchestrator registry', () => {
     expect(restored.answer().messages.some((message) => message.text === RESTART_MESSAGE)).toBe(false)
   })
 
-  it('rebuilds a sub with a new sibling so its instructions name the sibling', async () => {
+  it('keeps a sub with a new sibling running and updates its instructions to name the sibling', async () => {
     const files = makeBase({ ladder: { subs: [FRONTEND] } })
     const rig = makeRig(files)
     const backend = {
@@ -956,6 +956,38 @@ describe('the orchestrator registry', () => {
     const call = files.calls().find((item) => item.args.some((arg) => typeof arg === 'string' && arg.includes('Your id is `frontend`')))
     const instruction = call.args[call.args.indexOf('--append-system-prompt') + 1]
     expect(instruction).toContain('Your siblings: `backend` (Backend).')
+  })
+
+  it('does not restart a running sub or kill its turn when a sibling is added or removed', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    files.behaviour.mode = 'hold'
+    const rig = makeRig(files)
+    const frontend = rig.registry.find('frontend')
+    frontend.send({ text: 'Keep working', confirmed: true })
+    await waitFor(() => files.calls().length === 1, 5000, 'the frontend turn to start')
+    expect(frontend.answer().state).toBe('working')
+
+    const backend = {
+      id: 'backend',
+      name: 'Backend',
+      harness: 'claude',
+      model: 'sonnet',
+      lanes: ['opencode2'],
+      scope: ['server/**'],
+      restricted: true,
+      setBy: 'owner',
+    }
+    const added = rig.registry.ladderChange({ ladder: { subs: [FRONTEND, backend] }, by: 'owner', confirmed: true }, true)
+    expect(added.status).toBe(200)
+    expect(frontend.answer().state).toBe('working')
+    expect(frontend.getSiblings()).toEqual(['backend'])
+
+    writeFileSync(files.releaseFile, 'go')
+    await waitIdle(rig.registry, 'frontend', 1)
+    expect(frontend.answer().state).toBe('idle')
+    const last = frontend.answer().messages.at(-1)
+    expect(last.from).toBe('orchestrator')
+    expect(last.text).not.toContain('stopped')
   })
 
   it('refuses a second room on the same project', async () => {
