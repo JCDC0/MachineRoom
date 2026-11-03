@@ -13,7 +13,6 @@ export const REQUEST_LIMITS = {
   reviewDiff: 50000,
   reviews: 210000,
   mergeReview: 140000,
-  backupNow: 130000,
   decide: 10000,
   quickEndpoint: 60000,
 }
@@ -480,10 +479,6 @@ export function createClient({
         model === undefined ? { state, questions, confirmed } : { state, questions, model, confirmed },
         REQUEST_LIMITS.decide
       ),
-
-    backupStatus: () => request('GET', '/api/backup'),
-
-    backupNow: () => request('POST', '/api/backup', { confirmed: true }, REQUEST_LIMITS.backupNow),
 
     projects: () => request('GET', '/api/projects'),
 

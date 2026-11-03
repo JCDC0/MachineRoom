@@ -242,6 +242,7 @@ describe('the control client contract', () => {
       ['opencode', 'OpenCode', null, 50],
       ['claude', 'Claude Code', null, 0],
     ])
+    expect(agents.map((agent) => agent.model)).toEqual(['opencode-go/deepseek-v4.1-flash', 'sonnet'])
     for (const agent of agents) {
       for (const key of ['id', 'key', 'name', 'adapterType', 'role', 'status', 'model', 'reasoningEffort', 'maxTurnsPerRun', 'timeoutSec', 'subagentsAllowed', 'subagentDepth', 'instructions', 'reportsToAgentId', 'budgetMonthlyCents', 'spentMonthlyCents']) {
         expect(agent, `${agent.name} ${key}`).toHaveProperty(key)

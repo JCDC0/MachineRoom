@@ -91,10 +91,10 @@ describe('the liveRuns notice', () => {
   const frame = (type, payload = {}) => ({ id: 1, companyId: 'comp-1', type, createdAt: '2026-10-21T10:00:00.000Z', payload })
 
   it('goes out on a run that is queued, starts or ends', () => {
-    expect(changeEvents(frame('heartbeat.run.queued', { runId: 'r1' }))).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'liveRuns' }])
-    expect(changeEvents(frame('heartbeat.run.status', { runId: 'r1', status: 'running' }))).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'liveRuns' }])
+    expect(changeEvents(frame('heartbeat.run.queued', { runId: 'r1' }))).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'liveRuns' }, { topic: 'runs' }])
+    expect(changeEvents(frame('heartbeat.run.status', { runId: 'r1', status: 'running' }))).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'liveRuns' }, { topic: 'runs' }])
     for (const status of ['succeeded', 'failed', 'cancelled', 'timed_out']) {
-      expect(changeEvents(frame('heartbeat.run.status', { runId: 'r1', status })), status).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'costs' }, { topic: 'liveRuns' }])
+      expect(changeEvents(frame('heartbeat.run.status', { runId: 'r1', status })), status).toEqual([{ topic: 'agents' }, { topic: 'issues' }, { topic: 'costs' }, { topic: 'liveRuns' }, { topic: 'runs' }])
     }
   })
 

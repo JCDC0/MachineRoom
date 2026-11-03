@@ -62,13 +62,13 @@ function chunks(frames) {
 
 describe('the open tail test', () => {
   it('finds a tail that could still grow into a key', () => {
-    for (const tail of ['s', 'sk', 'sk-', 'sk-or-v1-abc', 'gh', 'ghp_', 'ghp_abc', 'github_p', 'AKIA', 'AKIA1234', 'AIza', 'OPENROUTER_API', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY=', 'OPENAI_API_KEY: "abc', 'run-ghp_ab']) {
+    for (const tail of ['s', 'sk', 'sk-', 'sk-or-v1-abc', 'gh', 'ghp_', 'ghp_abc', 'github_p', 'AKIA', 'AKIA1234', 'AIza', 'OPENROUTER_API', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY=', 'OPENAI_API_KEY: "abc', 'run-ghp_ab', 'x-sk-', '_sk-', 'x-sk-or-v1-abc']) {
       expect(openKeyStart(`text ${tail}`), tail).not.toBe(-1)
     }
   })
 
   it('finds no open tail where no key can start', () => {
-    for (const tail of ['', 'done', 'done ', 'sk-abc ', 'task-sk-abc', 'x_ghp_ab', 'AKIA' + '1234567890ABCDEF1', 'AKIAb', 'path/to/file.js', 'value\n', '42']) {
+    for (const tail of ['', 'done', 'done ', 'sk-abc ', 'tasksk-abc', 'x_ghp_ab', 'AKIA' + '1234567890ABCDEF1', 'AKIAb', 'path/to/file.js', 'value\n', '42']) {
       expect(openKeyStart(tail), tail).toBe(-1)
     }
   })
@@ -109,6 +109,27 @@ describe('a key split across chunks', () => {
     const out = run([log(1, `a ${SK.slice(0, 5)}`), log(2, SK.slice(5, 30)), log(3, `${SK.slice(30)} b\n`)])
     expect(chunks(out.frames)).toEqual(['a [key]', '', ' b\n'])
     expect(out.count).toBe(1)
+  })
+
+  it('masks a key whole after a dash or an underscore prefix', () => {
+    for (const [prefix, kept] of [['x-', 'x-'], ['_', '_']]) {
+      const line = `reading ${prefix}${SK} now\n`
+      const whole = maskKeys(line)
+      expect(whole.count, prefix).toBe(1)
+      expect(whole.text, prefix).toBe(`reading ${kept}[key] now\n`)
+      const start = line.indexOf(SK)
+      for (let at = start - prefix.length; at <= start + SK.length; at += 1) {
+        const out = run([log(1, line.slice(0, at)), log(2, line.slice(at))])
+        expect(joined(out.frames), `${prefix} cut ${at}`).toBe(whole.text)
+        expect(out.count, `${prefix} cut ${at}`).toBe(1)
+        expect(JSON.stringify(out.frames)).not.toContain(SK.slice(-20))
+      }
+    }
+  })
+
+  it('leaves an ordinary word with sk- inside it alone', () => {
+    expect(maskKeys('disk-usage-report-for-the-week')).toEqual({ text: 'disk-usage-report-for-the-week', count: 0 })
+    expect(maskKeys('risk-assessment-of-the-build')).toEqual({ text: 'risk-assessment-of-the-build', count: 0 })
   })
 
   it('keeps two interleaved runs apart', () => {
@@ -378,7 +399,7 @@ describe('every recording cut at seeded random points', () => {
     })
 
     it(`masks every key put into ${recording.name} at seeded points`, () => {
-      const keys = [SK, GITHUB, SETTING]
+      const keys = [SK, GITHUB, SETTING, 'x-' + SK, '_' + SK]
       for (const seed of [11, 12, 13]) {
         const random = seeded(seed * 104729)
         const cut = cutFrames(recording.frames, random, keys)

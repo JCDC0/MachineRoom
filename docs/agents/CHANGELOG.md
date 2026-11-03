@@ -34,6 +34,12 @@
 - Remove on an MCP server asks first, on a card that names the server and says its command and settings are lost (task U117).
 - The Build a team card and Add sub orchestrator stop with a sentence when the ladder changed while the card was open, instead of creating a different team (task U117).
 - A chat read keeps the newest answer, so an older poll that answers last cannot drop the message the owner just sent (task U117).
+- The control client drops its two backup methods and their request limit, since the bridge has no backup route (task S28).
+- The kept history stays at 500 frames even when every frame is a run start, and a pinned start survives while an unpinned frame can go (task S28).
+- A lane run that starts or ends from a terminal sends the runs notice, so Reviews and Dispatch reload (task S28).
+- The Agents list carries each lane's model, so the Agents tab shows it (task S28).
+- A file added between the page's tree read and its stream connect reaches the page at connect, and a reconnect resumes after the last frame the page saw instead of replaying the history (task S28).
+- A key after a dash or an underscore is masked whole, and the split masker holds the same key head the mask looks for (task S28).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
 - The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).

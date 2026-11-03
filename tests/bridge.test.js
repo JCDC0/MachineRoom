@@ -4,7 +4,7 @@ import { request as httpRequest } from 'node:http'
 import { basename, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree } from '../server/index.js'
+import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree, trimHistory } from '../server/index.js'
 import { getJson, postJson, readFrames, startLaneBridge, waitFor, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -385,6 +385,25 @@ describe('the file tree', () => {
     expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
   })
 
+  it('sends a file added between the tree read and the stream connect', async () => {
+    const dir = tempDir()
+    writeFileSync(join(dir, 'a.js'), '1\n')
+    const { url } = await laneBridge({ projectRoot: dir, bridge: { debounceMs: 50 } })
+    const accept = { Accept: `application/json; shape=${FOLDER_SHAPE}` }
+    const read = await getJson(`${url}/api/tree`, { headers: accept })
+
+    writeFileSync(join(dir, 'b.js'), '2\n')
+    await waitFor(
+      async () => (await getJson(`${url}/api/tree`, { headers: accept })).body.version > read.body.version,
+      { what: 'the tree version to rise' }
+    )
+
+    const sse = await openSse(url, {}, `?history=1&tree=${FOLDER_SHAPE}&since=${read.body.version}`)
+    cleanups.push(() => sse.close())
+    const event = await sse.next((e) => e.event === 'tree')
+    expect(JSON.parse(event.data)).toEqual({ root: basename(dir), files: ['b.js'] })
+  })
+
   it('sends the whole list to a stream whose since is unknown', async () => {
     const dir = tempDir()
     writeFileSync(join(dir, 'a.js'), '1\n')
@@ -459,6 +478,32 @@ describe('frames from a lane log', () => {
     const next = await again.next((item) => item.event === 'frame')
     expect(next.id).toBe(history[1].id)
     expect(JSON.parse(next.data)).toEqual(JSON.parse(history[1].data))
+
+    const after = await openSse(url, {}, `?history=1&after=${history[0].id}`)
+    cleanups.push(() => after.close())
+    const resumed = await after.next((item) => item.event === 'frame')
+    expect(resumed.id).toBe(history[1].id)
+    expect(JSON.parse(resumed.data)).toEqual(JSON.parse(history[1].data))
+  })
+
+  it('bounds the kept history even when every frame is a run start', () => {
+    const history = Array.from({ length: 600 }, (_, index) => ({ id: String(index), pinned: true }))
+    trimHistory(history)
+    expect(history).toHaveLength(500)
+    expect(history[0].id).toBe('100')
+    expect(history.at(-1).id).toBe('599')
+  })
+
+  it('drops an unpinned frame before an open run start', () => {
+    const history = [
+      { id: 'start', pinned: true },
+      { id: 'log', pinned: false },
+    ]
+    for (let index = 0; index < 500; index += 1) history.push({ id: `n${index}`, pinned: false })
+    trimHistory(history)
+    expect(history).toHaveLength(500)
+    expect(history[0].id).toBe('start')
+    expect(history.some((entry) => entry.id === 'log')).toBe(false)
   })
 
   it('sends no history to a client that does not ask', async () => {
@@ -499,6 +544,44 @@ describe('frames from a lane log', () => {
     loop.writeLog('opencode-Y1-20261024-124000', `${toolLine('docs/a.md', { id: 'call-1' })}\n`)
     const notice = await sse.next((e) => e.event === 'change')
     expect(JSON.parse(notice.data)).toEqual({ topic: 'agents' })
+  })
+
+  it('sends a runs notice when a run starts from a lane log, so Reviews reloads', async () => {
+    const loop = await laneBridge()
+    const sse = await openSse(loop.url)
+    cleanups.push(() => sse.close())
+    loop.writeLog('opencode-Y1-20261024-124500', `${toolLine('docs/a.md', { id: 'call-1' })}\n`)
+    const notice = await sse.next((e) => e.event === 'change' && JSON.parse(e.data).topic === 'runs')
+    expect(JSON.parse(notice.data)).toEqual({ topic: 'runs' })
+  })
+
+  it('sends no endpoints or mcp notice that no panel hears', async () => {
+    const loop = await laneBridge()
+    const sse = await openSse(loop.url)
+    cleanups.push(() => sse.close())
+    const headers = { 'content-type': 'application/json', origin: loop.url }
+    const endpoint = await getJson(`${loop.url}/api/endpoints`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'Work',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['alpha'],
+        confirmed: true,
+      }),
+    })
+    expect(endpoint.status).toBe(200)
+    const server = await getJson(`${loop.url}/api/mcp/servers`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'files', transport: 'stdio', command: 'node', enabled: true, confirmed: true }),
+    })
+    expect(server.status).toBe(200)
+    await expect(
+      sse.next((e) => e.event === 'change' && ['endpoints', 'mcp'].includes(JSON.parse(e.data).topic), 300)
+    ).rejects.toThrow('timed out waiting for SSE event')
   })
 })
 

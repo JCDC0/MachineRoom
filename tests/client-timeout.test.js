@@ -34,6 +34,13 @@ function harness(fetchImpl) {
 }
 
 describe('control client request limits', () => {
+  it('has no backup methods or their limit, since the bridge has no backup route', () => {
+    const { client } = harness(hangingFetch().fetchImpl)
+    expect(client.backupStatus).toBeUndefined()
+    expect(client.backupNow).toBeUndefined()
+    expect(REQUEST_LIMITS.backupNow).toBeUndefined()
+  })
+
   it('gives up on a request that never answers at the default limit', async () => {
     const { fetchImpl, seen } = hangingFetch()
     const { client, timers, cleared } = harness(fetchImpl)
@@ -66,11 +73,11 @@ describe('control client request limits', () => {
   it('gives a long route a limit above the bridge limit', async () => {
     const { fetchImpl, seen } = hangingFetch()
     const { client, timers } = harness(fetchImpl)
-    const pending = client.backupNow()
-    expect(timers[0].ms).toBe(REQUEST_LIMITS.backupNow)
+    const pending = client.hireAgent({ name: 'New lane' })
+    expect(timers[0].ms).toBe(REQUEST_LIMITS.hireAgent)
     timers[0].fn()
     await expect(pending).rejects.toThrow(
-      `The bridge did not answer within ${REQUEST_LIMITS.backupNow / 1000} seconds.`
+      `The bridge did not answer within ${REQUEST_LIMITS.hireAgent / 1000} seconds.`
     )
     expect(seen.options.signal.aborted).toBe(true)
   })

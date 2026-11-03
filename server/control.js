@@ -81,7 +81,7 @@ export function changeEvents(frame) {
   if (type === 'agent.status') return [{ topic: 'agents' }]
   if (RUN_NOTICES.has(type)) {
     const costs = type === 'heartbeat.run.status' && ['succeeded', 'failed', 'cancelled', 'timed_out'].includes(payload.status) ? [{ topic: 'costs' }] : []
-    return [{ topic: 'agents' }, { topic: 'issues' }, ...costs, { topic: 'liveRuns' }]
+    return [{ topic: 'agents' }, { topic: 'issues' }, ...costs, { topic: 'liveRuns' }, { topic: 'runs' }]
   }
   if (type !== 'activity.logged') return []
   const action = String(payload.action ?? '')
@@ -114,7 +114,7 @@ export function mapAgent(raw, spendCents) {
     adapterType: String(raw?.adapterType ?? ''),
     role: String(raw?.role ?? 'general'),
     status: AGENT_STATUS[raw?.status] ?? 'idle',
-    model: typeof raw?.adapterConfig?.model === 'string' && raw.adapterConfig.model ? raw.adapterConfig.model : null,
+    model: (typeof raw?.adapterConfig?.model === 'string' && raw.adapterConfig.model) || (typeof raw?.model === 'string' && raw.model) || null,
     reasoningEffort: effortOf(raw),
     maxTurnsPerRun: setting(raw, 'maxTurnsPerRun'),
     timeoutSec: setting(raw, 'timeoutSec'),

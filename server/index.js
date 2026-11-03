@@ -246,6 +246,17 @@ function createReadJsonBody(sendJson) {
   }
 }
 
+export function trimHistory(history) {
+  while (history.length > HISTORY_LIMIT) {
+    const index = history.findIndex((item) => !item.pinned)
+    if (index === -1) break
+    history.splice(index, 1)
+  }
+  if (history.length > HISTORY_LIMIT) {
+    history.splice(0, history.length - HISTORY_LIMIT)
+  }
+}
+
 export function createBridge(options = {}) {
   const projectRoot = options.projectRoot ?? process.env.PROJECT_ROOT ?? process.cwd()
   const treeReader = options.readTree ?? readTree
@@ -402,9 +413,7 @@ export function createBridge(options = {}) {
     runsFolder: resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
     sendJson,
     readJsonBody,
-    notify: (event) => {
-      for (const client of clients) writeSseChange(client, event)
-    },
+    notify: notifyHeard,
   })
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
@@ -445,9 +454,7 @@ export function createBridge(options = {}) {
     runsFolder: bridgeRunsFolder,
     sendJson,
     readJsonBody,
-    notify: (event) => {
-      for (const client of clients) writeSseChange(client, event)
-    },
+    notify: notifyHeard,
   })
   const projects = createProjectsApi({
     projectRoot,
@@ -532,6 +539,11 @@ export function createBridge(options = {}) {
 
   function writeSseChange(res, event) {
     res.write(`event: change\ndata: ${JSON.stringify(event)}\n\n`)
+  }
+
+  function notifyHeard(event) {
+    if (event?.topic === 'endpoints' || event?.topic === 'mcp') return
+    for (const client of clients) writeSseChange(client, event)
   }
 
   function rememberTreeVersion(files) {
@@ -700,14 +712,6 @@ export function createBridge(options = {}) {
     )
   }
 
-  function trimHistory() {
-    while (history.length > HISTORY_LIMIT) {
-      const index = history.findIndex((item) => !item.pinned)
-      if (index === -1) return
-      history.splice(index, 1)
-    }
-  }
-
   function emit(parsed) {
     if (typeof parsed.id === 'number' && parsed.id > nextId) {
       nextId = parsed.id
@@ -725,7 +729,7 @@ export function createBridge(options = {}) {
         if (item.runId === runId) item.pinned = false
       }
     }
-    trimHistory()
+    trimHistory(history)
     if (endsRun) gitApi.invalidateCache()
     const notices = changeEvents(parsed)
     if (endsRun) notices.push({ topic: 'git' })
@@ -887,7 +891,10 @@ export function createBridge(options = {}) {
       })
       res.flushHeaders()
 
-      const lastEventId = req.headers['last-event-id'] !== undefined ? String(req.headers['last-event-id']).trim() : ''
+      const lastEventId =
+        req.headers['last-event-id'] !== undefined
+          ? String(req.headers['last-event-id']).trim()
+          : String(url.searchParams.get('after') ?? '').trim()
       const wantsHistory = url.searchParams.get('history') === '1'
       if (lastEventId) {
         const index = history.findIndex((item) => item.id === lastEventId)
@@ -914,7 +921,15 @@ export function createBridge(options = {}) {
         const sinceText = url.searchParams.get('since')
         const sinceVersion = sinceText && /^\d+$/.test(sinceText) ? Number(sinceText) : null
         const sinceFiles = sinceVersion === null ? null : treeVersions.get(sinceVersion)
-        if (sinceFiles) treeSent.set(res, sinceFiles)
+        if (sinceFiles) {
+          treeSent.set(res, sinceFiles)
+          if (lastTree) {
+            const shape = url.searchParams.get('tree') === FOLDER_SHAPE ? FOLDER_SHAPE : null
+            const event = treeEvent(lastTree, sinceFiles, shape)
+            if (event) res.write(event)
+            treeSent.set(res, lastTree.files)
+          }
+        }
       }
       req.on('close', () => {
         clients.delete(res)
