@@ -1200,8 +1200,8 @@ export function createOrchestrator({
     const message = addMessage('owner', text)
     pending.push(message)
     maybeStartTurn()
-    if (persistError) return { status: 500, body: { error: persistError, id: message.id } }
-    return { status: 202, body: { id: message.id } }
+    // The message is queued and its turn starts, so a failure here would invite a second send.
+    return { status: 202, body: persistError ? { id: message.id, saveError: persistError } : { id: message.id } }
   }
 
   function deliver(from, text) {

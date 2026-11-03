@@ -1703,8 +1703,9 @@ describe('the orchestrator chat file', () => {
     })
 
     const sent = orchestrator.send({ text: 'Keep me', confirmed: true })
-    expect(sent.status).toBe(500)
-    expect(sent.body).toEqual({ error: CHAT_SAVE_PROBLEM, id: sent.body.id })
+
+    expect(sent.status).toBe(202)
+    expect(sent.body).toEqual({ id: sent.body.id, saveError: CHAT_SAVE_PROBLEM })
     expect(orchestrator.answer().saveError).toBe(CHAT_SAVE_PROBLEM)
 
     failing = false
