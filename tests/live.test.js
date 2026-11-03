@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createLivePlayer } from '../src/live/livePlayer.js'
 import { diffRoster, loadAgents, openStream, parserFor, socketUrl, toAgents } from '../src/live/source.js'
 import { makeTree } from '../src/model/paths.js'
-import { SEEN_LIMIT, buildActivities, createPipeline } from '../src/model/pipeline.js'
+import { RUN_IDLE_MS, SEEN_LIMIT, buildActivities, createPipeline } from '../src/model/pipeline.js'
 import { createPlayer } from '../src/model/player.js'
 import { loadRecording } from './helpers.js'
 
@@ -504,6 +504,61 @@ describe('incremental pipeline', () => {
     const out = pipeline.push({ id: 'm1', type: 'heartbeat.run.log', createdAt: '2026-10-20T00:00:00Z', payload: { agentId: agent.id, runId: 'joined', stream: 'stdout', seq: 40, chunk: read } })
     expect(out.find((activity) => activity.type === 'tool.start').touches).toEqual([{ path: 'src/math.js', mode: 'read', kind: 'file' }])
     expect(pipeline.remembered()).toMatchObject({ runs: 1, parsers: 1 })
+  })
+
+  it('forgets a run after 30 minutes without a frame and starts a new parser for it', () => {
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const agent = recording.agents.find((entry) => entry.key === 'claude')
+    const base = Date.parse('2026-10-20T00:00:00Z')
+    const at = (ms) => new Date(base + ms).toISOString()
+    const read = (id) => `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Read', input: { file_path: 'src/math.js' } }] } })}\n`
+    const frame = (id, type, ms, payload) => ({
+      id,
+      type,
+      createdAt: at(ms),
+      payload: { agentId: agent.id, ...payload },
+    })
+
+    pipeline.push(frame('s1', 'heartbeat.run.status', 0, { runId: 'idle-run', status: 'running' }))
+    pipeline.push(frame('l1', 'heartbeat.run.log', 1000, { runId: 'idle-run', stream: 'stdout', seq: 1, ts: at(1000), chunk: read('old-call') }))
+    expect(pipeline.remembered()).toMatchObject({ runs: 1, parsers: 1 })
+
+    pipeline.push(frame('s2', 'heartbeat.run.status', RUN_IDLE_MS, { runId: 'other-run', status: 'running' }))
+    expect(pipeline.remembered()).toMatchObject({ runs: 2, parsers: 1 })
+
+    pipeline.push(frame('s3', 'heartbeat.run.status', RUN_IDLE_MS + 1001, { runId: 'other-run', status: 'succeeded' }))
+    expect(pipeline.remembered()).toMatchObject({ runs: 0, parsers: 0 })
+
+    const out = pipeline.push(
+      frame('l2', 'heartbeat.run.log', RUN_IDLE_MS + 2000, { runId: 'idle-run', stream: 'stdout', seq: 2, ts: at(RUN_IDLE_MS + 2000), chunk: read('new-call') })
+    )
+    expect(out.filter((activity) => activity.type === 'tool.start').map((activity) => activity.id)).toEqual(['new-call'])
+    expect(pipeline.remembered()).toMatchObject({ runs: 1, parsers: 1 })
+  })
+
+  it('drops a half line held by a run parser that went idle', () => {
+    const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
+    const agent = recording.agents.find((entry) => entry.key === 'claude')
+    const base = Date.parse('2026-10-20T00:00:00Z')
+    const at = (ms) => new Date(base + ms).toISOString()
+    const full = `${JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'half', name: 'Read', input: { file_path: 'src/math.js' } }] } })}\n`
+    const frame = (id, ms, seq, chunk) => ({
+      id,
+      type: 'heartbeat.run.log',
+      createdAt: at(ms),
+      payload: { agentId: agent.id, runId: 'half-run', stream: 'stdout', seq, ts: at(ms), chunk },
+    })
+
+    expect(pipeline.push(frame('h1', 0, 1, full.slice(0, 30)))).toEqual([])
+    pipeline.push({
+      id: 'h2',
+      type: 'heartbeat.run.status',
+      createdAt: at(RUN_IDLE_MS + 1),
+      payload: { agentId: agent.id, runId: 'other-run', status: 'running' },
+    })
+    expect(pipeline.remembered()).toMatchObject({ runs: 1, parsers: 0 })
+    expect(pipeline.push(frame('h3', RUN_IDLE_MS + 1000, 2, full.slice(30)))).toEqual([])
+    expect(pipeline.flush().filter((activity) => activity.type === 'tool.start')).toEqual([])
   })
 
   it('shows an error event that comes after the run ended without keeping the run open', () => {

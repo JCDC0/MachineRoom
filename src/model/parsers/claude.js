@@ -160,6 +160,7 @@ export function createClaudeParser(ctx) {
         out.push({ time, type: 'agent.end', agent: child, ok })
       }
     }
+    calls.delete(id)
   }
 
   function hear(json) {
@@ -189,6 +190,7 @@ export function createClaudeParser(ctx) {
     if (finished) {
       const output = call.kind === 'shell' ? json.text : ''
       out.push({ ...toolEnd({ time, id: call.id, ok: json.status === 'completed' && !looksFailed(output) }), agent: call.owner })
+      calls.delete(call.id)
     }
   }
 

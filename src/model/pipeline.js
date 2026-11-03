@@ -22,6 +22,7 @@ const RUN_END = new Set(['succeeded', 'failed', 'cancelled', 'timed_out'])
 const MESSAGE_KINDS = new Set(['order', 'report', 'dispatch', 'wake'])
 export const SEEN_LIMIT = 20000
 export const ENDED_LIMIT = 1000
+export const RUN_IDLE_MS = 30 * 60000
 
 export function createPipeline({ agents, tree }) {
   const ctx = makeContext({ ...tree, files: [...tree.files], dirs: [...(tree.dirs ?? [])] })
@@ -34,6 +35,18 @@ export function createPipeline({ agents, tree }) {
   const ended = new Set()
   let order = 0
   let lastTime = 0
+  let feedTime = 0
+
+  function sweep(time) {
+    if (!Number.isFinite(time)) return
+    if (time > feedTime) feedTime = time
+    const from = feedTime - RUN_IDLE_MS
+    for (const [runId, last] of lastRunTime) {
+      if (last >= from) continue
+      lastRunTime.delete(runId)
+      parsers.delete(runId)
+    }
+  }
 
   function once(key) {
     if (seen.has(key)) return false
@@ -57,6 +70,7 @@ export function createPipeline({ agents, tree }) {
     if (frame.id !== undefined && frame.id !== null) {
       if (!once(`frame:${frame.id}`)) return []
     }
+    sweep(Date.parse(frame.createdAt))
 
     const payload = frame.payload
     if (frame.type === 'orchestrator.message') {

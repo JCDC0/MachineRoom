@@ -873,6 +873,11 @@ export function createAgents(scene, roster, cssScene = null) {
     const at = pickables.indexOf(view.picker)
     if (at !== -1) pickables.splice(at, 1)
     views.delete(view.key)
+    if (!view.parentKey) return
+    for (const other of views.values()) {
+      if (other.shapeName === view.shapeName) return
+    }
+    usedShapes.delete(view.shapeName)
   }
 
   function childIndex(state, entry) {

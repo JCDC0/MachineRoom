@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  COMPACT_AFTER,
   RECORD_MINUTES_DEFAULT,
   RECORD_MINUTES_MAX,
   RECORD_MINUTES_MIN,
@@ -240,6 +241,38 @@ describe('createSessionRecorder', () => {
     expect(recorder.span()).toBe(0)
     recorder.push(notice(7000))
     expect(recorder.span()).toBe(7000)
+  })
+
+  it('drops old frames with a head and compacts the list in chunks', () => {
+    const recorder = createSessionRecorder({ minutes: 1 })
+    recorder.push(runFrame('heartbeat.run.queued', 0))
+    for (let index = 1; index <= 4000; index += 1) recorder.push(notice(index * 1000))
+    const kept = recorder.stats().kept
+    expect(kept).toBe(61)
+    expect(recorder.frames()).toHaveLength(61)
+    expect(recorder.frames()[0].createdAt).toBe(at(3940 * 1000))
+    expect(recorder.stats().slots).toBeLessThanOrEqual(kept + COMPACT_AFTER)
+    expect(timesOf(recorder)[0]).toBe(3940 * 1000)
+  })
+
+  it('keeps an out of order frame that falls inside the window after a trim', () => {
+    const recorder = createSessionRecorder({ minutes: 1 })
+    recorder.push(runFrame('heartbeat.run.queued', 0))
+    for (let index = 1; index <= 9; index += 1) recorder.push(notice(index * 10000))
+    expect(timesOf(recorder)).toEqual([30000, 40000, 50000, 60000, 70000, 80000, 90000])
+    recorder.push(notice(45000))
+    expect(timesOf(recorder)).toEqual([30000, 40000, 45000, 50000, 60000, 70000, 80000, 90000])
+    expect(recorder.stats().kept).toBe(8)
+  })
+
+  it('resets the head when it clears', () => {
+    const recorder = createSessionRecorder({ minutes: 1 })
+    recorder.push(runFrame('heartbeat.run.queued', 0))
+    for (let index = 1; index <= 2000; index += 1) recorder.push(notice(index * 1000))
+    recorder.clear()
+    expect(recorder.stats()).toEqual({ kept: 0, slots: 0 })
+    recorder.push(runFrame('heartbeat.run.status', 5000, { status: 'running' }))
+    expect(timesOf(recorder)).toEqual([5000])
   })
 })
 

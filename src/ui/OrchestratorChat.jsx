@@ -105,6 +105,18 @@ function initialList(value) {
   return value.filter((entry) => entry && typeof entry === 'object' && typeof entry.id === 'string' && entry.id)
 }
 
+export function pruneOrchestratorRecord(record, ids) {
+  const keep = new Set(Array.isArray(ids) ? ids : [])
+  keep.add('orchestrator')
+  let dropped = false
+  const next = {}
+  for (const [id, value] of Object.entries(record ?? {})) {
+    if (keep.has(id)) next[id] = value
+    else dropped = true
+  }
+  return dropped ? next : record
+}
+
 export default function OrchestratorChat({
   client = null,
   open = true,
@@ -312,6 +324,14 @@ export default function OrchestratorChat({
     if (!Array.isArray(orchestrators)) return
     setList(initialList(orchestrators))
   }, [orchestrators])
+
+  useEffect(() => {
+    const ids = list.map((entry) => entry.id)
+    setChats((current) => pruneOrchestratorRecord(current, ids))
+    setLoadedIds((current) => pruneOrchestratorRecord(current, ids))
+    setStartedIds((current) => pruneOrchestratorRecord(current, ids))
+    chatTicketsRef.current = pruneOrchestratorRecord(chatTicketsRef.current, ids)
+  }, [list])
 
   useEffect(() => {
     if (!open) return undefined

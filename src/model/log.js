@@ -3,6 +3,7 @@ import { shorten } from './parsers/common.js'
 const LIMIT = 50
 const TEXT_LIMIT = 140
 export const LIVE_LOG_LIMIT = 200
+export const LABEL_LIMIT = 2000
 
 export function appendLiveLog(previous, added, limit = LIVE_LOG_LIMIT) {
   if (added.length === 0) return previous
@@ -23,6 +24,7 @@ export function createLogger(agents) {
         return { agent, text: `run ${String(activity.runId).slice(0, 4)} started`, tone: 'dim' }
       case 'tool.start':
         labels.set(call, activity.label)
+        if (labels.size > LABEL_LIMIT) labels.delete(labels.keys().next().value)
         return { agent, text: shorten(activity.label, TEXT_LIMIT), tone: 'normal' }
       case 'tool.end': {
         const label = activity.label ?? labels.get(call)
