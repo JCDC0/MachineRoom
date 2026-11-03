@@ -898,7 +898,7 @@ export function createCards(cssScene, options = {}) {
         const card = cards.get(path)
         if (card) {
           card.home.set(spot.x, spot.y, spot.z)
-          card.danceDelay = danceDelay(ringOf(spot).angle)
+          card.danceDelay = path === '' ? 0 : danceDelay(ringOf(spot).angle)
         }
       }
     }
