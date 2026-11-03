@@ -56,7 +56,7 @@ describe('addFailureActivities', () => {
     expect(failureRows(tray).rows[0].at).toBe(NOW + 1000)
   })
 
-  it('removes a lane rows when that lane ends a run well', () => {
+  it('removes a lane\'s rows when that lane ends a run well', () => {
     const failed = [
       toolEnd('call-1', false, NOW, 'run-1', 'opencode'),
       toolEnd('call-2', false, NOW, 'run-1', 'agy'),
@@ -84,18 +84,21 @@ describe('addFailureActivities', () => {
 })
 
 describe('failureRows', () => {
-  it('lists the newest failure first and shows five with the rest counted', () => {
+  it('lists the newest failure first and shows the tray limit with the rest counted', () => {
+    const total = FAILURE_TRAY_LIMIT + 3
     const activities = []
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < total; index += 1) {
       activities.push(toolEnd(`call-${index}`, false, NOW + index, 'run-1', index % 2 ? 'agy' : 'opencode'))
     }
     const tray = addFailureActivities(emptyFailureTray(), activities, NOW)
     const shown = failureRows(tray)
     expect(shown.rows).toHaveLength(FAILURE_TRAY_LIMIT)
-    expect(shown.more).toBe(3)
-    expect(shown.total).toBe(8)
-    expect(shown.rows[0].id).toBe('tool:run-1:call-7')
-    expect(shown.rows[4].id).toBe('tool:run-1:call-3')
+    expect(shown.more).toBe(total - FAILURE_TRAY_LIMIT)
+    expect(shown.total).toBe(total)
+    expect(shown.rows[0].id).toBe(`tool:run-1:call-${total - 1}`)
+    expect(shown.rows[FAILURE_TRAY_LIMIT - 1].id).toBe(
+      `tool:run-1:call-${total - FAILURE_TRAY_LIMIT}`
+    )
   })
 })
 

@@ -275,7 +275,7 @@ describe('Hud agent groups', () => {
     expect(html).not.toContain('1 lanes')
   })
 
-  it('draws today\'s flat list when there is no ladder', () => {
+  it('draws the flat list when there is no ladder', () => {
     const html = renderToString(
       createElement(Hud, { mode: 'replay', snapshot, speeds: [1] })
     )

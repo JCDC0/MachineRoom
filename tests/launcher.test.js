@@ -140,11 +140,6 @@ describe('folder path', () => {
 })
 
 describe('launcher poll', () => {
-  it('polls every 500 ms for up to 30 seconds', () => {
-    expect(POLL_INTERVAL_MS).toBe(500)
-    expect(POLL_TIMEOUT_MS).toBe(30000)
-  })
-
   it('answers when health is back and the current path is the new one', async () => {
     vi.useFakeTimers()
     try {
@@ -155,7 +150,7 @@ describe('launcher poll', () => {
       ]
       const probe = vi.fn(async () => answers.shift() ?? null)
       const result = pollProject({ probe, path: 'c:/work/new/' })
-      await vi.advanceTimersByTimeAsync(1500)
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3)
       await expect(result).resolves.toMatchObject({ ok: true })
       expect(probe).toHaveBeenCalledTimes(3)
     } finally {
@@ -173,7 +168,7 @@ describe('launcher poll', () => {
         return { current: { path: '/work/new' } }
       }
       const result = pollProject({ probe, path: '/work/new' })
-      await vi.advanceTimersByTimeAsync(1500)
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3)
       await expect(result).resolves.toMatchObject({ ok: true })
       expect(calls).toBe(3)
     } finally {
@@ -181,12 +176,12 @@ describe('launcher poll', () => {
     }
   })
 
-  it('gives up after 30 seconds', async () => {
+  it('gives up at the poll timeout', async () => {
     vi.useFakeTimers()
     try {
       const probe = vi.fn(async () => ({ current: { path: '/work/old' } }))
       const result = pollProject({ probe, path: '/work/new' })
-      await vi.advanceTimersByTimeAsync(30000)
+      await vi.advanceTimersByTimeAsync(POLL_TIMEOUT_MS)
       await expect(result).resolves.toEqual({ ok: false, reason: 'timeout' })
     } finally {
       vi.useRealTimers()

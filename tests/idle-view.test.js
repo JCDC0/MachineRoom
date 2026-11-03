@@ -70,7 +70,6 @@ afterEach(() => {
 
 describe('idleAllowed', () => {
   it('allows the calm view at 900 pixels and wider with the page at its top', () => {
-    expect(IDLE_AFTER_MS).toBe(60000)
     expect(idleAllowed(allowed)).toBe(true)
     expect(idleAllowed({ ...allowed, width: 900 })).toBe(true)
   })

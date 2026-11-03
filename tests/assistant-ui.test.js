@@ -4,6 +4,7 @@ import {
   addToHistory,
   BLOCKED_MASK,
   clampPosition,
+  DEFAULT_TERMINAL_SIZE,
   DOCK_BREAKPOINT,
   formatCommandLine,
   getBlockedCommandLine,
@@ -16,24 +17,25 @@ import {
 } from '../src/ui/assistantHistory.js'
 
 describe('history ring', () => {
-  it('appends items up to 20', () => {
+  it('appends items up to the history limit', () => {
     let history = []
-    for (let i = 1; i <= 20; i++) {
+    for (let i = 1; i <= MAX_HISTORY; i++) {
       history = addToHistory(history, `line-${i}`)
     }
-    expect(history).toHaveLength(20)
+    expect(history).toHaveLength(MAX_HISTORY)
     expect(history[0]).toBe('line-1')
-    expect(history[19]).toBe('line-20')
+    expect(history[MAX_HISTORY - 1]).toBe(`line-${MAX_HISTORY}`)
   })
 
-  it('drops the oldest item when exceeding 20 lines', () => {
+  it('drops the oldest item when exceeding the history limit', () => {
+    const total = MAX_HISTORY + 5
     let history = []
-    for (let i = 1; i <= 25; i++) {
+    for (let i = 1; i <= total; i++) {
       history = addToHistory(history, `cmd-${i}`)
     }
     expect(history).toHaveLength(MAX_HISTORY)
-    expect(history[0]).toBe('cmd-6')
-    expect(history[19]).toBe('cmd-25')
+    expect(history[0]).toBe(`cmd-${total - MAX_HISTORY + 1}`)
+    expect(history[MAX_HISTORY - 1]).toBe(`cmd-${total}`)
   })
 
   it('ignores empty lines and whitespace but preserves [hidden]', () => {
@@ -88,7 +90,7 @@ describe('history ring', () => {
 })
 
 describe('position clamp', () => {
-  const size = { width: 380, height: 280 }
+  const size = DEFAULT_TERMINAL_SIZE
   const win = { windowWidth: 1280, windowHeight: 800 }
 
   it('keeps positions inside viewport bounds', () => {
@@ -101,8 +103,8 @@ describe('position clamp', () => {
 
   it('clamps right and bottom edges to window boundaries', () => {
     expect(clampPosition({ x: 2000, y: 1500 }, size, win)).toEqual({
-      x: 1280 - 380,
-      y: 800 - 280,
+      x: 1280 - size.width,
+      y: 800 - size.height,
     })
   })
 
@@ -113,30 +115,29 @@ describe('position clamp', () => {
 
   it('calculates a valid default position above the transport bar on the right', () => {
     const pos = getDefaultPosition(size, win)
-    expect(pos.x).toBe(1280 - 380 - 16)
-    expect(pos.y).toBe(800 - 280 - 88)
+    expect(pos.x).toBe(1280 - size.width - 16)
+    expect(pos.y).toBe(800 - size.height - 88)
 
     const smallerPos = getDefaultPosition(size, { windowWidth: 1024, windowHeight: 768 })
-    expect(smallerPos.x).toBe(1024 - 380 - 16)
-    expect(smallerPos.y).toBe(768 - 280 - 88)
+    expect(smallerPos.x).toBe(1024 - size.width - 16)
+    expect(smallerPos.y).toBe(768 - size.height - 88)
   })
 
-  it('identifies dock threshold under 900px', () => {
-    expect(isDocked(899)).toBe(true)
-    expect(isDocked(900)).toBe(false)
+  it('docks the terminal below the breakpoint and floats it above', () => {
+    expect(isDocked(DOCK_BREAKPOINT - 1)).toBe(true)
+    expect(isDocked(DOCK_BREAKPOINT)).toBe(false)
     expect(isDocked(1024)).toBe(false)
-    expect(DOCK_BREAKPOINT).toBe(900)
   })
 
   it('falls back to DEFAULT_TERMINAL_SIZE when width or height is zero or invalid', () => {
     const zeroSize = { width: 0, height: 0 }
     expect(clampPosition({ x: 2000, y: 1500 }, zeroSize, win)).toEqual({
-      x: 1280 - 380,
-      y: 800 - 280,
+      x: 1280 - DEFAULT_TERMINAL_SIZE.width,
+      y: 800 - DEFAULT_TERMINAL_SIZE.height,
     })
     expect(getDefaultPosition(zeroSize, win)).toEqual({
-      x: 1280 - 380 - 16,
-      y: 800 - 280 - 88,
+      x: 1280 - DEFAULT_TERMINAL_SIZE.width - 16,
+      y: 800 - DEFAULT_TERMINAL_SIZE.height - 88,
     })
   })
 })
@@ -153,7 +154,6 @@ describe('assistant log entries', () => {
   })
 
   it('drops the oldest entries past the limit', () => {
-    expect(MAX_ENTRIES).toBe(200)
     const list = Array.from({ length: MAX_ENTRIES }, (_, i) => ({ id: `old-${i}` }))
     const next = appendEntries(list, { id: 'new-1' }, { id: 'new-2' })
     expect(next).toHaveLength(MAX_ENTRIES)

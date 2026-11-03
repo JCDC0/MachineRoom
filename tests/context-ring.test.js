@@ -3,6 +3,8 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import Transport, { LiveBadgeContext, liveBadgeText } from '../src/ui/Transport.jsx'
 import {
+  CONTEXT_RED_SHARE,
+  DEFAULT_CONTEXT_RULE,
   contextLabel,
   contextPercent,
   contextShare,
@@ -35,14 +37,14 @@ describe('the context ring helpers', () => {
     expect(contextShare(84000, 0)).toBeNull()
   })
 
-  it('is white below the rule, yellow at or past it and red past 95 percent', () => {
+  it('is white below the rule, yellow at or past it and red past the red share', () => {
     expect(contextTone(0.42, 80)).toBe('white')
-    expect(contextTone(0.79, 80)).toBe('white')
-    expect(contextTone(0.8, 80)).toBe('yellow')
-    expect(contextTone(0.95, 80)).toBe('yellow')
-    expect(contextTone(0.951, 80)).toBe('red')
+    expect(contextTone(0.79, DEFAULT_CONTEXT_RULE)).toBe('white')
+    expect(contextTone(DEFAULT_CONTEXT_RULE / 100, DEFAULT_CONTEXT_RULE)).toBe('yellow')
+    expect(contextTone(CONTEXT_RED_SHARE, 80)).toBe('yellow')
+    expect(contextTone(CONTEXT_RED_SHARE + 0.001, 80)).toBe('red')
     expect(contextTone(0.75, 70)).toBe('yellow')
-    expect(contextTone(null, 80)).toBe('white')
+    expect(contextTone(null, DEFAULT_CONTEXT_RULE)).toBe('white')
     expect(contextTone(0.85, 0)).toBe('yellow')
     expect(contextTone(0.85, 120)).toBe('white')
     expect(contextTone(0.5, 5000)).toBe('white')
@@ -116,7 +118,7 @@ describe('the transport under the lens', () => {
     expect(html).not.toContain('stroke-dasharray')
   })
 
-  it('turns the ring yellow at the autocompact rule and red past 95 percent', () => {
+  it('turns the ring yellow at the autocompact rule and red past the red share', () => {
     const yellow = renderToString(
       createElement(Transport, {
         snapshot: LIVE,

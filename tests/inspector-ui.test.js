@@ -1,6 +1,7 @@
 import { act, createElement } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import Inspector from '../src/ui/Inspector.jsx'
+import { EXPLORER_LIMIT } from '../src/ui/inspector.js'
 import { buttonWithText, click, settle, withDom } from './helpers/uiDom.js'
 
 const lane = {
@@ -211,9 +212,9 @@ describe('the inspector panel', () => {
     })
   })
 
-  it('caps a big folder at 200 rows and says how many more', async () => {
+  it('caps a big folder at the explorer limit and says how many more', async () => {
     const files = Array.from(
-      { length: 205 },
+      { length: EXPLORER_LIMIT + 5 },
       (_, index) => `big/f${String(index).padStart(3, '0')}.js`
     )
     const tree = { rootName: 'demo', dirs: ['', 'big'], files }
@@ -226,7 +227,7 @@ describe('the inspector panel', () => {
         lanes: [],
       })
 
-      expect(container.querySelectorAll('.mr-inspector-entry-btn')).toHaveLength(200)
+      expect(container.querySelectorAll('.mr-inspector-entry-btn')).toHaveLength(EXPLORER_LIMIT)
       expect(container.textContent).toContain('5 more. Open the folder card to see them all.')
     })
   })

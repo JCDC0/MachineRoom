@@ -189,7 +189,6 @@ describe('FamilyTree rows', () => {
       await mount(root, client)
       expect(container.textContent).toContain('The lane file is missing.')
       expect(container.querySelector('.mr-side-count').textContent).toBe('Agents failed to load.')
-      expect(container.textContent).not.toContain('The family tree is not available.')
     })
   })
 

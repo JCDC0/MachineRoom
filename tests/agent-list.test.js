@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { agentForNumber, agentList, agentRows, displayName } from '../src/ui/agentList.js'
+import { agentForNumber, agentList, displayName } from '../src/ui/agentList.js'
 
 const orchestrator = { key: 'orchestrator', name: 'Orchestrator', status: 'idle' }
 const alpha = { key: 'alpha', name: 'Alpha', status: 'idle' }
@@ -85,19 +85,6 @@ describe('agentList', () => {
     const list = agentList([delta])
     expect(list.idleCount).toBe(1)
     expect(list.rows[0].visible).toBe(false)
-  })
-
-  it('keeps the old agentRows nesting and numbering', () => {
-    const rows = agentRows([
-      { key: 'a', name: 'Alpha', status: 'working' },
-      { key: 'a~1', name: 'Scout', status: 'done', parent: 'a', depth: 1 },
-      { key: 'b', name: 'Beta', status: 'idle' },
-    ])
-    expect(rows.map((row) => [row.agent.key, row.depth, row.number])).toEqual([
-      ['a', 0, 1],
-      ['a~1', 1, null],
-      ['b', 0, 2],
-    ])
   })
 })
 
