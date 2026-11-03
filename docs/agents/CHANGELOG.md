@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `layoutRing` walks its folder queue with an index instead of shifting it, so a deep folder chain lays out in one pass.
 - `makeTree` builds its folders by walking the sorted prefixes of the file list, so a 200,000-file tree costs less to load.
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.

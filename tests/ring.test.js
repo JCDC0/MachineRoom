@@ -380,6 +380,18 @@ describe('the folder levels', () => {
     expect(spotOf(placeOf(after, 'src/a'))).not.toEqual(spotOf(placeOf(before, 'src/a')))
     expect(ringOf(placeOf(after, 'src/a')).radius).toBeCloseTo(ringOf(placeOf(after, 'src')).radius + CHILD_STEP, 6)
   })
+
+  it('places every card of a long folder chain in one pass', () => {
+    const entries = [rootEntry(), { path: 'src', ...FILES }]
+    let path = 'src'
+    for (let level = 0; level < 2000; level += 1) {
+      path = `${path}/d`
+      entries.push({ path, ...FILES })
+    }
+    const placed = layoutRing(entries)
+    expect(placed.size).toBe(entries.length)
+    expect(ringOf(placeOf(placed, path)).radius).toBeGreaterThan(ringOf(placeOf(placed, 'src')).radius)
+  })
 })
 
 describe('the click spray', () => {
