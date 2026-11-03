@@ -260,23 +260,21 @@ export function planFolderView({
     return entries.sort((a, b) => rank(a) - rank(b) || byName(a.path, b.path))
   }
 
-  const shapeKey = [
-    alwaysLevel,
-    alwaysLimit,
-    folderLimit,
-    itemLimit,
-    limitItems ? 1 : 0,
-    [...drawn].sort(byName).join('\n'),
-    [...pinned].sort(byName).join('\n'),
-    focusPaths.join('\n'),
-    touchedPaths.join('\n'),
-    changedPaths.join('\n'),
-    [...expandedPaths].sort(byName).join('\n'),
-  ].join('|')
+  const optionKey = `${alwaysLevel}|${alwaysLimit}|${folderLimit}|${itemLimit}|${limitItems ? 1 : 0}`
+
+  const folderKey = (path) => {
+    const parts = [optionKey, String(index.folderVersion.get(path) ?? 0), pinned.has(path) ? '1' : '0']
+    for (const child of children.get(path)) {
+      parts.push(child, drawn.has(child) ? '1' : '0', String(rankOf(child, focusFolders, touchedFolders)))
+    }
+    for (const file of filesIn.get(path) ?? []) {
+      parts.push(file, focusSet.has(file) ? '0' : touchedSet.has(file) ? '1' : '2')
+    }
+    return parts.join('|')
+  }
 
   const plan = [...drawn].sort(byName).map((path) => {
-    const version = index.folderVersion.get(path) ?? 0
-    const key = `${version}|${shapeKey}`
+    const key = folderKey(path)
     const cached = index.views.get(path)
     if (cached && cached.key === key) return cached.view
     const all = itemsFor(path)
