@@ -11,7 +11,8 @@ import {
   breadcrumbRows,
   cutPath,
   effortForAgent,
-  explorerRows,
+  explorerMoreText,
+  explorerView,
   formatBytes,
   formatTime,
   gitGraphRows,
@@ -239,8 +240,8 @@ export default function Inspector({
     }
   }, [item?.kind, item?.id, orchestratorAgent, bridge, client])
 
-  const folderRows = useMemo(
-    () => (item?.kind === 'folder' ? explorerRows(item.id, tree ?? {}) : []),
+  const folderView = useMemo(
+    () => (item?.kind === 'folder' ? explorerView(item.id, tree ?? {}) : { rows: [], total: 0, more: false }),
     [item?.kind, item?.id, tree]
   )
   const crumbs = useMemo(
@@ -366,11 +367,11 @@ export default function Inspector({
                 </span>
               ))}
             </nav>
-            {folderRows.length === 0 ? (
+            {folderView.rows.length === 0 ? (
               <p className="mr-inspector-note mono">This folder is empty.</p>
             ) : (
               <ul className="mr-inspector-explorer" aria-label="Folder contents">
-                {folderRows.map((row) => (
+                {folderView.rows.map((row) => (
                   <li className={`mr-inspector-entry is-${row.kind}`} key={`${row.kind}-${row.path}`}>
                     <button
                       type="button"
@@ -384,6 +385,9 @@ export default function Inspector({
                 ))}
               </ul>
             )}
+            {folderView.more ? (
+              <p className="mr-inspector-note mono">{explorerMoreText(folderView.total)}</p>
+            ) : null}
           </>
         )}
 

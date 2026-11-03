@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The inspector's folder list draws at most 200 rows and says how many more (task U122).
 - A key saved by the quick form appears in the custom form's slot list at once (task U122).
 - The music list read stops when the panel closes (task U122).
 - A failed music start says which track could not play (task U122).

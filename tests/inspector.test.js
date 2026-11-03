@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  EXPLORER_LIMIT,
   agentStateWord,
   breadcrumbRows,
   cutPath,
   effortForAgent,
+  explorerMoreText,
   explorerRows,
+  explorerView,
   formatBytes,
   gitGraphRows,
   inspectTarget,
@@ -78,6 +81,20 @@ describe('the folder explorer rows', () => {
   it('leaves out paths that are not direct children', () => {
     expect(explorerRows('docs', tree).map((row) => row.path)).toEqual(['docs/guide.md'])
     expect(explorerRows('missing', tree)).toEqual([])
+  })
+
+  it('draws at most 200 rows and says how many more', () => {
+    const files = Array.from(
+      { length: EXPLORER_LIMIT + 5 },
+      (_, index) => `big/${String(index).padStart(4, '0')}.js`
+    )
+    const big = { rootName: 'demo', dirs: ['', 'big'], files }
+    const view = explorerView('big', big)
+    expect(view.rows).toHaveLength(EXPLORER_LIMIT)
+    expect(view.total).toBe(EXPLORER_LIMIT + 5)
+    expect(view.more).toBe(true)
+    expect(explorerMoreText(view.total)).toBe('Showing the first 200 of 205.')
+    expect(explorerView('', big).more).toBe(false)
   })
 
   it('builds a breadcrumb from the root to the folder', () => {

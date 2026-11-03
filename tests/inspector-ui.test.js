@@ -211,6 +211,26 @@ describe('the inspector panel', () => {
     })
   })
 
+  it('caps a big folder at 200 rows and says how many more', async () => {
+    const files = Array.from(
+      { length: 205 },
+      (_, index) => `big/f${String(index).padStart(3, '0')}.js`
+    )
+    const tree = { rootName: 'demo', dirs: ['', 'big'], files }
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'folder', id: 'big' },
+        live: true,
+        tree,
+        lanes: [],
+      })
+
+      expect(container.querySelectorAll('.mr-inspector-entry-btn')).toHaveLength(200)
+      expect(container.textContent).toContain('Showing the first 200 of 205.')
+    })
+  })
+
   it('lists a folder and follows an inner folder click', async () => {
     const onOpenPath = vi.fn()
     const tree = {
