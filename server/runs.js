@@ -1,7 +1,8 @@
 import { execFile, spawn } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
+import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
@@ -159,6 +160,80 @@ export function outcomesFile() {
   return join(defaultRunsFolder(), 'outcomes.jsonl')
 }
 
+const runRecordCaches = new Map()
+
+export function clearRunsCache() {
+  runRecordCaches.clear()
+}
+
+export function cachedRunRecords(file = runsFile()) {
+  const target = resolve(file ?? runsFile())
+  let stat
+  try {
+    stat = statSync(target)
+  } catch {
+    runRecordCaches.delete(target)
+    return []
+  }
+
+  let entry = runRecordCaches.get(target)
+  if (!entry) {
+    entry = {
+      offset: 0,
+      mtimeMs: 0,
+      records: [],
+      tail: '',
+      decoder: new StringDecoder('utf8'),
+    }
+    runRecordCaches.set(target, entry)
+  }
+
+  if (stat.size < entry.offset || stat.mtimeMs < entry.mtimeMs || (stat.size === entry.offset && stat.mtimeMs !== entry.mtimeMs)) {
+    entry.offset = 0
+    entry.records = []
+    entry.tail = ''
+    entry.decoder = new StringDecoder('utf8')
+  } else if (stat.size === entry.offset && stat.mtimeMs === entry.mtimeMs) {
+    return entry.records.slice()
+  }
+
+  let fd
+  try {
+    fd = openSync(target, 'r')
+  } catch {
+    return entry.records.slice()
+  }
+
+  try {
+    const length = stat.size - entry.offset
+    if (length > 0) {
+      const buffer = Buffer.alloc(length)
+      const got = readSync(fd, buffer, 0, length, entry.offset)
+      const text = entry.decoder.write(buffer.subarray(0, got))
+      const parts = (entry.tail + text).split(/\r?\n/)
+      entry.tail = parts.pop() ?? ''
+      for (const line of parts) {
+        if (!line.trim()) continue
+        try {
+          entry.records.push(JSON.parse(line))
+        } catch {}
+      }
+      if (entry.tail.trim()) {
+        try {
+          entry.records.push(JSON.parse(entry.tail))
+          entry.tail = ''
+        } catch {}
+      }
+      entry.offset += got
+    }
+    entry.mtimeMs = stat.mtimeMs
+  } finally {
+    closeSync(fd)
+  }
+
+  return entry.records.slice()
+}
+
 function readJsonLines(file) {
   let text
   try {
@@ -200,8 +275,8 @@ export function newestRecordPerLane(records) {
   return [...latest.values()]
 }
 
-export function readAllRunRecords(file) {
-  return readJsonLines(file)
+export function readAllRunRecords(file = runsFile()) {
+  return cachedRunRecords(file)
 }
 
 export function readOutcomeRecords(file) {

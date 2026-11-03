@@ -1,32 +1,10 @@
-import { statSync } from 'node:fs'
-import { readAllRunRecords, runsFile } from './runs.js'
-
-const recordCaches = new Map()
+import { cachedRunRecords, clearRunsCache, runsFile } from './runs.js'
 
 export function clearRunRecordsCache() {
-  recordCaches.clear()
+  clearRunsCache()
 }
 
-export function cachedRunRecords(file = runsFile()) {
-  let stat
-  try {
-    stat = statSync(file)
-  } catch {
-    recordCaches.delete(file)
-    return []
-  }
-  const cached = recordCaches.get(file)
-  if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
-    return cached.records
-  }
-  const records = readAllRunRecords(file)
-  recordCaches.set(file, {
-    size: stat.size,
-    mtimeMs: stat.mtimeMs,
-    records,
-  })
-  return records
-}
+export { cachedRunRecords }
 
 function monthStart(time) {
   const date = new Date(time)
