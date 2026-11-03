@@ -922,7 +922,7 @@ function tokenField(value) {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null
 }
 
-export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy, stoppedLeftovers, queue, startFailed, note } = {}) {
+export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, exitCode, killed, costUsd, inputTokens, outputTokens, log, branch, commits, project, task, startedBy, stoppedLeftovers, queue, startFailed, note, retried } = {}) {
   const record = {
     lane: String(lane ?? ''),
     briefs: Array.isArray(briefs) ? briefs.map(String) : [],
@@ -947,6 +947,7 @@ export function runRecord({ lane, briefs, model, reasoning, startedAt, minutes, 
   }
   if (Number.isInteger(stoppedLeftovers) && stoppedLeftovers > 0) record.stoppedLeftovers = stoppedLeftovers
   if (startFailed === true) record.startFailed = true
+  if (retried === true) record.retried = true
   if (typeof note === 'string' && note.trim() !== '') record.note = note.trim().slice(0, 200)
   if (typeof startedBy === 'string' && startedBy.trim() !== '') record.startedBy = startedBy.trim()
   if (typeof project === 'string' && project.trim() !== '') record.project = project

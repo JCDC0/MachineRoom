@@ -52,6 +52,14 @@
 
 - Changing sibling sub orchestrators leaves a running sub running and passes the new siblings without restarting (task S31).
 
+- Sibling folders in the project list omit the current folder (task S32).
+- The Claude session reader notices lane meta files written after the session file (task S32).
+- The recent projects list omits skipped folders when read (task S32).
+- The projects route reports git: true for a folder inside a repository (task S32).
+- Record the failure when a queue throws before its first task starts (task S32).
+- A runner that fails to start or dies by a signal writes a failed record (task S32).
+- The pack holds runner scripts and pack-check verifies spawned scripts (task S32).
+- A run that retries after the readiness sentence records the first run as retried (task S32).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

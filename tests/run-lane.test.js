@@ -862,6 +862,12 @@ describe('runRecord', () => {
     expect(runRecord({ lane: 'opencode2', briefs: [], stoppedLeftovers: '2' })).not.toHaveProperty('stoppedLeftovers')
   })
 
+  it('records retried runs with retried: true', () => {
+    const record = runRecord({ lane: 'opencode', retried: true })
+    expect(record.retried).toBe(true)
+    expect(runRecord({ lane: 'opencode' })).not.toHaveProperty('retried')
+  })
+
   it('writes nulls where the run reported nothing', () => {
     const record = runRecord({ lane: 'opencode', briefs: 'T3', startedAt: 1760000000000, exitCode: null, costUsd: undefined })
     expect(record.briefs).toEqual([])
@@ -1568,6 +1574,63 @@ describe('scripts/run-lane.mjs', () => {
         if (value === undefined) delete process.env[name]
         else process.env[name] = value
       }
+      rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    }
+  })
+
+  it('writes a retried: true record for the first log before retrying on readiness exit', async () => {
+    const folder = makeTempDir('machine-room-retry-run-')
+    try {
+      const runs = join(folder, 'runs')
+      const project = join(folder, 'project')
+      mkdirSync(runs, { recursive: true })
+      mkdirSync(project, { recursive: true })
+      const previous = process.env.MACHINEROOM_RUNS
+      process.env.MACHINEROOM_RUNS = runs
+      const countFile = join(folder, 'count.txt')
+      writeFileSync(countFile, '0')
+      const script = join(project, 'run')
+      writeFileSync(script, [
+        "const { readFileSync, writeFileSync } = require('node:fs')",
+        `const count = Number(readFileSync(${JSON.stringify(countFile)}, 'utf8')) + 1`,
+        `writeFileSync(${JSON.stringify(countFile)}, String(count))`,
+        "if (count === 1) {",
+        "  console.log('Standalone server exited before reporting readiness')",
+        "  process.exit(1)",
+        "} else {",
+        "  console.log('{\"type\":\"step_finish\",\"part\":{\"cost\":0,\"tokens\":{\"input\":1,\"output\":1}}}')",
+        "  process.exit(0)",
+        "}",
+      ].join('\n'))
+      const lane = {
+        name: 'test-opencode',
+        worktree: project,
+        cli: { harness: 'opencode', bin: process.execPath, model: 'fake/model' },
+      }
+      await startLane({
+        options: { lane: 'test-opencode', minutes: 1 },
+        lane,
+        lanes: { 'test-opencode': lane },
+        wanted: [],
+        prompt: 'test prompt',
+        logPath: join(runs, 'run-retry.log'),
+        usageFile: join(runs, 'run-retry.usage.json'),
+        name: 'run-retry',
+        project,
+        task: 'task',
+      })
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8')
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line))
+      expect(records.length).toBe(2)
+      expect(records[0].retried).toBe(true)
+      expect(records[0].log).toBe(join(runs, 'run-retry.log'))
+      expect(records[1].retried).toBeUndefined()
+      expect(records[1].log).toBe(join(runs, 'run-retry-retry.log'))
+      if (previous === undefined) delete process.env.MACHINEROOM_RUNS
+      else process.env.MACHINEROOM_RUNS = previous
+    } finally {
       rmSync(folder, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
     }
   })

@@ -298,6 +298,33 @@ describe('claude sessions reader', () => {
     expect(frames).toEqual([])
   })
 
+  it('notices a lane meta file written after the session file was registered', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames })
+    reader.tick()
+
+    const file = join(sessionsFolder, 'sess-registered-first.jsonl')
+    writeFileSync(file, jsonLines([
+      sessionLine('user', { role: 'user', content: 'Turn 1.' }, { sessionId: 'sess-registered-first' }, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [readUse('call-1', join(projectRoot, 'src', 'math.js'))] }, { sessionId: 'sess-registered-first' }, projectRoot),
+    ]))
+    reader.tick()
+    expect(frames.length).toBeGreaterThan(0)
+    const countBefore = frames.length
+
+    writeFileSync(join(runs, 'claude-lane-1.meta.json'), `${JSON.stringify({ lane: 'claude', project: projectRoot, sessionId: 'sess-registered-first' })}\n`)
+
+    appendFileSync(file, jsonLines([
+      sessionLine('assistant', { role: 'assistant', content: [readUse('call-2', join(projectRoot, 'src', 'app.js'))] }, { sessionId: 'sess-registered-first' }, projectRoot),
+    ]))
+    reader.tick()
+
+    const logFramesAfter = frames.slice(countBefore).filter((f) => f.type === 'heartbeat.run.log')
+    expect(logFramesAfter).toEqual([])
+    expect(reader.sessions().get('sess-registered-first').skipped).toBe(true)
+  })
+
   it('reads the runs meta again when a later session file appears', () => {
     const { projectRoot, home, runs, sessionsFolder } = setup()
     writeFileSync(join(sessionsFolder, 'sess-old.jsonl'), jsonLines([

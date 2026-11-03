@@ -173,17 +173,26 @@ export function readProjectSessions(runsFolder, projectPath) {
   }
 }
 
+function isInsideGitRepo(folder) {
+  let current = folder
+  while (true) {
+    try {
+      if (existsSync(join(current, '.git'))) return true
+    } catch {}
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  return false
+}
+
 export function currentProject(projectRoot) {
   if (!projectRoot) return { path: '', name: '', git: false }
   const resolved = resolve(projectRoot)
-  let git = false
-  try {
-    git = existsSync(join(resolved, '.git'))
-  } catch {}
   return {
     path: resolved,
     name: basename(resolved),
-    git,
+    git: isInsideGitRepo(resolved),
   }
 }
 
@@ -204,6 +213,7 @@ export function siblingFolders(projectRoot) {
     if (entry.name.startsWith('.')) continue
     if (entry.name === '.worktrees' || entry.name === 'node_modules') continue
     const fullPath = join(parent, entry.name)
+    if (samePath(fullPath, resolved)) continue
     let git = false
     try {
       git = existsSync(join(fullPath, '.git'))
@@ -253,6 +263,7 @@ export function recentProjects(projectsFile, runsFolder, currentRoot, now = Date
   const result = []
   for (const item of existing) {
     if (currentRoot && samePath(item.path, currentRoot)) continue
+    if (shouldSkipProject(item.path)) continue
     result.push({
       path: item.path,
       name: basename(item.path),

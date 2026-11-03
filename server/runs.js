@@ -233,28 +233,39 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
   }
 
-  function finish(item) {
-    if (running.get(item.entry.lane) !== item) return
+  function flushTail(item) {
     const tail = item.tail.trim()
     if (tail) {
       item.entry.lastLines.push(tail)
       if (item.entry.lastLines.length > LAST_LINE_LIMIT) item.entry.lastLines.shift()
+      item.tail = ''
     }
+  }
+
+  function finish(item) {
+    if (running.get(item.entry.lane) !== item) return
+    flushTail(item)
     running.delete(item.entry.lane)
     if (stopped) return
     notify({ topic: 'runs' })
   }
 
-  function recordsSize() {
+  function hasRecordForLaneSince(lane, startedAt) {
     try {
-      return statSync(recordsPath()).size
-    } catch {
-      return 0
-    }
+      const records = readAllRunRecords(recordsPath())
+      const startTime = new Date(startedAt).getTime()
+      for (let i = records.length - 1; i >= 0; i--) {
+        const r = records[i]
+        if (r.lane === lane && new Date(r.startedAt).getTime() >= startTime) {
+          return true
+        }
+      }
+    } catch {}
+    return false
   }
 
   function recordRefusal(item, exitCode) {
-    if (recordsSize() !== item.sizeBefore) return
+    if (hasRecordForLaneSince(item.entry.lane, item.entry.startedAt)) return
     const note = item.entry.lastLines.join(' ').trim()
     const record = runRecord({
       lane: item.entry.lane,
@@ -264,6 +275,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       exitCode,
       killed: false,
       note: note !== '' ? note.slice(0, 200) : 'the runner refused to start or could not start',
+      ...(item.project ? { project: item.project, task: item.task } : {}),
+      ...(item.startedBy ? { startedBy: item.startedBy } : {}),
     })
     try {
       appendFileSync(recordsPath(), `${JSON.stringify(record)}\n`)
@@ -278,7 +291,13 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
     const startedArgs = startedBy ? ['--started-by', startedBy] : []
     const reasoningArgs = reasoning ? ['--reasoning', reasoning] : []
-    const item = { entry, tail: '', sizeBefore: recordsSize() }
+    const item = {
+      entry,
+      tail: '',
+      project: projectRun?.project || '',
+      task: projectRun?.task || '',
+      startedBy,
+    }
     const args = projectRun
       ? projectRun.queue
         ? [...command.args, lane, '--project', projectRun.project, ...(projectRun.worktree ? ['--worktree'] : []), '--queue', projectRun.queue, ...startedArgs, ...reasoningArgs]
@@ -323,10 +342,13 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     child.on('error', (error) => {
       entry.lastLines.push(`start failed: ${String(error?.message ?? error)}`)
       if (entry.lastLines.length > LAST_LINE_LIMIT) entry.lastLines.shift()
+      flushTail(item)
+      if (!stopped) recordRefusal(item, 1)
       finish(item)
     })
     child.on('close', (code) => {
-      if (!stopped && (code ?? 0) !== 0) recordRefusal(item, code ?? 1)
+      flushTail(item)
+      if (!stopped && (code === null || code !== 0)) recordRefusal(item, code ?? 1)
       finish(item)
     })
     if (startedBy) {

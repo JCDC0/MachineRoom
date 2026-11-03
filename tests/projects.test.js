@@ -7,6 +7,7 @@ import { projectHash } from '../server/orchestrator.js'
 import {
   CONFIRM_FORGET_PROBLEM,
   CONFIRM_OPEN_PROBLEM,
+  currentProject,
   NOT_ABSOLUTE_PROBLEM,
   NOT_FOLDER_PROBLEM,
   NOT_FOUND_PROBLEM,
@@ -22,6 +23,7 @@ import {
   recordProject,
   resetPruneCache,
   shouldSkipProject,
+  siblingFolders,
 } from '../server/projects.js'
 import { createClient } from '../src/control/client.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
@@ -165,7 +167,7 @@ describe('projects api', () => {
     })
 
     const folderNames = res.body.folders.map((f) => f.name)
-    expect(folderNames).toContain('current-repo')
+    expect(folderNames).not.toContain('current-repo')
     expect(folderNames).toContain('sibling-git')
     expect(folderNames).toContain('sibling-plain')
     expect(folderNames).toContain('outside-repo')
@@ -178,6 +180,36 @@ describe('projects api', () => {
 
     const plainFolder = res.body.folders.find((f) => f.name === 'sibling-plain')
     expect(plainFolder.git).toBe(false)
+  })
+
+  it('leaves out the current folder from sibling folders', () => {
+    const env = createEnvironment()
+    const siblings = siblingFolders(env.root)
+    const names = siblings.map((s) => s.name)
+    expect(names).not.toContain('current-repo')
+    expect(names).toContain('sibling-git')
+    expect(names).toContain('sibling-plain')
+  })
+
+  it('says git: true for a subfolder inside a repository', async () => {
+    const env = createEnvironment()
+    const subfolder = join(env.root, 'src', 'nested')
+    mkdirSync(subfolder, { recursive: true })
+    const info = currentProject(subfolder)
+    expect(info.git).toBe(true)
+    expect(info.name).toBe('nested')
+
+    const bridge = createBridge({
+      projectRoot: subfolder,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+    })
+    const bridgeInfo = await bridge.start()
+    cleanups.push(() => bridge.stop())
+    const res = await getJson(`${bridgeInfo.url}/api/projects`)
+    expect(res.status).toBe(200)
+    expect(res.body.current.git).toBe(true)
   })
 
   it('limits recent projects to at most 20 and orders newest first', () => {
@@ -233,6 +265,28 @@ describe('projects api', () => {
     const storedAfter = readProjectsFile(file)
     expect(storedAfter.recent).toHaveLength(1)
     expect(storedAfter.recent[0].path).toBe(resolve(env.outsideRepo))
+  })
+
+  it('leaves out folders shouldSkipProject skips when reading recent projects', () => {
+    const env = createEnvironment()
+    const file = join(env.runs, 'projects.json')
+    const worktreeFolder = join(env.base, '.worktrees', 'agy2')
+    mkdirSync(worktreeFolder, { recursive: true })
+    const validFolder = join(env.base, 'valid-proj')
+    mkdirSync(validFolder, { recursive: true })
+
+    writeFileSync(
+      file,
+      JSON.stringify({
+        recent: [
+          { path: worktreeFolder, openedAt: '2026-10-25T10:00:00.000Z' },
+          { path: validFolder, openedAt: '2026-10-25T09:00:00.000Z' },
+        ],
+      })
+    )
+
+    const list = recentProjects(file, env.runs, env.root)
+    expect(list.map((item) => item.path)).toEqual([resolve(validFolder)])
   })
 
   it('does not record a temp folder or worktree when bridge starts on it', async () => {

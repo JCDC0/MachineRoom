@@ -775,11 +775,15 @@ async function runQueueProject({ options, lane, lanes }) {
   }
   try {
     const plan = options.worktree ? worktreePlan(project, options.lane) : { path: project, made: false }
+    const startBranch = options.worktree
+      ? (gitRead(plan.path, ['branch', '--show-current']) || gitRead(project, ['branch', '--show-current']) || '')
+      : (gitRead(project, ['branch', '--show-current']) || '')
+    const startHead = gitRead(options.worktree && !plan.made ? plan.path : project, ['rev-parse', 'HEAD']) || ''
     const test = projectTestCommand(plan.made ? project : plan.path, options.test)
     const target = options.worktree ? prepareWorktree(project, options.lane) : plan
-    const startBranch = gitRead(target.path, ['branch', '--show-current']) ?? ''
     let pending = null
     let testsFailed = false
+    const queueStartedAt = Date.now()
     const finishPending = (status = '') => {
       if (!pending) return
       const item = pending
@@ -819,11 +823,39 @@ async function runQueueProject({ options, lane, lanes }) {
       formatQueueSummary({ branch: result.branch, results: result.results, tests: test, worktree: options.worktree ? target.path : '' }).forEach((line) => console.log(line))
       return result.results.some((item) => item.status.startsWith('failed')) ? 1 : 0
     } catch (error) {
-      finishPending('failed: the queue stopped')
-      const back = gitRead(target.path, ['switch', startBranch])
+      if (pending) {
+        finishPending('failed: the queue stopped')
+      } else {
+        const failedRecord = laneRunRecord({
+          lane: options.lane,
+          briefs: [],
+          model: lane?.cli?.model || null,
+          reasoning: lane?.reasoning ?? null,
+          startedAt: queueStartedAt,
+          minutes: 0,
+          exitCode: 1,
+          killed: false,
+          costUsd: null,
+          inputTokens: null,
+          outputTokens: null,
+          log: null,
+          branch,
+          queue: { branch, index: 1 },
+          project,
+          task: tasks[0] || '',
+          startedBy: options.startedBy || '',
+          note: String(error?.message ?? error).slice(0, 200),
+        })
+        failedRecord.queueStatus = 'failed: the queue stopped'
+        appendFileSync(runsFile(), `${JSON.stringify(failedRecord)}\n`)
+        console.log(`record: ${runsFile()}`)
+      }
+      const back = startBranch
+        ? gitRead(target.path, ['switch', startBranch])
+        : (startHead ? gitRead(target.path, ['switch', '--detach', startHead]) : null)
       const where = back === null
         ? `The project stays on ${branch}, where the queue stopped.`
-        : `The project is back on ${startBranch}; the queue branch ${branch} keeps what it made.`
+        : `The project is back on ${startBranch || startHead}; the queue branch ${branch} keeps what it made.`
       console.log(`queue: stopped. ${where}`)
       throw error
     } finally {
@@ -1226,6 +1258,30 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     })
     if (retryProblem === '' && options?.retried !== true) {
       console.log('retrying this run once, because it made no tool call, no commit and printed the readiness sentence')
+      const retryRecord = laneRunRecord({
+        lane: options.lane,
+        briefs: project ? [] : wanted.map((brief) => brief.id),
+        model: lane.cli.model,
+        reasoning: lane.reasoning ?? null,
+        startedAt,
+        minutes,
+        exitCode: result.code,
+        killed,
+        costUsd: summary.costUsd ?? totalCost(report),
+        inputTokens: summary.inputTokens,
+        outputTokens: summary.outputTokens,
+        log: logPath,
+        branch: git.branch,
+        commits: git.commits,
+        retried: true,
+        startFailed: startFailure !== '' ? true : undefined,
+        ...(start ? { startBranch: start.startBranch } : {}),
+        ...(options.startedBy ? { startedBy: options.startedBy } : {}),
+        ...(project ? { project, task } : {}),
+        ...(queue ? { queue } : {}),
+      })
+      appendFileSync(runsFile(), `${JSON.stringify(retryRecord)}\n`)
+      console.log(`record: ${runsFile()}`)
       const retryName = `${name}-retry`
       return await startLane({
         options: { ...options, retried: true },
