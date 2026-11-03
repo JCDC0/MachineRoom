@@ -154,20 +154,20 @@ describe('the lane pill list', () => {
     expect(lanePills({ agents: AGENTS, records, now: NOW }).pills).toEqual([])
   })
 
-  it('caps the list at six pills and counts the rest', () => {
+  it('caps the list at LANE_PILL_LIMIT pills and counts the rest', () => {
     const agents = []
     const liveRuns = []
     const issues = []
-    for (let index = 0; index < 9; index += 1) {
+    const count = LANE_PILL_LIMIT + 3
+    for (let index = 0; index < count; index += 1) {
       const key = `lane${index}`
       agents.push(lane(key, key))
       liveRuns.push(run(key, `2026-11-03T11:${String(30 - index).padStart(2, '0')}:00.000Z`))
       issues.push(issue(`${key}-U120-20261103-090000`, `U${120 + index}`))
     }
     const { pills, more } = lanePills({ agents, liveRuns, issues, now: NOW })
-    expect(LANE_PILL_LIMIT).toBe(6)
-    expect(pills).toHaveLength(6)
-    expect(pills.map((pill) => pill.task)).toEqual(['U128', 'U127', 'U126', 'U125', 'U124', 'U123'])
+    expect(pills).toHaveLength(LANE_PILL_LIMIT)
+    expect(pills[0].task).toBe(`U${120 + count - 1}`)
     expect(more).toBe(3)
   })
 

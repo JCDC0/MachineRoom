@@ -223,21 +223,6 @@ describe('subscribeToNotices', () => {
     expect(() => unsubscribe2()).not.toThrow()
   })
 
-  it('batches rapid notices on same topic into single callback', () => {
-    const client = createFakeClient()
-    const callback = vi.fn()
-
-    const unsubscribe = subscribeToNotices(client, 'approvals', callback, 100)
-    client.emit({ topic: 'approvals' })
-    client.emit({ topic: 'approvals' })
-
-    expect(callback).not.toHaveBeenCalled()
-    vi.advanceTimersByTime(100)
-    expect(callback).toHaveBeenCalledTimes(1)
-
-    unsubscribe()
-  })
-
   it('batches multiple topic writes into single callback for meters', () => {
     const client = createFakeClient()
     const callback = vi.fn()

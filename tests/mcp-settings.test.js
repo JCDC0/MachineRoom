@@ -470,7 +470,7 @@ describe('the MCP settings panel', () => {
     expect(html).not.toContain('id="mr-mcp-args"')
   })
 
-  it('mounts the MCP section in Settings and can be closed', () => {
+  it('mounts the MCP section in Settings and renders nothing while closed', () => {
     const open = renderToString(
       createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
     )

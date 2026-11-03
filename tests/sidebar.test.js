@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import Sidebar from '../src/ui/Sidebar.jsx'
 import SidebarTabs from '../src/ui/SidebarTabs.jsx'
+import { WIDE_LAYOUT_MIN } from '../src/ui/agentStrip.js'
 import {
   agentCountLine,
   groupSessions,
@@ -284,15 +285,22 @@ describe('The family tree in a live sidebar', () => {
 })
 
 describe('The folded menu entry', () => {
-  it('adds Sessions to the menu below 900 pixels', () => {
-    const html = renderToString(
-      createElement(Hud, {
-        mode: 'replay',
-        snapshot: { position: 0, duration: 60, playing: false, speed: 1, agents: [], log: [] },
-        speeds: [1, 2, 4],
-      })
-    )
-    expect(html).toContain('Sessions')
-    expect(html).toContain('aria-controls="mr-side-overlay"')
+  it('adds Sessions to the menu below WIDE_LAYOUT_MIN pixels', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { innerWidth: WIDE_LAYOUT_MIN - 1 }
+    try {
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot: { position: 0, duration: 60, playing: false, speed: 1, agents: [], log: [] },
+          speeds: [1, 2, 4],
+        })
+      )
+      expect(html).toContain('Sessions')
+      expect(html).toContain('aria-controls="mr-side-overlay"')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
   })
 })

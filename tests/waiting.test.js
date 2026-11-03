@@ -2,6 +2,7 @@ import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import Waiting from '../src/ui/Waiting.jsx'
+import { WIDE_LAYOUT_MIN } from '../src/ui/agentStrip.js'
 import { ELEMENT_NODE, withDom } from './helpers/uiDom.js'
 
 function elementByClass(node, className) {
@@ -15,9 +16,9 @@ function elementByClass(node, className) {
 }
 
 describe('Waiting close button', () => {
-  it('says the chat is in the lower half at 900 pixels and wider', () => {
+  it('says the chat is in the lower half at WIDE_LAYOUT_MIN and wider', () => {
     const savedWindow = globalThis.window
-    globalThis.window = { innerWidth: 1200 }
+    globalThis.window = { innerWidth: WIDE_LAYOUT_MIN }
     try {
       const html = renderToString(
         createElement(Waiting, {
@@ -35,9 +36,9 @@ describe('Waiting close button', () => {
     }
   })
 
-  it('keeps the bottom right sentence below 900 pixels', () => {
+  it('keeps the bottom right sentence below WIDE_LAYOUT_MIN', () => {
     const savedWindow = globalThis.window
-    globalThis.window = { innerWidth: 800 }
+    globalThis.window = { innerWidth: WIDE_LAYOUT_MIN - 1 }
     try {
       const html = renderToString(
         createElement(Waiting, {

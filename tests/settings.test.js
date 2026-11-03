@@ -171,13 +171,12 @@ describe('settings', () => {
 })
 
 describe('the record time setting', () => {
-  it('saves 10 minutes by default and keeps a saved value', () => {
+  it('saves RECORD_MINUTES_DEFAULT by default and keeps a saved value', () => {
     expect(DEFAULT_SETTINGS.recordMinutes).toBe(RECORD_MINUTES_DEFAULT)
-    expect(RECORD_MINUTES_DEFAULT).toBe(10)
 
     const storage = makeStorage()
-    expect(loadSettings(storage).recordMinutes).toBe(10)
-    expect(saveSettings(storage, { speed: 2 }).recordMinutes).toBe(10)
+    expect(loadSettings(storage).recordMinutes).toBe(RECORD_MINUTES_DEFAULT)
+    expect(saveSettings(storage, { speed: 2 }).recordMinutes).toBe(RECORD_MINUTES_DEFAULT)
 
     const saved = saveSettings(storage, { recordMinutes: 45 })
     expect(saved.recordMinutes).toBe(45)
@@ -190,20 +189,20 @@ describe('the record time setting', () => {
       loadSettings(makeStorage({ [SETTINGS_KEY]: JSON.stringify({ recordMinutes: value }) })).recordMinutes
 
     expect(saved(0)).toBe(RECORD_MINUTES_MIN)
-    expect(saved(-5)).toBe(1)
-    expect(saved(1)).toBe(1)
+    expect(saved(-5)).toBe(RECORD_MINUTES_MIN)
+    expect(saved(1)).toBe(RECORD_MINUTES_MIN)
     expect(saved(45.9)).toBe(45)
     expect(saved('45')).toBe(45)
-    expect(saved(240)).toBe(RECORD_MINUTES_MAX)
-    expect(saved(241)).toBe(240)
-    expect(saved('soon')).toBe(10)
-    expect(saved(null)).toBe(10)
+    expect(saved(RECORD_MINUTES_MAX)).toBe(RECORD_MINUTES_MAX)
+    expect(saved(RECORD_MINUTES_MAX + 1)).toBe(RECORD_MINUTES_MAX)
+    expect(saved('soon')).toBe(RECORD_MINUTES_DEFAULT)
+    expect(saved(null)).toBe(RECORD_MINUTES_DEFAULT)
 
-    expect(clampRecordMinutes(0)).toBe(1)
-    expect(clampRecordMinutes(999)).toBe(240)
+    expect(clampRecordMinutes(0)).toBe(RECORD_MINUTES_MIN)
+    expect(clampRecordMinutes(999)).toBe(RECORD_MINUTES_MAX)
   })
 
-  it('reads an old saved file with no record time as 10 minutes', () => {
+  it('reads an old saved file with no record time as RECORD_MINUTES_DEFAULT', () => {
     const old = makeStorage({
       [SETTINGS_KEY]: JSON.stringify({
         source: 'bridge',
@@ -212,7 +211,7 @@ describe('the record time setting', () => {
         effects: { vignette: { on: false, strength: 0 } },
       }),
     })
-    expect(loadSettings(old).recordMinutes).toBe(10)
+    expect(loadSettings(old).recordMinutes).toBe(RECORD_MINUTES_DEFAULT)
   })
 
   it('renders the Replay section row with its hint and limits', () => {
@@ -225,7 +224,7 @@ describe('the record time setting', () => {
     expect(html).toContain('aria-label="Record time in minutes"')
     expect(html).toContain(`min="${RECORD_MINUTES_MIN}"`)
     expect(html).toContain(`max="${RECORD_MINUTES_MAX}"`)
-    expect(html).toContain('value="10"')
+    expect(html).toContain(`value="${RECORD_MINUTES_DEFAULT}"`)
   })
 })
 
@@ -290,8 +289,10 @@ describe('the content files setting', () => {
     expect(html).toContain('aria-label="Content files"')
     expect(html).toContain(`min="${FILE_LIMIT_MIN}"`)
     expect(html).toContain(`max="${FILE_LIMIT_MAX}"`)
-    expect(html).toContain('value="6"')
-    expect(html).toContain('<span>4</span><span>12</span><span>20</span>')
+    expect(html).toContain(`value="${FILE_LIMIT_DEFAULT}"`)
+    expect(html).toContain(
+      `<span>${FILE_LIMIT_MIN}</span><span>${(FILE_LIMIT_MIN + FILE_LIMIT_MAX) / 2}</span><span>${FILE_LIMIT_MAX}</span>`
+    )
     expect(html.indexOf('Content files')).toBeGreaterThan(html.indexOf('Folder depth'))
   })
 
