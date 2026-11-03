@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The dance hears a low group (kick and bass) and a high group (snare and hats), each with its own rise and its own 160 ms rest (task U135).
 - A shared byte-offset cache on runs.jsonl serves run records, issues, stats, costs and reviews (task S38).
 - The Claude session reader caches meta files by mtime and forgets removed meta files (task S38).
 
