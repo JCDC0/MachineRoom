@@ -38,6 +38,11 @@ function nextMonth(start) {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)
 }
 
+function dayStart(time) {
+  const date = new Date(time)
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime()
+}
+
 function recordCost(record) {
   return typeof record?.costUsd === 'number' && Number.isFinite(record.costUsd) ? record.costUsd : null
 }
@@ -50,6 +55,7 @@ function recordTokens(record, name) {
 export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) {
   const from = monthStart(now)
   const to = nextMonth(from)
+  const today = dayStart(now)
   const totals = new Map()
 
   for (const record of Array.isArray(records) ? records : []) {
@@ -60,11 +66,14 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
     if (!Number.isFinite(started) || started < from || started >= to) continue
     let total = totals.get(lane)
     if (!total) {
-      total = { cost: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
+      total = { cost: 0, today: 0, input: 0, output: 0, hasInput: false, hasOutput: false }
       totals.set(lane, total)
     }
     const cost = recordCost(record)
-    if (cost !== null) total.cost += cost
+    if (cost !== null) {
+      total.cost += cost
+      if (started >= today) total.today += cost
+    }
     const input = recordTokens(record, 'inputTokens')
     if (input !== null) {
       total.input += input
@@ -88,6 +97,7 @@ export function laneCosts({ records = [], agents = [], now = Date.now() } = {}) 
       agentId,
       agentName: String(agent.name ?? key ?? agentId),
       costCents: Math.round((total?.cost ?? 0) * 100),
+      todayCents: Math.round((total?.today ?? 0) * 100),
       inputTokens: total?.hasInput ? total.input : null,
       outputTokens: total?.hasOutput ? total.output : null,
     })

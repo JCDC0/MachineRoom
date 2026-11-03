@@ -36,6 +36,8 @@
 - `makeTree` builds its folders by walking the sorted prefixes of the file list, so a 200,000-file tree costs less to load.
 - A red tray in the live lens keeps this page session's failed runs and tool calls, newest first, until Clear or the lane ends a run well, and a click inspects the agent (task U119).
 - A yellow count on the Control button shows lane branches with commits ahead and opens Control on Reviews, and the Orchestrator button counts pending proposals plus orchestrators that wait for the owner (task U119).
+- The live transport shows today's and this month's spend just left of the context ring, summed over the lanes, and `lane-costs` now sums each lane's spend by the local calendar day (task U120).
+- The live transport shows a compact pill per lane that is working, queued or failed in its last run, with its task, minutes and queue step, and a click focuses and inspects that lane (task U120).
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.
 - A hunt that ran 464 real run logs through the parsers (task Q30).

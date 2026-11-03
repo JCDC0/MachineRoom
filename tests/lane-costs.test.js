@@ -57,6 +57,11 @@ function record(lane, startedAt, costUsd, extra = {}) {
   return { lane, startedAt, costUsd, ...extra }
 }
 
+function localTime(dayOffset, hour) {
+  const base = new Date(NOW)
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate() + dayOffset, hour, 0, 0).toISOString()
+}
+
 describe('laneCosts', () => {
   it('sums this month per lane, skips a null cost and a run from last month, and counts a project run', () => {
     const records = [
@@ -70,12 +75,29 @@ describe('laneCosts', () => {
     const costs = laneCosts({ records, agents: AGENTS, now: NOW })
 
     expect(costs.byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, inputTokens: null, outputTokens: null },
-      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, inputTokens: null, outputTokens: null },
-      { agentId: 'agent-agy', agentName: 'agy', costCents: 0, inputTokens: null, outputTokens: null },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, todayCents: 0, inputTokens: null, outputTokens: null },
+      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, todayCents: 0, inputTokens: null, outputTokens: null },
+      { agentId: 'agent-agy', agentName: 'agy', costCents: 0, todayCents: 0, inputTokens: null, outputTokens: null },
     ])
     expect(costs.summary).toEqual({ spendCents: 72, budgetCents: 0, utilizationPercent: null })
     expect(costs.quota).toEqual([])
+  })
+
+  it('sums today per lane by the local calendar day and leaves yesterday out', () => {
+    const records = [
+      record('opencode', localTime(0, 1), 0.3),
+      record('opencode', localTime(-1, 23), 0.4),
+      record('opencode2', localTime(0, 9), 0.05),
+      record('opencode2', localTime(-2, 12), 0.2),
+      record('opencode', 'not a time', 1),
+    ]
+
+    const costs = laneCosts({ records, agents: AGENTS, now: NOW })
+    expect(costs.byAgent.map((row) => [row.costCents, row.todayCents])).toEqual([
+      [70, 30],
+      [25, 5],
+      [0, 0],
+    ])
   })
 
   it('sums the tokens per lane and leaves one null when no record carries it', () => {
@@ -93,9 +115,9 @@ describe('laneCosts', () => {
 
     const costs = laneCosts({ records, agents, now: NOW })
     expect(costs.byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 50, inputTokens: 2000, outputTokens: 500 },
-      { agentId: 'agent-agy', agentName: 'agy', costCents: 0, inputTokens: 5000, outputTokens: 600 },
-      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 20, inputTokens: 400, outputTokens: null },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 50, todayCents: 0, inputTokens: 2000, outputTokens: 500 },
+      { agentId: 'agent-agy', agentName: 'agy', costCents: 0, todayCents: 0, inputTokens: 5000, outputTokens: 600 },
+      { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 20, todayCents: 0, inputTokens: 400, outputTokens: null },
     ])
     expect(costs.summary.spendCents).toBe(70)
   })
@@ -104,12 +126,13 @@ describe('laneCosts', () => {
     const folder = tempDir()
     const file = join(folder, 'runs.jsonl')
     writeRuns(file, [
-      record('opencode', '2026-10-24T08:00:00.000Z', 0.5),
-      record('opencode2', '2026-10-24T08:00:00.000Z', 0.25),
+      record('opencode', localTime(0, 8), 0.5),
+      record('opencode2', localTime(0, 8), 0.25),
     ])
 
     const costs = readLaneCosts({ agents: AGENTS, file, now: NOW })
     expect(costs.byAgent.map((row) => row.costCents)).toEqual([50, 25, 0])
+    expect(costs.byAgent.map((row) => row.todayCents)).toEqual([50, 25, 0])
     expect(costs.summary.spendCents).toBe(75)
   })
 
@@ -117,7 +140,7 @@ describe('laneCosts', () => {
     const folder = tempDir()
     const file = join(folder, 'runs.jsonl')
     writeRuns(file, [
-      record('opencode', '2026-10-24T08:00:00.000Z', 0.5),
+      record('opencode', localTime(0, 8), 0.5),
     ])
 
     const first = cachedRunRecords(file)
@@ -170,8 +193,8 @@ describe('the lane costs routes', () => {
     const body = await costs.json()
     expect(body.summary).toEqual({ spendCents: 72, budgetCents: 0, utilizationPercent: null })
     expect(body.byAgent).toEqual([
-      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, inputTokens: 2000, outputTokens: 500 },
-      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, inputTokens: null, outputTokens: null },
+      { agentId: 'agent-opencode', agentName: 'OpenCode', costCents: 60, todayCents: 60, inputTokens: 2000, outputTokens: 500 },
+      { agentId: 'agent-opencode2', agentName: 'OpenCode 2', costCents: 12, todayCents: 12, inputTokens: null, outputTokens: null },
     ])
     expect(body.quota).toEqual([])
 

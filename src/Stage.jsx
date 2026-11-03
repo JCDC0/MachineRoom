@@ -33,7 +33,7 @@ import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
 import { still } from './engine/sprites.js'
 import { createIdleWatch, idleAllowed, stageClassName } from './ui/idleView.js'
-import { LiveBadgeContext, OrchestratorsContext } from './ui/Transport.jsx'
+import { LiveBadgeContext, LanePillsContext, OrchestratorsContext, TransportCostsContext } from './ui/Transport.jsx'
 import { orchestratorAnswerList } from './ui/transportOrchestrators.js'
 import { displayName } from './ui/agentList.js'
 import { addFailureActivities, emptyFailureTray, failureAge, failureRows, FAILURE_TRAY_LIMIT } from './ui/failureTray.js'
@@ -64,7 +64,7 @@ const DEMO_SUBS = [
 ]
 const SEAM_MIN_WIDTH = 900
 const SEAM_TOP = '.hud-band-project, .hud-band-switch, .hud-modes button, .hud-action, .hud-health-chip'
-const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-orchestrator, .transport-chip, .transport-chip-overflow, .transport-context, .transport-tail > .mono, .transport.is-live > .mono, .transport:not(.is-live) > button, .transport:not(.is-live) > .mono, .speeds button'
+const SEAM_BOTTOM = '.transport-badge, .transport-center, .transport-orchestrator, .transport-chip, .transport-chip-overflow, .transport-lane, .transport-lane-overflow, .transport-spend, .transport-context, .transport-tail > .mono, .transport.is-live > .mono, .transport:not(.is-live) > button, .transport:not(.is-live) > .mono, .speeds button'
 const SEAM_QUIET = ['hud-dropdown', 'hud-band-list', 'hud-health-popover']
 export const LENS_MOVE = 0.0005
 
@@ -672,9 +672,11 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const [dockCosts, setDockCosts] = useState(null)
+  const [dockLanes, setDockLanes] = useState(NONE)
   const [dockRuns, setDockRuns] = useState(NONE)
   const [dockTasks, setDockTasks] = useState(NONE)
   const [failures, setFailures] = useState(emptyFailureTray)
+  const [dockRecords, setDockRecords] = useState(null)
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
@@ -1145,8 +1147,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!client) {
       latestTasksRef.current = null
       roomRef.current?.setTasks(null)
+      setDockLanes(NONE)
       setDockRuns(NONE)
       setDockTasks(NONE)
+      setDockRecords(null)
       return undefined
     }
     let active = true
@@ -1155,24 +1159,29 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     async function updateTasks() {
       const isLatest = latest()
       try {
-        const [agentsRaw, issuesRaw, liveRunsRaw] = await Promise.all([
+        const [agentsRaw, issuesRaw, liveRunsRaw, recordsRaw] = await Promise.all([
           client.agents(),
           client.issues(),
           client.liveRuns(),
+          typeof client.runs === 'function' ? client.runs().catch(() => null) : null,
         ])
         if (!active || !isLatest()) return
         const roster = toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
         const tasks = agentTasks(liveRunsRaw, issuesRaw, roster)
         latestTasksRef.current = tasks
         roomRef.current?.setTasks(tasks)
+        setDockLanes(Array.isArray(agentsRaw) ? agentsRaw : NONE)
         setDockRuns(Array.isArray(liveRunsRaw) ? liveRunsRaw : NONE)
         setDockTasks(Array.isArray(issuesRaw) ? issuesRaw : NONE)
+        setDockRecords(recordsRaw && typeof recordsRaw === 'object' ? recordsRaw : null)
       } catch {
         if (!active || !isLatest()) return
         latestTasksRef.current = null
         roomRef.current?.setTasks(null)
+        setDockLanes(NONE)
         setDockRuns(NONE)
         setDockTasks(NONE)
+        setDockRecords(null)
       }
     }
 
@@ -1425,6 +1434,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const inspectorTouches = inspector?.kind === 'file' ? roomRef.current?.touches?.(inspector.id) ?? NONE : NONE
   const webAgents = roomRef.current?.webAgents?.() ?? NONE
   const failureList = failureRows(failures, FAILURE_TRAY_LIMIT)
+  const lanePills = useMemo(
+    () => ({ agents: dockLanes, liveRuns: dockRuns, issues: dockTasks, records: dockRecords, labels }),
+    [dockLanes, dockRuns, dockTasks, dockRecords, labels]
+  )
   const failureName = (key) => {
     const agent = snapshot.agents.find((entry) => entry.key === key)
     if (!agent) return key
@@ -1646,39 +1659,43 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         <OrchestratorActivity.Provider value={orchestratorActivity}>
           <CostsModeContext.Provider value={costMode}>
             <OrchestratorsContext.Provider value={orchestrators}>
-              <Hud
-                snapshot={snapshot}
-                project={project}
-                focused={focused}
-                speeds={SPEEDS}
-                fpsStats={fpsStats}
-                mode={mode}
-                client={client}
-                assistantPaths={assistantPaths}
-                onAssistantAction={runAssistant}
-                controlTarget={controlTarget}
-                markers={timeline?.markers ?? NONE}
-                log={log}
-                costs={dockCosts}
-                liveRuns={dockRuns}
-                tasks={dockTasks}
-                familyProposals={familyProposals}
-                liveAvailable={liveAvailable}
-                onMode={onMode}
-                onToggle={() => player.toggle()}
-                onSeek={(value) => player.seek(value)}
-                onSpeed={changeSpeed}
-                onFocus={focus}
-                onOverview={overview}
-                openTerminals={openChips}
-                onToggleTerminal={toggleTerminal}
-                onShowTerminals={showTerminals}
-                health={health}
-                ladder={ladder}
-                labels={labels}
-                effects={effects}
-                onSettingsChange={handleSettingsChange}
-              />
+              <LanePillsContext.Provider value={lanePills}>
+                <TransportCostsContext.Provider value={dockCosts}>
+                  <Hud
+                    snapshot={snapshot}
+                    project={project}
+                    focused={focused}
+                    speeds={SPEEDS}
+                    fpsStats={fpsStats}
+                    mode={mode}
+                    client={client}
+                    assistantPaths={assistantPaths}
+                    onAssistantAction={runAssistant}
+                    controlTarget={controlTarget}
+                    markers={timeline?.markers ?? NONE}
+                    log={log}
+                    costs={dockCosts}
+                    liveRuns={dockRuns}
+                    tasks={dockTasks}
+                    familyProposals={familyProposals}
+                    liveAvailable={liveAvailable}
+                    onMode={onMode}
+                    onToggle={() => player.toggle()}
+                    onSeek={(value) => player.seek(value)}
+                    onSpeed={changeSpeed}
+                    onFocus={focus}
+                    onOverview={overview}
+                    openTerminals={openChips}
+                    onToggleTerminal={toggleTerminal}
+                    onShowTerminals={showTerminals}
+                    health={health}
+                    ladder={ladder}
+                    labels={labels}
+                    effects={effects}
+                    onSettingsChange={handleSettingsChange}
+                  />
+                </TransportCostsContext.Provider>
+              </LanePillsContext.Provider>
             </OrchestratorsContext.Provider>
           </CostsModeContext.Provider>
         </OrchestratorActivity.Provider>

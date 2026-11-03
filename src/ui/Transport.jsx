@@ -7,9 +7,13 @@ import {
   orchestratorStateWord,
 } from './contextRing.js'
 import { OPEN_CHAT_EVENT, orchestratorChips } from './transportOrchestrators.js'
+import { inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
+import { openCostsDrawer, spendText } from './transportSpend.js'
 
 export const LiveBadgeContext = createContext('live')
 export const OrchestratorsContext = createContext(null)
+export const LanePillsContext = createContext(null)
+export const TransportCostsContext = createContext(null)
 
 export function liveBadgeText(status, kind = 'live') {
   const state = status === 'live' ? 'connected' : status || 'connecting'
@@ -99,6 +103,8 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
   const main = orchestrator && typeof orchestrator === 'object' ? orchestrator : null
   const badgeKind = useContext(LiveBadgeContext)
   const orchestrators = useContext(OrchestratorsContext)
+  const laneFeed = useContext(LanePillsContext)
+  const costs = useContext(TransportCostsContext)
   const badge = (
     <span className={`transport-badge is-${snapshot.status === 'live' ? 'live' : 'down'}`} role="status">
       {liveBadgeText(snapshot.status, badgeKind)}
@@ -127,6 +133,18 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
     }
     const state = orchestratorStateWord(main.state)
     const { chips, more } = orchestratorChips(orchestrators)
+    const lanes =
+      laneFeed && typeof laneFeed === 'object'
+        ? lanePills({
+            agents: laneFeed.agents,
+            liveRuns: laneFeed.liveRuns,
+            issues: laneFeed.issues,
+            records: laneFeed.records,
+            labels: laneFeed.labels,
+            now: laneFeed.now ?? Date.now(),
+          })
+        : { pills: [], more: 0 }
+    const spend = spendText(costs)
     return (
       <div className="transport is-live has-orchestrator">
         <div className="transport-live-head">
@@ -169,8 +187,44 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
               +{more}
             </span>
           ) : null}
+          {lanes.pills.length > 0 ? (
+            <div className="transport-lanes" role="group" aria-label="Lanes">
+              {lanes.pills.map((pill) => (
+                <button
+                  key={pill.key}
+                  type="button"
+                  className={`transport-lane is-${pill.tone} mono`}
+                  title={lanePillTitle(pill)}
+                  aria-label={`${lanePillTitle(pill)}. Inspect this lane`}
+                  onClick={() => inspectLane(pill.key)}
+                >
+                  <span className="transport-lane-label">{pill.label}</span>
+                  {pill.task ? <span className="transport-lane-task">{pill.task}</span> : null}
+                  <span className="transport-lane-dot" aria-hidden="true" />
+                  {pill.minutes !== null ? <span className="transport-lane-time">{pill.minutes}m</span> : null}
+                  {pill.step ? <span className="transport-lane-step">{pill.step}</span> : null}
+                </button>
+              ))}
+              {lanes.more > 0 ? (
+                <span className="transport-lane-overflow mono" title={`${lanes.more} more`}>
+                  +{lanes.more}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="transport-tail">
+          {spend ? (
+            <button
+              type="button"
+              className="transport-spend mono"
+              onClick={() => openCostsDrawer()}
+              title="Open the Costs drawer"
+              aria-label={`${spend}. Open the Costs drawer`}
+            >
+              {spend}
+            </button>
+          ) : null}
           <ContextRing orchestrator={main} onClick={openConversation} />
           <span className="mono">{clock(position)} since opening</span>
         </div>
