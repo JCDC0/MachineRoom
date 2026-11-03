@@ -1,10 +1,6 @@
-import { createSplitMasker } from '../briefs/audit.js'
 import { harnessByAdapter } from '../harnesses/index.js'
 import { AGENT_ORDER } from '../model/pipeline.js'
 import { FOLDER_SHAPE_ACCEPT, readFileList, readTreeVersion, rememberTreeVersion } from './tree.js'
-
-const BACKOFF_START = 1000
-const BACKOFF_LIMIT = 15000
 
 function slug(text) {
   return String(text).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'agent'
@@ -104,72 +100,4 @@ export async function loadTree(url, fetchImpl = fetch) {
 export async function loadAgents(url, fetchImpl = fetch) {
   const raw = await getJson(fetchImpl, `${url}/api/agents`)
   return toAgents(Array.isArray(raw) ? raw : [])
-}
-
-export function socketUrl(base, companyId) {
-  const origin = base.startsWith('http') ? base : `${location.origin}${base}`
-  return `${origin.replace(/^http/, 'ws')}/api/companies/${encodeURIComponent(companyId)}/events/ws`
-}
-
-export function openStream({ url, onFrame, onStatus, WebSocketImpl = WebSocket, setTimer = setTimeout, clearTimer = clearTimeout, now = Date.now }) {
-  let socket = null
-  let delay = BACKOFF_START
-  let timer = null
-  let maskTimer = null
-  let closed = false
-  const masker = createSplitMasker()
-
-  function release(out) {
-    for (const frame of out.frames) onFrame(frame)
-    if (maskTimer !== null) {
-      clearTimer(maskTimer)
-      maskTimer = null
-    }
-    if (closed) return
-    const at = masker.nextDue()
-    if (at === null) return
-    maskTimer = setTimer(() => {
-      maskTimer = null
-      if (!closed) release(masker.due(now()))
-    }, Math.max(0, at - now()))
-  }
-
-  function connect() {
-    onStatus('connecting')
-    socket = new WebSocketImpl(url)
-    socket.onopen = () => {
-      delay = BACKOFF_START
-      onStatus('live')
-    }
-    socket.onmessage = (event) => {
-      try {
-        release(masker.push(JSON.parse(event.data), now()))
-      } catch {
-        return
-      }
-    }
-    socket.onclose = () => {
-      if (closed) return
-      try {
-        release(masker.reset())
-      } catch {}
-      if (closed) return
-      onStatus('reconnecting')
-      timer = setTimer(connect, delay)
-      delay = Math.min(delay * 2, BACKOFF_LIMIT)
-    }
-    socket.onerror = () => socket.close()
-  }
-
-  connect()
-
-  return {
-    close() {
-      closed = true
-      clearTimer(timer)
-      clearTimer(maskTimer)
-      maskTimer = null
-      socket?.close()
-    },
-  }
 }

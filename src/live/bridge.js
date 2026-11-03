@@ -88,12 +88,12 @@ export function openBridge({ url, since, onFrame, onTree, onStatus, EventSourceI
   }
 }
 
-export async function probeLive({ base, bridge, fetchImpl = fetch, timeoutMs = 1500 }) {
+export async function probeLive({ bridge, fetchImpl = fetch, timeoutMs = 1500 }) {
+  if (!bridge) return false
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    const url = bridge ? `${bridge}/api/health` : `${base}/api/companies`
-    await getJson(fetchImpl, url, { signal: controller.signal })
+    await getJson(fetchImpl, `${bridge}/api/health`, { signal: controller.signal })
     return true
   } catch {
     return false
