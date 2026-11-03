@@ -1,11 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { packTo } from '../scripts/pack-check.mjs'
 import { untar } from '../scripts/untar.mjs'
-import { gitPath } from '../server/programPath.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -27,17 +26,6 @@ function childEnv(tempDir) {
   env.TEMP = tempDir
   env.TMP = tempDir
   return env
-}
-
-function gitRead(cwd, args) {
-  try {
-    const git = gitPath()
-    const result = spawnSync(git, args, { cwd, encoding: 'utf8', windowsHide: true })
-    if (result.error || result.status !== 0) return null
-    return String(result.stdout ?? '').trim()
-  } catch {
-    return null
-  }
 }
 
 function openAddress(child) {
@@ -155,14 +143,13 @@ describe('a pack starts the room', () => {
       return
     }
     const env = childEnv(runsDir)
-    const gitCommon = gitRead(root, ['rev-parse', '--git-common-dir'])
-    if (gitCommon) {
-      writeFileSync(join(packageDir, '.git'), `gitdir: ${resolve(root, gitCommon)}\n`)
-    }
+    // A project run needs no git link back to this checkout, so the live lane worktrees cannot change the answer.
+    const project = join(dirname(packageDir), 'project')
+    mkdirSync(project, { recursive: true })
 
     const laneResult = spawnSync(
       process.execPath,
-      ['scripts/run-lane.mjs', 'opencode', 'P1', '--dry-run'],
+      ['scripts/run-lane.mjs', 'opencode', '--project', project, '--task', 'Say hello.', '--dry-run'],
       { cwd: packageDir, env, encoding: 'utf8' },
     )
     expect(laneResult.status).toBe(0)
