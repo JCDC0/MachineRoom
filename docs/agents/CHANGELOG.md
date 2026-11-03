@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The lane editor offers Save only on a lane the owner made and says why otherwise (task U122).
 - A failed family read shows the bridge's sentence and a failed count line (task U122).
 - The inspector's folder list draws at most 200 rows and says how many more (task U122).
 - A key saved by the quick form appears in the custom form's slot list at once (task U122).

@@ -5,6 +5,7 @@ import { AGENT_NAME_MAX, cleanText } from './sidebar.js'
 export const DIRECT_HARNESS = 'machineroom'
 export const DIRECT_LABEL = 'Direct API'
 export const DIRECT_KEY_PROBLEM = 'Add a Direct API key in Settings first.'
+export const LANES_JSON_SAVE_PROBLEM = 'A lane from lanes.json cannot be updated.'
 export const MAX_SUBS = 5
 
 const KINDS = new Set(['orchestrator', 'sub', 'lane'])

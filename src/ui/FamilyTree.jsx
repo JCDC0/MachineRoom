@@ -5,6 +5,7 @@ import AutocompactInput from './AutocompactInput.jsx'
 import {
   DIRECT_HARNESS,
   DIRECT_KEY_PROBLEM,
+  LANES_JSON_SAVE_PROBLEM,
   MAX_SUBS,
   affectedSubText,
   childConfirmText,
@@ -672,6 +673,10 @@ export function FamilyTree({ client = null, tasks = null }) {
 
   function askLaneSave(node) {
     if (!nodeDraft) return
+    if (node.custom !== true) {
+      setActionError(LANES_JSON_SAVE_PROBLEM)
+      return
+    }
     if (typeof client?.updateLane !== 'function') {
       setActionError('This bridge cannot change an agent.')
       return
@@ -1239,7 +1244,7 @@ export function FamilyTree({ client = null, tasks = null }) {
               <button
                 type="button"
                 className="mr-side-primary"
-                disabled={busy || typeof client?.updateLane !== 'function' || directMissing}
+                disabled={busy || typeof client?.updateLane !== 'function' || directMissing || node.custom !== true}
                 onClick={() => askLaneSave(node)}
               >
                 Save
@@ -1253,6 +1258,9 @@ export function FamilyTree({ client = null, tasks = null }) {
                 Remove
               </button>
             </div>
+            {node.custom !== true ? (
+              <p className="mr-side-note is-dim">{LANES_JSON_SAVE_PROBLEM}</p>
+            ) : null}
           </>
         ) : (
           <>
