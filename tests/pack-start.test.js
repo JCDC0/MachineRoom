@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -155,10 +155,10 @@ describe('a pack starts the room', () => {
       return
     }
     const env = childEnv(runsDir)
-    const gitDir = gitRead(root, ['rev-parse', '--git-dir'])
     const gitCommon = gitRead(root, ['rev-parse', '--git-common-dir'])
-    if (gitDir) env.GIT_DIR = resolve(root, gitDir)
-    if (gitCommon) env.GIT_COMMON_DIR = resolve(root, gitCommon)
+    if (gitCommon) {
+      writeFileSync(join(packageDir, '.git'), `gitdir: ${resolve(root, gitCommon)}\n`)
+    }
 
     const laneResult = spawnSync(
       process.execPath,
