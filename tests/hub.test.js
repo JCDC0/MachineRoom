@@ -199,6 +199,24 @@ describe('the lower park ring', () => {
     expect(lower.visible).toBe(false)
     hub.dispose()
   })
+
+  it('puts a sub lane slot tick on the lower ring, not the main one', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    const ticks = hub.group.getObjectByName('ticks').children[0].geometry.getAttribute('position')
+    let lowerTicks = 0
+    for (let index = 0; index < ticks.count; index += 1) {
+      if (ticks.getY(index) === -SUB_RING_DROP) lowerTicks += 1
+    }
+    expect(lowerTicks).toBeGreaterThan(0)
+    expect(lowerTicks % 2).toBe(0)
+    hub.dispose()
+  })
+
+  it('hides the lower ring while no lane sits on it', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, { subs: [{ id: 'empty', name: 'Empty', lanes: [] }] })
+    expect(hub.group.getObjectByName('sub-ring').visible).toBe(false)
+    hub.dispose()
+  })
 })
 
 describe('where a sector name sits', () => {

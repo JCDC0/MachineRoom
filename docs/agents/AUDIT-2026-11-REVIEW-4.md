@@ -34,3 +34,12 @@ Q40. I read `git log --merges` and `git diff` on main after Review 3 for U134, U
 - Orchestrator commit `b560ced` (`scripts/run-lane.mjs`, `server/briefs.js`): passed `readAgentDepth(runsFolder()).limit` into `buildPrompt`.
 - Orchestrator commit `8f6db34` (`src/ui/sound.js`): lowered analyser `smoothingTimeConstant` from 0.75 to 0.4 so drum kicks register sharp onsets.
 - Orchestrator merge conflict resolutions in `db9b6df` (U137) and `8d1c2cb` (U138): resolved concurrent additions in `src/engine/agents.js`, `src/engine/hub.js`, and `tests/cards-frames.test.js`.
+
+## Orchestrator's corrections
+
+- Finding 1 does not hold: `play()` on a media element whose playback has ended seeks to the start first, so Loop one restarts the track.
+- Findings 2, 6 and 9 are fixed at the merge of this review: a sub lane's slot tick sits on the lower ring, `scripts/agy-prompt.mjs` passes the saved depth, and the lower ring shows only while a lane sits on it.
+- Findings 3 and 4 hold but a beat ring lives about a second, so a seek or a ladder change leaves it for at most that long. They stay.
+- Finding 5 does not hold: the music queue lives for the page on purpose (U142), and `startMusicQueue` starts once.
+- Finding 7 does not hold: `server/orchestrator.js` replaces the depth sentence `subPrompt` writes with the saved limit at each turn (U139).
+- Findings 8 and 10 stay: a replay keeps the room's own limit of 3, and a lowered limit applies to the next subagent, not to one already working.

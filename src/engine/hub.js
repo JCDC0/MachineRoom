@@ -309,23 +309,31 @@ function clearGroup(group) {
   }
 }
 
-function buildTicks(angles) {
+function onSubRing(ladder, key) {
+  return hasSubs(ladder) && typeof key === 'string' && ownerOf(ladder, key) !== 'orchestrator'
+}
+
+function buildTicks(angles, keys = [], ladder = null) {
   const values = []
   for (let i = 0; i < TICKS; i++) {
     const a = (i / TICKS) * Math.PI * 2
     const long = i % 10 === 0 ? 34 : 14
     values.push(Math.cos(a) * HUB_RADIUS, 0, Math.sin(a) * HUB_RADIUS, Math.cos(a) * (HUB_RADIUS + long), 0, Math.sin(a) * (HUB_RADIUS + long))
   }
-  for (const a of angles) {
-    values.push(Math.cos(a) * (HUB_RADIUS - 70), 0, Math.sin(a) * (HUB_RADIUS - 70), Math.cos(a) * (HUB_RADIUS * 1.14), 0, Math.sin(a) * (HUB_RADIUS * 1.14))
-  }
+  angles.forEach((a, index) => {
+    const lower = onSubRing(ladder, keys[index])
+    const radius = lower ? SUB_RING_RADIUS : HUB_RADIUS
+    const y = lower ? -SUB_RING_DROP : 0
+    const inner = radius * (1 - 70 / HUB_RADIUS)
+    values.push(Math.cos(a) * inner, y, Math.sin(a) * inner, Math.cos(a) * (radius * 1.14), y, Math.sin(a) * (radius * 1.14))
+  })
   return new THREE.LineSegments(segments(values), lineMaterial(WHITE, 0.2))
 }
 
 function buildSlots(angles, keys = [], ladder = null) {
   return angles.map((a, index) => {
     const key = keys[index]
-    const lower = hasSubs(ladder) && typeof key === 'string' && ownerOf(ladder, key) !== 'orchestrator'
+    const lower = onSubRing(ladder, key)
     const radius = lower ? SUB_RING_RADIUS : HUB_RADIUS
     const marker = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(SLOT_RADIUS, 40)), lineMaterial(WHITE, 0.3))
     marker.name = 'slot'
@@ -448,7 +456,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   slotAngles = anglesFor(currentLadder)
   slots = buildSlots(slotAngles, parkedKeys, currentLadder)
   for (const marker of slots) group.add(marker)
-  tickGroup.add(buildTicks(slotAngles))
+  tickGroup.add(buildTicks(slotAngles, parkedKeys, currentLadder))
   group.add(main, inner, subRing, dashes, tickGroup, centre, centreRing, sectorGroup, ...beatRings.map((slot) => slot.line))
   scene.add(group)
 
@@ -464,7 +472,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     buildCount += 1
     slotAngles = anglesFor(currentLadder)
     clearGroup(tickGroup)
-    tickGroup.add(buildTicks(slotAngles))
+    tickGroup.add(buildTicks(slotAngles, parkedKeys, currentLadder))
     clearSlots()
     slots = buildSlots(slotAngles, parkedKeys, currentLadder)
     for (const marker of slots) group.add(marker)
@@ -475,7 +483,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     sectorGroups = built.groups
     sectorLevels = new Map(sectorGroups.map((sector) => [sector.userData.id, 0]))
     main.visible = !currentLadder
-    subRing.visible = Boolean(currentLadder)
+    subRing.visible = parkedKeys.some((key) => onSubRing(currentLadder, key))
     ringLines = currentLadder ? sectorLines : [main]
     for (const line of ringLines) {
       writeColor(line.material, WHITE)

@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url'
 import { buildPrompt, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
+import { readAgentDepth } from '../server/agent-depth.js'
+import { runsFolder } from '../server/lanes-source.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const docs = join(root, 'docs', 'agents')
@@ -28,7 +30,7 @@ if (problems.length > 0) {
 
 const brief = briefs.find((item) => item.id.toLowerCase() === id.toLowerCase())
 const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
-const prompt = buildPrompt({ briefs: [brief], laneKey: 'agy', lanes, rules: parseRules(read('HOUSE-RULES.md')), version })
+const prompt = buildPrompt({ briefs: [brief], laneKey: 'agy', lanes, rules: parseRules(read('HOUSE-RULES.md')), version, agentDepth: readAgentDepth(runsFolder()).limit })
 const worktree = lanes.agy.worktree
 if (process.argv.includes('--clean')) {
   for (const name of readdirSync(worktree)) {
