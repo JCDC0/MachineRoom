@@ -625,4 +625,18 @@ describe('the incremental plan', () => {
     expect(second.get('docs')).not.toBe(first.get('docs'))
     expect(second.get('docs').items.map((item) => item.path)).toEqual(['docs/a.md', 'docs/c.md', 'docs/b.md'])
   })
+
+  it('matches a fresh plan after a touch changes the cached views', () => {
+    const files = ['README.md', 'docs/a.md', 'docs/b.md', 'src/a.js', 'src/b.js', 'lib/a/x.js', 'lib/b/x.js']
+    const focus = ['docs/a.md', 'lib/a/x.js']
+
+    planFolderView({ files: [] })
+    planFolderView({ files, focus, touched: ['src/a.js'], alwaysDepth: 1, maxFolders: 1 })
+    const cached = planFolderView({ files, focus, touched: ['lib/b/x.js'], alwaysDepth: 1, maxFolders: 1 })
+
+    planFolderView({ files: [] })
+    const fresh = planFolderView({ files, focus, touched: ['lib/b/x.js'], alwaysDepth: 1, maxFolders: 1 })
+
+    expect(cached).toEqual(fresh)
+  })
 })
