@@ -138,6 +138,7 @@ export default function OrchestratorChat({
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState(null)
   const [readError, setReadError] = useState(null)
+  const [listError, setListError] = useState(null)
   const [teamFailed, setTeamFailed] = useState([])
   const [modelsOpen, setModelsOpen] = useState(false)
   const [models, setModels] = useState(null)
@@ -251,7 +252,10 @@ export default function OrchestratorChat({
       return undefined
     }
     setUnavailable(false)
-    if (Array.isArray(orchestrators)) return undefined
+    if (Array.isArray(orchestrators)) {
+      setListError(null)
+      return undefined
+    }
     let stopped = false
 
     async function readList() {
@@ -259,9 +263,14 @@ export default function OrchestratorChat({
       try {
         const answer = await client.orchestrators()
         const items = Array.isArray(answer) ? answer : Array.isArray(answer?.orchestrators) ? answer.orchestrators : []
-        if (stopped || items.length === 0) return
+        if (stopped) return
+        setListError(null)
+        if (items.length === 0) return
         setList(items.filter((entry) => entry && typeof entry === 'object' && typeof entry.id === 'string' && entry.id))
-      } catch {}
+      } catch (failure) {
+        if (stopped) return
+        setListError(errorText(failure, 'Could not read the orchestrator list.'))
+      }
     }
 
     readListRef.current = readList
@@ -806,9 +815,10 @@ export default function OrchestratorChat({
         <span>{status}</span>
       </p>
 
-      {problem ? (
+      {problem || listError ? (
         <div className="mr-orch-error" role="alert">
-          <p>{problem}</p>
+          {problem ? <p>{problem}</p> : null}
+          {listError ? <p>{listError}</p> : null}
         </div>
       ) : null}
 
