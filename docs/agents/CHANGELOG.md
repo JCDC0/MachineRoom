@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- An empty live room says why it is empty above the waiting card, and a replay never shows the line (task U124).
+- Settings lists the saved key names with a delete card, and never shows a value (task U124).
 - `opencode4` and `opencode5` are live lanes again, on the same DeepSeek V4.1 Flash model as the other OpenCode lanes.
 - The MCP server list sends each server's env names and never their values, and a save or toggle that leaves env out keeps the saved values (task U121).
 - Run tool asks on a card naming the server, the tool and its arguments, and the control client no longer confirms an MCP tool call by default (task U121).

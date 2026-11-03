@@ -20,6 +20,7 @@ import Inspector from './ui/Inspector.jsx'
 import { INSPECT_EVENT, inspectTarget } from './ui/inspector.js'
 import { CostsModeContext } from './ui/panels/MetersPanel.jsx'
 import { name } from './ui/brand.js'
+import { emptyRoomLine } from './ui/emptyRoom.js'
 import { lensClock, lensProject, lensStatus } from './ui/lens.js'
 import { ladderFromAnswer } from './ui/liveLadder.js'
 import { version } from '../package.json'
@@ -1425,6 +1426,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const lens = lensStatus(snapshot.agents, log)
   const project = lensProject(data.tree.rootName)
   const clock = lensClock(Boolean(live), snapshot.position)
+  const emptyLine = emptyRoomLine({
+    live: Boolean(live),
+    simulated: Boolean(live?.simulated),
+    status: snapshot.status,
+    files: fileCount,
+    agents: snapshot.agents,
+  })
   const bridgeLive = Boolean(live) && !live.simulated
   const workingInspector = snapshot.agents.find((agent) => agent.status === 'working') ?? null
   const inspectorLanes = snapshot.agents.map((agent) => {
@@ -1579,7 +1587,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
             onShare={(share) => roomRef.current?.setZoomShare?.(share)}
             onWheel={(deltaY) => roomRef.current?.zoomBy?.(deltaY)}
           />
-          {showWaiting && <Waiting agents={liveRoster ?? snapshot.agents} status={snapshot.status} />}
+          {showWaiting && (
+            <div className="lens-waiting">
+              {emptyLine !== '' && <p className="lens-empty-room mono">{emptyLine}</p>}
+              <Waiting agents={liveRoster ?? snapshot.agents} status={snapshot.status} />
+            </div>
+          )}
         </div>
         {chromaFilter && (
           <svg

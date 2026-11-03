@@ -98,6 +98,32 @@ describe('Stage lens labels', () => {
     expect(html).not.toContain('lens-brackets')
   })
 
+  it('puts the empty room sentence above the waiting card in a live empty room', () => {
+    liveStatus.status = 'live'
+    try {
+      const html = stageHtml({ live: { bridge: 'http://127.0.0.1:9' } }, { mode: 'live' })
+      const lens = html.indexOf('class="lens"')
+      const line = html.indexOf('class="lens-empty-room mono"')
+      const waiting = html.indexOf('class="waiting is-')
+      const menu = html.indexOf('class="hud-menu')
+
+      expect(line).toBeGreaterThan(lens)
+      expect(waiting).toBeGreaterThan(line)
+      expect(line).toBeLessThan(menu)
+      expect(html).toContain(
+        'This folder is empty. Open another project in Projects, or start a lane in Dispatch with C.'
+      )
+    } finally {
+      liveStatus.status = 'connecting'
+    }
+  })
+
+  it('never shows the empty room sentence in a replay', () => {
+    const html = stageHtml()
+    expect(html).not.toContain('class="lens-empty-room')
+    expect(html).not.toContain('This folder is empty.')
+  })
+
   it('puts the live link tag in the transport beside the Center button', () => {
     const html = stageHtml()
     const transport = html.indexOf('class="transport')

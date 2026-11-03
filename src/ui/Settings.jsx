@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import EndpointsPanel from './EndpointsPanel.jsx'
+import KeysSettings from './KeysSettings.jsx'
 import McpSettings from './McpSettings.jsx'
 import MusicPlayer from './MusicPlayer.jsx'
 import SearchSettings from './SearchSettings.jsx'
@@ -268,6 +269,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
         </div>
 
         <EndpointsPanel client={client} />
+        <KeysSettings client={client} />
         <McpSettings client={client} />
         <SearchSettings />
       </div>

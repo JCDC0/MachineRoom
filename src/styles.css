@@ -3395,15 +3395,44 @@ summary:focus-visible,
   margin-top: var(--space);
 }
 
-.waiting {
+.lens-waiting {
   position: fixed;
   left: calc(var(--space) * 2 + 368px + var(--space) * 2);
   bottom: calc(var(--space) * 11);
   transform: none;
   width: min(512px, calc(100vw - 432px));
   min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space);
   pointer-events: none;
   z-index: 4;
+}
+
+.lens-empty-room {
+  margin: 0;
+  align-self: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  color: rgb(255 255 255 / 0.8);
+  text-align: center;
+  text-shadow: 0 0 6px rgb(0 0 0 / 0.9);
+}
+
+@media (min-width: 900px) {
+  .lens-empty-room {
+    width: min(720px, calc(100vw - 96px));
+  }
+}
+
+.waiting {
+  position: static;
+  width: auto;
+  min-width: 0;
+  pointer-events: none;
 }
 
 .waiting button {
@@ -3411,7 +3440,7 @@ summary:focus-visible,
 }
 
 @media (min-width: 900px) {
-  .waiting {
+  .lens-waiting {
     position: absolute;
     left: 50%;
     bottom: calc(6% + 16px + var(--lens-bow, 28px));
@@ -3422,7 +3451,7 @@ summary:focus-visible,
   }
 }
 
-body:has(#hud-orchestrator-chat) .waiting {
+body:has(#hud-orchestrator-chat) .lens-waiting {
   display: none;
 }
 
@@ -10056,6 +10085,111 @@ body:has(#hud-orchestrator-chat) .waiting {
 }
 
 .mr-search-confirm-btn.is-cancel:hover:not(:disabled) {
+  border-color: var(--white);
+}
+
+/* U124. Saved key names in Settings, never their values. */
+.mr-keys {
+  gap: var(--space);
+}
+
+.mr-keys-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mr-keys-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+  padding: 4px var(--space);
+  border: 1px solid var(--line);
+}
+
+.mr-keys-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.mr-keys-delete {
+  flex: 0 0 auto;
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.mr-keys-delete:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.mr-keys-state {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-keys-state.is-error {
+  color: var(--red);
+}
+
+.mr-keys-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space);
+  border: 1px solid var(--red);
+}
+
+.mr-keys-confirm-text {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.mr-keys-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space);
+}
+
+.mr-keys-confirm-btn {
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.mr-keys-confirm-btn.is-start {
+  color: var(--white);
+  background: rgb(255 42 42 / 0.18);
+  border-color: var(--red);
+}
+
+.mr-keys-confirm-btn.is-cancel:hover:not(:disabled) {
   border-color: var(--white);
 }
 

@@ -309,7 +309,7 @@ describe('HUD concept style structure', () => {
     expect(css).not.toContain('url(#mr-lens-clip)')
     expect(css).not.toContain('.lens-brackets')
     expect(css).not.toContain('.hud.is-disconnected .hud-menu')
-    expect(css).toMatch(/@media \(min-width: 900px\) \{\n  \.waiting \{/)
+    expect(css).toMatch(/@media \(min-width: 900px\) \{\n  \.lens-waiting \{/)
   })
 
   it('defines corner ticks, 0.04em title spacing, and faint red scanlines in styles.css', () => {
