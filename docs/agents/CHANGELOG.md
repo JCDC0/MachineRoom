@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The Claude session reader caches meta files by mtime and forgets removed meta files (task S38).
+
 - A beat lifts the folder cards round the ring as a wave and pulses the hub ring, on top of each card's own glide and pop (task U131).
 - A new Pulse switch beside Dance makes each agent's wireframe shape move with five music bands, and puts the shape back when it is off or the music stops (task U131).
 - The music player picks a playlist or Loose tracks, plays it in order and loops, and saves `music.playlist` (task U130).

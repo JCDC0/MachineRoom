@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { claudeProjectSlug, createClaudeSessionsReader } from '../server/claude-sessions.js'
@@ -342,6 +342,31 @@ describe('claude sessions reader', () => {
     reader.tick()
 
     expect(frames).toEqual([])
+  })
+
+  it('caches meta file reads by mtime and forgets removed meta files', () => {
+    const { projectRoot, home, runs } = setup()
+    const metaPath = join(runs, 'claude-test.meta.json')
+    writeFileSync(metaPath, `${JSON.stringify({ sessionId: 'sess-a' })}\n`)
+
+    const reader = makeReader({ projectRoot, home, runs, frames: [] })
+    reader.tick()
+
+    expect(reader.metaFiles().get('claude-test.meta.json')).toEqual(expect.objectContaining({ sessionId: 'sess-a' }))
+    const cachedMtime = reader.metaFiles().get('claude-test.meta.json').mtimeMs
+
+    writeFileSync(metaPath, `${JSON.stringify({ sessionId: 'sess-b' })}\n`)
+    const future = new Date(Date.now() + 2000)
+    utimesSync(metaPath, future, future)
+    reader.tick()
+
+    expect(reader.metaFiles().get('claude-test.meta.json')).toEqual(expect.objectContaining({ sessionId: 'sess-b' }))
+    expect(reader.metaFiles().get('claude-test.meta.json').mtimeMs).not.toBe(cachedMtime)
+
+    rmSync(metaPath)
+    reader.tick()
+
+    expect(reader.metaFiles().has('claude-test.meta.json')).toBe(false)
   })
 
   it('reads only the lines whose cwd is the project or inside it', () => {

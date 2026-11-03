@@ -95,6 +95,7 @@ export function createClaudeSessionsReader(options = {}) {
   const projectsFolder = join(home, '.claude', 'projects', claudeProjectSlug(projectRoot))
   const sessions = new Map()
   const evicted = new Map()
+  const metaFiles = new Map()
   let lastEvictedCheck = 0
   let primed = false
   let stopped = false
@@ -109,12 +110,34 @@ export function createClaudeSessionsReader(options = {}) {
     } catch {
       return skipped
     }
+    const seen = new Set()
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.meta.json')) continue
+      seen.add(entry.name)
+      const path = join(runsFolder, entry.name)
+      let mtimeMs
       try {
-        const meta = JSON.parse(readFileSync(join(runsFolder, entry.name), 'utf8'))
-        if (typeof meta?.sessionId === 'string' && meta.sessionId !== '') skipped.add(meta.sessionId)
-      } catch {}
+        mtimeMs = statSync(path).mtimeMs
+      } catch {
+        metaFiles.delete(entry.name)
+        continue
+      }
+      const cached = metaFiles.get(entry.name)
+      if (cached && cached.mtimeMs === mtimeMs) {
+        if (cached.sessionId) skipped.add(cached.sessionId)
+        continue
+      }
+      try {
+        const meta = JSON.parse(readFileSync(path, 'utf8'))
+        const sessionId = typeof meta?.sessionId === 'string' && meta.sessionId !== '' ? meta.sessionId : null
+        metaFiles.set(entry.name, { mtimeMs, sessionId })
+        if (sessionId) skipped.add(sessionId)
+      } catch {
+        metaFiles.delete(entry.name)
+      }
+    }
+    for (const name of metaFiles.keys()) {
+      if (!seen.has(name)) metaFiles.delete(name)
     }
     return skipped
   }
@@ -430,7 +453,8 @@ export function createClaudeSessionsReader(options = {}) {
     stopped = true
     sessions.clear()
     evicted.clear()
+    metaFiles.clear()
   }
 
-  return { agent: AGENT, agents: [AGENT], tick, stop, sessions: () => sessions, evicted: () => evicted }
+  return { agent: AGENT, agents: [AGENT], tick, stop, sessions: () => sessions, evicted: () => evicted, metaFiles: () => metaFiles }
 }
