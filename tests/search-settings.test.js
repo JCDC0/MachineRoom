@@ -13,7 +13,7 @@ import SearchSettings, {
   searchChoiceSummary,
 } from '../src/ui/SearchSettings.jsx'
 import Settings from '../src/ui/Settings.jsx'
-import { withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, withDom } from './helpers/uiDom.js'
 
 describe('the web search settings helpers', () => {
   it('reads a saved choice and falls back to off', () => {
@@ -148,6 +148,26 @@ describe('the web search section', () => {
       })
       expect(container.textContent).toContain('No key saved in the key slot Tavily yet.')
       expect(container.textContent).not.toContain('Saved in the key slot Tavily.')
+    })
+  })
+
+  it('closes its save card on Escape without closing Settings', async () => {
+    const client = createMockClient({ latencyMs: 0 })
+    await withDom(async ({ container, root, dom }) => {
+      await act(async () => {
+        root.render(createElement(SearchSettings, { client }))
+      })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      await click(root, buttonWithText(container, 'Save'))
+      expect(container.querySelector('.mr-search-confirm')).not.toBeNull()
+      const event = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(event)
+      })
+      expect(container.querySelector('.mr-search-confirm')).toBeNull()
+      expect(event.cancelBubble).toBe(true)
     })
   })
 

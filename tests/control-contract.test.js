@@ -749,7 +749,6 @@ describe('the control client MCP routes', () => {
           transport: 'http',
           command: '',
           args: [],
-          env: {},
           url: 'http://127.0.0.1:8787/mcp',
           enabled: true,
           confirmed: true,
@@ -764,7 +763,7 @@ describe('the control client MCP routes', () => {
       {
         url: 'http://127.0.0.1:9/api/mcp/call',
         method: 'POST',
-        body: JSON.stringify({ server: 'docs', tool: 'search_docs', arguments: { query: 'room' }, confirmed: true }),
+        body: JSON.stringify({ server: 'docs', tool: 'search_docs', arguments: { query: 'room' }, confirmed: false }),
       },
     ])
   })
@@ -782,7 +781,6 @@ describe('the control client MCP routes', () => {
           transport: 'stdio',
           command: 'node',
           args: [],
-          env: {},
           url: '',
           enabled: true,
           confirmed: false,

@@ -92,7 +92,7 @@ describe('the MCP settings helpers', () => {
     const rows = mcpServerList({
       ok: true,
       servers: [
-        { name: ' docs ', transport: 'stdio', command: 'npx', args: ['-y', 7], env: { A: '1' }, enabled: false },
+        { name: ' docs ', transport: 'stdio', command: 'npx', args: ['-y', 7], envNames: ['A'], enabled: false },
         { name: 'remote', transport: 'http', url: 'https://mcp.example/rpc' },
         { transport: 'stdio' },
         null,
@@ -104,7 +104,7 @@ describe('the MCP settings helpers', () => {
         transport: 'stdio',
         command: 'npx',
         args: ['-y', '7'],
-        env: { A: '1' },
+        envNames: ['A'],
         url: '',
         enabled: false,
       },
@@ -113,12 +113,14 @@ describe('the MCP settings helpers', () => {
         transport: 'http',
         command: '',
         args: [],
-        env: {},
+        envNames: [],
         url: 'https://mcp.example/rpc',
         enabled: true,
       },
     ])
     expect(mcpServerList([{ name: 'one', transport: 'sse' }])[0].transport).toBe('stdio')
+    expect(mcpServerList([{ name: 'secret', transport: 'stdio', env: { TOKEN: 'value' } }])[0].envNames).toEqual([])
+    expect(mcpServerList([{ name: 'secret', transport: 'stdio', env: { TOKEN: 'value' } }])[0].env).toBeUndefined()
     expect(mcpServerList(null)).toEqual([])
     expect(mcpServerList({ servers: 'nope' })).toEqual([])
   })
@@ -167,7 +169,6 @@ describe('the MCP settings helpers', () => {
       transport: 'stdio',
       command: 'npx',
       args: ['-y', '@scope/server'],
-      env: {},
       url: '',
       enabled: true,
       confirmed: true,
@@ -177,20 +178,20 @@ describe('the MCP settings helpers', () => {
       transport: 'http',
       command: '',
       args: [],
-      env: {},
       url: 'https://mcp.example/rpc',
       enabled: true,
       confirmed: true,
     })
+    expect(saveMcpPayload({ name: 'docs', transport: 'stdio', command: 'npx' }).env).toBeUndefined()
   })
 
-  it('turns a server on or off with its env kept and the confirmation set', () => {
+  it('turns a server on or off without its saved env', () => {
     const payload = toggleMcpPayload({
       name: 'docs',
       transport: 'stdio',
       command: 'npx',
       args: ['-y'],
-      env: { TOKEN_NAME: 'local' },
+      envNames: ['TOKEN_NAME'],
       enabled: true,
     })
     expect(payload).toEqual({
@@ -198,7 +199,6 @@ describe('the MCP settings helpers', () => {
       transport: 'stdio',
       command: 'npx',
       args: ['-y'],
-      env: { TOKEN_NAME: 'local' },
       url: '',
       enabled: false,
       confirmed: true,
@@ -273,6 +273,34 @@ describe('the MCP settings panel', () => {
     })
   })
 
+  it('closes its confirm card on Escape without closing Settings', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root, dom }) => {
+      await mount(root, { client })
+      const row = container.querySelectorAll('.mr-mcp-server')[0]
+      await click(root, buttonWithText(row, 'Remove'))
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card).not.toBeNull()
+      const first = buttonWithText(card, 'Remove server')
+      const last = buttonWithText(card, 'Cancel')
+      expect(dom.document.activeElement).toBe(first)
+      last.focus()
+      const tab = { type: 'keydown', key: 'Tab', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(tab)
+      })
+      expect(tab.defaultPrevented).toBe(true)
+      expect(dom.document.activeElement).toBe(first)
+      const event = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(event)
+      })
+      expect(container.querySelector('.brief-confirm-card')).toBeNull()
+      expect(event.cancelBubble).toBe(true)
+      expect(calls.remove).toEqual([])
+    })
+  })
+
   it('removes a server through deleteMcpServer with the confirmation', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
@@ -303,7 +331,6 @@ describe('the MCP settings panel', () => {
           transport: 'stdio',
           command: 'npx',
           args: ['-y', '@scope/server'],
-          env: {},
           url: '',
           enabled: true,
           confirmed: true,
@@ -338,7 +365,7 @@ describe('the MCP settings panel', () => {
     })
   })
 
-  it('runs a tool with JSON arguments and shows the result', async () => {
+  it('asks on a card naming the server and tool, and only the card calls it', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, {
@@ -346,10 +373,32 @@ describe('the MCP settings panel', () => {
         initialTester: { server: 'docs', tool: 'read_file', arguments: '{"path":"README.md"}' },
       })
       await submit(root, container.querySelector('.mr-mcp-run'))
+      expect(calls.call).toEqual([])
+      const card = container.querySelector('.mr-mcp-run-confirm')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('Run read_file on docs?')
+      expect(card.textContent).toContain('{"path":"README.md"}')
+      await click(root, buttonWithText(card, 'Run tool'))
       expect(calls.call).toEqual([
-        { server: 'docs', tool: 'read_file', arguments: { path: 'README.md' } },
+        { server: 'docs', tool: 'read_file', arguments: { path: 'README.md' }, confirmed: true },
       ])
+      expect(container.querySelector('.mr-mcp-run-confirm')).toBeNull()
       expect(container.querySelector('.mr-mcp-result').textContent).toContain('"content": "ok"')
+    })
+  })
+
+  it('cancels a run tool card without calling the tool', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        initialTester: { server: 'docs', tool: 'read_file', arguments: '{"path":"README.md"}' },
+      })
+      await submit(root, container.querySelector('.mr-mcp-run'))
+      const card = container.querySelector('.mr-mcp-run-confirm')
+      await click(root, buttonWithText(card, 'Cancel'))
+      expect(calls.call).toEqual([])
+      expect(container.querySelector('.mr-mcp-run-confirm')).toBeNull()
     })
   })
 

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createClient } from '../control/client.js'
 import { store } from '../storage.js'
+import { useDialogFocus } from './dialogFocus.js'
 import { loadSettings } from './settings.js'
 
 export const SEARCH_PROVIDERS = [
@@ -103,6 +104,25 @@ export default function SearchSettings({ client: givenClient = null }) {
   const [confirm, setConfirm] = useState(false)
   const [keyValue, setKeyValue] = useState('')
   const [keyConfirm, setKeyConfirm] = useState(false)
+  const confirmRef = useRef(null)
+  const keyConfirmRef = useRef(null)
+
+  useDialogFocus(confirm, { containerRef: confirmRef })
+  useDialogFocus(keyConfirm, { containerRef: keyConfirmRef })
+
+  useEffect(() => {
+    if (!confirm && !keyConfirm) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (busy) return
+      setConfirm(false)
+      setKeyConfirm(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [confirm, keyConfirm, busy])
 
   useEffect(() => {
     if (!client || typeof client.searchProvider !== 'function') {
@@ -293,7 +313,7 @@ export default function SearchSettings({ client: givenClient = null }) {
       </div>
 
       {confirm && (
-        <section className="mr-search-confirm" aria-label="Save web search">
+        <section ref={confirmRef} className="mr-search-confirm" aria-label="Save web search">
           <p className="mr-search-confirm-text">Save web search?</p>
           <p className="mr-search-confirm-detail mono">{searchChoiceSummary(form)}</p>
           <div className="mr-search-confirm-actions">
@@ -313,7 +333,7 @@ export default function SearchSettings({ client: givenClient = null }) {
       )}
 
       {keyConfirm && (
-        <section className="mr-search-confirm" aria-label="Save key">
+        <section ref={keyConfirmRef} className="mr-search-confirm" aria-label="Save key">
           <p className="mr-search-confirm-text">{`Save the ${keySlot} key?`}</p>
           <p className="mr-search-confirm-detail mono">{`Key slot ${keySlot}`}</p>
           <div className="mr-search-confirm-actions">

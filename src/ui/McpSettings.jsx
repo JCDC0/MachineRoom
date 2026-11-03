@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useDialogFocus } from './dialogFocus.js'
 
 export const MCP_TRANSPORTS = ['stdio', 'http']
 export const MCP_NAME_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
@@ -25,12 +26,15 @@ export function mcpServerList(answer) {
     if (!entry || typeof entry !== 'object') continue
     const name = typeof entry.name === 'string' ? entry.name.trim() : ''
     if (name === '') continue
+    const envNames = Array.isArray(entry.envNames)
+      ? entry.envNames.map((item) => String(item)).filter((item) => item !== '')
+      : []
     rows.push({
       name,
       transport: entry.transport === 'http' ? 'http' : 'stdio',
       command: typeof entry.command === 'string' ? entry.command : '',
       args: Array.isArray(entry.args) ? entry.args.map((item) => String(item)) : [],
-      env: entry.env && typeof entry.env === 'object' && !Array.isArray(entry.env) ? { ...entry.env } : {},
+      envNames,
       url: typeof entry.url === 'string' ? entry.url : '',
       enabled: entry.enabled !== false,
     })
@@ -120,7 +124,6 @@ export function mcpServerFields(server, patch = {}) {
     transport,
     command: transport === 'stdio' && typeof merged.command === 'string' ? merged.command.trim() : '',
     args: transport === 'stdio' && Array.isArray(merged.args) ? merged.args.map((item) => String(item)) : [],
-    env: merged.env && typeof merged.env === 'object' && !Array.isArray(merged.env) ? { ...merged.env } : {},
     url: transport === 'http' && typeof merged.url === 'string' ? merged.url.trim() : '',
     enabled: merged.enabled !== false,
   }
@@ -132,7 +135,6 @@ export function saveMcpPayload(draft) {
     transport: draft?.transport === 'http' ? 'http' : 'stdio',
     command: draft?.transport === 'http' ? '' : String(draft?.command ?? '').trim(),
     args: draft?.transport === 'http' ? [] : splitArgs(draft?.args),
-    env: {},
     url: draft?.transport === 'http' ? String(draft?.url ?? '').trim() : '',
     enabled: true,
     confirmed: true,
@@ -212,7 +214,27 @@ export default function McpSettings({
   const [tester, setTester] = useState(() => ({ server: '', tool: '', arguments: '', ...(initialTester ?? {}) }))
   const [toolBusy, setToolBusy] = useState(false)
   const [toolResult, setToolResult] = useState({ text: '', error: false })
+  const [runConfirm, setRunConfirm] = useState(null)
   const [removeConfirm, setRemoveConfirm] = useState(null)
+  const removeRef = useRef(null)
+  const runRef = useRef(null)
+
+  useDialogFocus(Boolean(removeConfirm), { containerRef: removeRef })
+  useDialogFocus(Boolean(runConfirm), { containerRef: runRef })
+
+  useEffect(() => {
+    if (!removeConfirm && !runConfirm) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (busy !== '' || toolBusy) return
+      setRemoveConfirm(null)
+      setRunConfirm(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [removeConfirm, runConfirm, busy, toolBusy])
 
   async function readServers() {
     if (typeof client?.mcpServers !== 'function') {
@@ -352,19 +374,22 @@ export default function McpSettings({
       setToolResult({ text: MCP_UNAVAILABLE, error: true })
       return
     }
+    setToolResult({ text: '', error: false })
+    setRunConfirm({ server: tester.server.trim(), tool: tester.tool.trim(), arguments: args })
+  }
+
+  async function runConfirmed() {
+    if (!runConfirm) return
     setToolBusy(true)
     setToolResult({ text: '', error: false })
     try {
-      const answer = await client.callMcpTool({
-        server: tester.server.trim(),
-        tool: tester.tool.trim(),
-        arguments: args,
-      })
+      const answer = await client.callMcpTool({ ...runConfirm, confirmed: true })
       setToolResult({ text: mcpResultText(answer), error: answer?.ok === false })
     } catch (error) {
       setToolResult({ text: String(error?.message ?? 'The tool call failed.'), error: true })
     }
     setToolBusy(false)
+    setRunConfirm(null)
   }
 
   const serverNames = []
@@ -416,7 +441,7 @@ export default function McpSettings({
           </ul>
         )}
         {removeConfirm && (
-          <div className="brief-confirm-card" role="dialog" aria-modal="true" aria-label="Remove MCP server">
+          <div ref={removeRef} className="brief-confirm-card" role="dialog" aria-modal="true" aria-label="Remove MCP server">
             <p className="brief-confirm-warning">
               {`Remove ${removeConfirm.name}? Its command and settings are lost.`}
             </p>
@@ -624,6 +649,31 @@ export default function McpSettings({
           <pre className={`mr-mcp-result mono ${toolResult.error ? 'is-error' : ''}`}>{toolResult.text}</pre>
         )}
       </form>
+
+      {runConfirm && (
+        <div ref={runRef} className="brief-confirm-card mr-mcp-run-confirm" role="dialog" aria-modal="true" aria-label="Run MCP tool">
+          <p className="brief-confirm-warning">{`Run ${runConfirm.tool} on ${runConfirm.server}?`}</p>
+          <p className="mr-mcp-target mono">{JSON.stringify(runConfirm.arguments)}</p>
+          <div className="brief-confirm-actions">
+            <button
+              type="button"
+              className="hud-settings-switch brief-confirm-btn"
+              disabled={toolBusy}
+              onClick={runConfirmed}
+            >
+              Run tool
+            </button>
+            <button
+              type="button"
+              className="hud-settings-switch"
+              disabled={toolBusy}
+              onClick={() => setRunConfirm(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

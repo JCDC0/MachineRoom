@@ -876,14 +876,60 @@ describe('/api/mcp routes', () => {
       transport: 'stdio',
       command: 'node',
       args: ['server.mjs'],
-      env: { ROOM: 'one' },
       url: '',
       enabled: true,
+      envNames: ['ROOM'],
     })
     expect(saved.body.servers).toEqual([saved.body.server])
-    expect(readMcpServers(runsDir)).toEqual([saved.body.server])
+    expect(readMcpServers(runsDir)).toEqual([
+      {
+        name: 'files',
+        transport: 'stdio',
+        command: 'node',
+        args: ['server.mjs'],
+        env: { ROOM: 'one' },
+        url: '',
+        enabled: true,
+      },
+    ])
     const listed = await pageGet(url, '/api/mcp/servers')
     expect(listed.body).toEqual({ ok: true, servers: [saved.body.server] })
+  })
+
+  it('sends only the env names and keeps saved values when a save leaves env out', async () => {
+    const { url, runsDir } = await startMcpBridge()
+    writeMcpServers(runsDir, [
+      {
+        name: 'files',
+        transport: 'stdio',
+        command: 'node',
+        args: ['server.mjs'],
+        env: { GITHUB_TOKEN: 'a-saved-secret' },
+        enabled: true,
+      },
+    ])
+    const listed = await pageGet(url, '/api/mcp/servers')
+    expect(listed.status).toBe(200)
+    expect(JSON.stringify(listed.body)).not.toContain('a-saved-secret')
+    expect(listed.body.servers[0].env).toBeUndefined()
+    expect(listed.body.servers[0].envNames).toEqual(['GITHUB_TOKEN'])
+    const saved = await pagePost(url, '/api/mcp/servers', {
+      name: 'files',
+      transport: 'stdio',
+      command: 'node',
+      args: ['server.mjs'],
+      enabled: false,
+      confirmed: true,
+    })
+    expect(saved.status).toBe(200)
+    expect(JSON.stringify(saved.body)).not.toContain('a-saved-secret')
+    expect(saved.body.server.env).toBeUndefined()
+    expect(saved.body.server.envNames).toEqual(['GITHUB_TOKEN'])
+    expect(readMcpServers(runsDir)[0]).toMatchObject({
+      name: 'files',
+      enabled: false,
+      env: { GITHUB_TOKEN: 'a-saved-secret' },
+    })
   })
 
   it('refuses an invalid server and keeps the saved list', async () => {

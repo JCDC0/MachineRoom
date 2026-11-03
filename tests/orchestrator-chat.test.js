@@ -1,9 +1,10 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
 import Waiting from '../src/ui/Waiting.jsx'
+import { buttonWithText, click, withDom } from './helpers/uiDom.js'
 import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
@@ -808,6 +809,124 @@ describe('OrchestratorChat panel', () => {
     )
     expect(html).toContain(ORCH_STOP_CONFIRM)
     expect(html).toContain('class="mr-orch-confirm is-stop"')
+  })
+
+  it('closes the model, effort and Compact cards on Escape without closing the chat', async () => {
+    const closed = []
+    const client = {
+      ...fakeClient({ state: 'idle', model: 'opus', messages: [] }),
+      models: async () => [
+        { id: 'opus', label: 'Opus', harness: 'claude' },
+        { id: 'sonnet', label: 'Sonnet', harness: 'claude' },
+      ],
+      setOrchestratorModel: async () => ({ ok: true }),
+      setOrchestratorEffort: async () => ({ ok: true }),
+      compactOrchestrator: async () => ({ ok: true }),
+    }
+    const list = [{ id: 'orchestrator', name: 'Orchestrator', harness: 'claude', model: 'opus', state: 'idle' }]
+    await withDom(async ({ container, root, dom }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            inline: true,
+            orchestrators: list,
+            initialOrchestrators: list,
+            initialSelected: 'orchestrator',
+            initialChat: { state: 'idle', model: 'opus', messages: [] },
+            onClose: () => closed.push(true),
+          })
+        )
+      })
+      await act(async () => {})
+
+      await click(root, container.querySelector('.hud-strip-model'))
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      const modelsPop = container.querySelector('.strip-pop.is-models')
+      const modelChoice = modelsPop ? modelsPop.querySelector('.mr-model-choice') : null
+      expect(modelChoice).not.toBeNull()
+      await click(root, modelChoice)
+      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the model"]')).not.toBeNull()
+      const modelEscape = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(modelEscape)
+      })
+      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the model"]')).toBeNull()
+      expect(modelEscape.cancelBubble).toBe(true)
+
+      await click(root, container.querySelector('.hud-strip-effort'))
+      const effortPop = container.querySelector('.strip-pop.is-effort')
+      const effortChoice = effortPop ? effortPop.querySelector('.strip-model-choice') : null
+      expect(effortChoice).not.toBeNull()
+      await click(root, effortChoice)
+      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the effort"]')).not.toBeNull()
+      const effortEscape = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(effortEscape)
+      })
+      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the effort"]')).toBeNull()
+      expect(effortEscape.cancelBubble).toBe(true)
+
+      await click(root, container.querySelector('.hud-strip-compact'))
+      expect(container.querySelector('.strip-pop.is-compact')).not.toBeNull()
+      const compactEscape = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(compactEscape)
+      })
+      expect(container.querySelector('.strip-pop.is-compact')).toBeNull()
+      expect(compactEscape.cancelBubble).toBe(true)
+      expect(closed).toEqual([])
+    })
+  })
+
+  it('re-reads the stopped sub chat at once and hides its Stop button', async () => {
+    let subReads = 0
+    const stopped = []
+    const list = [
+      { id: 'orchestrator', name: 'Orchestrator', harness: 'claude', state: 'idle' },
+      { id: 'sub-1', name: 'Team 1', harness: 'claude', state: 'working' },
+    ]
+    const client = {
+      ...fakeClient({ state: 'idle', messages: [] }),
+      orchestrator: async (id) => {
+        if (id === 'sub-1') {
+          subReads += 1
+          return subReads === 1
+            ? { state: 'working', messages: [{ id: 'm1', from: 'owner', text: 'Build it.' }] }
+            : { state: 'idle', messages: [{ id: 'm1', from: 'owner', text: 'Build it.' }] }
+        }
+        return { state: 'idle', messages: [] }
+      },
+      stopOrchestrator: async (options) => {
+        stopped.push(options)
+        return { ok: true }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            orchestrators: list,
+            initialOrchestrators: list,
+            initialSelected: 'sub-1',
+          })
+        )
+      })
+      await act(async () => {})
+      expect(subReads).toBe(1)
+      const stop = container.querySelector('.mr-orch-stop')
+      expect(stop).not.toBeNull()
+      await click(root, stop)
+      const card = container.querySelector('.mr-orch-confirm.is-stop')
+      expect(card).not.toBeNull()
+      await click(root, buttonWithText(card, 'Stop'))
+      expect(stopped).toEqual([{ confirmed: true, id: 'sub-1' }])
+      expect(subReads).toBe(2)
+      expect(container.querySelector('.mr-orch-stop')).toBeNull()
+    })
   })
 
   it('shows the character count past 7000 and the waiting line', () => {

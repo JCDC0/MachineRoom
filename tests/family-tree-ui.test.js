@@ -534,7 +534,7 @@ describe('FamilyTeam', () => {
       labels.push(payload)
       return { ok: true }
     }
-    await withDom(async ({ container, root }) => {
+    await withDom(async ({ container, root, dom }) => {
       await act(async () => {
         root.render(createElement(FamilyTeam, { client }))
       })
@@ -557,7 +557,17 @@ describe('FamilyTeam', () => {
       expect(card.textContent).toContain('Build 1 sub orchestrator?')
       expect(card.textContent).toContain('Team 1')
       expect(card.textContent).toContain('OpenCode')
-      await click(root, buttonWithText(card, 'Build the team'))
+      const primary = buttonWithText(card, 'Build the team')
+      expect(dom.document.activeElement).toBe(primary)
+      const cancel = buttonWithText(card, 'Cancel')
+      cancel.focus()
+      const tab = { type: 'keydown', key: 'Tab', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(tab)
+      })
+      expect(dom.document.activeElement).toBe(primary)
+      expect(tab.defaultPrevented).toBe(true)
+      await click(root, primary)
 
       expect(calls.setLadder).toHaveLength(1)
       expect(calls.setLadder[0].subs).toEqual([

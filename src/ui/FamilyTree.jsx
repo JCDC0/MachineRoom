@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toAgents } from '../live/source.js'
 import { agentTasks } from '../model/liveTasks.js'
 import AutocompactInput from './AutocompactInput.jsx'
+import { useDialogFocus } from './dialogFocus.js'
 import {
   DIRECT_HARNESS,
   DIRECT_KEY_PROBLEM,
@@ -166,12 +167,16 @@ export function FamilyTree({ client = null, tasks = null }) {
   const [childProblem, setChildProblem] = useState('')
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const confirmRef = useRef(null)
+
   const [selectedLanes, setSelectedLanes] = useState([])
   const [groupOpen, setGroupOpen] = useState(false)
   const [subDraft, setSubDraft] = useState(null)
   const [subProblem, setSubProblem] = useState('')
   const [orchestrators, setOrchestrators] = useState(null)
   const [liveTaskMap, setLiveTaskMap] = useState(null)
+
+  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
   useEffect(() => {
     if (!canFamily) return undefined
@@ -1775,7 +1780,7 @@ export function FamilyTree({ client = null, tasks = null }) {
         </div>
       ) : null}
       {confirm ? (
-        <div className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
+        <div ref={confirmRef} className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
           <section className="mr-side-confirm-card">
             <p className="mr-side-confirm-text">{busy && confirm.busyText ? confirm.busyText : confirm.text}</p>
             {confirm.detail ? <p className="mr-family-confirm-detail mono">{confirm.detail}</p> : null}
