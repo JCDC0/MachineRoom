@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { BEAM_OPACITY, BEAM_PACKET_BURST, ORCHESTRATOR_LINK_OPACITY, PACKET_BURST, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, createAgents, litChain, orchestratorLineEnds, packetSpots, samplePolyline, speckPolyline, stripPoints, webTunnelEnd } from '../src/engine/agents.js'
+import { BEAM_OPACITY, BEAM_PACKET_BURST, ORCHESTRATOR_LINK_OPACITY, PACKET_BURST, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, TAIL_GAP, TAIL_POINTS, TUNNEL_CORE_WIDTH, TUNNEL_GATE, TUNNEL_IN_SECONDS, TUNNEL_OUT_SECONDS, TUNNEL_SHEATH_SHARE, TUNNEL_SHEATH_WIDTH, createAgents, litChain, orchestratorLineEnds, packetSpots, samplePolyline, shellStart, speckPolyline, stripPoints, tailSpots, tunnelGate, tunnelLevel, tunnelRoute, webTunnelEnd } from '../src/engine/agents.js'
 import { INTERNET_RADIUS } from '../src/engine/internet.js'
 import { WEB, YELLOW } from '../src/engine/sprites.js'
 import { apply, createState } from '../src/model/state.js'
@@ -207,18 +207,19 @@ describe('the beam for an online call', () => {
     expect(view.beam.visible).toBe(true)
     expect(view.beam.material.color.getHex()).toBe(WEB)
     expect(view.beam.material.opacity).toBe(BEAM_OPACITY)
-    const beam = view.beam.geometry.attributes.position.array
-    expect(beam[0]).toBeCloseTo(view.group.position.x, 6)
-    expect(beam[1]).toBeCloseTo(view.group.position.y, 6)
-    expect(beam[2]).toBeCloseTo(view.group.position.z, 6)
-    const end = { x: beam[3], y: beam[4], z: beam[5] }
+    const beam = trailPoints(view.beam)
+    expect(beam).toHaveLength(2)
+    expect(beam[0].x).toBeCloseTo(view.group.position.x, 6)
+    expect(beam[0].y).toBeCloseTo(view.group.position.y, 6)
+    expect(beam[0].z).toBeCloseTo(view.group.position.z, 6)
+    const end = beam[1]
     expect(Math.hypot(end.x - world.internet.x, end.y - world.internet.y, end.z - world.internet.z)).toBeCloseTo(INTERNET_RADIUS, 2)
 
     expect(view.strip.material.color.getHex()).toBe(YELLOW)
-    const strip = view.strip.geometry.attributes.position.array
-    expect(strip[3]).toBeCloseTo(edge.x, 6)
-    expect(strip[4]).toBeCloseTo(edge.y, 6)
-    expect(strip[5]).toBeCloseTo(edge.z, 6)
+    const strip = trailPoints(view.strip)
+    expect(strip.at(-1).x).toBeCloseTo(edge.x, 6)
+    expect(strip.at(-1).y).toBeCloseTo(edge.y, 6)
+    expect(strip.at(-1).z).toBeCloseTo(edge.z, 6)
 
     const packets = view.beamPackets.geometry.attributes.position.array
     const count = view.beamPackets.geometry.drawRange.count
@@ -350,33 +351,56 @@ describe('the line to the main orchestrator', () => {
 })
 
 describe('packets on the tunnel', () => {
-  it('starts at the agent centre and keeps every speck on the yellow line', () => {
+  it('waits for the tunnel, then starts on the shell and keeps every speck and its tail on the path', () => {
     const { agents, state, terminals, world } = harness()
     startWrite(state, 1000)
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
-    const packets = view.packets.geometry.attributes.position.array
-    expect(view.packets.geometry.drawRange.count).toBe(1)
-    expect(packets[0]).toBeCloseTo(view.group.position.x, 6)
-    expect(packets[1]).toBeCloseTo(view.group.position.y, 6)
-    expect(packets[2]).toBeCloseTo(view.group.position.z, 6)
+    expect(tunnelGate(view.tunnel)).toBe(false)
+    expect(view.packets.visible).toBe(false)
+    expect(view.packetTail.visible).toBe(false)
+    expect(view.packets.geometry.drawRange.count).toBe(0)
 
-    agents.update(state, 0.016, 1225, world, terminals)
-    const strip = view.strip.geometry.attributes.position.array
-    const start = { x: strip[0], y: strip[1], z: strip[2] }
-    const end = { x: strip[3], y: strip[4], z: strip[5] }
-    const span = { x: end.x - start.x, y: end.y - start.y, z: end.z - start.z }
-    const count = view.packets.geometry.drawRange.count
-    expect(count).toBeGreaterThan(1)
-    for (let i = 0; i < count; i += 1) {
-      const offset = { x: packets[i * 3] - start.x, y: packets[i * 3 + 1] - start.y, z: packets[i * 3 + 2] - start.z }
-      const cross = {
-        x: offset.y * span.z - offset.z * span.y,
-        y: offset.z * span.x - offset.x * span.z,
-        z: offset.x * span.y - offset.y * span.x,
-      }
-      expect(Math.hypot(cross.x, cross.y, cross.z)).toBeLessThan(1e-6)
-    }
+    agents.update(state, 0.1, 1100, world, terminals)
+    expect(tunnelGate(view.tunnel)).toBe(true)
+    const drawn = trailPoints(view.strip)
+    const level = view.tunnel
+    const radius = view.shellRadius * view.group.scale.x
+    expect(Math.hypot(drawn[0].x - view.group.position.x, drawn[0].y - view.group.position.y, drawn[0].z - view.group.position.z)).toBeCloseTo(radius, 3)
+    expect(level).toBeGreaterThan(0)
+    expect(drawn[0]).not.toEqual({ x: view.group.position.x, y: view.group.position.y, z: view.group.position.z })
+
+    const heads = packetPoints(view)
+    expect(heads.length).toBeGreaterThan(0)
+    expect(heads.some((point) => Math.hypot(point.x - drawn[0].x, point.y - drawn[0].y, point.z - drawn[0].z) < 1e-6)).toBe(true)
+    for (const point of heads) expect(offPolyline(drawn, point)).toBeLessThan(1e-3)
+
+    const tails = tailPointList(view)
+    expect(tails).toHaveLength(heads.length * TAIL_POINTS)
+    for (const point of tails) expect(offPolyline(drawn, point)).toBeLessThan(1e-3)
+    agents.dispose()
+  })
+
+  it('draws no packet while the tunnel is under the gate', () => {
+    const { agents, state, terminals, world } = harness()
+    startWrite(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+    expect(view.tunnel).toBeLessThan(TUNNEL_GATE)
+    expect(view.packets.geometry.drawRange.count).toBe(0)
+    expect(view.packetTail.geometry.drawRange.count).toBe(0)
+
+    agents.update(state, 0.4, 1400, world, terminals)
+    expect(view.tunnel).toBe(1)
+    expect(view.packets.geometry.drawRange.count).toBeGreaterThan(0)
+    expect(view.packetTail.geometry.drawRange.count).toBeGreaterThan(0)
+
+    apply(state, { time: 1500, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+    agents.update(state, 1, 1516, world, terminals)
+    expect(view.tunnel).toBe(0)
+    expect(view.packets.visible).toBe(false)
+    expect(view.packetTail.visible).toBe(false)
+    expect(view.packets.geometry.drawRange.count).toBe(0)
     agents.dispose()
   })
 })
@@ -577,6 +601,117 @@ describe('samplePolyline', () => {
   })
 })
 
+describe('shellStart', () => {
+  const centre = { x: 0, y: 300, z: 0 }
+
+  it('puts the start on the shape shell, facing the first waypoint', () => {
+    const start = shellStart(centre, 120, { x: 0, y: 300, z: 900 })
+    expect(start).toEqual({ x: 0, y: 300, z: 120 })
+    expect(Math.hypot(start.x - centre.x, start.y - centre.y, start.z - centre.z)).toBeCloseTo(120, 10)
+  })
+
+  it('stays on the shell when the waypoint sits inside it', () => {
+    const start = shellStart(centre, 120, { x: 0, y: 300, z: 10 })
+    expect(start).toEqual({ x: 0, y: 300, z: 120 })
+  })
+
+  it('gives the centre when there is no direction or no radius', () => {
+    expect(shellStart(centre, 120, centre)).toEqual(centre)
+    expect(shellStart(centre, 0, { x: 0, y: 0, z: 900 })).toEqual(centre)
+    expect(shellStart(null, 120, null)).toEqual({ x: 0, y: 0, z: 0 })
+  })
+
+  it('writes into the point it is given', () => {
+    const out = {}
+    expect(shellStart(centre, 120, { x: 0, y: 300, z: 900 }, out)).toBe(out)
+    expect(out).toEqual({ x: 0, y: 300, z: 120 })
+  })
+})
+
+describe('tailSpots', () => {
+  it('puts three fainter points behind each packet, on the path it came down', () => {
+    const tails = tailSpots([0.5, 0.2])
+    expect(tails).toHaveLength(6)
+    expect(tails.slice(0, 3)).toEqual([0.5 - TAIL_GAP, 0.5 - TAIL_GAP * 2, 0.5 - TAIL_GAP * 3])
+    expect(tails.slice(3)).toEqual([0.2 - TAIL_GAP, 0.2 - TAIL_GAP * 2, 0.2 - TAIL_GAP * 3])
+    tails.forEach((value) => expect(value).toBeLessThanOrEqual(0.5))
+  })
+
+  it('never runs past the start of the path', () => {
+    for (const value of tailSpots([0.01])) expect(value).toBeGreaterThanOrEqual(0)
+    for (const value of tailSpots([0])) expect(value).toBe(0)
+  })
+
+  it('gives nothing for no packet and writes into the list it is given', () => {
+    expect(tailSpots([])).toEqual([])
+    const out = ['stale']
+    const tails = tailSpots([1], out)
+    expect(tails).toBe(out)
+    expect(out).toHaveLength(TAIL_POINTS)
+  })
+
+  it('keeps every head and tail point on the polyline', () => {
+    const path = [
+      { x: 0, y: 300, z: 0 },
+      { x: 0, y: -160, z: 300 },
+      { x: 900, y: 0, z: 0 },
+      { x: 1400, y: 40, z: 0 },
+    ]
+    const heads = [0.9, 0.4, 0.02]
+    const tails = tailSpots(heads)
+    for (const t of [...heads, ...tails]) {
+      expect(offPolyline(path, samplePolyline(path, t))).toBeLessThan(1e-6)
+    }
+    for (let index = 0; index < heads.length; index += 1) {
+      for (let tail = 0; tail < TAIL_POINTS; tail += 1) {
+        expect(tails[index * TAIL_POINTS + tail]).toBeLessThanOrEqual(heads[index])
+      }
+    }
+  })
+})
+
+describe('the tunnel gate', () => {
+  it('hides every packet until the tunnel reaches 30 percent of its opacity', () => {
+    expect(TUNNEL_GATE).toBe(0.3)
+    expect(tunnelGate(0)).toBe(false)
+    expect(tunnelGate(0.299)).toBe(false)
+    expect(tunnelGate(0.3)).toBe(true)
+    expect(tunnelGate(1)).toBe(true)
+    expect(tunnelGate('0.5')).toBe(true)
+    expect(tunnelGate('x')).toBe(false)
+  })
+})
+
+describe('tunnelRoute', () => {
+  const links = [
+    { from: '', to: 'src' },
+    { from: 'src', to: 'src/ui' },
+    { from: '', to: 'docs' },
+  ]
+  const mask = { dimmed: true, lit: new Set(['', 'src', 'src/ui', 'docs']) }
+
+  it('keeps the root card when its link to the folder is lit', () => {
+    expect(tunnelRoute(['', 'src', 'src/ui'], links, mask)).toEqual(['', 'src', 'src/ui'])
+  })
+
+  it('drops the root card when the chain does not pass through its link', () => {
+    const sparse = [{ from: '', to: 'src' }, { from: 'docs', to: 'docs/a' }]
+    expect(tunnelRoute(['', 'docs', 'docs/a'], sparse, mask)).toEqual(['docs', 'docs/a'])
+  })
+
+  it('keeps a lone root and gives nothing for no chain', () => {
+    expect(tunnelRoute([''], links, mask)).toEqual([''])
+    expect(tunnelRoute([], links, mask)).toEqual([])
+    expect(tunnelRoute(null, links, mask)).toEqual([])
+  })
+
+  it('writes into the list it is given', () => {
+    const out = ['stale']
+    expect(tunnelRoute(['', 'src'], links, mask, out)).toBe(out)
+    expect(out).toEqual(['', 'src'])
+  })
+})
+
 function chainHarness() {
   const scene = new THREE.Scene()
   const roster = [{ key: 'a', name: 'Alpha', shape: 'claude' }]
@@ -614,18 +749,35 @@ function chainHarness() {
   return { agents, state, terminals, world, centres, edge }
 }
 
-function drawnPoints(line) {
-  const attr = line.geometry.attributes.position
+function trailPoints(line) {
+  const attr = line.geometry.getAttribute('instanceStart')
+  if (!attr?.data) return []
+  const array = attr.data.array
+  const segments = attr.data.count
   const points = []
-  for (let index = 0; index < attr.count; index += 1) {
-    points.push({ x: attr.getX(index), y: attr.getY(index), z: attr.getZ(index) })
+  for (let index = 0; index < segments; index += 1) {
+    const base = index * 6
+    if (index === 0) points.push({ x: array[base], y: array[base + 1], z: array[base + 2] })
+    points.push({ x: array[base + 3], y: array[base + 4], z: array[base + 5] })
   }
   return points
+}
+
+function drawnPoints(line) {
+  return trailPoints(line)
 }
 
 function packetPoints(view) {
   const array = view.packets.geometry.attributes.position.array
   const count = view.packets.geometry.drawRange.count
+  const points = []
+  for (let index = 0; index < count; index += 1) points.push({ x: array[index * 3], y: array[index * 3 + 1], z: array[index * 3 + 2] })
+  return points
+}
+
+function tailPointList(view) {
+  const array = view.packetTail.geometry.attributes.position.array
+  const count = view.packetTail.geometry.drawRange.count
   const points = []
   for (let index = 0; index < count; index += 1) points.push({ x: array[index * 3], y: array[index * 3 + 1], z: array[index * 3 + 2] })
   return points
@@ -638,8 +790,19 @@ describe('the specks ride the lit folder chain', () => {
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
     expect(view.strip.visible).toBe(true)
+    expect(view.stripSheath.visible).toBe(true)
+    expect(view.stripSheath.geometry).toBe(view.strip.geometry)
+    expect(view.strip.material.color.getHex()).toBe(YELLOW)
+    expect(view.stripSheath.material.color.getHex()).toBe(YELLOW)
+    expect(view.strip.material.linewidth).toBe(TUNNEL_CORE_WIDTH)
+    expect(view.stripSheath.material.linewidth).toBe(TUNNEL_SHEATH_WIDTH)
+    expect(view.stripSheath.material.opacity).toBeCloseTo(view.strip.material.opacity * TUNNEL_SHEATH_SHARE, 10)
 
-    const expected = speckPolyline(view.group.position, ['', 'src', 'src/ui'], world.center, edge)
+    const route = tunnelRoute(['', 'src', 'src/ui'], world.links, world.mask)
+    expect(route).toEqual(['', 'src', 'src/ui'])
+    const expected = speckPolyline(view.group.position, route, world.center, edge)
+    const radius = view.shellRadius * view.group.scale.x
+    shellStart(view.group.position, radius, expected[1], expected[0])
     const drawn = drawnPoints(view.strip)
     expect(drawn).toHaveLength(expected.length)
     drawn.forEach((point, index) => {
@@ -647,17 +810,17 @@ describe('the specks ride the lit folder chain', () => {
       expect(point.y).toBeCloseTo(expected[index].y, 3)
       expect(point.z).toBeCloseTo(expected[index].z, 3)
     })
-    expect(drawn[0].x).toBeCloseTo(view.group.position.x, 3)
-    expect(drawn[0].y).toBeCloseTo(view.group.position.y, 3)
-    expect(drawn[0].z).toBeCloseTo(view.group.position.z, 3)
+    expect(Math.hypot(drawn[0].x - view.group.position.x, drawn[0].y - view.group.position.y, drawn[0].z - view.group.position.z)).toBeCloseTo(radius, 3)
     expect(drawn.at(-1).x).toBeCloseTo(edge.x, 3)
     expect(drawn.at(-1).y).toBeCloseTo(edge.y, 3)
     expect(drawn.at(-1).z).toBeCloseTo(edge.z, 3)
 
-    agents.update(state, 0.016, 1225, world, terminals)
+    agents.update(state, 0.2, 1100, world, terminals)
+    agents.update(state, 0.2, 1225, world, terminals)
     const packets = packetPoints(view)
     expect(packets.length).toBeGreaterThan(1)
     for (const point of packets) expect(offPolyline(drawn, point)).toBeLessThan(1e-3)
+    for (const point of tailPointList(view)) expect(offPolyline(drawn, point)).toBeLessThan(1e-3)
     agents.dispose()
   })
 
@@ -677,23 +840,25 @@ describe('the specks ride the lit folder chain', () => {
     expect(after[3].z).toBeCloseTo(centres.get('src/ui').z, 3)
 
     const expected = speckPolyline(view.group.position, ['', 'src', 'src/ui'], world.center, edge)
+    shellStart(view.group.position, view.shellRadius * view.group.scale.x, expected[1], expected[0])
     expect(after).toHaveLength(expected.length)
-    agents.update(state, 0.016, 1180, world, terminals)
+    agents.update(state, 0.2, 1180, world, terminals)
     for (const point of packetPoints(view)) expect(offPolyline(expected, point)).toBeLessThan(1e-3)
     agents.dispose()
   })
 
   it('goes straight from the agent to the file when the folder has no card on the path', () => {
-    const { agents, state, terminals, world } = chainHarness()
+    const { agents, state, terminals, world, edge } = chainHarness()
     startWrite(state, 1000, 'r1', 'src/ui/a.js')
     world.links = [{ from: '', to: 'src' }]
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
     const drawn = drawnPoints(view.strip)
     expect(drawn).toHaveLength(2)
-    expect(drawn[0].x).toBeCloseTo(view.group.position.x, 3)
-    expect(drawn[1]).toEqual({ x: 1400, y: 40, z: 0 })
-    agents.update(state, 0.016, 1225, world, terminals)
+    const radius = view.shellRadius * view.group.scale.x
+    expect(Math.hypot(drawn[0].x - view.group.position.x, drawn[0].y - view.group.position.y, drawn[0].z - view.group.position.z)).toBeCloseTo(radius, 3)
+    expect(drawn[1]).toEqual({ x: edge.x, y: edge.y, z: edge.z })
+    agents.update(state, 0.2, 1225, world, terminals)
     for (const point of packetPoints(view)) expect(offPolyline(drawn, point)).toBeLessThan(1e-3)
     agents.dispose()
   })
@@ -836,19 +1001,64 @@ describe('a strip with still ends', () => {
     agents.aimAt('a', 'src', 'src/a.js', 1000)
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
-    const positionVersion = view.strip.geometry.attributes.position.version
+    const version = view.strip.geometry.getAttribute('instanceStart').data.version
     expect(view.strip.visible).toBe(true)
 
     agents.update(state, 0.016, 1016, world, terminals)
-    expect(view.strip.geometry.attributes.position.version).toBe(positionVersion)
+    expect(view.strip.geometry.getAttribute('instanceStart').data.version).toBe(version)
 
     edge.x += 60
     agents.update(state, 0.016, 1032, world, terminals)
-    expect(view.strip.geometry.attributes.position.version).toBeGreaterThan(positionVersion)
-    const array = view.strip.geometry.attributes.position.array
-    expect(array[0]).toBeCloseTo(view.group.position.x, 3)
-    expect(array[1]).toBeCloseTo(view.group.position.y, 3)
-    expect(array[2]).toBeCloseTo(view.group.position.z, 3)
+    expect(view.strip.geometry.getAttribute('instanceStart').data.version).toBeGreaterThan(version)
+    const drawn = drawnPoints(view.strip)
+    expect(drawn.at(-1)).toEqual({ x: edge.x, y: edge.y, z: edge.z })
     agents.dispose()
+  })
+})
+
+describe('the tunnel and its beam', () => {
+  it('keeps both line materials in step with the lens size', () => {
+    const { agents, state, terminals, world } = harness()
+    startWrite(state, 1000)
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+    agents.setViewport(1440, 900)
+    for (const material of [view.strip.material, view.stripSheath.material, view.beam.material, view.beamSheath.material]) {
+      expect(material.resolution.x).toBe(1440)
+      expect(material.resolution.y).toBe(900)
+    }
+    agents.setViewport(0, 0)
+    expect(view.strip.material.resolution.x).toBe(1)
+    expect(view.strip.material.resolution.y).toBe(1)
+    agents.dispose()
+  })
+
+  it('eases in over 0.3 seconds and out over 0.6 seconds, at once under reduced motion', () => {
+    expect(tunnelLevel(0, true, 0.15)).toBeCloseTo(0.5, 10)
+    expect(tunnelLevel(0, true, 0.3)).toBe(1)
+    expect(tunnelLevel(1, false, 0.3)).toBeCloseTo(0.5, 10)
+    expect(tunnelLevel(1, false, 0.6)).toBe(0)
+    expect(tunnelLevel(0, true, 0.05, true)).toBe(1)
+    expect(tunnelLevel(1, false, 0.05, true)).toBe(0)
+    expect(TUNNEL_IN_SECONDS).toBe(0.3)
+    expect(TUNNEL_OUT_SECONDS).toBe(0.6)
+  })
+
+  it('shows the tunnel but sends no packet under reduced motion', () => {
+    const { agents, state, terminals, world } = harness()
+    const saved = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      startWrite(state, 1000)
+      agents.update(state, 0.016, 1000, world, terminals)
+      const view = agents.views.get('a')
+      expect(view.strip.visible).toBe(true)
+      expect(view.tunnel).toBe(1)
+      expect(view.packets.visible).toBe(false)
+      expect(view.packetTail.visible).toBe(false)
+      agents.dispose()
+    } finally {
+      globalThis.window = saved
+    }
   })
 })

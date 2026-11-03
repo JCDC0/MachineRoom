@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The file tunnel draws as a light trail with a 2 pixel core and a 9 pixel sheath in the strip's colour, eases in over 0.3 seconds and out over 0.6 seconds, and starts on the agent's shell (task U136).
+- The payload packets ride only the tunnel, each with a tail of 3 fainter points, and none shows under 30 percent of its opacity (task U136).
+- The blue web beam draws as the same light trail with a thinner core, and the tunnel leaves out the root card when the touched folder's chain does not pass through its link (task U136).
 - A shared byte-offset cache on runs.jsonl serves run records, issues, stats, costs and reviews (task S38).
 - The Claude session reader caches meta files by mtime and forgets removed meta files (task S38).
 
