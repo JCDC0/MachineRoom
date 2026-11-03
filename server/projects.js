@@ -173,17 +173,26 @@ export function readProjectSessions(runsFolder, projectPath) {
   }
 }
 
+function isInsideGitRepo(folder) {
+  let current = folder
+  while (true) {
+    try {
+      if (existsSync(join(current, '.git'))) return true
+    } catch {}
+    const parent = dirname(current)
+    if (parent === current) break
+    current = parent
+  }
+  return false
+}
+
 export function currentProject(projectRoot) {
   if (!projectRoot) return { path: '', name: '', git: false }
   const resolved = resolve(projectRoot)
-  let git = false
-  try {
-    git = existsSync(join(resolved, '.git'))
-  } catch {}
   return {
     path: resolved,
     name: basename(resolved),
-    git,
+    git: isInsideGitRepo(resolved),
   }
 }
 

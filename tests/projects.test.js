@@ -7,6 +7,7 @@ import { projectHash } from '../server/orchestrator.js'
 import {
   CONFIRM_FORGET_PROBLEM,
   CONFIRM_OPEN_PROBLEM,
+  currentProject,
   NOT_ABSOLUTE_PROBLEM,
   NOT_FOLDER_PROBLEM,
   NOT_FOUND_PROBLEM,
@@ -178,6 +179,27 @@ describe('projects api', () => {
 
     const plainFolder = res.body.folders.find((f) => f.name === 'sibling-plain')
     expect(plainFolder.git).toBe(false)
+  })
+
+  it('says git: true for a subfolder inside a repository', async () => {
+    const env = createEnvironment()
+    const subfolder = join(env.root, 'src', 'nested')
+    mkdirSync(subfolder, { recursive: true })
+    const info = currentProject(subfolder)
+    expect(info.git).toBe(true)
+    expect(info.name).toBe('nested')
+
+    const bridge = createBridge({
+      projectRoot: subfolder,
+      runsFolder: env.runs,
+      port: 0,
+      env: {},
+    })
+    const bridgeInfo = await bridge.start()
+    cleanups.push(() => bridge.stop())
+    const res = await getJson(`${bridgeInfo.url}/api/projects`)
+    expect(res.status).toBe(200)
+    expect(res.body.current.git).toBe(true)
   })
 
   it('limits recent projects to at most 20 and orders newest first', () => {
