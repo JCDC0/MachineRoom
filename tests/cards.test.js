@@ -525,11 +525,6 @@ describe('viewInput', () => {
 })
 
 describe('viewKey', () => {
-  const oldKey = (state, pinned = []) => {
-    const input = viewInput(state, pinned)
-    return `${input.files.length}|${input.focus.join('\n')}|${input.touched.join('\n')}`
-  }
-
   const fixture = () => {
     const tree = makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md', 'src/new.js'], created: ['src/new.js'] })
     const state = createState(tree, [{ key: 'hermes', name: 'Hermes' }])
@@ -545,9 +540,12 @@ describe('viewKey', () => {
     expect(viewKey(state, ['docs'])).toBe(viewKey(state, ['docs']))
   })
 
-  it('makes the same key as the old form for a fixture state', () => {
+  it('leaves a stale recent touch out of the plan key', () => {
     const state = fixture()
-    expect(viewKey(state, ['docs'])).toBe(oldKey(state, ['docs']))
+    const before = viewKey(state, ['docs'])
+    state.recent = ['docs/b.md', 'src/a.js', 'old/c.js']
+    state.recentAt = new Map([['docs/b.md', 1000], ['src/a.js', 2000], ['old/c.js', -100000]])
+    expect(viewKey(state, ['docs'])).toBe(before)
   })
 
   it('changes when a write creates a file', () => {

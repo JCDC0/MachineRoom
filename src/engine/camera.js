@@ -180,6 +180,10 @@ export function createCameraRig(camera, surface) {
     if (typeof surface.getBoundingClientRect === 'function') rect = surface.getBoundingClientRect()
   }
 
+  function invalidateRect() {
+    rect = null
+  }
+
   function hover(event) {
     if (!rect) readRect()
     if (!rect || !rect.width || !rect.height) return
@@ -231,6 +235,7 @@ export function createCameraRig(camera, surface) {
   window.addEventListener('pointermove', move)
   window.addEventListener('pointermove', hover)
   window.addEventListener('pointerup', up)
+  window.addEventListener('scroll', invalidateRect, { passive: true })
   surface.addEventListener('wheel', wheel, { passive: false })
 
   function reset() {
@@ -431,6 +436,7 @@ export function createCameraRig(camera, surface) {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointermove', hover)
       window.removeEventListener('pointerup', up)
+      window.removeEventListener('scroll', invalidateRect)
       surface.removeEventListener('wheel', wheel)
     },
   }

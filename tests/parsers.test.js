@@ -405,6 +405,27 @@ describe('agy parser', () => {
     expect(second[0]).toMatchObject({ type: 'tool.end', ok: false, label: 'read src/missing.js: permission denied' })
   })
 
+  it('forgets a label once its call ends', () => {
+    const parser = createAgyParser(ctx)
+    parser.push(lines(step('ACTIVE', 'read_file', { Path: 'src/a.js' })), 500)
+    parser.push(lines(step('DONE', 'read_file', { Path: 'src/a.js' })), 510)
+    const out = parser.push(
+      lines({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'c1',
+          step_index: 4,
+          state: 'ERROR',
+          step_type: 'tool',
+          tool_name: 'write_to_file',
+          tool_info: { error: 'denied', parameters: { TargetFile: 'src/b.js' } },
+        },
+      }),
+      520
+    )
+    expect(out[0]).toMatchObject({ type: 'tool.end', label: 'write_to_file: denied', error: 'denied' })
+  })
+
   it('maps write_to_file to a write touch', () => {
     const parser = createAgyParser(ctx)
     const out = parser.push(lines(step('ACTIVE', 'write_to_file', { TargetFile: 'C:\\Temp\\agent-sandbox\\docs\\agy-report.md' })), 400)

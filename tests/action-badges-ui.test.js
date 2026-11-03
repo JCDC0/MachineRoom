@@ -57,9 +57,11 @@ describe('action badges', () => {
       await mount(root, client)
 
       const control = container.querySelector('.hud-action.is-control')
-      const badge = control.querySelector('.hud-action-badge')
+      const badge = container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')
       expect(badge).not.toBeNull()
       expect(badge.textContent).toBe('1')
+      expect(badge.tagName).toBe('BUTTON')
+      expect(control.contains(badge)).toBe(false)
 
       await click(root, badge)
       await settle(20)
@@ -67,6 +69,22 @@ describe('action badges', () => {
       const drawer = container.querySelector('#hud-control-drawer')
       expect(drawer).not.toBeNull()
       expect(container.querySelector('#tab-reviews').getAttribute('aria-selected')).toBe('true')
+    })
+  })
+
+  it('makes the Control count a button of its own, outside the Control button', async () => {
+    const client = makeClient()
+    await withDom(async ({ container, dom, root }) => {
+      dom.window.localStorage.setItem('machineroom.guide', '1')
+      await mount(root, client)
+
+      const control = container.querySelector('.hud-action.is-control')
+      const badge = container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')
+      expect(control.tagName).toBe('BUTTON')
+      expect(badge.tagName).toBe('BUTTON')
+      expect(badge.getAttribute('type')).toBe('button')
+      expect(control.contains(badge)).toBe(false)
+      expect(badge.getAttribute('aria-label')).toContain('Open Reviews')
     })
   })
 
@@ -104,7 +122,7 @@ describe('action badges', () => {
         )
       })
       await settle(20)
-      expect(container.querySelector('.hud-action.is-control .hud-action-badge')).toBeNull()
+      expect(container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')).toBeNull()
     })
   })
 

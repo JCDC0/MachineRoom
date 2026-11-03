@@ -138,7 +138,7 @@ export function viewInput(state, pinned = []) {
 }
 
 export function viewKey(state, pinned = []) {
-  return `${state.existingFiles}|${viewFocus(state, pinned).join('\n')}|${(state.recent ?? []).join('\n')}`
+  return `${state.existingFiles}|${viewFocus(state, pinned).join('\n')}`
 }
 
 export function openChain(state, extra = []) {

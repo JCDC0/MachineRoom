@@ -207,7 +207,10 @@ export function apply(state, activity) {
       break
     case 'tool.end':
       if (!activity.ok) {
-        say(agent, 'failed', 'error')
+        const label = activity.label ?? agent.label
+        if (activity.label) agent.label = activity.label
+        if (activity.error) agent.error = activity.error
+        say(agent, label ? `failed ${label}` : 'failed', 'error')
         for (const touch of agent.calls.get(activity.id) ?? []) {
           const file = touch.kind === 'file' ? state.files.get(touch.path) : null
           if (file) file.failed = true

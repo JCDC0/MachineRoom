@@ -196,6 +196,7 @@ export function createAgyParser(ctx) {
     const callLabel = calls.get(id) ?? step.tool_name ?? 'tool'
     const endLabel = entry.error && !callLabel.includes(entry.error) ? `${callLabel}: ${shorten(entry.error)}` : callLabel
     out.push(credit(entry, toolEnd({ time, id, ok: entry.doneOk, ...(entry.error ? { label: endLabel, error: entry.error } : {}) })))
+    calls.delete(id)
     if (step.tool_name === 'invoke_subagent') finishInvoke(step, id)
     if (step.tool_name === 'manage_subagents' && step.tool_info?.parameters?.Action === 'list') {
       for (const item of subagentList(step.tool_info?.output)) {

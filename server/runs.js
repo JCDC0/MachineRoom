@@ -182,6 +182,24 @@ export function readRunRecords(file) {
   return readAllRunRecords(file).slice(-RECENT_LIMIT).reverse()
 }
 
+export function newestRecordPerLane(records) {
+  const latest = new Map()
+  for (const record of Array.isArray(records) ? records : []) {
+    if (!record || typeof record !== 'object') continue
+    const lane = typeof record.lane === 'string' ? record.lane.trim() : ''
+    if (!lane) continue
+    const kept = latest.get(lane)
+    if (!kept) {
+      latest.set(lane, record)
+      continue
+    }
+    const started = Date.parse(record.startedAt)
+    const keptStarted = Date.parse(kept.startedAt)
+    if (!Number.isFinite(keptStarted) || (Number.isFinite(started) && started >= keptStarted)) latest.set(lane, record)
+  }
+  return [...latest.values()]
+}
+
 export function readAllRunRecords(file) {
   return readJsonLines(file)
 }
@@ -397,10 +415,12 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     if (path !== '/api/control/runs') return false
 
     if (method === 'GET') {
+      const records = readAllRunRecords(recordsPath())
       sendJson(req, res, 200, {
         project: resolvedRoot ? basename(resolvedRoot) : '',
         running: [...running.values()].map(snapshot),
-        recent: readRunRecords(recordsPath()),
+        recent: records.slice(-RECENT_LIMIT).reverse(),
+        last: newestRecordPerLane(records),
       })
       return true
     }

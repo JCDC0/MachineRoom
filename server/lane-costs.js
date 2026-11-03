@@ -30,12 +30,12 @@ export function cachedRunRecords(file = runsFile()) {
 
 function monthStart(time) {
   const date = new Date(time)
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1)
+  return new Date(date.getFullYear(), date.getMonth(), 1).getTime()
 }
 
 function nextMonth(start) {
   const date = new Date(start)
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1)
+  return new Date(date.getFullYear(), date.getMonth() + 1, 1).getTime()
 }
 
 function dayStart(time) {

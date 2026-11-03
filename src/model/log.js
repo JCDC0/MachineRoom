@@ -25,7 +25,7 @@ export function createLogger(agents) {
         labels.set(call, activity.label)
         return { agent, text: shorten(activity.label, TEXT_LIMIT), tone: 'normal' }
       case 'tool.end': {
-        const label = labels.get(call)
+        const label = activity.label ?? labels.get(call)
         labels.delete(call)
         return activity.ok ? null : { agent, text: shorten(`failed ${label ?? 'tool call'}`, TEXT_LIMIT), tone: 'error' }
       }
