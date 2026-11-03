@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The music player picks a playlist or Loose tracks, plays it in order and loops, and saves `music.playlist` (task U130).
 - `GET /api/music` lists one playlist per subfolder and serves `GET /music/PLAYLIST/NAME`, with every part checked (task U130).
 - The orchestrator list's read error shows in the chat beside the status line (task U128).
 - A record time typed just before Settings closes reaches the live room, not only storage (task U128).

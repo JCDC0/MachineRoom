@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
-import { store } from '../storage.js'
+import { readStorage, store, writeStorage } from '../storage.js'
 import { loadSettings, loadSoundSettings, saveSoundSettings } from './settings.js'
 import { sound } from './sound.js'
+
+const SETTINGS_KEY = 'machineroom.settings'
+
+export const ALL_CHOICE = 'all'
+export const LOOSE_CHOICE = 'loose'
+const PLAYLIST_PREFIX = 'playlist:'
 
 function cleanBase(value) {
   return String(value ?? '').replace(/\/+$/, '')
@@ -33,10 +39,20 @@ async function readMusicList(signal = null) {
       if (!response.ok) continue
       const body = await response.json()
       if (!body || !Array.isArray(body.tracks)) continue
+      const playlists = Array.isArray(body.playlists)
+        ? body.playlists
+            .filter((playlist) => playlist && typeof playlist.name === 'string' && playlist.name && Array.isArray(playlist.tracks))
+            .map((playlist) => ({
+              name: playlist.name,
+              tracks: playlist.tracks.filter((name) => typeof name === 'string'),
+            }))
+            .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        : []
       return {
         base,
         folder: typeof body.folder === 'string' ? body.folder : '',
         tracks: body.tracks.filter((name) => typeof name === 'string'),
+        playlists,
       }
     } catch {
       if (signal?.aborted) return null
@@ -48,8 +64,69 @@ async function readMusicList(signal = null) {
   return null
 }
 
-function trackUrl(base, name) {
-  return `${base}/music/${encodeURIComponent(name)}`
+export function playlistChoice(raw, playlists = [], tracks = []) {
+  const lists = Array.isArray(playlists) ? playlists : []
+  const loose = Array.isArray(tracks) ? tracks : []
+  if (raw === LOOSE_CHOICE) return loose.length > 0 ? LOOSE_CHOICE : ALL_CHOICE
+  if (typeof raw === 'string' && raw.startsWith(PLAYLIST_PREFIX)) {
+    const name = raw.slice(PLAYLIST_PREFIX.length)
+    return lists.some((playlist) => playlist && playlist.name === name) ? raw : ALL_CHOICE
+  }
+  return ALL_CHOICE
+}
+
+export function playlistQueue(playlists, tracks, choice = ALL_CHOICE) {
+  const lists = Array.isArray(playlists) ? playlists : []
+  const loose = Array.isArray(tracks) ? tracks : []
+  if (choice === LOOSE_CHOICE) return loose.map((name) => ({ playlist: '', name }))
+  if (typeof choice === 'string' && choice.startsWith(PLAYLIST_PREFIX)) {
+    const name = choice.slice(PLAYLIST_PREFIX.length)
+    const found = lists.find((playlist) => playlist && playlist.name === name)
+    return found && Array.isArray(found.tracks)
+      ? found.tracks.map((track) => ({ playlist: found.name, name: track }))
+      : []
+  }
+  const all = []
+  for (const playlist of lists) {
+    const named = Array.isArray(playlist?.tracks) ? playlist.tracks : []
+    for (const name of named) all.push({ playlist: playlist.name, name })
+  }
+  for (const name of loose) all.push({ playlist: '', name })
+  return all
+}
+
+export function musicTrackUrl(base, track) {
+  const name = typeof track?.name === 'string' ? track.name : ''
+  const playlist = typeof track?.playlist === 'string' ? track.playlist : ''
+  return playlist
+    ? `${base}/music/${encodeURIComponent(playlist)}/${encodeURIComponent(name)}`
+    : `${base}/music/${encodeURIComponent(name)}`
+}
+
+export function readMusicPlaylist(storage = store()) {
+  try {
+    const raw = readStorage(SETTINGS_KEY, storage)
+    const parsed = raw ? JSON.parse(raw) : null
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return ALL_CHOICE
+    const music = parsed.music && typeof parsed.music === 'object' && !Array.isArray(parsed.music) ? parsed.music : {}
+    return typeof music.playlist === 'string' && music.playlist ? music.playlist : ALL_CHOICE
+  } catch {
+    return ALL_CHOICE
+  }
+}
+
+export function saveMusicPlaylist(choice, storage = store()) {
+  if (typeof choice !== 'string' || choice === '') return false
+  let parsed = null
+  try {
+    const raw = readStorage(SETTINGS_KEY, storage)
+    parsed = raw ? JSON.parse(raw) : null
+  } catch {
+    parsed = null
+  }
+  const current = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
+  const music = current.music && typeof current.music === 'object' && !Array.isArray(current.music) ? current.music : {}
+  return writeStorage(SETTINGS_KEY, JSON.stringify({ ...current, music: { ...music, playlist: choice } }), storage)
 }
 
 function nextIndex(index, length, shuffle, random = Math.random) {
@@ -68,15 +145,19 @@ function previousIndex(index, length) {
 }
 
 export default function MusicPlayer() {
-  const [list, setList] = useState({ base: '', folder: '', tracks: [] })
+  const [list, setList] = useState({ base: '', folder: '', tracks: [], playlists: [] })
   const [loading, setLoading] = useState(true)
   const [failed, setFailed] = useState(false)
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [playError, setPlayError] = useState('')
   const [shuffle, setShuffle] = useState(false)
-  const [repeat, setRepeat] = useState(false)
+  const [choice, setChoice] = useState(() => readMusicPlaylist(store()))
   const [volume, setVolume] = useState(() => loadSoundSettings(store()).musicVolume)
+
+  const shownChoice = playlistChoice(choice, list.playlists, list.tracks)
+  const queue = playlistQueue(list.playlists, list.tracks, shownChoice)
+  const current = queue[index] ?? null
 
   useEffect(() => {
     let active = true
@@ -89,8 +170,13 @@ export default function MusicPlayer() {
         return
       }
       setList(found)
+      const saved = readMusicPlaylist(store())
+      const next = playlistChoice(saved, found.playlists, found.tracks)
+      if (saved !== next) saveMusicPlaylist(next, store())
+      setChoice(next)
+      const nextQueue = playlistQueue(found.playlists, found.tracks, next)
       const playingUrl = sound.musicTrack()
-      const at = playingUrl === '' ? -1 : found.tracks.findIndex((name) => trackUrl(found.base, name) === playingUrl)
+      const at = playingUrl === '' ? -1 : nextQueue.findIndex((track) => musicTrackUrl(found.base, track) === playingUrl)
       setIndex(at >= 0 ? at : 0)
       setPlaying(at >= 0 && sound.musicPlaying())
     })
@@ -106,54 +192,59 @@ export default function MusicPlayer() {
 
   useEffect(() => {
     return sound.onMusicEnded(() => {
-      if (repeat) {
-        changeTrack(1)
-        return
-      }
-      if (index < list.tracks.length - 1) {
-        changeTrack(1)
-        return
-      }
-      setPlaying(false)
+      changeTrack(1)
     })
   })
 
+  function startTrack(track) {
+    if (!track) return
+    sound.arm()
+    const started = sound.playMusic(musicTrackUrl(list.base, track))
+    started.then((ok) => {
+      if (ok) return
+      setPlaying(false)
+      setPlayError(`Could not play ${track.name}.`)
+    })
+  }
+
   function changeTrack(step) {
-    if (list.tracks.length === 0) return
+    if (queue.length === 0) return
     const next = step > 0
-      ? nextIndex(index, list.tracks.length, shuffle)
-      : previousIndex(index, list.tracks.length)
+      ? nextIndex(index, queue.length, shuffle)
+      : previousIndex(index, queue.length)
     if (next < 0) return
     setIndex(next)
     setPlayError('')
-    if (playing) {
-      sound.arm()
-      const started = sound.playMusic(trackUrl(list.base, list.tracks[next]))
-      started.then((ok) => {
-        if (ok) return
-        setPlaying(false)
-        setPlayError(`Could not play ${list.tracks[next]}.`)
-      })
-    }
+    if (playing) startTrack(queue[next])
   }
 
   function togglePlay() {
-    if (list.tracks.length === 0) return
+    if (queue.length === 0) return
     if (playing) {
       sound.pauseMusic()
       setPlaying(false)
       setPlayError('')
       return
     }
-    sound.arm()
     setPlayError('')
-    const started = sound.playMusic(trackUrl(list.base, list.tracks[index]))
     setPlaying(true)
-    started.then((ok) => {
-      if (ok) return
+    startTrack(current ?? queue[0])
+  }
+
+  function choosePlaylist(raw) {
+    const next = playlistChoice(raw, list.playlists, list.tracks)
+    setChoice(next)
+    saveMusicPlaylist(next, store())
+    setIndex(0)
+    setPlayError('')
+    if (!playing) return
+    const nextQueue = playlistQueue(list.playlists, list.tracks, next)
+    if (nextQueue.length === 0) {
+      sound.pauseMusic()
       setPlaying(false)
-      setPlayError(`Could not play ${list.tracks[index]}.`)
-    })
+      return
+    }
+    startTrack(nextQueue[0])
   }
 
   function changeVolume(value) {
@@ -164,22 +255,35 @@ export default function MusicPlayer() {
     saveSoundSettings(store(), { musicVolume: next })
   }
 
-  const current = list.tracks[index] ?? ''
-
   return (
     <div className="hud-sound-player">
       <div className="hud-sound-row">
         <span className="hud-settings-label">Music</span>
-        <span className="hud-settings-value mono">{current || (loading ? 'Loading' : 'Off')}</span>
+        <span className="hud-settings-value mono">{current?.name || (loading ? 'Loading' : 'Off')}</span>
+      </div>
+      <div className="hud-sound-row">
+        <label className="hud-settings-label" htmlFor="music-playlist">Playlist</label>
+        <select
+          id="music-playlist"
+          className="hud-sound-select"
+          value={shownChoice}
+          onChange={(event) => choosePlaylist(event.target.value)}
+        >
+          <option value={ALL_CHOICE}>All</option>
+          {list.playlists.map((playlist) => (
+            <option key={playlist.name} value={`${PLAYLIST_PREFIX}${playlist.name}`}>{playlist.name}</option>
+          ))}
+          {list.tracks.length > 0 && <option value={LOOSE_CHOICE}>Loose tracks</option>}
+        </select>
       </div>
       <div className="hud-sound-controls">
-        <button type="button" className="hud-sound-button" onClick={() => changeTrack(-1)} disabled={list.tracks.length < 2} aria-label="Previous track">
+        <button type="button" className="hud-sound-button" onClick={() => changeTrack(-1)} disabled={queue.length < 2} aria-label="Previous track">
           Previous
         </button>
-        <button type="button" className="hud-sound-button is-main" onClick={togglePlay} disabled={list.tracks.length === 0}>
+        <button type="button" className="hud-sound-button is-main" onClick={togglePlay} disabled={queue.length === 0}>
           {playing ? 'Pause' : 'Play'}
         </button>
-        <button type="button" className="hud-sound-button" onClick={() => changeTrack(1)} disabled={list.tracks.length < 2} aria-label="Next track">
+        <button type="button" className="hud-sound-button" onClick={() => changeTrack(1)} disabled={queue.length < 2} aria-label="Next track">
           Next
         </button>
       </div>
@@ -194,16 +298,6 @@ export default function MusicPlayer() {
         >
           Shuffle
         </button>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={repeat}
-          aria-label="Repeat"
-          className={`hud-settings-switch ${repeat ? 'is-on' : ''}`}
-          onClick={() => setRepeat((now) => !now)}
-        >
-          Repeat
-        </button>
       </div>
       <div className="hud-sound-control">
         <input
@@ -217,7 +311,7 @@ export default function MusicPlayer() {
         />
         <span className="hud-settings-value mono">{Math.round(volume * 100)}%</span>
       </div>
-      {!loading && !failed && list.tracks.length === 0 && (
+      {!loading && !failed && queue.length === 0 && (
         <div className="hud-sound-empty">
           <p>Put music files in the music folder of MachineRoom.</p>
           {list.folder && <p className="mono">{list.folder}</p>}
