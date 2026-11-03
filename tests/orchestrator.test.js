@@ -1281,15 +1281,16 @@ describe('waking the orchestrator', () => {
     await waitIdle(rig, 3)
 
     const second = rig.calls()[1].args[1]
-    expect(second).toContain('Q3')
-    expect(second).toContain('Q4')
-    expect(second).not.toContain('Q1')
-    expect(second).not.toContain('Q2')
+    expect(second).toContain('Q1')
+    expect(second).toContain('Q2')
+    expect(second).not.toContain('Q3')
+    expect(second).not.toContain('Q4')
 
     const third = rig.calls()[2].args[1]
-    expect(third).toContain('Q1')
-    expect(third).toContain('Q2')
-    expect(third).not.toContain('Q4')
+    expect(third).toContain('Q3')
+    expect(third).toContain('Q4')
+    expect(third).not.toContain('Q1')
+    expect(third).not.toContain('Q2')
   })
 
   it('does not report a stopped turn when stop lands after the child exited well', async () => {

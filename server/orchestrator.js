@@ -369,11 +369,11 @@ function fitTurnText(messages) {
   const blocks = []
   const used = []
   let size = 0
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
+  for (let index = 0; index < messages.length; index += 1) {
     const block = blockFor(messages[index])
     if (blocks.length > 0 && size + block.length + 2 > PROMPT_LIMIT) break
-    blocks.unshift(block)
-    used.unshift(messages[index])
+    blocks.push(block)
+    used.push(messages[index])
     size += block.length + 2
   }
   return { text: blocks.join('\n\n'), used }
@@ -886,7 +886,7 @@ export function createOrchestrator({
     const fit = compaction ? { text: '', used: [] } : fitTurnText(queued)
     const turnMessages = fit.used
     if (!compaction && turnMessages.length < queued.length) {
-      pending.unshift(...queued.slice(0, queued.length - turnMessages.length))
+      pending.unshift(...queued.slice(turnMessages.length))
       persist()
     }
     const hasOwner = turnMessages.some((message) => message.from === 'owner')
