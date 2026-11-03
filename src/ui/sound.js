@@ -50,16 +50,19 @@ export function spatialSound(place = {}) {
   return { audible: gain > 0, pan: panForScreen(x, width), gain }
 }
 
-export function beatDetector(levels, { window = 8, factor = 1.3, floor = 0.08 } = {}) {
+export const BEAT_WINDOW = 22
+
+// Soft, compressed music never jumps 30 percent over its last moment, so a beat is a rise past the last second's spread instead.
+export function beatDetector(levels, { window = BEAT_WINDOW, spread = 1.2, floor = 0.08, least = 8 } = {}) {
   if (!Array.isArray(levels)) return false
   const clean = levels.filter((level) => Number.isFinite(level) && level >= 0)
-  if (clean.length < 3) return false
+  if (clean.length < least + 1) return false
   const current = clean[clean.length - 1]
   const from = Math.max(0, clean.length - 1 - Math.max(1, Math.floor(window)))
   const recent = clean.slice(from, clean.length - 1)
-  if (recent.length === 0) return false
   const average = recent.reduce((sum, level) => sum + level, 0) / recent.length
-  return current > floor && current > average * factor
+  const deviation = Math.sqrt(recent.reduce((sum, level) => sum + (level - average) ** 2, 0) / recent.length)
+  return current > floor && current > recent[recent.length - 1] && current > average + spread * Math.max(deviation, 0.01)
 }
 
 const REMOVE_COMMANDS = new Set(['rm', 'del', 'remove-item'])
@@ -320,7 +323,7 @@ export const sound = {
     for (let index = 0; index < bins; index += 1) total += engine.bins[index]
     const level = total / bins / 255
     engine.levels.push(level)
-    if (engine.levels.length > 16) engine.levels.shift()
+    if (engine.levels.length > BEAT_WINDOW + 1) engine.levels.shift()
     if (stamp - engine.lastBeatAt < 220) return 0
     if (!beatDetector(engine.levels)) return 0
     engine.lastBeatAt = stamp

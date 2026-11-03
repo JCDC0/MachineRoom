@@ -41,16 +41,21 @@ describe('spatial beeps', () => {
 })
 
 describe('beat detector', () => {
-  it('finds a bass spike above the short rolling average', () => {
-    expect(beatDetector([0.1, 0.1, 0.1, 0.1, 0.9])).toBe(true)
-    expect(beatDetector([0.4, 0.4, 0.4, 0.4, 0.4])).toBe(false)
-    expect(beatDetector([0.1, 0.1, 0.9])).toBe(true)
+  it('finds a rise past the last second of levels', () => {
+    expect(beatDetector([...Array(9).fill(0.1), 0.9])).toBe(true)
+    expect(beatDetector(Array(10).fill(0.4))).toBe(false)
+    expect(beatDetector([0.5, 0.6, 0.5, 0.6, 0.5, 0.6, 0.5, 0.6, 0.5, 0.55])).toBe(false)
+  })
+
+  it('hears the beat in soft music that never jumps 30 percent', () => {
+    expect(beatDetector([0.5, 0.52, 0.49, 0.51, 0.5, 0.48, 0.52, 0.5, 0.49, 0.6])).toBe(true)
+    expect(beatDetector([0.5, 0.52, 0.49, 0.51, 0.5, 0.48, 0.52, 0.5, 0.62, 0.6])).toBe(false)
   })
 
   it('needs enough samples and a level above the floor', () => {
     expect(beatDetector([])).toBe(false)
     expect(beatDetector([0.1, 0.9])).toBe(false)
-    expect(beatDetector([0.01, 0.01, 0.05])).toBe(false)
+    expect(beatDetector([...Array(9).fill(0.01), 0.05])).toBe(false)
     expect(beatDetector(null)).toBe(false)
   })
 })
