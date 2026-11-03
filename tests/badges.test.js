@@ -50,30 +50,31 @@ describe('proposalBadgeCount', () => {
 })
 
 describe('orchestratorBadgeCount', () => {
-  it('counts the orchestrators that wait or are paused', () => {
+  it('counts only the paused orchestrators, since idle is the resting state', () => {
     expect(
       orchestratorBadgeCount([
         { id: 'orchestrator', state: 'idle' },
         { id: 'frontend', state: 'working' },
         { id: 'backend', state: 'paused' },
       ])
-    ).toBe(2)
+    ).toBe(1)
   })
 
-  it('treats a missing state as waiting and reads an answer object', () => {
-    expect(orchestratorBadgeCount({ orchestrators: [{ id: 'orchestrator' }] })).toBe(1)
+  it('treats a missing state as idle and reads an answer object', () => {
+    expect(orchestratorBadgeCount({ orchestrators: [{ id: 'orchestrator' }] })).toBe(0)
+    expect(orchestratorBadgeCount({ orchestrators: [{ id: 'orchestrator', state: 'paused' }] })).toBe(1)
     expect(orchestratorBadgeCount(null)).toBe(0)
   })
 })
 
 describe('actionBadges', () => {
-  it('puts reviews on Control and proposals plus waiting orchestrators on Orchestrator', () => {
+  it('puts reviews on Control and proposals plus paused orchestrators on Orchestrator', () => {
     const counts = actionBadges({
       reviews: [{ ahead: 2 }, { ahead: 0 }],
       proposals: [{ id: 'p1' }, { id: 'p2' }],
       orchestrators: [{ state: 'idle' }, { state: 'paused' }, { state: 'working' }],
     })
-    expect(counts).toEqual({ control: 1, orchestrator: 4 })
+    expect(counts).toEqual({ control: 1, orchestrator: 3 })
   })
 
   it('shows nothing for empty answers', () => {

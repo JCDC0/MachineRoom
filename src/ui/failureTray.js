@@ -33,7 +33,8 @@ function forgetCalls(calls, run) {
 
 export function addFailureActivities(tray, activities, now = Date.now()) {
   const base = tray && Array.isArray(tray.rows) ? tray : emptyFailureTray()
-  const calls = { ...(base.calls ?? {}) }
+  // Tool starts only feed the labels, so they change the calls in place and never cause a render.
+  const calls = base.calls ?? {}
   let rows = base.rows
   let seq = Number.isFinite(base.seq) ? base.seq : 0
   let changed = false
@@ -45,7 +46,6 @@ export function addFailureActivities(tray, activities, now = Date.now()) {
       const id = activity.id == null ? '' : String(activity.id)
       if (!id) continue
       calls[callKey(run, id)] = typeof activity.label === 'string' ? activity.label : ''
-      changed = true
       continue
     }
     if (activity.type === 'tool.end' && activity.ok === false) {

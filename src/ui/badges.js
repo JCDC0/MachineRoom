@@ -29,7 +29,8 @@ export function orchestratorBadgeCount(value) {
   for (const entry of listOf(value, 'orchestrators')) {
     if (!entry || typeof entry !== 'object') continue
     const state = typeof entry.state === 'string' ? entry.state.trim().toLowerCase() : 'idle'
-    if (state === 'paused' || state === 'idle' || state === 'waiting') count += 1
+    // An idle orchestrator is the normal resting state, so only a paused one needs the owner.
+    if (state === 'paused') count += 1
   }
   return count
 }

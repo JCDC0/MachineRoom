@@ -22,7 +22,7 @@ function makeClient() {
     ],
     family: async () => ({ nodes: [], proposals: [] }),
     orchestrators: async () => [
-      { id: 'orchestrator', name: 'Orchestrator', state: 'idle' },
+      { id: 'orchestrator', name: 'Orchestrator', state: 'paused' },
       { id: 'frontend', name: 'Frontend', state: 'working' },
     ],
     subscribe: () => () => {},
@@ -70,7 +70,7 @@ describe('action badges', () => {
     })
   })
 
-  it('counts the pending proposal and the waiting orchestrator on Orchestrator', async () => {
+  it('counts the pending proposal and the paused orchestrator on Orchestrator', async () => {
     const client = makeClient()
     await withDom(async ({ container, dom, root }) => {
       dom.window.localStorage.setItem('machineroom.guide', '1')
