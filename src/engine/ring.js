@@ -226,6 +226,6 @@ export function layoutRing(entries, options = {}) {
       queue.push(path)
     })
   }
-  while (queue.length > 0) placeChildren(queue.shift())
+  for (let at = 0; at < queue.length; at += 1) placeChildren(queue[at])
   return positions
 }

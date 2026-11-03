@@ -748,6 +748,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
+    rig.resize()
     const shown = boardVisible(width)
     if (shown !== boardShown) {
       boardShown = shown
@@ -804,7 +805,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       pendingFollow = null
       followPath(path)
     }
-    strings.update(centerOf, mask, delta)
+    strings.update(centerOf, mask, delta, cards.moving())
     labels.update(delta)
     messages.update(now)
     world.mask = mask

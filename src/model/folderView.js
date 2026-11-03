@@ -33,7 +33,11 @@ function rankOf(path, first, second) {
   return 2
 }
 
-function addFolder(path, has, add, kids) {
+function bumpFolder(index, path) {
+  index.folderVersion.set(path, (index.folderVersion.get(path) ?? 0) + 1)
+}
+
+function addFolder(path, has, add, kids, bump = null) {
   const missing = []
   for (let at = path; !has(at); at = parentOf(at)) missing.push(at)
   missing.forEach(add)
@@ -42,6 +46,7 @@ function addFolder(path, has, add, kids) {
     const list = kids.get(parent)
     if (list) list.push(at)
     else kids.set(parent, [at])
+    if (bump) bump(parent)
   })
 }
 
@@ -50,7 +55,7 @@ function addFile(index, raw) {
   if (!path || index.fileSet.has(path)) return
   index.fileSet.add(path)
   const parent = parentOf(path)
-  addFolder(parent, (at) => index.folders.has(at), (at) => index.folders.add(at), index.children)
+  addFolder(parent, (at) => index.folders.has(at), (at) => index.folders.add(at), index.children, (at) => bumpFolder(index, at))
   for (let at = parent; ; at = parentOf(at)) {
     index.fileCount.set(at, (index.fileCount.get(at) ?? 0) + 1)
     if (at === '') break
@@ -58,20 +63,28 @@ function addFile(index, raw) {
   const list = index.filesIn.get(parent)
   if (list) list.push(path)
   else index.filesIn.set(parent, [path])
+  bumpFolder(index, parent)
 }
 
 function extendIndex(index, files) {
+  if (files === index.source) {
+    if (files.length < index.length) return false
+    for (let at = index.length; at < files.length; at += 1) addFile(index, files[at])
+    index.length = files.length
+    return true
+  }
   const before = index.source
-  if (files.length < before.length) return false
+  if (files.length < index.length) return false
   const added = []
   let kept = 0
   for (const raw of files) {
-    if (kept < before.length && raw === before[kept]) kept += 1
+    if (kept < index.length && raw === before[kept]) kept += 1
     else added.push(raw)
   }
-  if (kept !== before.length) return false
+  if (kept !== index.length) return false
   added.forEach((raw) => addFile(index, raw))
-  index.source = [...files]
+  index.source = files
+  index.length = files.length
   return true
 }
 
@@ -80,12 +93,15 @@ let lastIndex = null
 function indexFiles(files) {
   if (lastIndex && extendIndex(lastIndex, files)) return lastIndex
   const index = {
-    source: [...files],
+    source: files,
+    length: files.length,
     fileSet: new Set(),
     folders: new Set(['']),
     filesIn: new Map(),
     children: new Map(),
     fileCount: new Map([['', 0]]),
+    folderVersion: new Map(),
+    views: new Map(),
   }
   files.forEach((raw) => addFile(index, raw))
   lastIndex = index
@@ -226,7 +242,24 @@ export function planFolderView({
     return entries.sort((a, b) => rank(a) - rank(b) || byName(a.path, b.path))
   }
 
-  return [...drawn].sort(byName).map((path) => {
+  const shapeKey = [
+    alwaysLevel,
+    alwaysLimit,
+    folderLimit,
+    itemLimit,
+    limitItems ? 1 : 0,
+    [...drawn].sort(byName).join('\n'),
+    [...pinned].sort(byName).join('\n'),
+    focusPaths.join('\n'),
+    touchedPaths.join('\n'),
+    [...expandedPaths].sort(byName).join('\n'),
+  ].join('|')
+
+  const plan = [...drawn].sort(byName).map((path) => {
+    const version = index.folderVersion.get(path) ?? 0
+    const key = `${version}|${shapeKey}`
+    const cached = index.views.get(path)
+    if (cached && cached.key === key) return cached.view
     const all = itemsFor(path)
     let items = []
     if (!limitItems) items = all.slice()
@@ -253,6 +286,11 @@ export function planFolderView({
       hiddenItems: limitItems ? all.length - items.length : 0,
     }
     if (isPinned) view.pinned = true
+    index.views.set(path, { key, view })
     return view
   })
+  if (index.views.size > drawn.size * 2 + 32) {
+    for (const path of index.views.keys()) if (!drawn.has(path)) index.views.delete(path)
+  }
+  return plan
 }

@@ -751,3 +751,53 @@ describe('existingFiles', () => {
     expect(state.existingFiles).toBe(3)
   })
 })
+
+describe('the card class string', () => {
+  it('builds only when a class input changes, not on every frame', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    for (const card of cards.cards.values()) card.classBuilds = 0
+
+    for (let frame = 0; frame < 5; frame += 1) cards.update(state, 0.016, camera())
+    for (const card of cards.cards.values()) expect(card.classBuilds, card.path || 'root').toBe(0)
+
+    expect(cards.setSelected('docs')).toBe(true)
+    cards.update(state, 0.016, camera())
+    expect(cards.cards.get('docs').classBuilds).toBe(1)
+    for (const card of cards.cards.values()) {
+      if (card.path !== 'docs') expect(card.classBuilds, card.path || 'root').toBe(0)
+    }
+    cards.dispose()
+  })
+})
+
+describe('the file list behind the plan', () => {
+  it('appends a new file to the same list instead of walking the map again', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [])
+    const first = viewInput(state, [])
+    const files = first.files
+    state.files.set('src/new.js', { path: 'src/new.js', exists: true, reads: 0, writes: 0, failed: false, yellow: false })
+    const next = viewInput(state, [])
+    expect(next.files).toBe(files)
+    expect(next.files).toEqual(['docs/b.md', 'src/a.js', 'src/new.js'])
+  })
+
+  it('rebuilds the list when a created file becomes real', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'src/new.js'], created: ['src/new.js'] }), [
+      { key: 'hermes', name: 'Hermes' },
+    ])
+    expect(viewInput(state, []).files).toEqual(['src/a.js'])
+    apply(state, {
+      type: 'tool.start',
+      agent: 'hermes',
+      time: 1,
+      id: 'call-1',
+      label: 'write src/new.js',
+      touches: [{ kind: 'file', path: 'src/new.js', mode: 'write' }],
+    })
+    expect(state.fileVersion).toBe(1)
+    expect(viewInput(state, []).files).toEqual(['src/a.js', 'src/new.js'])
+  })
+})

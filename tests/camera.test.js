@@ -42,12 +42,16 @@ function openRig({ still = false } = {}) {
     removeEventListener: () => {},
   }
   const surfaceListeners = {}
+  let rectReads = 0
   const surface = {
     addEventListener: (type, handler) => {
       surfaceListeners[type] = handler
     },
     removeEventListener: () => {},
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 1000, height: 800 }),
+    getBoundingClientRect: () => {
+      rectReads += 1
+      return { left: 0, top: 0, width: 1000, height: 800 }
+    },
   }
   const camera = new THREE.PerspectiveCamera()
   const rig = createCameraRig(camera, surface)
@@ -62,10 +66,13 @@ function openRig({ still = false } = {}) {
     for (const handler of listeners.pointerup ?? []) handler({ clientX: 500, clientY: 400 })
     for (const handler of listeners.pointermove ?? []) handler({ clientX: 500, clientY: 400 })
   }
+  const move = (x, y) => {
+    for (const handler of listeners.pointermove ?? []) handler({ clientX: x, clientY: y })
+  }
   const close = () => {
     globalThis.window = saved
   }
-  return { rig, drag, wheel, rest, close, camera }
+  return { rig, drag, wheel, rest, move, close, camera, rectReads: () => rectReads }
 }
 
 describe('camera rig yaw and pitch', () => {
@@ -698,5 +705,22 @@ describe('fitView', () => {
 
   it('gives the same answer every time', () => {
     expect(fitView(room)).toEqual(fitView(room))
+  })
+})
+
+describe('the pointer hover rect', () => {
+  it('reads the surface rect once per resize, not on every move', () => {
+    const { rig, move, close, rectReads } = openRig()
+    try {
+      const reads = rectReads()
+      for (let index = 0; index < 10; index += 1) move(500 + index, 400)
+      expect(rectReads()).toBe(reads)
+      rig.resize()
+      expect(rectReads()).toBe(reads + 1)
+      for (let index = 0; index < 10; index += 1) move(500, 400 + index)
+      expect(rectReads()).toBe(reads + 1)
+    } finally {
+      close()
+    }
   })
 })

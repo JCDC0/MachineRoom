@@ -89,7 +89,19 @@ function sharedFolders(a, b) {
 export function makeTree(raw) {
   const files = [...raw.files].sort()
   const dirs = new Set([''])
-  files.forEach((file) => ancestors(file).forEach((dir) => dirs.add(dir)))
+  let previous = []
+  for (const file of files) {
+    const parts = file.split('/')
+    parts.pop()
+    let shared = 0
+    while (shared < previous.length && shared < parts.length && previous[shared] === parts[shared]) shared += 1
+    let prefix = shared > 0 ? previous.slice(0, shared).join('/') : ''
+    for (let index = shared; index < parts.length; index += 1) {
+      prefix = prefix ? `${prefix}/${parts[index]}` : parts[index]
+      dirs.add(prefix)
+    }
+    previous = parts
+  }
   return {
     rootName: raw.root,
     files,

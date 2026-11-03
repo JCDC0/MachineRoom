@@ -234,3 +234,39 @@ describe('linkOnPath', () => {
     expect(linkOnPath({ from: '', to: 'src' }, null)).toBe(false)
   })
 })
+
+describe('cached link endpoints', () => {
+  it('asks for the card centres only while a card moves', () => {
+    const scene = fakeScene()
+    const centres = new Map([
+      ['a', new THREE.Vector3(0, 0, 0)],
+      ['b', new THREE.Vector3(100, 0, 0)],
+    ])
+    let calls = 0
+    const centreOf = (key) => {
+      calls += 1
+      return centres.get(key)
+    }
+    const strings = createStrings(scene)
+    try {
+      strings.build([{ from: 'a', to: 'b' }], centreOf)
+      calls = 0
+      strings.update(centreOf, null, 0.016, false)
+      expect(calls).toBe(0)
+      strings.update(centreOf, null, 0.016, false)
+      expect(calls).toBe(0)
+      strings.update(centreOf, null, 0.016, true)
+      expect(calls).toBe(2)
+      const before = strandMesh(scene).geometry.getAttribute('position').getX(1)
+      centres.set('b', new THREE.Vector3(140, 0, 0))
+      strings.update(centreOf, null, 0.016, false)
+      expect(calls).toBe(2)
+      expect(strandMesh(scene).geometry.getAttribute('position').getX(1)).toBe(before)
+      strings.update(centreOf, null, 0.016, true)
+      expect(calls).toBe(4)
+      expect(strandMesh(scene).geometry.getAttribute('position').getX(1)).not.toBe(before)
+    } finally {
+      strings.dispose()
+    }
+  })
+})

@@ -47,17 +47,70 @@ function viewFocus(state, pinned) {
   return focus
 }
 
-let cachedFiles = null
+let cachedFiles = []
 let cachedCount = -1
 let cachedMap = null
+let cachedVersion = -1
+let cachedIterator = null
+let cachedIteratorDone = true
+let cachedSeen = 0
+
+function rebuildFileList(state) {
+  const files = []
+  for (const file of state.files.values()) if (file.exists) files.push(file.path)
+  cachedFiles = files
+  cachedMap = state.files
+  cachedCount = Number.isFinite(state.existingFiles) ? state.existingFiles : files.length
+  cachedVersion = Number.isFinite(state.fileVersion) ? state.fileVersion : -1
+  cachedSeen = state.files.size
+  cachedIterator = null
+  cachedIteratorDone = true
+}
+
+function tailIterator(state) {
+  if (!cachedIteratorDone) return
+  cachedIterator = state.files.values()
+  for (let at = 0; at < cachedSeen; at += 1) {
+    if (cachedIterator.next().done) break
+  }
+  cachedIteratorDone = false
+}
+
+function appendFileList(state) {
+  const count = Number.isFinite(state.existingFiles) ? state.existingFiles : cachedFiles.length
+  const mapDelta = state.files.size - cachedSeen
+  const countDelta = count - cachedCount
+  const version = Number.isFinite(state.fileVersion) ? state.fileVersion : null
+  const versionDelta = version !== null && cachedVersion >= 0 ? version - cachedVersion : null
+  const appended =
+    countDelta > 0 &&
+    mapDelta >= countDelta &&
+    (versionDelta === null || versionDelta === countDelta || (versionDelta === 0 && mapDelta === countDelta))
+  if (!appended) {
+    rebuildFileList(state)
+    return
+  }
+  tailIterator(state)
+  let found = 0
+  for (let next = cachedIterator.next(); !next.done; next = cachedIterator.next()) {
+    if (next.value.exists) {
+      cachedFiles.push(next.value.path)
+      found += 1
+    }
+  }
+  cachedIteratorDone = true
+  cachedSeen = state.files.size
+  cachedCount = count
+  if (version !== null) cachedVersion = version
+  if (found !== countDelta) rebuildFileList(state)
+}
 
 export function viewInput(state, pinned = []) {
-  if (cachedMap !== state.files || cachedCount !== state.existingFiles) {
-    const files = []
-    for (const file of state.files.values()) if (file.exists) files.push(file.path)
-    cachedFiles = files
-    cachedCount = state.existingFiles
-    cachedMap = state.files
+  if (cachedMap !== state.files) rebuildFileList(state)
+  else {
+    const count = Number.isFinite(state.existingFiles) ? state.existingFiles : cachedFiles.length
+    if (count !== cachedCount) appendFileList(state)
+    else if (Number.isFinite(state.fileVersion) && cachedVersion >= 0 && state.fileVersion !== cachedVersion) rebuildFileList(state)
   }
   return { files: cachedFiles, focus: viewFocus(state, pinned), touched: state.recent ?? [] }
 }
@@ -357,6 +410,7 @@ export function createCards(cssScene, options = {}) {
   let inspected = null
   let rowRevision = 0
   let lastRowFrameKey = null
+  let movingNow = false
   let lastState = null
   let linksCache = null
 
@@ -477,6 +531,7 @@ export function createCards(cssScene, options = {}) {
       occluderKey: '',
       baseClass: 'mr-card is-closed',
       className: 'mr-card is-closed',
+      classBuilds: 0,
       bandText: '',
       bandFailed: false,
       height: 0,
@@ -987,6 +1042,7 @@ export function createCards(cssScene, options = {}) {
 
   function update(state, delta, camera, mask = null) {
     lastState = state
+    movingNow = false
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)
@@ -1014,7 +1070,7 @@ export function createCards(cssScene, options = {}) {
     const rowsDue = rowFrameKey !== lastRowFrameKey
     lastRowFrameKey = rowFrameKey
     let removed = false
-    for (const card of [...cards.values()]) {
+    for (const card of cards.values()) {
       if (card.fade) {
         const t = fadeProgress(card.fade.start, now, isStill)
         setCardOpacity(card, t >= 1 ? card.fade.to : card.fade.from + (card.fade.to - card.fade.from) * t)
@@ -1051,6 +1107,7 @@ export function createCards(cssScene, options = {}) {
       }
       if (posChanged) {
         card.occluder.position.copy(position)
+        movingNow = true
       }
       const view = card.view
       const goal = CARD_SCALES[view.state] ?? 1
@@ -1099,19 +1156,44 @@ export function createCards(cssScene, options = {}) {
         }
       }
 
-      let className = card.baseClass ?? `mr-card is-${view.state}`
-      if (active.dirs.has(card.path)) className += ' is-active'
-      else if (active.path.has(card.path)) className += ' is-path'
-      if (pinned.has(card.path) || sprayed.has(card.path)) className += ' is-pinned'
+      const isActive = active.dirs.has(card.path)
+      const isPath = !isActive && active.path.has(card.path)
+      const isPinned = pinned.has(card.path) || sprayed.has(card.path)
       const selectedNow = selected !== null && selected === card.path
-      if (selectedNow) className += ' is-selected'
-      if (tone) className += ` is-flash-${tone}`
       const lit = dimmed && Boolean(dimLit?.has(card.path))
-      if (dimmed) className += lit ? ' is-lit' : ' is-dim'
-      if (targeted?.has(card.path)) className += ' is-targeted'
-      if (card.className !== className) {
-        card.className = className
-        card.element.className = className
+      const isTargeted = Boolean(targeted?.has(card.path))
+      const dimFlag = dimmed ? (lit ? 1 : 2) : 0
+      if (
+        card.classBase !== card.baseClass ||
+        card.classActive !== isActive ||
+        card.classPath !== isPath ||
+        card.classPinned !== isPinned ||
+        card.classSelected !== selectedNow ||
+        card.classTone !== tone ||
+        card.classDim !== dimFlag ||
+        card.classTargeted !== isTargeted
+      ) {
+        card.classBase = card.baseClass
+        card.classActive = isActive
+        card.classPath = isPath
+        card.classPinned = isPinned
+        card.classSelected = selectedNow
+        card.classTone = tone
+        card.classDim = dimFlag
+        card.classTargeted = isTargeted
+        let className = card.baseClass ?? `mr-card is-${view.state}`
+        if (isActive) className += ' is-active'
+        else if (isPath) className += ' is-path'
+        if (isPinned) className += ' is-pinned'
+        if (selectedNow) className += ' is-selected'
+        if (tone) className += ` is-flash-${tone}`
+        if (dimmed) className += lit ? ' is-lit' : ' is-dim'
+        if (isTargeted) className += ' is-targeted'
+        card.classBuilds = (card.classBuilds ?? 0) + 1
+        if (card.className !== className) {
+          card.className = className
+          card.element.className = className
+        }
       }
 
       const dimGoal = dimmed && !lit && !selectedNow ? 1 : 0
@@ -1247,6 +1329,7 @@ export function createCards(cssScene, options = {}) {
     sync,
     setOptions,
     update,
+    moving: () => movingNow,
     visibleLinks,
     homes: () => homes,
     overviewSpheres: overview,
