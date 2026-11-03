@@ -141,12 +141,13 @@ export function runDoctor(options = {}) {
     lines.push(`${result.ok ? 'ok' : 'FAIL'} ${result.text}`)
   }
 
-  add(folderLine(settings.projectRoot))
+  const folder = folderLine(settings.projectRoot)
+  add(folder)
   add(gitLine(env))
   add(runsLine(settings.runsFolder))
   for (const line of laneLines(settings.lanesFile, env)) add(line)
 
-  return { exitCode: ok ? 0 : 1, lines }
+  return { exitCode: ok ? 0 : 1, lines, folderOk: folder.ok }
 }
 
 export function openProgramName(platform = process.platform) {

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `up` stops with exit 1 when the project folder does not exist (task S33).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

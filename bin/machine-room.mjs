@@ -201,6 +201,7 @@ async function up(options) {
   options.sessions = options.noSessions !== true
   const result = runDoctor(options)
   for (const line of result.lines) console.log(line)
+  if (!result.folderOk) process.exit(1)
   if (result.exitCode !== 0) console.log(SOME_CHECKS_FAILED)
   await startRoom(options, dist, { block: true })
 }

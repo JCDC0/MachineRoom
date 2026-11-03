@@ -187,31 +187,21 @@ describe('machine-room up', () => {
     await kill(run)
   }, 30000)
 
-  it('prints a failed check and the warning, then still serves the room', async () => {
+  it('stops with exit 1 when the project folder does not exist', async () => {
     const project = makeProject()
     const temp = makeFolder('machine-room-up-temp-')
     const { dist } = makeDist()
     const run = startBin(['up', '--root', join(project, 'missing'), '--dist', dist, '--port', '0'], childEnv(temp))
 
-    const address = await waitForAddress(run)
-    const origin = new URL(address).origin
-    expect((await fetch(`${origin}/`)).status).toBe(200)
-
+    const { code } = await waitForExit(run.child)
+    expect(code).toBe(1)
     const lines = outputLines(run)
-    const addressAt = lines.findIndex((line) => line.startsWith('machine-room: open '))
-    expect(addressAt).toBeGreaterThan(0)
-    expect(lines[addressAt - 1]).toBe('MachineRoom is running.')
-    expect(lines[addressAt - 2]).toBe(SOME_CHECKS_FAILED)
-    expect(lines.slice(0, addressAt).filter((line) => line.startsWith('FAIL '))).toHaveLength(1)
+    expect(lines.filter((line) => line.startsWith('FAIL '))).toHaveLength(1)
     expect(lines).toContainEqual(expect.stringContaining('does not exist.'))
-    expect(lines.slice(addressAt, addressAt + 3)).toEqual([
-      `machine-room: open ${address}`,
-      'The room fills when a lane or a session works on the project.',
-      'Press Ctrl+C in the terminal to stop the room.',
-    ])
-
-    await kill(run)
-  }, 30000)
+    expect(lines).not.toContain(SOME_CHECKS_FAILED)
+    expect(lines).not.toContain('MachineRoom is running.')
+    expect(lines.some((line) => line.startsWith('machine-room: open '))).toBe(false)
+  }, 15000)
 
   it('accepts --open with up', async () => {
     const project = makeProject()
