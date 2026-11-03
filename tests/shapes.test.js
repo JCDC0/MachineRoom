@@ -11,12 +11,12 @@ import { BAND_COUNT } from '../src/ui/sound.js'
 
 describe('the pulse bands on a shape', () => {
   it('picks a band from where the point sits, so a repeated corner keeps one band', () => {
-    expect(bandForPoint(-1, -0.0001, 5)).toBe(0)
-    expect(bandForPoint(1, 0, 5)).toBe(2)
-    expect(bandForPoint(-1, 0, 5)).toBe(4)
-    expect(bandForPoint(0, 1, 5)).toBe(3)
-    expect(bandForPoint(0, -1, 5)).toBe(1)
-    expect(bandForPoint(3, 4, 5)).toBe(bandForPoint(3, 4, 5))
+    expect(bandForPoint(-1, -0.0001, PULSE_BANDS)).toBe(0)
+    expect(bandForPoint(1, 0, PULSE_BANDS)).toBe(2)
+    expect(bandForPoint(-1, 0, PULSE_BANDS)).toBe(4)
+    expect(bandForPoint(0, 1, PULSE_BANDS)).toBe(3)
+    expect(bandForPoint(0, -1, PULSE_BANDS)).toBe(1)
+    expect(bandForPoint(3, 4, PULSE_BANDS)).toBe(3)
     expect(bandForPoint(1, 1, 0)).toBe(0)
   })
 
@@ -26,14 +26,14 @@ describe('the pulse bands on a shape', () => {
 })
 
 describe('the pulse vertex offset', () => {
-  it('moves a vertex out by at most 12 percent of its distance', () => {
+  it('moves a vertex out by at most PULSE_SCALE of its distance', () => {
     expect(vertexOffset(0, 1)).toBe(0)
     expect(vertexOffset(-4, 1)).toBe(0)
     expect(vertexOffset(100, 1)).toBeCloseTo(100 * PULSE_SCALE, 8)
     expect(vertexOffset(100, 0.5)).toBeCloseTo(50 * PULSE_SCALE, 8)
     expect(vertexOffset(100, 1.4)).toBeCloseTo(100 * PULSE_SCALE, 8)
     expect(vertexOffset(100, -1)).toBe(0)
-    expect(vertexOffset(100, 1, 0.04)).toBeCloseTo(4, 8)
+    expect(vertexOffset(100, 1, ORCHESTRATOR_PULSE_SCALE)).toBeCloseTo(100 * ORCHESTRATOR_PULSE_SCALE, 8)
   })
 
   it('gives the orchestrator and its subs less', () => {

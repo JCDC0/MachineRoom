@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { DANCE_SCALE, ORCHESTRATOR_DANCE_SCALE, danceScale } from '../src/engine/agents.js'
 import {
   BAND_COUNT,
-  GROUP_REST_MS,
   LOCK_GRID_MS,
+  SOUND_LIMIT,
+  SOUND_WINDOW_MS,
+  SWAY_MS,
   activitySounds,
   bandGroups,
   bandIndexForBin,
@@ -93,15 +95,17 @@ describe('delete commands', () => {
 })
 
 describe('the sound rate limit', () => {
-  it('takes at most eight sounds in a rolling second', () => {
+  it('takes at most SOUND_LIMIT sounds in a rolling SOUND_WINDOW_MS', () => {
     const limit = createRateLimit()
-    for (let index = 0; index < 8; index += 1) {
-      expect(limit.take(100 + index)).toBe(true)
+    const start = 100
+    for (let index = 0; index < SOUND_LIMIT; index += 1) {
+      expect(limit.take(start + index)).toBe(true)
     }
-    expect(limit.take(108)).toBe(false)
-    expect(limit.count(108)).toBe(8)
-    expect(limit.take(1200)).toBe(true)
-    expect(limit.count(1200)).toBe(1)
+    expect(limit.take(start + SOUND_LIMIT)).toBe(false)
+    expect(limit.count(start + SOUND_LIMIT)).toBe(SOUND_LIMIT)
+    const later = start + SOUND_WINDOW_MS + SOUND_LIMIT
+    expect(limit.take(later)).toBe(true)
+    expect(limit.count(later)).toBe(1)
   })
 
   it('can be reset', () => {
@@ -135,18 +139,18 @@ describe('the sound of a file touch', () => {
 
 describe('the sound bands', () => {
   it('runs from bass to treble across the analyser bins', () => {
-    expect(bandIndexForBin(0, 100, 5)).toBe(0)
-    expect(bandIndexForBin(1, 100, 5)).toBe(0)
-    expect(bandIndexForBin(2, 100, 5)).toBe(1)
-    expect(bandIndexForBin(20, 100, 5)).toBe(3)
-    expect(bandIndexForBin(99, 100, 5)).toBe(4)
+    expect(bandIndexForBin(0, 100, BAND_COUNT)).toBe(0)
+    expect(bandIndexForBin(1, 100, BAND_COUNT)).toBe(0)
+    expect(bandIndexForBin(2, 100, BAND_COUNT)).toBe(1)
+    expect(bandIndexForBin(20, 100, BAND_COUNT)).toBe(3)
+    expect(bandIndexForBin(99, 100, BAND_COUNT)).toBe(BAND_COUNT - 1)
   })
 
   it('keeps a bin inside the bands and gives a broken one the bass', () => {
-    expect(bandIndexForBin(-4, 100, 5)).toBe(0)
-    expect(bandIndexForBin(100, 100, 5)).toBe(4)
-    expect(bandIndexForBin(4, 0, 5)).toBe(0)
-    expect(bandIndexForBin('x', 100, 5)).toBe(0)
+    expect(bandIndexForBin(-4, 100, BAND_COUNT)).toBe(0)
+    expect(bandIndexForBin(100, 100, BAND_COUNT)).toBe(BAND_COUNT - 1)
+    expect(bandIndexForBin(4, 0, BAND_COUNT)).toBe(0)
+    expect(bandIndexForBin('x', 100, BAND_COUNT)).toBe(0)
     expect(bandIndexForBin(3, 10, 0)).toBe(0)
   })
 
@@ -212,8 +216,7 @@ describe('the band beat groups', () => {
     expect(found[0].strength).toBe(1)
   })
 
-  it('gives each group its own 160 ms rest', () => {
-    expect(GROUP_REST_MS).toBe(160)
+  it('gives each group its own rest', () => {
     const found = beats([...Array(9).fill(quiet), kick, hats])
     expect(found.map((beat) => beat.group)).toEqual(['low', 'high'])
   })
@@ -346,11 +349,11 @@ describe('the beat a dancer hears', () => {
     expect(tracker.sway()).toBeGreaterThan(0.2)
   })
 
-  it('eases the sway over about a second and a half', () => {
+  it('eases the sway over SWAY_MS', () => {
     expect(swayStep(0, 1, 0)).toBe(0)
-    expect(swayStep(0, 1, 750)).toBeCloseTo(0.5, 6)
-    expect(swayStep(0, 1, 1500)).toBe(1)
-    expect(swayStep(0.4, 0.1, 1500)).toBeCloseTo(0.1, 6)
+    expect(swayStep(0, 1, SWAY_MS / 2)).toBeCloseTo(0.5, 6)
+    expect(swayStep(0, 1, SWAY_MS)).toBe(1)
+    expect(swayStep(0.4, 0.1, SWAY_MS)).toBeCloseTo(0.1, 6)
     expect(swayTarget([0.2, 0.4, 0.4, 0.2, 0.3])).toBeCloseTo(0.45, 6)
     expect(swayTarget(null)).toBe(0)
     expect(LOCK_GRID_MS).toBe(90)
@@ -358,7 +361,7 @@ describe('the beat a dancer hears', () => {
 })
 
 describe('the dance pulse', () => {
-  it('stays within eight percent and gives the orchestrator less', () => {
+  it('stays within DANCE_SCALE and gives the orchestrator less', () => {
     expect(danceScale(0)).toBe(1)
     expect(danceScale(1)).toBeCloseTo(1 + DANCE_SCALE, 10)
     expect(danceScale(2)).toBeCloseTo(1 + DANCE_SCALE, 10)

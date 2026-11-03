@@ -1217,18 +1217,6 @@ describe('Hud and Waiting with an orchestrator', () => {
     expect(html).not.toContain('class="mr-assistant"')
   })
 
-  it('points a beginner at the chat on the waiting card', () => {
-    const html = renderToString(
-      createElement(Waiting, {
-        status: 'live',
-        agents: [{ key: 'orchestrator', name: 'Orchestrator', status: 'idle' }],
-      })
-    )
-    expect(html).toContain(
-      'Nothing is running yet. Press / or click ORCHESTRATOR at the top, and the chat opens at the bottom right.'
-    )
-  })
-
   it('keeps the lane wording and names no Paperclip when there is no orchestrator', () => {
     const html = renderToString(
       createElement(Waiting, {

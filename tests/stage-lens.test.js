@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
 import Stage, {
   LENS_BOW,
+  LENS_EDGE_HEIGHT,
   compassBearingLabel,
   compassBottomHeading,
   compassBottomLabel,
@@ -89,10 +90,13 @@ describe('Stage lens labels', () => {
     expect(html).toContain('class="lens-edge-cross">+<')
     expect(html.match(/class="lens-edge-corner is-left"/g)).toHaveLength(2)
     expect(html.match(/class="lens-edge-corner is-right"/g)).toHaveLength(2)
-    expect(html).toContain('--lens-bow:28px')
-    expect(html).toContain('height="52"')
-    expect(html).toContain('class="lens-edge-line" d="M 0 0.5 Q 0 56.5 0 0.5"')
-    expect(html).toContain('class="lens-edge-line" d="M 0 51.5 Q 0 -4.5 0 51.5"')
+    expect(html).toContain(`--lens-bow:${LENS_BOW}px`)
+    expect(html).toContain(`height="${LENS_EDGE_HEIGHT + LENS_BOW}"`)
+    expect(html).toContain(`class="lens-edge-line" d="M 0 0.5 Q 0 ${0.5 + 2 * LENS_BOW} 0 0.5"`)
+    const bottomLine = LENS_EDGE_HEIGHT + LENS_BOW - 0.5
+    expect(html).toContain(
+      `class="lens-edge-line" d="M 0 ${bottomLine} Q 0 ${bottomLine - 2 * LENS_BOW} 0 ${bottomLine}"`
+    )
     expect(html).not.toContain('<line class="lens-edge-line"')
     expect(html).not.toContain('mr-lens-clip')
     expect(html).not.toContain('lens-brackets')

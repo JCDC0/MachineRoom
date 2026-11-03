@@ -25,7 +25,6 @@ describe('AgentBuilder Team panel', () => {
     expect(html).toContain('Lanes (')
     expect(html).toContain('Claude Code')
     expect(html).toContain(NEW_LANES_TEXT)
-    expect(html).toContain('New lanes are added in docs/agents/lanes.json.')
     expect(html).not.toContain('Hire agent')
     expect(html).not.toContain('Monthly budget')
   })

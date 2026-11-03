@@ -54,7 +54,7 @@ describe('a conversation list that cannot be read', () => {
       },
     })
     await withDom(async ({ container, root }) => {
-      await mount(root, { client, live: true, project: 'C:\project' })
+      await mount(root, { client, live: true, project: 'C:\\project' })
       expect(container.textContent).toContain('Conversations are not available.')
       expect(container.textContent).not.toContain('Loading conversations...')
     })

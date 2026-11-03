@@ -2,10 +2,11 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { createMockClient } from '../src/control/mock.js'
+import { costLabels } from '../src/engine/board.js'
 import MetersPanel, { CostsModeContext } from '../src/ui/panels/MetersPanel.jsx'
 
 const SPEND_NOTE = 'Spend comes from the lane run records. Budgets are not set here.'
-const SAMPLE_NOTE = 'These numbers are made up for the replay.'
+const SAMPLE = costLabels('replay')
 
 const COSTS = {
   summary: { spendCents: 405, budgetCents: 0, utilizationPercent: null },
@@ -31,16 +32,16 @@ describe('MetersPanel', () => {
   it('labels made-up costs in a replay and a demo', () => {
     for (const costMode of ['replay', 'demo']) {
       const html = renderPanel(COSTS, costMode)
-      expect(html).toContain('Sample costs')
-      expect(html).toContain(SAMPLE_NOTE)
+      expect(html).toContain(SAMPLE.title)
+      expect(html).toContain(SAMPLE.note)
     }
   })
 
   it('leaves a live room with the plain spend title and no sample note', () => {
     const html = renderPanel(COSTS, 'live')
     expect(html).toContain('Spend')
-    expect(html).not.toContain('Sample costs')
-    expect(html).not.toContain(SAMPLE_NOTE)
+    expect(html).not.toContain(SAMPLE.title)
+    expect(html).not.toContain(SAMPLE.note)
   })
 
   it('shows this month spend and the tokens per lane', () => {

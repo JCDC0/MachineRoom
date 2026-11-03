@@ -1,10 +1,9 @@
 import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { changeEvents, createControlApi } from '../server/control.js'
 import { createMockClient } from '../src/control/mock.js'
 import TasksPanel, { liveRunMark } from '../src/ui/panels/TasksPanel.jsx'
-import { makeTempDir } from './helpers/tempRoot.js'
 
 const AGENTS = [
   { id: 'agent-opencode', key: 'opencode', name: 'OpenCode', adapterType: 'opencode_local' },
@@ -15,20 +14,6 @@ const OPEN = [
   { name: 'opencode-L2-20261021-100000', lane: 'opencode', startedAt: '2026-10-21T10:00:00.000Z' },
   { name: 'opencode2-L1-20261021-100500', lane: 'opencode2', startedAt: '2026-10-21T10:05:00.000Z' },
 ]
-
-let previousTemp = null
-let tempRoot = ''
-
-beforeAll(() => {
-  previousTemp = process.env.TEMP
-  tempRoot = makeTempDir('mr-live-runs-')
-  process.env.TEMP = tempRoot
-})
-
-afterAll(() => {
-  if (previousTemp === undefined) delete process.env.TEMP
-  else process.env.TEMP = previousTemp
-})
 
 function laneSource(openRuns = OPEN, agents = AGENTS) {
   return { agents, openRuns: () => openRuns }

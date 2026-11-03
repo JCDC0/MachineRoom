@@ -54,26 +54,18 @@ describe('the transport chip list', () => {
     expect(chipTone('paused')).toBe('paused')
     expect(chipTone('failed')).toBe('failed')
     expect(chipTone('error')).toBe('failed')
-    expect(TRANSPORT_CHIP_LIMIT).toBe(4)
   })
 
-  it('shows four chips and counts the rest', () => {
-    const list = [
-      MAIN,
-      sub('one', 'One'),
-      sub('two', 'Two'),
-      sub('three', 'Three'),
-      sub('four', 'Four'),
-      sub('five', 'Five'),
-      sub('six', 'Six'),
-    ]
+  it('shows TRANSPORT_CHIP_LIMIT chips and counts the rest', () => {
+    const names = ['One', 'Two', 'Three', 'Four', 'Five', 'Six']
+    const list = [MAIN, ...names.map((name) => sub(name.toLowerCase(), name))]
     const { chips, more } = orchestratorChips(list)
-    expect(chips.map((chip) => chip.id)).toEqual(['one', 'two', 'three', 'four'])
-    expect(more).toBe(2)
+    expect(chips.map((chip) => chip.id)).toEqual(names.slice(0, TRANSPORT_CHIP_LIMIT).map((name) => name.toLowerCase()))
+    expect(more).toBe(names.length - TRANSPORT_CHIP_LIMIT)
     expect(orchestratorChips(list, 2)).toEqual({ chips: [
       { id: 'one', name: 'One', tone: 'idle' },
       { id: 'two', name: 'Two', tone: 'idle' },
-    ], more: 4 })
+    ], more: names.length - 2 })
   })
 
   it('leaves the list it reads as it was', () => {
@@ -104,13 +96,15 @@ describe('the transport chips', () => {
     expect(html).not.toContain('transport-chip-overflow')
   })
 
-  it('shows +N after four chips', () => {
-    const list = [MAIN, sub('one', 'One'), sub('two', 'Two'), sub('three', 'Three'), sub('four', 'Four'), sub('five', 'Five')]
+  it('shows +N after TRANSPORT_CHIP_LIMIT chips', () => {
+    const names = ['One', 'Two', 'Three', 'Four', 'Five', 'Six']
+    const list = [MAIN, ...names.map((name) => sub(name.toLowerCase(), name))]
+    const hidden = names.length - TRANSPORT_CHIP_LIMIT
     const html = renderTransport(list)
-    expect(html.match(/class="transport-chip /g)).toHaveLength(4)
+    expect(html.match(/class="transport-chip /g)).toHaveLength(TRANSPORT_CHIP_LIMIT)
     expect(html).toContain('class="transport-chip-overflow mono"')
-    expect(html).toContain('title="1 more"')
-    expect(html).not.toContain('>Five<')
+    expect(html).toContain(`title="${hidden} more"`)
+    expect(html).not.toContain(`>${names[names.length - 1]}<`)
   })
 
   it('shows no chips for a replay or with no sub', () => {

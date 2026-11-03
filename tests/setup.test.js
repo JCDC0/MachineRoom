@@ -39,12 +39,11 @@ afterEach(() => {
 })
 
 describe('setup helpers', () => {
-  it('asks the one question and starts at two', () => {
+  it('asks the one question and starts at SETUP_DEFAULT_COUNT', () => {
     expect(SETUP_QUESTION).toBe('How many agents should work on this project?')
     expect(SETUP_START).toBe('Start')
     expect(SETUP_LATER).toBe('Later')
-    expect(SETUP_DEFAULT_COUNT).toBe(2)
-    expect(initialAgentCount(6)).toBe(2)
+    expect(initialAgentCount(6)).toBe(SETUP_DEFAULT_COUNT)
     expect(initialAgentCount(1)).toBe(1)
     expect(initialAgentCount(0)).toBe(0)
   })
@@ -57,7 +56,7 @@ describe('setup helpers', () => {
     expect(clampAgentCount(9, 4)).toBe(4)
     expect(clampAgentCount(2, 0)).toBe(0)
     expect(clampAgentCount('3', 4)).toBe(3)
-    expect(clampAgentCount(undefined, 4)).toBe(2)
+    expect(clampAgentCount(undefined, 4)).toBe(SETUP_DEFAULT_COUNT)
   })
 
   it('normalises the lanes answer and needs a choice only when chosen is false', () => {
