@@ -172,7 +172,7 @@ export default function MusicPlayer() {
       setList(found)
       const saved = readMusicPlaylist(store())
       const next = playlistChoice(saved, found.playlists, found.tracks)
-      if (saved !== next) saveMusicPlaylist(next, store())
+      saveMusicPlaylist(next, store())
       setChoice(next)
       const nextQueue = playlistQueue(found.playlists, found.tracks, next)
       const playingUrl = sound.musicTrack()
