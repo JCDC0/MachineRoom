@@ -21,6 +21,10 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   const [soundState, setSoundState] = useState(() => loadSoundSettings(store()))
   const [recordDraft, setRecordDraft] = useState(() => String(loadSettings(store()).recordMinutes))
   const recordDraftRef = useRef(recordDraft)
+  const currentRef = useRef(current)
+  const onSettingsChangeRef = useRef(onSettingsChange)
+  currentRef.current = current
+  onSettingsChangeRef.current = onSettingsChange
   const seenDirectApi = useRef(0)
 
   useEffect(() => {
@@ -65,7 +69,8 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
   useEffect(() => {
     return () => {
       const minutes = clampRecordMinutes(recordDraftRef.current)
-      saveSettings(store(), { recordMinutes: minutes })
+      const saved = saveSettings(store(), { recordMinutes: minutes })
+      onSettingsChangeRef.current?.({ ...currentRef.current, recordMinutes: saved.recordMinutes })
     }
   }, [])
 

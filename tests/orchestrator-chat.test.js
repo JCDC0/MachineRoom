@@ -881,6 +881,29 @@ describe('OrchestratorChat panel', () => {
     })
   })
 
+  it('shows the orchestrator list read error in the chat', async () => {
+    const client = {
+      ...fakeClient({ state: 'idle', messages: [] }),
+      orchestrators: async () => {
+        throw new Error('The bridge did not answer the orchestrator list.')
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            initialOrchestrators: [{ id: 'orchestrator', name: 'Orchestrator', state: 'idle' }],
+          })
+        )
+      })
+      await act(async () => {})
+      const alert = container.querySelector('.mr-orch-error')
+      expect(alert).not.toBeNull()
+      expect(alert.textContent).toContain('The bridge did not answer the orchestrator list.')
+    })
+  })
+
   it('re-reads the stopped sub chat at once and hides its Stop button', async () => {
     let subReads = 0
     const stopped = []
