@@ -6,10 +6,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   ALL_CHECKS_PASSED,
   NEXT_STEP,
+  PROJECT_READ_LIMIT_MS,
   doctorSettings,
   openBrowser,
   openCommand,
   runDoctor,
+  runDoctorWithProject,
   upArgs,
   upBlock,
 } from '../server/doctor.js'
@@ -50,10 +52,10 @@ function makeDist(withIndex = true) {
   return dist
 }
 
-function doctor(options = {}) {
+function doctorOptions(options = {}) {
   const project = makeFolder('machine-room-doctor-project-')
   const runs = join(makeFolder('machine-room-doctor-runs-'), 'machineroom-runs')
-  return runDoctor({
+  return {
     projectRoot: project,
     runsFolder: runs,
     dist: makeDist(),
@@ -62,7 +64,11 @@ function doctor(options = {}) {
     }),
     env: { ...process.env },
     ...options,
-  })
+  }
+}
+
+function doctor(options = {}) {
+  return runDoctor(doctorOptions(options))
 }
 
 function failures(lines) {
@@ -289,6 +295,81 @@ describe('machine-room doctor', () => {
   })
 })
 
+describe('the doctor project read', () => {
+  it('reads the project with the reader /api/tree uses', async () => {
+    const options = doctorOptions()
+    mkdirSync(join(options.projectRoot, 'src'))
+    writeFileSync(join(options.projectRoot, 'README.md'), 'x')
+    writeFileSync(join(options.projectRoot, 'src', 'a.js'), 'x')
+    writeFileSync(join(options.projectRoot, 'src', 'b.js'), 'x')
+
+    const result = await runDoctorWithProject(options)
+
+    expect(result.project).toEqual({ ok: true, text: 'The project holds 3 files in 2 folders.' })
+    expect(result.lines[1]).toBe('ok The project holds 3 files in 2 folders.')
+    expect(result.exitCode).toBe(0)
+  })
+
+  it('puts the project line under the folder line and before git', async () => {
+    const readProject = async () => ({ files: ['docs/one.md', 'docs/two.md', 'README.md'] })
+    const result = await runDoctorWithProject(doctorOptions({ readProject }))
+
+    expect(result.lines[0]).toContain('The project folder')
+    expect(result.lines[1]).toBe('ok The project holds 3 files in 2 folders.')
+    expect(result.lines[2]).toContain('Git is found at')
+    expect(result.exitCode).toBe(0)
+  })
+
+  it('counts one file in one folder and an empty project', async () => {
+    const one = await runDoctorWithProject(doctorOptions({ readProject: async () => ({ files: ['src/only.js'] }) }))
+    expect(one.lines[1]).toBe('ok The project holds 1 file in 1 folder.')
+
+    const nested = await runDoctorWithProject(
+      doctorOptions({ readProject: async () => ({ files: ['src/ui/one.js', 'src/model/two.js'] }) })
+    )
+    expect(nested.lines[1]).toBe('ok The project holds 2 files in 3 folders.')
+
+    const empty = await runDoctorWithProject(doctorOptions({ readProject: async () => ({ files: [] }) }))
+    expect(empty.lines[1]).toBe('ok The project holds 0 files in 0 folders.')
+  })
+
+  it('fails the project line without a path when the reader throws', async () => {
+    const options = doctorOptions()
+    const readProject = async () => {
+      throw new Error(`EACCES: permission denied, scandir '${options.projectRoot}'`)
+    }
+    const result = await runDoctorWithProject({ ...options, readProject })
+
+    expect(result.lines[1]).toBe('FAIL The project could not be read: The folder could not be listed.')
+    expect(result.lines[1]).not.toContain(options.projectRoot)
+    expect(result.exitCode).toBe(1)
+  })
+
+  it('gives up on a project read after the limit', async () => {
+    expect(PROJECT_READ_LIMIT_MS).toBe(10000)
+    const options = doctorOptions()
+    const result = await runDoctorWithProject({
+      ...options,
+      readProject: () => new Promise(() => {}),
+      projectReadLimitMs: 20,
+    })
+
+    expect(result.lines[1]).toBe('FAIL The project could not be read: The folder did not answer in time.')
+    expect(result.lines[1]).not.toContain(options.projectRoot)
+    expect(result.exitCode).toBe(1)
+  })
+
+  it('leaves the project line out when the folder is missing', async () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    const result = await runDoctorWithProject(doctorOptions({ projectRoot: join(project, 'missing') }))
+
+    expect(result.lines[0]).toContain('does not exist')
+    expect(result.lines.join('\n')).not.toContain('The project holds')
+    expect(result.project).toBeNull()
+    expect(result.exitCode).toBe(1)
+  })
+})
+
 describe('the machine-room doctor command', () => {
   it('runs as a child process and exits 0 when every check passes', async () => {
     const project = makeFolder('machine-room-doctor-project-')
@@ -303,6 +384,7 @@ describe('the machine-room doctor command', () => {
     expect(lines).toContain(
       'warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.'
     )
+    expect(lines[1]).toBe('ok The project holds 0 files in 0 folders.')
     expect(lines.slice(-2)).toEqual([ALL_CHECKS_PASSED, NEXT_STEP])
     expect(existsSync(join(temp, 'machineroom-runs'))).toBe(true)
   })

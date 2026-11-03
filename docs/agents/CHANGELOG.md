@@ -6,6 +6,8 @@
 - A failed manual Refresh in Reviews shows its sentence (task U126).
 - A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).
 - Changing the project or leaving the page stops a running `One lane per task` loop, and closing the Control drawer keeps it going (task U126).
+- The Projects tab and the folder picker say `Not a git repository. Run git init here.` under a folder whose `git` is false, with a Copy button that copies `git init` (task S35).
+- `doctor` and `up` read the project once with the reader `/api/tree` uses and print its file and folder count, or a failed-read sentence (task S35).
 - An empty live room says why it is empty above the waiting card, and a replay never shows the line (task U124).
 - Settings lists the saved key names with a delete card, and never shows a value (task U124).
 - `opencode4` and `opencode5` are live lanes again, on the same DeepSeek V4.1 Flash model as the other OpenCode lanes.

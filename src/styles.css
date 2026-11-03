@@ -7126,6 +7126,44 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   background: rgb(255 255 255 / 0.05);
 }
 
+.mr-no-git-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space);
+  padding: 0 4px 4px 21px;
+  color: rgb(255 255 255 / 0.45);
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.mr-no-git-copy {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgb(255 255 255 / 0.7);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgb(255 255 255 / 0.28);
+  border-radius: 0;
+}
+
+.mr-no-git-copy:hover:not(:disabled) {
+  color: var(--yellow);
+  background: transparent;
+  border-bottom-color: rgb(229 255 0 / 0.5);
+}
+
+.mr-launcher .mr-no-git-hint {
+  padding-left: calc(var(--space) * 1.5);
+}
+
 .mr-side-folder {
   position: relative;
   flex: 0 0 auto;

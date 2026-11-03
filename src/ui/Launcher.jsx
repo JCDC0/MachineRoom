@@ -14,8 +14,27 @@ import {
   samePath,
   shouldOpenLauncher,
 } from './launcher.js'
+import { NO_GIT_PROJECT_TEXT, copyGitInit } from './sidebar.js'
 
 const NO_OPEN_PROJECT = 'This room cannot open another project. Run machineroom in that folder.'
+
+function NoGitHint() {
+  const [label, setLabel] = useState('')
+  return (
+    <p className="mr-no-git-hint">
+      <span>{NO_GIT_PROJECT_TEXT}</span>
+      <button
+        type="button"
+        className="mr-no-git-copy"
+        onClick={async () => {
+          setLabel((await copyGitInit()) ? 'Copied.' : 'Copy failed.')
+        }}
+      >
+        {label || 'Copy'}
+      </button>
+    </p>
+  )
+}
 
 export default function Launcher({ client = null, live = false }) {
   const [open, setOpen] = useState(false)
@@ -193,23 +212,29 @@ export default function Launcher({ client = null, live = false }) {
       ) : (
         <div className="mr-launcher-list">
           {currentPath !== '' && (
-            <button
-              type="button"
-              className="mr-launcher-row is-current"
-              onClick={() => pick({ path: currentPath, name: currentName })}
-            >
-              <span className="mr-launcher-name">{keepWorkingLabel(currentName)}</span>
-              <span className="mr-launcher-path mono">{currentPath}</span>
-            </button>
+            <div className="mr-launcher-item">
+              <button
+                type="button"
+                className="mr-launcher-row is-current"
+                onClick={() => pick({ path: currentPath, name: currentName })}
+              >
+                <span className="mr-launcher-name">{keepWorkingLabel(currentName)}</span>
+                <span className="mr-launcher-path mono">{currentPath}</span>
+              </button>
+              {current?.git === false ? <NoGitHint /> : null}
+            </div>
           )}
           {rows.map((row) => (
-            <button key={row.path} type="button" className="mr-launcher-row" onClick={() => pick(row)}>
-              <span className="mr-launcher-name">
-                {row.name}
-                {row.git && <span className="mr-launcher-git mono">git</span>}
-              </span>
-              <span className="mr-launcher-path mono">{row.path}</span>
-            </button>
+            <div className="mr-launcher-item" key={row.path}>
+              <button type="button" className="mr-launcher-row" onClick={() => pick(row)}>
+                <span className="mr-launcher-name">
+                  {row.name}
+                  {row.git && <span className="mr-launcher-git mono">git</span>}
+                </span>
+                <span className="mr-launcher-path mono">{row.path}</span>
+              </button>
+              {row.noGit === true ? <NoGitHint /> : null}
+            </div>
           ))}
         </div>
       )}

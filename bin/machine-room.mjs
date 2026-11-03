@@ -2,7 +2,7 @@
 import { statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { ALL_CHECKS_PASSED, NEXT_STEP, openBrowser, runDoctor, upBlock } from '../server/doctor.js'
+import { ALL_CHECKS_PASSED, NEXT_STEP, openBrowser, runDoctorWithProject, upBlock } from '../server/doctor.js'
 import { createBridge } from '../server/index.js'
 
 const USAGE = [
@@ -12,7 +12,7 @@ const USAGE = [
   '',
   'Commands:',
   '  up                  run the doctor checks, then serve the room with the lane and session sources on',
-  '  doctor              check the folder, git, the runs folder and the lane programs',
+  '  doctor              check the folder, the project files, git, the runs folder and the lane programs',
   '',
   'Options:',
   '  --root <folder>     project folder (PROJECT_ROOT)',
@@ -204,7 +204,7 @@ async function up(options) {
   if (options.noOpen === true) options.open = false
   options.lanes = true
   options.sessions = options.noSessions !== true
-  const result = runDoctor(options)
+  const result = await runDoctorWithProject(options)
   for (const line of result.lines) console.log(line)
   if (!result.folderOk) process.exit(1)
   if (result.exitCode !== 0) console.log(SOME_CHECKS_FAILED)
@@ -232,7 +232,7 @@ if (options.help) {
 }
 
 if (command === 'doctor') {
-  const result = runDoctor(options)
+  const result = await runDoctorWithProject(options)
   for (const line of result.lines) console.log(line)
   if (result.exitCode === 0) {
     console.log(ALL_CHECKS_PASSED)

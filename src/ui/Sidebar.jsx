@@ -6,9 +6,11 @@ import RepositoryPanel from './RepositoryPanel.jsx'
 import SidebarTabs from './SidebarTabs.jsx'
 import { loadSettings, saveSettings } from './settings.js'
 import {
+  NO_GIT_PROJECT_TEXT,
   ORCHESTRATOR_ID,
   SESSION_LIMIT,
   cleanText,
+  copyGitInit,
   normalizeSidebarTab,
   previewLines,
   projectName,
@@ -22,6 +24,24 @@ const GROUP_LABEL = { pinned: 'Pinned', starred: 'Starred', recent: 'Recent' }
 
 function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
+}
+
+function NoGitHint() {
+  const [label, setLabel] = useState('')
+  return (
+    <p className="mr-no-git-hint">
+      <span>{NO_GIT_PROJECT_TEXT}</span>
+      <button
+        type="button"
+        className="mr-no-git-copy"
+        onClick={async () => {
+          setLabel((await copyGitInit()) ? 'Copied.' : 'Copy failed.')
+        }}
+      >
+        {label || 'Copy'}
+      </button>
+    </p>
+  )
 }
 
 export function Sidebar({ client = null, live = false, project = '', tasks = null }) {
@@ -511,25 +531,30 @@ export function Sidebar({ client = null, live = false, project = '', tasks = nul
         {available ? (
           <>
             {currentProject ? (
-              <div className="mr-side-project is-current" title={currentPath}>
-                <span className="mr-side-folder" aria-hidden="true" />
-                <span className="mr-side-project-name">{projectLabel}</span>
-                <span className="mr-side-current mono">Current</span>
+              <div className="mr-side-project-block">
+                <div className="mr-side-project is-current" title={currentPath}>
+                  <span className="mr-side-folder" aria-hidden="true" />
+                  <span className="mr-side-project-name">{projectLabel}</span>
+                  <span className="mr-side-current mono">Current</span>
+                </div>
+                {currentProject.git === false ? <NoGitHint /> : null}
               </div>
             ) : null}
             {recentProjects.map((entry) => {
               const path = cleanText(entry.path)
               return (
-                <button
-                  type="button"
-                  className="mr-side-project is-button"
-                  key={path}
-                  title={path}
-                  onClick={() => askProject(entry)}
-                >
-                  <span className="mr-side-folder" aria-hidden="true" />
-                  <span className="mr-side-project-name">{projectName(entry)}</span>
-                </button>
+                <div className="mr-side-project-block" key={path}>
+                  <button
+                    type="button"
+                    className="mr-side-project is-button"
+                    title={path}
+                    onClick={() => askProject(entry)}
+                  >
+                    <span className="mr-side-folder" aria-hidden="true" />
+                    <span className="mr-side-project-name">{projectName(entry)}</span>
+                  </button>
+                  {entry.git === false ? <NoGitHint /> : null}
+                </div>
               )
             })}
           </>
