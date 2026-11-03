@@ -130,11 +130,12 @@ Four more lanes then hunted what the first five did not reach: `AUDIT-2026-11-PA
 
 Written on 2026-11-03, when AGY's quota ran out. Pick it up from here when AGY has quota again. The features and design changes above still wait for the owner's yes.
 
-In progress when this was pushed, on their own branches and not on main: S26, S27, S28 and U117. Read each lane's report before planning more, because each brief says which findings it did not reach.
+S26, S27, S28 and U117 merged on 2026-11-04. S27 was stopped by a shutdown before it wrote a report, so its rows were read from the diff.
 
 For AGY, on the backend:
 
-- Whatever S26 and S27 did not reach in `AUDIT-2026-11-ORCHESTRATOR.md` and `AUDIT-2026-11-RUNNER.md`.
+- Finding 11 of `AUDIT-2026-11-RUNNER.md` stays open on purpose: the end of a run still looks for leftovers by the worktree's path, because that is what finds an orphaned harness server, so an editor open in a lane worktree can still be stopped.
+- Finding 2 of `AUDIT-2026-11-ORCHESTRATOR.md` in part: a run end before the orchestrator has a session or an owner message is still ignored, by design.
 - The nine parser findings in `AUDIT-2026-11-LOGS.md`. The first two matter most: an AGY error step never ends and is never marked failed, and a read-only command that quotes a failure word turns its file red.
 - `server/assistant.js` starts OpenCode with `execFile`, which has no process group on Linux, so its time limit stops only that process there. `mr-agent` had the same fault and now uses `spawn` with `detached`.
 - B7's rest: `server/opencode-sessions.js` still queries every known session once a second, even one that went quiet long ago. S25 only dropped their rows from memory.
@@ -150,4 +151,4 @@ For OpenCode, because AGY lanes may not touch `src/engine` or `src/styles.css`:
 
 For the orchestrator, at 1440 by 900 in a browser: keys behind the Control drawer, dialog focus, `/` scrolling to the chat, the waiting card, the corner counter, a subagent fading with `?replay&fixture=scenario-e` at 8x, Settings and Log by eye, and the chat when its list read fails.
 
-Known in this push: finding 5 of `AUDIT-2026-11-CONTRACT.md` is not fixed yet, so a key that follows an `x-` or `_` prefix can reach a page unmasked. S28 fixes it. Until then `tests/mask-split.test.js` fails on any local recording that holds such a key, and recordings are not in git, so CI does not see them.
+Finding 5 of `AUDIT-2026-11-CONTRACT.md` is fixed by S28. A key glued straight to a letter, as in `xsk-`, is still not masked, on purpose, so words such as `risk-` stay whole.
