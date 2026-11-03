@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { availableParallelism } from 'node:os'
 
 export default defineConfig({
   plugins: [react()],
@@ -10,7 +11,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     pool: 'threads',
-    maxWorkers: 4,
+    maxWorkers: Math.max(1, Math.min(4, availableParallelism() - 1)),
     testTimeout: 20000,
     hookTimeout: 20000,
     globalSetup: ['./tests/helpers/cleanTemp.js'],
