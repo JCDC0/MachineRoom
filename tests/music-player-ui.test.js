@@ -6,30 +6,40 @@ import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
 
 const originalFetch = globalThis.fetch
 
+const audio = {
+  paused: true,
+  ended: false,
+  volume: 1,
+  src: '',
+  dataset: {},
+  listeners: {},
+  addEventListener(type, fn) {
+    if (!this.listeners[type]) this.listeners[type] = []
+    this.listeners[type].push(fn)
+  },
+  play() {
+    this.paused = false
+    return Promise.resolve()
+  },
+  pause() {
+    this.paused = true
+  },
+}
+
 afterEach(() => {
   globalThis.fetch = originalFetch
   sound.pauseMusic()
 })
 
 function installAudio(dom) {
-  const audio = {
-    paused: true,
-    ended: false,
-    volume: 1,
-    src: '',
-    dataset: {},
-    listeners: {},
-    addEventListener(type, fn) {
-      if (!this.listeners[type]) this.listeners[type] = []
-      this.listeners[type].push(fn)
-    },
-    play() {
-      this.paused = false
-      return Promise.resolve()
-    },
-    pause() {
-      this.paused = true
-    },
+  audio.paused = true
+  audio.ended = false
+  audio.play = () => {
+    audio.paused = false
+    return Promise.resolve()
+  }
+  audio.pause = () => {
+    audio.paused = true
   }
   dom.window.Audio = function Audio() {
     return audio
@@ -48,7 +58,7 @@ describe('the music player', () => {
   it('shows the track that is still playing after the panel reopens', async () => {
     globalThis.fetch = listAnswer(['alpha.mp3', 'beta.mp3'])
     await withDom(async ({ container, dom, root }) => {
-      const audio = installAudio(dom)
+      const player = installAudio(dom)
       await act(async () => {
         root.render(createElement(MusicPlayer))
       })
@@ -58,7 +68,7 @@ describe('the music player', () => {
       })
       await settle(5)
       expect(buttonWithText(container, 'Pause')).not.toBeNull()
-      expect(audio.paused).toBe(false)
+      expect(player.paused).toBe(false)
 
       await act(async () => {
         root.render(null)
@@ -70,6 +80,25 @@ describe('the music player', () => {
 
       expect(container.textContent).toContain('alpha.mp3')
       expect(buttonWithText(container, 'Pause')).not.toBeNull()
+    })
+  })
+
+  it('says when a track cannot start', async () => {
+    globalThis.fetch = listAnswer(['alpha.mp3', 'beta.mp3'])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      player.play = () => Promise.reject(new Error('no audio device'))
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await act(async () => {
+        buttonWithText(container, 'Play').click()
+      })
+      await settle(5)
+
+      expect(container.textContent).toContain('Could not play alpha.mp3.')
+      expect(buttonWithText(container, 'Play')).not.toBeNull()
     })
   })
 })

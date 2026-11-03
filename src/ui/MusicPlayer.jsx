@@ -63,6 +63,7 @@ export default function MusicPlayer() {
   const [failed, setFailed] = useState(false)
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [playError, setPlayError] = useState('')
   const [shuffle, setShuffle] = useState(false)
   const [repeat, setRepeat] = useState(false)
   const [volume, setVolume] = useState(() => loadSoundSettings(store()).musicVolume)
@@ -112,9 +113,15 @@ export default function MusicPlayer() {
       : previousIndex(index, list.tracks.length)
     if (next < 0) return
     setIndex(next)
+    setPlayError('')
     if (playing) {
       sound.arm()
-      sound.playMusic(trackUrl(list.base, list.tracks[next]))
+      const started = sound.playMusic(trackUrl(list.base, list.tracks[next]))
+      started.then((ok) => {
+        if (ok) return
+        setPlaying(false)
+        setPlayError(`Could not play ${list.tracks[next]}.`)
+      })
     }
   }
 
@@ -123,13 +130,17 @@ export default function MusicPlayer() {
     if (playing) {
       sound.pauseMusic()
       setPlaying(false)
+      setPlayError('')
       return
     }
     sound.arm()
+    setPlayError('')
     const started = sound.playMusic(trackUrl(list.base, list.tracks[index]))
     setPlaying(true)
     started.then((ok) => {
-      if (!ok) setPlaying(false)
+      if (ok) return
+      setPlaying(false)
+      setPlayError(`Could not play ${list.tracks[index]}.`)
     })
   }
 
@@ -201,6 +212,7 @@ export default function MusicPlayer() {
         </div>
       )}
       {failed && <p className="hud-sound-empty">Could not read the music folder.</p>}
+      {playError && <p className="hud-sound-empty">{playError}</p>}
     </div>
   )
 }

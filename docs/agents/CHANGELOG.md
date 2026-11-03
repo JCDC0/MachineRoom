@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A failed music start says which track could not play (task U122).
 - Reopened Settings shows the track that is still playing (task U122).
 - A lane row without a saved label shows the lane's own name (task U122).
 - The confirm card for a lane move names every other sub that loses lanes or goes away (task U122).
