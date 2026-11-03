@@ -2,7 +2,18 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import * as THREE from 'three'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import { CHILD_GAP, CHILD_HOLD_MS, CHILD_SCALE, childEndIsFresh, childFade, childPlace, createAgents } from '../src/engine/agents.js'
+import {
+  CHILD_HOLD_MS,
+  CHILD_ORBIT_SCALE,
+  CHILD_ORBIT_SECONDS,
+  CHILD_ORBIT_TILT,
+  CHILD_RADIUS,
+  CHILD_SCALE,
+  childEndIsFresh,
+  childFade,
+  childOrbit,
+  createAgents,
+} from '../src/engine/agents.js'
 import { nextSpareShape } from '../src/engine/shapes.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
@@ -10,37 +21,42 @@ import { apply, createState } from '../src/model/state.js'
 import Hud, { agentRows } from '../src/ui/Hud.jsx'
 
 const parentPlace = { x: 0, y: 290, z: 300 }
+const ORBIT_RADIUS = CHILD_RADIUS * CHILD_ORBIT_SCALE
 
-describe('childPlace', () => {
-  it('puts a child beside its parent at the parent height and radius', () => {
-    const place = childPlace(parentPlace, 0)
-    expect(place).not.toEqual(parentPlace)
-    expect(place.y).toBe(parentPlace.y)
-    expect(Math.hypot(place.x, place.z)).toBeCloseTo(Math.hypot(parentPlace.x, parentPlace.z))
+describe('childOrbit', () => {
+  it('keeps the same distance from its parent all the way round', () => {
+    for (let time = 0; time <= CHILD_ORBIT_SECONDS; time += 5) {
+      const place = childOrbit(parentPlace, 0, 1, time)
+      expect(Math.hypot(place.x - parentPlace.x, place.y - parentPlace.y, place.z - parentPlace.z)).toBeCloseTo(ORBIT_RADIUS)
+    }
   })
 
-  it('sends the first two children to either side of the parent', () => {
-    const first = childPlace(parentPlace, 0)
-    const second = childPlace(parentPlace, 1)
-    expect(first.x).toBeLessThan(0)
-    expect(second.x).toBeGreaterThan(0)
-    expect(first).not.toEqual(second)
-  })
-
-  it('gives each index its own place', () => {
-    const places = [0, 1, 2, 3].map((index) => childPlace(parentPlace, index))
+  it('spreads siblings evenly and never shares a phase', () => {
+    const places = [0, 1, 2, 3].map((index) => childOrbit(parentPlace, index, 4, 0))
     expect(new Set(places.map((place) => `${place.x},${place.y},${place.z}`)).size).toBe(4)
+    places.forEach((place) => {
+      expect(Math.hypot(place.x - parentPlace.x, place.y - parentPlace.y, place.z - parentPlace.z)).toBeCloseTo(ORBIT_RADIUS)
+    })
   })
 
-  it('starts a short way from a parent at the hub centre', () => {
-    const place = childPlace({ x: 0, y: 200, z: 0 }, 0)
-    expect(Math.hypot(place.x, place.z)).toBeCloseTo(CHILD_GAP)
+  it('turns once in about 40 seconds', () => {
+    const start = childOrbit(parentPlace, 2, 5, 0)
+    const turn = childOrbit(parentPlace, 2, 5, CHILD_ORBIT_SECONDS)
+    expect(turn.x).toBeCloseTo(start.x)
+    expect(turn.y).toBeCloseTo(start.y)
+    expect(turn.z).toBeCloseTo(start.z)
+  })
+
+  it('tilts a little off the hub plane', () => {
+    const place = childOrbit(parentPlace, 0, 1, 10)
+    expect(place.y).not.toBeCloseTo(parentPlace.y)
+    expect(Math.abs(place.y - parentPlace.y)).toBeLessThanOrEqual(ORBIT_RADIUS * Math.sin(CHILD_ORBIT_TILT) + 1e-9)
   })
 
   it('gives the same place every time and leaves its input alone', () => {
     const before = { ...parentPlace }
-    const first = childPlace(parentPlace, 2)
-    const second = childPlace(parentPlace, 2)
+    const first = childOrbit(parentPlace, 2, 4, 7)
+    const second = childOrbit(parentPlace, 2, 4, 7)
     expect(second).toEqual(first)
     expect(parentPlace).toEqual(before)
   })
@@ -183,10 +199,11 @@ describe('a child view', () => {
     agents.update(state, 0.016, 1000, world, terminals)
     const child = agents.views.get('a~1')
     expect(child).toBeTruthy()
+    expect(CHILD_SCALE).toBe(0.35)
     expect(child.scale).toBe(CHILD_SCALE)
     expect(child.parentLink).toBeTruthy()
     const parent = agents.views.get('a')
-    expect(child.home.distanceTo(parent.home)).toBeGreaterThan(50)
+    expect(child.home.distanceTo(parent.home)).toBeCloseTo(parent.shellRadius * CHILD_ORBIT_SCALE)
     expect(chips.get('a~1').name).toBe('Alpha > Scout')
 
     apply(state, { time: 2000, type: 'agent.end', agent: 'a~1', ok: true })
@@ -207,6 +224,27 @@ describe('a child view', () => {
     agents.update(state, 0.016, 9500, world, terminals)
     expect(agents.views.has('a~1')).toBe(false)
     expect(chips.get('a~1').visible).toBe(false)
+    agents.dispose()
+  })
+
+  it('moves round its parent and keeps its short line with it', () => {
+    const { agents, state, terminals, world } = childHarness()
+    apply(state, { time: 1000, type: 'agent.spawn', agent: 'a', child: 'a~1', name: 'Scout', label: 'task', runId: 'r1' })
+    agents.update(state, 0.016, 1000, world, terminals)
+    const parent = agents.views.get('a')
+    const child = agents.views.get('a~1')
+    const first = child.home.clone()
+    const distance = first.distanceTo(parent.home)
+    agents.update(state, 0.016, 11000, world, terminals)
+    expect(child.home.equals(first)).toBe(false)
+    expect(child.home.distanceTo(parent.home)).toBeCloseTo(distance)
+    const ends = child.parentLink.geometry.attributes.position.array
+    expect(ends[0]).toBeCloseTo(parent.group.position.x)
+    expect(ends[1]).toBeCloseTo(parent.group.position.y)
+    expect(ends[2]).toBeCloseTo(parent.group.position.z)
+    expect(ends[3]).toBeCloseTo(child.group.position.x)
+    expect(ends[4]).toBeCloseTo(child.group.position.y)
+    expect(ends[5]).toBeCloseTo(child.group.position.z)
     agents.dispose()
   })
 
@@ -250,7 +288,7 @@ describe('a child view under a moved parent', () => {
       { key: 'a', name: 'Alpha' },
     ])
 
-    const place = childPlace(parent.home, 0)
+    const place = childOrbit({ x: parent.home.x, y: parent.home.y, z: parent.home.z, radius: parent.shellRadius * parent.scale }, 0, 1, 0)
     expect(child.home.x).toBeCloseTo(place.x)
     expect(child.home.y).toBeCloseTo(place.y)
     expect(child.home.z).toBeCloseTo(place.z)
@@ -283,6 +321,17 @@ describe('a child view under reduced motion', () => {
     agents.update(state, 0.016, 8001, world, terminals)
     expect(agents.views.has('a~1')).toBe(false)
     expect(chips.get('a~1').visible).toBe(false)
+    agents.dispose()
+  })
+
+  it('holds the child where it is on the circle', () => {
+    const { agents, state, terminals, world } = childHarness()
+    apply(state, { time: 1000, type: 'agent.spawn', agent: 'a', child: 'a~1', name: 'Scout', label: 'task', runId: 'r1' })
+    agents.update(state, 0.016, 1000, world, terminals)
+    const child = agents.views.get('a~1')
+    const first = child.home.clone()
+    agents.update(state, 0.016, 31000, world, terminals)
+    expect(child.home.equals(first)).toBe(true)
     agents.dispose()
   })
 })
