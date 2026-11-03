@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Folder strings leave from the folder tabs and stay on their cards while a card jumps, glides or pops (task U137).
 - A shared byte-offset cache on runs.jsonl serves run records, issues, stats, costs and reviews (task S38).
 - The Claude session reader caches meta files by mtime and forgets removed meta files (task S38).
 

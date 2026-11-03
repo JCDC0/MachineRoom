@@ -229,7 +229,7 @@ export function createStrings(scene) {
     glow.dispose()
   }
 
-  function update(centerOf, mask = null, delta = 0, movingNow = true) {
+  function update(anchorOf, mask = null, delta = 0) {
     currentMask = mask
     const dimGoal = mask?.dimmed ? 1 : 0
     if (still()) {
@@ -247,14 +247,10 @@ export function createStrings(scene) {
     for (let i = 0; i < ends.length; i += 1) {
       const link = ends[i]
       const strand = strands[i]
-      const cached = strand && !Number.isNaN(strand.from.x) && !Number.isNaN(strand.to.x)
-      if (movingNow || !cached) {
-        from.copy(centerOf(link.from))
-        to.copy(centerOf(link.to))
-      } else {
-        from.copy(strand.from)
-        to.copy(strand.to)
-      }
+      const fromValue = anchorOf(link.from ?? '', from)
+      if (fromValue && fromValue !== from) from.copy(fromValue)
+      const toValue = anchorOf(link.to ?? '', to)
+      if (toValue && toValue !== to) to.copy(toValue)
 
       const onPath = linkOnPath(link, mask)
       const level = LINE_LEVEL + ((onPath ? 1 : LINE_LEVEL * DIM_FACTOR) - LINE_LEVEL) * dimLevel
@@ -264,7 +260,7 @@ export function createStrings(scene) {
         colorChanged = true
       }
 
-      const moved = !strand || Number.isNaN(strand.from.x) ||
+      const moved = !strand || Number.isNaN(strand.from.x) || Number.isNaN(strand.to.x) ||
         strand.from.distanceToSquared(from) > 0.01 ||
         strand.to.distanceToSquared(to) > 0.01
 
@@ -298,7 +294,7 @@ export function createStrings(scene) {
     }
   }
 
-  function build(links, centerOf) {
+  function build(links, anchorOf) {
     clear()
     ends = [...links]
     if (ends.length === 0) return
@@ -375,7 +371,7 @@ export function createStrings(scene) {
       return strand
     })
 
-    update(centerOf)
+    update(anchorOf)
   }
 
   return { build, update, dispose }

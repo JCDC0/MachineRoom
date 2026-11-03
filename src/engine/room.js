@@ -221,6 +221,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   let fitted = null
   let heldPath = null
   const centerOf = (path) => cards.center(path ?? '')
+  const cardAnchorOf = (path, out) => cards.anchor(path ?? '', out)
   const world = {
     center: centerOf,
     slot: (dir, file, out) => (file ? cards.slotPosition(dir, file, out) : out.copy(cards.center(dir))),
@@ -243,7 +244,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     if (key === linkKey) return
     linkKey = key
     world.links = links
-    strings.build(links, centerOf, false)
+    strings.build(links, cardAnchorOf)
   }
 
   function refit(force = false) {
@@ -828,7 +829,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       pendingFollow = null
       followPath(path)
     }
-    strings.update(centerOf, mask, delta, cards.moving())
+    strings.update(cardAnchorOf, mask, delta)
     labels.update(delta)
     messages.update(now)
     world.mask = mask

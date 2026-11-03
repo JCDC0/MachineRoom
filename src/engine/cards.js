@@ -929,7 +929,7 @@ export function createCards(cssScene, options = {}) {
     const card = nearestCard(path)
     if (!card) return out.copy(rootHome)
     const width = cardBaseWidth(card.path, card.rootName) + CARD_FACE_BORDER
-    const height = (card.height || cardHeight(cardRows(card.view))) + CARD_FACE_BORDER
+    const height = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
     const offset = tabAnchorOffset(width, height, card.scale)
     out.copy(card.object.position)
     out.addScaledVector(right, offset.x)
