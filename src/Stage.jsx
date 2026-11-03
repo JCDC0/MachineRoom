@@ -7,7 +7,7 @@ import { costModeFor } from './engine/board.js'
 import { openBridge } from './live/bridge.js'
 import { createLivePlayer } from './live/livePlayer.js'
 import { openSimulated } from './live/simulated.js'
-import { openStream, socketUrl, toAgents, diffRoster, loadAgents } from './live/source.js'
+import { toAgents, diffRoster, loadAgents } from './live/source.js'
 import { appendLiveLog, buildTimeline, createLogger, entriesUpTo } from './model/log.js'
 import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
@@ -1264,10 +1264,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         for (const path of tree.files) knownSoundRef.current?.add(path)
       },
     }
-    let link
-    if (live.simulated) link = openSimulated({ frames: live.frames, speed: live.speed, ...handlers })
-    else if (live.bridge) link = openBridge({ url: live.bridge, ...handlers })
-    else link = openStream({ url: socketUrl(live.base, live.companyId), ...handlers })
+    if (!live.simulated && !live.bridge) return undefined
+    const link = live.simulated
+      ? openSimulated({ frames: live.frames, speed: live.speed, ...handlers })
+      : openBridge({ url: live.bridge, ...handlers })
     return () => link.close()
   }, [agents, data, live, player])
 

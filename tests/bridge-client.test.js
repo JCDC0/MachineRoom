@@ -267,20 +267,20 @@ describe('probeLive', () => {
     expect(asked).toEqual(['http://bridge/api/health'])
   })
 
-  it('asks the companies route of an older link when no bridge is set', async () => {
-    const asked = []
-    const fetchImpl = async (url) => {
-      asked.push(url)
-      return reply([])()
+  it('says no without a bridge and asks nothing', async () => {
+    let asked = false
+    const fetchImpl = async () => {
+      asked = true
+      throw new Error('refused')
     }
-    expect(await probeLive({ base: '/paperclip', fetchImpl })).toBe(true)
-    expect(asked).toEqual(['/paperclip/api/companies'])
+    expect(await probeLive({ base: '/paperclip', fetchImpl })).toBe(false)
+    expect(asked).toBe(false)
   })
 
   it('says no when nothing answers', async () => {
     const fetchImpl = async () => {
       throw new Error('refused')
     }
-    expect(await probeLive({ base: '/paperclip', fetchImpl })).toBe(false)
+    expect(await probeLive({ bridge: 'http://bridge', fetchImpl })).toBe(false)
   })
 })

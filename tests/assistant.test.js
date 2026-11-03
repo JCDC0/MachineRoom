@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACTION_TYPES, CARD_SAY, CONFIRMED, cardFirst, validateAction } from '../src/assistant/actions.js'
+import { ACTION_TYPES, CONFIRMED, cardFirst, validateAction } from '../src/assistant/actions.js'
 import { containsSecret, interpret, resolveAgents, resolvePaths } from '../src/assistant/intent.js'
 import { ACTION_CASES } from './probes/assistant.js'
 import { context } from './probes/context.js'
@@ -200,20 +200,8 @@ describe('secrets', () => {
 })
 
 describe('cardFirst', () => {
-  it('turns a write that came as an action into a confirm card', () => {
-    CONFIRMED.add('test_write')
-    try {
-      const write = { type: 'test_write' }
-      expect(cardFirst({ kind: 'action', action: write, say: 'Done.' })).toEqual({ kind: 'propose', action: write, say: CARD_SAY })
-      expect(CARD_SAY).toBe('That changes a task, a budget or an agent. Confirm to go on.')
-      expect(cardFirst({ kind: 'blocked', action: write, say: 'No.' })).toEqual({ kind: 'blocked', say: 'No.' })
-      expect(cardFirst({ kind: 'ask', action: write, say: 'Which?', options: [] })).toEqual({ kind: 'ask', say: 'Which?', options: [] })
-    } finally {
-      CONFIRMED.delete('test_write')
-    }
-  })
-
-  it('leaves reads, cards and odd answers alone', () => {
+  it('leaves every answer alone, since no action writes a task, a budget or an agent', () => {
+    expect([...CONFIRMED]).toEqual([])
     const read = { kind: 'action', action: { type: 'overview' }, say: 'Back.' }
     const card = { kind: 'propose', action: { type: 'test' }, say: 'Set it?' }
     expect(cardFirst(read)).toBe(read)

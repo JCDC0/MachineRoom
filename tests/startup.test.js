@@ -16,6 +16,13 @@ describe('chooseRoute', () => {
     expect(route.connection.bridge).toBe('http://127.0.0.1:5174')
   })
 
+  it('opens the connect screen for a saved connection with no bridge', () => {
+    expect(chooseRoute(at(''), { source: 'bridge' }, true).mode).toBe('connect')
+    expect(chooseRoute(at('live'), { source: 'bridge' }, true).mode).toBe('connect')
+    expect(chooseRoute(at('bridge='), { source: 'bridge' }, true).mode).toBe('connect')
+    expect(chooseRoute(at('simulate'), { source: 'bridge' }, true)).toMatchObject({ mode: 'live', connection: { source: 'demo' } })
+  })
+
   it('opens the replay when asked, even on a first visit', () => {
     expect(chooseRoute(at('replay'), saved, false).mode).toBe('replay')
   })
