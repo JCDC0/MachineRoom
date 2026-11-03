@@ -183,7 +183,7 @@ server/           the bridge: frames from the lane runs and the sessions, the ag
   active-lanes.js   active lane choice, /api/lanes and /api/lanes/active
   agents-config.js  owner-made lanes, /api/harnesses, /api/lanes/create, update, delete
   family.js         the family tree, key slots, proposals and agent labels
-  runs.js           run and outcome records, the command behind a run, and a task or a queue run on the room's project (L3, S8b); a runner that exits nonzero without writing a record leaves a failed one behind
+  runs.js           run and outcome records, the command behind a run, and a task or a queue run on the room's project (L3, S8b); a runner that fails to start, dies by a signal or exits nonzero without writing a record leaves a failed one behind
   outcomes.js       outcomeTable: merge rate and cost per lane and model
   models.js         the model list, with each saved endpoint's models for the machineroom harness as NAME/MODEL
   model-list.js     the static model list per harness and its context windows

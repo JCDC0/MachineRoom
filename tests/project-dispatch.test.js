@@ -121,8 +121,50 @@ describe('the runs route with a task', () => {
     await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
     const file = join(runsFolder(), 'runs.jsonl')
     const records = readFileSync(file, 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
-    expect(records.at(-1)).toMatchObject({ lane: 'opencode', exitCode: 3 })
+    expect(records.at(-1)).toMatchObject({ lane: 'opencode', exitCode: 3, project, task: 'Fix the typo.' })
     expect(records.at(-1).note).toContain('args opencode --project')
+  })
+
+  it('writes a failed record when the runner dies by a signal or refuses to start', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runnerDir = tempDir('mr-project-runner-')
+    const path = join(runnerDir, 'signal-runner.mjs')
+    writeFileSync(path, "process.kill(process.pid, 'SIGKILL')")
+    const { url } = await startBridge({ projectRoot: project, runnerPath: path })
+    const res = await postJson(`${url}/api/control/runs`, { lane: 'opencode', task: 'Die by signal.', confirmed: true })
+    expect(res.status).toBe(202)
+    await waitFor(async () => (await getJson(`${url}/api/control/runs`)).body.running.length === 0, { what: 'the run to end' })
+    const file = join(runsFolder(), 'runs.jsonl')
+    const records = readFileSync(file, 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+    expect(records.at(-1)).toMatchObject({ lane: 'opencode', exitCode: 1, project, task: 'Die by signal.' })
+  })
+
+  it('writes a failed record when the runner binary fails to start', async () => {
+    const project = tempDir('mr-project-dispatch-')
+    const runs = runsFolder()
+    mkdirSync(runs, { recursive: true })
+    let answer = null
+    const api = createRunsApi({
+      projectRoot: project,
+      runnerCommand: { file: 'this-binary-does-not-exist-at-all-12345', args: [] },
+      sendJson: (req, res, status, body) => { answer = { status, body } },
+      readJsonBody: async () => ({ lane: 'opencode', task: 'Spawn failure.', confirmed: true }),
+      runsFolder: runs,
+      activeLanes: { isChosen: () => true, isLaneActive: () => true },
+    })
+    cleanups.push(() => api.stopAll())
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/control/runs')
+    )
+    expect(handled).toBe(true)
+    expect(answer.status).toBe(202)
+    await waitFor(() => !api.isRunning('opencode'), { what: 'runner error to finish' })
+    const file = join(runs, 'runs.jsonl')
+    const records = readFileSync(file, 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+    expect(records.at(-1)).toMatchObject({ lane: 'opencode', exitCode: 1, project, task: 'Spawn failure.' })
+    expect(records.at(-1).note).toContain('start failed:')
   })
 
   it('starts run-lane with --project and --task on the bridge project', async () => {
