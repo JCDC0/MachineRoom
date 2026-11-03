@@ -524,6 +524,7 @@ export function createBridge(options = {}) {
   let lastFiles = []
   let lastTree = null
   let lastTreeAt = 0
+  let lastTreeError = ''
   let treeChangedAt = 0
   let lastReadMs = 0
   let treePrimed = false
@@ -595,10 +596,15 @@ export function createBridge(options = {}) {
       let tree
       try {
         tree = await treeReader(projectRoot)
-      } catch {
+        lastTreeError = ''
+      } catch (error) {
+        lastTreeError = error instanceof Error ? error.message : String(error)
         tree = { root: '', files: [], created: [] }
       }
-      if (!tree || !Array.isArray(tree.files)) tree = { root: '', files: [], created: [] }
+      if (!tree || !Array.isArray(tree.files)) {
+        if (!lastTreeError) lastTreeError = 'The tree read returned no file list.'
+        tree = { root: '', files: [], created: [] }
+      }
       if (stopped) return tree
       publishTree(tree)
       return tree
@@ -830,8 +836,30 @@ export function createBridge(options = {}) {
     if (await networkApi.handle(req, res, url)) return
 
     if (req.method === 'GET' && url.pathname === '/api/health') {
+      const problems = []
+      const folder = resolve(projectRoot)
+      let folderOk = false
+      try {
+        folderOk = statSync(folder).isDirectory()
+      } catch {}
+      if (!folderOk) problems.push(`The project folder ${folder} does not exist or is not a folder.`)
+      if (options.staticDir) {
+        const index = join(resolve(options.staticDir), 'index.html')
+        let indexOk = false
+        try {
+          indexOk = statSync(index).isFile()
+        } catch {}
+        if (!indexOk) problems.push(`The built viewer is missing ${index}. Run npm run build.`)
+      }
+      if (lastTreeError) problems.push(`The last tree read failed: ${lastTreeError}`)
+      if (sessionsSource && typeof sessionsSource.problems === 'function') {
+        for (const problem of sessionsSource.problems()) {
+          problems.push(`The ${problem.name} source stopped: ${problem.message}`)
+        }
+      }
       sendJson(req, res, 200, {
-        ok: true,
+        ok: problems.length === 0,
+        problems,
         lanes: lanesSource !== null,
         sessions: sessionsSource !== null,
         ...(orchestrators ? { orchestrator: true } : {}),

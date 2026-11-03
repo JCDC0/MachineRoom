@@ -239,7 +239,8 @@ describe('health and agents', () => {
     expect(health.body.unparsed).toMatchObject({ total: 0 })
     expect(health.body.masked).toMatchObject({ total: 0 })
     expect(health.body.orchestrator).toBe(true)
-    expect(Object.keys(health.body).sort()).toEqual(['lanes', 'masked', 'ok', 'orchestrator', 'sessions', 'unparsed'])
+    expect(health.body.problems).toEqual([])
+    expect(Object.keys(health.body).sort()).toEqual(['lanes', 'masked', 'ok', 'orchestrator', 'problems', 'sessions', 'unparsed'])
     expect(health.body).not.toHaveProperty('paperclip')
     expect(health.body).not.toHaveProperty('paperclipVersion')
     expect(health.body).not.toHaveProperty('surface')
@@ -250,6 +251,53 @@ describe('health and agents', () => {
       expect(answer.status, method).toBe(404)
       expect(await answer.json()).toEqual({ error: 'not found' })
     }
+  })
+
+  it('names a missing project folder as a problem and fails the health answer', async () => {
+    const missing = join(tempDir('mr-health-'), 'gone')
+    const { url } = await startLaneBridge({ projectRoot: missing })
+    const health = await getJson(`${url}/api/health`)
+
+    expect(health.status).toBe(200)
+    expect(health.body.ok).toBe(false)
+    expect(health.body.problems).toContainEqual(expect.stringContaining('does not exist or is not a folder'))
+  })
+
+  it('names a missing built viewer as a problem and says how to build it', async () => {
+    const { url } = await startLaneBridge({ bridge: { staticDir: tempDir('mr-health-dist-') } })
+    const health = await getJson(`${url}/api/health`)
+
+    expect(health.body.ok).toBe(false)
+    expect(health.body.problems).toContainEqual(expect.stringContaining('index.html'))
+    expect(health.body.problems).toContainEqual(expect.stringContaining('Run npm run build.'))
+  })
+
+  it('names the last tree read error as a problem', async () => {
+    const { url } = await startLaneBridge({
+      bridge: {
+        readTree: async () => {
+          throw new Error('The folder is locked.')
+        },
+      },
+    })
+    const health = await getJson(`${url}/api/health`)
+
+    expect(health.body.ok).toBe(false)
+    expect(health.body.problems).toContain('The last tree read failed: The folder is locked.')
+  })
+
+  it('names a stopped session source as a problem', async () => {
+    const reader = {
+      agent: { id: 'agent-test', key: 'test', name: 'OpenCode session', parser: 'opencode' },
+      tick: () => {},
+      problem: () => 'no such table: session_v2',
+    }
+    const { url } = await startLaneBridge({ bridge: { sessionsSource: { readers: [reader], pollMs: 20 } } })
+    const health = await getJson(`${url}/api/health`)
+
+    expect(health.body.ok).toBe(false)
+    expect(health.body.sessions).toBe(true)
+    expect(health.body.problems).toContain('The OpenCode session source stopped: no such table: session_v2')
   })
 
   it('lists the lane agents only, in lane file order', async () => {
