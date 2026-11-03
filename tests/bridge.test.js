@@ -579,6 +579,39 @@ describe('frames from a lane log', () => {
     expect(activeHistory.some((entry) => entry.id === 'start')).toBe(true)
   })
 
+  it('clears expired pins in one pass over mixed pinned, expired and fresh runs (S39)', () => {
+    const twoHoursMs = 2 * 60 * 60 * 1000
+    const start = 1000000
+    const now = start + twoHoursMs + 5000
+    const history = [
+      { id: 'exp1-start', runId: 'run-exp-1', pinned: true, at: start },
+      { id: 'exp1-log', runId: 'run-exp-1', pinned: false, at: start + 100 },
+      { id: 'exp2-start', runId: 'run-exp-2', pinned: true, at: start + 200 },
+      { id: 'fresh1-start', runId: 'run-fresh-1', pinned: true, at: start },
+      { id: 'fresh1-recent', runId: 'run-fresh-1', pinned: false, at: now - 1000 },
+      { id: 'fresh2-start', runId: 'run-fresh-2', pinned: true, at: now - 2000 },
+      { id: 'fresh2-pinned-log', runId: 'run-fresh-2', pinned: true, at: now - 500 },
+      { id: 'orphan-pinned', pinned: true, at: start },
+      { id: 'orphan-unpinned', pinned: false, at: start },
+    ]
+    for (let i = 0; i < 600; i += 1) {
+      history.push({ id: `pad-${i}`, pinned: false, at: now })
+    }
+
+    trimHistory(history, now)
+
+    expect(history).toHaveLength(500)
+    const byId = new Map(history.map((entry) => [entry.id, entry]))
+    expect(byId.has('exp1-start')).toBe(false)
+    expect(byId.has('exp1-log')).toBe(false)
+    expect(byId.has('exp2-start')).toBe(false)
+    expect(byId.has('orphan-unpinned')).toBe(false)
+    expect(byId.get('fresh1-start')?.pinned).toBe(true)
+    expect(byId.get('fresh2-start')?.pinned).toBe(true)
+    expect(byId.get('fresh2-pinned-log')?.pinned).toBe(true)
+    expect(byId.get('orphan-pinned')?.pinned).toBe(true)
+  })
+
   it('sends no history to a client that does not ask', async () => {
     const runs = tempDir()
     const name = 'opencode-Y1-20261024-122000'

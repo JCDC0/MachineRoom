@@ -6,6 +6,7 @@ import { runsFolder as defaultRunsFolder } from './lanes-source.js'
 const DEFAULT_QUIET_MS = 30000
 const DEFAULT_QUIET_POLL_MS = 10000
 const TEXT_LIMIT = 2000
+const MAX_FORGOTTEN = 200
 
 export const OPENCODE_SESSION_AGENT = {
   id: 'agent-opencode-session',
@@ -415,11 +416,16 @@ export function createOpencodeSessionsReader(options = {}) {
       if (open.has(info.rootId) || at - info.lastSeen < retentionMs) continue
       sessions.delete(id)
       sent.delete(id)
+      forgotten.delete(id)
       forgotten.set(id, {
         rootId: info.rootId,
         lastSessionUpdated: info.lastSessionUpdated ?? 0,
         since: info.since + 1,
       })
+      while (forgotten.size > MAX_FORGOTTEN) {
+        const oldest = forgotten.keys().next().value
+        forgotten.delete(oldest)
+      }
     }
   }
 
