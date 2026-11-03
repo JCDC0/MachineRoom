@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { createCards, DANCE_LIFT, DANCE_LIFT_MS } from '../src/engine/cards.js'
+import { createCards, DANCE_LIFT } from '../src/engine/cards.js'
+import { DANCE_RISE_MS, DANCE_SETTLE_MS } from '../src/engine/hub.js'
 import { makeTree } from '../src/model/paths.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -185,13 +186,13 @@ describe('the dance lift on a card', () => {
     expect(root.object.position.y).toBeCloseTo(placeY, 6)
 
     cards.beat(1)
-    clock += DANCE_LIFT_MS / 2
+    clock += DANCE_RISE_MS
     cards.update(state, 0.016, camera())
     expect(root.object.position.y - root.base.y).toBeCloseTo(DANCE_LIFT, 6)
     expect(cards.center('').y).toBeCloseTo(placeY, 6)
     expect(root.occluder.position.distanceTo(root.object.position)).toBe(0)
 
-    clock += DANCE_LIFT_MS
+    clock += DANCE_SETTLE_MS
     cards.update(state, 0.016, camera())
     expect(root.object.position.y).toBeCloseTo(placeY, 6)
     cards.dispose()

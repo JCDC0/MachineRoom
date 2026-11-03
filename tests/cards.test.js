@@ -19,11 +19,6 @@ import {
   clampFileLimit,
   createCards,
   createRowFrameKey,
-  danceDelay,
-  danceLift,
-  DANCE_LIFT,
-  DANCE_LIFT_MS,
-  DANCE_WAVE_MS,
   fadeProgress,
   openChain,
   rowOffset,
@@ -776,36 +771,21 @@ describe('the card class string', () => {
   })
 })
 
-describe('the dance wave round the ring', () => {
-  it('starts at the first card and runs round in about 300 ms', () => {
-    expect(danceDelay(0)).toBe(0)
-    expect(danceDelay(Math.PI / 2)).toBeCloseTo(DANCE_WAVE_MS / 4, 6)
-    expect(danceDelay(Math.PI)).toBeCloseTo(DANCE_WAVE_MS / 2, 6)
-    expect(danceDelay(Math.PI * 2)).toBeCloseTo(0, 6)
-  })
-
-  it('wraps a negative angle and clamps a broken one', () => {
-    expect(danceDelay(-Math.PI / 2)).toBeCloseTo((DANCE_WAVE_MS * 3) / 4, 6)
-    expect(danceDelay(4 * Math.PI)).toBeCloseTo(0, 6)
-    expect(danceDelay('x')).toBe(0)
-    expect(danceDelay(1, -20)).toBe(0)
-  })
-
-  it('lifts at most 24 units and settles back to none', () => {
-    expect(danceLift(0, 0, 1)).toBe(0)
-    expect(danceLift(-4, 0, 1)).toBe(0)
-    const top = danceLift(DANCE_LIFT_MS / 2, 0, 1)
-    expect(top).toBeCloseTo(DANCE_LIFT, 6)
-    expect(danceLift(DANCE_LIFT_MS, 0, 1)).toBe(0)
-    expect(danceLift(DANCE_LIFT_MS * 2, 0, 1)).toBe(0)
-    expect(danceLift(DANCE_LIFT_MS / 2, 0, 2)).toBe(DANCE_LIFT)
-    expect(danceLift(DANCE_LIFT_MS / 2, 0, 0)).toBe(0)
-  })
-
-  it('holds the lift until the wave reaches that card', () => {
-    expect(danceLift(100, 200, 1)).toBe(0)
-    expect(danceLift(200 + DANCE_LIFT_MS / 2, 200, 1)).toBeCloseTo(DANCE_LIFT, 6)
-    expect(danceLift(200 + DANCE_LIFT_MS, 200, 1)).toBe(0)
+describe('the dance lift on the cards', () => {
+  it('gives every card the same envelope when a beat lands', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1000)
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    expect(cards.beat(1)).toBe(true)
+    for (const card of cards.cards.values()) {
+      expect(card.danceFrom).toBe(0)
+      expect(card.danceTo).toBe(1)
+      expect(card.danceAt).toBe(1000)
+    }
+    clock.mockRestore()
+    cards.dispose()
   })
 })
 
