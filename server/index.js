@@ -306,6 +306,7 @@ export function createBridge(options = {}) {
     projectRoot,
     briefsDir: options.briefsDir ?? process.env.BRIEFS_DIR,
     patchLimit: options.patchLimit,
+    runsFolder: options.runsFolder ?? options.orchestratorFolder ?? '',
     sendJson,
     readJsonBody,
     orchestrators: () => orchestrators,

@@ -123,6 +123,7 @@ async function startBridge({ projectRoot, briefsDir }) {
   const bridge = createBridge({
     projectRoot,
     briefsDir,
+    runsFolder: join(projectRoot, '..', 'runs'),
     port: 0,
     paperclipUrl: 'http://127.0.0.1:1',
     companyId: 'company-1',
@@ -169,6 +170,17 @@ describe('review routes on another project', () => {
     expect(entry.commits).toHaveLength(1)
     expect(entry.commits[0]).toMatch(/ lane work$/)
     expect(git(worktree, ['status', '--porcelain'])).toBe('')
+  }, 40000)
+
+  it('reads the last run from the bridge runs folder', async () => {
+    const { project, briefsDir } = makeProject()
+    const runs = join(project, '..', 'runs')
+    mkdirSync(runs, { recursive: true })
+    writeFileSync(join(runs, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', briefs: [], startedAt: '2026-11-04T00:00:00.000Z', exitCode: 0 })}
+`)
+    const { url } = await startBridge({ projectRoot: project, briefsDir })
+    const { lanes } = await (await fetch(`${url}/api/control/reviews`)).json()
+    expect(lanes[0].lastRun).toMatchObject({ lane: 'opencode', startedAt: '2026-11-04T00:00:00.000Z' })
   }, 40000)
 
   it('answers the diff of the lane against the project branch', async () => {

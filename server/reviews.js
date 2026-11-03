@@ -167,6 +167,7 @@ export function createReviewsApi({
   readJsonBody,
   orchestrators,
   readRuns = readAllRunRecords,
+  runsFolder = '',
   notify = () => {},
 }) {
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
@@ -210,8 +211,12 @@ export function createReviewsApi({
     return { lanes: parsed }
   }
 
+  function recordsFile() {
+    return runsFolder ? join(resolve(runsFolder), 'runs.jsonl') : runsFile()
+  }
+
   function lastRunFor(lane, runs = null) {
-    const list = runs ?? readRuns(runsFile())
+    const list = runs ?? readRuns(recordsFile())
     const matches = list.filter((record) => record && record.lane === lane)
     if (matches.length === 0) return null
     return matches.reduce((newest, record) => {
@@ -516,7 +521,7 @@ export function createReviewsApi({
       sendJson(req, res, 409, { error: 'The project is not on a branch.' })
       return true
     }
-    const runs = readRuns(runsFile())
+    const runs = readRuns(recordsFile())
     const entries = []
     for (const lane of Object.keys(read.lanes)) {
       const worktree = laneFolder(read.lanes, lane)

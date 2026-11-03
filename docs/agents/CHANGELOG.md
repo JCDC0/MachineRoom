@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Reviews read each lane's last run from the bridge's own runs folder, not the default one.
 - A hunt that ran 464 real run logs through the parsers (task Q30).
 - `mr-agent`'s shell tool stops the whole tree on Linux too, since `exec` dropped its process group.
 - The history audit no longer reads punctuation after a key name as a key.
