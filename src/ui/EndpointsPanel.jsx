@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import ModelRefresh from './ModelRefresh.jsx'
+import { useDialogFocus } from './dialogFocus.js'
 
 const NAME_PATTERN = /^[A-Za-z0-9 _-]{1,40}$/
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
@@ -140,6 +141,11 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   const [busy, setBusy] = useState(false)
   const [modelsBusy, setModelsBusy] = useState(false)
   const quickKeyRef = useRef(null)
+  const quickConfirmRef = useRef(null)
+  const confirmRef = useRef(null)
+
+  useDialogFocus(Boolean(quickConfirm), { containerRef: quickConfirmRef })
+  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
   useEffect(() => {
     if (!confirm && !quickConfirm) return undefined
@@ -601,7 +607,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       ) : null}
 
       {quickConfirm ? (
-        <div className="brief-confirm-card endpoints-confirm">
+        <div ref={quickConfirmRef} className="brief-confirm-card endpoints-confirm">
           <p className="brief-confirm-warning">{quickConfirmText(quickConfirm.provider)}</p>
           <div className="brief-confirm-actions">
             <button
@@ -625,7 +631,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       ) : null}
 
       {confirm?.kind === 'save' ? (
-        <div className="brief-confirm-card endpoints-confirm">
+        <div ref={confirmRef} className="brief-confirm-card endpoints-confirm">
           <div className="brief-confirm-meta mono">
             <span>{confirm.endpoint.name}</span>
             <span>{confirm.endpoint.provider}</span>
@@ -651,7 +657,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       ) : null}
 
       {confirm?.kind === 'delete' ? (
-        <div className="brief-confirm-card endpoints-confirm">
+        <div ref={confirmRef} className="brief-confirm-card endpoints-confirm">
           <p className="brief-confirm-warning">Delete {confirm.endpoint.name}?</p>
           <div className="brief-confirm-actions">
             <button

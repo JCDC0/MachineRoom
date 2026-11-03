@@ -279,7 +279,18 @@ describe('the MCP settings panel', () => {
       await mount(root, { client })
       const row = container.querySelectorAll('.mr-mcp-server')[0]
       await click(root, buttonWithText(row, 'Remove'))
-      expect(container.querySelector('.brief-confirm-card')).not.toBeNull()
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card).not.toBeNull()
+      const first = buttonWithText(card, 'Remove server')
+      const last = buttonWithText(card, 'Cancel')
+      expect(dom.document.activeElement).toBe(first)
+      last.focus()
+      const tab = { type: 'keydown', key: 'Tab', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(tab)
+      })
+      expect(tab.defaultPrevented).toBe(true)
+      expect(dom.document.activeElement).toBe(first)
       const event = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
       await act(async () => {
         dom.window.dispatchEvent(event)

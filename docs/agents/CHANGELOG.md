@@ -6,6 +6,7 @@
 - Run tool asks on a card naming the server, the tool and its arguments, and the control client no longer confirms an MCP tool call by default (task U121).
 - Escape closes a confirm card inside Settings without closing Settings (task U121).
 - Escape closes the chat's model, effort or Compact card before it closes the chat (task U121).
+- Confirm cards in Settings, the family tree, Build a team and the chat take focus and trap Tab through the shared dialog focus (task U121).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

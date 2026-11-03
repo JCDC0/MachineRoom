@@ -1,6 +1,7 @@
 import { useContext, useEffect, useId, useRef, useState } from 'react'
 import MenuIcon from './MenuIcon.jsx'
 import CompactCard from './AgentStrip.jsx'
+import { useDialogFocus } from './dialogFocus.js'
 import ModelRefresh, { useHarnessModels } from './ModelRefresh.jsx'
 import { filterModelChoices, groupModelChoices, modelChoiceText } from './modelRefresh.js'
 import {
@@ -162,7 +163,16 @@ export default function OrchestratorChat({
   const chatTicketsRef = useRef({})
   const teamTicketRef = useRef(0)
   const focusAtRef = useRef(Number(focusRequest) || 0)
+  const confirmRef = useRef(null)
+  const modelConfirmRef = useRef(null)
+  const effortConfirmRef = useRef(null)
+  const compactRef = useRef(null)
   const roomActivity = useContext(OrchestratorActivity)
+
+  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
+  useDialogFocus(Boolean(modelConfirm), { containerRef: modelConfirmRef })
+  useDialogFocus(Boolean(effortConfirm), { containerRef: effortConfirmRef })
+  useDialogFocus(compactOpen, { containerRef: compactRef })
 
   const subs = list.filter((entry) => entry.id !== 'orchestrator')
   const teamSelected = teamOpen || selected === TEAM_TAB
@@ -855,7 +865,7 @@ export default function OrchestratorChat({
           </div>
 
           {confirm === 'start' ? (
-            <section className="mr-orch-confirm" aria-label="Start the orchestrator">
+            <section ref={confirmRef} className="mr-orch-confirm" aria-label="Start the orchestrator">
               <p className="mr-orch-confirm-text">{startText}</p>
               <div className="mr-orch-confirm-actions">
                 <button
@@ -879,7 +889,7 @@ export default function OrchestratorChat({
           ) : null}
 
           {confirm === 'stop' ? (
-            <section className="mr-orch-confirm is-stop" aria-label="Stop the orchestrator">
+            <section ref={confirmRef} className="mr-orch-confirm is-stop" aria-label="Stop the orchestrator">
               <p className="mr-orch-confirm-text">{ORCH_STOP_CONFIRM}</p>
               <div className="mr-orch-confirm-actions">
                 <button
@@ -1039,7 +1049,7 @@ export default function OrchestratorChat({
 
               {modelConfirm ? (
                 <div className="strip-pop is-confirm">
-                  <section className="mr-orch-confirm" aria-label="Set the model">
+                  <section ref={modelConfirmRef} className="mr-orch-confirm" aria-label="Set the model">
                     <p className="mr-orch-confirm-text">
                       {`Set ${modelConfirm.label} for ${current?.name || 'the orchestrator'}?`}
                     </p>
@@ -1095,7 +1105,7 @@ export default function OrchestratorChat({
 
               {effortConfirm ? (
                 <div className="strip-pop is-confirm">
-                  <section className="mr-orch-confirm" aria-label="Set the effort">
+                  <section ref={effortConfirmRef} className="mr-orch-confirm" aria-label="Set the effort">
                     <p className="mr-orch-confirm-text">
                       {`Set effort ${effortConfirm} for ${current?.name || 'the orchestrator'}?`}
                     </p>
@@ -1126,7 +1136,7 @@ export default function OrchestratorChat({
               ) : null}
 
               {compactOpen ? (
-                <div className="strip-pop is-compact">
+                <div ref={compactRef} className="strip-pop is-compact">
                   <CompactCard
                     name={current?.name || 'the orchestrator'}
                     id={selected}

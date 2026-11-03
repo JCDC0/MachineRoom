@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useDialogFocus } from './dialogFocus.js'
 
 export const MCP_TRANSPORTS = ['stdio', 'http']
 export const MCP_NAME_PATTERN = /^[A-Za-z0-9_-]{1,40}$/
@@ -215,6 +216,11 @@ export default function McpSettings({
   const [toolResult, setToolResult] = useState({ text: '', error: false })
   const [runConfirm, setRunConfirm] = useState(null)
   const [removeConfirm, setRemoveConfirm] = useState(null)
+  const removeRef = useRef(null)
+  const runRef = useRef(null)
+
+  useDialogFocus(Boolean(removeConfirm), { containerRef: removeRef })
+  useDialogFocus(Boolean(runConfirm), { containerRef: runRef })
 
   useEffect(() => {
     if (!removeConfirm && !runConfirm) return undefined
@@ -435,7 +441,7 @@ export default function McpSettings({
           </ul>
         )}
         {removeConfirm && (
-          <div className="brief-confirm-card" role="dialog" aria-modal="true" aria-label="Remove MCP server">
+          <div ref={removeRef} className="brief-confirm-card" role="dialog" aria-modal="true" aria-label="Remove MCP server">
             <p className="brief-confirm-warning">
               {`Remove ${removeConfirm.name}? Its command and settings are lost.`}
             </p>
@@ -645,7 +651,7 @@ export default function McpSettings({
       </form>
 
       {runConfirm && (
-        <div className="brief-confirm-card mr-mcp-run-confirm" role="dialog" aria-modal="true" aria-label="Run MCP tool">
+        <div ref={runRef} className="brief-confirm-card mr-mcp-run-confirm" role="dialog" aria-modal="true" aria-label="Run MCP tool">
           <p className="brief-confirm-warning">{`Run ${runConfirm.tool} on ${runConfirm.server}?`}</p>
           <p className="mr-mcp-target mono">{JSON.stringify(runConfirm.arguments)}</p>
           <div className="brief-confirm-actions">

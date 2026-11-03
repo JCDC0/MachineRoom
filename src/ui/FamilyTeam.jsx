@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDialogFocus } from './dialogFocus.js'
 import {
   harnessModels,
   teamDraft,
@@ -46,6 +47,9 @@ export function FamilyTeam({ client = null }) {
   const [actionError, setActionError] = useState('')
   const [confirm, setConfirm] = useState(null)
   const [busy, setBusy] = useState(false)
+  const confirmRef = useRef(null)
+
+  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
   useEffect(() => {
     let active = true
@@ -406,7 +410,7 @@ export function FamilyTeam({ client = null }) {
         </p>
       ) : null}
       {confirm ? (
-        <div className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
+        <div ref={confirmRef} className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
           <section className="mr-side-confirm-card">
             <p className="mr-side-confirm-text">
               {busy && confirm.busyText ? confirm.busyText : confirm.text}
