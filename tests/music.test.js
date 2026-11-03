@@ -7,7 +7,9 @@ import {
   createMusicApi,
   isSafeMusicName,
   listMusic,
+  listMusicLibrary,
   musicFolderFor,
+  musicLibrary,
   musicTrackNames,
   musicType,
   parseRange,
@@ -34,11 +36,18 @@ function tempDir(prefix = 'mr-music-') {
 
 function musicFolder() {
   const dir = tempDir()
-  mkdirSync(join(dir, 'nested'), { recursive: true })
+  mkdirSync(join(dir, 'nested', 'inner'), { recursive: true })
+  mkdirSync(join(dir, 'Lofi'), { recursive: true })
+  mkdirSync(join(dir, 'Technical Calm'), { recursive: true })
   writeFileSync(join(dir, 'beta.mp3'), 'abcdef')
   writeFileSync(join(dir, 'alpha.ogg'), 'ogg')
   writeFileSync(join(dir, 'notes.txt'), 'not music')
   writeFileSync(join(dir, 'nested', 'inner.wav'), 'wav')
+  writeFileSync(join(dir, 'nested', 'inner', 'deep.mp3'), 'deep')
+  writeFileSync(join(dir, 'nested', 'notes.txt'), 'not music')
+  writeFileSync(join(dir, 'Lofi', 'calm.mp3'), 'calm')
+  writeFileSync(join(dir, 'Lofi', 'another.ogg'), 'another')
+  writeFileSync(join(dir, 'Technical Calm', 'focus.m4a'), 'focus')
   return dir
 }
 
@@ -78,6 +87,37 @@ describe('the music folder', () => {
     expect(await listMusic(join(folder, 'missing'))).toEqual([])
   })
 
+  it('lists one playlist per subfolder, by name, and skips folders inside them', async () => {
+    const folder = musicFolder()
+    mkdirSync(join(folder, 'Empty'), { recursive: true })
+    const library = await listMusicLibrary(folder)
+    expect(library.tracks).toEqual(['alpha.ogg', 'beta.mp3'])
+    expect(library.playlists).toEqual([
+      { name: 'Empty', tracks: [] },
+      { name: 'Lofi', tracks: ['another.ogg', 'calm.mp3'] },
+      { name: 'Technical Calm', tracks: ['focus.m4a'] },
+      { name: 'nested', tracks: ['inner.wav'] },
+    ])
+    expect(await listMusicLibrary(join(folder, 'missing'))).toEqual({ tracks: [], playlists: [] })
+  })
+
+  it('caps every playlist and the loose tracks together at the track limit', () => {
+    const many = (prefix) => Array.from({ length: 300 }, (_, index) => `${prefix}-${String(index).padStart(3, '0')}.mp3`)
+    const library = musicLibrary(['loose.mp3'], [
+      { name: 'B', tracks: many('b') },
+      { name: 'A', tracks: many('a') },
+    ])
+    expect(library.playlists[0].tracks).toHaveLength(300)
+    expect(library.playlists[1].tracks).toHaveLength(200)
+    expect(library.tracks).toEqual([])
+    const total = library.tracks.length + library.playlists.reduce((sum, playlist) => sum + playlist.tracks.length, 0)
+    expect(total).toBe(MUSIC_LIMIT)
+    expect(musicLibrary(['a.mp3', 'b.mp3'], [{ name: 'A', tracks: ['c.mp3'] }], 2)).toEqual({
+      tracks: ['a.mp3'],
+      playlists: [{ name: 'A', tracks: ['c.mp3'] }],
+    })
+  })
+
   it('refuses a separator or a parent link in a name', () => {
     expect(isSafeMusicName('song.mp3')).toBe(true)
     expect(isSafeMusicName('a song.mp3')).toBe(true)
@@ -112,11 +152,19 @@ describe('the music folder', () => {
 })
 
 describe('the music routes', () => {
-  it('lists the tunes and the folder', async () => {
+  it('lists the tunes, the folder and the playlists', async () => {
     const { url, folder } = await bridgeFor()
     const answer = await getJson(`${url}/api/music`)
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual({ folder: resolve(folder), tracks: ['alpha.ogg', 'beta.mp3'] })
+    expect(answer.body).toEqual({
+      folder: resolve(folder),
+      tracks: ['alpha.ogg', 'beta.mp3'],
+      playlists: [
+        { name: 'Lofi', tracks: ['another.ogg', 'calm.mp3'] },
+        { name: 'Technical Calm', tracks: ['focus.m4a'] },
+        { name: 'nested', tracks: ['inner.wav'] },
+      ],
+    })
   })
 
   it('serves a file with its type and supports a byte range', async () => {
@@ -152,12 +200,42 @@ describe('the music routes', () => {
     expect((await fetch(`${url}/music/a%5Cb.mp3`)).status).toBe(400)
   })
 
+  it('serves a playlist track with its type and a byte range', async () => {
+    const { url } = await bridgeFor()
+    const whole = await fetch(`${url}/music/Lofi/calm.mp3`)
+    expect(whole.status).toBe(200)
+    expect(whole.headers.get('content-type')).toBe('audio/mpeg')
+    expect(whole.headers.get('accept-ranges')).toBe('bytes')
+    expect(await whole.text()).toBe('calm')
+
+    const spaced = await fetch(`${url}/music/Technical%20Calm/focus.m4a`)
+    expect(spaced.status).toBe(200)
+    expect(spaced.headers.get('content-type')).toBe('audio/mp4')
+    expect(await spaced.text()).toBe('focus')
+
+    const part = await fetch(`${url}/music/nested/inner.wav`, { headers: { Range: 'bytes=0-1' } })
+    expect(part.status).toBe(206)
+    expect(part.headers.get('content-type')).toBe('audio/wav')
+    expect(part.headers.get('content-range')).toBe('bytes 0-1/3')
+    expect(await part.text()).toBe('wa')
+  })
+
+  it('checks each part of a playlist path and refuses a folder inside one', async () => {
+    const { url } = await bridgeFor()
+    expect((await fetch(`${url}/music/Lofi/missing.mp3`)).status).toBe(404)
+    expect((await fetch(`${url}/music/nested/inner/deep.mp3`)).status).toBe(404)
+    expect((await fetch(`${url}/music/%2e%2e%2fsecret.mp3`)).status).toBe(400)
+    expect((await fetch(`${url}/music/Lofi/%2e%2e%2fsecret.mp3`)).status).toBe(400)
+    expect((await fetch(`${url}/music/Lofi%2f..%2fsecret.mp3`)).status).toBe(400)
+    expect((await fetch(`${url}/music/a%5Cb.mp3`)).status).toBe(400)
+  })
+
   it('answers an empty list with the folder still named', async () => {
     const folder = tempDir()
     const { url } = await bridgeFor(folder)
     const answer = await getJson(`${url}/api/music`)
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual({ folder: resolve(folder), tracks: [] })
+    expect(answer.body).toEqual({ folder: resolve(folder), tracks: [], playlists: [] })
   })
 
   it('destroys its file stream when the response closes', async () => {

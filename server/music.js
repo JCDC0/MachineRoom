@@ -42,6 +42,47 @@ export async function listMusic(folder) {
   }
 }
 
+export function musicLibrary(files, playlists, limit = MUSIC_LIMIT) {
+  const cap = Number.isFinite(Number(limit)) ? Math.max(0, Math.floor(Number(limit))) : MUSIC_LIMIT
+  const loose = musicTrackNames(files)
+  const out = []
+  let left = cap
+  for (const playlist of Array.isArray(playlists) ? playlists : []) {
+    if (!playlist || typeof playlist.name !== 'string' || !playlist.name) continue
+    const tracks = musicTrackNames(playlist.tracks).slice(0, left)
+    out.push({ name: playlist.name, tracks })
+    left -= tracks.length
+  }
+  return { tracks: loose.slice(0, left), playlists: out }
+}
+
+export async function listMusicLibrary(folder) {
+  let entries = []
+  try {
+    entries = await readdir(folder, { withFileTypes: true })
+  } catch {
+    return { tracks: [], playlists: [] }
+  }
+  const files = entries.filter((entry) => entry.isFile()).map((entry) => entry.name)
+  const folders = entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .filter((name) => isSafeMusicName(name))
+    .sort()
+  const playlists = []
+  for (const name of folders) {
+    let inner = []
+    try {
+      inner = await readdir(join(folder, name), { withFileTypes: true })
+    } catch {
+      inner = []
+    }
+    const tracks = inner.filter((entry) => entry.isFile()).map((entry) => entry.name)
+    playlists.push({ name, tracks })
+  }
+  return musicLibrary(files, playlists)
+}
+
 export function isSafeMusicName(name) {
   if (typeof name !== 'string' || name.length === 0 || name.length > 255) return false
   if (name.includes('\0')) return false
@@ -92,8 +133,8 @@ export function createMusicApi({ folder, env, sendJson, corsHeaders = () => ({})
 
   async function handleApi(req, res, url) {
     if (url.pathname !== '/api/music' || req.method !== 'GET') return false
-    const tracks = await listMusic(musicFolder)
-    sendJson(req, res, 200, { folder: musicFolder, tracks })
+    const { tracks, playlists } = await listMusicLibrary(musicFolder)
+    sendJson(req, res, 200, { folder: musicFolder, tracks, playlists })
     return true
   }
 
@@ -111,19 +152,31 @@ export function createMusicApi({ folder, env, sendJson, corsHeaders = () => ({})
       sendNotFound(res, cors)
       return true
     }
-    let name
+    const rawParts = raw.split('/')
+    if (rawParts.length > 2) {
+      sendNotFound(res, cors)
+      return true
+    }
+    let parts
     try {
-      name = decodeURIComponent(raw)
+      parts = rawParts.map((part) => decodeURIComponent(part))
     } catch {
       sendBadName(res, cors)
       return true
     }
-    if (!isSafeMusicName(name)) {
+    if (!parts.every((part) => isSafeMusicName(part))) {
       sendBadName(res, cors)
       return true
     }
-    const file = resolve(musicFolder, name)
-    if (dirname(file) !== resolve(musicFolder)) {
+    const root = resolve(musicFolder)
+    const folder = parts.length === 2 ? resolve(root, parts[0]) : root
+    if (parts.length === 2 && dirname(folder) !== root) {
+      sendBadName(res, cors)
+      return true
+    }
+    const name = parts[parts.length - 1]
+    const file = resolve(folder, name)
+    if (dirname(file) !== folder) {
       sendBadName(res, cors)
       return true
     }
@@ -178,5 +231,10 @@ export function createMusicApi({ folder, env, sendJson, corsHeaders = () => ({})
     return handleFile(req, res, url)
   }
 
-  return { folder: musicFolder, handle, list: () => listMusic(musicFolder) }
+  return {
+    folder: musicFolder,
+    handle,
+    list: () => listMusic(musicFolder),
+    library: () => listMusicLibrary(musicFolder),
+  }
 }
