@@ -19,7 +19,9 @@ import {
   clampFileLimit,
   createCards,
   createRowFrameKey,
+  danceOrder,
   fadeProgress,
+  nextDanceCard,
   openChain,
   rowOffset,
   rowWindow,
@@ -771,19 +773,37 @@ describe('the card class string', () => {
   })
 })
 
-describe('the dance lift on the cards', () => {
-  it('gives every card the same envelope when a beat lands', () => {
-    const state = createState(makeTree({ root: 'demo', files: ['src/a.js'] }), [])
+describe('the next card in the dance', () => {
+  it('orders the cards by ring angle and puts the root last', () => {
+    const spots = [
+      { path: '', angle: 0, radius: 0 },
+      { path: 'src', angle: 0, radius: 900 },
+      { path: 'docs', angle: Math.PI / 2, radius: 900 },
+      { path: 'src/lib', angle: Math.PI, radius: 900 },
+    ]
+    expect(danceOrder(spots)).toEqual(['src', 'docs', 'src/lib', ''])
+    expect(danceOrder([{ path: 'root', angle: 0 }, { path: '', angle: 0 }])).toEqual(['root', ''])
+  })
+
+  it('walks to the next card in ring order and wraps after the root', () => {
+    const order = ['src', 'docs', '']
+    expect(nextDanceCard(order, '')).toBe('src')
+    expect(nextDanceCard(order, 'src')).toBe('docs')
+    expect(nextDanceCard(order, 'docs')).toBe('')
+    expect(nextDanceCard(order, 'missing')).toBe('src')
+    expect(nextDanceCard([], '')).toBe('')
+    expect(nextDanceCard(null)).toBe('')
+  })
+
+  it('lifts one card per beat and leaves the others alone', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [])
     const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
     const clock = vi.spyOn(performance, 'now').mockReturnValue(1000)
     cards.sync(state)
     cards.update(state, 0.016, camera())
     expect(cards.beat(1)).toBe(true)
-    for (const card of cards.cards.values()) {
-      expect(card.danceFrom).toBe(0)
-      expect(card.danceTo).toBe(1)
-      expect(card.danceAt).toBe(1000)
-    }
+    const lifted = [...cards.cards.values()].filter((card) => card.danceAt === 1000)
+    expect(lifted).toHaveLength(1)
     clock.mockRestore()
     cards.dispose()
   })
