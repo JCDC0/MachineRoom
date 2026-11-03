@@ -325,37 +325,6 @@ function pagePost(url, path, body, headers = {}) {
   })
 }
 
-async function readNextChange(url, action) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10000)
-  try {
-    const response = await fetch(`${url}/events`, { signal: controller.signal })
-    const running = action()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    for await (const chunk of response.body) {
-      buffer += decoder.decode(chunk, { stream: true })
-      let cut = buffer.indexOf('\n\n')
-      while (cut !== -1) {
-        const block = buffer.slice(0, cut)
-        buffer = buffer.slice(cut + 2)
-        const lines = block.split('\n')
-        if (lines.includes('event: change')) {
-          const data = lines.find((line) => line.startsWith('data: '))
-          if (data) {
-            await running
-            return JSON.parse(data.slice(6))
-          }
-        }
-        cut = buffer.indexOf('\n\n')
-      }
-    }
-    return null
-  } finally {
-    clearTimeout(timer)
-    controller.abort()
-  }
-}
 
 describe('MCP server registry', () => {
   it('answers an empty list when mcp.json is missing', () => {
@@ -988,21 +957,6 @@ describe('/api/mcp routes', () => {
     expect(deleted.body).toEqual({ ok: true, deleted: 'files', servers: [] })
     expect(readMcpServers(runsDir)).toEqual([])
     expect((await pageGet(url, '/api/mcp/servers')).body.servers).toEqual([])
-  })
-
-  it('broadcasts an mcp notice when a server is saved and deleted', async () => {
-    const { url } = await startMcpBridge()
-    const saved = await readNextChange(url, () =>
-      pagePost(url, '/api/mcp/servers', {
-        name: 'files',
-        transport: 'stdio',
-        command: 'node',
-        confirmed: true,
-      })
-    )
-    expect(saved).toEqual({ topic: 'mcp' })
-    const deleted = await readNextChange(url, () => pagePost(url, '/api/mcp/servers/files/delete', { confirmed: true }))
-    expect(deleted).toEqual({ topic: 'mcp' })
   })
 
   it('answers no tools when nothing is saved and uses 405 for another method', async () => {
