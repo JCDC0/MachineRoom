@@ -1166,6 +1166,19 @@ describe('the orchestrator registry', () => {
     expect(rig.chat('frontend').messages.some((message) => message.from === 'orchestrator' && message.text === 'Do the goal')).toBe(true)
   })
 
+  it('clears pause and starts a turn when the main orchestrator messages a paused sub', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const rig = makeRig(files)
+    const frontend = rig.registry.find('frontend')
+    frontend.stop({ confirmed: true })
+    expect(frontend.answer().state).toBe('paused')
+
+    frontend.deliver('orchestrator', 'Resume work')
+    await waitIdle(rig.registry, 'frontend', 2)
+    expect(frontend.answer().state).toBe('idle')
+    expect(frontend.answer().messages.some((m) => m.from === 'orchestrator' && m.text === 'Resume work')).toBe(true)
+  })
+
   it('requires a valid token or origin for orchestrator stop', async () => {
     const rig = await makeBridge(makeBase())
     const mainToken = rig.bridge.orchestrators().token('orchestrator')

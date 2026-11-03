@@ -1405,6 +1405,15 @@ describe('waking the orchestrator', () => {
     await waitIdle(rig, 2)
     expect(rig.answer().state).toBe('idle')
   })
+
+  it('clears pause and starts a turn on a delivered main orchestrator message to a sub', async () => {
+    const rig = makeRig({ id: 'sub-backend' })
+    rig.orchestrator.stop({ confirmed: true })
+    expect(rig.answer().state).toBe('paused')
+    rig.orchestrator.deliver('orchestrator', 'Resume sub')
+    await waitIdle(rig, 1)
+    expect(rig.answer().state).toBe('idle')
+  })
 })
 
 describe('the orchestrator conversation file', () => {

@@ -1211,6 +1211,9 @@ export function createOrchestrator({
     if (stopped) return null
     const value = typeof text === 'string' ? text.trim() : ''
     if (!value) return null
+    if (state === 'paused' && (from === 'owner' || (key !== ORCHESTRATOR_KEY && from === ORCHESTRATOR_KEY))) {
+      setState('idle')
+    }
     const message = addMessage(from, value)
     pending.push(message)
     maybeStartTurn()

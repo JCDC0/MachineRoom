@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A message from the main orchestrator to a paused sub clears the pause and starts a turn (task S31).
+
 - Queued messages that exceed the prompt limit run oldest first and leave newer messages for the next turn (task S31).
 
 - Changing sibling sub orchestrators leaves a running sub running and passes the new siblings without restarting (task S31).
