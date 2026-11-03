@@ -16,7 +16,7 @@ const DEFAULT_QUIET_MS = 10 * 60 * 1000
 const DEFAULT_POLL_MS = 200
 const DEFAULT_PRIME_MS = 60 * 1000
 const READ_CHUNK = 64 * 1024
-const MAX_PARTIAL = 1024 * 1024
+const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 

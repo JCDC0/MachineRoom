@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Raise the live lane source partial line limit to 8 MB (task S29).
+
 - Anchor every branch of the parser failure pattern to a line start (task S29).
 
 - An AGY step that ends ERROR ends its call as failed with the error in its label (task S29).
