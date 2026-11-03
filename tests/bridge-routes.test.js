@@ -589,7 +589,7 @@ describe('run routes', () => {
     const { url, dir } = await startRunsBridge()
     const res = await fetch(`${url}/api/control/runs`)
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ project: basename(RUN_ROOM), running: [], recent: [] })
+    expect(await res.json()).toEqual({ project: basename(RUN_ROOM), running: [], recent: [], last: [] })
   })
 
   it('reads the last 20 records newest first and skips lines that do not parse', async () => {
@@ -631,6 +631,22 @@ describe('run routes', () => {
       'lane-7',
       'lane-6',
     ])
+  })
+
+  it('sends the newest record per lane beside the recent list', async () => {
+    const tempDirRuns = useRunsTemp()
+    const { url } = await startRunsBridge()
+    const lines = [statsRecord({ lane: 'opencode', startedAt: '2026-10-01T12:00:00.000Z', minutes: 1, exitCode: 1 })]
+    for (let i = 2; i <= 25; i += 1) {
+      lines.push(statsRecord({ lane: `lane-${i}`, startedAt: `2026-10-${String(i).padStart(2, '0')}T12:00:00.000Z`, minutes: 1 }))
+    }
+    writeRuns(tempDirRuns, lines)
+
+    const { recent, last } = await fetch(`${url}/api/control/runs`).then((response) => response.json())
+    expect(recent).toHaveLength(20)
+    expect(recent.some((record) => record.lane === 'opencode')).toBe(false)
+    expect(last).toHaveLength(25)
+    expect(last.find((record) => record.lane === 'opencode')).toMatchObject({ lane: 'opencode', exitCode: 1 })
   })
 
   it('starts the runner with an argument list, keeps the last five lines and records the run when it ends', async () => {

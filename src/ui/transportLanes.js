@@ -186,7 +186,7 @@ export function lanePills({
       })
       continue
     }
-    const last = lastRecordFor(records?.recent, key, byAgentId)
+    const last = lastRecordFor(records?.last ?? records?.recent, key, byAgentId)
     if (!last || !runFailed(last.record)) continue
     failed.push({
       key,

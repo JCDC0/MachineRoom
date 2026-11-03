@@ -119,6 +119,18 @@ describe('the lane pill list', () => {
     expect(restarted.pills.map((pill) => [pill.key, pill.state])).toEqual([['opencode2', 'working']])
   })
 
+  it('reads a failed pill from the last record per lane past the recent list', () => {
+    const recent = Array.from({ length: 20 }, (_, index) => record('opencode2', `2026-11-03T1${Math.floor(index / 10)}:${String(index % 60).padStart(2, '0')}:00.000Z`, 0))
+    const records = {
+      running: [],
+      recent,
+      last: [record('opencode2', '2026-11-03T10:30:00.000Z', 1, { task: 'A broken task' })],
+    }
+    const { pills } = lanePills({ agents: AGENTS, records, now: NOW })
+    expect(pills).toHaveLength(1)
+    expect(pills[0]).toMatchObject({ key: 'opencode2', state: 'failed', tone: 'failed' })
+  })
+
   it('shows nothing for a lane whose last run ended well or has no record', () => {
     const records = {
       running: [],
