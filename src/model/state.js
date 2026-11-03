@@ -3,7 +3,22 @@ import { ancestors, dirname } from './paths.js'
 const LINE_LIMIT = 80
 export const CALL_LIMIT = 500
 export const MAX_DEPTH = 3
+export const MAX_DEPTH_ALLOWED = 4
 export const CHILD_LIFE_MS = 7500
+
+export function depthLimitOf(value) {
+  const raw = value !== null && typeof value === 'object' ? value.depth ?? value.limit : value
+  if (raw === undefined || raw === null || raw === '') return MAX_DEPTH
+  const number = Number(raw)
+  if (!Number.isFinite(number)) return MAX_DEPTH
+  return Math.min(MAX_DEPTH_ALLOWED, Math.max(0, Math.floor(number)))
+}
+
+export function setDepthLimit(state, value) {
+  if (!state || typeof state !== 'object') return MAX_DEPTH
+  state.depthLimit = depthLimitOf(value)
+  return state.depthLimit
+}
 
 function makeAgent(key, name, parent = null, depth = 0, runId = null, source = null) {
   return {
@@ -167,7 +182,8 @@ export function apply(state, activity) {
     case 'agent.spawn': {
       if (!activity.child) break
       const depth = (agent.depth ?? 0) + 1
-      if (depth > MAX_DEPTH) break
+      const limit = Number.isFinite(state.depthLimit) ? state.depthLimit : MAX_DEPTH
+      if (depth > limit) break
       const existing = state.agents.get(activity.child)
       if (existing && (existing.status === 'working' || existing.parent !== agent.key || existing.depth !== depth)) break
       const child = makeAgent(activity.child, activity.name || activity.child, agent.key, depth, activity.runId ?? null)

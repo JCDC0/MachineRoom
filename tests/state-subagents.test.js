@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { makeTree } from '../src/model/paths.js'
 import { createPlayer } from '../src/model/player.js'
-import { apply, createState } from '../src/model/state.js'
+import { MAX_DEPTH, MAX_DEPTH_ALLOWED, apply, createState, depthLimitOf, setDepthLimit } from '../src/model/state.js'
 
 const tree = makeTree({ root: 'demo', files: ['src/a.js'] })
 const agents = [{ key: 'opencode', name: 'OpenCode' }]
@@ -112,6 +112,43 @@ describe('agents a harness spawns', () => {
     expect(byKey.get('opencode')).toMatchObject({ parent: null, depth: 0 })
     expect(byKey.get('opencode~1')).toMatchObject({ parent: 'opencode', depth: 1 })
     expect(byKey.get('opencode~1~1')).toMatchObject({ parent: 'opencode~1', depth: 2 })
+  })
+})
+
+describe('the saved agent depth', () => {
+  it('stays at 3 without a setting and reads at most 4', () => {
+    expect(MAX_DEPTH).toBe(3)
+    expect(MAX_DEPTH_ALLOWED).toBe(4)
+    expect(depthLimitOf(undefined)).toBe(3)
+    expect(depthLimitOf(null)).toBe(3)
+    expect(depthLimitOf('two')).toBe(3)
+    expect(depthLimitOf(1)).toBe(1)
+    expect(depthLimitOf(4)).toBe(4)
+    expect(depthLimitOf(9)).toBe(4)
+    expect(depthLimitOf(-2)).toBe(0)
+    expect(depthLimitOf({ depth: 2 })).toBe(2)
+    expect(depthLimitOf({ limit: 4 })).toBe(4)
+  })
+
+  it('draws children only to the limit on the state', () => {
+    const state = createState(tree, agents)
+    expect(setDepthLimit(state, 1)).toBe(1)
+    apply(state, spawn('opencode~1', 'opencode'))
+    apply(state, spawn('opencode~1~1', 'opencode~1'))
+    expect(state.agents.has('opencode~1')).toBe(true)
+    expect(state.agents.has('opencode~1~1')).toBe(false)
+  })
+
+  it('allows a fourth depth when the saved limit is 4', () => {
+    const state = createState(tree, agents)
+    setDepthLimit(state, 4)
+    apply(state, spawn('opencode~1', 'opencode'))
+    apply(state, spawn('opencode~1~1', 'opencode~1'))
+    apply(state, spawn('opencode~1~1~1', 'opencode~1~1'))
+    apply(state, spawn('opencode~1~1~1~1', 'opencode~1~1~1'))
+    apply(state, spawn('opencode~1~1~1~1~1', 'opencode~1~1~1~1'))
+    expect(state.agents.get('opencode~1~1~1~1').depth).toBe(4)
+    expect(state.agents.has('opencode~1~1~1~1~1')).toBe(false)
   })
 })
 

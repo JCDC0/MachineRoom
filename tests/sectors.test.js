@@ -27,6 +27,9 @@ import {
   SECTOR_LABEL_OPACITY,
   SECTOR_LABEL_OUT,
   SECTOR_LABEL_SPREAD,
+  SUB_RING_DROP,
+  SUB_RING_RADIUS,
+  SUB_RING_Y,
   arcDrawSpan,
   createHub,
   sectorArcRadii,
@@ -416,9 +419,13 @@ describe('the hub with a ladder', () => {
     const angles = sectorSlotAngles(LADDER, ['opencode', 'claude', 'hermes'])
     const keys = ['opencode', 'claude', 'hermes']
     slots().forEach((marker, index) => {
-      const angle = angles.get(keys[index])
-      expect(marker.position.x).toBeCloseTo(Math.cos(angle) * HUB_RADIUS)
-      expect(marker.position.z).toBeCloseTo(Math.sin(angle) * HUB_RADIUS)
+      const key = keys[index]
+      const angle = angles.get(key)
+      const lower = LADDER.subs.some((sub) => sub.lanes.includes(key))
+      const radius = lower ? SUB_RING_RADIUS : HUB_RADIUS
+      expect(marker.position.x).toBeCloseTo(Math.cos(angle) * radius)
+      expect(marker.position.z).toBeCloseTo(Math.sin(angle) * radius)
+      expect(marker.position.y).toBe(lower ? -SUB_RING_DROP : 0)
     })
 
     hub.setLadder({ subs: [] })
@@ -442,9 +449,9 @@ describe('the agents with a ladder', () => {
     const keys = ['opencode', 'claude', 'hermes']
     const angles = sectorSlotAngles(LADDER, keys)
     const opencode = agents.views.get('opencode')
-    expect(opencode.home.y).toBeCloseTo(HUB_Y + PARK_LIFT)
-    expect(opencode.home.x).toBeCloseTo(Math.cos(angles.get('opencode')) * HUB_RADIUS)
-    expect(opencode.home.z).toBeCloseTo(Math.sin(angles.get('opencode')) * HUB_RADIUS)
+    expect(opencode.home.y).toBeCloseTo(SUB_RING_Y + PARK_LIFT)
+    expect(opencode.home.x).toBeCloseTo(Math.cos(angles.get('opencode')) * SUB_RING_RADIUS)
+    expect(opencode.home.z).toBeCloseTo(Math.sin(angles.get('opencode')) * SUB_RING_RADIUS)
 
     const sub = agents.views.get('sub-frontend')
     const arcs = sectorArcs(LADDER, keys)
@@ -461,6 +468,24 @@ describe('the agents with a ladder', () => {
     const main = agents.views.get('orchestrator')
     expect(main.home.equals(ORCHESTRATOR_HOME)).toBe(true)
     expect(main.orchestrator).toBe(true)
+    agents.dispose()
+  })
+
+  it('keeps a lane in no sub on the main ring and a sub above its own code agents', () => {
+    const roster = [...ROSTER, { key: 'agy', name: 'AGY' }]
+    const ladder = { subs: [{ id: 'frontend', name: 'Frontend', lanes: ['opencode'] }] }
+    const agents = createAgents(new THREE.Scene(), roster, new THREE.Scene())
+    agents.setLadder(ladder)
+    const keys = ['opencode', 'claude', 'hermes', 'agy']
+    const angles = sectorSlotAngles(ladder, keys)
+    const agy = agents.views.get('agy')
+    expect(agy.home.y).toBeCloseTo(HUB_Y + PARK_LIFT)
+    expect(agy.home.x).toBeCloseTo(Math.cos(angles.get('agy')) * HUB_RADIUS)
+    expect(agy.home.z).toBeCloseTo(Math.sin(angles.get('agy')) * HUB_RADIUS)
+    const sub = agents.views.get('sub-frontend')
+    const opencode = agents.views.get('opencode')
+    expect(Math.hypot(sub.home.x, sub.home.z)).toBeGreaterThan(Math.hypot(opencode.home.x, opencode.home.z))
+    expect(sub.home.y).toBeGreaterThan(opencode.home.y)
     agents.dispose()
   })
 })

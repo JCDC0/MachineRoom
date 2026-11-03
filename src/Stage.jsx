@@ -13,6 +13,7 @@ import { createPipeline } from './model/pipeline.js'
 import { createPlayer } from './model/player.js'
 import { costBoard } from './model/costs.js'
 import { DEFAULT_FIXTURE } from './model/replay.js'
+import { MAX_DEPTH, setDepthLimit } from './model/state.js'
 import { agentTasks } from './model/liveTasks.js'
 import { store } from './storage.js'
 import Hud, { hudKeyBlocked } from './ui/Hud.jsx'
@@ -1076,6 +1077,33 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       unsubscribe()
     }
   }, [client, live])
+
+  useEffect(() => {
+    let active = true
+
+    async function updateDepth() {
+      if (!client || typeof client.agentDepth !== 'function') {
+        setDepthLimit(player.state, MAX_DEPTH)
+        return
+      }
+      try {
+        const answer = await client.agentDepth()
+        if (!active) return
+        setDepthLimit(player.state, answer)
+      } catch {
+        if (!active) return
+        setDepthLimit(player.state, MAX_DEPTH)
+      }
+    }
+
+    updateDepth()
+    const unsubscribe = subscribeToNotices(client, ['agents'], updateDepth)
+
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [client, player])
 
   useEffect(() => {
     setFineDust(effects.dust)

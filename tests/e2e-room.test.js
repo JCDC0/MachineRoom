@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { PACKET_POOL, childPlace, packetSpots, stripPoints } from '../src/engine/agents.js'
+import { PACKET_POOL, childOrbit, packetSpots, stripPoints } from '../src/engine/agents.js'
 import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
 import { nearestDrawnPath } from '../src/engine/room.js'
@@ -410,7 +410,7 @@ function runRoom(frames, agents, tree) {
       const parentHome = agent.parent ? parked.get(agent.parent) ?? ORCHESTRATOR_HOME : null
       const slot = Number(String(agent.key).split('~').at(-1))
       const home = agent.parent
-        ? childPlace(parentHome, Number.isFinite(slot) ? slot - 1 : 0)
+        ? childOrbit(parentHome, Number.isFinite(slot) ? slot - 1 : 0, 1, 0)
         : parked.get(agent.key) ?? ORCHESTRATOR_HOME
       const [start, end] = stripPoints(home, placed.get(dir) ?? HUB_CENTER)
       checkPoint(start, `${agent.key} strip start`)

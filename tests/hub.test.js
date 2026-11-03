@@ -4,12 +4,18 @@ import {
   DANCE_RISE_MS,
   DANCE_SETTLE_MS,
   HUB_RADIUS,
+  HUB_Y,
+  PARK_LIFT,
   SECTOR_ARC_OPACITY,
   SECTOR_GLOW_MS,
   SECTOR_LABEL_DROP,
   SECTOR_LABEL_INSET,
   SECTOR_LABEL_OUT,
   SECTOR_LABEL_SPREAD,
+  SUB_RING_DROP,
+  SUB_RING_OPACITY,
+  SUB_RING_RADIUS,
+  SUB_RING_Y,
   createHub,
   danceEnvelope,
   startDanceEnvelope,
@@ -20,6 +26,7 @@ import {
   sectorLabelRadius,
   sectorLaneAngles,
   sectorSlotAngles,
+  subRingPlace,
   workingKeys,
 } from '../src/engine/hub.js'
 import { sectorArcs } from '../src/model/hierarchy.js'
@@ -148,6 +155,44 @@ describe('where a sector parks its lanes', () => {
     expect(angles.get('opencode')).toBeCloseTo((frontend.start + frontend.end) / 2)
     expect(angles.get('claude')).toBeCloseTo(backend.start + (backend.end - backend.start) / 4)
     expect(angles.get('hermes')).toBeCloseTo(backend.start + ((backend.end - backend.start) * 3) / 4)
+  })
+})
+
+describe('the lower park ring', () => {
+  it('sits at 0.6 of the hub radius and 260 units below it', () => {
+    expect(SUB_RING_RADIUS).toBeCloseTo(HUB_RADIUS * 0.6)
+    expect(SUB_RING_Y).toBe(HUB_Y - SUB_RING_DROP)
+    expect(SUB_RING_DROP).toBe(260)
+  })
+
+  it('puts a lane on the lower ring at the angle it is given', () => {
+    const point = subRingPlace(Math.PI / 2)
+    expect(Math.hypot(point.x, point.z)).toBeCloseTo(SUB_RING_RADIUS)
+    expect(point.x).toBeCloseTo(0)
+    expect(point.z).toBeCloseTo(SUB_RING_RADIUS)
+    expect(point.y).toBe(SUB_RING_Y + PARK_LIFT)
+  })
+
+  it('fills the vector it is given and falls back to zero', () => {
+    const out = new THREE.Vector3()
+    expect(subRingPlace(0, out)).toBe(out)
+    expect(out.x).toBeCloseTo(SUB_RING_RADIUS)
+    expect(out.z).toBeCloseTo(0)
+    const fallback = subRingPlace(Number.NaN)
+    expect(fallback.x).toBeCloseTo(SUB_RING_RADIUS)
+    expect(fallback.z).toBeCloseTo(0)
+  })
+
+  it('draws a faint lower ring only with a ladder', () => {
+    const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+    const lower = hub.group.getObjectByName('sub-ring')
+    expect(lower.visible).toBe(true)
+    expect(lower.position.y).toBe(-SUB_RING_DROP)
+    expect(lower.material.opacity).toBe(SUB_RING_OPACITY)
+    expect(lower.material.opacity).toBeLessThan(SECTOR_ARC_OPACITY.main)
+    hub.setLadder(null)
+    expect(lower.visible).toBe(false)
+    hub.dispose()
   })
 })
 

@@ -6,7 +6,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle, startDanceEnvelope } from './hub.js'
+import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
@@ -51,9 +51,11 @@ export const BEAM_PACKET_INTERVAL = 160
 export const BEAM_PACKET_BURST = 3
 const BEAM_PACKET_GAP = 40
 const MAX_CHAIN = 32
-export const CHILD_SCALE = 0.6
-export const CHILD_TURN = Math.PI / 5
-export const CHILD_GAP = 120
+export const CHILD_SCALE = 0.35
+export const CHILD_RADIUS = 100
+export const CHILD_ORBIT_SCALE = 1.6
+export const CHILD_ORBIT_SECONDS = 40
+export const CHILD_ORBIT_TILT = Math.PI / 18
 export const SUB_ORCHESTRATOR_SCALE = 0.7
 export const SUB_ORCHESTRATOR_LIFT = ORCHESTRATOR_LIFT * 0.5
 export const SUB_ORCHESTRATOR_RADIUS = HUB_RADIUS * 2.4
@@ -219,20 +221,23 @@ export function shapeForNewAgent(agent, used = []) {
   return nextSpareShape([...taken])
 }
 
-export function childPlace(parentPlace, index = 0) {
+export function childOrbit(parentPlace, index = 0, count = 1, time = 0) {
   const x = Number(parentPlace?.x) || 0
   const y = Number(parentPlace?.y) || 0
   const z = Number(parentPlace?.z) || 0
-  const slot = Math.max(0, Math.floor(Number(index) || 0))
-  const side = slot % 2 === 0 ? 1 : -1
-  const rank = Math.floor(slot / 2) + 1
-  const turn = side * rank * CHILD_TURN
-  const radius = Math.hypot(x, z)
-  if (radius < 1) {
-    return { x: x + Math.cos(turn) * CHILD_GAP * rank, y, z: z + Math.sin(turn) * CHILD_GAP * rank }
+  const parentRadius = Number(parentPlace?.radius) > 0 ? Number(parentPlace.radius) : CHILD_RADIUS
+  const radius = parentRadius * CHILD_ORBIT_SCALE
+  const total = Math.max(1, Math.floor(Number(count) || 1))
+  const slot = Math.max(0, Math.floor(Number(index) || 0)) % total
+  const phase = (slot / total) * Math.PI * 2
+  const turn = phase + (Number(time) || 0) * (Math.PI * 2 / CHILD_ORBIT_SECONDS)
+  const flatX = Math.cos(turn) * radius
+  const flatZ = Math.sin(turn) * radius
+  return {
+    x: x + flatX,
+    y: y + flatZ * Math.sin(CHILD_ORBIT_TILT),
+    z: z + flatZ * Math.cos(CHILD_ORBIT_TILT),
   }
-  const angle = Math.atan2(z, x) + turn
-  return { x: Math.cos(angle) * radius, y, z: Math.sin(angle) * radius }
 }
 
 export function stripPoints(from, to, out = []) {
@@ -830,7 +835,33 @@ export function createAgents(scene, roster, cssScene = null) {
 
   function laneHome(key, index) {
     const angle = slotAngles.get(key) ?? slotAngle(index, Math.max(1, parkedKeys.length))
+    if (currentLadder && ownerOf(currentLadder, key) !== 'orchestrator') {
+      const place = subRingPlace(angle)
+      return new THREE.Vector3(place.x, place.y, place.z)
+    }
     return new THREE.Vector3(Math.cos(angle) * HUB_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * HUB_RADIUS)
+  }
+
+  function orbitSlot(view) {
+    let index = 0
+    let count = 0
+    for (const other of views.values()) {
+      if (other.parentKey !== view.parentKey) continue
+      if (other === view) index = count
+      count += 1
+    }
+    return { index, count }
+  }
+
+  function orbitHome(view, parent, time) {
+    const slot = orbitSlot(view)
+    const place = childOrbit(
+      { x: parent.group.position.x, y: parent.group.position.y, z: parent.group.position.z, radius: parent.shellRadius * parent.scale },
+      slot.index,
+      slot.count,
+      time
+    )
+    view.home.set(place.x, place.y, place.z)
   }
 
   function layoutHomes(ladder) {
@@ -1203,7 +1234,11 @@ export function createAgents(scene, roster, cssScene = null) {
       const shapeName = nextSpareShape([...usedShapes])
       usedShapes.add(shapeName)
       const index = childIndex(state, entry)
-      const place = childPlace(parentView.home, index)
+      let count = 1
+      for (const other of views.values()) {
+        if (other.parentKey === entry.parent) count += 1
+      }
+      const place = childOrbit({ x: parentView.home.x, y: parentView.home.y, z: parentView.home.z, radius: parentView.shellRadius * parentView.scale }, index, count, 0)
       addView(entry, {
         index: -1,
         shapeName,
@@ -1247,7 +1282,8 @@ export function createAgents(scene, roster, cssScene = null) {
       if (!view.parentKey) continue
       const parent = views.get(view.parentKey)
       if (!parent) continue
-      const place = childPlace(parent.home, view.childIndex ?? 0)
+      const slot = orbitSlot(view)
+      const place = childOrbit({ x: parent.home.x, y: parent.home.y, z: parent.home.z, radius: parent.shellRadius * parent.scale }, slot.index, slot.count, 0)
       view.home.set(place.x, place.y, place.z)
     }
   }
@@ -1463,6 +1499,10 @@ export function createAgents(scene, roster, cssScene = null) {
       }
 
       const working = (status === 'working' || status === 'queued') && Boolean(entry?.label)
+      if (view.parentKey) {
+        const parentView = views.get(view.parentKey)
+        if (parentView) orbitHome(view, parentView, isStill ? 0 : now / 1000)
+      }
       if (!view.group.position.equals(view.home)) {
         if (isStill) view.group.position.copy(view.home)
         else view.group.position.lerp(view.home, easeRate(delta, 4, false))
