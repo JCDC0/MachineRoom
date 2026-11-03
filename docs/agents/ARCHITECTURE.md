@@ -48,6 +48,7 @@ Every file in this folder, and what it is for:
 - `ORCHESTRATOR.md`: current. The orchestrator's guide: standing rules, the review and merge loop, ownership and lessons.
 - `PLAN.md`: plan. Where the work stands and what comes next.
 - `policy.json`: config the code reads. The routing policy that `src/policy/route.js` parses.
+- `SLASH-COMMANDS.md`: current. What Claude Code and OpenCode do with a slash command in a headless turn, and the room's design for them.
 - `RECORDING.md`: current. How a run becomes a recording and how to replay it.
 - `TASKS.md`: prompt the code reads. The task briefs; the code reads them and the planner adds to them.
 - `history/BACKUPS.md`: history. Paperclip's backup routes, from before 2026-10-24.

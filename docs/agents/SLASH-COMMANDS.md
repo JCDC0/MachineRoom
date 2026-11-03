@@ -42,3 +42,5 @@ Probed in an isolated Git repository with `README.md`, `.claude/commands/hello.m
    - Resolve `<name>` against the scanned command and skill files for the active harness.
    - Expand the markdown body on the server (substituting `$ARGUMENTS` and positional `$1..$N`, or wrapping a `SKILL.md` body with its base directory) before building the prompt.
    - Pass the expanded text through the normal turn builder so custom commands work identically in OpenCode, in Claude Code, and on turns where `server/orchestrator.js` prepends `carried`, `instruction`, `restarted`, or `Owner:` batching.
+
+The orchestrator checked this study on 2026-11-04 against the routes: a new conversation is `POST /api/orchestrator/sessions/new`, not `/api/orchestrator/new`, and the model and effort have their own confirmed routes (`/api/orchestrator/model`, `/api/orchestrator/effort`). Brief U125 builds the list, the room commands and the server-side expansion of custom commands and skills.
