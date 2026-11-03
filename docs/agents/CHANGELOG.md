@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- An empty live room says why it is empty above the waiting card, and a replay never shows the line (task U124).
+- Settings lists the saved key names with a delete card, and never shows a value (task U124).
 - `opencode4` and `opencode5` are live lanes again, on the same DeepSeek V4.1 Flash model as the other OpenCode lanes.
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
