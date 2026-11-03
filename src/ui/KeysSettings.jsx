@@ -79,6 +79,19 @@ export default function KeysSettings({ client = null }) {
 
   useDialogFocus(confirm !== '', { containerRef: cardRef, openerSelector: 'mr-keys-confirm' })
 
+  useEffect(() => {
+    if (confirm === '') return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      event.stopImmediatePropagation?.()
+      setConfirm('')
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [confirm])
+
   if (!canList) return null
 
   return (

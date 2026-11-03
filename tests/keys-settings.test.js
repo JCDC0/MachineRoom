@@ -119,6 +119,33 @@ describe('the Keys section', () => {
     })
   })
 
+  it('closes the card on Escape from anywhere and lets no other handler see it', async () => {
+    const client = makeClient(['OPENROUTER_API_KEY'])
+
+    await withDom(async ({ container, dom, root }) => {
+      await mount(root, { client })
+      await click(root, container.querySelector('.mr-keys-delete'))
+      expect(container.querySelector('.mr-keys-confirm')).not.toBeNull()
+
+      const heard = []
+      function onKey(event) {
+        heard.push(event.key)
+      }
+      dom.window.addEventListener('keydown', onKey)
+      try {
+        await act(async () => {
+          dom.window.dispatchEvent({ type: 'keydown', key: 'Escape', bubbles: true, cancelable: true })
+        })
+      } finally {
+        dom.window.removeEventListener('keydown', onKey)
+      }
+
+      expect(container.querySelector('.mr-keys-confirm')).toBeNull()
+      expect(client.calls.deleteKey).toEqual([])
+      expect(heard).toEqual([])
+    })
+  })
+
   it('shows nothing without a keys method', async () => {
     await withDom(async ({ container, root }) => {
       await mount(root, { client: { deleteKey: async () => ({}) } })
