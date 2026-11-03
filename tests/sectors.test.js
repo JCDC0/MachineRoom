@@ -27,6 +27,7 @@ import {
   SECTOR_LABEL_OPACITY,
   SECTOR_LABEL_OUT,
   SECTOR_LABEL_SPREAD,
+  SUB_RING_DROP,
   SUB_RING_RADIUS,
   SUB_RING_Y,
   arcDrawSpan,
@@ -418,9 +419,13 @@ describe('the hub with a ladder', () => {
     const angles = sectorSlotAngles(LADDER, ['opencode', 'claude', 'hermes'])
     const keys = ['opencode', 'claude', 'hermes']
     slots().forEach((marker, index) => {
-      const angle = angles.get(keys[index])
-      expect(marker.position.x).toBeCloseTo(Math.cos(angle) * HUB_RADIUS)
-      expect(marker.position.z).toBeCloseTo(Math.sin(angle) * HUB_RADIUS)
+      const key = keys[index]
+      const angle = angles.get(key)
+      const lower = LADDER.subs.some((sub) => sub.lanes.includes(key))
+      const radius = lower ? SUB_RING_RADIUS : HUB_RADIUS
+      expect(marker.position.x).toBeCloseTo(Math.cos(angle) * radius)
+      expect(marker.position.z).toBeCloseTo(Math.sin(angle) * radius)
+      expect(marker.position.y).toBe(lower ? -SUB_RING_DROP : 0)
     })
 
     hub.setLadder({ subs: [] })
