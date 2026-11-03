@@ -1,5 +1,4 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import { cardFirst } from '../assistant/actions.js'
 import { containsSecret, interpret } from '../assistant/intent.js'
 import {
   addToHistory,
@@ -265,7 +264,7 @@ export default function Assistant({
     }
 
     if (isSecret) {
-      const blockedResult = cardFirst(interpret(raw, context))
+      const blockedResult = interpret(raw, context)
       const say = getBlockedSay(blockedResult)
       const blockedEntry = {
         id: `entry-${nextEntryId++}`,
@@ -279,7 +278,7 @@ export default function Assistant({
       return
     }
 
-    const result = cardFirst(interpret(raw, context))
+    const result = interpret(raw, context)
 
     if (result.kind === 'action') {
       const actionEntry = {
@@ -332,7 +331,7 @@ export default function Assistant({
         setEntries((prev) => appendEntries(prev, commandEntry, thinkingEntry))
 
         try {
-          const reply = cardFirst(await handleAsk(raw))
+          const reply = await handleAsk(raw)
           handleAsyncReply(thinkingId, commandEntry.id, reply, result.say)
         } catch {
           setEntries((prev) =>

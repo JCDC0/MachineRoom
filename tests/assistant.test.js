@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ACTION_TYPES, CONFIRMED, cardFirst, validateAction } from '../src/assistant/actions.js'
+import { ACTION_TYPES, CONFIRMED, validateAction } from '../src/assistant/actions.js'
 import { containsSecret, interpret, resolveAgents, resolvePaths } from '../src/assistant/intent.js'
 import { ACTION_CASES } from './probes/assistant.js'
 import { context } from './probes/context.js'
@@ -199,14 +199,3 @@ describe('secrets', () => {
   })
 })
 
-describe('cardFirst', () => {
-  it('leaves every answer alone, since no action writes a task, a budget or an agent', () => {
-    expect([...CONFIRMED]).toEqual([])
-    const read = { kind: 'action', action: { type: 'overview' }, say: 'Back.' }
-    const card = { kind: 'propose', action: { type: 'test' }, say: 'Set it?' }
-    expect(cardFirst(read)).toBe(read)
-    expect(cardFirst(card)).toBe(card)
-    expect(cardFirst(null)).toBe(null)
-    expect(cardFirst({ kind: 'unknown', say: 'Hm.' })).toEqual({ kind: 'unknown', say: 'Hm.' })
-  })
-})

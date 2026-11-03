@@ -50,6 +50,3 @@ export function validateAction(action, context) {
   return { ok: true, action: { type: action.type, ...cleaned }, confirm: CONFIRMED.has(action.type) }
 }
 
-export function cardFirst(result) {
-  return result
-}
