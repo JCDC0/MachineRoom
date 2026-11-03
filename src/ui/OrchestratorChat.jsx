@@ -308,6 +308,7 @@ export default function OrchestratorChat({
     if (!open) return undefined
     if (typeof client?.orchestratorCommands !== 'function') {
       setCommands([])
+      setCommandError('Commands are not available here.')
       return undefined
     }
     let stopped = false

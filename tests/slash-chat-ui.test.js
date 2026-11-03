@@ -90,6 +90,16 @@ describe('the slash command list in the chat', () => {
     })
   })
 
+  it('says when the client cannot list commands', async () => {
+    await withDom(async ({ container, root }) => {
+      const { client } = makeClient()
+      const bare = { ...client, orchestratorCommands: undefined }
+      await mount(root, bare, { initialDraft: '/' })
+      expect(rowsOf(container)).toHaveLength(0)
+      expect(container.textContent).toContain('Commands are not available here.')
+    })
+  })
+
   it('picks a command from a click and leaves the arguments to type', async () => {
     await withDom(async ({ container, root }) => {
       const { client, calls } = makeClient()
