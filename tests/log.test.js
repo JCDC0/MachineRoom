@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildTimeline, createLogger, entriesUpTo } from '../src/model/log.js'
+import { LABEL_LIMIT, buildTimeline, createLogger, entriesUpTo } from '../src/model/log.js'
 import { createPlayer } from '../src/model/player.js'
 import { loadRecording } from './helpers.js'
 
@@ -70,6 +70,18 @@ describe('createLogger', () => {
 
   it('ignores activity types it does not know', () => {
     expect(entryFor({ ...base, type: 'something.else' })).toBeNull()
+  })
+
+  it('keeps a bounded set of open call labels and drops the oldest first', () => {
+    const bounded = createLogger([])
+    const call = (id) => ({ agent: 'lane', runId: 'run', type: 'tool.start', id, label: `call ${id}` })
+    for (let index = 0; index <= LABEL_LIMIT; index += 1) bounded(call(String(index)))
+    expect(
+      bounded({ agent: 'lane', runId: 'run', type: 'tool.end', id: '0', ok: false })
+    ).toMatchObject({ text: 'failed tool call' })
+    expect(
+      bounded({ agent: 'lane', runId: 'run', type: 'tool.end', id: String(LABEL_LIMIT), ok: false })
+    ).toMatchObject({ text: `failed call ${LABEL_LIMIT}` })
   })
 })
 
