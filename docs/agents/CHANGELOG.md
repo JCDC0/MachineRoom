@@ -9,6 +9,9 @@
 - The MCP server switches and Remove buttons are disabled while the Remove card is open (task U128).
 - Test autocompact at 500,000 tokens across main and sub orchestrators and verify lanes and fresh harnesses compact themselves (task S34).
 
+- The bridge lists an orchestrator's slash commands from the harness, the project and the user folders without starting a turn, and expands a custom command or skill before a turn (task U125).
+- A `/` at the start of the chat draft opens its command list, with the arrow keys, Enter, Tab, a click and Escape (task U125).
+- The chat handles `/compact [keep]`, `/new`, `/clear`, `/stop` and `/help` itself, never as a turn, and the `/` key that opens the chat leaves the box empty (task U125).
 - On a reconnect the page asks the bridge for the tree since the newest version it holds (task U126).
 - A failed manual Refresh in Reviews shows its sentence (task U126).
 - A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).

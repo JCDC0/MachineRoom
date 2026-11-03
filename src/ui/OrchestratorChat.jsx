@@ -35,6 +35,13 @@ import {
   teamLines,
 } from './orchestratorChat.js'
 import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
+import {
+  commandKeyAction,
+  commandPickText,
+  commandQuery,
+  filterCommands,
+  parseRoomCommand,
+} from './slashCommands.js'
 
 function InlineSpans({ spans }) {
   return spans.map((span, index) =>
@@ -155,12 +162,19 @@ export default function OrchestratorChat({
   const [effortError, setEffortError] = useState('')
   const [effortSaved, setEffortSaved] = useState('')
   const [compactOpen, setCompactOpen] = useState(false)
+  const [compactKeep, setCompactKeep] = useState('')
+  const [compacting, setCompacting] = useState(false)
+  const [commands, setCommands] = useState([])
+  const [commandError, setCommandError] = useState('')
+  const [slashOpen, setSlashOpen] = useState(() => clampDraft(initialDraft).startsWith('/'))
+  const [slashIndex, setSlashIndex] = useState(0)
 
   const inputId = useId()
   const logRef = useRef(null)
   const inputRef = useRef(null)
   const readChatRef = useRef(null)
   const readListRef = useRef(null)
+  const readCommandsRef = useRef(null)
   const chatTicketsRef = useRef({})
   const teamTicketRef = useRef(0)
   const focusAtRef = useRef(Number(focusRequest) || 0)
@@ -185,6 +199,16 @@ export default function OrchestratorChat({
   const status = teamSelected ? "Every orchestrator's messages" : statusDetail(state, doing)
   const tone = teamSelected ? 'waiting' : statusTone(state)
   const count = charCount(draft)
+  const slashQuery = slashOpen ? commandQuery(draft) : null
+  const slashItems = slashQuery === null ? [] : filterCommands(commands, slashQuery)
+  const slashVisible = slashQuery !== null
+  const slashNote = commandError
+    ? commandError
+    : commands.length === 0
+      ? 'Reading commands.'
+      : slashItems.length === 0
+        ? 'No commands found.'
+        : ''
   const working = state === 'working'
   const model = teamSelected ? '' : chat.model || (typeof current?.model === 'string' ? current.model : '')
   const harness = typeof current?.harness === 'string' ? current.harness : ''
@@ -288,6 +312,37 @@ export default function OrchestratorChat({
     if (!Array.isArray(orchestrators)) return
     setList(initialList(orchestrators))
   }, [orchestrators])
+
+  useEffect(() => {
+    if (!open) return undefined
+    if (typeof client?.orchestratorCommands !== 'function') {
+      setCommands([])
+      setCommandError('Commands are not available here.')
+      return undefined
+    }
+    let stopped = false
+
+    async function readCommands() {
+      try {
+        const answer = await client.orchestratorCommands(selected === 'orchestrator' ? undefined : selected)
+        if (stopped) return
+        setCommands(Array.isArray(answer) ? answer : [])
+        setCommandError('')
+      } catch (failure) {
+        if (stopped) return
+        setCommands([])
+        setCommandError(errorText(failure, 'Commands are not available.'))
+      }
+    }
+
+    readCommandsRef.current = readCommands
+    readCommands()
+
+    return () => {
+      stopped = true
+      readCommandsRef.current = null
+    }
+  }, [open, client, selected, harness])
 
   useEffect(() => {
     if (!open || selected === TEAM_TAB) return undefined
@@ -503,6 +558,10 @@ export default function OrchestratorChat({
         setCompactOpen(false)
         return
       }
+      if (slashOpen) {
+        setSlashOpen(false)
+        return
+      }
       if (confirm) {
         setConfirm(null)
         return
@@ -511,7 +570,7 @@ export default function OrchestratorChat({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, confirm, onClose, modelsOpen, effortOpen, modelConfirm, effortConfirm, compactOpen])
+  }, [open, confirm, onClose, modelsOpen, effortOpen, modelConfirm, effortConfirm, compactOpen, slashOpen])
 
   useEffect(() => {
     function onOpenChat(event) {
@@ -537,6 +596,9 @@ export default function OrchestratorChat({
   }, [list, selected])
 
   function changeSelected(id) {
+    setSlashOpen(false)
+    setSlashIndex(0)
+    setCompactKeep('')
     if (controlled) onSelect?.(id)
     else setOwnSelected(id)
   }
@@ -569,12 +631,103 @@ export default function OrchestratorChat({
 
   function requestSend() {
     const text = draft.trim()
-    if (!canSend(text) || sending || unavailable) return
+    if (sending || unavailable) return
+    const command = parseRoomCommand(text)
+    if (command) {
+      runRoomCommand(command)
+      return
+    }
+    if (!canSend(text)) return
     if (!startedIds[selected] && needsStartConfirm(chat)) {
       setConfirm('start')
       return
     }
     deliver(text)
+  }
+
+  function onDraftChange(event) {
+    const next = clampDraft(event.target.value)
+    setDraft(next)
+    setSlashIndex(0)
+    setSlashOpen(next.startsWith('/'))
+    if (next.startsWith('/') && commands.length === 0) readCommandsRef.current?.()
+  }
+
+  function pickCommand(entry) {
+    if (!entry) return
+    const text = commandPickText(entry.name)
+    if (!text) return
+    setDraft(text)
+    setSlashOpen(false)
+    setSlashIndex(0)
+    inputRef.current?.focus()
+  }
+
+  async function startConversation() {
+    if (typeof client?.newOrchestratorSession !== 'function') {
+      setError('The bridge cannot start a new conversation.')
+      return
+    }
+    setSending(true)
+    setError(null)
+    try {
+      await client.newOrchestratorSession({ id: selected })
+      setDraft('')
+      setSlashOpen(false)
+      setConfirm(null)
+      await readChatRef.current?.()
+      await readListRef.current?.()
+    } catch (failure) {
+      setError(errorText(failure, 'Could not start a new conversation.'))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  function runRoomCommand(command) {
+    if (command.kind === 'help') {
+      setDraft('/')
+      setSlashIndex(0)
+      setSlashOpen(true)
+      if (commands.length === 0) readCommandsRef.current?.()
+      return
+    }
+    if (command.kind === 'compact') {
+      setCompactKeep(command.keep)
+      setError(null)
+      setConfirm('compact')
+      return
+    }
+    if (command.kind === 'stop') {
+      setDraft('')
+      setSlashOpen(false)
+      setConfirm('stop')
+      return
+    }
+    setDraft('')
+    setSlashOpen(false)
+    startConversation()
+  }
+
+  async function compactConfirmed() {
+    if (typeof client?.compactOrchestrator !== 'function') {
+      setError('The bridge cannot compact the conversation.')
+      return
+    }
+    setCompacting(true)
+    setError(null)
+    try {
+      await client.compactOrchestrator({ id: selected, keep: compactKeep })
+      setConfirm(null)
+      setCompactKeep('')
+      setDraft('')
+      setSlashOpen(false)
+      await readChatRef.current?.()
+    } catch (failure) {
+      setError(errorText(failure, 'Could not compact the conversation.'))
+    } finally {
+      setCompacting(false)
+    }
   }
 
   function startConfirmed() {
@@ -609,6 +762,30 @@ export default function OrchestratorChat({
 
   function handleKeyDown(event) {
     if (sending) return
+    if (slashVisible && slashItems.length > 0) {
+      const action = commandKeyAction(event, { items: slashItems, index: slashIndex, draft })
+      if (action.type === 'close') {
+        event.preventDefault()
+        event.stopPropagation()
+        setSlashOpen(false)
+        return
+      }
+      if (action.type === 'move') {
+        event.preventDefault()
+        setSlashIndex(action.index)
+        return
+      }
+      if (action.type === 'pick') {
+        event.preventDefault()
+        pickCommand(slashItems[action.index])
+        return
+      }
+      if (action.type === 'send') {
+        event.preventDefault()
+        requestSend()
+        return
+      }
+    }
     if (!isSendKey(event)) return
     event.preventDefault()
     requestSend()
@@ -755,6 +932,33 @@ export default function OrchestratorChat({
     setConfirm(null)
     setError(null)
     setReadError(null)
+  }
+
+  function renderSlashList() {
+    if (!slashVisible) return null
+    return (
+      <div className="mr-orch-slash" role="listbox" aria-label="Slash commands">
+        {slashItems.length === 0 ? (
+          <p className="mr-orch-slash-note mono">{slashNote}</p>
+        ) : (
+          slashItems.map((entry, index) => (
+            <button
+              key={entry.name}
+              type="button"
+              role="option"
+              aria-selected={index === slashIndex}
+              className={`mr-orch-slash-row${index === slashIndex ? ' is-active' : ''}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => pickCommand(entry)}
+            >
+              <span className="mr-orch-slash-name mono">/{entry.name}</span>
+              <span className={`mr-orch-slash-source mono is-${entry.source}`}>{entry.source}</span>
+              {entry.description ? <span className="mr-orch-slash-desc">{entry.description}</span> : null}
+            </button>
+          ))
+        )}
+      </div>
+    )
   }
 
   if (!open) return null
@@ -922,6 +1126,37 @@ export default function OrchestratorChat({
             </section>
           ) : null}
 
+          {confirm === 'compact' ? (
+            <section ref={confirmRef} className="mr-orch-confirm" aria-label="Compact the conversation">
+              <p className="mr-orch-confirm-text">
+                {compactKeep
+                  ? `Compact the conversation and keep: ${compactKeep}`
+                  : 'Compact the conversation? The next turn starts a new session with the summary.'}
+              </p>
+              <div className="mr-orch-confirm-actions">
+                <button
+                  type="button"
+                  className="mr-orch-confirm-btn is-start"
+                  onClick={compactConfirmed}
+                  disabled={compacting}
+                >
+                  Compact
+                </button>
+                <button
+                  type="button"
+                  className="mr-orch-confirm-btn is-cancel"
+                  onClick={() => {
+                    setConfirm(null)
+                    setCompactKeep('')
+                  }}
+                  disabled={compacting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </section>
+          ) : null}
+
           {inline ? (
             <form className="mr-orch-form hud-lower-input" onSubmit={handleSubmit}>
               <textarea
@@ -934,9 +1169,10 @@ export default function OrchestratorChat({
                 spellCheck="false"
                 placeholder="Ask the orchestrator anything"
                 aria-label="Message to the orchestrator"
-                onChange={(event) => setDraft(clampDraft(event.target.value))}
+                onChange={onDraftChange}
                 onKeyDown={handleKeyDown}
               />
+              {renderSlashList()}
               <div className="hud-lower-tools">
                 <button
                   type="button"
@@ -1174,9 +1410,10 @@ export default function OrchestratorChat({
                 spellCheck="false"
                 placeholder="What should be built?"
                 aria-label="Message to the orchestrator"
-                onChange={(event) => setDraft(clampDraft(event.target.value))}
+                onChange={onDraftChange}
                 onKeyDown={handleKeyDown}
               />
+              {renderSlashList()}
               <div className="mr-orch-meta">
                 <span className="mr-orch-hint mono">Enter sends. Shift+Enter adds a line.</span>
                 {count ? <span className="mr-orch-count mono">{count}</span> : null}

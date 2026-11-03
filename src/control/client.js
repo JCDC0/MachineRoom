@@ -209,6 +209,12 @@ export function createClient({
     orchestrator: (id) =>
       request('GET', id === undefined || id === null || id === '' ? '/api/orchestrator' : `/api/orchestrator?id=${encodeURIComponent(id)}`),
 
+    orchestratorCommands: async (id) => {
+      const query = id === undefined || id === null || id === '' ? '' : `?id=${encodeURIComponent(id)}`
+      const data = await request('GET', `/api/orchestrator/commands${query}`)
+      return Array.isArray(data?.commands) ? data.commands : []
+    },
+
     sendOrchestrator: (text, { id } = {}) => {
       const body = id === undefined || id === null || id === '' ? { text, confirmed: true } : { text, id, confirmed: true }
       return request('POST', '/api/orchestrator/messages', body)
