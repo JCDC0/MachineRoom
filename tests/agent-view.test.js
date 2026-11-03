@@ -166,6 +166,31 @@ describe('a child chip', () => {
   })
 })
 
+describe('a child view shape', () => {
+  it('goes back to the spare list when the view is removed', () => {
+    const { agents, state, world } = harness()
+    const shapes = []
+    for (let index = 1; index <= 6; index += 1) {
+      apply(state, {
+        time: index * 20000,
+        type: 'agent.spawn',
+        agent: 'a',
+        child: `a~${index}`,
+        name: 'Scout',
+        label: 'task',
+      })
+      agents.snap(state, world)
+      shapes.push(agents.views.get(`a~${index}`).shapeName)
+      apply(state, { time: index * 20000 + 1000, type: 'agent.end', agent: `a~${index}`, ok: true })
+      apply(state, { time: index * 20000 + 9000, type: 'run.end', agent: 'a', runId: 'r1', ok: true })
+      agents.snap(state, world)
+      expect(agents.views.has(`a~${index}`)).toBe(false)
+    }
+    expect(shapes).toEqual(['knot', 'knot', 'knot', 'knot', 'knot', 'knot'])
+    agents.dispose()
+  })
+})
+
 describe('createTerminals onPick', () => {
   it('gives the handler to roster chips and chips made later', () => {
     const picked = []
