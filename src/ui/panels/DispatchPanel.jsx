@@ -11,6 +11,11 @@ import { subscribeToNotices } from './notices.js'
 import { laneNeedsNetwork } from '../../model/online.js'
 import { PROJECT_CONFIRM_LIMIT, PROJECT_QUEUE_TEXT_LIMIT, cancelSplitRun, clearSplitRun, planLaneTasks, projectRunBody, projectRunConfirm, projectRunLabel, projectRunLanes, projectSplitLabel, projectTaskProblem, projectWorktreeName, recordLine, resultWord, splitRunProgress, splitRunSnapshot, splitTasks, startSplitRun, subscribeSplitRun, timeSinceStart } from './runs.js'
 
+function projectKey(value) {
+  if (typeof value !== 'string') return ''
+  return value.trim().replace(/[\\/]+$/, '').toLowerCase()
+}
+
 export default function DispatchPanel({
   client,
   targetBriefId,
@@ -61,6 +66,7 @@ export default function DispatchPanel({
   const splitActive = splitRun.active
   const mountedRef = useRef(true)
   const splitDoneRef = useRef(false)
+  const splitProjectRef = useRef('')
   const promptReqRef = useRef(0)
   const promptBoxRef = useRef(null)
 
@@ -110,7 +116,17 @@ export default function DispatchPanel({
         running: Array.isArray(data?.running) ? data.running : [],
         recent: Array.isArray(data?.recent) ? data.recent : [],
       })
-      setProjectName(typeof data?.project === 'string' ? data.project : '')
+      const nextProject = typeof data?.project === 'string' ? data.project : ''
+      const startedProject = splitProjectRef.current
+      if (
+        splitRunSnapshot().active &&
+        startedProject &&
+        nextProject &&
+        projectKey(startedProject) !== projectKey(nextProject)
+      ) {
+        cancelSplitRun()
+      }
+      setProjectName(nextProject)
     } catch (err) {
       setRunsError(err.message || 'Could not load runs.')
     } finally {
@@ -359,8 +375,10 @@ export default function DispatchPanel({
       }
       if (typeof client?.startRun !== 'function') return
       setProjectError(null)
+      splitProjectRef.current = projectName
       const started = await startSplitRun({ client, pairs: projectSplitPlan.pairs })
       if (!started) {
+        splitProjectRef.current = ''
         setProjectError('The split run is already starting.')
       }
       return
