@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A key saved by the quick form appears in the custom form's slot list at once (task U122).
 - The music list read stops when the panel closes (task U122).
 - A failed music start says which track could not play (task U122).
 - Reopened Settings shows the track that is still playing (task U122).

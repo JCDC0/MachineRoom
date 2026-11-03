@@ -67,6 +67,18 @@ export function modelsText(models) {
   return (Array.isArray(models) ? models : []).join('\n')
 }
 
+export function keySlotNames(answer) {
+  const list = Array.isArray(answer) ? answer : Array.isArray(answer?.keys) ? answer.keys : []
+  const names = []
+  for (const entry of list) {
+    const name = typeof entry === 'string' ? entry : entry?.name
+    if (typeof name !== 'string') continue
+    const clean = name.trim()
+    if (clean !== '' && !names.includes(clean)) names.push(clean)
+  }
+  return names
+}
+
 function localHost(hostname) {
   return LOCAL_HOSTS.has(String(hostname ?? '').toLowerCase())
 }
@@ -151,10 +163,16 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     setLoading(true)
     setError('')
     try {
-      const list = await client.endpoints()
-      setEndpoints(Array.isArray(list) ? list : [])
-    } catch (err) {
-      setError(err?.message || reloadFailed || 'Could not load the endpoints.')
+      const [endpointList, keys] = await Promise.allSettled([
+        Promise.resolve().then(() => client.endpoints()),
+        typeof client.keys === 'function' ? Promise.resolve().then(() => client.keys()) : Promise.resolve(null),
+      ])
+      if (endpointList.status === 'fulfilled') {
+        setEndpoints(Array.isArray(endpointList.value) ? endpointList.value : [])
+      } else {
+        setError(endpointList.reason?.message || reloadFailed || 'Could not load the endpoints.')
+      }
+      if (keys.status === 'fulfilled' && keys.value !== null) setKeyNames(keySlotNames(keys.value))
     } finally {
       setLoading(false)
     }
@@ -178,8 +196,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
         if (endpointList.status === 'fulfilled') setEndpoints(Array.isArray(endpointList.value) ? endpointList.value : [])
         else setError(endpointList.reason?.message || 'Could not load the endpoints.')
         if (keys.status === 'fulfilled') {
-          const list = Array.isArray(keys.value) ? keys.value : []
-          setKeyNames(list.map((entry) => (typeof entry === 'string' ? entry : entry?.name)).filter((entry) => typeof entry === 'string' && entry !== ''))
+          setKeyNames(keySlotNames(keys.value))
         }
       } finally {
         if (alive) setLoading(false)
