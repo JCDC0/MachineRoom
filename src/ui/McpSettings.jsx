@@ -213,6 +213,7 @@ export default function McpSettings({
   const [tester, setTester] = useState(() => ({ server: '', tool: '', arguments: '', ...(initialTester ?? {}) }))
   const [toolBusy, setToolBusy] = useState(false)
   const [toolResult, setToolResult] = useState({ text: '', error: false })
+  const [runConfirm, setRunConfirm] = useState(null)
   const [removeConfirm, setRemoveConfirm] = useState(null)
 
   async function readServers() {
@@ -353,19 +354,22 @@ export default function McpSettings({
       setToolResult({ text: MCP_UNAVAILABLE, error: true })
       return
     }
+    setToolResult({ text: '', error: false })
+    setRunConfirm({ server: tester.server.trim(), tool: tester.tool.trim(), arguments: args })
+  }
+
+  async function runConfirmed() {
+    if (!runConfirm) return
     setToolBusy(true)
     setToolResult({ text: '', error: false })
     try {
-      const answer = await client.callMcpTool({
-        server: tester.server.trim(),
-        tool: tester.tool.trim(),
-        arguments: args,
-      })
+      const answer = await client.callMcpTool({ ...runConfirm, confirmed: true })
       setToolResult({ text: mcpResultText(answer), error: answer?.ok === false })
     } catch (error) {
       setToolResult({ text: String(error?.message ?? 'The tool call failed.'), error: true })
     }
     setToolBusy(false)
+    setRunConfirm(null)
   }
 
   const serverNames = []
@@ -625,6 +629,31 @@ export default function McpSettings({
           <pre className={`mr-mcp-result mono ${toolResult.error ? 'is-error' : ''}`}>{toolResult.text}</pre>
         )}
       </form>
+
+      {runConfirm && (
+        <div className="brief-confirm-card mr-mcp-run-confirm" role="dialog" aria-modal="true" aria-label="Run MCP tool">
+          <p className="brief-confirm-warning">{`Run ${runConfirm.tool} on ${runConfirm.server}?`}</p>
+          <p className="mr-mcp-target mono">{JSON.stringify(runConfirm.arguments)}</p>
+          <div className="brief-confirm-actions">
+            <button
+              type="button"
+              className="hud-settings-switch brief-confirm-btn"
+              disabled={toolBusy}
+              onClick={runConfirmed}
+            >
+              Run tool
+            </button>
+            <button
+              type="button"
+              className="hud-settings-switch"
+              disabled={toolBusy}
+              onClick={() => setRunConfirm(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

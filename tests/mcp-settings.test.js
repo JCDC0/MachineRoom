@@ -337,7 +337,7 @@ describe('the MCP settings panel', () => {
     })
   })
 
-  it('runs a tool with JSON arguments and shows the result', async () => {
+  it('asks on a card naming the server and tool, and only the card calls it', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, {
@@ -345,10 +345,32 @@ describe('the MCP settings panel', () => {
         initialTester: { server: 'docs', tool: 'read_file', arguments: '{"path":"README.md"}' },
       })
       await submit(root, container.querySelector('.mr-mcp-run'))
+      expect(calls.call).toEqual([])
+      const card = container.querySelector('.mr-mcp-run-confirm')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('Run read_file on docs?')
+      expect(card.textContent).toContain('{"path":"README.md"}')
+      await click(root, buttonWithText(card, 'Run tool'))
       expect(calls.call).toEqual([
-        { server: 'docs', tool: 'read_file', arguments: { path: 'README.md' } },
+        { server: 'docs', tool: 'read_file', arguments: { path: 'README.md' }, confirmed: true },
       ])
+      expect(container.querySelector('.mr-mcp-run-confirm')).toBeNull()
       expect(container.querySelector('.mr-mcp-result').textContent).toContain('"content": "ok"')
+    })
+  })
+
+  it('cancels a run tool card without calling the tool', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        client,
+        initialTester: { server: 'docs', tool: 'read_file', arguments: '{"path":"README.md"}' },
+      })
+      await submit(root, container.querySelector('.mr-mcp-run'))
+      const card = container.querySelector('.mr-mcp-run-confirm')
+      await click(root, buttonWithText(card, 'Cancel'))
+      expect(calls.call).toEqual([])
+      expect(container.querySelector('.mr-mcp-run-confirm')).toBeNull()
     })
   })
 

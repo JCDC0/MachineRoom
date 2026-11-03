@@ -552,7 +552,7 @@ export function createClient({
 
     mcpTools: () => request('GET', '/api/mcp/tools'),
 
-    callMcpTool: ({ server, tool, arguments: toolArgs = {}, confirmed = true } = {}) =>
+    callMcpTool: ({ server, tool, arguments: toolArgs = {}, confirmed = false } = {}) =>
       request('POST', '/api/mcp/call', { server, tool, arguments: toolArgs, confirmed }),
 
     gitState: () => request('GET', '/api/git'),
