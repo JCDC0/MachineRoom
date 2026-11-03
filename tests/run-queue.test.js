@@ -576,4 +576,39 @@ describe('a queue that stops', () => {
       remove(parent)
     }
   }, 60000)
+
+  it('records the failure when a queue throws before its first task starts', async () => {
+    const parent = makeTempDir('machine-room-queue-')
+    try {
+      const repo = initRepo(parent)
+      const runs = join(parent, 'machineroom-runs')
+      const file = join(parent, 'queue.txt')
+      writeFileSync(file, 'First task.\n')
+      copyFileSync(fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url)), join(repo, 'run'))
+      git(repo, ['add', 'run'])
+      git(repo, ['commit', '-m', 'the fake lane program'])
+      const lanes = laneFile(parent, {
+        name: 'fake',
+        worktree: join(parent, 'worktree'),
+        cli: { harness: 'opencode', bin: process.execPath, model: 'opencode/fake' },
+      })
+      const gitDir = join(repo, '.git')
+      writeFileSync(join(gitDir, 'HEAD.lock'), 'locked')
+      try {
+        const result = await runLane(['fake', '--project', repo, '--queue', file], {
+          TEMP: parent,
+          MACHINEROOM_RUNS: runs,
+          MACHINEROOM_LANES_FILE: lanes,
+        })
+        expect(result.code).toBe(1)
+      } finally {
+        try { unlinkSync(join(gitDir, 'HEAD.lock')) } catch {}
+      }
+      const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
+      expect(records.length).toBeGreaterThanOrEqual(1)
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: the queue stopped' })
+    } finally {
+      remove(parent)
+    }
+  }, 60000)
 })

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Record the failure when a queue throws before its first task starts (task S32).
 - A runner that fails to start or dies by a signal writes a failed record (task S32).
 - The pack holds runner scripts and pack-check verifies spawned scripts (task S32).
 - A run that retries after the readiness sentence records the first run as retried (task S32).
