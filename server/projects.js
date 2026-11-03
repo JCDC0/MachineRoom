@@ -262,6 +262,7 @@ export function recentProjects(projectsFile, runsFolder, currentRoot, now = Date
   const result = []
   for (const item of existing) {
     if (currentRoot && samePath(item.path, currentRoot)) continue
+    if (shouldSkipProject(item.path)) continue
     result.push({
       path: item.path,
       name: basename(item.path),

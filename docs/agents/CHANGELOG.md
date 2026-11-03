@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The recent projects list omits skipped folders when read (task S32).
 - The projects route reports git: true for a folder inside a repository (task S32).
 - Record the failure when a queue throws before its first task starts (task S32).
 - A runner that fails to start or dies by a signal writes a failed record (task S32).

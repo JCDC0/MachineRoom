@@ -257,6 +257,28 @@ describe('projects api', () => {
     expect(storedAfter.recent[0].path).toBe(resolve(env.outsideRepo))
   })
 
+  it('leaves out folders shouldSkipProject skips when reading recent projects', () => {
+    const env = createEnvironment()
+    const file = join(env.runs, 'projects.json')
+    const worktreeFolder = join(env.base, '.worktrees', 'agy2')
+    mkdirSync(worktreeFolder, { recursive: true })
+    const validFolder = join(env.base, 'valid-proj')
+    mkdirSync(validFolder, { recursive: true })
+
+    writeFileSync(
+      file,
+      JSON.stringify({
+        recent: [
+          { path: worktreeFolder, openedAt: '2026-10-25T10:00:00.000Z' },
+          { path: validFolder, openedAt: '2026-10-25T09:00:00.000Z' },
+        ],
+      })
+    )
+
+    const list = recentProjects(file, env.runs, env.root)
+    expect(list.map((item) => item.path)).toEqual([resolve(validFolder)])
+  })
+
   it('does not record a temp folder or worktree when bridge starts on it', async () => {
     const env = createEnvironment()
     const tempProject = join(env.systemTemp, 'temp-proj')
