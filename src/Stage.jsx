@@ -33,7 +33,7 @@ import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
 import { still } from './engine/sprites.js'
 import { createIdleWatch, idleAllowed, stageClassName } from './ui/idleView.js'
-import { LiveBadgeContext, LanePillsContext, OrchestratorsContext } from './ui/Transport.jsx'
+import { LiveBadgeContext, LanePillsContext, OrchestratorsContext, TransportCostsContext } from './ui/Transport.jsx'
 import { orchestratorAnswerList } from './ui/transportOrchestrators.js'
 import Waiting from './ui/Waiting.jsx'
 import LensRail from './ui/LensRail.jsx'
@@ -1618,38 +1618,40 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                   labels,
                 }}
               >
-                <Hud
-                  snapshot={snapshot}
-                  project={project}
-                  focused={focused}
-                  speeds={SPEEDS}
-                  fpsStats={fpsStats}
-                  mode={mode}
-                  client={client}
-                  assistantPaths={assistantPaths}
-                  onAssistantAction={runAssistant}
-                  controlTarget={controlTarget}
-                  markers={timeline?.markers ?? NONE}
-                  log={log}
-                  costs={dockCosts}
-                  liveRuns={dockRuns}
-                  tasks={dockTasks}
-                  liveAvailable={liveAvailable}
-                  onMode={onMode}
-                  onToggle={() => player.toggle()}
-                  onSeek={(value) => player.seek(value)}
-                  onSpeed={changeSpeed}
-                  onFocus={focus}
-                  onOverview={overview}
-                  openTerminals={openChips}
-                  onToggleTerminal={toggleTerminal}
-                  onShowTerminals={showTerminals}
-                  health={health}
-                  ladder={ladder}
-                  labels={labels}
-                  effects={effects}
-                  onSettingsChange={handleSettingsChange}
-                />
+                <TransportCostsContext.Provider value={dockCosts}>
+                  <Hud
+                    snapshot={snapshot}
+                    project={project}
+                    focused={focused}
+                    speeds={SPEEDS}
+                    fpsStats={fpsStats}
+                    mode={mode}
+                    client={client}
+                    assistantPaths={assistantPaths}
+                    onAssistantAction={runAssistant}
+                    controlTarget={controlTarget}
+                    markers={timeline?.markers ?? NONE}
+                    log={log}
+                    costs={dockCosts}
+                    liveRuns={dockRuns}
+                    tasks={dockTasks}
+                    liveAvailable={liveAvailable}
+                    onMode={onMode}
+                    onToggle={() => player.toggle()}
+                    onSeek={(value) => player.seek(value)}
+                    onSpeed={changeSpeed}
+                    onFocus={focus}
+                    onOverview={overview}
+                    openTerminals={openChips}
+                    onToggleTerminal={toggleTerminal}
+                    onShowTerminals={showTerminals}
+                    health={health}
+                    ladder={ladder}
+                    labels={labels}
+                    effects={effects}
+                    onSettingsChange={handleSettingsChange}
+                  />
+                </TransportCostsContext.Provider>
               </LanePillsContext.Provider>
             </OrchestratorsContext.Provider>
           </CostsModeContext.Provider>

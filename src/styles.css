@@ -2661,7 +2661,8 @@ summary:focus-visible,
   justify-content: space-between;
 }
 
-.transport-lanes {
+.transport-lanes,
+.transport-spend {
   display: none;
 }
 
@@ -9198,6 +9199,28 @@ body:has(#hud-orchestrator-chat) .waiting {
     white-space: nowrap;
   }
 
+  .transport-spend {
+    display: inline-block;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: rgb(255 255 255 / 0.6);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .transport-spend:hover,
+  .transport-spend:focus-visible {
+    color: var(--white);
+    background: none;
+    border: 0;
+  }
+
   .transport-tail {
     display: inline-flex;
     align-items: center;
@@ -9270,6 +9293,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   .transport-chip-overflow,
   .transport-lane,
   .transport-lane-overflow,
+  .transport-spend,
   .transport-context,
   .transport-tail > .mono,
   .transport.is-live > .mono,
@@ -9286,6 +9310,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   .transport-chip-overflow,
   .transport-lane,
   .transport-lane-overflow,
+  .transport-spend,
   .transport-context,
   .transport-tail > .mono,
   .transport.is-live > .mono,

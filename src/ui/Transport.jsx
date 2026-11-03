@@ -8,10 +8,12 @@ import {
 } from './contextRing.js'
 import { OPEN_CHAT_EVENT, orchestratorChips } from './transportOrchestrators.js'
 import { inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
+import { openCostsDrawer, spendText } from './transportSpend.js'
 
 export const LiveBadgeContext = createContext('live')
 export const OrchestratorsContext = createContext(null)
 export const LanePillsContext = createContext(null)
+export const TransportCostsContext = createContext(null)
 
 export function liveBadgeText(status, kind = 'live') {
   const state = status === 'live' ? 'connected' : status || 'connecting'
@@ -102,6 +104,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
   const badgeKind = useContext(LiveBadgeContext)
   const orchestrators = useContext(OrchestratorsContext)
   const laneFeed = useContext(LanePillsContext)
+  const costs = useContext(TransportCostsContext)
   const badge = (
     <span className={`transport-badge is-${snapshot.status === 'live' ? 'live' : 'down'}`} role="status">
       {liveBadgeText(snapshot.status, badgeKind)}
@@ -141,6 +144,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             now: laneFeed.now ?? Date.now(),
           })
         : { pills: [], more: 0 }
+    const spend = spendText(costs)
     return (
       <div className="transport is-live has-orchestrator">
         <div className="transport-live-head">
@@ -210,6 +214,17 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
           ) : null}
         </div>
         <div className="transport-tail">
+          {spend ? (
+            <button
+              type="button"
+              className="transport-spend mono"
+              onClick={() => openCostsDrawer()}
+              title="Open the Costs drawer"
+              aria-label={`${spend}. Open the Costs drawer`}
+            >
+              {spend}
+            </button>
+          ) : null}
           <ContextRing orchestrator={main} onClick={openConversation} />
           <span className="mono">{clock(position)} since opening</span>
         </div>

@@ -137,6 +137,7 @@ export function mapCosts(costs) {
       agentId: String(row?.agentId ?? ''),
       agentName: String(row?.agentName ?? ''),
       costCents: money(row?.costCents),
+      todayCents: Number.isInteger(row?.todayCents) && row.todayCents >= 0 ? row.todayCents : null,
       inputTokens: Number.isInteger(row?.inputTokens) && row.inputTokens >= 0 ? row.inputTokens : null,
       outputTokens: Number.isInteger(row?.outputTokens) && row.outputTokens >= 0 ? row.outputTokens : null,
     })),

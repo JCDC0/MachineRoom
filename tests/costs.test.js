@@ -12,6 +12,35 @@ async function mockBoard() {
 }
 
 describe('costBoard rows', () => {
+  it('carries today cents beside the month for a lane that reports a cost', () => {
+    const board = costBoard(
+      {
+        byAgent: [
+          {
+            agentId: 'agent-opencode',
+            agentName: 'OpenCode',
+            costCents: 350,
+            todayCents: 125,
+            inputTokens: 1000,
+            outputTokens: 200,
+          },
+          { agentId: 'agent-agy', agentName: 'agy', costCents: 40, todayCents: 0 },
+          { agentId: 'agent-claude', agentName: 'Claude Code', costCents: 0, todayCents: 0, inputTokens: 0, outputTokens: 0 },
+        ],
+      },
+      [
+        { id: 'agent-opencode', key: 'opencode', name: 'OpenCode' },
+        { id: 'agent-agy', key: 'agy', name: 'agy' },
+        { id: 'agent-claude', key: 'claude', name: 'Claude Code' },
+      ]
+    )
+    expect(board.rows.map((row) => [row.key, row.costCents, row.todayCents, row.reported])).toEqual([
+      ['opencode', 350, 125, true],
+      ['agy', 40, 0, true],
+      ['claude', null, null, false],
+    ])
+  })
+
   it('gives one row per roster agent in roster order', async () => {
     const { board, roster } = await mockBoard()
     expect(board.rows.map((row) => row.key)).toEqual(roster.map((agent) => agent.key))
@@ -21,6 +50,7 @@ describe('costBoard rows', () => {
       agentId: 'agent-claude',
       name: 'Claude Code',
       costCents: 218,
+      todayCents: null,
       inputTokens: 310000,
       outputTokens: 26000,
       reported: true,
@@ -36,6 +66,7 @@ describe('costBoard rows', () => {
       agentId: 'agent-opencode4',
       name: 'OpenCode 4',
       costCents: null,
+      todayCents: null,
       inputTokens: null,
       outputTokens: null,
       reported: false,
@@ -53,6 +84,7 @@ describe('costBoard rows', () => {
       agentId: 'agent-agy',
       name: 'agy',
       costCents: null,
+      todayCents: null,
       inputTokens: null,
       outputTokens: null,
       reported: false,

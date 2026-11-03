@@ -62,6 +62,7 @@ function readByAgent(byAgent) {
 
 function rowFor(agent, source) {
   const costCents = countOrNull(source?.costCents)
+  const todayCents = countOrNull(source?.todayCents)
   const inputTokens = countOrNull(source?.inputTokens)
   const outputTokens = countOrNull(source?.outputTokens)
   const numbers = [costCents, inputTokens, outputTokens]
@@ -72,6 +73,7 @@ function rowFor(agent, source) {
     agentId: agent.id ?? textOrNull(source?.agentId),
     name: name ?? null,
     costCents: reported ? costCents : null,
+    todayCents: reported ? todayCents : null,
     inputTokens: reported ? inputTokens : null,
     outputTokens: reported ? outputTokens : null,
     reported,

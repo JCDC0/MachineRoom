@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The live transport shows today's and this month's spend just left of the context ring, summed over the lanes, and `lane-costs` now sums each lane's spend by the local calendar day (task U120).
 - The live transport shows a compact pill per lane that is working, queued or failed in its last run, with its task, minutes and queue step, and a click focuses and inspects that lane (task U120).
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.
