@@ -194,6 +194,12 @@ describe('machine-room doctor', () => {
 
     expect(result.exitCode).toBe(0)
     expect(result.lines.join('\n')).not.toContain('not a git repository')
+
+    const sub = join(project, 'src')
+    mkdirSync(sub)
+    const nested = doctor({ projectRoot: sub })
+    expect(nested.exitCode).toBe(0)
+    expect(nested.lines.join('\n')).not.toContain('not a git repository')
   })
 
   it('fails when the built viewer is missing and names the build command', () => {

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runsFolder } from './lanes-source.js'
 import { programPath } from './programPath.js'
@@ -68,6 +68,20 @@ function folderLine(projectRoot) {
   return { ok: true, text: `The project folder ${folder} exists.` }
 }
 
+function insideGitRepository(projectRoot) {
+  let current = resolve(projectRoot)
+  for (;;) {
+    let dotGit = null
+    try {
+      dotGit = statSync(join(current, '.git'))
+    } catch {}
+    if (dotGit) return true
+    const parent = dirname(current)
+    if (parent === current) return false
+    current = parent
+  }
+}
+
 function gitLines(projectRoot, env) {
   const found = programPath('git', { env })
   if (!found) return [{ ok: false, text: 'Git is not on the PATH.' }]
@@ -77,11 +91,7 @@ function gitLines(projectRoot, env) {
   try {
     folderExists = statSync(folder).isDirectory()
   } catch {}
-  let dotGit = null
-  try {
-    dotGit = statSync(join(folder, '.git'))
-  } catch {}
-  if (folderExists && !dotGit) {
+  if (folderExists && !insideGitRepository(folder)) {
     lines.push({
       warn: true,
       text: 'This folder is not a git repository. Source control stays empty. Run git init here to fill it.',
