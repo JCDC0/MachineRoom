@@ -38,6 +38,7 @@ function musicFolder() {
   const dir = tempDir()
   mkdirSync(join(dir, 'nested', 'inner'), { recursive: true })
   mkdirSync(join(dir, 'Lofi'), { recursive: true })
+  mkdirSync(join(dir, 'Technical Calm'), { recursive: true })
   writeFileSync(join(dir, 'beta.mp3'), 'abcdef')
   writeFileSync(join(dir, 'alpha.ogg'), 'ogg')
   writeFileSync(join(dir, 'notes.txt'), 'not music')
@@ -46,6 +47,7 @@ function musicFolder() {
   writeFileSync(join(dir, 'nested', 'notes.txt'), 'not music')
   writeFileSync(join(dir, 'Lofi', 'calm.mp3'), 'calm')
   writeFileSync(join(dir, 'Lofi', 'another.ogg'), 'another')
+  writeFileSync(join(dir, 'Technical Calm', 'focus.m4a'), 'focus')
   return dir
 }
 
@@ -93,6 +95,7 @@ describe('the music folder', () => {
     expect(library.playlists).toEqual([
       { name: 'Empty', tracks: [] },
       { name: 'Lofi', tracks: ['another.ogg', 'calm.mp3'] },
+      { name: 'Technical Calm', tracks: ['focus.m4a'] },
       { name: 'nested', tracks: ['inner.wav'] },
     ])
     expect(await listMusicLibrary(join(folder, 'missing'))).toEqual({ tracks: [], playlists: [] })
@@ -158,6 +161,7 @@ describe('the music routes', () => {
       tracks: ['alpha.ogg', 'beta.mp3'],
       playlists: [
         { name: 'Lofi', tracks: ['another.ogg', 'calm.mp3'] },
+        { name: 'Technical Calm', tracks: ['focus.m4a'] },
         { name: 'nested', tracks: ['inner.wav'] },
       ],
     })
@@ -203,6 +207,11 @@ describe('the music routes', () => {
     expect(whole.headers.get('content-type')).toBe('audio/mpeg')
     expect(whole.headers.get('accept-ranges')).toBe('bytes')
     expect(await whole.text()).toBe('calm')
+
+    const spaced = await fetch(`${url}/music/Technical%20Calm/focus.m4a`)
+    expect(spaced.status).toBe(200)
+    expect(spaced.headers.get('content-type')).toBe('audio/mp4')
+    expect(await spaced.text()).toBe('focus')
 
     const part = await fetch(`${url}/music/nested/inner.wav`, { headers: { Range: 'bytes=0-1' } })
     expect(part.status).toBe(206)
