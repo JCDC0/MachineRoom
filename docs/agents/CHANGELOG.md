@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Music plays on with Settings closed: the queue, order, loop, shuffle and ended listener live for the page in `src/ui/musicQueue.js`, and a reopened player shows the same track and modes (task U142).
+- `saveSettings` keeps the saved `music` playlist, loop and shuffle through an effect or sound change (task U142).
 - The bloom screen pass and its blur draw at half the lens's pixel size and stretch back over the lens, and the bloom renderer has no antialias and a pixel ratio of 1 (task Q39a).
 - An agent whose run is open with no tool call open shows a thinking spinner: two faint white rings at right angles with bright quarter arcs that sweep once a second out of phase, it appears after 250 ms and eases in and out, and the shape turns one turn in 4 seconds (task U141).
 - The file tunnel's waypoints along the lit folder chain sit on the folder tabs, the same anchors the yellow strings use (task U141).

@@ -6,6 +6,7 @@ import { readStorage, writeStorage } from '../src/storage.js'
 import Settings, { EFFECTS } from '../src/ui/Settings.jsx'
 import { RECORD_MINUTES_DEFAULT, RECORD_MINUTES_MAX, RECORD_MINUTES_MIN, clampRecordMinutes } from '../src/model/recordLimits.js'
 import { DEFAULT_EFFECTS, DEFAULT_SETTINGS, clampFileLimit, effectSettings, FILE_LIMIT_DEFAULT, FILE_LIMIT_MAX, FILE_LIMIT_MIN, loadAssistantPosition, loadEffectSettings, loadSettings, loadSoundSettings, saveAssistantPosition, saveEffectSettings, saveSettings, saveSoundSettings, savedSource, SETTINGS_KEY, soundSettings } from '../src/ui/settings.js'
+import { saveMusicSettings } from '../src/ui/musicQueue.js'
 
 function makeStorage(initial = {}) {
   const map = new Map(Object.entries(initial))
@@ -139,6 +140,33 @@ describe('settings', () => {
     const updated = saveSettings(storage, { speed: 4 })
     expect(updated.speed).toBe(4)
     expect(updated.assistantPosition).toEqual({ x: 240, y: 120 })
+  })
+
+  it('keeps the music playlist, loop and shuffle through every settings save', () => {
+    const storage = makeStorage()
+    const music = { playlist: 'playlist:Lofi', shuffle: true, loop: 'all' }
+    saveMusicSettings(music, storage)
+
+    saveEffectSettings(storage, { bloom: { on: true } })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).music).toEqual(music)
+    expect(loadSettings(storage).music).toEqual(music)
+
+    saveSoundSettings(storage, { volume: 0.9 })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).music).toEqual(music)
+
+    saveSettings(storage, { speed: 2 })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).music).toEqual(music)
+    expect(loadSettings(storage).speed).toBe(2)
+  })
+
+  it('keeps a lens share, sidebar tab and record time while saving other keys', () => {
+    const storage = makeStorage()
+    saveSettings(storage, { lensShare: 0.6, sidebarTab: 'agents', recordMinutes: 45 })
+    saveEffectSettings(storage, { vignette: { on: true, strength: 0.4 } })
+    const saved = loadSettings(storage)
+    expect(saved.lensShare).toBe(0.6)
+    expect(saved.sidebarTab).toBe('agents')
+    expect(saved.recordMinutes).toBe(45)
   })
 })
 
