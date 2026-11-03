@@ -76,6 +76,7 @@ export const CLIENT_METHODS = [
   'projects',
   'openProject',
   'family',
+  'agentDepth',
   'setAgentLabel',
   'keys',
   'setKey',
@@ -1925,6 +1926,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           proposals: clone(proposals),
         }
       }),
+
+    agentDepth: () => call('agentDepth', () => ({ limit: 2, unlocked: false })),
 
     setAgentLabel: (options = {}) =>
       call('setAgentLabel', () => {

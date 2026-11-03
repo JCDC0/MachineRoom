@@ -516,6 +516,11 @@ export function createClient({
 
     family: () => request('GET', '/api/family'),
 
+    agentDepth: () => request('GET', '/api/agent-depth'),
+
+    setAgentDepth: ({ limit, unlocked, confirmed = true } = {}) =>
+      request('POST', '/api/agent-depth', { limit, unlocked, confirmed }),
+
     setAgentLabel: ({ id, label, confirmed = true } = {}) =>
       request('POST', '/api/family/label', { id, label, confirmed }),
 
