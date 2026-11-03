@@ -972,6 +972,7 @@ describe('waking the orchestrator', () => {
 
     const roomMessage = main.answer().messages.find((m) => m.from === 'room' && m.text.includes('Run opencode7-del-1 on lane opencode7 ended: succeeded.'))
     expect(roomMessage).toBeDefined()
+    expect(roomMessage.text).toContain('started by removed sub deleted-team')
   })
 
   it('wakes once for each real end when a run reopens, and suppresses duplicate turns for the same outcome', async () => {

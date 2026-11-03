@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A run started by a removed sub wakes the main orchestrator with a line naming the removed sub (task S31).
+
 - A message from the main orchestrator to a paused sub clears the pause and starts a turn (task S31).
 
 - Queued messages that exceed the prompt limit run oldest first and leave newer messages for the next turn (task S31).

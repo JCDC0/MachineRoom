@@ -1592,7 +1592,11 @@ export function createOrchestrator({
     if (!named && !givenWork()) return
     if (named) ownsRun = true
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
-    const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
+    const starterNote =
+      recordedStarter && recordedStarter !== key && !subExists(recordedStarter)
+        ? ` (started by removed sub ${recordedStarter})`
+        : ''
+    const first = `Run ${logName} on lane ${laneKey} ended: ${status}.${starterNote}`
     let text = record ? `${first}\n${recordLine(record)}` : first
     if (status === 'failed') {
       const candidate = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? resolve(folder, `${logName}.log`) : '')

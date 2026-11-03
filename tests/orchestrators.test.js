@@ -1498,6 +1498,7 @@ describe('starting lanes from a sub orchestrator', () => {
     await waitFor(() =>
       messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text.includes('Run opencode-K1-20261030-140000'))
     )
+    expect(messagesOf(rig.registry, 'orchestrator').some((m) => m.from === 'room' && m.text.includes('started by removed sub frontend'))).toBe(true)
     await waitIdle(rig.registry, 'orchestrator', 2)
   })
 
