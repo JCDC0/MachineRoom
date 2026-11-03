@@ -6,6 +6,7 @@ export const RECORD_MINUTES_MAX = 240
 
 const MINUTE_MS = 60000
 const RUN_FRAME = 'heartbeat.run.'
+export const COMPACT_AFTER = 1024
 
 function asNumber(value) {
   if (typeof value === 'number') return value
@@ -37,13 +38,16 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
   let active = false
   let newest = null
   let kept = []
+  let head = 0
 
   function trim() {
     if (newest === null) return
     const from = newest - limit * MINUTE_MS
-    let cut = 0
-    while (cut < kept.length && kept[cut].time < from) cut += 1
-    if (cut > 0) kept = kept.slice(cut)
+    while (head < kept.length && kept[head].time < from) head += 1
+    if (head > COMPACT_AFTER) {
+      kept = kept.slice(head)
+      head = 0
+    }
   }
 
   function push(frame) {
@@ -53,16 +57,24 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
       if (!isActivity(frame)) return false
       active = true
     }
-    const last = kept.length > 0 ? kept[kept.length - 1].time : null
-    kept.push({ time, frame })
-    if (last !== null && time < last) kept.sort((a, b) => a.time - b.time)
+    const last = kept.length > head ? kept[kept.length - 1].time : null
+    if (last !== null && time < last) {
+      if (head > 0) {
+        kept = kept.slice(head)
+        head = 0
+      }
+      kept.push({ time, frame })
+      kept.sort((a, b) => a.time - b.time)
+    } else {
+      kept.push({ time, frame })
+    }
     if (newest === null || time > newest) newest = time
     trim()
     return true
   }
 
   function frames() {
-    return kept.map((item) => item.frame)
+    return kept.slice(head).map((item) => item.frame)
   }
 
   function started() {
@@ -73,6 +85,7 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
     active = false
     newest = null
     kept = []
+    head = 0
   }
 
   function setMinutes(next) {
@@ -81,11 +94,15 @@ export function createSessionRecorder({ minutes = RECORD_MINUTES_DEFAULT } = {})
   }
 
   function span() {
-    if (kept.length === 0) return 0
-    return kept[kept.length - 1].time - kept[0].time
+    if (head >= kept.length) return 0
+    return kept[kept.length - 1].time - kept[head].time
   }
 
-  return { push, frames, started, clear, setMinutes, minutes: () => limit, span }
+  function stats() {
+    return { kept: kept.length - head, slots: kept.length }
+  }
+
+  return { push, frames, started, clear, setMinutes, minutes: () => limit, span, stats }
 }
 
 function shiftFrame(frame, from) {
