@@ -30,3 +30,13 @@ Q38. I read `git log --merges` and `git diff` on main after Review 2 for U129, U
 - S38: sound. Implemented byte-offset reading for `runs.jsonl` via `cachedRunRecords`, shared across runs API, costs, tasks and reviews; resets cleanly when file shrinks or mtime goes backward; Claude session reader caches `.meta.json` files by mtime.
 - Orchestrator fixes to `src/ui/sound.js` (`ecb689d`): replaced 30 percent jump check with standard deviation spread over recent levels. Works for soft music, but still runs on every animation frame without throttling to `sampleBins` interval.
 - Orchestrator fixes to `src/engine/shapes.js` (`f70658e`): mapped frequency bands by point angle in X-Z plane so line segments stay joined. Finding 4: at `x < 0, z = 0`, opposite zero signs produce bands 0 and 4, tearing vertices apart.
+
+## Orchestrator's corrections
+
+- Findings 1, 2, 5 and 9 hold on main. 1 and 2 go to brief U142, and 5 and 9 to brief S39.
+- Finding 4 does not hold: `Number(z) || 0` turns -0 into 0, and a corner a shape repeats has the same coordinates each time, so it gets one band.
+- Finding 3 is read again after U138, which rewrites the beat detector in `src/ui/sound.js`.
+- Finding 6 holds but costs one envelope reading per card per frame, so it stays.
+- Finding 7 is gone: Q39a removed `bloomPixelRatio`.
+- Finding 8 was already fixed by U132.
+- Finding 10 is read again with finding 3.
