@@ -27,6 +27,7 @@ import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
 import { programPath } from './programPath.js'
+import { createRecordsCache } from './lanes-source.js'
 
 export const ORCHESTRATOR_KEY = 'orchestrator'
 export const ORCHESTRATOR_CHAT_LIMIT = 200
@@ -295,6 +296,42 @@ function readText(file) {
     return readFileSync(file, 'utf8')
   } catch {
     return ''
+  }
+}
+
+export const LOG_TAIL_BYTES = 64 * 1024
+
+export function readTail(file, maxBytes = LOG_TAIL_BYTES) {
+  let stat
+  try {
+    stat = statSync(file)
+  } catch {
+    return ''
+  }
+  if (!stat.size) return ''
+  const length = Math.min(stat.size, maxBytes)
+  const position = Math.max(0, stat.size - length)
+  let fd
+  try {
+    fd = openSync(file, 'r')
+  } catch {
+    return ''
+  }
+  try {
+    const buffer = Buffer.alloc(length)
+    const got = readSync(fd, buffer, 0, length, position)
+    const text = buffer.toString('utf8', 0, got)
+    if (position > 0) {
+      const firstNewline = text.indexOf('\n')
+      return firstNewline >= 0 ? text.slice(firstNewline + 1) : text
+    }
+    return text
+  } catch {
+    return ''
+  } finally {
+    try {
+      closeSync(fd)
+    } catch {}
   }
 }
 
@@ -639,10 +676,12 @@ export function createOrchestrator({
   hasSub = null,
   rename = renameSync,
   siblings: siblingsOption = [],
+  recordsCache: recordsCacheOption = null,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
+  const recordsCache = recordsCacheOption ?? createRecordsCache(join(folder, 'runs.jsonl'), folder)
   const key = String(id) === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
   const logPrefix = key === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub-${key}`
   const lockFile = key === ORCHESTRATOR_KEY ? chatLockFileFor(root, folder) : null
@@ -991,30 +1030,11 @@ export function createOrchestrator({
     return message
   }
 
-  function records() {
-    const list = []
-    for (const line of readText(join(folder, 'runs.jsonl')).split(/\r?\n/)) {
-      if (!line.trim()) continue
-      let record
-      try {
-        record = JSON.parse(line)
-      } catch {
-        continue
-      }
-      if (record && typeof record === 'object') list.push(record)
-    }
-    return list
-  }
-
   function recordFor(runName) {
     if (!runName) return null
     const wanted = pathKey(join(folder, `${runName}.log`))
-    let found = null
-    for (const record of records()) {
-      if (typeof record.log !== 'string' || !record.log) continue
-      if (pathKey(record.log) === wanted) found = record
-    }
-    return found
+    const map = recordsCache.read()
+    return map.get(wanted) ?? null
   }
 
   function roomTurnAllowed() {
@@ -1274,7 +1294,7 @@ export function createOrchestrator({
         rmSync(turn.mcpConfigPath, { force: true })
       } catch {}
     }
-    const logText = readText(turn.logPath)
+    const logText = readTail(turn.logPath)
     let runStats
     let report
     const descriptor = (harnesses && harnesses[harness]) || harnessByKey[harness]
@@ -1777,14 +1797,14 @@ export function createOrchestrator({
     siblings = Array.isArray(list) ? [...list] : []
   }
 
-  function onFrame(frame) {
+  function onFrame(frame, preloadedRecord) {
     if (stopped) return
     if (frame?.type !== 'heartbeat.run.status') return
     const status = frame.payload?.status
     if (status !== 'succeeded' && status !== 'failed') return
     const runId = typeof frame.payload?.runId === 'string' ? frame.payload.runId : ''
     const runName = runId.startsWith('run-') ? runId.slice(4) : ''
-    const record = recordFor(runName)
+    const record = preloadedRecord !== undefined ? preloadedRecord : recordFor(runName)
     if (record && typeof record.log === 'string' && TURN_LOG.test(basename(record.log))) return
     const laneKey = record?.lane ?? String(frame.payload?.agentId ?? '').replace(/^agent-/, '')
     if (!laneKey || laneKey === ORCHESTRATOR_KEY) return
@@ -1813,7 +1833,7 @@ export function createOrchestrator({
       const rel = candidate ? relative(folder, candidate) : ''
       const inside = Boolean(candidate && rel && !rel.startsWith('..') && !isAbsolute(rel))
       const logFile = inside ? candidate : ''
-      const logContent = logFile ? readText(logFile) : ''
+      const logContent = logFile ? readTail(logFile) : ''
       if (logContent) {
         const laneEntry = lanes && Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
         const laneHarnessKey = laneEntry?.cli?.harness || laneEntry?.harness || laneKey

@@ -23,6 +23,8 @@ import {
   AUTOCOMPACT_MODE_PROBLEM,
   AUTOCOMPACT_PERCENT_PROBLEM,
   AUTOCOMPACT_TOKENS_PROBLEM,
+  LOG_TAIL_BYTES,
+  readTail,
   AUTOCOMPACT_RULES_PROBLEM,
   NO_NEW_REPORT,
   NO_REPORT,
@@ -1128,6 +1130,49 @@ describe('waking the orchestrator', () => {
     await waitFor(() => rig.calls().length === 4, 15000, 'the succeeded turn after reopen')
     await waitIdle(rig, 4)
     expect(rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-reopen-2 on lane opencode7 ended: succeeded.'))).toBe(true)
+  })
+
+  it('reads only the last 64 KB of the log on a failed run wake or finished turn (S37)', async () => {
+    const rig = makeRig()
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    const log = join(rig.runs, 'opencode7-big-1.log')
+    const padding = 'x'.repeat(100 * 1024)
+    const errorLine = JSON.stringify({ type: 'error', error: { message: 'bounded tail error' } })
+    writeFileSync(log, `${padding}\n${errorLine}\n`)
+
+    expect(LOG_TAIL_BYTES).toBe(64 * 1024)
+    const tail = readTail(log)
+    expect(tail.length).toBeLessThan(100 * 1024)
+    expect(tail).toContain('bounded tail error')
+
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 1, killed: false, log })}\n`
+    )
+
+    rig.orchestrator.onFrame(frame('run-opencode7-big-1', 'failed'))
+    await waitFor(() => rig.calls().length === 2, 15000, 'the failed run turn to start')
+    await waitIdle(rig, 2)
+
+    const roomMessage = rig.answer().messages.find((m) => m.from === 'room' && m.text.includes('Run opencode7-big-1'))
+    expect(roomMessage).toBeDefined()
+    expect(roomMessage.text).toContain('Error: bounded tail error')
+  })
+
+  it('keeps at most the newest 200 completed runs (S37)', async () => {
+    const rig = makeRig()
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    for (let index = 0; index < 210; index += 1) {
+      rig.orchestrator.onFrame(frame(`run-fill-${index}`, 'succeeded'))
+    }
+    const chat = JSON.parse(readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8'))
+    expect(chat.completedRuns).toHaveLength(200)
+    expect(chat.completedRuns[0][0]).toBe('run-fill-10')
+    expect(chat.completedRuns.at(-1)[0]).toBe('run-fill-209')
   })
 
   it('remembers a reported run end across a restart and adds no duplicate line', async () => {

@@ -23,6 +23,16 @@ import {
 import { gitPath } from './programPath.js'
 import { readAllLanes } from './agents-config.js'
 import { activeEligibleLaneKeys, eligibleLanes } from './active-lanes.js'
+import { createRecordsCache } from './lanes-source.js'
+
+function pathKey(path) {
+  try {
+    const resolved = resolve(String(path ?? ''))
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved
+  } catch {
+    return ''
+  }
+}
 
 export const CONFIRM_LADDER_PROBLEM = 'Confirm the ladder first.'
 export const NO_ORCHESTRATOR_PROBLEM = 'There is no orchestrator with that id.'
@@ -167,9 +177,11 @@ export function createOrchestrators({
   onMessage = () => {},
   activeLanes,
   home = '',
+  recordsCache,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
+  const sharedCache = recordsCache ?? createRecordsCache(join(folder, 'runs.jsonl'), folder)
   const mainName = typeof lanes?.[ORCHESTRATOR_KEY]?.name === 'string' ? lanes[ORCHESTRATOR_KEY].name : 'Orchestrator'
   const instances = new Map()
   const configs = new Map()
@@ -221,6 +233,7 @@ export function createOrchestrators({
     onMessage: (message) => announce(message?.from, message?.to, message?.kind),
     hasSub: (id) => instances.has(id),
     home,
+    recordsCache: sharedCache,
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -299,6 +312,7 @@ export function createOrchestrators({
       contextWindow: config.contextWindow,
       onNotice,
       onMasked,
+      recordsCache: sharedCache,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind),
       extraInstructions: () => {
         const ladder = readSaved().ladder
@@ -813,7 +827,19 @@ export function createOrchestrators({
   }
 
   function onFrame(frame) {
-    for (const instance of instances.values()) instance.onFrame(frame)
+    let preloadedRecord = undefined
+    if (frame?.type === 'heartbeat.run.status') {
+      const status = frame.payload?.status
+      if (status === 'succeeded' || status === 'failed') {
+        const runId = typeof frame.payload?.runId === 'string' ? frame.payload.runId : ''
+        const runName = runId.startsWith('run-') ? runId.slice(4) : ''
+        if (runName) {
+          const wanted = pathKey(join(folder, `${runName}.log`))
+          preloadedRecord = sharedCache.read().get(wanted) ?? null
+        }
+      }
+    }
+    for (const instance of instances.values()) instance.onFrame(frame, preloadedRecord)
   }
 
   function close() {
