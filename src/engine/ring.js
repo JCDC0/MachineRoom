@@ -147,10 +147,6 @@ export function shotgunOffset(index, count) {
   return { angleOffset, radiusStep, row, col, cols, rows }
 }
 
-export function fanAngle(index, count) {
-  return shotgunOffset(index, count).angleOffset
-}
-
 function tagPosition(spot, node, slot) {
   return { x: spot.x, y: spot.y, z: spot.z, width: node.width, height: node.height, slot }
 }
