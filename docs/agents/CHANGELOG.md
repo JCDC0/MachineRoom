@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A spawned subagent draws at 0.35 of its parent's size and orbits it on a tilted circle in about 40 seconds, each sibling on its own phase, with its line to the parent following it (task U140).
+- With a ladder, a second, fainter park ring of 0.6 the hub's radius sits 260 units below the hub, and a sub's code agents park on it inside their sector's arc while lanes in no sub stay on the main ring (task U140).
+- The room reads `client.agentDepth?.()` at start and on an `agents` notice and draws spawned subagents only to that depth, 3 without the method and 4 at most (task U140).
 - The file tunnel draws as a light trail with a 2 pixel core and a 9 pixel sheath in the strip's colour, eases in over 0.3 seconds and out over 0.6 seconds, and starts on the agent's shell (task U136).
 - The payload packets ride only the tunnel, each with a tail of 3 fainter points, and none shows under 30 percent of its opacity (task U136).
 - The blue web beam draws as the same light trail with a thinner core, and the tunnel leaves out the root card when the touched folder's chain does not pass through its link (task U136).
