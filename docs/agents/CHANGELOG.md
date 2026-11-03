@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The stylesheet drops 115 rules for 99 unused class names, including `.plan-*`, `.dispatch-route-*`, most of `.strip-*`, `.mr-orch-*` and `.mr-side-*`, and keeps every rule that names a state class a run-time build may use (task U143).
 - Music plays on with Settings closed: the queue, order, loop, shuffle and ended listener live for the page in `src/ui/musicQueue.js`, and a reopened player shows the same track and modes (task U142).
 - `saveSettings` keeps the saved `music` playlist, loop and shuffle through an effect or sound change (task U142).
 - The OpenCode session reader caps its forgotten map at 200 entries, dropping the oldest (task S39).
