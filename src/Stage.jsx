@@ -29,6 +29,7 @@ import { useBridgeHealth } from './ui/useBridgeHealth.js'
 import { OrchestratorActivity, orchestratorDoing } from './ui/orchestratorChat.js'
 import { latestOnly, subscribeToNotices } from './ui/panels/notices.js'
 import { loadEffectSettings, loadSettings, loadSoundSettings, saveEffectSettings, saveSettings } from './ui/settings.js'
+import { startMusicQueue } from './ui/musicQueue.js'
 import { aberrationChannels, mapPlacement, radialMapDataUrl } from './ui/aberration.js'
 import { startGrain } from './ui/grain.js'
 import { activitySounds, sound } from './ui/sound.js'
@@ -627,6 +628,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   useEffect(() => {
     sound.setSettings(loadSoundSettings(store()))
     sound.armOnGesture()
+    startMusicQueue()
   }, [])
 
   useEffect(() => {

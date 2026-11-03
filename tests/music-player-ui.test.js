@@ -1,6 +1,7 @@
 import { act, createElement } from 'react'
-import { afterEach, describe, expect, it } from 'vitest'
-import MusicPlayer, { nextLoop, shuffleOrder, shuffleOrderFrom } from '../src/ui/MusicPlayer.jsx'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import MusicPlayer from '../src/ui/MusicPlayer.jsx'
+import { nextLoop, resetMusicQueue, shuffleOrder, shuffleOrderFrom } from '../src/ui/musicQueue.js'
 import { sound } from '../src/ui/sound.js'
 import { buttonWithText, classesOf, settle, withDom } from './helpers/uiDom.js'
 
@@ -28,9 +29,14 @@ const audio = {
 }
 
 afterEach(() => {
+  resetMusicQueue()
   globalThis.fetch = originalFetch
   Math.random = originalRandom
   sound.pauseMusic()
+})
+
+beforeEach(() => {
+  resetMusicQueue()
 })
 
 function installAudio(dom) {
@@ -96,6 +102,12 @@ describe('the music player', () => {
       await settle(5)
       expect(control(container, 'Pause')).not.toBeNull()
       expect(player.paused).toBe(false)
+      await act(async () => {
+        control(container, 'Shuffle').click()
+      })
+      await act(async () => {
+        control(container, 'Loop off').click()
+      })
 
       await act(async () => {
         root.render(null)
@@ -107,6 +119,34 @@ describe('the music player', () => {
 
       expect(container.textContent).toContain('alpha.mp3')
       expect(control(container, 'Pause')).not.toBeNull()
+      expect(classesOf(control(container, 'Shuffle'))).toContain('is-on')
+      expect(control(container, 'Loop all')).not.toBeNull()
+      expect(buttonWithText(container, 'alpha.mp3')).not.toBeNull()
+      expect(buttonWithText(container, 'beta.mp3')).not.toBeNull()
+    })
+  })
+
+  it('plays the next track when one ends while the player is unmounted', async () => {
+    globalThis.fetch = listAnswer(['alpha.mp3', 'beta.mp3'])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await act(async () => {
+        buttonWithText(container, 'alpha.mp3').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/alpha.mp3')).toBe(true)
+
+      await act(async () => {
+        root.render(null)
+      })
+      await endTrack(player)
+      await settle(5)
+      expect(player.src.endsWith('/music/beta.mp3')).toBe(true)
+      expect(player.paused).toBe(false)
     })
   })
 
@@ -120,7 +160,7 @@ describe('the music player', () => {
       })
       await settle(5)
       await act(async () => {
-        control(container, 'Play').click()
+        buttonWithText(container, 'alpha.mp3').click()
       })
       await settle(5)
 
@@ -129,7 +169,7 @@ describe('the music player', () => {
     })
   })
 
-  it('stops the music list read when the panel closes', async () => {
+  it('keeps the music list read running when the panel closes', async () => {
     let seen = null
     globalThis.fetch = (url, options = {}) =>
       new Promise((resolve, reject) => {
@@ -148,7 +188,7 @@ describe('the music player', () => {
       await act(async () => {
         root.render(null)
       })
-      expect(seen.aborted).toBe(true)
+      expect(seen.aborted).toBe(false)
     })
   })
 
