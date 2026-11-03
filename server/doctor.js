@@ -13,6 +13,7 @@ export function doctorSettings(options = {}, env = process.env, cwd = process.cw
     projectRoot: options.projectRoot ?? env.PROJECT_ROOT ?? cwd,
     runsFolder: options.runsFolder ?? runsFolder(env),
     lanesFile: options.lanesFile ?? join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+    dist: resolve(options.dist ?? join(REPO_ROOT, 'dist')),
   }
 }
 
@@ -68,6 +69,12 @@ function gitLine(env) {
   const found = programPath('git', { env })
   if (!found) return { ok: false, text: 'Git is not on the PATH.' }
   return { ok: true, text: `Git is found at ${found}.` }
+}
+
+function viewerLine(dist) {
+  const index = join(dist, 'index.html')
+  if (isFile(index)) return { ok: true, text: `The built viewer is ready in ${dist}.` }
+  return { ok: false, text: `The built viewer is missing ${index}. Run npm run build in ${REPO_ROOT}.` }
 }
 
 function runsLine(folder) {
@@ -144,6 +151,7 @@ export function runDoctor(options = {}) {
   const folder = folderLine(settings.projectRoot)
   add(folder)
   add(gitLine(env))
+  add(viewerLine(settings.dist))
   add(runsLine(settings.runsFolder))
   for (const line of laneLines(settings.lanesFile, env)) add(line)
 

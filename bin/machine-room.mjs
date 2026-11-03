@@ -33,6 +33,7 @@ const OPTION_NAMES = {
 
 const DOCTOR_OPTION_NAMES = {
   '--root': 'projectRoot',
+  '--dist': 'dist',
 }
 
 const FLAGS = {
@@ -197,6 +198,7 @@ async function serve(options) {
 
 async function up(options) {
   const dist = prepare(options)
+  options.dist = dist
   options.lanes = true
   options.sessions = options.noSessions !== true
   const result = runDoctor(options)
