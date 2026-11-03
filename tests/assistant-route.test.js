@@ -1,7 +1,30 @@
+import { EventEmitter } from 'node:events'
+import { spawn } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { createAssistantApi, resolveOpencodeBinary, runOpencode } from '../server/assistant.js'
+import { createAssistantApi, resolveOpencodeBinary, runOpencode, OUTPUT_LIMIT } from '../server/assistant.js'
+import { makeTempDir, removeTempDir } from './helpers/tempRoot.js'
 
 const slashes = (path) => path.split('/').join('\\')
+
+function alive(pid) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+async function waitUntil(fn, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (fn()) return true
+    await new Promise((r) => setTimeout(r, 20))
+  }
+  return fn()
+}
 
 describe('resolveOpencodeBinary', () => {
   it('uses OPENCODE_BIN before the shim and the PATH', () => {
@@ -79,39 +102,138 @@ describe('assistant route prompt checks', () => {
 })
 
 describe('runOpencode process control', () => {
-  it('passes --standalone to the binary arguments', async () => {
+  it('passes --standalone and detached options to spawn', async () => {
     let passedArgs = null
-    await runOpencode({
+    let passedOpts = null
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
+    const promise = runOpencode({
       model: 'opencode/test-model',
       prompt: 'hello world',
       binary: 'opencode',
-      execFileImpl: (bin, args, opts, cb) => {
+      platform: 'linux',
+      spawnImpl: (bin, args, opts) => {
         passedArgs = args
-        cb(null, 'answer')
-        return {}
+        passedOpts = opts
+        setImmediate(() => {
+          child.stdout.emit('data', JSON.stringify({ text: 'answer' }))
+          child.emit('close', 0, null)
+        })
+        return child
       },
     })
-    expect(passedArgs).toContain('--standalone')
+    const result = await promise
+    expect(result).toBe('answer')
     expect(passedArgs).toEqual(['run', '--standalone', '-m', 'opencode/test-model', '--format', 'json', 'hello world'])
+    expect(passedOpts.detached).toBe(true)
+    expect(passedOpts.windowsHide).toBe(true)
+  })
+
+  it('keeps detached off on Windows', async () => {
+    let passedOpts = null
+    const child = new EventEmitter()
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
+    const promise = runOpencode({
+      model: 'opencode/test-model',
+      prompt: 'hello world',
+      binary: 'opencode',
+      platform: 'win32',
+      spawnImpl: (bin, args, opts) => {
+        passedOpts = opts
+        setImmediate(() => {
+          child.stdout.emit('data', JSON.stringify({ text: 'answer' }))
+          child.emit('close', 0, null)
+        })
+        return child
+      },
+    })
+    await promise
+    expect(passedOpts.detached).toBe(false)
   })
 
   it('stops the process tree on timeout', async () => {
     let killedChild = null
-    const childObj = { pid: 9999 }
+    const child = new EventEmitter()
+    child.pid = 9999
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
     const promise = runOpencode({
       model: 'opencode/test-model',
       prompt: 'hello world',
       binary: 'opencode',
       timeoutMs: 10,
-      execFileImpl: (bin, args, opts, cb) => {
-        setTimeout(() => cb(new Error('killed')), 30)
-        return childObj
+      spawnImpl: () => {
+        setTimeout(() => child.emit('close', null, 'SIGKILL'), 30)
+        return child
       },
-      killTreeImpl: (child) => {
-        killedChild = child
+      killTreeImpl: (target) => {
+        killedChild = target
       },
     })
     await expect(promise).rejects.toThrow('the assistant run failed')
-    expect(killedChild).toBe(childObj)
+    expect(killedChild).toBe(child)
   })
+
+  it('stops the process tree when output exceeds the limit', async () => {
+    let killedChild = null
+    const child = new EventEmitter()
+    child.pid = 9998
+    child.stdout = new EventEmitter()
+    child.stderr = new EventEmitter()
+    const promise = runOpencode({
+      model: 'opencode/test-model',
+      prompt: 'hello world',
+      binary: 'opencode',
+      spawnImpl: () => {
+        setImmediate(() => {
+          child.stdout.emit('data', 'x'.repeat(OUTPUT_LIMIT + 10))
+          child.emit('close', 1, null)
+        })
+        return child
+      },
+      killTreeImpl: (target) => {
+        killedChild = target
+      },
+    })
+    await expect(promise).rejects.toThrow('the assistant run failed')
+    expect(killedChild).toBe(child)
+  })
+
+  it('a grandchild does not outlive the limit', async () => {
+    const tempDir = makeTempDir('assistant-grandchild-')
+    const pidFile = join(tempDir, 'grandchild.pid')
+    const script = [
+      "const { spawn } = require('node:child_process')",
+      "const { writeFileSync } = require('node:fs')",
+      "const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' })",
+      `writeFileSync(${JSON.stringify(pidFile)}, String(child.pid))`,
+      'setTimeout(() => {}, 60000)',
+    ].join('\n')
+
+    let grandchildPid = 0
+    try {
+      const promise = runOpencode({
+        model: 'test',
+        prompt: 'test',
+        timeoutMs: 150,
+        binary: 'fake-opencode',
+        spawnImpl: (bin, args, opts) => spawn(process.execPath, ['-e', script], opts),
+      })
+      await waitUntil(() => existsSync(pidFile))
+      grandchildPid = Number(readFileSync(pidFile, 'utf8'))
+      expect(grandchildPid).toBeGreaterThan(0)
+      expect(alive(grandchildPid)).toBe(true)
+
+      await expect(promise).rejects.toThrow('the assistant run failed')
+      await waitUntil(() => !alive(grandchildPid))
+      expect(alive(grandchildPid)).toBe(false)
+    } finally {
+      if (grandchildPid > 0 && alive(grandchildPid)) {
+        try { process.kill(grandchildPid, 'SIGKILL') } catch {}
+      }
+      removeTempDir(tempDir)
+    }
+  }, 10000)
 })

@@ -19,6 +19,7 @@ const MAIN_BASE = { ref: MAIN_REF, name: 'main' }
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const ROOM_BRIEFS = join(REPO_ROOT, 'docs', 'agents')
 export const DEFAULT_PATCH_LIMIT = 400 * 1024
+export const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
 let codeCheckoutPath = null
 
@@ -159,10 +160,26 @@ function laneWorktree(lanes, lane) {
   return worktree
 }
 
+export async function mapConcurrent(items, limit, fn) {
+  if (!Array.isArray(items) || items.length === 0) return []
+  const max = Number.isInteger(limit) && limit > 0 ? limit : DEFAULT_REVIEW_CONCURRENCY
+  const results = new Array(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.min(max, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++
+      results[index] = await fn(items[index], index)
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
+
 export function createReviewsApi({
   projectRoot = '',
   briefsDir = '',
   patchLimit = DEFAULT_PATCH_LIMIT,
+  concurrency = DEFAULT_REVIEW_CONCURRENCY,
   sendJson,
   readJsonBody,
   orchestrators,
@@ -522,17 +539,20 @@ export function createReviewsApi({
       return true
     }
     const runs = readRuns(recordsFile())
-    const entries = []
+    const targets = []
     for (const lane of Object.keys(read.lanes)) {
       const worktree = laneFolder(read.lanes, lane)
       if (!worktree) continue
       if (onProject && !existsSync(worktree)) continue
-      try {
-        entries.push(await laneReview(lane, worktree, base, runs))
-      } catch (error) {
-        entries.push({ lane, worktree, error: worktreeError(error) })
-      }
+      targets.push({ lane, worktree })
     }
+    const entries = await mapConcurrent(targets, concurrency, async ({ lane, worktree }) => {
+      try {
+        return await laneReview(lane, worktree, base, runs)
+      } catch (error) {
+        return { lane, worktree, error: worktreeError(error) }
+      }
+    })
     sendJson(req, res, 200, { lanes: entries })
     return true
   }

@@ -4,6 +4,7 @@ import { basename, join, resolve } from 'node:path'
 import { runsFolder as defaultRunsFolder } from './lanes-source.js'
 
 const DEFAULT_QUIET_MS = 30000
+const DEFAULT_QUIET_POLL_MS = 10000
 const TEXT_LIMIT = 2000
 
 export const OPENCODE_SESSION_AGENT = {
@@ -73,6 +74,8 @@ export function createOpencodeSessionsReader(options = {}) {
   const dbPath = options.dbPath ? resolve(String(options.dbPath)) : defaultDbPath()
   const rawQuiet = Number(options.quietMs)
   const quietMs = Number.isFinite(rawQuiet) ? rawQuiet : DEFAULT_QUIET_MS
+  const rawQuietPoll = Number(options.quietPollMs)
+  const quietPollMs = Number.isFinite(rawQuietPoll) ? rawQuietPoll : DEFAULT_QUIET_POLL_MS
   const now = typeof options.now === 'function' ? options.now : Date.now
   const emit = typeof options.emit === 'function' ? options.emit : () => {}
   const rawRetention = Number(options.retentionMs)
@@ -157,7 +160,13 @@ export function createOpencodeSessionsReader(options = {}) {
   }
 
   function prime() {
-    const included = includedSessions(sessionRows())
+    const rows = sessionRows()
+    const included = includedSessions(rows)
+    const rowMap = new Map()
+    for (const row of rows) {
+      if (row && typeof row.id === 'string') rowMap.set(row.id, row)
+    }
+    const at = now()
     for (const [id, rootId] of included) {
       const handled = new Map()
       let since = -1
@@ -165,7 +174,14 @@ export function createOpencodeSessionsReader(options = {}) {
         handled.set(row.id, row.time_updated)
         if (Number.isFinite(row.time_updated) && row.time_updated > since) since = row.time_updated
       }
-      sessions.set(id, { handled, since, rootId, lastSeen: now() })
+      sessions.set(id, {
+        handled,
+        since,
+        rootId,
+        lastSeen: at,
+        lastPolled: at,
+        lastSessionUpdated: rowMap.get(id)?.time_updated ?? null,
+      })
     }
     primed = true
   }
@@ -333,15 +349,44 @@ export function createOpencodeSessionsReader(options = {}) {
     }
   }
 
+  function isQuiet(id, rootId, sessionRow, at) {
+    if (open.has(rootId)) return false
+    const info = sessions.get(id)
+    if (!info) return false
+    if (sessionRow && sessionRow.time_updated !== info.lastSessionUpdated) return false
+    if (info.lastPolled === 0) return false
+    return at - info.lastSeen >= quietMs
+  }
+
   function scan() {
-    const included = includedSessions(sessionRows())
+    const rows = sessionRows()
+    const included = includedSessions(rows)
+    const rowMap = new Map()
+    for (const row of rows) {
+      if (row && typeof row.id === 'string') rowMap.set(row.id, row)
+    }
+    const at = now()
     for (const [id, rootId] of included) {
+      const sessionRow = rowMap.get(id)
       let info = sessions.get(id)
       if (!info) {
-        info = { handled: new Map(), since: -1, rootId, lastSeen: now() }
+        info = {
+          handled: new Map(),
+          since: -1,
+          rootId,
+          lastSeen: at,
+          lastPolled: 0,
+          lastSessionUpdated: sessionRow?.time_updated ?? null,
+        }
         sessions.set(id, info)
       }
       info.rootId = rootId
+      const quiet = isQuiet(id, rootId, sessionRow, at)
+      if (quiet && at - info.lastPolled < quietPollMs) {
+        continue
+      }
+      info.lastPolled = at
+      info.lastSessionUpdated = sessionRow?.time_updated ?? null
       processSession(id, info)
     }
   }

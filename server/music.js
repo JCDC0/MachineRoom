@@ -87,7 +87,7 @@ function sendBadName(res, cors = {}) {
   res.end('Bad music name')
 }
 
-export function createMusicApi({ folder, env, sendJson, corsHeaders = () => ({}) } = {}) {
+export function createMusicApi({ folder, env, sendJson, corsHeaders = () => ({}), createStream = createReadStream } = {}) {
   const musicFolder = musicFolderFor({ folder, env })
 
   async function handleApi(req, res, url) {
@@ -163,7 +163,7 @@ export function createMusicApi({ folder, env, sendJson, corsHeaders = () => ({})
       res.end()
       return true
     }
-    const stream = createReadStream(file, { start, end })
+    const stream = createStream(file, { start, end })
     stream.on('error', () => {
       if (!res.headersSent) res.writeHead(500)
       res.destroy()

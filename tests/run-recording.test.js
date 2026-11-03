@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { basename, dirname, join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
@@ -536,5 +536,76 @@ describe('writeRecording', () => {
     expect(existsSync(written.runPath)).toBe(true)
     expect(existsSync(written.treePath)).toBe(true)
     expect(written.indexError).toMatch(/^The index of the recordings could not be written: /)
+  })
+
+  it('writes each recording file through a temporary file and renames it atomically', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    const folder = join(root, 'public', 'recordings')
+    const logPath = join(root, 'hermes-T11-atomic.log')
+    writeFileSync(logPath, 'the report\n')
+    const renames = []
+    const written = writeRecording({
+      record: {
+        lane: 'hermes',
+        startedAt: '2026-10-20T10:10:10.000Z',
+        minutes: 1,
+        exitCode: 0,
+        killed: false,
+        log: logPath,
+        branch: 'feat/atomic',
+        commits: [`${sha} one`],
+      },
+      lanes: { hermes: { ...lanes.hermes, worktree: dir } },
+      root,
+      env: {},
+      session: sessionFor(dir),
+      rename: (from, to) => {
+        renames.push({ from, to })
+        renameSync(from, to)
+      },
+    })
+    expect(existsSync(written.runPath)).toBe(true)
+    expect(existsSync(written.agentsPath)).toBe(true)
+    expect(existsSync(written.treePath)).toBe(true)
+    expect(renames).toHaveLength(4)
+    for (const item of renames) {
+      expect(basename(item.from)).toMatch(/^\./)
+      expect(basename(item.from)).toMatch(/\.tmp$/)
+    }
+    const remainingTempFiles = readdirSync(folder).filter((file) => file.endsWith('.tmp'))
+    expect(remainingTempFiles).toHaveLength(0)
+  })
+
+  it('removes the temporary file when writing a recording file fails', () => {
+    const { dir, sha } = worktreeWith({ 'src/briefs/run.js': 'x\n', 'docs/agents/CHANGELOG.md': 'y\n' })
+    const root = tempFolder()
+    const logPath = join(root, 'hermes-T11-atomic-fail.log')
+    writeFileSync(logPath, 'the report\n')
+    let failedTemp = null
+    expect(() =>
+      writeRecording({
+        record: {
+          lane: 'hermes',
+          startedAt: '2026-10-20T10:10:10.000Z',
+          minutes: 1,
+          exitCode: 0,
+          killed: false,
+          log: logPath,
+          branch: 'feat/atomic',
+          commits: [`${sha} one`],
+        },
+        lanes: { hermes: { ...lanes.hermes, worktree: dir } },
+        root,
+        env: {},
+        session: sessionFor(dir),
+        rename: (from) => {
+          failedTemp = from
+          throw new Error('disk full')
+        },
+      })
+    ).toThrow(/The recording could not be written/)
+    expect(failedTemp).toBeTruthy()
+    expect(existsSync(failedTemp)).toBe(false)
   })
 })

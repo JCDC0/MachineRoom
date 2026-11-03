@@ -17,6 +17,15 @@
 - Anchor every branch of the parser failure pattern to a line start (task S29).
 
 - An AGY step that ends ERROR ends its call as failed with the error in its label (task S29).
+- A closed music response destroys its file stream.
+
+- Recording files are written through temporary files and renamed atomically.
+
+- Lane reviews run concurrently up to a small bound while keeping their order.
+
+- Quiet OpenCode sessions are queried less often unless their session row moves.
+
+- The assistant starts OpenCode with a detached process group off Windows so its time limit stops child processes too.
 
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.

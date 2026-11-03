@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { maskKeys } from '../src/briefs/audit.js'
 import { agentsFile, framesFromRun, recordingIndex, treeFile } from '../src/briefs/recording.js'
 import { prepare } from '../src/model/source.js'
@@ -118,22 +118,37 @@ function indexEntry({ name, record, frames, toolCalls }) {
   }
 }
 
-function writeIndex(folder, entry) {
+export function writeAtomic(path, content, { write = writeFileSync, rename = renameSync, rm = rmSync } = {}) {
+  const folder = dirname(path)
+  const temp = join(folder, `.${basename(path)}-${process.pid}-${Date.now()}.tmp`)
+  try {
+    write(temp, content)
+    rename(temp, path)
+  } catch (error) {
+    rm(temp, { force: true })
+    throw error
+  }
+}
+
+function writeIndex(folder, entry, io = {}) {
   const entries = keptIndex(folder, readIndex(folder))
   const next = recordingIndex(entries, entry, INDEX_LIMIT)
   const path = join(folder, 'index.json')
-  const temp = join(folder, `.index-${process.pid}-${Date.now()}.json`)
-  try {
-    writeFileSync(temp, `${JSON.stringify(next, null, 2)}\n`)
-    renameSync(temp, path)
-  } catch (error) {
-    rmSync(temp, { force: true })
-    throw error
-  }
+  writeAtomic(path, `${JSON.stringify(next, null, 2)}\n`, io)
   return next
 }
 
-export function writeRecording({ record, lanes, root, env, session, exportSession } = {}) {
+export function writeRecording({
+  record,
+  lanes,
+  root,
+  env,
+  session,
+  exportSession,
+  write = writeFileSync,
+  rename = renameSync,
+  rm = rmSync,
+} = {}) {
   if (!record || typeof record !== 'object') throw refusal('There is no run record to turn into a recording.')
   if (typeof root !== 'string' || root.trim() === '') throw refusal('The recording needs the project folder.')
   const { key, lane, harness } = laneOf(lanes, record)
@@ -156,17 +171,18 @@ export function writeRecording({ record, lanes, root, env, session, exportSessio
   const runPath = join(folder, `${name}-run.jsonl`)
   const agentsPath = join(folder, `${name}-agents.json`)
   const treePath = join(folder, `${name}-tree.json`)
+  const io = { write, rename, rm }
   try {
     mkdirSync(folder, { recursive: true })
-    writeFileSync(runPath, `${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`)
-    writeFileSync(agentsPath, `${JSON.stringify(agents, null, 2)}\n`)
-    writeFileSync(treePath, `${JSON.stringify(tree, null, 2)}\n`)
+    writeAtomic(runPath, `${frames.map((frame) => JSON.stringify(frame)).join('\n')}\n`, io)
+    writeAtomic(agentsPath, `${JSON.stringify(agents, null, 2)}\n`, io)
+    writeAtomic(treePath, `${JSON.stringify(tree, null, 2)}\n`, io)
   } catch (error) {
     throw refusal(`The recording could not be written to ${folder}: ${String(error?.message ?? error)}`)
   }
   let indexError = null
   try {
-    writeIndex(folder, indexEntry({ name, record, frames: frames.length, toolCalls }))
+    writeIndex(folder, indexEntry({ name, record, frames: frames.length, toolCalls }), io)
   } catch (error) {
     indexError = `The index of the recordings could not be written: ${String(error?.message ?? error)}`
   }

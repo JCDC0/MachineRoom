@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { win32 } from 'node:path'
 import { killTree } from './processTree.js'
@@ -82,13 +82,16 @@ export function resolveOpencodeBinary({ env = process.env, platform = process.pl
   return programPath('opencode', { platform, env, check })
 }
 
+export const OUTPUT_LIMIT = 1024 * 1024
+
 export function runOpencode({
   model,
   prompt,
   timeoutMs,
   binary = resolveOpencodeBinary(),
-  execFileImpl = execFile,
+  spawnImpl = spawn,
   killTreeImpl = killTree,
+  platform = process.platform,
 }) {
   return new Promise((resolve, reject) => {
     if (!binary) {
@@ -97,19 +100,61 @@ export function runOpencode({
     }
     let timer = null
     let timedOut = false
-    const child = execFileImpl(
-      binary,
-      ['run', '--standalone', '-m', model, '--format', 'json', prompt],
-      { maxBuffer: 1024 * 1024, windowsHide: true },
-      (error, stdout) => {
-        if (timer) clearTimeout(timer)
-        if (error || timedOut) {
-          reject(new Error('the assistant run failed'))
-          return
+    let finished = false
+    let stdout = ''
+    let exceeded = false
+
+    let child = null
+    try {
+      child = spawnImpl(
+        binary,
+        ['run', '--standalone', '-m', model, '--format', 'json', prompt],
+        {
+          detached: platform !== 'win32',
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
         }
-        resolve(extractReplyText(stdout))
+      )
+    } catch {
+      reject(new Error('the assistant run failed'))
+      return
+    }
+
+    if (child.stdout) {
+      child.stdout.setEncoding?.('utf8')
+      child.stdout.on?.('data', (text) => {
+        if (stdout.length <= OUTPUT_LIMIT) {
+          stdout += text
+          if (stdout.length > OUTPUT_LIMIT) {
+            exceeded = true
+            killTreeImpl(child)
+          }
+        } else if (!exceeded) {
+          exceeded = true
+          killTreeImpl(child)
+        }
+      })
+    }
+    if (child.stderr) {
+      child.stderr.resume?.()
+    }
+
+    function finish(error) {
+      if (finished) return
+      finished = true
+      if (timer) clearTimeout(timer)
+      if (error || timedOut || exceeded) {
+        reject(new Error('the assistant run failed'))
+        return
       }
-    )
+      resolve(extractReplyText(stdout))
+    }
+
+    child.on?.('error', (error) => finish(error))
+    child.on?.('close', (code, signal) => {
+      finish(code === 0 && !signal ? null : new Error(`exit ${code ?? signal}`))
+    })
+
     if (timeoutMs && timeoutMs > 0) {
       timer = setTimeout(() => {
         timedOut = true
