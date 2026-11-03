@@ -193,8 +193,6 @@ describe('the lane costs routes', () => {
       projectRoot: base,
       port: 0,
       env: {},
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       ...(lanes ? { lanesSource: { folder: runs, lanes: LANES, repoRoot: base, quietMs: 60000, pollMs: 20 } } : {}),
     })
     cleanups.push(() => bridge.stop())

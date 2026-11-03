@@ -5,6 +5,7 @@ import { basename, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { FOLDER_SHAPE, createBridge, isAllowedHost, packTree, trimHistory } from '../server/index.js'
+import { DEFAULT_ASSISTANT_MODEL } from '../server/assistant.js'
 import { getJson, postJson, readFrames, startLaneBridge, waitFor, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -696,7 +697,7 @@ describe('the assistant route', () => {
     const { url } = await laneBridge({
       bridge: {
         assistantRunner: async ({ prompt }) => `You asked: ${prompt}`,
-        assistantModel: 'opencode/deepseek-v4.1-flash-free',
+        assistantModel: DEFAULT_ASSISTANT_MODEL,
       },
     })
     const answer = await getJson(`${url}/api/assistant`, {
@@ -709,7 +710,7 @@ describe('the assistant route', () => {
   })
 })
 
-describe('the bridge without a Paperclip', () => {
+describe('the bridge with no sources', () => {
   it('starts with no lane and no session source and answers health', async () => {
     const dir = tempDir()
     const bridge = createBridge({ port: 0, projectRoot: dir, env: {} })

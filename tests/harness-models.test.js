@@ -7,6 +7,7 @@ import {
   DIRECT_API_KEY_PROBLEM,
   getHarnessModels,
   modelAllowed,
+  OWNER_MODELS_PROBLEM,
   parseAgyModels,
   parseHelpForListCommand,
   parseOpencodeModels,
@@ -331,7 +332,7 @@ describe('harness models bridge route and client', () => {
     const baseUrl = `http://127.0.0.1:${started.port}`
     const res = await fetch(`${baseUrl}/api/harnesses/agy/models`)
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'Only the owner can refresh the model list.' })
+    expect(await res.json()).toEqual({ error: OWNER_MODELS_PROBLEM })
 
     const page = await fetch(`${baseUrl}/api/harnesses/agy/models`, { headers: { origin: baseUrl } })
     expect(page.status).toBe(200)

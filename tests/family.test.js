@@ -434,6 +434,7 @@ describe('Key slots: /api/keys, /api/keys/NAME/delete and readKey', () => {
       body: { confirmed: true },
     })
     expect(deleteAgain.status).toBe(404)
+    expect(deleteAgain.body.error).toBe('The key OPENAI_KEY was not found.')
   })
 
   it('reads keys from both a map and a list of key objects', () => {

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
-import { createReviewsApi, DEFAULT_REVIEW_CONCURRENCY, mapConcurrent, NOT_OWNER_PROBLEM } from '../server/reviews.js'
+import { createReviewsApi, mapConcurrent, NOT_OWNER_PROBLEM } from '../server/reviews.js'
 import { requestJson } from './helpers/httpJson.js'
 import { makeTempDir as makeTempRoot, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
@@ -127,10 +127,6 @@ async function startReviewsBridge(lanes, { patchLimit, withFiles = true, project
     projectRoot: projectRoot ?? dir,
     briefsDir: withFiles ? join(dir, 'docs', 'agents') : undefined,
     port: 0,
-    paperclipUrl: 'http://127.0.0.1:1',
-    companyId: 'company-1',
-    reconnectMinMs: 60000,
-    reconnectMaxMs: 60000,
     patchLimit,
     readTree: () => Promise.resolve({ root: 'project', files: [], created: [] }),
   })

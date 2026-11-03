@@ -42,8 +42,6 @@ function makeDist() {
 
 function childEnv(temp) {
   const env = { ...process.env }
-  delete env.PAPERCLIP_URL
-  delete env.PAPERCLIP_COMPANY_ID
   delete env.PROJECT_ROOT
   delete env.PORT
   delete env.MACHINEROOM_LANES
