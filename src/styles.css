@@ -1102,6 +1102,10 @@ summary:focus-visible,
   padding: 6px calc(var(--space) * 1.25);
 }
 
+.hud-menu .hud-action-slot {
+  flex: 0 0 auto;
+}
+
 .hud-menu .hud-health {
   flex: 0 1 auto;
   align-self: center;
@@ -2130,6 +2134,18 @@ summary:focus-visible,
   display: flex;
   flex-wrap: wrap;
   gap: var(--space);
+  width: 100%;
+}
+
+.hud-action-slot {
+  position: relative;
+  display: inline-flex;
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+.hud-action-slot > .hud-action {
+  flex: 1 1 auto;
   width: 100%;
 }
 

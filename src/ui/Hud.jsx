@@ -801,40 +801,44 @@ export default function Hud({
             </button>
           )}
           {client && (
-            <button
-              type="button"
-              className="hud-action is-control"
-              aria-pressed={controlOpen}
-              aria-expanded={controlOpen}
-              aria-controls="hud-control-drawer"
-              aria-label={
-                badges.control > 0
-                  ? `Control, ${badges.control} lane ${badges.control === 1 ? 'branch' : 'branches'} with commits ahead`
-                  : undefined
-              }
-              onClick={() => {
-                setControlOpen((open) => {
-                  const next = !open
-                  if (next) setLogOpen(false)
-                  return next
-                })
-              }}
-            >
-              <span>Control</span>
+            <span className="hud-action-slot">
+              <button
+                type="button"
+                className="hud-action is-control"
+                aria-pressed={controlOpen}
+                aria-expanded={controlOpen}
+                aria-controls="hud-control-drawer"
+                aria-label={
+                  badges.control > 0
+                    ? `Control, ${badges.control} lane ${badges.control === 1 ? 'branch' : 'branches'} with commits ahead`
+                    : undefined
+                }
+                onClick={() => {
+                  setControlOpen((open) => {
+                    const next = !open
+                    if (next) setLogOpen(false)
+                    return next
+                  })
+                }}
+              >
+                <span>Control</span>
+                <span className="agent-key mono">C</span>
+              </button>
               {badges.control > 0 && (
-                <span
+                <button
+                  type="button"
                   className="hud-action-badge mono"
                   title={`${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead. Open Reviews`}
+                  aria-label={`Open Reviews, ${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead`}
                   onClick={(event) => {
                     event.stopPropagation()
                     openControlReviews()
                   }}
                 >
                   {badges.control}
-                </span>
+                </button>
               )}
-              <span className="agent-key mono">C</span>
-            </button>
+            </span>
           )}
           {client && chatAvailable && (
             <button
