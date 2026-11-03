@@ -367,7 +367,12 @@ export function createBridge(options = {}) {
     folder: options.musicFolder,
     env,
     sendJson,
+    readJsonBody,
     corsHeaders: (req) => corsHeaders(req, isAllowed),
+    platform: options.musicPlatform,
+    check: options.musicProgramCheck,
+    spawn: options.musicSpawn,
+    openFolder: options.musicOpenFolder,
   })
   const serveStatic = createStaticHandler({ staticDir: options.staticDir })
   const lanesSourceOption = options.lanesSource
