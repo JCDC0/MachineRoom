@@ -3,7 +3,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
-import { ROOT_PLACE, layoutRing } from './ring.js'
+import { ROOT_PLACE, layoutRing, ringOf } from './ring.js'
 import { easeRate, still } from './sprites.js'
 
 export const CARD_W = 248
@@ -34,6 +34,28 @@ const FADE_MS = 400
 const DIM_FADE_MS = 1000
 const DIM_OPACITY = 0.25
 const BRACKETS = ['tl', 'tr', 'bl', 'br']
+export const DANCE_LIFT = 24
+export const DANCE_WAVE_MS = 300
+export const DANCE_LIFT_MS = 520
+const TURNS = Math.PI * 2
+
+export function danceDelay(angle, spread = DANCE_WAVE_MS) {
+  const value = Number(angle)
+  const span = Number(spread)
+  if (!Number.isFinite(value) || !Number.isFinite(span)) return 0
+  const wrapped = ((value % TURNS) + TURNS) % TURNS
+  return (wrapped / TURNS) * Math.max(0, span)
+}
+
+export function danceLift(age, delay = 0, strength = 1, height = DANCE_LIFT, duration = DANCE_LIFT_MS) {
+  const elapsed = Number(age) - Number(delay)
+  const span = Number(duration)
+  if (!Number.isFinite(elapsed) || elapsed <= 0 || !(span > 0) || elapsed >= span) return 0
+  const amount = Number(strength)
+  const peak = Math.min(1, Math.max(0, Number.isFinite(amount) ? amount : 0))
+  const top = Number.isFinite(Number(height)) ? Math.max(0, Number(height)) : DANCE_LIFT
+  return top * peak * Math.sin((elapsed / span) * Math.PI)
+}
 
 export function fadeProgress(start, now, stillNow = false, duration = FADE_MS) {
   if (stillNow) return 1
@@ -503,6 +525,7 @@ export function createCards(cssScene, options = {}) {
     occluder.renderOrder = -1
     glScene?.add(occluder)
     occluder.position.copy(object.position)
+    const base = object.position.clone()
     const card = {
       path,
       element,
@@ -513,7 +536,12 @@ export function createCards(cssScene, options = {}) {
       band,
       object,
       occluder,
-      home: object.position.clone(),
+      base,
+      home: base.clone(),
+      danceAt: 0,
+      danceStrength: 0,
+      danceDelay: 0,
+      lastLift: 0,
       scale,
       rootName,
       rows: [],
@@ -868,7 +896,10 @@ export function createCards(cssScene, options = {}) {
         const size = sizes.get(path)
         homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height, slot: spot.slot })
         const card = cards.get(path)
-        if (card) card.home.set(spot.x, spot.y, spot.z)
+        if (card) {
+          card.home.set(spot.x, spot.y, spot.z)
+          card.danceDelay = path === '' ? 0 : danceDelay(ringOf(spot).angle)
+        }
       }
     }
     const nextOverviewKey = entries
@@ -882,7 +913,7 @@ export function createCards(cssScene, options = {}) {
   }
 
   function center(path) {
-    return (nearestCard(path) ?? cards.get(''))?.object.position ?? rootHome
+    return (nearestCard(path) ?? cards.get(''))?.base ?? rootHome
   }
 
   function halfWidth(dir) {
@@ -893,7 +924,7 @@ export function createCards(cssScene, options = {}) {
   function bottom(dir) {
     const card = nearestCard(dir)
     if (!card) return rootHome.y
-    return card.object.position.y - (card.height * card.scale) / 2
+    return card.base.y - (card.height * card.scale) / 2
   }
 
   function sideOf(dir) {
@@ -942,6 +973,18 @@ export function createCards(cssScene, options = {}) {
     flashes.set(path, { tone, text, until: performance.now() + duration })
     flashVersion += 1
     rowRevision += 1
+  }
+
+  function beat(strength) {
+    if (still()) return false
+    const value = Math.min(1, Math.max(0, Number(strength) || 0))
+    if (!(value > 0)) return false
+    const now = performance.now()
+    for (const card of cards.values()) {
+      card.danceAt = now
+      card.danceStrength = value
+    }
+    return true
   }
 
   function sync(state) {
@@ -1007,7 +1050,7 @@ export function createCards(cssScene, options = {}) {
   function cardSphere(path) {
     const card = cards.get(path)
     if (!card?.view) return null
-    const position = card.object.position
+    const position = card.base
     return { x: position.x, y: position.y, z: position.z, r: cardRadius(card.view) }
   }
 
@@ -1022,7 +1065,7 @@ export function createCards(cssScene, options = {}) {
     let bottom = -Infinity
     for (const sx of [-1, 1]) {
       for (const sy of [-1, 1]) {
-        projection.copy(card.object.position).addScaledVector(right, sx * halfWidth).addScaledVector(up, sy * halfHeight).project(camera)
+        projection.copy(card.base).addScaledVector(right, sx * halfWidth).addScaledVector(up, sy * halfHeight).project(camera)
         if (![projection.x, projection.y].every(Number.isFinite)) return null
         const x = ((projection.x + 1) / 2) * viewWidth
         const y = ((1 - projection.y) / 2) * viewHeight
@@ -1097,18 +1140,25 @@ export function createCards(cssScene, options = {}) {
         continue
       }
       const position = card.object.position
+      const base = card.base
       let posChanged = false
-      if (position.distanceToSquared(card.home) > 0.25) {
-        position.lerp(card.home, ease)
+      if (base.distanceToSquared(card.home) > 0.25) {
+        base.lerp(card.home, ease)
         posChanged = true
-      } else if (!position.equals(card.home)) {
-        position.copy(card.home)
+      } else if (!base.equals(card.home)) {
+        base.copy(card.home)
         posChanged = true
       }
-      if (posChanged) {
+      const lift = card.danceAt > 0
+        ? danceLift(now, card.danceAt + card.danceDelay, card.danceStrength)
+        : 0
+      if (posChanged || lift !== card.lastLift) {
+        card.lastLift = lift
+        position.copy(base)
+        position.y += lift
         card.occluder.position.copy(position)
-        movingNow = true
       }
+      if (posChanged) movingNow = true
       const view = card.view
       const goal = CARD_SCALES[view.state] ?? 1
       if (Math.abs(card.scale - goal) > 0.002) {
@@ -1329,6 +1379,7 @@ export function createCards(cssScene, options = {}) {
     sync,
     setOptions,
     update,
+    beat,
     moving: () => movingNow,
     visibleLinks,
     homes: () => homes,

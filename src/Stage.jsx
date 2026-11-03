@@ -796,6 +796,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const pitch = roomRef.current?.pitch?.()
         compassRef.current?.(yaw, pitch)
         player.tick(ms)
+        roomRef.current?.setBands(sound.bands())
         const beat = sound.beat()
         if (beat > 0) roomRef.current?.setBeat(beat)
       },

@@ -272,6 +272,21 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                 </button>
               </div>
             </div>
+            <div className="hud-settings-effect">
+              <div className="hud-settings-row">
+                <span className="hud-settings-label">Pulse</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={soundState.pulse}
+                  aria-label="Pulse"
+                  className={`hud-settings-switch ${soundState.pulse ? 'is-on' : ''}`}
+                  onClick={() => updateSound({ pulse: !soundState.pulse })}
+                >
+                  {soundState.pulse ? 'On' : 'Off'}
+                </button>
+              </div>
+            </div>
             <MusicPlayer />
           </div>
         </div>

@@ -5,7 +5,7 @@ import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
 import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
-import { ORCHESTRATOR_SHAPE, PREFERRED, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor } from './shapes.js'
+import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForVertex, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 import { linkOnPath } from './strings.js'
 
@@ -527,6 +527,63 @@ export function createAgents(scene, roster, cssScene = null) {
   let sectorList = []
   let slotAngles = sectorSlotAngles(null, parkedKeys)
   const chainCache = { links: null, mask: null, parents: null }
+  let pulseSource = null
+
+  function setBands(levels) {
+    pulseSource = levels && typeof levels.length === 'number' && levels.length > 0 ? levels : null
+  }
+
+  function restorePulse(view) {
+    if (!view.pulseApplied) return
+    const attribute = view.shape.geometry.getAttribute('position')
+    attribute.array.set(view.pulseBase)
+    attribute.needsUpdate = true
+    view.pulseApplied = false
+  }
+
+  function applyPulse(view, delta, isStill) {
+    const levels = view.pulseLevels
+    const source = isStill ? null : pulseSource
+    if (!source) {
+      levels.fill(0)
+      restorePulse(view)
+      return
+    }
+    const ease = easeRate(delta, 14, false)
+    let max = 0
+    for (let band = 0; band < levels.length; band += 1) {
+      const raw = Number(source[band])
+      const target = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0
+      const next = levels[band] + (target - levels[band]) * ease
+      levels[band] = next < 0.0005 ? 0 : next
+      if (levels[band] > max) max = levels[band]
+    }
+    if (max <= 0.0005) {
+      restorePulse(view)
+      return
+    }
+    const attribute = view.shape.geometry.getAttribute('position')
+    const array = attribute.array
+    const base = view.pulseBase
+    const lengths = view.pulseLengths
+    const bands = view.pulseBands
+    for (let vertex = 0; vertex < bands.length; vertex += 1) {
+      const at = vertex * 3
+      const length = lengths[vertex]
+      if (!(length > 0)) {
+        array[at] = base[at]
+        array[at + 1] = base[at + 1]
+        array[at + 2] = base[at + 2]
+        continue
+      }
+      const factor = 1 + vertexOffset(length, levels[bands[vertex]], view.pulseScale) / length
+      array[at] = base[at] * factor
+      array[at + 1] = base[at + 1] * factor
+      array[at + 2] = base[at + 2] * factor
+    }
+    attribute.needsUpdate = true
+    view.pulseApplied = true
+  }
 
   function subIdOf(agent) {
     const key = String(agent?.key ?? '')
@@ -685,6 +742,16 @@ export function createAgents(scene, roster, cssScene = null) {
     const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(WHITE, 0.35))
     const orchestrator = parentKey === null && isOrchestrator(agent)
     const sub = parentKey === null && subOrchestrator
+    const pulseBase = Float32Array.from(shape.geometry.getAttribute('position').array)
+    const pulseVertices = pulseBase.length / 3
+    const pulseLengths = new Float32Array(pulseVertices)
+    const pulseBands = new Uint8Array(pulseVertices)
+    for (let vertex = 0; vertex < pulseVertices; vertex += 1) {
+      const at = vertex * 3
+      pulseLengths[vertex] = Math.hypot(pulseBase[at], pulseBase[at + 1], pulseBase[at + 2])
+      pulseBands[vertex] = bandForVertex(vertex, PULSE_BANDS)
+    }
+    const pulseScale = orchestrator ? ORCHESTRATOR_PULSE_SCALE : sub ? SUB_PULSE_SCALE : PULSE_SCALE
     const rings = [flatRing(130, 0.2, -110)]
     if (orchestrator) rings.push(flatRing(158, 0.14, -110))
     const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
@@ -775,6 +842,12 @@ export function createAgents(scene, roster, cssScene = null) {
       presenceReady: false,
       presenceOpacity: 1,
       dance: 0,
+      pulseBase,
+      pulseLengths,
+      pulseBands,
+      pulseLevels: new Float32Array(PULSE_BANDS),
+      pulseScale,
+      pulseApplied: false,
     }
     views.set(agent.key, view)
     if (view.sessionReader) group.visible = false
@@ -1108,6 +1181,7 @@ export function createAgents(scene, roster, cssScene = null) {
         pulse = Math.max(pulse, danceScale(view.dance, view.orchestrator || view.subOrchestrator) - 1)
       }
       view.shape.scale.setScalar(1 + pulse)
+      applyPulse(view, delta, isStill)
 
       const lastLine = entry?.lines?.[entry.lines.length - 1]
       const lastFailed = lastLine?.tone === 'error'
@@ -1279,6 +1353,8 @@ export function createAgents(scene, roster, cssScene = null) {
       view.presenceReady = false
       view.presenceOpacity = 1
       view.dance = 0
+      view.pulseLevels.fill(0)
+      restorePulse(view)
       view.group.scale.setScalar(view.scale)
     }
   }
@@ -1309,5 +1385,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, dispose, beat, webStart, webEnd, webActive, setOnline }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, setBands, dispose, beat, webStart, webEnd, webActive, setOnline }
 }

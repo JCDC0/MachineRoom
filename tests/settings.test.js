@@ -267,11 +267,11 @@ describe('the content files setting', () => {
     expect(html.indexOf('Content files')).toBeGreaterThan(html.indexOf('Folder depth'))
   })
 
-  it('gives every effect, Beeps and Dance switch an accessible name', () => {
+  it('gives every effect, Beeps, Dance and Pulse switch an accessible name', () => {
     const html = renderToString(
       createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
     )
-    for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Beeps', 'Dance']) {
+    for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Beeps', 'Dance', 'Pulse']) {
       expect(html).toContain(`aria-label="${label}"`)
     }
   })
@@ -456,19 +456,20 @@ describe('storage helpers', () => {
 
 describe('soundSettings', () => {
   it('starts beeps on at a low volume and dance on', () => {
-    expect(soundSettings()).toEqual({ on: true, volume: 0.3, musicVolume: 0.5, dance: true })
+    expect(soundSettings()).toEqual({ on: true, volume: 0.3, musicVolume: 0.5, dance: true, pulse: true })
     expect(soundSettings(null)).toEqual(soundSettings())
     expect(soundSettings('invalid')).toEqual(soundSettings())
   })
 
   it('clamps both volumes and keeps booleans', () => {
-    expect(soundSettings({ on: false, volume: 2, music: true, musicVolume: -1, dance: false })).toEqual({
+    expect(soundSettings({ on: false, volume: 2, music: true, musicVolume: -1, dance: false, pulse: false })).toEqual({
       on: false,
       volume: 1,
       musicVolume: 0,
       dance: false,
+      pulse: false,
     })
-    expect(soundSettings({ on: 'yes', volume: 'loud', dance: 'no' })).toEqual(soundSettings())
+    expect(soundSettings({ on: 'yes', volume: 'loud', dance: 'no', pulse: 'no' })).toEqual(soundSettings())
   })
 
   it('drops a music flag that no player reads', () => {
@@ -479,7 +480,7 @@ describe('soundSettings', () => {
     const storage = makeStorage()
     saveSettings(storage, { speed: 2 })
     const updated = saveSoundSettings(storage, { on: false, volume: 0.8, dance: false })
-    expect(updated).toEqual({ on: false, volume: 0.8, musicVolume: 0.5, dance: false })
+    expect(updated).toEqual({ on: false, volume: 0.8, musicVolume: 0.5, dance: false, pulse: true })
     expect(loadSoundSettings(storage)).toEqual(updated)
     const loaded = loadSettings(storage)
     expect(loaded.speed).toBe(2)

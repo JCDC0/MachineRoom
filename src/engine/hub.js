@@ -396,6 +396,14 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     )
   }
 
+  function beat(amount) {
+    if (still()) return false
+    const value = Math.min(1, Math.max(0, Number(amount) || 0))
+    if (!(value > 0)) return false
+    boost = Math.max(boost, value)
+    return true
+  }
+
   function pulse(color, amount) {
     for (const line of ringLines) line.material.color.setHex(color)
     boost = Math.max(boost, amount)
@@ -448,5 +456,5 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   if (currentLadder) rebuild()
 
-  return { group, pulse, setSlot, setLadder, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, builds: () => buildCount, dispose }
+  return { group, pulse, beat, setSlot, setLadder, setRoster, setWorking, parkedKeys: () => [...parkedKeys], update, builds: () => buildCount, dispose }
 }
