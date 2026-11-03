@@ -26,15 +26,29 @@ export function useDialogFocus(open, { containerRef = null, getInitialFocus = nu
       openerSelector && active?.getAttribute?.('aria-controls') === openerSelector ? active : named || active
     const first = focusableIn(container)[0] ?? container
     const target = getInitialFocus?.() ?? first
+    if (
+      target === container &&
+      container &&
+      typeof container.getAttribute === 'function' &&
+      container.getAttribute('tabindex') == null
+    ) {
+      container.setAttribute('tabindex', '-1')
+    }
     if (target && typeof target.focus === 'function') target.focus()
 
     function onKeyDown(event) {
       if (!trap || event.key !== 'Tab') return
       const current = document.activeElement
-      if (!container || typeof container.contains !== 'function' || !container.contains(current)) return
+      if (!container || typeof container.contains !== 'function') return
       const list = focusableIn(container)
       if (list.length === 0) {
         event.preventDefault()
+        if (typeof container.focus === 'function') container.focus()
+        return
+      }
+      if (!container.contains(current)) {
+        event.preventDefault()
+        list[0].focus()
         return
       }
       const firstItem = list[0]
