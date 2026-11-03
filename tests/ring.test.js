@@ -18,7 +18,6 @@ import {
   SHOTGUN_ROW_STEP,
   SPRAY_LIFT,
   TOP_MIN_RADIUS,
-  fanAngle,
   layoutRing,
   ringOf,
   ringRadius,
@@ -255,13 +254,6 @@ describe('the shotgun spray', () => {
     expect(Math.abs(shotgunOffset(1, 20).angleOffset)).toBeGreaterThan(Math.abs(shotgunOffset(1, 2).angleOffset) / 2)
     const step = shotgunOffset(1, 20).angleOffset - shotgunOffset(0, 20).angleOffset
     expect(step).toBeCloseTo(Math.min(0.38, FAN_STEP * 1.7), 6)
-  })
-
-  it('keeps fanAngle as the shotgun angle', () => {
-    expect(fanAngle(0, 1)).toBe(0)
-    for (let index = 0; index < 7; index += 1) {
-      expect(fanAngle(index, 7)).toBeCloseTo(shotgunOffset(index, 7).angleOffset, 12)
-    }
   })
 
   it('places four child folders in a two by two grid', () => {

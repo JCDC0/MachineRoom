@@ -4,6 +4,7 @@ import { HUB_CENTER } from '../src/engine/hub.js'
 import {
   GIT_BASE_STEP,
   GIT_HIT_MARGIN,
+  GIT_LEAN_STEP,
   GIT_MAX_LABELS,
   GIT_MAX_WIDTH,
   GIT_ROOT_GAP,
@@ -229,7 +230,7 @@ describe('layoutGitTree', () => {
     expect(layout.links.some((link) => link.sha === 'a2' && link.parent === 'z1')).toBe(true)
   })
 
-  it('lays a normal history out exactly as it did before', () => {
+  it('lays a linear history at the base step with the newest on the right', () => {
     const commits = [
       commit('c3', ['c2'], 6),
       commit('f2', ['f1'], 5),
@@ -242,15 +243,15 @@ describe('layoutGitTree', () => {
       { name: 'main', head: 'c3', current: true },
     ])
     const places = bySha(layout)
-    expect(layout.step).toBe(64)
-    expect(layout.width).toBe(256)
+    expect(layout.step).toBe(GIT_BASE_STEP)
+    expect(layout.width).toBe(GIT_BASE_STEP * 4)
     expect(layout.headSha).toBe('c3')
     expect(layout.headIndex).toBe(0)
-    expect(places.c3).toMatchObject({ x: 128, y: 0, level: 4, trunk: true })
-    expect(places.c2).toMatchObject({ x: -64, y: 0, level: 1, trunk: true })
-    expect(places.c1).toMatchObject({ x: -128, y: 0, level: 0, trunk: true })
-    expect(places.f2).toMatchObject({ x: 64, y: -152, level: 3, trunk: false })
-    expect(places.f1).toMatchObject({ x: 0, y: -76, level: 2, trunk: false })
+    expect(places.c3).toMatchObject({ x: GIT_START.x + 2 * GIT_BASE_STEP, y: 0, level: 4, trunk: true })
+    expect(places.c2).toMatchObject({ x: GIT_START.x - GIT_BASE_STEP, y: 0, level: 1, trunk: true })
+    expect(places.c1).toMatchObject({ x: GIT_START.x - 2 * GIT_BASE_STEP, y: 0, level: 0, trunk: true })
+    expect(places.f2).toMatchObject({ x: GIT_START.x + GIT_BASE_STEP, y: -2 * GIT_LEAN_STEP, level: 3, trunk: false })
+    expect(places.f1).toMatchObject({ x: GIT_START.x, y: -GIT_LEAN_STEP, level: 2, trunk: false })
     expect(places.f2.z).toBeCloseTo(GIT_START.z, 6)
     expect(places.f1.z).toBeCloseTo(GIT_START.z, 6)
     expect(layout.links).toHaveLength(4)

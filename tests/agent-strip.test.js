@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { BEAM_OPACITY, BEAM_PACKET_BURST, ORCHESTRATOR_LINK_OPACITY, PACKET_BURST, PACKET_DURATION, PACKET_POOL, SUB_ORCHESTRATOR_LINK_OPACITY, TAIL_GAP, TAIL_POINTS, TUNNEL_CORE_WIDTH, TUNNEL_GATE, TUNNEL_IN_SECONDS, TUNNEL_OUT_SECONDS, TUNNEL_SHEATH_SHARE, TUNNEL_SHEATH_WIDTH, createAgents, litChain, orchestratorLineEnds, packetSpots, samplePolyline, shellStart, speckPolyline, stripPoints, tailSpots, tunnelGate, tunnelLevel, tunnelRoute, webTunnelEnd } from '../src/engine/agents.js'
 import { INTERNET_RADIUS } from '../src/engine/internet.js'
-import { WEB, YELLOW } from '../src/engine/sprites.js'
+import { WEB, WHITE, YELLOW } from '../src/engine/sprites.js'
 import { apply, createState } from '../src/model/state.js'
 import {
   AUTOCOMPACT_MAX,
@@ -18,6 +18,7 @@ import {
   modelChoices,
   orchestratorEffort,
   orchestratorId,
+  WIDE_LAYOUT_MIN,
   wideLayout,
 } from '../src/ui/agentStrip.js'
 
@@ -163,9 +164,10 @@ describe('orchestratorLineEnds', () => {
     expect(points[1]).not.toBe(from)
   })
 
-  it('keeps the two opacities apart, the lane fainter than a folder string', () => {
+  it('keeps the lane link faint and the sub link brighter', () => {
     expect(ORCHESTRATOR_LINK_OPACITY).toBeLessThan(0.22)
     expect(SUB_ORCHESTRATOR_LINK_OPACITY).toBe(0.3)
+    expect(SUB_ORCHESTRATOR_LINK_OPACITY).toBeGreaterThan(ORCHESTRATOR_LINK_OPACITY)
   })
 })
 
@@ -295,7 +297,7 @@ describe('packetSpots', () => {
   it('moves a packet from the agent to the file in 0.45 seconds', () => {
     const sends = [1000]
     expect(packetSpots(1000, sends, PACKET_DURATION)).toEqual([0])
-    expect(packetSpots(1200, sends, PACKET_DURATION)[0]).toBeCloseTo(0.2 / 0.45, 10)
+    expect(packetSpots(1200, sends, PACKET_DURATION)[0]).toBeCloseTo(200 / PACKET_DURATION, 10)
     expect(packetSpots(1450, sends, PACKET_DURATION)).toEqual([1])
     expect(packetSpots(1451, sends, PACKET_DURATION)).toEqual([])
   })
@@ -304,14 +306,14 @@ describe('packetSpots', () => {
     const sends = [2000, 2000, 2000, 2000, 2000]
     const spots = packetSpots(2090, sends, PACKET_DURATION)
     expect(spots).toHaveLength(5)
-    spots.forEach((spot) => expect(spot).toBeCloseTo(0.09 / 0.45, 10))
+    spots.forEach((spot) => expect(spot).toBeCloseTo(90 / PACKET_DURATION, 10))
   })
 
   it('caps the pool at 24 and keeps the newest packets', () => {
     const sends = Array.from({ length: 30 }, (_, index) => index * 10)
     const spots = packetSpots(290, sends, PACKET_DURATION)
     expect(spots).toHaveLength(PACKET_POOL)
-    expect(spots[0]).toBeCloseTo(0.23 / 0.45, 10)
+    expect(spots[0]).toBeCloseTo(230 / PACKET_DURATION, 10)
     expect(spots[PACKET_POOL - 1]).toBe(0)
   })
 
@@ -330,7 +332,7 @@ describe('the line to the main orchestrator', () => {
     startWrite(state, 1000)
     agents.update(state, 0.016, 1000, world, terminals)
     expect(view.orchestratorLink.material.opacity).toBe(ORCHESTRATOR_LINK_OPACITY)
-    expect(view.orchestratorLink.material.color.getHex()).toBe(0xffffff)
+    expect(view.orchestratorLink.material.color.getHex()).toBe(WHITE)
     expect(view.orchestratorLink.visible).toBe(true)
     agents.dispose()
   })
@@ -345,7 +347,7 @@ describe('the line to the main orchestrator', () => {
     const view = agents.views.get('sub-ui')
     expect(view.orchestratorLink).toBeTruthy()
     expect(view.orchestratorLink.material.opacity).toBe(SUB_ORCHESTRATOR_LINK_OPACITY)
-    expect(view.orchestratorLink.material.color.getHex()).toBe(0xffffff)
+    expect(view.orchestratorLink.material.color.getHex()).toBe(WHITE)
     agents.dispose()
   })
 })
@@ -886,9 +888,9 @@ describe('the specks ride the lit folder chain', () => {
 })
 
 describe('agent strip layout', () => {
-  it('turns the wide layout on at 900 pixels', () => {
-    expect(wideLayout(899)).toBe(false)
-    expect(wideLayout(900)).toBe(true)
+  it('turns the wide layout on at its minimum width', () => {
+    expect(wideLayout(WIDE_LAYOUT_MIN - 1)).toBe(false)
+    expect(wideLayout(WIDE_LAYOUT_MIN)).toBe(true)
     expect(wideLayout(1600)).toBe(true)
     expect(wideLayout(0)).toBe(false)
     expect(wideLayout('1200')).toBe(true)

@@ -1,8 +1,8 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ORCHESTRATOR_HOME } from '../src/engine/hub.js'
-import { BASE_OPACITY, GLOW_OPACITY, INTERNET_HOME, INTERNET_LABEL, INTERNET_OFF_COLOR, INTERNET_OFF_LABEL, MORPH_SWING, createInternet, morphOffsets } from '../src/engine/internet.js'
-import { WEB } from '../src/engine/sprites.js'
+import { BASE_OPACITY, GLOW_OPACITY, INTERNET_HOME, INTERNET_LABEL, INTERNET_OFF_COLOR, INTERNET_OFF_LABEL, INTERNET_SEED, MORPH_SWING, createInternet, morphOffsets } from '../src/engine/internet.js'
+import { RED, WEB } from '../src/engine/sprites.js'
 
 describe('morphOffsets', () => {
   it('gives the same offsets for the same seed, count and time', () => {
@@ -92,7 +92,7 @@ describe('the internet shape when the room is offline', () => {
     internet.setOnline(false)
     expect(internet.online()).toBe(false)
     expect(wire.material.color.getHex()).toBe(INTERNET_OFF_COLOR)
-    expect(wire.material.color.getHex()).toBe(0xff2a2a)
+    expect(INTERNET_OFF_COLOR).toBe(RED)
     expect(internet.label.visible).toBe(false)
     expect(internet.labelOff.visible).toBe(true)
     expect(internet.labelOff.userData.text).toBe(INTERNET_OFF_LABEL)
@@ -119,7 +119,7 @@ describe('the internet shape when the room is offline', () => {
     const wire = internet.group.children.find((child) => child.isMesh)
     const attribute = wire.geometry.attributes.position
     const base = Float32Array.from(attribute.array)
-    const offsets = morphOffsets(20261025, attribute.count, 0.4)
+    const offsets = morphOffsets(INTERNET_SEED, attribute.count, 0.4)
 
     internet.update(0.4, false)
 

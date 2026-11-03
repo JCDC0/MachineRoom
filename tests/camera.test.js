@@ -666,7 +666,7 @@ describe('fitView', () => {
     expect(inside(lens, faces, 1280 / 464)).toBe(true)
   })
 
-  it('comes closer than the old 1800 floor for a small room', () => {
+  it('comes closer than 1800 for a small room', () => {
     const view = fitView([{ x: 0, y: 200, z: 0, r: 460 }], { width: 1280, height: 464 })
     expect(view.dist).toBeGreaterThanOrEqual(FIT_MIN)
     expect(view.dist).toBeLessThan(1800)

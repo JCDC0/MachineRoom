@@ -193,7 +193,8 @@ describe('thinkingArc', () => {
 })
 
 describe('the thinking spinner on an agent', () => {
-  it('builds once as two faint white rings at right angles with a bright quarter arc each', () => {    const { agents, state, terminals, world } = harness()
+  it('builds once as two faint white rings at right angles with a bright quarter arc each', () => {
+    const { agents, state, terminals, world } = harness()
     startRun(state)
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')

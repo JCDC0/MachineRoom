@@ -13,7 +13,7 @@ describe('easeRate', () => {
     expect(easeRate(10, 2, true)).toBe(1)
   })
 
-  it('returns the old formula when still is false', () => {
+  it('eases by the frame share at the given rate when still is false', () => {
     expect(easeRate(0.016, 5, false)).toBeCloseTo(1 - Math.exp(-0.016 * 5))
     expect(easeRate(0.1, 3, false)).toBeCloseTo(1 - Math.exp(-0.1 * 3))
     expect(easeRate(0.016, 5)).toBeCloseTo(1 - Math.exp(-0.016 * 5))
