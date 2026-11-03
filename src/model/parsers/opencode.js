@@ -94,10 +94,14 @@ export function createOpencodeParser(ctx) {
       touches = commandTouch(ctx, command)
       label = `$ ${shorten(command)}`
     } else if (tool === 'search') {
-      const raw = typeof input.path === 'string' ? input.path : ''
-      const touch = folderTouch(ctx, raw)
-      if (touch) touches = [touch]
-      label = `${name} ${touch ? touch.path || '.' : basename(raw) || '.'}`
+      const raw = typeof input.path === 'string' && input.path !== '' ? input.path : null
+      if (raw !== null) {
+        const touch = folderTouch(ctx, raw)
+        if (touch) touches = [touch]
+        label = `${name} ${touch ? touch.path || '.' : basename(raw) || '.'}`
+      } else {
+        label = `${name} ${shorten(input.pattern ?? '')}`
+      }
     } else if (tool === 'web') {
       const shown = name === 'webfetch' ? input.url ?? '' : input.query ?? ''
       label = shown ? `web ${name === 'webfetch' ? 'fetch' : 'search'} ${shorten(shown)}` : `web ${name === 'webfetch' ? 'fetch' : 'search'}`
