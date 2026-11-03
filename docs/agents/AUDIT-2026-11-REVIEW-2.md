@@ -38,3 +38,10 @@ Q36. I read `git log --merges --oneline -25 refs/heads/main` and `git diff MERGE
 - I did not open a browser. The 1440 by 900 checks for U119, U120, U123 and U124 are left to the orchestrator.
 - I did not replay a real recording or compare scale-probe digests, so I cannot confirm the U118 and U123 numbers or the digest changes.
 - I read the named diffs and the files they touch, not every test assertion or every CSS rule.
+
+## Orchestrator's corrections
+
+- Finding 2 is by design: the page shows `ok: false` as a dead room, so only a missing project folder or a missing viewer sets it, and the tree read error is named in `problems` only (the S33 merge).
+- Finding 5 is by design: an idle orchestrator is only resting, so the ORCHESTRATOR badge counts paused ones and pending proposals (the U119 merge).
+- Finding 13 holds as written; matching case-blind is kept on purpose, since Windows folder names are case-blind.
+- The rest go to brief U129.
