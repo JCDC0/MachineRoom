@@ -219,7 +219,7 @@ describe('boardLines', () => {
     ])
   })
 
-  it('marks direction characters in a quota error from Paperclip', () => {
+  it('marks direction characters in a quota error', () => {
     const board = costBoard({ quota: [{ provider: 'openai', ok: false, error: 'spawn ‮exe.codex' }] }, [])
     expect(boardLines(board).quota).toEqual([{ text: 'OPENAI spawn [U+202E]exe.codex', error: true }])
   })

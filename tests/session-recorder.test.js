@@ -54,24 +54,24 @@ describe('clampRecordMinutes', () => {
   })
 
   it('clamps to the range and floors', () => {
-    expect(clampRecordMinutes(0)).toBe(1)
-    expect(clampRecordMinutes(-5)).toBe(1)
-    expect(clampRecordMinutes(0.5)).toBe(1)
+    expect(clampRecordMinutes(0)).toBe(RECORD_MINUTES_MIN)
+    expect(clampRecordMinutes(-5)).toBe(RECORD_MINUTES_MIN)
+    expect(clampRecordMinutes(0.5)).toBe(RECORD_MINUTES_MIN)
     expect(clampRecordMinutes(2.9)).toBe(2)
-    expect(clampRecordMinutes(999)).toBe(240)
-    expect(clampRecordMinutes(1e6)).toBe(240)
+    expect(clampRecordMinutes(999)).toBe(RECORD_MINUTES_MAX)
+    expect(clampRecordMinutes(1e6)).toBe(RECORD_MINUTES_MAX)
   })
 
   it('answers the default for anything that is not a number', () => {
-    expect(clampRecordMinutes('abc')).toBe(10)
-    expect(clampRecordMinutes('')).toBe(10)
-    expect(clampRecordMinutes(null)).toBe(10)
-    expect(clampRecordMinutes(undefined)).toBe(10)
-    expect(clampRecordMinutes(NaN)).toBe(10)
-    expect(clampRecordMinutes(Infinity)).toBe(10)
-    expect(clampRecordMinutes(true)).toBe(10)
-    expect(clampRecordMinutes({})).toBe(10)
-    expect(clampRecordMinutes([])).toBe(10)
+    expect(clampRecordMinutes('abc')).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes('')).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes(null)).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes(undefined)).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes(NaN)).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes(Infinity)).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes(true)).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes({})).toBe(RECORD_MINUTES_DEFAULT)
+    expect(clampRecordMinutes([])).toBe(RECORD_MINUTES_DEFAULT)
   })
 
   it('reads a numeric string', () => {
@@ -142,22 +142,22 @@ describe('createSessionRecorder', () => {
     expect(recorder.minutes()).toBe(1)
   })
 
-  it('keeps a 240 minute window', () => {
-    const recorder = createSessionRecorder({ minutes: 240 })
+  it('keeps the longest window', () => {
+    const recorder = createSessionRecorder({ minutes: RECORD_MINUTES_MAX })
     recorder.push(runFrame('heartbeat.run.queued', 0))
-    recorder.push(notice(120 * MINUTE))
-    recorder.push(notice(240 * MINUTE))
+    recorder.push(notice(RECORD_MINUTES_MAX / 2 * MINUTE))
+    recorder.push(notice(RECORD_MINUTES_MAX * MINUTE))
     expect(timesOf(recorder)).toHaveLength(3)
-    recorder.push(notice(240 * MINUTE + 1))
-    expect(timesOf(recorder)).toEqual([120 * MINUTE, 240 * MINUTE, 240 * MINUTE + 1])
-    expect(recorder.minutes()).toBe(240)
+    recorder.push(notice(RECORD_MINUTES_MAX * MINUTE + 1))
+    expect(timesOf(recorder)).toEqual([RECORD_MINUTES_MAX / 2 * MINUTE, RECORD_MINUTES_MAX * MINUTE, RECORD_MINUTES_MAX * MINUTE + 1])
+    expect(recorder.minutes()).toBe(RECORD_MINUTES_MAX)
   })
 
   it('clamps the minutes it is given', () => {
-    expect(createSessionRecorder({ minutes: 0 }).minutes()).toBe(1)
-    expect(createSessionRecorder({ minutes: 500 }).minutes()).toBe(240)
-    expect(createSessionRecorder({ minutes: 'abc' }).minutes()).toBe(10)
-    expect(createSessionRecorder().minutes()).toBe(10)
+    expect(createSessionRecorder({ minutes: 0 }).minutes()).toBe(RECORD_MINUTES_MIN)
+    expect(createSessionRecorder({ minutes: 500 }).minutes()).toBe(RECORD_MINUTES_MAX)
+    expect(createSessionRecorder({ minutes: 'abc' }).minutes()).toBe(RECORD_MINUTES_DEFAULT)
+    expect(createSessionRecorder().minutes()).toBe(RECORD_MINUTES_DEFAULT)
   })
 
   it('trims at once when the minutes shrink', () => {
@@ -186,9 +186,9 @@ describe('createSessionRecorder', () => {
   it('clamps the minutes it is set to', () => {
     const recorder = createSessionRecorder()
     recorder.setMinutes(999)
-    expect(recorder.minutes()).toBe(240)
+    expect(recorder.minutes()).toBe(RECORD_MINUTES_MAX)
     recorder.setMinutes('abc')
-    expect(recorder.minutes()).toBe(10)
+    expect(recorder.minutes()).toBe(RECORD_MINUTES_DEFAULT)
   })
 
   it('returns the frames in time order', () => {

@@ -12,7 +12,7 @@ describe('relativeTo', () => {
   })
 
   it('returns null for a path outside the project', () => {
-    expect(relativeTo('agent-sandbox', 'C:\\Users\\user\\.paperclip\\skills\\SKILL.md')).toBeNull()
+    expect(relativeTo('agent-sandbox', 'C:\\Tools\\skills\\SKILL.md')).toBeNull()
     expect(relativeTo('agent-sandbox', '/etc/hosts')).toBeNull()
   })
 

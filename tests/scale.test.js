@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { readTree, treeEvent } from '../server/index.js'
 import { planFolderView } from '../src/model/folderView.js'
-import { BUDGET, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
+import { BUDGET, DEFAULTS, fakeListDir, makeScaleTree, parseProbeArgs, replayDigest, replaySources, runProbe } from '../scripts/scale-probe.mjs'
 import { startLaneBridge, waitForBridge } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -27,13 +27,13 @@ describe('the scale tree', () => {
     expect(other.files).not.toEqual(first.files)
   })
 
-  it('holds 40000 files in 4000 folders, up to 12 deep, by default', () => {
+  it('holds the default file and folder counts, up to the default depth', () => {
     const tree = makeScaleTree()
-    expect(tree.files).toHaveLength(40000)
-    expect(new Set(tree.files).size).toBe(40000)
-    expect(tree.folders).toHaveLength(4001)
+    expect(tree.files).toHaveLength(DEFAULTS.files)
+    expect(new Set(tree.files).size).toBe(DEFAULTS.files)
+    expect(tree.folders).toHaveLength(DEFAULTS.folders + 1)
     const depths = tree.folders.map((path) => (path === '' ? 0 : path.split('/').length))
-    expect(Math.max(...depths)).toBe(12)
+    expect(Math.max(...depths)).toBe(DEFAULTS.depth)
   })
 
   it('reads back through readTree with the fake listDir', async () => {
