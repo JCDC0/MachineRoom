@@ -10,6 +10,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     pool: 'threads',
+    maxWorkers: 4,
     testTimeout: 20000,
     hookTimeout: 20000,
     globalSetup: ['./tests/helpers/cleanTemp.js'],

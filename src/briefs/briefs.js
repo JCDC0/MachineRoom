@@ -125,7 +125,7 @@ export function buildPrompt({ briefs, laneKey, lanes, rules, version, agentDepth
   if (briefs.length === 1) {
     lines.push(`Commit with the prefix ${prefix} and one plain sentence. Do not push.`)
   } else {
-    lines.push(`Do the tasks in order. Run npm test and npm run build after each one and commit after each one, with the prefix ${prefix} and one plain sentence. Do not push. Report once, at the end.`)
+    lines.push(`Do the tasks in order. Run the tests for what you changed and npm run build after each one and commit after each one, with the prefix ${prefix} and one plain sentence. Do not push. Report once, at the end.`)
   }
   lines.push('')
   lines.push(`Report: ${rules.report}`)

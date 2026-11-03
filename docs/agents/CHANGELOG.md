@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Test runs use at most 4 worker threads (`maxWorkers` in `vite.config.js`), and lanes run only the tests for what they changed; the orchestrator runs the full suite once before each push.
 - The music Refresh line says `1 track` and `1 playlist` for one, instead of `1 tracks` and `1 playlists`.
 - The history audit treats `someone` as a placeholder user folder, like `user` and `owner`, so the sandbox fixture's masked home path passes.
 - The stylesheet drops 115 rules for 99 unused class names, including `.plan-*`, `.dispatch-route-*`, most of `.strip-*`, `.mr-orch-*` and `.mr-side-*`, and keeps every rule that names a state class a run-time build may use (task U143).
