@@ -147,6 +147,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                         type="button"
                         role="switch"
                         aria-checked={effect.on}
+                        aria-label={displayLabel}
                         className={`hud-settings-switch ${effect.on ? 'is-on' : ''}`}
                         onClick={() => updateEffect(key, { on: !effect.on })}
                       >
@@ -227,6 +228,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                   type="button"
                   role="switch"
                   aria-checked={soundState.on}
+                  aria-label="Beeps"
                   className={`hud-settings-switch ${soundState.on ? 'is-on' : ''}`}
                   onClick={() => updateSound({ on: !soundState.on })}
                 >
@@ -256,6 +258,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                   type="button"
                   role="switch"
                   aria-checked={soundState.dance}
+                  aria-label="Dance"
                   className={`hud-settings-switch ${soundState.dance ? 'is-on' : ''}`}
                   onClick={() => updateSound({ dance: !soundState.dance })}
                 >

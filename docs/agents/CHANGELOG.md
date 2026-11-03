@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every effect, Beeps and Dance switch has an accessible name (task U122).
 - The inspector keeps only the newest network answer and lets an offline event win (task U122).
 - The lane editor offers Save only on a lane the owner made and says why otherwise (task U122).
 - A failed family read shows the bridge's sentence and a failed count line (task U122).

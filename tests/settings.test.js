@@ -266,6 +266,15 @@ describe('the content files setting', () => {
     expect(html).toContain('<span>4</span><span>12</span><span>20</span>')
     expect(html.indexOf('Content files')).toBeGreaterThan(html.indexOf('Folder depth'))
   })
+
+  it('gives every effect, Beeps and Dance switch an accessible name', () => {
+    const html = renderToString(
+      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+    )
+    for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Beeps', 'Dance']) {
+      expect(html).toContain(`aria-label="${label}"`)
+    }
+  })
 })
 
 describe('validateBridgeUrl', () => {
