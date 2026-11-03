@@ -14,6 +14,7 @@ import Settings from './Settings.jsx'
 import SetupCard from './SetupCard.jsx'
 import Sidebar from './Sidebar.jsx'
 import { agentForNumber, agentList, displayName } from './agentList.js'
+import { actionBadges } from './badges.js'
 import { wideLayout } from './agentStrip.js'
 import { guideCanOpen, markGuideSeen, shouldShowGuide } from './guide.js'
 import { healthNotice } from './healthNotice.js'
@@ -26,6 +27,7 @@ import {
   lowerBreadcrumb,
   overviewEntries,
 } from './lowerHalf.js'
+import { latestOnly } from './panels/notices.js'
 import { orchestratorOn } from './orchestratorChat.js'
 import {
   areAllTerminalsOpen,
@@ -195,6 +197,7 @@ export default function Hud({
   costs = null,
   liveRuns = null,
   tasks = null,
+  familyProposals = null,
   mode = 'replay',
   onMode = () => {},
   liveAvailable = false,
@@ -241,6 +244,8 @@ export default function Hud({
   )
   const [orchestratorNonce, setOrchestratorNonce] = useState(0)
   const [orchestratorInfo, setOrchestratorInfo] = useState(null)
+  const [reviewList, setReviewList] = useState([])
+  const [reviewTarget, setReviewTarget] = useState(null)
   const sharedOrchestrators = useContext(OrchestratorsContext)
   const [guideOpen, setGuideOpen] = useState(
     () => typeof window !== 'undefined' && shouldShowGuide()
@@ -262,6 +267,10 @@ export default function Hud({
   const floatingChat = !wide || mode === 'replay'
   const settingsCountRef = useRef(Number(settingsRequest) || 0)
   const lastControlNonceRef = useRef(controlTarget?.nonce ?? null)
+  const reviewTargetCountRef = useRef(0)
+  const readReviewsRef = useRef(null)
+  const liveRunCountRef = useRef(null)
+  const controlOpenRef = useRef(controlOpen)
   const helpRef = useRef(null)
   const visibleLog = log.slice(-50)
   const logFollow = useLogFollow(logOpen, visibleLog.length)
@@ -294,6 +303,14 @@ export default function Hud({
   const conversation =
     conversationTabs.find((tab) => tab.id === chatTab) ?? conversationTabs[0]
   const conversationTitle = conversation?.label ?? 'Main'
+  const badges =
+    mode === 'live' && client
+      ? actionBadges({
+          reviews: reviewList,
+          proposals: familyProposals,
+          orchestrators: orchestratorList,
+        })
+      : { control: 0, orchestrator: 0 }
 
   function chooseConversation(id) {
     setChatTab(id)
@@ -350,6 +367,14 @@ export default function Hud({
       setControlOpen(false)
       setLogOpen(false)
     }
+  }
+
+  function openControlReviews() {
+    reviewTargetCountRef.current += 1
+    setReviewTarget({ tab: 'reviews', nonce: reviewTargetCountRef.current })
+    setControlOpen(true)
+    setLogOpen(false)
+    if (wide) setSettingsOpen(false)
   }
 
   useEffect(() => {
@@ -468,6 +493,50 @@ export default function Hud({
   }, [chatAvailable, client, sharedOrchestrators, wide, orchestratorNonce])
 
   useEffect(() => {
+    if (!client || mode !== 'live' || typeof client.reviews !== 'function') {
+      readReviewsRef.current = null
+      setReviewList([])
+      return undefined
+    }
+    let active = true
+    const latest = latestOnly()
+
+    async function readReviews() {
+      const isLatest = latest()
+      try {
+        const answer = await client.reviews()
+        if (!active || !isLatest()) return
+        setReviewList(Array.isArray(answer) ? answer : [])
+      } catch {
+        if (!active || !isLatest()) return
+        setReviewList([])
+      }
+    }
+
+    readReviewsRef.current = readReviews
+    readReviews()
+    const timer = setInterval(readReviews, 300000)
+    return () => {
+      active = false
+      readReviewsRef.current = null
+      clearInterval(timer)
+    }
+  }, [client, mode])
+
+  useEffect(() => {
+    const count = Array.isArray(liveRuns) ? liveRuns.length : null
+    const previous = liveRunCountRef.current
+    liveRunCountRef.current = count
+    if (count === null || previous === null || count >= previous) return
+    readReviewsRef.current?.()
+  }, [liveRuns])
+
+  useEffect(() => {
+    if (controlOpenRef.current && !controlOpen) readReviewsRef.current?.()
+    controlOpenRef.current = controlOpen
+  }, [controlOpen])
+
+  useEffect(() => {
     if (chatTab === 'orchestrator') return
     if (orchestratorList.length === 0) return
     if (!orchestratorList.some((entry) => entry.id === chatTab)) setChatTab('orchestrator')
@@ -515,6 +584,7 @@ export default function Hud({
     if (controlTarget?.nonce != null) {
       if (controlTarget.nonce !== lastControlNonceRef.current) {
         lastControlNonceRef.current = controlTarget.nonce
+        setReviewTarget(null)
         setControlOpen(true)
         setLogOpen(false)
       }
@@ -733,10 +803,15 @@ export default function Hud({
           {client && (
             <button
               type="button"
-              className="hud-action"
+              className="hud-action is-control"
               aria-pressed={controlOpen}
               aria-expanded={controlOpen}
               aria-controls="hud-control-drawer"
+              aria-label={
+                badges.control > 0
+                  ? `Control, ${badges.control} lane ${badges.control === 1 ? 'branch' : 'branches'} with commits ahead`
+                  : undefined
+              }
               onClick={() => {
                 setControlOpen((open) => {
                   const next = !open
@@ -746,16 +821,33 @@ export default function Hud({
               }}
             >
               <span>Control</span>
+              {badges.control > 0 && (
+                <span
+                  className="hud-action-badge mono"
+                  title={`${badges.control} lane ${badges.control === 1 ? 'branch has' : 'branches have'} commits ahead. Open Reviews`}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    openControlReviews()
+                  }}
+                >
+                  {badges.control}
+                </span>
+              )}
               <span className="agent-key mono">C</span>
             </button>
           )}
           {client && chatAvailable && (
             <button
               type="button"
-              className="hud-action"
+              className="hud-action is-orchestrator"
               aria-pressed={floatingChat ? chatOpen : undefined}
               aria-expanded={floatingChat ? chatOpen : undefined}
               aria-controls={floatingChat ? 'hud-orchestrator-chat' : undefined}
+              aria-label={
+                badges.orchestrator > 0
+                  ? `Orchestrator, ${badges.orchestrator} ${badges.orchestrator === 1 ? 'item needs' : 'items need'} the owner`
+                  : undefined
+              }
               onClick={() => {
                 if (floatingChat) {
                   setChatOpen((open) => !open)
@@ -766,6 +858,14 @@ export default function Hud({
               }}
             >
               <span>Orchestrator</span>
+              {badges.orchestrator > 0 && (
+                <span
+                  className="hud-action-badge mono"
+                  title={`${badges.orchestrator} of proposals and orchestrators need the owner`}
+                >
+                  {badges.orchestrator}
+                </span>
+              )}
               <span className="agent-key mono">/</span>
             </button>
           )}
@@ -1081,7 +1181,7 @@ export default function Hud({
           client={client}
           open={controlOpen}
           onClose={() => setControlOpen(false)}
-          controlTarget={controlTarget}
+          controlTarget={reviewTarget ?? controlTarget}
         />
       )}
 
