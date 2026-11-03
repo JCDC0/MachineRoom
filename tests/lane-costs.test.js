@@ -69,7 +69,7 @@ describe('laneCosts', () => {
       record('opencode', '2026-10-20T09:00:00.000Z', 0.1, { project: 'C:\\GitHub\\Other', task: 'A small job' }),
       record('opencode2', '2026-10-10T09:00:00.000Z', 0.1234),
       record('agy', '2026-10-11T09:00:00.000Z', null),
-      record('opencode', '2026-09-30T23:59:00.000Z', 5),
+      record('opencode', localTime(-24, 23), 5),
       record('hermes', '2026-10-05T09:00:00.000Z', 2),
     ]
     const costs = laneCosts({ records, agents: AGENTS, now: NOW })
@@ -98,6 +98,20 @@ describe('laneCosts', () => {
       [25, 5],
       [0, 0],
     ])
+  })
+
+  it('starts this month at local midnight on the first', () => {
+    const now = new Date(2026, 10, 1, 10, 0, 0).getTime()
+    const early = new Date(2026, 10, 1, 2, 0, 0).toISOString()
+    const last = new Date(2026, 9, 31, 23, 0, 0).toISOString()
+
+    const costs = laneCosts({
+      records: [record('opencode', early, 0.5), record('opencode', last, 0.25)],
+      agents: AGENTS,
+      now,
+    })
+
+    expect(costs.byAgent[0]).toMatchObject({ costCents: 50, todayCents: 50 })
   })
 
   it('sums the tokens per lane and leaves one null when no record carries it', () => {
