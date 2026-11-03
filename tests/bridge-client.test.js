@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { REOPEN_LIMIT, REOPEN_START, discoverBridge, openBridge, probeLive } from '../src/live/bridge.js'
+import { rememberTreeVersion } from '../src/live/tree.js'
 
 class FakeSource {
   constructor(url) {
@@ -63,6 +64,42 @@ describe('openBridge', () => {
       onStatus: () => {},
     })
     expect(FakeSource.last.url).toBe(`${url}/events?history=1&tree=folders&since=12`)
+    link.close()
+  })
+
+  it('asks for the newest version the page holds when it reconnects', async () => {
+    const url = 'http://bridge-reconnect-version'
+    const fetchImpl = async (asked) => {
+      if (asked.endsWith('/api/agents')) return reply([])()
+      return reply({ root: 'p', files: ['a.js'], version: 12 })()
+    }
+    await discoverBridge({ url, fetchImpl })
+    const timers = []
+    const sources = []
+    class Counting extends FakeSource {
+      constructor(target) {
+        super(target)
+        sources.push(this)
+      }
+    }
+    const link = openBridge({
+      url,
+      EventSourceImpl: Counting,
+      onFrame: () => {},
+      onTree: () => {},
+      onStatus: () => {},
+      setTimer: (fn, ms) => {
+        timers.push({ fn, ms })
+        return timers.length
+      },
+      clearTimer: () => {},
+    })
+    expect(sources.at(-1).url).toBe(`${url}/events?history=1&tree=folders&since=12`)
+    rememberTreeVersion(url, 13)
+    sources.at(-1).readyState = 2
+    sources.at(-1).onerror()
+    timers.at(-1).fn()
+    expect(sources.at(-1).url).toBe(`${url}/events?history=1&tree=folders&since=13`)
     link.close()
   })
 
