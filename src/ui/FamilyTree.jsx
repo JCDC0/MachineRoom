@@ -169,13 +169,14 @@ export function FamilyTree({ client = null, tasks = null }) {
   const [busy, setBusy] = useState(false)
   const confirmRef = useRef(null)
 
-  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
   const [selectedLanes, setSelectedLanes] = useState([])
   const [groupOpen, setGroupOpen] = useState(false)
   const [subDraft, setSubDraft] = useState(null)
   const [subProblem, setSubProblem] = useState('')
   const [orchestrators, setOrchestrators] = useState(null)
   const [liveTaskMap, setLiveTaskMap] = useState(null)
+
+  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
 
   useEffect(() => {
     if (!canFamily) return undefined
