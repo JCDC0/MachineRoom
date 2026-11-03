@@ -40,7 +40,6 @@ describe('the autocompact form under a poll', () => {
 
       await type(root, rules, 'My rules')
       await type(root, value, '90000')
-      console.log('AFTER TYPE', rules.value, value.value)
       await act(async () => {
         on.checked = false
         on.click()

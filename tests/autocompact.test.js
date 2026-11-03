@@ -7,6 +7,7 @@ import CompactCard from '../src/ui/AgentStrip.jsx'
 import AutocompactInput from '../src/ui/AutocompactInput.jsx'
 import {
   DEFAULT_COMPACT_RULES,
+  DEFAULT_CONTEXT_WINDOW,
   RULES_LIMIT,
   autocompactRequest,
   autocompactState,
@@ -61,7 +62,7 @@ describe('the autocompact answer', () => {
       mode: 'percent',
       value: 80,
       rules: '',
-      window: 200000,
+      window: DEFAULT_CONTEXT_WINDOW,
     })
     expect(state.defaultCompactRules).toBe(DEFAULT_COMPACT_RULES)
     expect(autocompactState({ autocompactMode: 'hours' }).mode).toBe('percent')

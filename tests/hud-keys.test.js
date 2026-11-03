@@ -33,7 +33,7 @@ describe('hudKeyBlocked', () => {
     expect(hudKeyBlocked(target('.hud'))).toBe(false)
   })
 
-  it('blocks the keys in a field as before', () => {
+  it('blocks the keys in a field', () => {
     expect(hudKeyBlocked(target('input'))).toBe(true)
     expect(hudKeyBlocked(target('textarea'))).toBe(true)
     expect(hudKeyBlocked(target('select'))).toBe(true)

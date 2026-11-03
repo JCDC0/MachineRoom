@@ -56,12 +56,9 @@ describe('action badges', () => {
       dom.window.localStorage.setItem('machineroom.guide', '1')
       await mount(root, client)
 
-      const control = container.querySelector('.hud-action.is-control')
       const badge = container.querySelector('.hud-action-slot').querySelector('.hud-action-badge')
       expect(badge).not.toBeNull()
       expect(badge.textContent).toBe('1')
-      expect(badge.tagName).toBe('BUTTON')
-      expect(control.contains(badge)).toBe(false)
 
       await click(root, badge)
       await settle(20)

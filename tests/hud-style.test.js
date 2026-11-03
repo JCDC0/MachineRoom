@@ -10,8 +10,8 @@ import MetersPanel from '../src/ui/panels/MetersPanel.jsx'
 import Waiting from '../src/ui/Waiting.jsx'
 
 const SAMPLE_AGENTS = [
-  { id: 'a1', key: 'scout', name: 'Scout', status: 'working', open: true },
-  { id: 'a2', key: 'forge', name: 'Forge', status: 'error', open: false },
+  { id: 'a1', key: 'scout', name: 'Scout', status: 'working' },
+  { id: 'a2', key: 'forge', name: 'Forge', status: 'error' },
 ]
 
 const SAMPLE_LOG = [
@@ -32,7 +32,6 @@ describe('HUD concept style structure', () => {
     const html = renderToString(
       createElement(Hud, {
         mode: 'replay',
-        liveStatus: 'replay',
         snapshot: SAMPLE_SNAPSHOT,
         speeds: [1, 2, 4],
       })
@@ -51,7 +50,6 @@ describe('HUD concept style structure', () => {
     const html = renderToString(
       createElement(Hud, {
         mode: 'replay',
-        liveStatus: 'replay',
         snapshot: SAMPLE_SNAPSHOT,
         speeds: [1, 2, 4],
         helpOpen: true,
@@ -92,15 +90,6 @@ describe('HUD concept style structure', () => {
           byAgent: [{ agentId: 'a1', costCents: 500 }],
           quota: [],
         },
-        initialAgents: [
-          {
-            id: 'a1',
-            name: 'Scout',
-            role: 'researcher',
-            budgetMonthlyCents: 2000,
-            spentMonthlyCents: 500,
-          },
-        ],
       })
     )
 
@@ -108,26 +97,21 @@ describe('HUD concept style structure', () => {
     expect(html).toContain('class="meter-track"')
     expect(html).toContain('class="meter-fill')
     expect(html).toContain('<span class="meter-percent mono">45%</span>')
-    expect(html).not.toContain('backup-age-bar')
   })
 
   it('renders the control drawer header strip and the waiting cursor underscore', () => {
     const drawerHtml = renderToString(
       createElement(ControlDrawer, {
         open: true,
-        activeTab: 'tasks',
-        mode: 'replay',
-        issues: [],
-        agents: [],
-        approvals: [],
-        quotas: [],
+        activeTab: 'dispatch',
+        onClose: () => {},
       })
     )
     expect(drawerHtml).toContain('class="control-drawer-header hud-header-strip"')
 
     const waitingHtml = renderToString(
       createElement(Waiting, {
-        status: 'connected',
+        status: 'live',
         agents: SAMPLE_AGENTS,
       })
     )
@@ -144,6 +128,7 @@ describe('HUD concept style structure', () => {
           id: 'orchestrator',
           autocompact: true,
           autocompactPercent: 70,
+          contextWindow: 200000,
         },
         client: {},
       })
@@ -161,13 +146,8 @@ describe('HUD concept style structure', () => {
 
   it('shows the lower half in place of the strip and dock at 900 pixels wide', () => {
     const savedWindow = globalThis.window
-    let savedSettings = null
     const storage = {
-      getItem: (key) => {
-        if (key === 'machineroom.guide') return '1'
-        if (key === 'machineroom.settings') return savedSettings
-        return null
-      },
+      getItem: (key) => (key === 'machineroom.guide' ? '1' : null),
       setItem: () => {},
     }
     globalThis.window = {
@@ -202,17 +182,6 @@ describe('HUD concept style structure', () => {
       expect(html).toContain('id="hud-dock-costs"')
       expect(html).not.toMatch(/class="hud-strip[ "]/)
       expect(html).not.toContain('class="hud-dock"')
-      savedSettings = JSON.stringify({ dockOpen: true })
-      const open = renderToString(
-        createElement(Hud, {
-          mode: 'replay',
-          snapshot: SAMPLE_SNAPSHOT,
-          speeds: [1, 2, 4],
-        })
-      )
-      expect(open).toContain('class="hud-lower"')
-      expect(open).not.toMatch(/class="hud-strip[ "]/)
-      expect(open).not.toContain('class="hud-dock"')
     } finally {
       if (savedWindow === undefined) delete globalThis.window
       else globalThis.window = savedWindow

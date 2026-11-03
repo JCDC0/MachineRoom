@@ -169,13 +169,13 @@ describe('the team plan', () => {
     expect(plan.subs).toHaveLength(subs.length)
   })
 
-  it('refuses a count outside 1 to 4 orchestrators or 1 to 3 coders', () => {
-    for (const orchestrators of [0, 5, 1.5, 'two']) {
+  it('refuses a count outside the team limits', () => {
+    for (const orchestrators of [0, TEAM_ORCHESTRATORS_MAX + 1, 1.5, 'two']) {
       expect(teamPlan({ lanes: LANES, ladder: { subs: [] }, orchestrators, coders: 1 }).problem).toBe(
         `Choose 1 to ${TEAM_ORCHESTRATORS_MAX} orchestrators.`
       )
     }
-    for (const coders of [0, 4, 1.5, 'two']) {
+    for (const coders of [0, TEAM_CODERS_MAX + 1, 1.5, 'two']) {
       expect(teamPlan({ lanes: LANES, ladder: { subs: [] }, orchestrators: 1, coders }).problem).toBe(
         `Choose 1 to ${TEAM_CODERS_MAX} coders for each orchestrator.`
       )

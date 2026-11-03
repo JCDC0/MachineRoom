@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { AGENT_NAME_MAX } from '../src/ui/sidebar.js'
 import {
   DIRECT_HARNESS,
   DIRECT_KEY_PROBLEM,
+  MAX_SUBS,
   affectedSubText,
   assignSubLanesPlan,
   childConfirmText,
@@ -175,7 +177,9 @@ describe('a node line', () => {
   it('shows a label or says what to write', () => {
     expect(labelProblem(' Writer ')).toBe('')
     expect(labelProblem('')).toBe('Write a label for the agent.')
-    expect(labelProblem('x'.repeat(41))).toBe('Keep the label to 40 characters.')
+    expect(labelProblem('x'.repeat(AGENT_NAME_MAX + 1))).toBe(
+      `Keep the label to ${AGENT_NAME_MAX} characters.`
+    )
   })
 
   it('names an orchestrator state and a working lane task', () => {
@@ -412,10 +416,10 @@ describe('turning a lane into a sub orchestrator', () => {
     expect(lanePlan.sub.id).toBe('a-2')
   })
 
-  it('refuses a sixth sub and a lane with no name', () => {
-    const subs = Array.from({ length: 5 }, (_, index) => ({ id: `sub-${index}`, lanes: [], scope: ['**'] }))
+  it('refuses a sub past the limit and a lane with no name', () => {
+    const subs = Array.from({ length: MAX_SUBS }, (_, index) => ({ id: `sub-${index}`, lanes: [], scope: ['**'] }))
     expect(convertPlan({ subs }, { id: 'editor', label: 'Editor' }, 'opencode-2').problem).toBe(
-      'There are at most 5 sub orchestrators.'
+      `There are at most ${MAX_SUBS} sub orchestrators.`
     )
     expect(convertPlan(ladder, { id: '', label: 'Editor' }, 'opencode-2').problem).toBe(
       'The lane has no name.'
@@ -487,8 +491,8 @@ describe('grouping code agents under a sub orchestrator', () => {
   it('asks for a label, a lane and room under the limit', () => {
     expect(groupSubPlan(ladder, { label: ' ' }, ['a']).problem).toBe('Write a label for the agent.')
     expect(groupSubPlan(ladder, draft, ['', ' ']).problem).toBe('Select at least one code agent.')
-    const full = { subs: Array.from({ length: 5 }, (_, index) => ({ id: `sub-${index}`, lanes: [`lane-${index}`] })) }
-    expect(groupSubPlan(full, draft, ['a']).problem).toBe('There are at most 5 sub orchestrators.')
+    const full = { subs: Array.from({ length: MAX_SUBS }, (_, index) => ({ id: `sub-${index}`, lanes: [`lane-${index}`] })) }
+    expect(groupSubPlan(full, draft, ['a']).problem).toBe(`There are at most ${MAX_SUBS} sub orchestrators.`)
   })
 
   it('names every other sub that loses lanes or goes away', () => {

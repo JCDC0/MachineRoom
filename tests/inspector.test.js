@@ -83,7 +83,7 @@ describe('the folder explorer rows', () => {
     expect(explorerRows('missing', tree)).toEqual([])
   })
 
-  it('draws at most 200 rows and says how many more', () => {
+  it('draws at most the explorer limit and says how many more', () => {
     const files = Array.from(
       { length: EXPLORER_LIMIT + 5 },
       (_, index) => `big/${String(index).padStart(4, '0')}.js`

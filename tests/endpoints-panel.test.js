@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { PROVIDERS } from '../server/endpoints.js'
@@ -19,6 +19,7 @@ import EndpointsPanel, {
   quickProviders,
   quickSavedText,
 } from '../src/ui/EndpointsPanel.jsx'
+import { settle, withDom } from './helpers/uiDom.js'
 
 const ENDPOINTS = [
   {
@@ -137,9 +138,29 @@ describe('EndpointsPanel', () => {
     expect(open).toContain('>Save<')
   })
 
-  it('does not show a saved key value', () => {
-    const html = renderPanel({ initialOpen: true, initialKeys: ['openrouter'] })
-    expect(html).not.toContain('slot-secret')
+  it('does not show a saved key value', async () => {
+    const client = {
+      providers: async () => PROVIDERS,
+      endpoints: async () => [],
+      keys: async () => [{ name: 'openrouter', value: 'slot-secret' }],
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(EndpointsPanel, {
+            client,
+            initialProviders: PROVIDERS,
+            initialEndpoints: [],
+            initialOpen: true,
+          })
+        )
+      })
+      await settle()
+
+      const slots = container.querySelector('#endpoints-key').querySelectorAll('option')
+      expect(slots.map((option) => option.getAttribute('value'))).toEqual(['', 'openrouter'])
+      expect(container.textContent).not.toContain('slot-secret')
+    })
   })
 })
 

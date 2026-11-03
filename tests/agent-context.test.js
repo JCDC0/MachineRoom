@@ -6,7 +6,7 @@ import { toAgents } from '../src/live/source.js'
 import { createPlayer } from '../src/model/player.js'
 import AgentDock from '../src/ui/AgentDock.jsx'
 import Hud from '../src/ui/Hud.jsx'
-import { agentContext } from '../src/ui/agentContext.js'
+import { DOCK_LOG_LIMIT, agentContext } from '../src/ui/agentContext.js'
 
 const lane = {
   id: 'agent-opencode',
@@ -363,9 +363,10 @@ describe('agentContext', () => {
     expect(result.autocompact).toBe(false)
   })
 
-  it('the log cut to 12 lines', () => {
+  it('the log cut to the dock limit', () => {
+    const total = 20
     const log = []
-    for (let index = 1; index <= 20; index += 1) {
+    for (let index = 1; index <= total; index += 1) {
       log.push({ agent: 'OpenCode', text: `line ${index}`, tone: 'normal' })
     }
     log.splice(10, 0, { agent: 'Orchestrator', text: 'other agent', tone: 'normal' })
@@ -379,10 +380,10 @@ describe('agentContext', () => {
       log,
     })
 
-    expect(result.log).toHaveLength(12)
-    expect(result.log[0].text).toBe('line 9')
-    expect(result.log[11].text).toBe('line 20')
-    expect(result.command).toBe('line 20')
+    expect(result.log).toHaveLength(DOCK_LOG_LIMIT)
+    expect(result.log[0].text).toBe(`line ${total - DOCK_LOG_LIMIT + 1}`)
+    expect(result.log[DOCK_LOG_LIMIT - 1].text).toBe(`line ${total}`)
+    expect(result.command).toBe(`line ${total}`)
   })
 
   it('reads the address from the agent console lines', () => {

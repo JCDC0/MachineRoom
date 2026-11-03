@@ -4,6 +4,7 @@ import {
   LENS_SHARE_DEFAULT,
   LENS_SHARE_MAX,
   LENS_SHARE_MIN,
+  RAIL_STEP,
   clampLensShare,
   heightRailShare,
   lensHeightValue,
@@ -43,9 +44,9 @@ describe('lens rails', () => {
   })
 
   it('steps a rail with the keys and ignores others', () => {
-    expect(railStep(0.5, 'ArrowUp')).toBeCloseTo(0.55)
-    expect(railStep(0.5, 'ArrowDown')).toBeCloseTo(0.45)
-    expect(railStep(0.5, 'PageUp')).toBeCloseTo(0.7)
+    expect(railStep(0.5, 'ArrowUp')).toBeCloseTo(0.5 + RAIL_STEP)
+    expect(railStep(0.5, 'ArrowDown')).toBeCloseTo(0.5 - RAIL_STEP)
+    expect(railStep(0.5, 'PageUp')).toBeCloseTo(0.5 + RAIL_STEP * 4)
     expect(railStep(0.98, 'PageUp')).toBe(1)
     expect(railStep(0.5, 'Home')).toBe(0)
     expect(railStep(0.5, 'End')).toBe(1)
