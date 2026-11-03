@@ -291,13 +291,13 @@ export function litChain(dir, links, mask, out = [], cache = null) {
   return chain
 }
 
-export function speckPolyline(start, chain, centerOf, end, out = []) {
+export function speckPolyline(start, chain, anchorOf, end, out = []) {
   const points = out ?? []
   let count = 0
   let routed = Array.isArray(chain) && chain.length > 0
   if (routed) {
     for (let index = 0; index < chain.length; index += 1) {
-      const spot = typeof centerOf === 'function' ? centerOf(chain[index]) : null
+      const spot = typeof anchorOf === 'function' ? anchorOf(chain[index]) : null
       if (!spot || !Number.isFinite(Number(spot.x)) || !Number.isFinite(Number(spot.y)) || !Number.isFinite(Number(spot.z))) {
         routed = false
         break
@@ -314,7 +314,7 @@ export function speckPolyline(start, chain, centerOf, end, out = []) {
   }
   write(start)
   if (routed) {
-    for (let index = 0; index < chain.length; index += 1) write(centerOf(chain[index]))
+    for (let index = 0; index < chain.length; index += 1) write(anchorOf(chain[index]))
   }
   write(end)
   points.length = count
@@ -1619,7 +1619,7 @@ export function createAgents(scene, roster, cssScene = null) {
           tunnelRoute(chain, world.links, world.mask, view.route)
         }
         if (view.route.length > 0) {
-          speckPolyline(view.group.position, view.route, world.center, view.touch, view.path)
+          speckPolyline(view.group.position, view.route, world.anchor, view.touch, view.path)
         } else {
           stripPoints(view.group.position, view.touch, view.path)
         }
