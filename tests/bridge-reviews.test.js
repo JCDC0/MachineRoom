@@ -469,6 +469,28 @@ describe('merge route', { timeout: 30000 }, () => {
     expect(git(worktree, ['status', '--porcelain'])).toBe('')
   })
 
+  it('tells open pages that git changed after a merge', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startReviewsBridge({ opencode: { name: 'OpenCode', worktree } }, { projectRoot: repo })
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 10000)
+    try {
+      const events = await fetch(`${url}/events`, { signal: controller.signal })
+      const res = await mergeRequest(url, 'opencode', { confirmed: true, head, message: 'Merge the lane' })
+      expect(res.status).toBe(200)
+      let text = ''
+      for await (const chunk of events.body) {
+        text += Buffer.from(chunk).toString('utf8')
+        if (text.includes('"topic":"git"')) break
+      }
+      expect(text).toContain('"topic":"git"')
+    } finally {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  })
+
   it('answers 404 for a lane that is not an own key with a worktree, and for a missing worktree', async () => {
     const { base, repo, worktree } = makeLaneRepo()
     const missing = join(base, 'gone')

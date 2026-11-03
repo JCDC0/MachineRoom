@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 
 - A file read that names a directory emits a folder touch instead of a file touch (task S29).

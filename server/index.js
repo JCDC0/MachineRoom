@@ -310,6 +310,9 @@ export function createBridge(options = {}) {
     sendJson,
     readJsonBody,
     orchestrators: () => orchestrators,
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
   })
   const control = createControlApi({
     sendJson,
