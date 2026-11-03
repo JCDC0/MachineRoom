@@ -310,21 +310,20 @@ export function createClaudeSessionsReader(options = {}) {
     if (!child && json.type === 'assistant' && json.message?.stop_reason === 'end_turn') endRun(session, 'succeeded')
   }
 
-  function scan() {
+  function scan(skippedIds) {
     let entries
     try {
       entries = readdirSync(projectsFolder, { withFileTypes: true })
     } catch {
       return
     }
-    let skippedIds = null
+    const skipped = skippedIds ?? skippedSessions()
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue
       const id = entry.name.slice(0, -6)
       if (sessions.has(id) || evicted.has(id)) continue
-      if (skippedIds === null) skippedIds = skippedSessions()
       const path = join(projectsFolder, entry.name)
-      if (skippedIds.has(id)) {
+      if (skipped.has(id)) {
         sessions.set(id, { id, path, skipped: true, stream: null, children: new Map(), number: 0, run: null, lastGrowth: now() })
         continue
       }
@@ -365,7 +364,19 @@ export function createClaudeSessionsReader(options = {}) {
     if (stopped || ticking) return
     ticking = true
     try {
-      scan()
+      const skippedIds = skippedSessions()
+      for (const [id, session] of sessions.entries()) {
+        if (!session.skipped && skippedIds.has(id)) {
+          session.skipped = true
+          if (session.run?.open) endRun(session, 'succeeded')
+        }
+      }
+      for (const [id, session] of evicted.entries()) {
+        if (!session.skipped && skippedIds.has(id)) {
+          session.skipped = true
+        }
+      }
+      scan(skippedIds)
       scanEvicted()
       primed = true
       for (const [id, session] of [...sessions.entries()]) {
