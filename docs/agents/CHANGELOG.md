@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The pack holds runner scripts and pack-check verifies spawned scripts (task S32).
 - A run that retries after the readiness sentence records the first run as retried (task S32).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).

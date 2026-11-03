@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { findPackProblems, isForbidden, readPackReport, runPack, RUNTIME_READS, walkImports } from '../scripts/pack-check.mjs'
+import { findPackProblems, isForbidden, readPackReport, runPack, RUNTIME_READS, SPAWNED_SCRIPTS, walkImports } from '../scripts/pack-check.mjs'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -55,6 +55,9 @@ describe('isForbidden', () => {
       '.git/config',
       'logs/run.log',
       'logs/RUN.LOG',
+      'scripts/scale-live.mjs',
+      'scripts/test.mjs',
+      'scripts/decide-eval.mjs',
     ]
     for (const path of forbidden) expect(isForbidden(path)).toBe(true)
   })
@@ -65,6 +68,8 @@ describe('isForbidden', () => {
       'docs/.env.example',
       'README.md',
       'server/index.js',
+      'scripts/run-lane.mjs',
+      'scripts/mr-agent.mjs',
       'src/model/paths.js',
       'src/tests.js',
       'logs/notes.txt',
@@ -100,6 +105,19 @@ describe('runtime reads', () => {
   it('lists the files the bridge reads at run time', () => {
     expect(RUNTIME_READS).toContain('docs/agents/lanes.json')
     expect(RUNTIME_READS).toContain('docs/agents/ORCHESTRATOR-AGENT.md')
+  })
+
+  it('names a spawned script the pack leaves out', () => {
+    const problems = findPackProblems({
+      packed: ['bin/machine-room.mjs'],
+      spawned: ['scripts/run-lane.mjs'],
+    })
+    expect(problems).toEqual(['The pack list leaves out scripts/run-lane.mjs, which the bridge spawns.'])
+  })
+
+  it('lists the scripts the bridge spawns', () => {
+    expect(SPAWNED_SCRIPTS).toContain('scripts/run-lane.mjs')
+    expect(SPAWNED_SCRIPTS).toContain('scripts/mr-agent.mjs')
   })
 })
 

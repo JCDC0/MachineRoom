@@ -43,6 +43,22 @@ export const RUNTIME_READS = [
   'docs/agents/policy.json',
 ]
 
+export const SPAWNED_SCRIPTS = [
+  'scripts/run-lane.mjs',
+  'scripts/mr-agent.mjs',
+]
+
+export const PACK_SCRIPTS = new Set([
+  'scripts/acp-run.mjs',
+  'scripts/lane-lock.mjs',
+  'scripts/mcp-bridge.mjs',
+  'scripts/mr-agent.mjs',
+  'scripts/recording-files.mjs',
+  'scripts/review-lane.mjs',
+  'scripts/run-lane.mjs',
+  'scripts/worktrees.mjs',
+])
+
 export function walkImports(entry = ENTRY, root = process.cwd()) {
   const files = new Set()
   const missing = new Set()
@@ -71,7 +87,8 @@ export function walkImports(entry = ENTRY, root = process.cwd()) {
     }
   }
 
-  visit(entry)
+  const entries = Array.isArray(entry) ? entry : [entry]
+  for (const e of entries) visit(e)
   return { files: [...files].sort(), missing: [...missing].sort() }
 }
 
@@ -87,10 +104,11 @@ export function isForbidden(path) {
   if (clean === 'dist/recordings' || clean.startsWith('dist/recordings/')) return true
   if (parts.includes('node_modules')) return true
   if (parts.includes('.git')) return true
+  if (clean.startsWith('scripts/') && !PACK_SCRIPTS.has(clean)) return true
   return false
 }
 
-export function findPackProblems({ packed = [], imports = [], missing = [], runtimeReads = [] } = {}) {
+export function findPackProblems({ packed = [], imports = [], missing = [], runtimeReads = [], spawned = [] } = {}) {
   const packedSet = new Set(packed.map((path) => toPosix(path)))
   const missingSet = new Set(missing)
   const problems = []
@@ -105,6 +123,11 @@ export function findPackProblems({ packed = [], imports = [], missing = [], runt
   for (const path of [...new Set(runtimeReads)].sort()) {
     if (!packedSet.has(path)) {
       problems.push(`The pack list leaves out ${path}, which the room reads at run time.`)
+    }
+  }
+  for (const path of [...new Set(spawned)].sort()) {
+    if (!packedSet.has(path)) {
+      problems.push(`The pack list leaves out ${path}, which the bridge spawns.`)
     }
   }
   for (const path of [...packedSet].sort()) {
@@ -195,12 +218,13 @@ export function packCheck(root = ROOT) {
   } catch {
     return { code: 1, lines: ['npm pack gave no file list.'] }
   }
-  const walked = walkImports(ENTRY, root)
+  const walked = walkImports([ENTRY, ...SPAWNED_SCRIPTS], root)
   const problems = findPackProblems({
     packed: report.files,
     imports: walked.files,
     missing: walked.missing,
     runtimeReads: RUNTIME_READS,
+    spawned: SPAWNED_SCRIPTS,
   })
   if (problems.length > 0) return { code: 1, lines: problems }
   return {
