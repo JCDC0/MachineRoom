@@ -2,17 +2,20 @@ import { spawn } from 'node:child_process'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import {
   appendFileSync,
+  closeSync,
   createWriteStream,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   renameSync,
   rmSync,
   statSync,
   writeFileSync,
 } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
@@ -90,6 +93,178 @@ const TURN_LOG = /-chat-\d{8}-\d{6}-\d{3}\.log$/i
 const DEFAULT_LANE = { name: 'Orchestrator', harness: 'Claude Code', cli: { harness: 'claude', bin: 'claude', model: 'opus' } }
 const DEFAULT_OPENCODE_MODEL = 'opencode/deepseek-v4.1-flash-free'
 const VARIABLE = /%([^%]+)%/g
+
+export const SLASH_COMMAND_LIMIT = 200
+export const SLASH_DESCRIPTION_LIMIT = 200
+const SLASH_HEAD_BYTES = 4096
+const SLASH_WALK_LIMIT = 400
+const SLASH_DEPTH_LIMIT = 6
+const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---/
+
+export const ROOM_COMMANDS = [
+  { name: 'compact', description: 'Summarize the conversation and keep the summary for the next turn.', source: 'room' },
+  { name: 'clear', description: 'Start a new conversation.', source: 'room' },
+  { name: 'help', description: 'Show the list of commands.', source: 'room' },
+  { name: 'new', description: 'Start a new conversation.', source: 'room' },
+  { name: 'stop', description: 'Stop the turn that is running.', source: 'room' },
+]
+
+export function commandDescription(text) {
+  const head = String(text ?? '').replace(/\r\n?/g, '\n')
+  const found = FRONTMATTER.exec(head)
+  if (!found) return ''
+  const lines = found[1].split('\n')
+  let value = ''
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = /^description:\s*(.*)$/.exec(lines[index])
+    if (!match) continue
+    const first = match[1].trim()
+    if (/^[>|][-+]?$/.test(first)) {
+      const parts = []
+      for (let next = index + 1; next < lines.length; next += 1) {
+        const line = lines[next]
+        if (line && !/^\s/.test(line)) break
+        const part = line.trim()
+        if (part) parts.push(part)
+      }
+      value = parts.join(' ')
+    } else {
+      value = first
+    }
+    break
+  }
+  const clean = value
+    .replace(/^['"]+/, '')
+    .replace(/['"]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return clean.slice(0, SLASH_DESCRIPTION_LIMIT)
+}
+
+function readHeadText(file) {
+  let handle = null
+  try {
+    handle = openSync(file, 'r')
+    const buffer = Buffer.alloc(SLASH_HEAD_BYTES)
+    const read = readSync(handle, buffer, 0, SLASH_HEAD_BYTES, 0)
+    return buffer.subarray(0, read).toString('utf8')
+  } catch {
+    return ''
+  } finally {
+    if (handle !== null) {
+      try {
+        closeSync(handle)
+      } catch {}
+    }
+  }
+}
+
+function markdownFiles(folder, depth = 0, found = []) {
+  if (depth > SLASH_DEPTH_LIMIT || found.length >= SLASH_WALK_LIMIT) return found
+  let entries
+  try {
+    entries = readdirSync(folder, { withFileTypes: true })
+  } catch {
+    return found
+  }
+  entries.sort((left, right) => left.name.localeCompare(right.name))
+  for (const entry of entries) {
+    if (found.length >= SLASH_WALK_LIMIT) break
+    const path = join(folder, entry.name)
+    if (entry.isDirectory()) markdownFiles(path, depth + 1, found)
+    else if (entry.isFile() && /\.md$/i.test(entry.name)) found.push(path)
+  }
+  return found
+}
+
+function slashFolders(harness, projectRoot = '', home = '') {
+  const project = typeof projectRoot === 'string' ? projectRoot.trim() : ''
+  const user = typeof home === 'string' && home.trim() ? resolve(home) : homedir()
+  const commands = []
+  const skills = []
+  if (harness === 'claude') {
+    if (project) commands.push(join(project, '.claude', 'commands'))
+    commands.push(join(user, '.claude', 'commands'))
+    if (project) skills.push(join(project, '.claude', 'skills'))
+    skills.push(join(user, '.claude', 'skills'))
+    return { commands, skills }
+  }
+  if (project) {
+    commands.push(join(project, '.opencode', 'command'))
+    commands.push(join(project, '.opencode', 'commands'))
+    skills.push(join(project, '.opencode', 'skills'))
+    skills.push(join(project, '.claude', 'skills'))
+    skills.push(join(project, '.agents', 'skills'))
+  }
+  commands.push(join(user, '.config', 'opencode', 'command'))
+  commands.push(join(user, '.config', 'opencode', 'commands'))
+  skills.push(join(user, '.config', 'opencode', 'skills'))
+  skills.push(join(user, '.claude', 'skills'))
+  skills.push(join(user, '.agents', 'skills'))
+  return { commands, skills }
+}
+
+function commandName(file, folder) {
+  const rel = relative(folder, file).replace(/\\/g, '/').replace(/\.md$/i, '')
+  return rel.split('/').filter(Boolean).join(':').trim()
+}
+
+function skillName(file, folder) {
+  const rel = relative(folder, file).replace(/\\/g, '/')
+  const parts = rel.split('/').filter(Boolean)
+  if (parts.length === 0) return ''
+  if (parts.length > 1) return parts[0].trim()
+  return parts[0].replace(/\.md$/i, '').trim()
+}
+
+export function scanSlashCommands({ harness = 'claude', projectRoot = '', home = '', limit = SLASH_COMMAND_LIMIT } = {}) {
+  const cap = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : SLASH_COMMAND_LIMIT
+  const seen = new Set(ROOM_COMMANDS.map((entry) => entry.name))
+  const commands = []
+  const folders = slashFolders(harness, projectRoot, home)
+  function collect(list, source, nameOf) {
+    for (const folder of list) {
+      for (const file of markdownFiles(folder)) {
+        if (commands.length >= Math.max(0, cap - ROOM_COMMANDS.length)) return
+        const name = nameOf(file, folder)
+        if (!name || seen.has(name)) continue
+        seen.add(name)
+        commands.push({ name, description: commandDescription(readHeadText(file)), source, file })
+      }
+    }
+  }
+  collect(folders.commands, 'command', commandName)
+  collect(folders.skills, 'skill', skillName)
+  commands.sort((left, right) => left.name.localeCompare(right.name))
+  const room = ROOM_COMMANDS.map((entry) => ({ ...entry })).slice(0, cap)
+  return [...room, ...commands].slice(0, cap)
+}
+
+function stripFrontmatter(text) {
+  const source = String(text ?? '').replace(/\r\n?/g, '\n')
+  const found = /^---\n[\s\S]*?\n---\n?/.exec(source)
+  return found ? source.slice(found[0].length) : source
+}
+
+export function expandSlashCommand(text, commands, readBody = readText) {
+  const value = typeof text === 'string' ? text : ''
+  const trimmed = value.trim()
+  const match = /^\/([A-Za-z0-9][A-Za-z0-9:._-]*)(?:[ \t]+([\s\S]*))?$/.exec(trimmed)
+  if (!match) return value
+  const name = match[1]
+  const args = (match[2] ?? '').trim()
+  const list = Array.isArray(commands) ? commands : []
+  const entry = list.find((item) => item && typeof item.name === 'string' && item.name === name)
+  if (!entry || typeof entry.file !== 'string' || !entry.file) return value
+  const body = stripFrontmatter(typeof readBody === 'function' ? readBody(entry.file) : '').trim()
+  if (!body) return value
+  const position = args ? args.split(/\s+/).slice(0, 9) : []
+  let expanded = body.replace(/\$(ARGUMENTS|[1-9])/g, (whole, token) =>
+    token === 'ARGUMENTS' ? args : (position[Number(token) - 1] ?? '')
+  )
+  if (!body.includes('$ARGUMENTS') && !/\$[1-9]/.test(body) && args) expanded = `${expanded}\n\nARGUMENTS: ${args}`
+  return expanded
+}
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -458,6 +633,7 @@ export function createOrchestrator({
   onOutsideScope = null,
   contextWindow: contextWindowOption = 0,
   token: tokenOption = '',
+  home = '',
   harnesses = harnessByKey,
   hasSub = null,
   rename = renameSync,
@@ -879,6 +1055,32 @@ export function createOrchestrator({
     return messages.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
   }
 
+  function slashCommands() {
+    return scanSlashCommands({ harness, projectRoot: root, home })
+  }
+
+  function commandList() {
+    return slashCommands().map((entry) => ({
+      name: entry.name,
+      description: entry.description,
+      source: entry.source,
+    }))
+  }
+
+  function expandOwners(queued) {
+    const slashed = queued.some(
+      (message) => message?.from === 'owner' && typeof message.text === 'string' && message.text.trim().startsWith('/')
+    )
+    if (!slashed) return queued
+    const list = slashCommands()
+    if (list.length === 0) return queued
+    return queued.map((message) => {
+      if (!message || message.from !== 'owner' || typeof message.text !== 'string') return message
+      const expanded = expandSlashCommand(message.text, list)
+      return expanded === message.text ? message : { ...message, text: expanded }
+    })
+  }
+
   function startTurn(options = null) {
     if (roomTimer) {
       clearTimeout(roomTimer)
@@ -889,7 +1091,7 @@ export function createOrchestrator({
     const compaction = manualCompacting || Boolean(pendingCompaction)
     pendingCompaction = null
     const queued = compaction ? [] : pending.splice(0, pending.length)
-    const fit = compaction ? { text: '', used: [] } : fitTurnText(queued)
+    const fit = compaction ? { text: '', used: [] } : fitTurnText(expandOwners(queued))
     const turnMessages = fit.used
     if (!compaction && turnMessages.length < queued.length) {
       pending.unshift(...queued.slice(turnMessages.length))
@@ -1692,6 +1894,7 @@ export function createOrchestrator({
     send,
     deliver,
     stop,
+    commands: commandList,
     setAutocompact,
     compact,
     setModel,

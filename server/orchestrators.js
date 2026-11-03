@@ -166,6 +166,7 @@ export function createOrchestrators({
   onMasked,
   onMessage = () => {},
   activeLanes,
+  home = '',
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -219,6 +220,7 @@ export function createOrchestrators({
     onMasked,
     onMessage: (message) => announce(message?.from, message?.to, message?.kind),
     hasSub: (id) => instances.has(id),
+    home,
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -303,6 +305,7 @@ export function createOrchestrators({
         const current = ladder.subs.find((entry) => entry.id === config.id) || sub
         return subPrompt(current, ORCHESTRATOR_KEY, ladder)
       },
+      home,
       siblings: config.siblings,
       onReply: (text) => {
         if (stopped) return
@@ -565,6 +568,16 @@ export function createOrchestrators({
         return true
       }
       sendJson(req, res, 200, instance.answer())
+      return true
+    }
+    if (path === '/api/orchestrator/commands') {
+      if (method !== 'GET') return methodNotAllowed(req, res)
+      const instance = find(url.searchParams.get('id'))
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      sendJson(req, res, 200, { commands: instance.commands() })
       return true
     }
     if (path === '/api/orchestrator/messages') {
