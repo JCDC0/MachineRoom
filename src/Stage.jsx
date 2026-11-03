@@ -33,7 +33,7 @@ import { activitySounds, sound } from './ui/sound.js'
 import { setFineDust } from './engine/void.js'
 import { still } from './engine/sprites.js'
 import { createIdleWatch, idleAllowed, stageClassName } from './ui/idleView.js'
-import { LiveBadgeContext, OrchestratorsContext } from './ui/Transport.jsx'
+import { LiveBadgeContext, LanePillsContext, OrchestratorsContext } from './ui/Transport.jsx'
 import { orchestratorAnswerList } from './ui/transportOrchestrators.js'
 import Waiting from './ui/Waiting.jsx'
 import LensRail from './ui/LensRail.jsx'
@@ -669,8 +669,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const [dockCosts, setDockCosts] = useState(null)
+  const [dockLanes, setDockLanes] = useState(NONE)
   const [dockRuns, setDockRuns] = useState(NONE)
   const [dockTasks, setDockTasks] = useState(NONE)
+  const [dockRecords, setDockRecords] = useState(null)
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
@@ -1138,8 +1140,10 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!client) {
       latestTasksRef.current = null
       roomRef.current?.setTasks(null)
+      setDockLanes(NONE)
       setDockRuns(NONE)
       setDockTasks(NONE)
+      setDockRecords(null)
       return undefined
     }
     let active = true
@@ -1148,24 +1152,29 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     async function updateTasks() {
       const isLatest = latest()
       try {
-        const [agentsRaw, issuesRaw, liveRunsRaw] = await Promise.all([
+        const [agentsRaw, issuesRaw, liveRunsRaw, recordsRaw] = await Promise.all([
           client.agents(),
           client.issues(),
           client.liveRuns(),
+          typeof client.runs === 'function' ? client.runs().catch(() => null) : null,
         ])
         if (!active || !isLatest()) return
         const roster = toAgents(Array.isArray(agentsRaw) ? agentsRaw : [])
         const tasks = agentTasks(liveRunsRaw, issuesRaw, roster)
         latestTasksRef.current = tasks
         roomRef.current?.setTasks(tasks)
+        setDockLanes(Array.isArray(agentsRaw) ? agentsRaw : NONE)
         setDockRuns(Array.isArray(liveRunsRaw) ? liveRunsRaw : NONE)
         setDockTasks(Array.isArray(issuesRaw) ? issuesRaw : NONE)
+        setDockRecords(recordsRaw && typeof recordsRaw === 'object' ? recordsRaw : null)
       } catch {
         if (!active || !isLatest()) return
         latestTasksRef.current = null
         roomRef.current?.setTasks(null)
+        setDockLanes(NONE)
         setDockRuns(NONE)
         setDockTasks(NONE)
+        setDockRecords(null)
       }
     }
 
@@ -1600,38 +1609,48 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         <OrchestratorActivity.Provider value={orchestratorActivity}>
           <CostsModeContext.Provider value={costMode}>
             <OrchestratorsContext.Provider value={orchestrators}>
-              <Hud
-                snapshot={snapshot}
-                project={project}
-                focused={focused}
-                speeds={SPEEDS}
-                fpsStats={fpsStats}
-                mode={mode}
-                client={client}
-                assistantPaths={assistantPaths}
-                onAssistantAction={runAssistant}
-                controlTarget={controlTarget}
-                markers={timeline?.markers ?? NONE}
-                log={log}
-                costs={dockCosts}
-                liveRuns={dockRuns}
-                tasks={dockTasks}
-                liveAvailable={liveAvailable}
-                onMode={onMode}
-                onToggle={() => player.toggle()}
-                onSeek={(value) => player.seek(value)}
-                onSpeed={changeSpeed}
-                onFocus={focus}
-                onOverview={overview}
-                openTerminals={openChips}
-                onToggleTerminal={toggleTerminal}
-                onShowTerminals={showTerminals}
-                health={health}
-                ladder={ladder}
-                labels={labels}
-                effects={effects}
-                onSettingsChange={handleSettingsChange}
-              />
+              <LanePillsContext.Provider
+                value={{
+                  agents: dockLanes,
+                  liveRuns: dockRuns,
+                  issues: dockTasks,
+                  records: dockRecords,
+                  labels,
+                }}
+              >
+                <Hud
+                  snapshot={snapshot}
+                  project={project}
+                  focused={focused}
+                  speeds={SPEEDS}
+                  fpsStats={fpsStats}
+                  mode={mode}
+                  client={client}
+                  assistantPaths={assistantPaths}
+                  onAssistantAction={runAssistant}
+                  controlTarget={controlTarget}
+                  markers={timeline?.markers ?? NONE}
+                  log={log}
+                  costs={dockCosts}
+                  liveRuns={dockRuns}
+                  tasks={dockTasks}
+                  liveAvailable={liveAvailable}
+                  onMode={onMode}
+                  onToggle={() => player.toggle()}
+                  onSeek={(value) => player.seek(value)}
+                  onSpeed={changeSpeed}
+                  onFocus={focus}
+                  onOverview={overview}
+                  openTerminals={openChips}
+                  onToggleTerminal={toggleTerminal}
+                  onShowTerminals={showTerminals}
+                  health={health}
+                  ladder={ladder}
+                  labels={labels}
+                  effects={effects}
+                  onSettingsChange={handleSettingsChange}
+                />
+              </LanePillsContext.Provider>
             </OrchestratorsContext.Provider>
           </CostsModeContext.Provider>
         </OrchestratorActivity.Provider>

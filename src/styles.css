@@ -2661,6 +2661,10 @@ summary:focus-visible,
   justify-content: space-between;
 }
 
+.transport-lanes {
+  display: none;
+}
+
 .transport > button {
   font-size: 12px;
   letter-spacing: 0.04em;
@@ -9003,7 +9007,7 @@ body:has(#hud-orchestrator-chat) .waiting {
 @media (min-width: 900px) {
   .transport.is-live.has-orchestrator {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
   }
 
   .transport-orchestrators {
@@ -9012,6 +9016,7 @@ body:has(#hud-orchestrator-chat) .waiting {
     gap: 6px;
     justify-self: center;
     min-width: 0;
+    max-width: 100%;
   }
 
   .hud-lower-main {
@@ -9107,6 +9112,92 @@ body:has(#hud-orchestrator-chat) .waiting {
     white-space: nowrap;
   }
 
+  .transport-lanes {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .transport-lane {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 112px;
+    padding: 1px 7px;
+    border: 1px solid rgb(255 255 255 / 0.18);
+    border-radius: 2px;
+    background: transparent;
+    color: rgb(255 255 255 / 0.72);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-transform: none;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .transport-lane:hover,
+  .transport-lane:focus-visible {
+    color: var(--white);
+    border-color: rgb(255 255 255 / 0.5);
+    background: transparent;
+  }
+
+  .transport-lane-label {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 56px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .transport-lane-task {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 48px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: rgb(255 255 255 / 0.45);
+  }
+
+  .transport-lane-dot {
+    flex: none;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgb(255 255 255 / 0.3);
+  }
+
+  .transport-lane.is-working .transport-lane-dot {
+    background: var(--yellow);
+  }
+
+  .transport-lane.is-failed .transport-lane-dot {
+    background: var(--red);
+  }
+
+  .transport-lane-time {
+    flex: none;
+    color: rgb(255 255 255 / 0.55);
+  }
+
+  .transport-lane-step {
+    flex: none;
+    color: var(--yellow);
+  }
+
+  .transport-lane-overflow {
+    color: rgb(255 255 255 / 0.5);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
   .transport-tail {
     display: inline-flex;
     align-items: center;
@@ -9177,6 +9268,8 @@ body:has(#hud-orchestrator-chat) .waiting {
   .transport-orchestrator,
   .transport-chip,
   .transport-chip-overflow,
+  .transport-lane,
+  .transport-lane-overflow,
   .transport-context,
   .transport-tail > .mono,
   .transport.is-live > .mono,
@@ -9191,6 +9284,8 @@ body:has(#hud-orchestrator-chat) .waiting {
   .transport-orchestrator,
   .transport-chip,
   .transport-chip-overflow,
+  .transport-lane,
+  .transport-lane-overflow,
   .transport-context,
   .transport-tail > .mono,
   .transport.is-live > .mono,

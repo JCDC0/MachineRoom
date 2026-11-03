@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The live transport shows a compact pill per lane that is working, queued or failed in its last run, with its task, minutes and queue step, and a click focuses and inspects that lane (task U120).
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.
 - A hunt that ran 464 real run logs through the parsers (task Q30).
