@@ -540,7 +540,8 @@ export function createGitApi({
         return true
       }
 
-      const alreadyTaken = await branchRefExists(resolved, name)
+      // A name that differs only by case breaks a checkout on Windows, so it counts as taken everywhere.
+      const alreadyTaken = await branchExistsLoose(resolved, name)
       if (alreadyTaken) {
         sendJson(req, res, 400, { error: BRANCH_TAKEN_PROBLEM })
         return true
@@ -569,8 +570,7 @@ export function createGitApi({
         try {
           await gitRunner(resolved, ['branch', '--', name, `refs/heads/${from}`])
         } catch {
-          const taken = await branchExistsLoose(resolved, name)
-          sendJson(req, res, taken ? 400 : 500, { error: taken ? BRANCH_TAKEN_PROBLEM : 'The bridge could not create that branch.' })
+          sendJson(req, res, 500, { error: 'The bridge could not create that branch.' })
           return true
         }
 
