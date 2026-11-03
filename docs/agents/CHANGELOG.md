@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The packed start test runs a lane dry-run and loads mr-agent from the unpacked pack (task S36).
+- Evicted Claude sessions keep only resume fields, the map is capped at 200, and finished subagent buffers are dropped (task S36).
+- Forgotten OpenCode sessions are dropped from the scan until reopened (task S36).
+
 - On a reconnect the page asks the bridge for the tree since the newest version it holds (task U126).
 - A failed manual Refresh in Reviews shows its sentence (task U126).
 - A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).
