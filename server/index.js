@@ -706,18 +706,27 @@ export function createBridge(options = {}) {
     }, pollMs)
   }
 
-  function rememberLaneParsers() {
-    if (!lanesSource) return
-    for (const agent of lanesSource.agents) {
-      if (agent.id !== '') parserByAgentId.set(String(agent.id), agent.parser)
+  function rememberParsers() {
+    const next = new Map()
+    if (lanesSource) {
+      for (const agent of lanesSource.agents) {
+        if (agent.id !== '') next.set(String(agent.id), agent.parser)
+      }
     }
+    if (sessionsSource) {
+      for (const agent of sessionsSource.agents) {
+        if (agent.id !== '') next.set(String(agent.id), agent.parser)
+      }
+    }
+    parserByAgentId = next
+  }
+
+  function rememberLaneParsers() {
+    rememberParsers()
   }
 
   function rememberSessionsParsers() {
-    if (!sessionsSource) return
-    for (const agent of sessionsSource.agents) {
-      if (agent.id !== '') parserByAgentId.set(String(agent.id), agent.parser)
-    }
+    rememberParsers()
   }
 
   function countUnreadable(parsed) {

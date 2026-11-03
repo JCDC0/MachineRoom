@@ -6,6 +6,7 @@
 - A new Pulse switch beside Dance makes each agent's wireframe shape move with five music bands, and puts the shape back when it is off or the music stops (task U131).
 - The music player picks a playlist or Loose tracks, plays it in order and loops, and saves `music.playlist` (task U130).
 - `GET /api/music` lists one playlist per subfolder and serves `GET /music/PLAYLIST/NAME`, with every part checked (task U130).
+- The bridge drops agents that left the roster from the parser index (task S37).
 - The completed runs list keeps at most the newest 200 entries (task S37).
 - A pinned run with no frame for 2 hours is unpinned in event history (task S37).
 - A finished turn or a failed run's wake reads only the last 64 KB of its log (task S37).

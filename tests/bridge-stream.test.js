@@ -436,6 +436,25 @@ describe('the unreadable counter', () => {
     expect((await healthOf(url)).unparsed).toMatchObject({ total: 0, byParser: ZERO })
   })
 
+  it('drops agents that left the roster from the parser index (S37)', async () => {
+    let currentLanes = {
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode' }, worktree: 'C:\\work\\opencode' },
+      claude: { name: 'Claude', cli: { harness: 'claude' }, worktree: 'C:\\work\\claude' },
+    }
+    const runs = tempDir()
+    const { url } = await laneBridge({ runsDir: runs, lanes: () => currentLanes })
+    await fetch(`${url}/api/agents`)
+
+    currentLanes = {
+      opencode: { name: 'OpenCode', cli: { harness: 'opencode' }, worktree: 'C:\\work\\opencode' },
+    }
+    await fetch(`${url}/api/agents`)
+
+    writeRun(runs, 'claude-left-20261024-132300', [flaggedClaudeLine()], { lane: 'claude' })
+    await sleep(200)
+    expect((await healthOf(url)).unparsed.total).toBe(0)
+  })
+
   it('counts nothing from a stderr frame', async () => {
     const { url, send } = await sourceBridge()
     send(sessionFrame('heartbeat.run.log', { runId: 'r1', seq: 1, stream: 'stderr', chunk: `${flaggedClaudeLine()}\n`, truncated: false }))
