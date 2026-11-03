@@ -87,6 +87,21 @@ describe('makeTree', () => {
     expect(tree.dirs).toEqual(['', 'a', 'a/y', 'b'])
     expect(tree.files).toEqual(['a/y/z.js', 'b/x.js'])
   })
+
+  it('builds the same folders by walking the sorted prefixes of a deep list', () => {
+    const files = [
+      'src/a/one.js',
+      'src/a/two.js',
+      'src/a/deep/three.js',
+      'src/b/one.js',
+      'src/b/deep/four.js',
+      'top.js',
+      'z/last.js',
+    ]
+    const tree = makeTree({ root: 'demo', files: [...files].reverse(), created: [] })
+    expect(tree.files).toEqual([...files].sort())
+    expect(tree.dirs).toEqual(['', 'src', 'src/a', 'src/a/deep', 'src/b', 'src/b/deep', 'z'])
+  })
 })
 
 describe('visibleText', () => {
