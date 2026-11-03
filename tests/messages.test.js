@@ -118,7 +118,7 @@ describe('the room packets', () => {
     expect(MESSAGE_DURATION).toBe(600)
     expect(MESSAGE_GAP).toBe(60)
     expect(messages.points.geometry.attributes.position.array).toHaveLength(MESSAGE_POOL * 3)
-    expect(messages.points.material.size).toBe(3)
+    expect(messages.points.material.size).toBe(MESSAGE_SIZE)
     expect(messages.points.material.sizeAttenuation).toBe(false)
 
     expect(messages.note({ type: 'agent.message', agent: 'orchestrator', to: 'sub-ui', kind: 'order' })).toBe(true)

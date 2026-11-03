@@ -69,7 +69,6 @@ const LADDER = {
   ],
 }
 
-const SUB_REACH = 96 * 0.7
 const CHIP_HALF_HEIGHT = 40
 const CALLOUT_HALF_HEIGHT = 40
 
@@ -121,7 +120,6 @@ describe('orchestratorNameLift', () => {
 
   it('raises the name above the sub lift', () => {
     expect(ORCHESTRATOR_NAME_LIFT).toBeGreaterThan(SUB_ORCHESTRATOR_LIFT)
-    expect(ORCHESTRATOR_NAME_LIFT).toBeGreaterThan(SUB_REACH)
   })
 })
 
@@ -136,8 +134,9 @@ describe('the main name from the overview', () => {
       const chipBottom = ndcY(camera, chip.clone().addScaledVector(camUp, -CHIP_HALF_HEIGHT))
       const calloutBottom = ndcY(camera, callout.clone().addScaledVector(camUp, -CALLOUT_HALF_HEIGHT))
       for (const key of ['sub-frontend', 'sub-backend']) {
-        const sub = agents.views.get(key).group.position
-        const subTop = ndcY(camera, sub.clone().addScaledVector(camUp, SUB_REACH))
+        const subView = agents.views.get(key)
+        const reach = subView.shellRadius * subView.scale
+        const subTop = ndcY(camera, subView.group.position.clone().addScaledVector(camUp, reach))
         expect(chipBottom).toBeGreaterThan(subTop)
         expect(calloutBottom).toBeGreaterThan(subTop)
       }
@@ -155,8 +154,9 @@ describe('the main name from the overview', () => {
     const callout = agents.views.get('orchestrator').callout.object.position
     expect(callout.y).toBeGreaterThan(main.y + 180)
     for (const key of ['sub-frontend', 'sub-backend']) {
-      const sub = agents.views.get(key).group.position
-      const subTop = ndcY(camera, sub.clone().addScaledVector(camUp, SUB_REACH))
+      const subView = agents.views.get(key)
+      const reach = subView.shellRadius * subView.scale
+      const subTop = ndcY(camera, subView.group.position.clone().addScaledVector(camUp, reach))
       expect(ndcY(camera, chip.clone().addScaledVector(camUp, -CHIP_HALF_HEIGHT))).toBeGreaterThan(subTop)
     }
     agents.dispose()

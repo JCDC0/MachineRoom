@@ -9,7 +9,7 @@ import {
   showsNameLabel,
   subOrchestratorPlace,
 } from '../src/engine/agents.js'
-import { OVERVIEW, viewBasis } from '../src/engine/camera.js'
+import { FOV, OVERVIEW, viewBasis } from '../src/engine/camera.js'
 import {
   HUB_RADIUS,
   HUB_Y,
@@ -160,7 +160,7 @@ describe('sector slot angles', () => {
 })
 
 describe('sector arcs a beginner can see', () => {
-  const FOCAL = 464 / 2 / Math.tan((50 * Math.PI) / 360)
+  const FOCAL = 464 / 2 / Math.tan((FOV * Math.PI) / 360)
   const OVERVIEW_DEPTH = 2854
 
   it('leaves a gap at each end of an arc', () => {
@@ -211,7 +211,7 @@ describe('sector arcs a beginner can see', () => {
 })
 
 describe('the place of a sector name', () => {
-  const FOCAL = 464 / 2 / Math.tan((50 * Math.PI) / 360)
+  const FOCAL = 464 / 2 / Math.tan((FOV * Math.PI) / 360)
   const GLYPH = 0.62
 
   it('sits below the ring plane and outside the arc', () => {
@@ -248,7 +248,7 @@ describe('the place of a sector name', () => {
   it('keeps two sector names from overlapping at four sectors', () => {
     const arcs = sectorArcs(FOUR_LADDER, FOUR_KEYS)
     expect(arcs).toHaveLength(4)
-    const camera = new THREE.PerspectiveCamera(50, 1280 / 464, 1, 60000)
+    const camera = new THREE.PerspectiveCamera(FOV, 1280 / 464, 1, 60000)
     const basis = viewBasis(OVERVIEW.yaw, OVERVIEW.pitch)
     camera.position.set(
       OVERVIEW.x + basis.back.x * OVERVIEW.dist,
@@ -407,10 +407,10 @@ describe('the hub with a ladder', () => {
     const label = subGroup.children.find((child) => child.isSprite)
     const at = new THREE.Vector3()
     label.getWorldPosition(at)
-    const camera = new THREE.PerspectiveCamera(50, 1280 / 464, 1, 60000)
+    const camera = new THREE.PerspectiveCamera(FOV, 1280 / 464, 1, 60000)
     camera.position.copy(at).add(new THREE.Vector3(0, 0, 2854))
     hub.update(0, 0.016, camera, 464)
-    const focal = 464 / 2 / Math.tan((50 * Math.PI) / 360)
+    const focal = 464 / 2 / Math.tan((FOV * Math.PI) / 360)
     const pixels = SECTOR_LABEL_FONT * SECTOR_LABEL_BASE * label.userData.factor * (focal / 2854)
     expect(pixels).toBeGreaterThanOrEqual(11)
     expect(label.scale.x).toBeCloseTo(label.userData.base.x * label.userData.factor)

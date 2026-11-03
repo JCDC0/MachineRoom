@@ -63,20 +63,20 @@ describe('childOrbit', () => {
 })
 
 describe('childFade', () => {
-  it('holds an ended child at full opacity for 6 seconds, then fades it', () => {
+  it('holds an ended child at full opacity for the hold, then fades it', () => {
     expect(childFade(0)).toBe(1)
-    expect(childFade(5900)).toBe(1)
-    expect(childFade(6000)).toBe(1)
-    expect(childFade(6750)).toBeCloseTo(0.5)
-    expect(childFade(7500)).toBe(0)
+    expect(childFade(CHILD_HOLD_MS - 100)).toBe(1)
+    expect(childFade(CHILD_HOLD_MS)).toBe(1)
+    expect(childFade(CHILD_HOLD_MS + 750)).toBeCloseTo(0.5)
+    expect(childFade(CHILD_HOLD_MS + 1500)).toBe(0)
   })
 
-  it('holds for 6 seconds under reduced motion, then goes at once', () => {
+  it('holds for the same time under reduced motion, then goes at once', () => {
     expect(childFade(0, true)).toBe(1)
-    expect(childFade(5900, true)).toBe(1)
-    expect(childFade(6000, true)).toBe(1)
-    expect(childFade(6750, true)).toBe(0)
-    expect(childFade(7500, true)).toBe(0)
+    expect(childFade(CHILD_HOLD_MS - 100, true)).toBe(1)
+    expect(childFade(CHILD_HOLD_MS, true)).toBe(1)
+    expect(childFade(CHILD_HOLD_MS + 750, true)).toBe(0)
+    expect(childFade(CHILD_HOLD_MS + 1500, true)).toBe(0)
   })
 })
 

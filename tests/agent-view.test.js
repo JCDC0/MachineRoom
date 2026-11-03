@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAgents } from '../src/engine/agents.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, SWAY_LIFT, SWAY_SCALE } from '../src/engine/hub.js'
 import { RED, YELLOW } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { apply, createState } from '../src/model/state.js'
@@ -234,16 +235,16 @@ describe('the beat rings around an agent', () => {
     try {
       const { agents, state, terminals, world } = harness()
       const view = agents.views.get('a')
-      expect(view.beatRings).toHaveLength(3)
+      expect(view.beatRings).toHaveLength(AGENT_RING_POOL)
       agents.beat(1)
-      clock += 450
+      clock += AGENT_RING_MS / 2
       agents.update(state, 0.016, clock, world, terminals)
       const lit = view.beatRings.filter((slot) => slot.line.visible)
       expect(lit).toHaveLength(1)
-      expect(lit[0].line.scale.x).toBeGreaterThan(130)
-      expect(lit[0].line.scale.x).toBeLessThan(260)
+      expect(lit[0].line.scale.x).toBeGreaterThan(AGENT_RING_BASE)
+      expect(lit[0].line.scale.x).toBeLessThan(AGENT_RING_BASE + AGENT_RING_GROW)
       expect(lit[0].line.material.opacity).toBeGreaterThan(0)
-      clock += 900
+      clock += AGENT_RING_MS
       agents.update(state, 0.016, clock, world, terminals)
       expect(view.beatRings.some((slot) => slot.line.visible)).toBe(false)
       agents.dispose()
@@ -263,7 +264,7 @@ describe('the beat rings on the ladder', () => {
     const agents = createAgents(new THREE.Scene(), roster, new THREE.Scene())
     for (const key of ['orchestrator', 'sub-frontend', 'opencode']) {
       const view = agents.views.get(key)
-      expect(view.beatRings).toHaveLength(3)
+      expect(view.beatRings).toHaveLength(AGENT_RING_POOL)
       agents.beat(1)
       expect(view.beatRings.some((slot) => slot.line.visible)).toBe(true)
       for (const slot of view.beatRings) slot.line.visible = false
@@ -292,9 +293,9 @@ describe('the agent sway', () => {
       maxScale = Math.max(maxScale, view.group.scale.x)
     }
     expect(maxLift).toBeGreaterThan(1)
-    expect(maxLift).toBeLessThanOrEqual(6.0001)
-    expect(maxScale).toBeGreaterThan(restScale * 1.005)
-    expect(maxScale).toBeLessThanOrEqual(view.scale * 1.02 + 1e-6)
+    expect(maxLift).toBeLessThanOrEqual(SWAY_LIFT + 1e-6)
+    expect(maxScale).toBeGreaterThan(restScale * (1 + SWAY_SCALE / 4))
+    expect(maxScale).toBeLessThanOrEqual(view.scale * (1 + SWAY_SCALE) + 1e-6)
     agents.dispose()
   })
 
