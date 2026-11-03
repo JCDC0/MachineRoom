@@ -97,9 +97,11 @@ export function launcherRows(projects) {
   const folders = Array.isArray(projects?.folders) ? projects.folders : []
 
   const gitByPath = new Map()
+  const noGitByPath = new Map()
   for (const folder of folders) {
     if (!folder || typeof folder.path !== 'string') continue
     if (folder.git === true) gitByPath.set(rowKey(folder.path), true)
+    else if (folder.git === false) noGitByPath.set(rowKey(folder.path), true)
   }
 
   const rows = []
@@ -110,10 +112,12 @@ export function launcherRows(projects) {
     const key = rowKey(entry.path)
     if (key === '' || seen.has(key)) return
     seen.add(key)
+    const git = entry.git === true || gitByPath.get(key) === true
     rows.push({
       path: entry.path,
       name: typeof entry.name === 'string' && entry.name !== '' ? entry.name : pathName(entry.path),
-      git: entry.git === true || gitByPath.get(key) === true,
+      git,
+      noGit: !git && (entry.git === false || noGitByPath.get(key) === true),
       source,
     })
   }

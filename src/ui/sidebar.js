@@ -46,6 +46,19 @@ export function projectName(project) {
   return parts.length > 0 ? parts[parts.length - 1] : 'Project'
 }
 
+export const NO_GIT_PROJECT_TEXT = 'Not a git repository. Run git init here.'
+export const GIT_INIT_COMMAND = 'git init'
+
+export async function copyGitInit({ clipboard = globalThis.navigator?.clipboard } = {}) {
+  try {
+    if (!clipboard || typeof clipboard.writeText !== 'function') return false
+    await clipboard.writeText(GIT_INIT_COMMAND)
+    return true
+  } catch {
+    return false
+  }
+}
+
 function stamp(value) {
   const number = typeof value === 'number' ? value : Number(value)
   if (Number.isFinite(number) && number > 0) return number
