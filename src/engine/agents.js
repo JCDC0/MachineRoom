@@ -62,6 +62,59 @@ export const ORCHESTRATOR_LINK_OPACITY = 0.1
 export const SUB_ORCHESTRATOR_LINK_OPACITY = 0.3
 export const DANCE_SCALE = 0.08
 export const ORCHESTRATOR_DANCE_SCALE = 0.03
+export const THINKING_DELAY_MS = 250
+export const THINKING_IN_SECONDS = 0.3
+export const THINKING_OUT_SECONDS = 0.6
+export const THINKING_TURN_SECONDS = 4
+export const THINKING_SPIN = (Math.PI * 2) / THINKING_TURN_SECONDS
+export const SPINNER_RADIUS_SCALE = 1.35
+export const SPINNER_ARC_SHARE = 0.25
+export const SPINNER_PHASE = Math.PI
+export const SPINNER_SWEEP_SECONDS = 1
+export const SPINNER_RING_OPACITY = 0.22
+export const SPINNER_ARC_OPACITY = 0.95
+
+const RUNNING_STATUSES = new Set(['working', 'running'])
+
+export function agentThinking(agent = {}) {
+  const status = typeof agent?.status === 'string' ? agent.status.toLowerCase() : ''
+  if (!RUNNING_STATUSES.has(status)) return false
+  const calls = agent?.calls
+  if (calls && typeof calls.size === 'number') return calls.size === 0
+  const open = Number(agent?.openCalls ?? agent?.openToolCalls ?? 0)
+  return !(Number.isFinite(open) && open > 0)
+}
+
+export function thinkingDue(since, now, delay = THINKING_DELAY_MS) {
+  const start = Number(since)
+  const at = Number(now)
+  const wait = Number(delay)
+  if (!Number.isFinite(start) || start <= 0 || !Number.isFinite(at)) return false
+  return at - start >= (Number.isFinite(wait) ? Math.max(0, wait) : THINKING_DELAY_MS)
+}
+
+export function thinkingLevel(level, on, delta, reduced = false) {
+  const value = Number(level)
+  const current = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+  const target = on ? 1 : 0
+  if (reduced) return target
+  const seconds = Math.max(0, Number(delta) || 0)
+  const step = seconds / (on ? THINKING_IN_SECONDS : THINKING_OUT_SECONDS)
+  if (current < target) return Math.min(target, current + step)
+  if (current > target) return Math.max(target, current - step)
+  return current
+}
+
+export function thinkingArc(now, phase = 0, sweep = SPINNER_SWEEP_SECONDS, reduced = false) {
+  if (reduced) return 0
+  const time = Number(now)
+  const rawSweep = Number(sweep)
+  const seconds = Number.isFinite(rawSweep) && rawSweep > 0 ? rawSweep : SPINNER_SWEEP_SECONDS
+  const offset = Number(phase)
+  const full = Math.PI * 2
+  const angle = ((Number.isFinite(time) ? time : 0) / 1000 / seconds) * full + (Number.isFinite(offset) ? offset : 0)
+  return ((angle % full) + full) % full
+}
 
 export const CALLOUT_CROWD_LIMIT = 4
 export const CALLOUT_RECENT_KEEP = 2
@@ -238,13 +291,13 @@ export function litChain(dir, links, mask, out = [], cache = null) {
   return chain
 }
 
-export function speckPolyline(start, chain, centerOf, end, out = []) {
+export function speckPolyline(start, chain, anchorOf, end, out = []) {
   const points = out ?? []
   let count = 0
   let routed = Array.isArray(chain) && chain.length > 0
   if (routed) {
     for (let index = 0; index < chain.length; index += 1) {
-      const spot = typeof centerOf === 'function' ? centerOf(chain[index]) : null
+      const spot = typeof anchorOf === 'function' ? anchorOf(chain[index]) : null
       if (!spot || !Number.isFinite(Number(spot.x)) || !Number.isFinite(Number(spot.y)) || !Number.isFinite(Number(spot.z))) {
         routed = false
         break
@@ -261,7 +314,7 @@ export function speckPolyline(start, chain, centerOf, end, out = []) {
   }
   write(start)
   if (routed) {
-    for (let index = 0; index < chain.length; index += 1) write(centerOf(chain[index]))
+    for (let index = 0; index < chain.length; index += 1) write(anchorOf(chain[index]))
   }
   write(end)
   points.length = count
@@ -644,6 +697,51 @@ function flatRing(radius, opacity, y) {
   return ring
 }
 
+const SPINNER_SEGMENTS = 64
+const SPINNER_ARC_SEGMENTS = 16
+
+function spinnerRing(radius, material) {
+  const points = []
+  for (let index = 0; index < SPINNER_SEGMENTS; index += 1) {
+    const angle = (index / SPINNER_SEGMENTS) * Math.PI * 2
+    points.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0))
+  }
+  const ring = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), material)
+  ring.frustumCulled = false
+  return ring
+}
+
+function spinnerArc(radius, material) {
+  const points = []
+  for (let index = 0; index <= SPINNER_ARC_SEGMENTS; index += 1) {
+    const angle = (index / SPINNER_ARC_SEGMENTS) * SPINNER_ARC_SHARE * Math.PI * 2
+    points.push(new THREE.Vector3(Math.cos(angle) * radius, Math.sin(angle) * radius, 0))
+  }
+  const arc = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), material)
+  arc.frustumCulled = false
+  return arc
+}
+
+function createSpinner(radius) {
+  const group = new THREE.Group()
+  const ringMaterial = lineMaterial(WHITE, SPINNER_RING_OPACITY)
+  const arcMaterial = lineMaterial(WHITE, SPINNER_ARC_OPACITY)
+  const rings = []
+  const arcs = []
+  for (let index = 0; index < 2; index += 1) {
+    const plane = new THREE.Group()
+    if (index === 1) plane.rotation.x = Math.PI / 2
+    const ring = spinnerRing(radius, ringMaterial)
+    const arc = spinnerArc(radius, arcMaterial)
+    plane.add(ring, arc)
+    group.add(plane)
+    rings.push(ring)
+    arcs.push(arc)
+  }
+  group.visible = false
+  return { group, rings, arcs, ringMaterial, arcMaterial }
+}
+
 export function createAgents(scene, roster, cssScene = null) {
   const views = new Map()
   const pickables = []
@@ -939,7 +1037,8 @@ export function createAgents(scene, roster, cssScene = null) {
     label.position.set(0, -150, 0)
     const picker = new THREE.Mesh(new THREE.SphereGeometry(170, 8, 8), new THREE.MeshBasicMaterial({ visible: false }))
     picker.userData.key = agent.key
-    group.add(shape, ...rings, label, picker)
+    const spinner = createSpinner(shellRadius * SPINNER_RADIUS_SCALE)
+    group.add(shape, ...rings, label, picker, spinner.group)
     group.position.copy(home)
     group.scale.setScalar(scale)
 
@@ -986,6 +1085,9 @@ export function createAgents(scene, roster, cssScene = null) {
       shape,
       shellRadius,
       rings,
+      spinner,
+      thinking: 0,
+      thinkingSince: 0,
       label,
       picker,
       callout,
@@ -1344,6 +1446,12 @@ export function createAgents(scene, roster, cssScene = null) {
       view.presenceOpacity = opacityFactor
       view.group.scale.setScalar(view.scale * scaleFactor)
 
+      const thinking = agentThinking(entry)
+      if (!thinking) view.thinkingSince = 0
+      else if (view.thinkingSince === 0) view.thinkingSince = now
+      const thinkingOn = thinking && thinkingDue(view.thinkingSince, now)
+      view.thinking = thinkingLevel(view.thinking, thinkingOn, delta, isStill)
+
       if (view.parentKey) {
         const parentName = state.agents.get(view.parentKey)?.name ?? view.parentKey
         terminals.ensure?.(view.key, `${parentName} > ${entry?.name ?? view.name}`)
@@ -1373,8 +1481,20 @@ export function createAgents(scene, roster, cssScene = null) {
         ring.material.opacity = opacity * fade * opacityFactor * (index === 0 ? 0.55 : 0.4)
       })
       if (!isStill) {
-        view.shape.rotation.y += delta * style.spin
+        const spin = style.spin + (THINKING_SPIN - style.spin) * view.thinking
+        view.shape.rotation.y += delta * spin
         view.shape.rotation.x += delta * style.spin * 0.4
+      }
+      if (view.thinking > 0.001) {
+        const spinnerFade = view.thinking * fade * opacityFactor
+        view.spinner.group.visible = true
+        view.spinner.ringMaterial.opacity = SPINNER_RING_OPACITY * spinnerFade
+        view.spinner.arcMaterial.opacity = SPINNER_ARC_OPACITY * spinnerFade
+        const arc = thinkingArc(now, 0, SPINNER_SWEEP_SECONDS, isStill)
+        view.spinner.arcs[0].rotation.z = arc
+        view.spinner.arcs[1].rotation.z = arc + SPINNER_PHASE
+      } else {
+        view.spinner.group.visible = false
       }
       const dance = isStill ? 0 : danceEnvelope(view.danceFrom, view.danceTo, now - view.danceAt)
       const less = view.orchestrator || view.subOrchestrator
@@ -1499,7 +1619,7 @@ export function createAgents(scene, roster, cssScene = null) {
           tunnelRoute(chain, world.links, world.mask, view.route)
         }
         if (view.route.length > 0) {
-          speckPolyline(view.group.position, view.route, world.center, view.touch, view.path)
+          speckPolyline(view.group.position, view.route, world.anchor, view.touch, view.path)
         } else {
           stripPoints(view.group.position, view.touch, view.path)
         }
@@ -1583,6 +1703,9 @@ export function createAgents(scene, roster, cssScene = null) {
       view.danceTo = 0
       view.danceAt = 0
       view.danceTurn = 0
+      view.thinking = 0
+      view.thinkingSince = 0
+      view.spinner.group.visible = false
       view.pulseLevels.fill(0)
       restorePulse(view)
       view.group.scale.setScalar(view.scale)

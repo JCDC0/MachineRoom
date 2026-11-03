@@ -2674,6 +2674,22 @@ summary:focus-visible,
   cursor: not-allowed;
 }
 
+.hud-settings-slider {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space);
+}
+
+.hud-settings-slider input[type='range'] {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.hud-settings-slider .hud-settings-value {
+  flex: 0 0 auto;
+}
+
 .hud-settings-ticks {
   display: flex;
   justify-content: space-between;

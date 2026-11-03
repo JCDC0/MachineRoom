@@ -725,7 +725,7 @@ function chainHarness() {
     remove() {},
     edgePoint: (key, side, out) => out.set(100, 290, 0),
   }
-  const centres = new Map([
+  const anchors = new Map([
     ['', { x: 0, y: -160, z: 300 }],
     ['src', { x: 900, y: 0, z: 0 }],
     ['src/ui', { x: 1300, y: 0, z: 0 }],
@@ -740,13 +740,13 @@ function chainHarness() {
     right: new THREE.Vector3(1, 0, 0),
     back: new THREE.Vector3(0, 0, 1),
     internet: new THREE.Vector3(0, 1280, 0),
-    center: (path) => centres.get(path ?? ''),
+    anchor: (path) => anchors.get(path ?? ''),
     links,
     mask,
     side: () => 1,
     edge: (dir, file, side, out) => out.set(edge.x, edge.y, edge.z),
   }
-  return { agents, state, terminals, world, centres, edge }
+  return { agents, state, terminals, world, anchors, edge }
 }
 
 function trailPoints(line) {
@@ -800,7 +800,7 @@ describe('the specks ride the lit folder chain', () => {
 
     const route = tunnelRoute(['', 'src', 'src/ui'], world.links, world.mask)
     expect(route).toEqual(['', 'src', 'src/ui'])
-    const expected = speckPolyline(view.group.position, route, world.center, edge)
+    const expected = speckPolyline(view.group.position, route, world.anchor, edge)
     const radius = view.shellRadius * view.group.scale.x
     shellStart(view.group.position, radius, expected[1], expected[0])
     const drawn = drawnPoints(view.strip)
@@ -824,22 +824,43 @@ describe('the specks ride the lit folder chain', () => {
     agents.dispose()
   })
 
+  it('puts its waypoints on the folder tab anchors, not the card centres', () => {
+    const { agents, state, terminals, world, anchors, edge } = chainHarness()
+    const asked = []
+    const anchorOf = world.anchor
+    world.anchor = (path) => {
+      asked.push(path)
+      return anchorOf(path)
+    }
+    startWrite(state, 1000, 'r1', 'src/ui/a.js')
+    agents.update(state, 0.016, 1000, world, terminals)
+    const view = agents.views.get('a')
+    expect(asked.slice(0, 3)).toEqual(['', 'src', 'src/ui'])
+    const drawn = drawnPoints(view.strip)
+    expect(drawn).toHaveLength(5)
+    expect(drawn[1]).toEqual(anchors.get(''))
+    expect(drawn[2]).toEqual(anchors.get('src'))
+    expect(drawn[3]).toEqual(anchors.get('src/ui'))
+    expect(drawn.at(-1)).toEqual({ x: edge.x, y: edge.y, z: edge.z })
+    agents.dispose()
+  })
+
   it('follows a card that moves instead of the old span', () => {
-    const { agents, state, terminals, world, centres, edge } = chainHarness()
+    const { agents, state, terminals, world, anchors, edge } = chainHarness()
     startWrite(state, 1000, 'r1', 'src/ui/a.js')
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
     const before = drawnPoints(view.strip)
 
-    centres.get('src').x += 220
-    centres.get('src/ui').z += 180
+    anchors.get('src').x += 220
+    anchors.get('src/ui').z += 180
     agents.update(state, 0.016, 1060, world, terminals)
     const after = drawnPoints(view.strip)
     expect(after).not.toEqual(before)
-    expect(after[2].x).toBeCloseTo(centres.get('src').x, 3)
-    expect(after[3].z).toBeCloseTo(centres.get('src/ui').z, 3)
+    expect(after[2].x).toBeCloseTo(anchors.get('src').x, 3)
+    expect(after[3].z).toBeCloseTo(anchors.get('src/ui').z, 3)
 
-    const expected = speckPolyline(view.group.position, ['', 'src', 'src/ui'], world.center, edge)
+    const expected = speckPolyline(view.group.position, ['', 'src', 'src/ui'], world.anchor, edge)
     shellStart(view.group.position, view.shellRadius * view.group.scale.x, expected[1], expected[0])
     expect(after).toHaveLength(expected.length)
     agents.update(state, 0.2, 1180, world, terminals)
