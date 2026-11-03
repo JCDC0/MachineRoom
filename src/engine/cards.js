@@ -310,20 +310,29 @@ function backPlaces(count) {
   return backOffsets(backLayers(count)).slice(1)
 }
 
+export function tabAnchorOffset(width, height, scale = 1) {
+  const faceWidth = Number(width) > 0 ? Number(width) : CARD_W + CARD_FACE_BORDER
+  const faceHeight = Number(height) > 0 ? Number(height) : HEAD_H + CARD_PAD + CARD_FACE_BORDER
+  const amount = Number(scale) > 0 ? Number(scale) : 1
+  const tabLeft = CARD_TAB_LEFT + CARD_FACE_EDGE
+  const tabTop = CARD_TAB_TOP + CARD_FACE_EDGE
+  return {
+    x: (tabLeft + CARD_TAB_W / 2 - faceWidth / 2) * amount,
+    y: (faceHeight / 2 - tabTop - CARD_TAB_H / 2) * amount,
+  }
+}
+
 export function occluderParts(view, rootName = 'root') {
   const width = cardBaseWidth(view?.path, rootName) + CARD_FACE_BORDER
   const height = cardHeight(cardRows(view)) + CARD_FACE_BORDER
-  const tabLeft = CARD_TAB_LEFT + CARD_FACE_EDGE
-  const tabTop = CARD_TAB_TOP + CARD_FACE_EDGE
-  const tabX = tabLeft + CARD_TAB_W / 2 - width / 2
-  const tabY = height / 2 - tabTop - CARD_TAB_H / 2
+  const tab = tabAnchorOffset(width, height)
   const parts = [
     { width, height, x: 0, y: 0 },
-    { width: CARD_TAB_W, height: CARD_TAB_H, x: tabX, y: tabY },
+    { width: CARD_TAB_W, height: CARD_TAB_H, x: tab.x, y: tab.y },
   ]
   for (const offset of backPlaces(view?.back)) {
     parts.push({ width, height, x: offset.x, y: offset.y })
-    parts.push({ width: CARD_TAB_W, height: CARD_TAB_H, x: offset.x + tabX, y: tabY })
+    parts.push({ width: CARD_TAB_W, height: CARD_TAB_H, x: offset.x + tab.x, y: tab.y })
   }
   return parts
 }
@@ -925,6 +934,18 @@ export function createCards(cssScene, options = {}) {
     return (nearestCard(path) ?? cards.get(''))?.base ?? rootHome
   }
 
+  function anchor(path, out = new THREE.Vector3()) {
+    const card = nearestCard(path)
+    if (!card) return out.copy(rootHome)
+    const width = cardBaseWidth(card.path, card.rootName) + CARD_FACE_BORDER
+    const height = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
+    const offset = tabAnchorOffset(width, height, card.scale)
+    out.copy(card.object.position)
+    out.addScaledVector(right, offset.x)
+    out.addScaledVector(up, offset.y)
+    return out
+  }
+
   function halfWidth(dir) {
     const card = nearestCard(dir)
     return ((card?.scale ?? CARD_SCALES.closed) * CARD_W) / 2
@@ -1384,6 +1405,7 @@ export function createCards(cssScene, options = {}) {
     setInspected,
     clearSelection,
     center,
+    anchor,
     bottom,
     halfWidth,
     sideOf,

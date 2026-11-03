@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import * as THREE from 'three'
 import { createCards, DANCE_LIFT } from '../src/engine/cards.js'
 import { DANCE_RISE_MS, DANCE_SETTLE_MS } from '../src/engine/hub.js'
+import { createStrings } from '../src/engine/strings.js'
 import { makeTree } from '../src/model/paths.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -69,10 +70,19 @@ function fakeElement(tag = 'div') {
 
 let savedDocument
 
+const context2d = {
+  fillStyle: '',
+  createRadialGradient: () => ({ addColorStop: () => {} }),
+  fillRect: () => {},
+}
+
 beforeAll(() => {
   savedDocument = globalThis.document
   globalThis.document = {
-    createElement: (tag) => fakeElement(tag),
+    createElement: (tag) => {
+      if (tag === 'canvas') return { width: 0, height: 0, getContext: () => context2d }
+      return fakeElement(tag)
+    },
   }
 })
 
@@ -208,6 +218,44 @@ describe('the dance lift on a card', () => {
     clock += DANCE_SETTLE_MS
     cards.update(state, 0.016, camera())
     expect(root.object.position.y).toBeCloseTo(placeY, 6)
+    cards.dispose()
+  })
+})
+
+describe('a string on a lifted card', () => {
+  it('moves its end with the tab as the card lifts', () => {
+    const state = makeState()
+    const { cards } = makeCards()
+    let clock = 10000
+    vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    cards.sync(state)
+    for (let step = 0; step < 200; step += 1) cards.update(state, 0.016, camera())
+    const links = cards.visibleLinks()
+    const index = links.findIndex((link) => link.from === '' && link.to === 'src')
+    expect(index).toBeGreaterThanOrEqual(0)
+    const scene = fakeScene()
+    const strings = createStrings(scene)
+    const anchorOf = (path, out) => cards.anchor(path ?? '', out)
+    strings.build(links, anchorOf)
+    const line = scene.children.find((child) => child.isLineSegments)
+    const position = line.geometry.attributes.position
+    const stride = position.count / links.length
+    const endAt = (vertex) => {
+      const base = (index * stride + vertex) * 3
+      return new THREE.Vector3(position.array[base], position.array[base + 1], position.array[base + 2])
+    }
+    const start = endAt(stride - 1)
+    expect(start.distanceTo(cards.anchor('src'))).toBeLessThan(0.001)
+
+    cards.beat(1)
+    clock += DANCE_RISE_MS
+    cards.update(state, 0.016, camera())
+    strings.update(anchorOf, null, 0.016)
+    const lifted = endAt(stride - 1)
+    expect(lifted.y - start.y).toBeGreaterThan(DANCE_LIFT / 2)
+    expect(lifted.distanceTo(cards.anchor('src'))).toBeLessThan(0.001)
+    expect(endAt(0).distanceTo(cards.anchor(''))).toBeLessThan(0.001)
+    strings.dispose()
     cards.dispose()
   })
 })

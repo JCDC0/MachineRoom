@@ -235,36 +235,41 @@ describe('linkOnPath', () => {
   })
 })
 
-describe('cached link endpoints', () => {
-  it('asks for the card centres only while a card moves', () => {
+describe('link endpoints', () => {
+  it('reads both anchors every update and writes only when one moves', () => {
     const scene = fakeScene()
-    const centres = new Map([
+    const places = new Map([
       ['a', new THREE.Vector3(0, 0, 0)],
       ['b', new THREE.Vector3(100, 0, 0)],
     ])
     let calls = 0
-    const centreOf = (key) => {
+    const anchorOf = (key, out) => {
       calls += 1
-      return centres.get(key)
+      return out.copy(places.get(key))
     }
     const strings = createStrings(scene)
     try {
-      strings.build([{ from: 'a', to: 'b' }], centreOf)
+      strings.build([{ from: 'a', to: 'b' }], anchorOf)
+      const line = scene.children.find((child) => child.isLineSegments)
+      const position = line.geometry.attributes.position
+      const strandPosition = strandMesh(scene).geometry.attributes.position
+      const version = position.version
+      const strandVersion = strandPosition.version
+      const before = position.getX(1)
       calls = 0
-      strings.update(centreOf, null, 0.016, false)
-      expect(calls).toBe(0)
-      strings.update(centreOf, null, 0.016, false)
-      expect(calls).toBe(0)
-      strings.update(centreOf, null, 0.016, true)
-      expect(calls).toBe(2)
-      const before = strandMesh(scene).geometry.getAttribute('position').getX(1)
-      centres.set('b', new THREE.Vector3(140, 0, 0))
-      strings.update(centreOf, null, 0.016, false)
-      expect(calls).toBe(2)
-      expect(strandMesh(scene).geometry.getAttribute('position').getX(1)).toBe(before)
-      strings.update(centreOf, null, 0.016, true)
+      strings.update(anchorOf, null, 0.016)
+      strings.update(anchorOf, null, 0.016)
       expect(calls).toBe(4)
-      expect(strandMesh(scene).geometry.getAttribute('position').getX(1)).not.toBe(before)
+      expect(position.version).toBe(version)
+      expect(strandPosition.version).toBe(strandVersion)
+      expect(position.getX(1)).toBe(before)
+
+      places.set('b', new THREE.Vector3(104, 0, 0))
+      strings.update(anchorOf, null, 0.016)
+      expect(calls).toBe(6)
+      expect(position.version).toBeGreaterThan(version)
+      expect(strandPosition.version).toBeGreaterThan(strandVersion)
+      expect(position.getX(1)).not.toBe(before)
     } finally {
       strings.dispose()
     }
