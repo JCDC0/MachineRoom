@@ -32,6 +32,22 @@ export const SECTOR_LABEL_OPACITY = 0.45
 export const SECTOR_LABEL_COLOR = `rgba(255,255,255,${SECTOR_LABEL_OPACITY})`
 export const SECTOR_GLOW_MS = 1000
 
+export function writeColor(material, hex) {
+  if (!material || !material.color) return false
+  if (!material.userData) material.userData = {}
+  if (material.userData.mrHex === hex) return false
+  material.userData.mrHex = hex
+  material.color.setHex(hex)
+  return true
+}
+
+export function writeOpacity(material, value) {
+  if (!material) return false
+  if (material.opacity === value) return false
+  material.opacity = value
+  return true
+}
+
 const TICKS = 120
 const DASHES = 72
 const SLOT_RADIUS = 46
@@ -410,6 +426,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let sectorGroups = []
   let sectorLevels = new Map()
   let workingSet = new Set()
+  const workingSectors = new Set()
   let ringLines = [main]
   let boost = 0
   let danceFrom = 0
@@ -461,8 +478,8 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     subRing.visible = Boolean(currentLadder)
     ringLines = currentLadder ? sectorLines : [main]
     for (const line of ringLines) {
-      line.material.color.setHex(WHITE)
-      line.material.opacity = line.userData.baseOpacity ?? RING_OPACITY
+      writeColor(line.material, WHITE)
+      writeOpacity(line.material, line.userData.baseOpacity ?? RING_OPACITY)
     }
     boost = 0
     danceFrom = 0
@@ -510,15 +527,15 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   }
 
   function pulse(color, amount) {
-    for (const line of ringLines) line.material.color.setHex(color)
+    for (const line of ringLines) writeColor(line.material, color)
     boost = Math.max(boost, amount)
   }
 
   function setSlot(index, color, opacity) {
     const marker = slots[index]
     if (!marker) return
-    marker.material.color.setHex(color)
-    marker.material.opacity = opacity
+    writeColor(marker.material, color)
+    writeOpacity(marker.material, opacity)
   }
 
   function update(time, delta, camera = null, viewportHeight = 0) {
@@ -537,21 +554,21 @@ export function createHub(scene, agentsOrCount, ladder = null) {
         continue
       }
       slot.line.scale.set(slot.pulse.radius, 1, slot.pulse.radius)
-      slot.line.material.opacity = slot.pulse.opacity
+      writeOpacity(slot.line.material, slot.pulse.opacity)
     }
     boost = Math.max(0, boost - delta * 1.2)
     const danceBoost = isStill ? 0 : danceEnvelope(danceFrom, danceTo, performance.now() - danceAt)
     const extra = Math.max(boost, danceBoost)
-    const workingSectors = new Set()
+    workingSectors.clear()
     for (const key of workingSet) workingSectors.add(sectorIdForKey(key, currentLadder))
-    for (const [id, level] of sectorLevels) {
-      sectorLevels.set(id, sectorGlow(level, workingSectors.has(id), delta, isStill))
+    for (const id of sectorLevels.keys()) {
+      sectorLevels.set(id, sectorGlow(sectorLevels.get(id), workingSectors.has(id), delta, isStill))
     }
     for (const line of ringLines) {
       const base = line.userData.baseOpacity ?? RING_OPACITY
       const level = line.userData.sector ? sectorLevels.get(line.userData.sector) ?? 0 : 0
-      line.material.opacity = Math.min(1, base + extra * 0.5 + (1 - base) * level)
-      if (level > 0 || boost <= 0.01) line.material.color.setHex(WHITE)
+      writeOpacity(line.material, Math.min(1, base + extra * 0.5 + (1 - base) * level))
+      if (level > 0 || boost <= 0.01) writeColor(line.material, WHITE)
     }
     if (camera && viewportHeight > 0) {
       const focal = viewportHeight / 2 / Math.tan(((camera.fov || 50) * Math.PI) / 360)
@@ -567,9 +584,10 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     if (!isStill) {
       dashes.rotation.y += delta * 0.04
     }
-    slots.forEach((marker, index) => {
+    for (let index = 0; index < slots.length; index += 1) {
+      const marker = slots[index]
       marker.scale.setScalar(isStill ? 1 : 1 + 0.04 * Math.sin(time * 1.6 + index))
-    })
+    }
   }
 
   function dispose() {

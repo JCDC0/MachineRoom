@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- A pulsing shape writes its vertices only when its music bands or its pulse scale changed since its last write, so a shape at rest uploads nothing (task Q39b).
+- The tunnel path keeps its cumulative segment lengths and a packet samples them, and the packet and beam buffers upload only while a packet is drawn (task Q39b).
+- The card row pass visits only the cards whose rows a flash or a run end marked, and `markRows()` marks them all (task Q39b).
+- Material colours and opacities are written only when their value changes, in the agent shapes, the trails, the hub ring and its slots (task Q39b).
+- The frame loop reuses its scratch objects for the callout list, the busy and ended lists, the focus pointer, the child orbit, the line ends, the working sectors and the callout input (task Q39b).
 - The bloom screen pass and its blur draw at half the lens's pixel size and stretch back over the lens, and the bloom renderer has no antialias and a pixel ratio of 1 (task Q39a).
 - An agent whose run is open with no tool call open shows a thinking spinner: two faint white rings at right angles with bright quarter arcs that sweep once a second out of phase, it appears after 250 ms and eases in and out, and the shape turns one turn in 4 seconds (task U141).
 - The file tunnel's waypoints along the lit folder chain sit on the folder tabs, the same anchors the yellow strings use (task U141).
