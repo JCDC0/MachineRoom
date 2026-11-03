@@ -16,7 +16,7 @@ const DEFAULT_QUIET_MS = 10 * 60 * 1000
 const DEFAULT_POLL_MS = 200
 const DEFAULT_PRIME_MS = 60 * 1000
 const READ_CHUNK = 64 * 1024
-const MAX_PARTIAL = 1024 * 1024
+const MAX_PARTIAL = 8 * 1024 * 1024
 const QUIET_KEPT = 50
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
@@ -342,6 +342,8 @@ export function createLanesSource(options = {}) {
       skipLine: false,
       feed: createRunLineReader(agent.parser),
       rewrite: keepPaths ? (line) => line : rewriter(project || currentLanes()[agent.key]?.worktree, roomRoot),
+      readLines: 0,
+      plainLines: [],
       startedAt,
       lastGrowth: startedAt,
     }
@@ -418,6 +420,8 @@ export function createLanesSource(options = {}) {
     run.skipLine = false
     run.decoder = new StringDecoder('utf8')
     run.feed = createRunLineReader(run.agent.parser)
+    run.readLines = 0
+    run.plainLines = []
   }
 
   function readNew(run) {
@@ -467,7 +471,12 @@ export function createLanesSource(options = {}) {
     for (const line of parts) {
       if (!line.trim()) continue
       const entry = run.feed(run.rewrite(line))
-      if (!entry || entry.read !== true) continue
+      if (!entry || entry.read !== true) {
+        run.plainLines.push(line)
+        if (run.plainLines.length > 20) run.plainLines.shift()
+        continue
+      }
+      run.readLines += 1
       run.seq += 1
       const at = Number.isFinite(entry.at) ? entry.at : now()
       emit({
@@ -501,6 +510,20 @@ export function createLanesSource(options = {}) {
     flushRun(run)
     active.delete(run.key)
     const at = now()
+    if (status === 'failed' && run.readLines === 0 && run.plainLines.length > 0) {
+      run.seq += 1
+      emit({
+        type: 'heartbeat.run.event',
+        companyId: run.companyId,
+        createdAt: iso(at),
+        payload: {
+          ...run.base,
+          seq: run.seq,
+          level: 'error',
+          message: run.plainLines.join('\n'),
+        },
+      })
+    }
     emit({
       type: 'heartbeat.run.status',
       companyId: run.companyId,

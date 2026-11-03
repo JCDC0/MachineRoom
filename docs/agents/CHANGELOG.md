@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Give Claude subagent Task calls the task kind (task S29).
+
+- A file read that names a directory emits a folder touch instead of a file touch (task S29).
+
+- Send unparsed plain log lines as an error event when a run fails (task S29).
+
+- AGY tool calls for MCP, tasks and schedules get distinct kinds and descriptive labels (task S29).
+
+- OpenCode search tools touch their target folder and name it in the label (task S29).
+
+- Raise the live lane source partial line limit to 8 MB (task S29).
+
+- Anchor every branch of the parser failure pattern to a line start (task S29).
+
+- An AGY step that ends ERROR ends its call as failed with the error in its label (task S29).
+
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.
 - A hunt that ran 464 real run logs through the parsers (task Q30).

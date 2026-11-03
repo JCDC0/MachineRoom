@@ -1,5 +1,5 @@
 import { basename } from '../paths.js'
-import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
+import { commandTouch, createLineReader, fileTouch, folderTouch, labelFor, looksFailed, mcpLabelOf, mcpPathOf, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const TOOLS = { shell: 'shell', bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'search', grep: 'search', list: 'search', websearch: 'web', webfetch: 'web' }
 const MCP_TOOL = /^(mcp__|mcp_call_tool$|mcp_list_tools$)/
@@ -10,33 +10,6 @@ const BROKEN_STATUS = /"status"\s*:\s*"(completed|error|running)"/
 const BROKEN_ID = /"id"\s*:\s*"([^"\\]+)"/
 const BROKEN_COMMAND = /"input"\s*:\s*\{\s*"command"\s*:\s*"/
 const BROKEN_PATH = /"input"\s*:\s*\{\s*"(?:path|filePath)"\s*:\s*"([^"\\]*)"/
-
-function mcpPathOf(input) {
-  const direct = input?.path ?? input?.file ?? input?.filePath
-  if (typeof direct === 'string' && direct !== '') return direct
-  const nested = input?.arguments
-  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
-    const value = nested.path ?? nested.file ?? nested.filePath
-    if (typeof value === 'string' && value !== '') return value
-  }
-  return ''
-}
-
-function mcpLabelOf(name, input) {
-  if (name === 'mcp_list_tools') {
-    const server = typeof input?.server === 'string' ? input.server.trim() : ''
-    return server === '' ? 'mcp list tools' : `mcp list tools ${server}`
-  }
-  let server = typeof input?.server === 'string' ? input.server.trim() : ''
-  let tool = typeof input?.tool === 'string' ? input.tool.trim() : ''
-  if (name.startsWith('mcp__')) {
-    const parts = name.split('__')
-    server = parts[1] ?? ''
-    tool = parts.slice(2).join('__')
-  }
-  const shown = [server, tool].filter((part) => part !== '').join(' ')
-  return shown === '' ? `mcp ${name}` : `mcp ${shown}`
-}
 
 function unescape(text) {
   return text.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (all, code) => {
@@ -121,7 +94,14 @@ export function createOpencodeParser(ctx) {
       touches = commandTouch(ctx, command)
       label = `$ ${shorten(command)}`
     } else if (tool === 'search') {
-      label = `${name} ${shorten(input.pattern ?? input.path ?? '')}`
+      const raw = typeof input.path === 'string' && input.path !== '' ? input.path : null
+      if (raw !== null) {
+        const touch = folderTouch(ctx, raw)
+        if (touch) touches = [touch]
+        label = `${name} ${touch ? touch.path || '.' : basename(raw) || '.'}`
+      } else {
+        label = `${name} ${shorten(input.pattern ?? '')}`
+      }
     } else if (tool === 'web') {
       const shown = name === 'webfetch' ? input.url ?? '' : input.query ?? ''
       label = shown ? `web ${name === 'webfetch' ? 'fetch' : 'search'} ${shorten(shown)}` : `web ${name === 'webfetch' ? 'fetch' : 'search'}`

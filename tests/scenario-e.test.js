@@ -5,14 +5,14 @@ import { loadScenario } from './helpers.js'
 
 const OTHER_FIXTURES = {
   'fixtures/sandbox': {
-    activities: '485d94210c7f1c8e',
+    activities: 'd0953d03899647e6',
     plans: '6dab246be0dc06a2',
-    layouts: '0013736c191ba17c',
+    layouts: 'bed751052ed5df63',
   },
   'fixtures/scenario-a': {
-    activities: '1894ba2b0fa96ff4',
+    activities: '00673deaecca9630',
     plans: '70d7b3ec3fb1f703',
-    layouts: '02e3cd513643bb09',
+    layouts: '2bf4946527815204',
   },
   'fixtures/scenario-b': {
     activities: '0a10dbb64e548bb9',

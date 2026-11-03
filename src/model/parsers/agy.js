@@ -1,4 +1,4 @@
-import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
+import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, mcpLabelOf, mcpPathOf, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const TOOLS = {
   view_file: ['read', 'AbsolutePath'],
@@ -11,6 +11,9 @@ const TOOLS = {
   run_command: ['shell', 'CommandLine'],
   search_web: ['web', null],
   read_url_content: ['web', null],
+  call_mcp_tool: ['mcp', null],
+  manage_task: ['plan', null],
+  schedule: ['wait', null],
 }
 const WEB_FIELDS = {
   search_web: ['query', 'Query'],
@@ -38,6 +41,7 @@ function subagentList(output) {
 export function createAgyParser(ctx) {
   const out = []
   const started = new Set()
+  const calls = new Map()
   const conversations = new Map()
   const invoked = new Map()
   const pending = new Map()
@@ -70,7 +74,28 @@ export function createAgyParser(ctx) {
         .map((name) => step.tool_info?.parameters?.[name])
         .find((item) => typeof item === 'string' && item.trim() !== '')
       label = webLabel(step.tool_name, shown ? shown.trim() : '')
+    } else if (tool === 'mcp') {
+      const params = step.tool_info?.parameters ?? {}
+      label = mcpLabelOf(step.tool_name, params)
+      const raw = mcpPathOf(params)
+      if (raw) {
+        const touched = fileTouch(ctx, raw, 'read')
+        touches = touched.touches
+        const shown = touched.relative === null ? (String(raw).split(/[\\/]/).pop() ?? '') : touched.relative || '.'
+        label = `${label} ${shown}`
+      }
+    } else if (tool === 'plan') {
+      const action = typeof step.tool_info?.parameters?.Action === 'string' ? step.tool_info.parameters.Action.trim() : ''
+      const taskId = typeof step.tool_info?.parameters?.TaskId === 'string' ? step.tool_info.parameters.TaskId.trim() : ''
+      label = action && taskId ? `task ${action} ${taskId}` : action ? `task ${action}` : 'task'
+    } else if (tool === 'wait') {
+      const duration = step.tool_info?.parameters?.DurationSeconds
+      const cron = typeof step.tool_info?.parameters?.CronExpression === 'string' ? step.tool_info.parameters.CronExpression.trim() : ''
+      label = duration != null ? `wait ${duration}s` : cron ? `schedule ${cron}` : 'schedule'
     }
+    const err = typeof step.tool_info?.error === 'string' ? step.tool_info.error.trim() : ''
+    if (err) label = `${label}: ${shorten(err)}`
+    calls.set(id, label)
     out.push(credit(entry, toolStart({ time, id, tool, label, touches })))
   }
 
@@ -151,17 +176,26 @@ export function createAgyParser(ctx) {
         endChild(child, child.doneAt)
       }
     }
-    if (step.state === 'DONE') {
+    const isEnd = step.state === 'DONE' || step.state === 'ERROR'
+    if (isEnd) {
       entry.doneAt = time
-      entry.doneOk = !(step.tool_name === 'run_command' && looksFailed(step.tool_info?.output))
+      const err = typeof step.tool_info?.error === 'string' ? step.tool_info.error.trim() : ''
+      const failed = step.state === 'ERROR'
+        || Boolean(err)
+        || (step.tool_name === 'run_command' && looksFailed(step.tool_info?.output))
+      entry.doneOk = !failed
+      entry.error = err || (step.state === 'ERROR' ? 'error' : null)
     } else {
       entry.doneAt = null
+      entry.error = null
     }
     if (step.step_type !== 'tool' && step.step_type !== 'subagent') return
     begin(step, entry, time, id)
     if (step.tool_name === 'invoke_subagent' && step.state === 'ACTIVE') beginInvoke(step, time, id)
-    if (step.state !== 'DONE') return
-    out.push(credit(entry, toolEnd({ time, id, ok: entry.doneOk })))
+    if (!isEnd) return
+    const callLabel = calls.get(id) ?? step.tool_name ?? 'tool'
+    const endLabel = entry.error && !callLabel.includes(entry.error) ? `${callLabel}: ${shorten(entry.error)}` : callLabel
+    out.push(credit(entry, toolEnd({ time, id, ok: entry.doneOk, ...(entry.error ? { label: endLabel, error: entry.error } : {}) })))
     if (step.tool_name === 'invoke_subagent') finishInvoke(step, id)
     if (step.tool_name === 'manage_subagents' && step.tool_info?.parameters?.Action === 'list') {
       for (const item of subagentList(step.tool_info?.output)) {

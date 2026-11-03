@@ -4,6 +4,7 @@ import { createClaudeParser } from '../src/model/parsers/claude.js'
 import { createHermesParser } from '../src/model/parsers/hermes.js'
 import { createParser } from '../src/model/parsers/index.js'
 import { createOpencodeParser } from '../src/model/parsers/opencode.js'
+import { looksFailed } from '../src/model/parsers/common.js'
 import { unreadableLines } from '../src/model/parsers/unreadable.js'
 import { testContext } from './helpers.js'
 
@@ -69,6 +70,20 @@ describe('claude parser', () => {
     const full = JSON.stringify({ type: 'acpx.tool_call', name: 'Read src\\math.js', toolCallId: 't5', tag: 'tool_call_update' })
     expect(parser.push(full.slice(0, 20), 1)).toEqual([])
     expect(summary(parser.push(full.slice(20) + '\n', 2))).toEqual(['start read src/math.js'])
+  })
+
+  it('gives a Task tool call the task kind', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 't-task', name: 'Task', input: { description: 'Search files' } }],
+        },
+      }),
+      1000
+    )
+    expect(out[0]).toMatchObject({ type: 'tool.start', id: 't-task', tool: 'task', label: 'task: Search files' })
   })
 })
 
@@ -168,6 +183,15 @@ describe('hermes parser', () => {
 })
 
 describe('opencode parser', () => {
+  it('maps a read of a folder to a dir touch', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(
+      lines({ type: 'tool_use', part: { id: 'p0', tool: 'read', state: { status: 'completed', input: { path: 'C:\\Temp\\agent-sandbox\\src' }, output: '' } } }),
+      9000
+    )
+    expect(out[0].touches).toEqual([{ path: 'src', mode: 'list', kind: 'dir' }])
+  })
+
   it('maps a read tool_use to a read touch', () => {
     const parser = createOpencodeParser(ctx)
     const out = parser.push(
@@ -197,6 +221,26 @@ describe('opencode parser', () => {
     )
     expect(out[0]).toMatchObject({ tool: 'web', label: 'web search hermes web tools', touches: [] })
     expect(out[2]).toMatchObject({ tool: 'web', label: 'web fetch https://example.com/docs', touches: [] })
+  })
+
+  it('maps an opencode search to a folder touch and names the folder in its label', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(
+      lines({
+        type: 'tool_use',
+        part: {
+          id: 's1',
+          tool: 'grep',
+          state: { status: 'completed', input: { pattern: 'render', path: 'C:\\Temp\\agent-sandbox\\src' } },
+        },
+      }),
+      9000
+    )
+    expect(out[0]).toMatchObject({
+      tool: 'search',
+      label: 'grep src',
+      touches: [{ path: 'src', mode: 'list', kind: 'dir' }],
+    })
   })
 
   it('turns an error event into an error activity', () => {
@@ -320,6 +364,47 @@ describe('agy parser', () => {
     expect(out[out.length - 1]).toMatchObject({ type: 'tool.end', ok: false })
   })
 
+  it('ends an error step as failed with the error in its label', () => {
+    const parser = createAgyParser(ctx)
+    const out = parser.push(
+      lines({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'c1',
+          step_index: 4,
+          state: 'ERROR',
+          step_type: 'tool',
+          tool_name: 'read_file',
+          tool_info: { error: 'file not found', parameters: { Path: 'src/missing.js' } },
+        },
+      }),
+      350
+    )
+    expect(out[0]).toMatchObject({ type: 'tool.start', label: 'read src/missing.js: file not found' })
+    expect(out[1]).toMatchObject({ type: 'tool.end', ok: false, label: 'read src/missing.js: file not found' })
+  })
+
+  it('ends an active step that errors as failed with the error in its label', () => {
+    const parser = createAgyParser(ctx)
+    const first = parser.push(lines(step('ACTIVE', 'read_file', { Path: 'src/missing.js' })), 360)
+    expect(first[0]).toMatchObject({ type: 'tool.start', label: 'read src/missing.js' })
+    const second = parser.push(
+      lines({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'c1',
+          step_index: 4,
+          state: 'ERROR',
+          step_type: 'tool',
+          tool_name: 'read_file',
+          tool_info: { error: 'permission denied', parameters: { Path: 'src/missing.js' } },
+        },
+      }),
+      370
+    )
+    expect(second[0]).toMatchObject({ type: 'tool.end', ok: false, label: 'read src/missing.js: permission denied' })
+  })
+
   it('maps write_to_file to a write touch', () => {
     const parser = createAgyParser(ctx)
     const out = parser.push(lines(step('ACTIVE', 'write_to_file', { TargetFile: 'C:\\Temp\\agent-sandbox\\docs\\agy-report.md' })), 400)
@@ -363,6 +448,68 @@ describe('agy parser', () => {
     )
     expect(out[0]).toMatchObject({ tool: 'web', label: 'web search hermes web tools', touches: [] })
     expect(out[1]).toMatchObject({ tool: 'web', label: 'web fetch https://example.com/docs', touches: [] })
+  })
+
+  it('maps call_mcp_tool to mcp kind and keeps server tool and path in label', () => {
+    const parser = createAgyParser(ctx)
+    const out = parser.push(
+      lines({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'c1',
+          step_index: 1,
+          state: 'ACTIVE',
+          step_type: 'tool',
+          tool_name: 'call_mcp_tool',
+          tool_info: {
+            parameters: {
+              ServerName: 'git',
+              ToolName: 'read_file',
+              Arguments: { Path: 'C:\\Temp\\agent-sandbox\\src\\math.js' },
+            },
+          },
+        },
+      }),
+      550
+    )
+    expect(out[0]).toMatchObject({
+      tool: 'mcp',
+      label: 'mcp git read_file src/math.js',
+      touches: [{ path: 'src/math.js', mode: 'read', kind: 'file' }],
+    })
+  })
+
+  it('maps manage_task and schedule to plan and wait kinds with useful labels', () => {
+    const parser = createAgyParser(ctx)
+    const out = parser.push(
+      lines(
+        {
+          event: 'step_update',
+          step_update: {
+            conversation_id: 'c1',
+            step_index: 1,
+            state: 'ACTIVE',
+            step_type: 'tool',
+            tool_name: 'manage_task',
+            tool_info: { parameters: { Action: 'status', TaskId: 'task-9' } },
+          },
+        },
+        {
+          event: 'step_update',
+          step_update: {
+            conversation_id: 'c1',
+            step_index: 2,
+            state: 'ACTIVE',
+            step_type: 'tool',
+            tool_name: 'schedule',
+            tool_info: { parameters: { DurationSeconds: 30 } },
+          },
+        }
+      ),
+      560
+    )
+    expect(out[0]).toMatchObject({ tool: 'plan', label: 'task status task-9' })
+    expect(out[1]).toMatchObject({ tool: 'wait', label: 'wait 30s' })
   })
 
   it('spawns an invoked subagent and ends it when a listing shows it idle', () => {
@@ -443,5 +590,23 @@ describe('tool names that are only inherited names', () => {
       expect(parser.push(lines({ type: 'tool_use', part: { tool: 'read' } }), 1000), name).toEqual([])
       expect(parser.flush(1000)).toEqual([])
     }
+  })
+})
+
+describe('looksFailed failure anchoring', () => {
+  it('does not fail a read-only command quoting failure words', () => {
+    expect(looksFailed('diff --git a/foo.js b/foo.js\n+ const FAILED = false')).toBe(false)
+    expect(looksFailed('+ // FAIL on empty input')).toBe(false)
+    expect(looksFailed('src/app.js:20: catch (Exception) {')).toBe(false)
+    expect(looksFailed('echo "this was not ok"')).toBe(false)
+  })
+
+  it('still detects real failed test outputs', () => {
+    expect(looksFailed('FAIL tests/math.test.js')).toBe(true)
+    expect(looksFailed('FAILED: test_math')).toBe(true)
+    expect(looksFailed('  \u2716 add two numbers')).toBe(true)
+    expect(looksFailed('not ok 1 - subtract numbers')).toBe(true)
+    expect(looksFailed('[exit 1]')).toBe(true)
+    expect(looksFailed('fatal: remote repository not found')).toBe(true)
   })
 })

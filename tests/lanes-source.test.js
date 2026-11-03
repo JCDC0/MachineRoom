@@ -310,6 +310,17 @@ describe('the live lane source', () => {
     const ended = await waitFor(() => endFrame(frames), { what: 'the failed end' })
     expect(ended.payload).toMatchObject({ status: 'failed', error: 'exit 1' })
 
+    const unreadRuns = join(base, 'runs-plain')
+    const unread = startSource({ runs: unreadRuns, lanes })
+    const unreadLog = join(unreadRuns, 'opencode-S6a-20261024-123000.log')
+    const plainError = 'Error: harness died unexpectedly\n    at init (cli.js:10:5)\n    at run (cli.js:20:1)'
+    writeFileSync(unreadLog, `${plainError}\n`)
+    appendFileSync(join(unreadRuns, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: unreadLog, exitCode: 1, killed: false })}\n`)
+    await waitFor(() => endFrame(unread.frames), { what: 'the failed plain run' })
+    const event = unread.frames.find((frame) => frame.type === 'heartbeat.run.event')
+    expect(event).toBeDefined()
+    expect(event.payload).toMatchObject({ level: 'error', message: plainError })
+
     const otherRuns = join(base, 'runs-killed')
     const other = startSource({ runs: otherRuns, lanes })
     const otherLog = join(otherRuns, 'opencode2-S6b-20261024-122000.log')
@@ -582,14 +593,14 @@ describe('the V5 audit fixes in the lane source', () => {
     expect([...rewritten.values()].map((record) => record.exitCode).sort((left, right) => left - right)).toEqual([1, 3])
   })
 
-  it('drops a held partial line past 1 MB and reads on from the next newline (X14)', async () => {
+  it('drops a held partial line past 8 MB and reads on from the next newline (X14)', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
     const { frames } = startSource({ runs, lanes })
     const logPath = join(runs, 'opencode-S6a-20261024-133000.log')
-    writeFileSync(logPath, 'x'.repeat(1024 * 1024 + 2048))
+    writeFileSync(logPath, 'x'.repeat(8 * 1024 * 1024 + 2048))
 
     await sleep(200)
     expect(logFrames(frames)).toHaveLength(0)
@@ -598,6 +609,22 @@ describe('the V5 audit fixes in the lane source', () => {
     appendFileSync(logPath, `\n${line}\n`)
     await waitFor(() => logFrames(frames).length === 1, { what: 'the line after the huge one' })
     expect(logFrames(frames)[0].payload.chunk).toBe(`${line}\n`)
+  })
+
+  it('reads a tool line over 1 MB (S29)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const { frames } = startSource({ runs, lanes })
+    const logPath = join(runs, 'opencode-S6a-20261024-133500.log')
+    const line = toolLine(`${worktree}\\src\\a.js`)
+    const parsed = JSON.parse(line)
+    parsed.part.state.output = 'x'.repeat(1500000)
+    const largeLine = JSON.stringify(parsed)
+    writeFileSync(logPath, `${largeLine}\n`)
+    await waitFor(() => logFrames(frames).length === 1, { what: 'the large line' })
+    expect(logFrames(frames)[0].payload.chunk).toBe(`${largeLine}\n`)
   })
 
   it('shows a worktree run when the room root is the repository main checkout (X15)', async () => {
