@@ -3,8 +3,10 @@ import { createReadStream, existsSync, mkdirSync, rmSync, writeFileSync } from '
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  MUSIC_CONFIRM_PROBLEM,
   MUSIC_LIMIT,
   MUSIC_OPEN_PROBLEM,
+  MUSIC_ORIGIN_PROBLEM,
   createMusicApi,
   isSafeMusicName,
   listMusic,
@@ -350,9 +352,11 @@ describe('the music folder opener', () => {
 
     const noOrigin = await postOpen(started.url)
     expect(noOrigin.status).toBe(403)
+    expect(await noOrigin.json()).toEqual({ error: MUSIC_ORIGIN_PROBLEM })
 
     const unconfirmed = await postOpen(started.url, { origin: started.url, body: { confirmed: false } })
     expect(unconfirmed.status).toBe(400)
+    expect(await unconfirmed.json()).toEqual({ error: MUSIC_CONFIRM_PROBLEM })
     expect(existsSync(folder)).toBe(false)
 
     const opened = await postOpen(started.url, { origin: started.url })

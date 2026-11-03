@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { projectHash } from '../server/orchestrator.js'
@@ -8,6 +8,8 @@ import {
   CONFIRM_FORGET_PROBLEM,
   CONFIRM_OPEN_PROBLEM,
   currentProject,
+  MAX_RECENT,
+  MAX_SESSIONS,
   NOT_ABSOLUTE_PROBLEM,
   NOT_FOLDER_PROBLEM,
   NOT_FOUND_PROBLEM,
@@ -15,6 +17,7 @@ import {
   NOT_SUPPORTED_PROBLEM,
   ORIGIN_FORGET_PROBLEM,
   ORIGIN_PROBLEM,
+  PRUNE_INTERVAL_MS,
   TURN_RUNNING_PROBLEM,
   LANES_RUNNING_PROBLEM,
   createProjectsApi,
@@ -159,7 +162,7 @@ describe('projects api', () => {
       path: resolve(env.outsideRepo),
       name: basename(env.outsideRepo),
     })
-    expect(res.body.recent[0].sessions).toHaveLength(6)
+    expect(res.body.recent[0].sessions).toHaveLength(MAX_SESSIONS)
     expect(res.body.recent[0].sessions[0]).toEqual({
       id: 's1',
       title: 'Session 1',
@@ -221,14 +224,14 @@ describe('projects api', () => {
     }
 
     const stored = readProjectsFile(file)
-    expect(stored.recent).toHaveLength(20)
+    expect(stored.recent).toHaveLength(MAX_RECENT)
     expect(stored.recent[0].path).toBe(resolve(join(env.base, 'proj-25')))
     expect(stored.recent[19].path).toBe(resolve(join(env.base, 'proj-6')))
 
     recordProject(file, join(env.base, 'proj-6'), 5000)
     const updated = readProjectsFile(file)
     expect(updated.recent[0].path).toBe(resolve(join(env.base, 'proj-6')))
-    expect(updated.recent).toHaveLength(20)
+    expect(updated.recent).toHaveLength(MAX_RECENT)
   })
 
   it('skips a temp folder, a worktree and a runs folder when recording', () => {
@@ -351,7 +354,7 @@ describe('projects api', () => {
     stored = readProjectsFile(file)
     expect(stored.recent.map((r) => r.path)).toContain(resolve(missing))
 
-    const list3 = recentProjects(file, env.runs, null, () => 62000)
+    const list3 = recentProjects(file, env.runs, null, () => PRUNE_INTERVAL_MS + 2000)
     expect(list3.map((r) => r.path)).toEqual([resolve(realB)])
 
     stored = readProjectsFile(file)

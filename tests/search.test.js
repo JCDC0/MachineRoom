@@ -5,8 +5,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import {
   FETCH_BYTES,
+  FETCH_CHARS,
+  MAX_REDIRECTS,
   MAX_RESULTS,
+  SEARCH_CONFIRM_PROBLEM,
   SEARCH_OFF,
+  SEARCH_ORIGIN_PROBLEM,
+  SEARCH_PROVIDER_PROBLEM,
+  SEARCH_URL_PROBLEM,
   addressProblem,
   fetchPage,
   htmlToText,
@@ -221,7 +227,7 @@ describe('web fetch page', () => {
     })
     const page = await fetchPage(`${fake.url}/big`, { checkHost: allow })
     expect(page.error).toBe('')
-    expect(page.text).toHaveLength(20000)
+    expect(page.text).toHaveLength(FETCH_CHARS)
     expect(page.truncated).toBe(true)
   })
 
@@ -272,7 +278,7 @@ describe('web fetch page', () => {
       res.end()
     })
     const page = await fetchPage(`${fake.url}/loop`, { checkHost: allow })
-    expect(page.error).toBe('The page redirected more than 3 times.')
+    expect(page.error).toBe(`The page redirected more than ${MAX_REDIRECTS} times.`)
   })
 
   it('reports an HTTP failure', async () => {
@@ -347,22 +353,22 @@ describe('the search provider route', () => {
   it('needs a page Origin', async () => {
     const answer = await ask('POST', { provider: 'duckduckgo', confirmed: true }, { origin: false })
     expect(answer.status).toBe(403)
-    expect(answer.body.error).toBe('A request with no Origin cannot set web search.')
+    expect(answer.body.error).toBe(SEARCH_ORIGIN_PROBLEM)
   })
 
   it('needs a confirmation', async () => {
     const answer = await ask('POST', { provider: 'duckduckgo' })
     expect(answer.status).toBe(400)
-    expect(answer.body.error).toBe('Confirm web search first.')
+    expect(answer.body.error).toBe(SEARCH_CONFIRM_PROBLEM)
   })
 
   it('refuses a provider it does not know and a URL that is not http or https', async () => {
     const provider = await ask('POST', { provider: 'elsewhere', confirmed: true })
     expect(provider.status).toBe(400)
-    expect(provider.body.error).toBe('Pick SearXNG, Tavily, Brave, DuckDuckGo or Off.')
+    expect(provider.body.error).toBe(SEARCH_PROVIDER_PROBLEM)
     const address = await ask('POST', { provider: 'searxng', url: 'ftp://search.example', confirmed: true })
     expect(address.status).toBe(400)
-    expect(address.body.error).toBe('The SearXNG address must be an http or https address.')
+    expect(address.body.error).toBe(SEARCH_URL_PROBLEM)
     const missing = await ask('POST', { provider: 'searxng', url: '', confirmed: true })
     expect(missing.status).toBe(400)
   })

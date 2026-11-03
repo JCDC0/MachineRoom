@@ -6,8 +6,28 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource, createRecordsCache } from '../server/lanes-source.js'
-import { chatFileFor, COMPACTED_MESSAGE, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
-import { availableHarnesses, branchChanges, createOrchestrators, NO_TOKEN_PROBLEM, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
+import { chatFileFor, COMPACT_RUNNING_PROBLEM, COMPACTED_MESSAGE, CONFIRM_AUTOCOMPACT_PROBLEM, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
+import {
+  availableHarnesses,
+  branchChanges,
+  CONFIRM_LADDER_PROBLEM,
+  createOrchestrators,
+  MAIN_LADDER_PROBLEM,
+  MAIN_MESSAGE_PROBLEM,
+  NO_ORCHESTRATOR_PROBLEM,
+  NO_TOKEN_PROBLEM,
+  OWNER_AUTOCOMPACT_PROBLEM,
+  OWNER_COMPACT_PROBLEM,
+  OWNER_EFFORT_PROBLEM,
+  OWNER_HARNESS_PROBLEM,
+  OWNER_LADDER_PROBLEM,
+  OWNER_MESSAGE_PROBLEM,
+  OWNER_MODEL_PROBLEM,
+  OWNER_SESSION_PROBLEM,
+  PAGE_LADDER_PROBLEM,
+  PAGE_MESSAGE_PROBLEM,
+  SCOPE_UNREAD_PROBLEM,
+} from '../server/orchestrators.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { gitPath } from '../server/programPath.js'
 import { parseRunArgs, runRecord } from '../src/briefs/run.js'
@@ -540,10 +560,10 @@ describe('the orchestrator registry', () => {
 
     const noOrigin = await postJson(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false, confirmed: true })
     expect(noOrigin.status).toBe(403)
-    expect(noOrigin.body).toEqual({ error: 'A request with no Origin cannot set autocompact.' })
+    expect(noOrigin.body).toEqual({ error: OWNER_AUTOCOMPACT_PROBLEM })
 
     expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: false })).body).toEqual({
-      error: 'Confirm the autocompact change first.',
+      error: CONFIRM_AUTOCOMPACT_PROBLEM,
     })
     expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', on: 'yes', confirmed: true })).status).toBe(400)
     expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'orchestrator', percent: 0, confirmed: true })).status).toBe(400)
@@ -714,18 +734,18 @@ describe('the orchestrator registry', () => {
     const req = { method: 'POST', headers: { origin: 'http://localhost:5173' } }
     await rig.registry.handle(req, {}, new URL('http://127.0.0.1/api/orchestrator/compact'))
     expect(answer.status).toBe(404)
-    expect(answer.body).toEqual({ error: 'There is no orchestrator with that id.' })
+    expect(answer.body).toEqual({ error: NO_ORCHESTRATOR_PROBLEM })
   })
 
   it('compacts now and sets the model for an orchestrator', async () => {
     const rig = await makeBridge(makeBase())
     const noOriginCompact = await postJson(`${rig.url}/api/orchestrator/compact`, { confirmed: true })
     expect(noOriginCompact.status).toBe(403)
-    expect(noOriginCompact.body).toEqual({ error: 'A request with no Origin cannot compact an orchestrator.' })
+    expect(noOriginCompact.body).toEqual({ error: OWNER_COMPACT_PROBLEM })
 
     const noOriginModel = await postJson(`${rig.url}/api/orchestrator/model`, { model: 'claude-sonnet-5-5', confirmed: true })
     expect(noOriginModel.status).toBe(403)
-    expect(noOriginModel.body).toEqual({ error: 'A request with no Origin cannot set the model.' })
+    expect(noOriginModel.body).toEqual({ error: OWNER_MODEL_PROBLEM })
 
     expect((await pagePost(`${rig.url}/api/orchestrator/compact`, {})).status).toBe(400)
     expect((await pagePost(`${rig.url}/api/orchestrator/compact`, { confirmed: true })).status).toBe(400)
@@ -826,7 +846,7 @@ describe('the orchestrator registry', () => {
     await waitFor(() => rig.chat('orchestrator')?.state === 'working')
     const runningConflict = await pagePost(`${rig.url}/api/orchestrator/harness`, { harness: 'claude', model: 'claude-haiku-5-5', confirmed: true })
     expect(runningConflict.status).toBe(409)
-    expect(runningConflict.body).toEqual({ error: 'A turn is already running.' })
+    expect(runningConflict.body).toEqual({ error: COMPACT_RUNNING_PROBLEM })
     writeFileSync(files.releaseFile, 'go')
     await waitFor(() => rig.chat('orchestrator')?.state === 'idle')
   })
@@ -862,7 +882,7 @@ describe('the orchestrator registry', () => {
 
     const noOriginEffort = await postJson(`${rig.url}/api/orchestrator/effort`, { effort: 'high', confirmed: true })
     expect(noOriginEffort.status).toBe(403)
-    expect(noOriginEffort.body).toEqual({ error: 'A request with no Origin cannot set effort.' })
+    expect(noOriginEffort.body).toEqual({ error: OWNER_EFFORT_PROBLEM })
 
     expect((await pagePost(`${rig.url}/api/orchestrator/effort`, { effort: 'high' })).status).toBe(400)
     expect((await pagePost(`${rig.url}/api/orchestrator/effort`, { effort: 'invalid', confirmed: true })).status).toBe(400)
@@ -887,7 +907,7 @@ describe('the orchestrator registry', () => {
 
     const noOriginNew = await postJson(`${rig.url}/api/orchestrator/sessions/new`, { confirmed: true })
     expect(noOriginNew.status).toBe(403)
-    expect(noOriginNew.body).toEqual({ error: 'A request with no Origin cannot change sessions.' })
+    expect(noOriginNew.body).toEqual({ error: OWNER_SESSION_PROBLEM })
 
     const unconfirmedNew = await pagePost(`${rig.url}/api/orchestrator/sessions/new`, {})
     expect(unconfirmedNew.status).toBe(400)
@@ -1132,7 +1152,7 @@ describe('the orchestrator registry', () => {
     const rig = await makeBridge(makeBase())
     const mainToken = rig.bridge.orchestrators().token('orchestrator')
     const unconfirmed = await tokenPost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [] }, by: 'owner' }, mainToken)
-    expect(unconfirmed.body).toEqual({ error: 'Confirm the ladder first.' })
+    expect(unconfirmed.body).toEqual({ error: CONFIRM_LADDER_PROBLEM })
 
     const missing = await pagePost(`${rig.url}/api/orchestrator/ladder`, { by: 'owner', confirmed: true })
     expect(missing.status).toBe(400)
@@ -1189,7 +1209,7 @@ describe('the orchestrator registry', () => {
 
     const page = await pagePost(`${rig.url}/api/orchestrator/ladder`, { ladder: { subs: [FRONTEND] }, by: 'orchestrator', confirmed: true })
     expect(page.status).toBe(403)
-    expect(page.body).toEqual({ error: 'A page cannot change the ladder as the orchestrator.' })
+    expect(page.body).toEqual({ error: PAGE_LADDER_PROBLEM })
 
     const owner = await pagePost(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [{ ...FRONTEND, scope: ['src/ui/**', 'src/engine/**'] }] },
@@ -1211,7 +1231,7 @@ describe('the orchestrator registry', () => {
       confirmed: true,
     }, mainToken)
     expect(ownerLadder.status).toBe(403)
-    expect(ownerLadder.body).toEqual({ error: 'A request with no Origin cannot change the ladder as the owner.' })
+    expect(ownerLadder.body).toEqual({ error: OWNER_LADDER_PROBLEM })
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[1].scope).toEqual(['src/ui/**'])
 
     const pageLadder = await pagePost(`${rig.url}/api/orchestrator/ladder`, {
@@ -1235,7 +1255,7 @@ describe('the orchestrator registry', () => {
       confirmed: true,
     }, mainToken)
     expect(ownerMessage.status).toBe(403)
-    expect(ownerMessage.body).toEqual({ error: 'A request with no Origin cannot send a message as the owner.' })
+    expect(ownerMessage.body).toEqual({ error: OWNER_MESSAGE_PROBLEM })
     expect(rig.chat('frontend').messages.some((message) => message.from === 'owner')).toBe(false)
 
     const orchestratorMessage = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
@@ -1268,7 +1288,7 @@ describe('the orchestrator registry', () => {
       confirmed: true,
     })
     expect(page.status).toBe(403)
-    expect(page.body).toEqual({ error: 'A page cannot send a message as the orchestrator.' })
+    expect(page.body).toEqual({ error: PAGE_MESSAGE_PROBLEM })
 
     const unconfirmed = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',
@@ -1412,7 +1432,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     })
     expect(noToken.status).toBe(403)
-    expect(noToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+    expect(noToken.body).toEqual({ error: NO_TOKEN_PROBLEM })
 
     const wrongToken = await tokenPost(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
@@ -1420,7 +1440,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     }, 'wrong-token')
     expect(wrongToken.status).toBe(403)
-    expect(wrongToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+    expect(wrongToken.body).toEqual({ error: NO_TOKEN_PROBLEM })
 
     const inside = await tokenPost(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
@@ -1504,7 +1524,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     })
     expect(claimedNoToken.status).toBe(403)
-    expect(claimedNoToken.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+    expect(claimedNoToken.body).toEqual({ error: NO_TOKEN_PROBLEM })
     expect(readLines(runnerCalls)).toHaveLength(0)
 
     const subLadder = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
@@ -1513,7 +1533,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     }, subToken)
     expect(subLadder.status).toBe(403)
-    expect(subLadder.body).toEqual({ error: "A ladder change needs the main orchestrator's token." })
+    expect(subLadder.body).toEqual({ error: MAIN_LADDER_PROBLEM })
 
     const noTokenLadder = await postJson(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [FRONTEND] },
@@ -1521,7 +1541,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     })
     expect(noTokenLadder.status).toBe(403)
-    expect(noTokenLadder.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+    expect(noTokenLadder.body).toEqual({ error: NO_TOKEN_PROBLEM })
 
     const wrongTokenLadder = await tokenPost(`${rig.url}/api/orchestrator/ladder`, {
       ladder: { subs: [FRONTEND] },
@@ -1529,7 +1549,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     }, 'wrong-token')
     expect(wrongTokenLadder.status).toBe(403)
-    expect(wrongTokenLadder.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+    expect(wrongTokenLadder.body).toEqual({ error: NO_TOKEN_PROBLEM })
 
     const subMessage = await tokenPost(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',
@@ -1538,7 +1558,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     }, subToken)
     expect(subMessage.status).toBe(403)
-    expect(subMessage.body).toEqual({ error: "A message to a sub needs the main orchestrator's token." })
+    expect(subMessage.body).toEqual({ error: MAIN_MESSAGE_PROBLEM })
 
     const noTokenMessage = await postJson(`${rig.url}/api/orchestrator/messages`, {
       id: 'frontend',
@@ -1547,7 +1567,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     })
     expect(noTokenMessage.status).toBe(403)
-    expect(noTokenMessage.body).toEqual({ error: 'A request with no Origin needs a valid orchestrator token.' })
+    expect(noTokenMessage.body).toEqual({ error: NO_TOKEN_PROBLEM })
 
     const page = await pagePost(`${rig.url}/api/control/runs`, {
       lane: 'opencode',
@@ -1566,7 +1586,7 @@ describe('starting lanes from a sub orchestrator', () => {
       confirmed: true,
     })
     expect(unknownPage.status).toBe(400)
-    expect(unknownPage.body).toEqual({ error: 'There is no orchestrator with that id.' })
+    expect(unknownPage.body).toEqual({ error: NO_ORCHESTRATOR_PROBLEM })
   })
 
   it('makes new tokens when the bridge restarts', async () => {
@@ -1664,7 +1684,9 @@ describe('starting lanes from a sub orchestrator', () => {
 
     appendRecord(rig, { logName: 'opencode-K2-20261025-140000', startedBy: 'frontend', project: rig.projectRoot })
     rig.registry.onFrame(frame('opencode-K2-20261025-140000'))
-    await waitFor(() => messagesOf(rig.registry, 'orchestrator').some((message) => message.from === 'room' && message.text === SCOPE_UNREAD_PROBLEM))
+    const told = await waitFor(() => messagesOf(rig.registry, 'orchestrator').find((message) => message.from === 'room' && message.text === SCOPE_UNREAD_PROBLEM))
+    expect(told).toBeTruthy()
+    expect(told.text).toBe(SCOPE_UNREAD_PROBLEM)
   })
 })
 

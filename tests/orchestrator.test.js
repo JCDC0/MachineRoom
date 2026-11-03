@@ -18,8 +18,6 @@ import {
   CHAT_SAVE_PROBLEM,
   COMPACT_PROMPT,
   DEFAULT_COMPACT_RULES,
-  DEFAULT_AUTOCOMPACT_MODE,
-  DEFAULT_AUTOCOMPACT_VALUE,
   AUTOCOMPACT_MODE_PROBLEM,
   AUTOCOMPACT_PERCENT_PROBLEM,
   AUTOCOMPACT_TOKENS_PROBLEM,
@@ -31,9 +29,21 @@ import {
   RESTART_MESSAGE,
   ORCHESTRATOR_ROOM_WINDOW_MS,
   SESSION_PENDING_PROBLEM,
+  AUTOCOMPACT_PROBLEM,
+  COMPACT_KEEP_PROBLEM,
+  COMPACT_RUNNING_PROBLEM,
+  CONFIRM_AUTOCOMPACT_PROBLEM,
+  CONFIRM_EFFORT_PROBLEM,
+  CONFIRM_MESSAGE_PROBLEM,
+  CONFIRM_STOP_PROBLEM,
+  EFFORT_PROBLEM,
+  EMPTY_REPLY,
+  MESSAGE_PROBLEM,
+  MODEL_PROBLEM,
+  NO_SESSION_PROBLEM,
 } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
-import { getJson, postJson } from './helpers/bridge.js'
+import { getJson } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 function pagePostJson(url, body) {
@@ -57,7 +67,6 @@ const OPENCODE_LANE = {
 }
 const LANES = { orchestrator: ORCHESTRATOR_LANE }
 const OPENCODE_LANES = { orchestrator: OPENCODE_LANE }
-const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
 const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
 
 const FAKE_CLAUDE = [
@@ -460,7 +469,7 @@ describe('one orchestrator turn', () => {
     rig.behaviour.mode = 'empty'
     rig.send('Say nothing')
     await waitIdle(rig, 1)
-    expect(rig.answer().messages.at(-1).text).toBe('The orchestrator ended its turn without a reply.')
+    expect(rig.answer().messages.at(-1).text).toBe(EMPTY_REPLY)
 
     rig.behaviour.mode = 'fail'
     rig.send('Fail now')
@@ -868,15 +877,15 @@ describe('autocompact', () => {
     const rig = makeRig()
     expect(rig.orchestrator.setAutocompact({ confirmed: false })).toEqual({
       status: 400,
-      body: { error: 'Confirm the autocompact change first.' },
+      body: { error: CONFIRM_AUTOCOMPACT_PROBLEM },
     })
     expect(rig.orchestrator.setAutocompact({ confirmed: true })).toEqual({
       status: 400,
-      body: { error: 'Say whether autocompact is on or off.' },
+      body: { error: AUTOCOMPACT_PROBLEM },
     })
     expect(rig.orchestrator.setAutocompact({ confirmed: true, on: 'yes' })).toEqual({
       status: 400,
-      body: { error: 'Say whether autocompact is on or off.' },
+      body: { error: AUTOCOMPACT_PROBLEM },
     })
     expect(rig.orchestrator.setAutocompact({ confirmed: true, mode: 'characters' })).toEqual({
       status: 400,
@@ -946,7 +955,7 @@ describe('autocompact', () => {
     const rig = makeRig()
     expect(rig.orchestrator.compact({ confirmed: true })).toEqual({
       status: 400,
-      body: { error: 'The orchestrator has no session yet.' },
+      body: { error: NO_SESSION_PROBLEM },
     })
 
     rig.behaviour.mode = 'hold'
@@ -955,7 +964,7 @@ describe('autocompact', () => {
 
     expect(rig.orchestrator.compact({ confirmed: true })).toEqual({
       status: 409,
-      body: { error: 'A turn is already running.' },
+      body: { error: COMPACT_RUNNING_PROBLEM },
     })
 
     writeFileSync(rig.releaseFile, 'go')
@@ -963,7 +972,7 @@ describe('autocompact', () => {
 
     expect(rig.orchestrator.compact({ confirmed: true, keep: 'a'.repeat(2001) })).toEqual({
       status: 400,
-      body: { error: 'Write at most 2000 characters to keep.' },
+      body: { error: COMPACT_KEEP_PROBLEM },
     })
 
     const compacted = rig.orchestrator.compact({ confirmed: true, keep: 'Keep the tests and bridge passing.' })
@@ -1004,11 +1013,11 @@ describe('autocompact', () => {
     const rig = makeRig()
     expect(rig.orchestrator.setModel({ model: 'unlisted-model', confirmed: true })).toEqual({
       status: 400,
-      body: { error: 'Choose a model listed for this harness.' },
+      body: { error: MODEL_PROBLEM },
     })
     expect(rig.orchestrator.setModel({ model: 'opencode/deepseek-v4.1-flash-free', confirmed: true })).toEqual({
       status: 400,
-      body: { error: 'Choose a model listed for this harness.' },
+      body: { error: MODEL_PROBLEM },
     })
 
     expect(rig.orchestrator.setModel({ model: 'claude-sonnet-5-5', confirmed: true })).toEqual({
@@ -1578,7 +1587,7 @@ describe('waking the orchestrator', () => {
     rig.send('A long job')
     await waitFor(() => rig.calls().length === 1)
     const pid = rig.calls()[0].pid
-    expect(rig.orchestrator.stop({})).toEqual({ status: 400, body: { error: 'Confirm the stop first.' } })
+    expect(rig.orchestrator.stop({})).toEqual({ status: 400, body: { error: CONFIRM_STOP_PROBLEM } })
     expect(rig.orchestrator.stop({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
     expect(rig.answer().state).toBe('paused')
     await waitFor(() => {
@@ -2080,11 +2089,11 @@ describe('orchestrator reasoning effort and sessions', () => {
 
     const badClaude = claudeRig.orchestrator.setEffort({ effort: 'extreme', confirmed: true })
     expect(badClaude.status).toBe(400)
-    expect(badClaude.body).toEqual({ error: 'Choose an effort level listed for this harness.' })
+    expect(badClaude.body).toEqual({ error: EFFORT_PROBLEM })
 
     const unconfirmed = claudeRig.orchestrator.setEffort({ effort: 'high' })
     expect(unconfirmed.status).toBe(400)
-    expect(unconfirmed.body).toEqual({ error: 'Confirm the effort change first.' })
+    expect(unconfirmed.body).toEqual({ error: CONFIRM_EFFORT_PROBLEM })
 
     const opencodeRig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
     const setOpenCode = opencodeRig.orchestrator.setEffort({ effort: 'max', confirmed: true })
@@ -2108,11 +2117,11 @@ describe('orchestrator reasoning effort and sessions', () => {
 
     expect(rig.orchestrator.setModel({ model: 'claude-sonnet-5-5', confirmed: true })).toEqual({
       status: 409,
-      body: { error: 'A turn is already running.' },
+      body: { error: COMPACT_RUNNING_PROBLEM },
     })
     expect(rig.orchestrator.setEffort({ effort: 'high', confirmed: true })).toEqual({
       status: 409,
-      body: { error: 'A turn is already running.' },
+      body: { error: COMPACT_RUNNING_PROBLEM },
     })
 
     writeFileSync(rig.releaseFile, 'go')
@@ -2285,11 +2294,11 @@ describe('orchestrator reasoning effort and sessions', () => {
 
     const newAttempt = rig.orchestrator.newSession({ confirmed: true })
     expect(newAttempt.status).toBe(409)
-    expect(newAttempt.body).toEqual({ error: 'A turn is already running.' })
+    expect(newAttempt.body).toEqual({ error: COMPACT_RUNNING_PROBLEM })
 
     const openAttempt = rig.orchestrator.openSession('some-id', { confirmed: true })
     expect(openAttempt.status).toBe(409)
-    expect(openAttempt.body).toEqual({ error: 'A turn is already running.' })
+    expect(openAttempt.body).toEqual({ error: COMPACT_RUNNING_PROBLEM })
 
     writeFileSync(rig.releaseFile, 'go')
     await waitIdle(rig, 1)
@@ -2301,14 +2310,9 @@ describe('the orchestrator routes', () => {
     const rig = makeRig()
     rig.orchestrator.close()
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-orchestrator',
       projectRoot: rig.projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       lanesSource: { folder: rig.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
       orchestratorSpawn: () => {
         throw new Error('No turn should start in this test.')
@@ -2325,16 +2329,16 @@ describe('the orchestrator routes', () => {
     expect(Array.isArray(chat.body.messages)).toBe(true)
 
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'Build it' })).body).toEqual({
-      error: 'Confirm the message first.',
+      error: CONFIRM_MESSAGE_PROBLEM,
     })
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'Build it', confirmed: false })).status).toBe(400)
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: '   ', confirmed: true })).body).toEqual({
-      error: 'Write a message from 1 to 8000 characters.',
+      error: MESSAGE_PROBLEM,
     })
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'x'.repeat(8001), confirmed: true })).status).toBe(400)
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 42, confirmed: true })).status).toBe(400)
     expect((await pagePostJson(`${url}/api/orchestrator/stop`, {})).body).toEqual({
-      error: 'Confirm the stop first.',
+      error: CONFIRM_STOP_PROBLEM,
     })
     expect((await pagePostJson(`${url}/api/orchestrator/stop`, { confirmed: true })).body).toEqual({ ok: true })
     expect((await getJson(`${url}/api/orchestrator`)).body.state).toBe('paused')
@@ -2344,14 +2348,9 @@ describe('the orchestrator routes', () => {
     const rig = makeRig()
     rig.orchestrator.close()
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-orchestrator-mask',
       projectRoot: rig.projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       lanesSource: { folder: rig.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
       orchestratorSpawn: () => {
         throw new Error('No turn should start in this test.')
@@ -2376,14 +2375,9 @@ describe('the orchestrator routes', () => {
     const rig = makeRig({ project: false })
     rig.orchestrator.close()
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-orchestrator',
       projectRoot: '',
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       lanesSource: { folder: rig.runs, lanes: LANES, pollMs: 20, quietMs: 60000 },
       orchestratorSpawn: () => {
         throw new Error('No turn should start in this test.')
@@ -2394,7 +2388,7 @@ describe('the orchestrator routes', () => {
     expect((await pagePostJson(`${url}/api/orchestrator/messages`, { text: 'Build it', confirmed: true })).status).toBe(409)
     expect((await getJson(`${url}/api/orchestrator`)).body.project).toBe('')
 
-    const off = createBridge({ paperclipUrl: DEAD_PAPERCLIP, companyId: 'comp-off', projectRoot: rig.projectRoot, port: 0, env: {}, surfaceEveryMs: 0, reconnectMinMs: 60000, reconnectMaxMs: 60000 })
+    const off = createBridge({ projectRoot: rig.projectRoot, port: 0, env: {} })
     cleanups.push(() => off.stop())
     const offUrl = (await off.start()).url
     expect((await getJson(`${offUrl}/api/orchestrator`)).status).toBe(404)
@@ -2796,7 +2790,7 @@ describe('the lane source and the orchestrator turn', () => {
 
       const compactAttempt = rig.orchestrator.compact({ confirmed: true })
       expect(compactAttempt.status).toBe(400)
-      expect(compactAttempt.body).toEqual({ error: 'The orchestrator has no session yet.' })
+      expect(compactAttempt.body).toEqual({ error: NO_SESSION_PROBLEM })
 
       rig.send('Next fresh turn')
       await waitFor(() => rig.answer().state === 'idle', 15000, 'second turn to finish')

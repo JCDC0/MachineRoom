@@ -13,6 +13,7 @@ import { laneRunRecord, laneStartProblem, laneWorktreeStart, projectLockName, ta
 import {
   childEnvironment,
   commandFor,
+  DEFAULT_MINUTES,
   laneLockPids,
   laneStats,
   parseRunArgs,
@@ -141,7 +142,7 @@ function logFrames(frames) {
 describe('parseRunArgs for another project', () => {
   it('takes a folder with task text instead of a brief id', () => {
     expect(parseRunArgs(['opencode', '--project', 'C:\\GitHub\\Other', '--task', 'Fix the test.'])).toEqual({
-      lane: 'opencode', briefs: [], dryRun: false, minutes: 100, list: false, project: 'C:\\GitHub\\Other', task: 'Fix the test.',
+      lane: 'opencode', briefs: [], dryRun: false, minutes: DEFAULT_MINUTES, list: false, project: 'C:\\GitHub\\Other', task: 'Fix the test.',
     })
     expect(parseRunArgs(['opencode', '--project=C:\\GitHub\\Other', '--task=Fix it.', '--allow-dirty'])).toMatchObject({
       project: 'C:\\GitHub\\Other', task: 'Fix it.', allowDirty: true,
@@ -626,6 +627,8 @@ describe('the lane source on another project', () => {
 
     const { frames } = startSource({ runs, projectRoot, lanes })
     await waitFor(() => logFrames(frames).length === 1, { what: 'the case-insensitive log' })
+    expect(logFrames(frames)).toHaveLength(1)
+    expect(logFrames(frames)[0].payload.chunk).toContain('a.js')
   })
 
   it('lists the lanes when the project root has no lanes.json', () => {
