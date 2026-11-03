@@ -748,6 +748,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
+    rig.resize()
     const shown = boardVisible(width)
     if (shown !== boardShown) {
       boardShown = shown

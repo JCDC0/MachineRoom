@@ -170,14 +170,19 @@ export function createCameraRig(camera, surface) {
   let adjusted = false
   let spin = false
   const drift = { x: 0, y: 0, sx: 0, sy: 0 }
+  let rect = typeof surface.getBoundingClientRect === 'function' ? surface.getBoundingClientRect() : null
 
   function free() {
     return !follow && heldDist === null
   }
 
+  function readRect() {
+    if (typeof surface.getBoundingClientRect === 'function') rect = surface.getBoundingClientRect()
+  }
+
   function hover(event) {
-    const rect = surface.getBoundingClientRect()
-    if (!rect.width || !rect.height) return
+    if (!rect) readRect()
+    if (!rect || !rect.width || !rect.height) return
     drift.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
     drift.y = ((event.clientY - rect.top) / rect.height) * 2 - 1
   }
@@ -339,6 +344,7 @@ export function createCameraRig(camera, surface) {
   return {
     update,
     snap,
+    resize: readRect,
     zoomBy,
     free,
     setSpin(on) {
