@@ -145,6 +145,7 @@ describe('the OpenCode session reader', () => {
     expect(frames).toHaveLength(before)
 
     addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 4, time: 9000 })
+    clock.value += 10000
     reader.tick()
     expect(frames.length).toBeGreaterThan(before)
     expect(frames[before].payload.runId).toBe('ses-1:4')
@@ -508,5 +509,70 @@ describe('the OpenCode session reader', () => {
     reader.tick()
 
     expect(frames).toHaveLength(count)
+  })
+
+  it('queries a quiet session less often than an active one', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 1000 }
+    const { reader, frames } = startReader({
+      dbPath,
+      projectRoot,
+      runsFolder: join(dir, 'runs'),
+      clock,
+      quietMs: 2000,
+      quietPollMs: 10000,
+    })
+
+    reader.tick()
+    addSession(dbPath, { id: 'ses-1', directory: projectRoot, time: 1000 })
+    addMessage(dbPath, { id: 'm-user-1', sessionId: 'ses-1', type: 'user', seq: 1, time: 1000 })
+    addMessage(dbPath, { id: 'm-idle-1', sessionId: 'ses-1', type: 'idle', seq: 2, time: 1001, data: { outcome: 'succeeded' } })
+    reader.tick()
+
+    clock.value += 3000
+    reader.tick()
+    const countAfterQuiet = frames.length
+
+    addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 3, time: 4000 })
+    clock.value += 1000
+    reader.tick()
+    expect(frames).toHaveLength(countAfterQuiet)
+
+    clock.value += 10000
+    reader.tick()
+    expect(frames.length).toBeGreaterThan(countAfterQuiet)
+  })
+
+  it('queries a quiet session immediately when its time_updated moves', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 1000 }
+    const { reader, frames } = startReader({
+      dbPath,
+      projectRoot,
+      runsFolder: join(dir, 'runs'),
+      clock,
+      quietMs: 2000,
+      quietPollMs: 10000,
+    })
+
+    reader.tick()
+    addSession(dbPath, { id: 'ses-1', directory: projectRoot, time: 1000 })
+    addMessage(dbPath, { id: 'm-user-1', sessionId: 'ses-1', type: 'user', seq: 1, time: 1000 })
+    addMessage(dbPath, { id: 'm-idle-1', sessionId: 'ses-1', type: 'idle', seq: 2, time: 1001, data: { outcome: 'succeeded' } })
+    reader.tick()
+
+    clock.value += 3000
+    reader.tick()
+    const countAfterQuiet = frames.length
+
+    addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 3, time: 4000 })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(4000, 'ses-1')
+    })
+    clock.value += 1000
+    reader.tick()
+    expect(frames.length).toBeGreaterThan(countAfterQuiet)
   })
 })

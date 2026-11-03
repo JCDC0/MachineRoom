@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Quiet OpenCode sessions are queried less often unless their session row moves.
+
 - The assistant starts OpenCode with a detached process group off Windows so its time limit stops child processes too.
 
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
