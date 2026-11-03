@@ -276,6 +276,21 @@ describe('the content files setting', () => {
     }
     expect(html).toContain('aria-label="Bloom strength"')
   })
+
+  it('gives the Beeps volume a 0 to 100 slider with its percent beside it and one dim line', () => {
+    const html = renderToString(
+      createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
+    )
+    expect(html).toContain('aria-label="Beep volume"')
+    expect(html).toContain('type="range"')
+    expect(html).toContain('min="0"')
+    expect(html).toContain('max="100"')
+    expect(html).toContain('value="30"')
+    expect(html).toContain('30<!-- -->%')
+    expect(html).toContain('A short tone when an agent reads, writes, makes or deletes a file.')
+    expect(html.indexOf('Beeps')).toBeLessThan(html.indexOf('Beep volume'))
+    expect(html.indexOf('Beep volume')).toBeLessThan(html.indexOf('A short tone when an agent'))
+  })
 })
 
 describe('validateBridgeUrl', () => {

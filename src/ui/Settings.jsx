@@ -243,14 +243,14 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                   {soundState.on ? 'On' : 'Off'}
                 </button>
               </div>
-              <div className="hud-settings-control">
+              <div className="hud-settings-control hud-settings-slider">
                 <input
-                  type="number"
+                  type="range"
                   min="0"
                   max="100"
                   step="1"
                   value={Math.round(soundState.volume * 100)}
-                  aria-label="Beep volume percent"
+                  aria-label="Beep volume"
                   onChange={(event) => {
                     const percent = Math.min(100, Math.max(0, Number(event.target.value) || 0))
                     updateSound({ volume: percent / 100 })
@@ -258,6 +258,7 @@ export default function Settings({ open = true, effects, onChange, onSettingsCha
                 />
                 <span className="hud-settings-value mono">{Math.round(soundState.volume * 100)}%</span>
               </div>
+              <p className="hud-settings-hint">A short tone when an agent reads, writes, makes or deletes a file.</p>
             </div>
             <div className="hud-settings-effect">
               <div className="hud-settings-row">
