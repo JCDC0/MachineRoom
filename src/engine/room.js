@@ -942,11 +942,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return true
   }
 
-  function bloomPixelRatio() {
-    const ratio = Number(window.devicePixelRatio)
-    return Number.isFinite(ratio) && ratio > 0 ? Math.min(ratio, 1.5) : 1
-  }
-
   function setBloom(next) {
     const settings = next && typeof next === 'object' && !Array.isArray(next) ? next : {}
     const raw = Number(settings.strength)
@@ -967,7 +962,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       camera,
       width,
       height,
-      pixelRatio: bloomPixelRatio(),
+      pixelRatio: 1,
       strength,
     })
   }
