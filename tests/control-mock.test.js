@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_REFUSAL, CLIENT_METHODS, LANE_TASK_REFUSAL, createMockClient } from '../src/control/mock.js'
+import { TIERS } from '../src/policy/route.js'
 
 const fast = () => createMockClient({ latencyMs: 0, now: () => Date.parse('2026-10-18T00:00:00Z') })
 
@@ -77,7 +78,7 @@ describe('mock control client', () => {
 
   it('lists models in tiers and marks the free one', async () => {
     const models = await fast().models()
-    expect(new Set(models.map((model) => model.tier))).toEqual(new Set(['small', 'medium', 'large']))
+    expect(new Set(models.map((model) => model.tier))).toEqual(new Set(TIERS))
     expect(models.filter((model) => model.free).map((model) => model.id)).toContain('opencode/deepseek-v4.1-flash-free')
   })
 

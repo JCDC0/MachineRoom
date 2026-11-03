@@ -104,9 +104,9 @@ describe('helpers', () => {
   it('picks the model of a task, with a default per lane', () => {
     const mapped = { ...lanes.agy, models: { C3e: 'Gemini 4 Argon (Medium)' } }
     expect(modelFor(mapped, 'C3e')).toBe('Gemini 4 Argon (Medium)')
-    expect(modelFor(mapped, 'C3b')).toBe('Gemini 3.8 Flash (High)')
-    expect(modelFor(lanes.agy, 'C3e')).toBe('Gemini 3.8 Flash (High)')
-    expect(modelFor(lanes.hermes, 'P5')).toBe('deepseek/deepseek-v4.1-flash-1017')
+    expect(modelFor(mapped, 'C3b')).toBe(lanes.agy.model)
+    expect(modelFor(lanes.agy, 'C3e')).toBe(lanes.agy.model)
+    expect(modelFor(lanes.hermes, 'P5')).toBe(lanes.hermes.model)
   })
 })
 
@@ -202,7 +202,7 @@ describe('buildPrompt', () => {
 
   it('marks a task whose model differs from the first one', () => {
     const prompt = buildPrompt({ briefs: [byId('C3e'), byId('C3b')], laneKey: 'agy', lanes: argonLanes, rules, version: '0.1.35' })
-    expect(prompt).toContain('Task C3b: Change notices in the panels (select Gemini 3.8 Flash (High) for this task).')
+    expect(prompt).toContain(`Task C3b: Change notices in the panels (select ${lanes.agy.model} for this task).`)
   })
 
   it('refuses an unknown lane and an empty list', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { decide, sanitize } from '../src/decider/decide.js'
-import { choice, noul } from '../src/decider/wire.js'
+import { DEFAULT_URL, choice, noul } from '../src/decider/wire.js'
 import { startFakeDecisions } from './fakeDecisions.js'
 
 const questions = {
@@ -64,6 +64,7 @@ describe('decide', () => {
     expect(result.error).toMatch(/key was refused/i)
     expect(JSON.stringify(result)).not.toContain('test-key-abc123')
     expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe(DEFAULT_URL)
   })
 
   it('names a missing model or alpha access, a payment problem and a size problem', async () => {
@@ -120,6 +121,7 @@ describe('decide', () => {
     const result = await decide({ ...base, fetch, retries: 2 })
     expect(result).toMatchObject({ ok: false, kind: 'bad_answer' })
     expect(calls).toHaveLength(1)
+    expect(calls[0].url).toBe(DEFAULT_URL)
   })
 
   it('scrubs the key from a server error that echoes it', async () => {
