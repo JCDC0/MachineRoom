@@ -213,7 +213,8 @@ function skillName(file, folder) {
   const rel = relative(folder, file).replace(/\\/g, '/')
   const parts = rel.split('/').filter(Boolean)
   if (parts.length === 0) return ''
-  if (parts.length > 1) return parts[0].trim()
+  // A skill folder can hold other notes beside its SKILL.md, and only SKILL.md names the skill and carries its body.
+  if (parts.length > 1) return parts.at(-1).toLowerCase() === 'skill.md' ? parts[0].trim() : ''
   return parts[0].replace(/\.md$/i, '').trim()
 }
 

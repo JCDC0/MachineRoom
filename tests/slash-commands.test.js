@@ -61,6 +61,7 @@ function fakeHarness() {
     join(project, '.claude', 'commands', 'team', 'review.md'),
     ['---', 'description: >', '  Review the branch and', '  report back.', '---', 'Review $ARGUMENTS.'].join('\n')
   )
+  write(join(project, '.claude', 'skills', 'style', 'NOTES.md'), ['---', 'description: Not the skill.', '---', 'Notes body.'].join('\n'))
   write(
     join(project, '.claude', 'skills', 'style', 'SKILL.md'),
     ['---', 'description: Keep the house style.', '---', 'Follow the style guide.'].join('\n')
@@ -229,6 +230,7 @@ describe('the command scan', () => {
     expect(found.find((entry) => entry.name === 'pair').description).toBe('Pair two things.')
     expect(found.find((entry) => entry.name === 'team:review').description).toBe('Review the branch and report back.')
     expect(found.find((entry) => entry.name === 'style').source).toBe('skill')
+    expect(found.find((entry) => entry.name === 'style').description).toBe('Keep the house style.')
     expect(found.find((entry) => entry.name === 'compact').source).toBe('room')
     const json = JSON.stringify(found)
     expect(json).not.toContain('Say hello to')
