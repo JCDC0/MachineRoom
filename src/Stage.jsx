@@ -666,6 +666,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [orchestrators, setOrchestrators] = useState(NONE)
   const [labels, setLabels] = useState(null)
   const [familyNodes, setFamilyNodes] = useState(NONE)
+  const [familyProposals, setFamilyProposals] = useState(NONE)
   const [toast, setToast] = useState('')
   const [openChips, setOpenChips] = useState(NONE)
   const [dockCosts, setDockCosts] = useState(null)
@@ -910,6 +911,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!live || !client || typeof client.family !== 'function') {
       apply(null)
       setFamilyNodes(NONE)
+      setFamilyProposals(NONE)
       roomRef.current?.setLabels(null)
       return undefined
     }
@@ -924,11 +926,13 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const next = labelsFromFamily(answer)
         apply(next)
         setFamilyNodes(Array.isArray(answer?.nodes) ? answer.nodes : NONE)
+        setFamilyProposals(Array.isArray(answer?.proposals) ? answer.proposals : NONE)
         roomRef.current?.setLabels(next)
       } catch {
         if (!active || !isLatest()) return
         apply(null)
         setFamilyNodes(NONE)
+        setFamilyProposals(NONE)
         roomRef.current?.setLabels(null)
       }
     }
@@ -1616,6 +1620,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                 costs={dockCosts}
                 liveRuns={dockRuns}
                 tasks={dockTasks}
+                familyProposals={familyProposals}
                 liveAvailable={liveAvailable}
                 onMode={onMode}
                 onToggle={() => player.toggle()}
