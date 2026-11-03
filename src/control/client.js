@@ -537,11 +537,15 @@ export function createClient({
       transport = 'stdio',
       command = '',
       args = [],
-      env = {},
+      env,
       url = '',
       enabled = true,
       confirmed = false,
-    } = {}) => request('POST', '/api/mcp/servers', { name, transport, command, args, env, url, enabled, confirmed }),
+    } = {}) => {
+      const body = { name, transport, command, args, url, enabled, confirmed }
+      if (env !== undefined) body.env = env
+      return request('POST', '/api/mcp/servers', body)
+    },
 
     deleteMcpServer: ({ name, confirmed = false } = {}) =>
       request('POST', `/api/mcp/servers/${encodeURIComponent(name ?? '')}/delete`, { confirmed }),

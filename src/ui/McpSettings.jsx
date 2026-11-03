@@ -25,12 +25,15 @@ export function mcpServerList(answer) {
     if (!entry || typeof entry !== 'object') continue
     const name = typeof entry.name === 'string' ? entry.name.trim() : ''
     if (name === '') continue
+    const envNames = Array.isArray(entry.envNames)
+      ? entry.envNames.map((item) => String(item)).filter((item) => item !== '')
+      : []
     rows.push({
       name,
       transport: entry.transport === 'http' ? 'http' : 'stdio',
       command: typeof entry.command === 'string' ? entry.command : '',
       args: Array.isArray(entry.args) ? entry.args.map((item) => String(item)) : [],
-      env: entry.env && typeof entry.env === 'object' && !Array.isArray(entry.env) ? { ...entry.env } : {},
+      envNames,
       url: typeof entry.url === 'string' ? entry.url : '',
       enabled: entry.enabled !== false,
     })
@@ -120,7 +123,6 @@ export function mcpServerFields(server, patch = {}) {
     transport,
     command: transport === 'stdio' && typeof merged.command === 'string' ? merged.command.trim() : '',
     args: transport === 'stdio' && Array.isArray(merged.args) ? merged.args.map((item) => String(item)) : [],
-    env: merged.env && typeof merged.env === 'object' && !Array.isArray(merged.env) ? { ...merged.env } : {},
     url: transport === 'http' && typeof merged.url === 'string' ? merged.url.trim() : '',
     enabled: merged.enabled !== false,
   }
@@ -132,7 +134,6 @@ export function saveMcpPayload(draft) {
     transport: draft?.transport === 'http' ? 'http' : 'stdio',
     command: draft?.transport === 'http' ? '' : String(draft?.command ?? '').trim(),
     args: draft?.transport === 'http' ? [] : splitArgs(draft?.args),
-    env: {},
     url: draft?.transport === 'http' ? String(draft?.url ?? '').trim() : '',
     enabled: true,
     confirmed: true,

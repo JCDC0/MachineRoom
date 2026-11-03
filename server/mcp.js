@@ -100,6 +100,19 @@ export function cleanMcpServer(draft) {
   }
 }
 
+export function publicMcpServer(server) {
+  const env = isPlainObject(server?.env) ? server.env : {}
+  return {
+    name: server.name,
+    transport: server.transport,
+    command: server.command,
+    args: server.args,
+    url: server.url,
+    enabled: server.enabled,
+    envNames: Object.keys(env),
+  }
+}
+
 export function readMcpServers(runsDir) {
   if (typeof runsDir !== 'string' || runsDir.trim() === '') return []
   let parsed
@@ -144,9 +157,11 @@ export function writeMcpServers(runsDir, servers, { rename = renameSync } = {}) 
 export function upsertMcpServer(runsDir, entry) {
   const problem = mcpServerProblem(entry)
   if (problem !== null) return { ok: false, problem }
-  const server = cleanMcpServer(entry)
   const servers = readMcpServers(runsDir)
-  const index = servers.findIndex((item) => item.name === server.name)
+  const index = servers.findIndex((item) => item.name === entry.name.trim())
+  const saved = index === -1 ? null : servers[index]
+  const merged = saved && entry.env === undefined ? { ...entry, env: saved.env } : entry
+  const server = cleanMcpServer(merged)
   if (index === -1) servers.push(server)
   else servers[index] = server
   writeMcpServers(runsDir, servers)
@@ -528,7 +543,7 @@ export function createMcpApi(options = {}) {
 
     if (path === '/api/mcp/servers') {
       if (method === 'GET') {
-        sendJson(req, res, 200, { ok: true, servers: readMcpServers(runsDir) })
+        sendJson(req, res, 200, { ok: true, servers: readMcpServers(runsDir).map(publicMcpServer) })
         return true
       }
       if (method !== 'POST') {
@@ -547,7 +562,11 @@ export function createMcpApi(options = {}) {
         return true
       }
       if (typeof notify === 'function') notify({ topic: 'mcp' })
-      sendJson(req, res, 200, { ok: true, server: answer.server, servers: answer.servers })
+      sendJson(req, res, 200, {
+        ok: true,
+        server: publicMcpServer(answer.server),
+        servers: answer.servers.map(publicMcpServer),
+      })
       return true
     }
 
@@ -574,7 +593,11 @@ export function createMcpApi(options = {}) {
         return true
       }
       if (typeof notify === 'function') notify({ topic: 'mcp' })
-      sendJson(req, res, 200, { ok: true, deleted: answer.server.name, servers: answer.servers })
+      sendJson(req, res, 200, {
+        ok: true,
+        deleted: answer.server.name,
+        servers: answer.servers.map(publicMcpServer),
+      })
       return true
     }
 

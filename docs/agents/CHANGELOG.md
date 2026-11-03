@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The MCP server list sends each server's env names and never their values, and a save or toggle that leaves env out keeps the saved values (task U121).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

@@ -92,7 +92,7 @@ describe('the MCP settings helpers', () => {
     const rows = mcpServerList({
       ok: true,
       servers: [
-        { name: ' docs ', transport: 'stdio', command: 'npx', args: ['-y', 7], env: { A: '1' }, enabled: false },
+        { name: ' docs ', transport: 'stdio', command: 'npx', args: ['-y', 7], envNames: ['A'], enabled: false },
         { name: 'remote', transport: 'http', url: 'https://mcp.example/rpc' },
         { transport: 'stdio' },
         null,
@@ -104,7 +104,7 @@ describe('the MCP settings helpers', () => {
         transport: 'stdio',
         command: 'npx',
         args: ['-y', '7'],
-        env: { A: '1' },
+        envNames: ['A'],
         url: '',
         enabled: false,
       },
@@ -113,12 +113,14 @@ describe('the MCP settings helpers', () => {
         transport: 'http',
         command: '',
         args: [],
-        env: {},
+        envNames: [],
         url: 'https://mcp.example/rpc',
         enabled: true,
       },
     ])
     expect(mcpServerList([{ name: 'one', transport: 'sse' }])[0].transport).toBe('stdio')
+    expect(mcpServerList([{ name: 'secret', transport: 'stdio', env: { TOKEN: 'value' } }])[0].envNames).toEqual([])
+    expect(mcpServerList([{ name: 'secret', transport: 'stdio', env: { TOKEN: 'value' } }])[0].env).toBeUndefined()
     expect(mcpServerList(null)).toEqual([])
     expect(mcpServerList({ servers: 'nope' })).toEqual([])
   })
@@ -167,7 +169,6 @@ describe('the MCP settings helpers', () => {
       transport: 'stdio',
       command: 'npx',
       args: ['-y', '@scope/server'],
-      env: {},
       url: '',
       enabled: true,
       confirmed: true,
@@ -177,20 +178,20 @@ describe('the MCP settings helpers', () => {
       transport: 'http',
       command: '',
       args: [],
-      env: {},
       url: 'https://mcp.example/rpc',
       enabled: true,
       confirmed: true,
     })
+    expect(saveMcpPayload({ name: 'docs', transport: 'stdio', command: 'npx' }).env).toBeUndefined()
   })
 
-  it('turns a server on or off with its env kept and the confirmation set', () => {
+  it('turns a server on or off without its saved env', () => {
     const payload = toggleMcpPayload({
       name: 'docs',
       transport: 'stdio',
       command: 'npx',
       args: ['-y'],
-      env: { TOKEN_NAME: 'local' },
+      envNames: ['TOKEN_NAME'],
       enabled: true,
     })
     expect(payload).toEqual({
@@ -198,7 +199,6 @@ describe('the MCP settings helpers', () => {
       transport: 'stdio',
       command: 'npx',
       args: ['-y'],
-      env: { TOKEN_NAME: 'local' },
       url: '',
       enabled: false,
       confirmed: true,
@@ -303,7 +303,6 @@ describe('the MCP settings panel', () => {
           transport: 'stdio',
           command: 'npx',
           args: ['-y', '@scope/server'],
-          env: {},
           url: '',
           enabled: true,
           confirmed: true,
