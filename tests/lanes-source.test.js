@@ -446,6 +446,56 @@ describe('the V5 audit fixes in the lane source', () => {
     expect(paths).toEqual([`${worktree.replace(/\\/g, '/')}/src/old.js`, `${worktree.replace(/\\/g, '/')}/src/new.js`])
   })
 
+  it('checks a lagging log only when named or after the interval, and reopens when adopted (S37)', async () => {
+    const base = tempDir()
+    const runs = join(base, 'runs')
+    mkdirSync(runs, { recursive: true })
+    const worktree = join(base, 'MachineRoom-opencode3')
+    const lanes = lanesFor({ opencode: worktree })
+    const logPath = join(runs, 'opencode-S6a-20261024-130000.log')
+    writeFileSync(logPath, `${toolLine(`${worktree}\\src\\old.js`, { id: 'old' })}\n`)
+    const past = new Date(Date.now() - 120000)
+    utimesSync(logPath, past, past)
+
+    let currentTime = Date.now()
+    const frames = []
+    const source = createLanesSource({
+      folder: runs,
+      lanes,
+      quietMs: 120,
+      pollMs: 20,
+      laggingPollMs: 10000,
+      now: () => currentTime,
+      onFrame: (frame) => frames.push(frame),
+    })
+    cleanups.push(() => source.stop())
+    source.start()
+    await sleep(60)
+    expect(frames).toEqual([])
+
+    currentTime += 10000
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\new.js`, { id: 'new' })}\n`)
+    source.tick()
+    await waitFor(() => logFrames(frames).length === 2, { what: 'adopted after interval' })
+
+    currentTime += 200
+    source.tick()
+    const ended = await waitFor(() => endFrame(frames), { what: 'the quiet end of adopted log' })
+    expect(ended.payload).toMatchObject({ status: 'failed', error: 'no record' })
+
+    appendFileSync(logPath, `${toolLine(`${worktree}\\src\\reopen.js`, { id: 'reopen' })}\n`)
+    currentTime += 10
+    source.tick()
+    const reopened = await waitFor(
+      () =>
+        frames
+          .filter((frame) => frame.type === 'heartbeat.run.status' && frame.payload.status === 'running')
+          .slice(1)[0],
+      { what: 'the reopened running status of adopted run' }
+    )
+    expect(reopened.payload.runId).toBe(ended.payload.runId)
+  })
+
   it('reopens a run ended for quiet when its log grows again, with the same runId (X4)', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')

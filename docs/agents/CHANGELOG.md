@@ -6,6 +6,7 @@
 - A new Pulse switch beside Dance makes each agent's wireframe shape move with five music bands, and puts the shape back when it is off or the music stops (task U131).
 - The music player picks a playlist or Loose tracks, plays it in order and loops, and saves `music.playlist` (task U130).
 - `GET /api/music` lists one playlist per subfolder and serves `GET /music/PLAYLIST/NAME`, with every part checked (task U130).
+- The lane source checks an old log only when the watcher names it or every 10 seconds (task S37).
 - The orchestrator list's read error shows in the chat beside the status line (task U128).
 - A record time typed just before Settings closes reaches the live room, not only storage (task U128).
 - The MCP server switches and Remove buttons are disabled while the Remove card is open (task U128).

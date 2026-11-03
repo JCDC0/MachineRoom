@@ -267,12 +267,14 @@ export function createLanesSource(options = {}) {
   const quietMs = Number(options.quietMs ?? DEFAULT_QUIET_MS)
   const pollMs = Number(options.pollMs ?? DEFAULT_POLL_MS)
   const primeMs = Number(options.primeMs ?? DEFAULT_PRIME_MS)
+  const laggingPollMs = Number(options.laggingPollMs ?? 10000)
   const now = options.now ?? Date.now
   const onFrame = options.onFrame ?? (() => {})
   const active = new Map()
   const quiet = new Map()
   const seen = new Set()
   const lagging = new Map()
+  const pendingChecks = new Set()
   const recordsCache = createRecordsCache(recordsFile)
   let watcher = null
   let timer = null
@@ -371,6 +373,12 @@ export function createLanesSource(options = {}) {
       const path = join(folder, entry.name)
       const key = pathKey(path)
       if (lagging.has(key)) {
+        const info = lagging.get(key)
+        const isNamed = pendingChecks.has(key)
+        const isTime = now() - info.checkedAt >= laggingPollMs
+        if (!isNamed && !isTime) continue
+        pendingChecks.delete(key)
+        info.checkedAt = now()
         let size
         try {
           size = statSync(path).size
@@ -378,7 +386,7 @@ export function createLanesSource(options = {}) {
           lagging.delete(key)
           continue
         }
-        if (size <= lagging.get(key)) continue
+        if (size <= info.size) continue
         lagging.delete(key)
       } else {
         if (seen.has(key)) continue
@@ -386,7 +394,7 @@ export function createLanesSource(options = {}) {
           try {
             const stat = statSync(path)
             if (now() - stat.mtimeMs > primeMs) {
-              lagging.set(key, stat.size)
+              lagging.set(key, { size: stat.size, checkedAt: now() })
               continue
             }
           } catch {
@@ -412,6 +420,7 @@ export function createLanesSource(options = {}) {
       seen.add(key)
       beginRun(entry.name.slice(0, -4), path, agent, Boolean(ownProject), meta?.project ?? '')
     }
+    pendingChecks.clear()
   }
 
   function reset(run) {
@@ -609,7 +618,10 @@ export function createLanesSource(options = {}) {
     scan()
     primed = true
     try {
-      watcher = watch(folder, () => tick())
+      watcher = watch(folder, (_eventType, filename) => {
+        if (filename) pendingChecks.add(pathKey(join(folder, String(filename))))
+        tick()
+      })
       watcher.on('error', () => {
         try {
           watcher?.close()
@@ -626,6 +638,10 @@ export function createLanesSource(options = {}) {
     stopped = true
     active.clear()
     quiet.clear()
+    lagging.clear()
+    seen.clear()
+    sameRepo.clear()
+    pendingChecks.clear()
     if (timer) {
       clearInterval(timer)
       timer = null
