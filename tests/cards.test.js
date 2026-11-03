@@ -186,9 +186,9 @@ describe('card size', () => {
 
   it('uses the smaller, near uniform scales', () => {
     expect(CARD_SCALES).toEqual({ closed: 1, open: 1.2, files: 1.8 })
-    expect(cardSize(view('closed')).width).toBe(248)
-    expect(cardSize(view('open')).width).toBeCloseTo(297.6, 6)
-    expect(cardSize(view('files', 3)).width).toBeCloseTo(446.4, 6)
+    expect(cardSize(view('closed')).width).toBe(CARD_W * CARD_SCALES.closed)
+    expect(cardSize(view('open')).width).toBeCloseTo(CARD_W * CARD_SCALES.open, 6)
+    expect(cardSize(view('files', 3)).width).toBeCloseTo(CARD_W * CARD_SCALES.files, 6)
   })
 
   it('places rows from the top of the card down', () => {

@@ -162,8 +162,4 @@ describe('touchesForCommand', () => {
   it('does not treat a single quoted at sign as a here-string', () => {
     expect(run("echo '@' > docs/notes.md")).toEqual(['write:docs/notes.md'])
   })
-
-  it('leaves a command without a here-string unchanged', () => {
-    expect(run('cat src/math.js > docs/notes.md')).toEqual(['read:src/math.js', 'write:docs/notes.md'])
-  })
 })

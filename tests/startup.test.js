@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { chooseRoute, connectionFrom, foreignLinkNotice, linkAddressAllowed, recordingName, tourEnabled } from '../src/startup.js'
-import { replayFiles } from '../src/model/replay.js'
+import { DEFAULT_FIXTURE, replayFiles } from '../src/model/replay.js'
 
 const saved = { source: 'bridge', bridge: 'http://127.0.0.1:5174', speed: 2 }
 const at = (query) => new URLSearchParams(query)
@@ -65,7 +65,7 @@ describe('recordingName', () => {
 
   it('maps a recording to its three files and no recording to the default fixtures', () => {
     expect(replayFiles('opencode-T5')).toEqual({ run: 'recordings/opencode-T5-run.jsonl', agents: 'recordings/opencode-T5-agents.json', tree: 'recordings/opencode-T5-tree.json' })
-    expect(replayFiles(null).run).toBe('fixtures/scenario-i-run.jsonl')
+    expect(replayFiles(null).run).toBe(`fixtures/${DEFAULT_FIXTURE}-run.jsonl`)
     expect(replayFiles(null, 'sandbox').run).toBe('fixtures/sandbox-run.jsonl')
   })
 })

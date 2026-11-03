@@ -20,7 +20,7 @@ describe('actions', () => {
     expect(validateAction({}, context).ok).toBe(false)
   })
 
-  it('marks every write as needing a confirmation', () => {
+  it('offers no action that needs a confirmation', () => {
     expect([...CONFIRMED]).toEqual([])
     for (const type of ACTION_TYPES) {
       const sample = {

@@ -3,6 +3,7 @@ import { createPipeline } from '../src/model/pipeline.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
 import { loadDemo, openSimulated, simulatedSpeed } from '../src/live/simulated.js'
 import { makeTree } from '../src/model/paths.js'
+import { DEFAULT_FIXTURE } from '../src/model/replay.js'
 import { loadRecording } from './helpers.js'
 
 const recording = loadRecording()
@@ -63,16 +64,18 @@ describe('loadDemo', () => {
     vi.unstubAllGlobals()
   })
 
-  it('reads the scenario-i run and agent list', async () => {
+  it('reads the default run and agent list', async () => {
     const asked = []
+    const run = `/fixtures/${DEFAULT_FIXTURE}-run.jsonl`
+    const agents = `/fixtures/${DEFAULT_FIXTURE}-agents.json`
     vi.stubGlobal('fetch', async (url) => {
       asked.push(url)
-      if (url === '/fixtures/scenario-i-run.jsonl') return { text: async () => DEMO_RUN }
-      if (url === '/fixtures/scenario-i-agents.json') return { json: async () => DEMO_AGENTS }
+      if (url === run) return { text: async () => DEMO_RUN }
+      if (url === agents) return { json: async () => DEMO_AGENTS }
       throw new Error(`unexpected ${url}`)
     })
     const demo = await loadDemo('/fixtures/')
-    expect(asked.sort()).toEqual(['/fixtures/scenario-i-agents.json', '/fixtures/scenario-i-run.jsonl'])
+    expect(asked.sort()).toEqual([agents, run])
     expect(demo.rootName).toBe('agent-sandbox')
     expect(demo.agents.map((agent) => agent.key)).toEqual(['claude'])
     expect(demo.frames).toHaveLength(1)

@@ -251,7 +251,7 @@ describe('discoverBridge', () => {
     expect(found.rootName).toBe('other')
   })
 
-  it('fails when the bridge cannot reach Paperclip', async () => {
+  it('fails when the bridge answers with an error', async () => {
     await expect(discoverBridge({ url: 'http://bridge', fetchImpl: reply({}, false) })).rejects.toThrow(/502/)
   })
 })
@@ -267,7 +267,7 @@ describe('probeLive', () => {
     expect(asked).toEqual(['http://bridge/api/health'])
   })
 
-  it('asks Paperclip through the proxy otherwise', async () => {
+  it('asks the companies route of an older link when no bridge is set', async () => {
     const asked = []
     const fetchImpl = async (url) => {
       asked.push(url)

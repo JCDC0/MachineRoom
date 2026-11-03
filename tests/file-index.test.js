@@ -328,9 +328,9 @@ describe('touchesForCommand with the file index', () => {
     expect(differences).toEqual([])
   })
 
-  it('matches the old walk on every shell command in the recordings', () => {
-    if (!existsSync(RECORDINGS)) return
+  it.skipIf(!existsSync(RECORDINGS))('matches the old walk on every shell command in the recordings', () => {
     const commands = shellCommands(RECORDINGS)
+    expect(commands.length).toBeGreaterThan(0)
     const differences = commands
       .map(({ command, tree }) => difference(command, tree.files, tree.dirs))
       .filter(Boolean)

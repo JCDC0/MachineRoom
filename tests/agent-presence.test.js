@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import {
+  PRESENCE_GROW_MS,
   UNSEEN_OPACITY,
   UNSEEN_SCALE,
   agentPresence,
@@ -128,18 +129,19 @@ describe('an agent that has not run in the room', () => {
     agents.dispose()
   })
 
-  it('grows over 600 ms when queued and keeps its chip', () => {
+  it('grows steadily when queued and keeps its chip', () => {
     const { agents, state, chips, terminals, world } = harness()
     agents.update(state, 0.016, 1000, world, terminals)
     apply(state, { time: 1000, type: 'run.queued', agent: 'a' })
-    agents.update(state, 0.3, 1000, world, terminals)
+    const half = PRESENCE_GROW_MS / 2000
+    agents.update(state, half, 1000, world, terminals)
     const view = agents.views.get('a')
     expect(chips.get('a').visible).toBe(true)
-    expect(view.group.scale.x).toBeCloseTo(0.85, 5)
+    expect(view.group.scale.x).toBeCloseTo(UNSEEN_SCALE + (1 - UNSEEN_SCALE) / 2, 5)
     expect(view.group.scale.x).toBeGreaterThan(UNSEEN_SCALE)
     expect(view.group.scale.x).toBeLessThan(1)
 
-    agents.update(state, 0.3, 1300, world, terminals)
+    agents.update(state, half, 1000 + PRESENCE_GROW_MS, world, terminals)
     expect(view.group.scale.x).toBeCloseTo(1, 5)
     agents.dispose()
   })
