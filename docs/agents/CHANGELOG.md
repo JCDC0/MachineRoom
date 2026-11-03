@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A subagent depth limit of 2 by default lives in `<runs>/agent-depth.json` with its route, an owner-only unlock for 3 and 4 behind a cost warning, the sentence in every lane and orchestrator prompt, and a Subagents section in Settings (task U139).
 - A shared byte-offset cache on runs.jsonl serves run records, issues, stats, costs and reviews (task S38).
 - The Claude session reader caches meta files by mtime and forgets removed meta files (task S38).
 
