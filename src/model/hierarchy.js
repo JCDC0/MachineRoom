@@ -257,7 +257,12 @@ export function sectorArcs(ladder, roster) {
   })
 }
 
-export function subPrompt(sub, parent, ladder) {
+export function agentDepthLine(limit) {
+  const depth = Number.isInteger(limit) && limit >= 1 ? limit : 2
+  return `Spawn subagents at most ${depth} levels deep. A subagent at depth ${depth} spawns none.`
+}
+
+export function subPrompt(sub, parent, ladder, agentDepth = 2) {
   const value = isObject(sub) ? sub : {}
   const id = typeof value.id === 'string' && value.id ? value.id : 'sub'
   const name = typeof value.name === 'string' && value.name.trim() ? value.name.trim() : id
@@ -297,6 +302,7 @@ export function subPrompt(sub, parent, ladder) {
     ruleLine,
     `Your sector branch is \`machineroom/sector-${id}\`.`,
     'Plan for your lanes, start them, review their work and merge it into your sector branch.',
+    agentDepthLine(agentDepth),
     `Then report to your parent as \`sub:${id}\`.`,
     'Your reply is your report. End your turn with it. Never send it to /api/orchestrator/messages.',
     'If a room message is about work you already reported, reply with exactly NO_REPORT and nothing else.',

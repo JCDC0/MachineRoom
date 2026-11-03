@@ -21,6 +21,8 @@ import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
 import { harnessByKey } from '../src/harnesses/index.js'
+import { agentDepthLine } from '../src/model/hierarchy.js'
+import { readAgentDepth } from './agent-depth.js'
 import { harnessUnavailableProblem, isHarnessAvailable, modelUnavailableProblem } from './agents-config.js'
 import { readEndpoints } from './endpoints.js'
 import { modelAllowed } from './harness-models.js'
@@ -38,6 +40,7 @@ export const ORCHESTRATOR_MESSAGE_LIMIT = 8000
 export { DEFAULT_CONTEXT_WINDOW } from './models.js'
 export const AUTOCOMPACT_SHARE = 0.8
 export const DEFAULT_AUTOCOMPACT_MODE = 'percent'
+const SPAWN_DEPTH_LINE = /Spawn subagents at most \d+ levels deep\. A subagent at depth \d+ spawns none\.\s*/g
 export const DEFAULT_AUTOCOMPACT_VALUE = 80
 export const DEFAULT_AUTOCOMPACT_PERCENT = 80
 export const COMPACT_RULES_LIMIT = 2000
@@ -1168,7 +1171,9 @@ export function createOrchestrator({
       scratchFolder
     )
     const extra = typeof extraInstructions === 'function' ? extraInstructions() : extraInstructions
-    const instruction = extra ? `${baseInstruction}\n\n${extra}` : baseInstruction
+    const joined = extra ? `${baseInstruction}\n\n${extra}` : baseInstruction
+    const depthLine = agentDepthLine(readAgentDepth(folder).limit)
+    const instruction = `${joined.replace(SPAWN_DEPTH_LINE, '').replace(/\n{3,}/g, '\n\n').trimEnd()}\n\n${depthLine}`
     let program = binFor(harness)
     let args
     if (harness === 'opencode') {

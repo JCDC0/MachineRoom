@@ -14,6 +14,7 @@ import { createBriefsApi } from './briefs.js'
 import { changeEvents, createControlApi } from './control.js'
 import { createDecideApi } from './decide.js'
 import { createFamilyApi } from './family.js'
+import { createAgentDepthApi } from './agent-depth.js'
 import { createEndpointsApi } from './endpoints.js'
 import { createFilesApi } from './files.js'
 import { createGitApi } from './git.js'
@@ -507,6 +508,14 @@ export function createBridge(options = {}) {
     readJsonBody,
     env,
   })
+  const agentDepthApi = createAgentDepthApi({
+    runsFolder: bridgeRunsFolder,
+    sendJson,
+    readJsonBody,
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
+  })
   const gitApi = createGitApi({
     projectRoot,
     sendJson,
@@ -858,6 +867,7 @@ export function createBridge(options = {}) {
 
     if (orchestrators && (await orchestrators.handle(req, res, url))) return
     if (await projects.handle(req, res, url)) return
+    if (await agentDepthApi.handle(req, res, url)) return
     if (await familyApi.handle(req, res, url)) return
     if (await gitApi.handle(req, res, url)) return
     if (await filesApi.handle(req, res, url)) return
