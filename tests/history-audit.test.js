@@ -125,7 +125,7 @@ describe('findLeaks addresses and paths', () => {
 
 describe('findLeaks placeholders', () => {
   it('leaves out each placeholder user folder, any case', () => {
-    const folders = ['user', 'owner', 'name', 'you', 'me', 'example', 'username', '%USERNAME%', '$env:USERNAME', '<user>']
+    const folders = ['user', 'owner', 'name', 'you', 'me', 'someone', 'example', 'username', '%USERNAME%', '$env:USERNAME', '<user>']
     for (const folder of folders) {
       expect(findLeaks(`C:\\Users\\${folder}\\notes.md`)).toEqual([])
       expect(findLeaks(`C:\\Users\\${folder.toUpperCase()}\\notes.md`)).toEqual([])

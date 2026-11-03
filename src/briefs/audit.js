@@ -23,6 +23,7 @@ const PLACEHOLDER_USER_FOLDERS = new Set([
   'name',
   'you',
   'me',
+  'someone',
   'example',
   'username',
   '%username%',
