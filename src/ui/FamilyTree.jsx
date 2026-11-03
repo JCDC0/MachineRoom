@@ -823,6 +823,13 @@ export function FamilyTree({ client = null, tasks = null }) {
       run: async () => {
         const fresh = planGroup(await readLadder())
         if (fresh.problem) throw new Error(fresh.problem)
+        const same =
+          fresh.sub &&
+          plan.sub &&
+          fresh.sub.id === plan.sub.id &&
+          fresh.sub.name === plan.sub.name &&
+          fresh.sub.lanes.join('\n') === plan.sub.lanes.join('\n')
+        if (!same) throw new Error('The team changed while the card was open. Open it again.')
         await client.setLadder({ subs: fresh.subs })
         clearSelection()
         await refresh()
@@ -958,7 +965,8 @@ export function FamilyTree({ client = null, tasks = null }) {
         clearSelection()
         return
       }
-      openGroupForm([node.id], true)
+      const next = selectedLanes.includes(node.id) ? selectedLanes : [...selectedLanes, node.id]
+      openGroupForm(next, true)
       return
     }
     if (childFor === node.id) {

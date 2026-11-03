@@ -19,6 +19,21 @@
 - A room turn held by the 30 turns an hour cap starts when the oldest turns fall out of the hour (task S26).
 - An approved proposal whose ladder write fails removes the new lane again and keeps the proposal (task S26).
 - A chat file that could not be written reports its error in the chat answer and the message response, and the next save retries it (task S26).
+- The Chat tab says its conversation list is unavailable when the bridge refuses the read, instead of loading forever (task U117).
+- F, T, 0, [ and ] no longer reach the room while the Control drawer or another panel is open (task U117).
+- The player no longer writes a music flag that nothing reads, and the saved sound settings drop it (task U117).
+- The web search key hint says the slot is empty until this form saves a key in it (task U117).
+- The live tour points at the Settings button in the menu row, and the replay guide no longer names Attach (task U117).
+- The folder picker keeps Close and Escape from cancelling the reload while a folder is opening (task U117).
+- The autocompact save card says whether it is turning autocompact on or off (task U117).
+- The plus on a lane adds it to the checked lanes, so the sub orchestrator card keeps the whole selection (task U117).
+- Meters, Team and Tasks say when a manual Refresh failed instead of leaving the old numbers on screen (task U117).
+- Record time saves on Enter and when Settings closes without a blur, so a typed value is kept (task U117).
+- An endpoint save, delete, model refresh or quick key that lands but cannot reload the list says so, apart from a refused write (task U117).
+- The custom endpoint form is locked while its Save card is up, so the card and the call carry the same values (task U117).
+- Remove on an MCP server asks first, on a card that names the server and says its command and settings are lost (task U117).
+- The Build a team card and Add sub orchestrator stop with a sentence when the ladder changed while the card was open, instead of creating a different team (task U117).
+- A chat read keeps the newest answer, so an older poll that answers last cannot drop the message the owner just sent (task U117).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
 - The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).

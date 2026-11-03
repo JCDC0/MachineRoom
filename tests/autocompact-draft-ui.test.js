@@ -73,3 +73,22 @@ describe('the autocompact form under a poll', () => {
     })
   })
 })
+
+describe('the autocompact save card', () => {
+  it('says whether autocompact is being turned on or off', async () => {
+    await withDom(async ({ container, root }) => {
+      await mount(root, FIRST)
+      const on = container.querySelector('input[aria-label="Autocompact"]')
+      await act(async () => {
+        on.checked = false
+        on.click()
+      })
+      const save = container.querySelectorAll('button').find((button) => button.textContent.trim() === 'Save')
+      await act(async () => {
+        save.click()
+      })
+      const card = container.querySelector('.mr-orch-confirm')
+      expect(card.textContent).toContain('Autocompact is off.')
+    })
+  })
+})

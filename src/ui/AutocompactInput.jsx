@@ -200,6 +200,7 @@ export default function AutocompactInput({ orchestrator = null, client = null, o
       {confirm && (
         <section className="mr-orch-confirm" aria-label="Save autocompact">
           <p className="mr-orch-confirm-text">{`Save autocompact for ${name}?`}</p>
+          <p className="mr-orch-confirm-detail mono">{on ? 'Autocompact is on.' : 'Autocompact is off.'}</p>
           {at && <p className="mr-orch-confirm-detail mono">{at}</p>}
           <p className="mr-orch-confirm-detail mono">
             {usingDefault ? 'Using the default rules.' : 'Saving the owner rules.'}

@@ -13,10 +13,12 @@ export default function AgentBuilder({
   const [agents, setAgents] = useState(() => (Array.isArray(initialAgents) ? initialAgents : []))
   const [loading, setLoading] = useState(() => !Array.isArray(initialAgents))
   const [loadError, setLoadError] = useState(null)
+  const [refreshError, setRefreshError] = useState(null)
   const canRead = typeof client?.agents === 'function'
 
   async function loadData({ isInitial = false } = {}) {
     if (!canRead) return
+    setRefreshError(null)
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
@@ -25,9 +27,8 @@ export default function AgentBuilder({
       const agentList = await client.agents()
       setAgents(Array.isArray(agentList) ? agentList : [])
     } catch (err) {
-      if (isInitial) {
-        setLoadError(err.message || 'Could not load the lanes.')
-      }
+      if (isInitial) setLoadError(err.message || 'Could not load the lanes.')
+      else setRefreshError(err?.message || 'Could not refresh the lanes.')
     } finally {
       if (isInitial) {
         setLoading(false)
@@ -76,6 +77,7 @@ export default function AgentBuilder({
         </div>
       </div>
 
+      {refreshError && <p className="panel-error-message" role="alert">{refreshError}</p>}
       <p className="agent-builder-note mono">{NEW_LANES_TEXT}</p>
 
       <section className="agent-builder-list-section" aria-label="Lanes">

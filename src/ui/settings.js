@@ -19,7 +19,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   sound: Object.freeze({
     on: true,
     volume: 0.3,
-    music: false,
     musicVolume: 0.5,
     dance: true,
   }),
@@ -56,7 +55,6 @@ export function soundSettings(raw) {
   return {
     on: typeof source.on === 'boolean' ? source.on : DEFAULT_SETTINGS.sound.on,
     volume: clampVolume(source.volume, DEFAULT_SETTINGS.sound.volume),
-    music: typeof source.music === 'boolean' ? source.music : DEFAULT_SETTINGS.sound.music,
     musicVolume: clampVolume(source.musicVolume, DEFAULT_SETTINGS.sound.musicVolume),
     dance: typeof source.dance === 'boolean' ? source.dance : DEFAULT_SETTINGS.sound.dance,
   }

@@ -254,7 +254,11 @@ export default function SearchSettings({ client: givenClient = null }) {
               setNotice({ text: '', error: false })
             }}
           />
-          <p className="mr-search-hint">{`Saved in the key slot ${keySlot}.`}</p>
+          <p className="mr-search-hint">
+            {form.keyName === keySlot
+              ? `Saved in the key slot ${keySlot}.`
+              : `No key saved in the key slot ${keySlot} yet.`}
+          </p>
           <div className="mr-search-actions">
             <button
               type="button"

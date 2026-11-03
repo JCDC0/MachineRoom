@@ -159,6 +159,8 @@ export default function OrchestratorChat({
   const inputRef = useRef(null)
   const readChatRef = useRef(null)
   const readListRef = useRef(null)
+  const chatTicketsRef = useRef({})
+  const teamTicketRef = useRef(0)
   const focusAtRef = useRef(Number(focusRequest) || 0)
   const roomActivity = useContext(OrchestratorActivity)
 
@@ -279,9 +281,12 @@ export default function OrchestratorChat({
     const id = selected
 
     async function readChat() {
+      const ticket = (chatTicketsRef.current[id] ?? 0) + 1
+      chatTicketsRef.current[id] = ticket
+      const newest = () => chatTicketsRef.current[id] === ticket
       try {
         const answer = await client.orchestrator(id === 'orchestrator' ? undefined : id)
-        if (stopped) return
+        if (stopped || !newest()) return
         const next = normalizeChat(answer)
         setChats((currentChats) => ({ ...currentChats, [id]: next }))
         setLoadedIds((currentLoaded) => (currentLoaded[id] ? currentLoaded : { ...currentLoaded, [id]: true }))
@@ -290,7 +295,7 @@ export default function OrchestratorChat({
           currentList.map((entry) => (entry.id === id ? { ...entry, state: next.state } : entry))
         )
       } catch (failure) {
-        if (stopped) return
+        if (stopped || !newest()) return
         setLoadedIds((currentLoaded) => ({ ...currentLoaded, [id]: true }))
         setReadError(errorText(failure, 'Could not read the orchestrator.'))
       }
@@ -329,11 +334,14 @@ export default function OrchestratorChat({
     const ids = selected === TEAM_TAB ? allIds : allIds.filter((id) => id !== selected)
 
     async function readTeam() {
+      const ticket = teamTicketRef.current + 1
+      teamTicketRef.current = ticket
+      const newest = () => teamTicketRef.current === ticket
       try {
         const answers = await Promise.allSettled(
           ids.map((id) => client.orchestrator(id === 'orchestrator' ? undefined : id))
         )
-        if (stopped) return
+        if (stopped || !newest()) return
         const nextChats = {}
         const nextLoaded = {}
         const failed = []
@@ -360,7 +368,7 @@ export default function OrchestratorChat({
             : null
         )
       } catch (failure) {
-        if (stopped) return
+        if (stopped || !newest()) return
         setTeamFailed([...ids])
         setReadError(errorText(failure, 'Could not read the team.'))
       }

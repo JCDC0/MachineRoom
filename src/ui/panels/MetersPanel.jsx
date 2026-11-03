@@ -31,11 +31,13 @@ export default function MetersPanel({ client, initialCosts = null }) {
   const [costs, setCosts] = useState(initialCosts)
   const [loading, setLoading] = useState(() => initialCosts == null)
   const [loadError, setLoadError] = useState(null)
+  const [refreshError, setRefreshError] = useState(null)
   const canRead = typeof client?.costs === 'function'
   const hasCosts = costs != null
 
   async function loadData({ isInitial = false } = {}) {
     if (!canRead) return
+    setRefreshError(null)
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
@@ -44,9 +46,8 @@ export default function MetersPanel({ client, initialCosts = null }) {
       const costData = await client.costs()
       setCosts(costData && typeof costData === 'object' ? costData : null)
     } catch (err) {
-      if (isInitial) {
-        setLoadError(err.message || 'Could not load meters.')
-      }
+      if (isInitial) setLoadError(err.message || 'Could not load meters.')
+      else setRefreshError(err?.message || 'Could not refresh meters.')
     } finally {
       if (isInitial) {
         setLoading(false)
@@ -87,6 +88,7 @@ export default function MetersPanel({ client, initialCosts = null }) {
         </button>
       </div>
 
+      {refreshError && <p className="panel-error-message" role="alert">{refreshError}</p>}
       {sample && <div className="meter-label-dim mono">{sample.note}</div>}
 
       {!canRead && !hasCosts ? (

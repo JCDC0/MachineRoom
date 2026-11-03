@@ -279,7 +279,13 @@ describe('the MCP settings panel', () => {
       await mount(root, { client })
       const row = container.querySelectorAll('.mr-mcp-server')[0]
       await click(root, buttonWithText(row, 'Remove'))
+      expect(calls.remove).toEqual([])
+      const card = container.querySelector('.brief-confirm-card')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain('Remove docs? Its command and settings are lost.')
+      await click(root, buttonWithText(card, 'Remove server'))
       expect(calls.remove).toEqual([{ name: 'docs', confirmed: true }])
+      expect(container.querySelector('.brief-confirm-card')).toBeNull()
     })
   })
 

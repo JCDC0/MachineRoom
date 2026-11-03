@@ -151,7 +151,7 @@ describe('FamilyTree ladder changes', () => {
 })
 
 describe('FamilyTeam ladder changes', () => {
-  it('keeps a sub that was added while the build card was open', async () => {
+  it('stops the build when a sub was added while the card was open', async () => {
     const orchestrators = [
       { id: 'orchestrator', name: 'Orchestrator' },
       { id: 'frontend', name: 'Frontend', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', lanes: ['opencode2'] },
@@ -174,15 +174,15 @@ describe('FamilyTeam ladder changes', () => {
       const card = container.querySelector('.mr-side-confirm-card')
       expect(card.textContent).toContain('Build 1 sub orchestrator?')
 
-      orchestrators.push({ id: 'backend', name: 'Backend', harness: 'opencode', model: '', lanes: [] })
+      orchestrators.push({ id: 'backend', name: 'Backend', harness: 'opencode', model: '', lanes: ['opencode'] })
       await act(async () => {
         buttonWithText(card, 'Build the team').click()
       })
       await settle()
 
-      expect(calls.setLadder).toHaveLength(1)
-      expect(calls.setLadder[0].subs.map((sub) => sub.id)).toEqual(['frontend', 'backend', 'team-1'])
-      expect(calls.setAgentLabel).toEqual([{ id: 'team-1', label: 'Team 1', confirmed: true }])
+      expect(calls.setLadder).toHaveLength(0)
+      expect(calls.setAgentLabel).toHaveLength(0)
+      expect(container.textContent).toContain('The team changed while the card was open. Open it again.')
     })
   })
 })

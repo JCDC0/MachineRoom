@@ -143,7 +143,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
 
   const quickList = useMemo(() => quickProviders(providers), [providers])
 
-  async function loadData() {
+  async function loadData({ reloadFailed = '' } = {}) {
     if (!client || typeof client.endpoints !== 'function') {
       setLoading(false)
       return
@@ -154,7 +154,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
       const list = await client.endpoints()
       setEndpoints(Array.isArray(list) ? list : [])
     } catch (err) {
-      setError(err?.message || 'Could not load the endpoints.')
+      setError(err?.message || reloadFailed || 'Could not load the endpoints.')
     } finally {
       setLoading(false)
     }
@@ -255,15 +255,16 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     setError('')
     try {
       await client.saveEndpoint({ ...next, confirmed: true })
-      await loadData()
-      setConfirm(null)
-      setFormOpen(false)
-      setNote(`Saved ${next.name}.`)
     } catch (err) {
       setError(err?.message || 'Could not save the endpoint.')
-    } finally {
       setBusy(false)
+      return
     }
+    setConfirm(null)
+    setFormOpen(false)
+    setNote(`Saved ${next.name}.`)
+    setBusy(false)
+    await loadData({ reloadFailed: 'The endpoint was saved, but the list could not be read.' })
   }
 
   function askQuick() {
@@ -284,21 +285,24 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     }
     setQuickBusy(true)
     setQuickNotice({ text: '', error: false })
+    let answer
     try {
-      const answer = await client.quickEndpoint({
+      answer = await client.quickEndpoint({
         provider: next.provider,
         key: next.key,
         confirmed: true,
       })
-      setQuickKey('')
-      await loadData()
-      setQuickNotice({ text: quickSavedText(answer, next.provider), error: Boolean(answer?.error) })
     } catch (err) {
       setQuickNotice({ text: err?.message || 'Could not save the key.', error: true })
-    } finally {
       setQuickBusy(false)
       setQuickConfirm(null)
+      return
     }
+    setQuickKey('')
+    setQuickNotice({ text: quickSavedText(answer, next.provider), error: Boolean(answer?.error) })
+    setQuickBusy(false)
+    setQuickConfirm(null)
+    await loadData({ reloadFailed: 'The key was saved, but the list could not be read.' })
   }
 
   function replaceKey(endpoint) {
@@ -329,14 +333,15 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     setError('')
     try {
       await client.deleteEndpoint({ name: endpoint.name, confirmed: true })
-      await loadData()
-      setConfirm(null)
-      setNote(`Deleted ${endpoint.name}.`)
     } catch (err) {
       setError(err?.message || 'Could not delete the endpoint.')
-    } finally {
       setBusy(false)
+      return
     }
+    setConfirm(null)
+    setNote(`Deleted ${endpoint.name}.`)
+    setBusy(false)
+    await loadData({ reloadFailed: 'The endpoint was deleted, but the list could not be read.' })
   }
 
   async function refreshModels(endpoint) {
@@ -351,11 +356,11 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
     try {
       const models = await client.endpointModels(endpoint.name)
       await client.saveEndpoint({ ...endpoint, models, confirmed: true })
-      await loadData()
       setNote(`Saved ${endpoint.name}, ${endpointCount(models)}.`)
+      setBusy(false)
+      await loadData({ reloadFailed: 'The models were saved, but the list could not be read.' })
     } catch (err) {
       setError(err?.message || 'Could not refresh the models.')
-    } finally {
       setBusy(false)
     }
   }
@@ -505,6 +510,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
             <select
               id="endpoints-provider"
               value={provider}
+              disabled={busy || confirm !== null}
               onChange={(event) => chooseProvider(event.target.value)}
             >
               {providers.map((entry) => (
@@ -519,6 +525,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               type="text"
               maxLength={40}
               value={name}
+              disabled={busy || confirm !== null}
               onChange={(event) => setName(event.target.value)}
             />
           </div>
@@ -528,6 +535,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               id="endpoints-base-url"
               type="text"
               value={baseUrl}
+              disabled={busy || confirm !== null}
               onChange={(event) => setBaseUrl(event.target.value)}
             />
           </div>
@@ -536,6 +544,7 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
             <select
               id="endpoints-key"
               value={keyName}
+              disabled={busy || confirm !== null}
               onChange={(event) => setKeyName(event.target.value)}
             >
               <option value="">No key (local server)</option>
@@ -550,18 +559,19 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
               id="endpoints-models"
               rows={4}
               value={modelText}
+              disabled={busy || confirm !== null}
               onChange={(event) => setModelText(event.target.value)}
             />
             <div className="endpoints-actions">
               <ModelRefresh
                 onRefresh={() => fetchModels(name.trim(), endpoints.some((entry) => entry.name === name.trim()))}
                 loading={modelsBusy}
-                disabled={busy || name.trim() === ''}
+                disabled={busy || confirm !== null || name.trim() === ''}
               />
-              <button type="button" className="hud-settings-switch" disabled={busy} onClick={askSave}>
+              <button type="button" className="hud-settings-switch" disabled={busy || confirm !== null} onClick={askSave}>
                 Save
               </button>
-              <button type="button" className="hud-settings-switch" disabled={busy} onClick={() => setFormOpen(false)}>
+              <button type="button" className="hud-settings-switch" disabled={busy || confirm !== null} onClick={() => setFormOpen(false)}>
                 Cancel
               </button>
             </div>

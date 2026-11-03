@@ -212,6 +212,7 @@ export default function McpSettings({
   const [tester, setTester] = useState(() => ({ server: '', tool: '', arguments: '', ...(initialTester ?? {}) }))
   const [toolBusy, setToolBusy] = useState(false)
   const [toolResult, setToolResult] = useState({ text: '', error: false })
+  const [removeConfirm, setRemoveConfirm] = useState(null)
 
   async function readServers() {
     if (typeof client?.mcpServers !== 'function') {
@@ -310,6 +311,7 @@ export default function McpSettings({
       setServers((current) => current.filter((entry) => entry.name !== server.name))
       setTester((current) => (current.server === server.name ? { ...current, server: '' } : current))
       setNotice({ text: `Removed ${server.name}.`, error: false })
+      setRemoveConfirm(null)
       await readServers()
     } catch (error) {
       setNotice({ text: String(error?.message ?? 'Could not remove the MCP server.'), error: true })
@@ -403,7 +405,7 @@ export default function McpSettings({
                     type="button"
                     className="mr-mcp-remove mono"
                     disabled={busy !== ''}
-                    onClick={() => removeServer(server)}
+                    onClick={() => setRemoveConfirm(server)}
                   >
                     Remove
                   </button>
@@ -412,6 +414,31 @@ export default function McpSettings({
               </li>
             ))}
           </ul>
+        )}
+        {removeConfirm && (
+          <div className="brief-confirm-card" role="dialog" aria-modal="true" aria-label="Remove MCP server">
+            <p className="brief-confirm-warning">
+              {`Remove ${removeConfirm.name}? Its command and settings are lost.`}
+            </p>
+            <div className="brief-confirm-actions">
+              <button
+                type="button"
+                className="hud-settings-switch brief-confirm-btn"
+                disabled={busy !== ''}
+                onClick={() => removeServer(removeConfirm)}
+              >
+                Remove server
+              </button>
+              <button
+                type="button"
+                className="hud-settings-switch"
+                disabled={busy !== ''}
+                onClick={() => setRemoveConfirm(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

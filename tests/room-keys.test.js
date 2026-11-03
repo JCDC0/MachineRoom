@@ -65,6 +65,21 @@ describe('the room key handler', () => {
     ])
   })
 
+  it('leaves the room alone behind the control drawer', () => {
+    const { calls, view } = makeView()
+    const saved = globalThis.document
+    globalThis.document = { querySelector: (selector) => (selector.includes('.control-drawer') ? {} : null) }
+    try {
+      for (const key of ['f', 't', '0', '[', ']']) {
+        handleRoomKey({ key, defaultPrevented: false, target: null }, view)
+      }
+    } finally {
+      if (saved === undefined) delete globalThis.document
+      else globalThis.document = saved
+    }
+    expect(calls).toEqual([])
+  })
+
   it('leaves typing and a button key alone', () => {
     const { calls, view } = makeView()
     const field = { closest: (selector) => (selector.includes('input') ? {} : null) }

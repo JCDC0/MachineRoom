@@ -68,6 +68,7 @@ export const LENS_MOVE = 0.0005
 export function handleRoomKey(event, view = {}) {
   if (!event || event.defaultPrevented) return
   if (hudKeyBlocked(event.target)) return
+  if (typeof document !== 'undefined' && document.querySelector(OPEN_PANEL)) return
   if (event.target?.closest?.('button') && (event.code === 'Space' || event.key === 'Enter')) return
   const player = view.player
   if (!player) return
