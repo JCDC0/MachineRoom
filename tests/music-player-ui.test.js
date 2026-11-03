@@ -101,4 +101,27 @@ describe('the music player', () => {
       expect(buttonWithText(container, 'Play')).not.toBeNull()
     })
   })
+
+  it('stops the music list read when the panel closes', async () => {
+    let seen = null
+    globalThis.fetch = (url, options = {}) =>
+      new Promise((resolve, reject) => {
+        seen = options.signal
+        options.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+      })
+    await withDom(async ({ dom, root }) => {
+      installAudio(dom)
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      expect(seen).not.toBeNull()
+      expect(seen.aborted).toBe(false)
+
+      await act(async () => {
+        root.render(null)
+      })
+      expect(seen.aborted).toBe(true)
+    })
+  })
 })

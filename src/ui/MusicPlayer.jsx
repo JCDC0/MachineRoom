@@ -21,10 +21,15 @@ function musicBases() {
   return [...new Set(bases)]
 }
 
-async function readMusicList() {
+async function readMusicList(signal = null) {
   for (const base of musicBases()) {
+    if (signal?.aborted) return null
+    const controller = new AbortController()
+    const stop = () => controller.abort()
+    if (signal) signal.addEventListener('abort', stop)
+    const timer = setTimeout(stop, 5000)
     try {
-      const response = await fetch(`${base}/api/music`, { signal: AbortSignal.timeout(5000) })
+      const response = await fetch(`${base}/api/music`, { signal: controller.signal })
       if (!response.ok) continue
       const body = await response.json()
       if (!body || !Array.isArray(body.tracks)) continue
@@ -33,7 +38,12 @@ async function readMusicList() {
         folder: typeof body.folder === 'string' ? body.folder : '',
         tracks: body.tracks.filter((name) => typeof name === 'string'),
       }
-    } catch {}
+    } catch {
+      if (signal?.aborted) return null
+    } finally {
+      clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', stop)
+    }
   }
   return null
 }
@@ -70,7 +80,8 @@ export default function MusicPlayer() {
 
   useEffect(() => {
     let active = true
-    readMusicList().then((found) => {
+    const controller = new AbortController()
+    readMusicList(controller.signal).then((found) => {
       if (!active) return
       setLoading(false)
       if (!found) {
@@ -85,6 +96,7 @@ export default function MusicPlayer() {
     })
     return () => {
       active = false
+      controller.abort()
     }
   }, [])
 

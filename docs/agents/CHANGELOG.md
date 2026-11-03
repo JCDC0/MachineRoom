@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The music list read stops when the panel closes (task U122).
 - A failed music start says which track could not play (task U122).
 - Reopened Settings shows the track that is still playing (task U122).
 - A lane row without a saved label shows the lane's own name (task U122).
