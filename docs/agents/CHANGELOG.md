@@ -4,6 +4,7 @@
 
 - The MCP server list sends each server's env names and never their values, and a save or toggle that leaves env out keeps the saved values (task U121).
 - Run tool asks on a card naming the server, the tool and its arguments, and the control client no longer confirms an MCP tool call by default (task U121).
+- Escape closes a confirm card inside Settings without closing Settings (task U121).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

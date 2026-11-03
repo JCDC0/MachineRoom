@@ -216,6 +216,20 @@ export default function McpSettings({
   const [runConfirm, setRunConfirm] = useState(null)
   const [removeConfirm, setRemoveConfirm] = useState(null)
 
+  useEffect(() => {
+    if (!removeConfirm && !runConfirm) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (busy !== '' || toolBusy) return
+      setRemoveConfirm(null)
+      setRunConfirm(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [removeConfirm, runConfirm, busy, toolBusy])
+
   async function readServers() {
     if (typeof client?.mcpServers !== 'function') {
       setListError(MCP_UNAVAILABLE)

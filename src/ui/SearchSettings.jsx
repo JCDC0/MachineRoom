@@ -105,6 +105,20 @@ export default function SearchSettings({ client: givenClient = null }) {
   const [keyConfirm, setKeyConfirm] = useState(false)
 
   useEffect(() => {
+    if (!confirm && !keyConfirm) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (busy) return
+      setConfirm(false)
+      setKeyConfirm(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [confirm, keyConfirm, busy])
+
+  useEffect(() => {
     if (!client || typeof client.searchProvider !== 'function') {
       setLoading(false)
       setFailed('Web search settings need a newer bridge.')

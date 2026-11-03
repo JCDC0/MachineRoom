@@ -141,6 +141,22 @@ export default function EndpointsPanel({ client, initialEndpoints = null, initia
   const [modelsBusy, setModelsBusy] = useState(false)
   const quickKeyRef = useRef(null)
 
+  useEffect(() => {
+    if (!confirm && !quickConfirm) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (quickConfirm && !quickBusy) {
+        setQuickConfirm(null)
+        return
+      }
+      if (confirm && !busy) setConfirm(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [confirm, quickConfirm, busy, quickBusy])
+
   const quickList = useMemo(() => quickProviders(providers), [providers])
 
   async function loadData({ reloadFailed = '' } = {}) {

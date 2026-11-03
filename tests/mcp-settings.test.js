@@ -273,6 +273,23 @@ describe('the MCP settings panel', () => {
     })
   })
 
+  it('closes its confirm card on Escape without closing Settings', async () => {
+    const { client, calls } = makeClient()
+    await withDom(async ({ container, root, dom }) => {
+      await mount(root, { client })
+      const row = container.querySelectorAll('.mr-mcp-server')[0]
+      await click(root, buttonWithText(row, 'Remove'))
+      expect(container.querySelector('.brief-confirm-card')).not.toBeNull()
+      const event = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(event)
+      })
+      expect(container.querySelector('.brief-confirm-card')).toBeNull()
+      expect(event.cancelBubble).toBe(true)
+      expect(calls.remove).toEqual([])
+    })
+  })
+
   it('removes a server through deleteMcpServer with the confirmation', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
