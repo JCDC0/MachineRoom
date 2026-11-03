@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A beat lifts the folder cards round the ring as a wave and pulses the hub ring, on top of each card's own glide and pop (task U131).
 - The orchestrator list's read error shows in the chat beside the status line (task U128).
 - A record time typed just before Settings closes reaches the live room, not only storage (task U128).
 - The MCP server switches and Remove buttons are disabled while the Remove card is open (task U128).

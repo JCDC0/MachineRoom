@@ -479,7 +479,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     pendingFollow = null
     heldPath = target
     cards.setSelected(target)
-    rig.hold(() => card.object.position, ANCHOR_DIST)
+    rig.hold(() => card.base, ANCHOR_DIST)
     onPick(null)
     return true
   }
@@ -938,7 +938,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   return {
     onActivity,
     soundAt,
-    setBeat: (strength) => agentSet.beat(strength),
+    setBeat: (strength) => {
+      agentSet.beat(strength)
+      cards.beat(strength)
+      hub.beat(strength)
+    },
     reset: sync,
     yaw: () => rig.yaw(),
     pitch: () => rig.pitch(),
