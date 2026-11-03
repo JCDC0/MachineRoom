@@ -472,7 +472,8 @@ export function createLanesSource(options = {}) {
       if (!line.trim()) continue
       const entry = run.feed(run.rewrite(line))
       if (!entry || entry.read !== true) {
-        run.plainLines.push(line)
+        // A plain line can be megabytes long, and only its start helps the error text.
+        run.plainLines.push(line.slice(0, 500))
         if (run.plainLines.length > 20) run.plainLines.shift()
         continue
       }
