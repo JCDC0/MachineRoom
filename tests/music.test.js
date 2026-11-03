@@ -1,8 +1,10 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { EventEmitter } from 'node:events'
+import { createReadStream, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   MUSIC_LIMIT,
+  createMusicApi,
   isSafeMusicName,
   listMusic,
   musicFolderFor,
@@ -156,5 +158,31 @@ describe('the music routes', () => {
     const answer = await getJson(`${url}/api/music`)
     expect(answer.status).toBe(200)
     expect(answer.body).toEqual({ folder: resolve(folder), tracks: [] })
+  })
+
+  it('destroys its file stream when the response closes', async () => {
+    const dir = tempDir()
+    const file = join(dir, 'test.mp3')
+    writeFileSync(file, 'sample music content')
+    let stream = null
+    const api = createMusicApi({
+      folder: dir,
+      createStream: (filePath, options) => {
+        stream = createReadStream(filePath, options)
+        return stream
+      },
+    })
+    const res = new EventEmitter()
+    res.writeHead = () => {}
+    res.write = () => true
+    res.end = () => {}
+    res.destroy = () => {}
+    const req = { method: 'GET', headers: {} }
+    await api.handle(req, res, new URL('http://localhost/music/test.mp3'))
+
+    expect(stream).not.toBeNull()
+    expect(stream.destroyed).toBe(false)
+    res.emit('close')
+    expect(stream.destroyed).toBe(true)
   })
 })

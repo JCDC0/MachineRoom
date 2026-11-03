@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A closed music response destroys its file stream.
+
 - Recording files are written through temporary files and renamed atomically.
 
 - Lane reviews run concurrently up to a small bound while keeping their order.
