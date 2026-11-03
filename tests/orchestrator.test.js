@@ -1,6 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { EventEmitter } from 'node:events'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -12,6 +14,8 @@ import {
   contextTokensFromLog,
   compactPrompt,
   COMPACTED_MESSAGE,
+  COMPACT_FAILED_MESSAGE,
+  CHAT_SAVE_PROBLEM,
   COMPACT_PROMPT,
   DEFAULT_COMPACT_RULES,
   DEFAULT_AUTOCOMPACT_MODE,
@@ -23,6 +27,8 @@ import {
   NO_NEW_REPORT,
   NO_REPORT,
   RESTART_MESSAGE,
+  ORCHESTRATOR_ROOM_WINDOW_MS,
+  SESSION_PENDING_PROBLEM,
 } from '../server/orchestrator.js'
 import { briefProblems } from '../src/briefs/run.js'
 import { getJson, postJson } from './helpers/bridge.js'
@@ -866,6 +872,29 @@ describe('autocompact', () => {
     expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
   })
 
+  it('keeps the open session and says so when a compact fails', async () => {
+    const rig = makeRig()
+    rig.send('First turn')
+    await waitIdle(rig, 1)
+    const sessionId = valueAfter(rig.calls()[0].args, '--session-id')
+    expect(sessionId).toBeTruthy()
+
+    rig.behaviour.mode = 'fail'
+    expect(rig.orchestrator.compact({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
+    await waitIdle(rig, 2)
+
+    const messages = rig.answer().messages
+    expect(messages.some((message) => message.from === 'room' && message.text === COMPACT_FAILED_MESSAGE)).toBe(true)
+    expect(messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
+
+    rig.behaviour.mode = 'reply'
+    rig.send('After the failed compact')
+    await waitIdle(rig, 3)
+    const resume = rig.calls()[2].args
+    expect(resume).toContain('--resume')
+    expect(valueAfter(resume, '--resume')).toBe(sessionId)
+  })
+
   it('sets a model listed for its harness and refuses unlisted models', async () => {
     const rig = makeRig()
     expect(rig.orchestrator.setModel({ model: 'unlisted-model', confirmed: true })).toEqual({
@@ -998,6 +1027,31 @@ describe('waking the orchestrator', () => {
     expect(rig.answer().messages.some((m) => m.from === 'room' && m.text.includes('Run opencode7-reopen-2 on lane opencode7 ended: succeeded.'))).toBe(true)
   })
 
+  it('remembers a reported run end across a restart and adds no duplicate line', async () => {
+    const rig = makeRig()
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    const log = join(rig.runs, 'opencode7-restart-1.log')
+    writeFileSync(log, 'done\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode7-restart-1', 'succeeded'))
+    await waitIdle(rig, 2)
+    const line = (message) => message.from === 'room' && message.text.includes('Run opencode7-restart-1')
+    expect(rig.answer().messages.filter(line)).toHaveLength(1)
+
+    rig.orchestrator.close()
+    const restored = restoreRig(rig)
+    restored.orchestrator.onFrame(frame('run-opencode7-restart-1', 'succeeded'))
+    await sleep(300)
+
+    expect(restored.calls()).toHaveLength(0)
+    expect(restored.answer().messages.filter(line)).toHaveLength(1)
+  })
+
   it('adds a room message with the run record and starts a turn', async () => {
     const rig = makeRig()
     rig.send('Hello')
@@ -1056,6 +1110,32 @@ describe('waking the orchestrator', () => {
     rig.orchestrator.onFrame(frame('run-opencode7-K2-20261024-130000', 'failed'))
     await sleep(150)
     expect(rig.calls()).toHaveLength(3)
+  })
+
+  it('keeps a run end that arrives while paused and runs it after the next owner message', async () => {
+    const rig = makeRig()
+    rig.send('Start')
+    await waitIdle(rig, 1)
+    rig.orchestrator.stop({ confirmed: true })
+
+    const log = join(rig.runs, 'opencode7-paused-1.log')
+    writeFileSync(log, 'done\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode7-paused-1', 'succeeded'))
+    await sleep(200)
+
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer().state).toBe('paused')
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text.includes('Run opencode7-paused-1'))).toBe(true)
+
+    rig.send('Resume the room')
+    await waitIdle(rig, 2)
+    const prompt = rig.calls()[1].args[1]
+    expect(prompt).toContain('Run opencode7-paused-1 on lane opencode7 ended: succeeded.')
+    expect(prompt).toContain('Resume the room')
   })
 
   it('adds an Error line to the wake message when a failed run has an error in its log', async () => {
@@ -1189,6 +1269,114 @@ describe('waking the orchestrator', () => {
     expect(prompt).toContain('Run opencode7-cap-30 on lane opencode7 ended: succeeded.')
     expect(prompt).toContain('The owner is here')
   }, 60000)
+
+  it('keeps the queued messages that a long turn could not fit and runs them next', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('Start')
+    await waitFor(() => rig.calls().length === 1, 5000, 'the held turn')
+    const long = (tag) => `${tag} ${'a'.repeat(7996)}`
+    for (const tag of ['Q1', 'Q2', 'Q3', 'Q4']) rig.send(long(tag))
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 3)
+
+    const second = rig.calls()[1].args[1]
+    expect(second).toContain('Q3')
+    expect(second).toContain('Q4')
+    expect(second).not.toContain('Q1')
+    expect(second).not.toContain('Q2')
+
+    const third = rig.calls()[2].args[1]
+    expect(third).toContain('Q1')
+    expect(third).toContain('Q2')
+    expect(third).not.toContain('Q4')
+  })
+
+  it('does not report a stopped turn when stop lands after the child exited well', async () => {
+    const base = makeTempDir('mr-stop-race-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const child = new EventEmitter()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = () => {}
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => child,
+    })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    expect(orchestrator.send({ text: 'Finish first', confirmed: true }).status).toBe(202)
+    child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+    child.stdout.write(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'All done.',
+        usage: { input_tokens: 12, output_tokens: 3 },
+      }) + '\n'
+    )
+    child.emit('close', 0)
+    expect(orchestrator.stop({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
+
+    await waitFor(() => orchestrator.answer().messages.some((message) => message.from === 'orchestrator'))
+    expect(orchestrator.answer().messages.at(-1).text).toBe('All done.')
+    expect(orchestrator.answer().messages.some((message) => /^The orchestrator stopped/.test(message.text))).toBe(false)
+    expect(readLines(join(runs, 'runs.jsonl')).at(-1)).toMatchObject({ exitCode: 0, killed: false })
+  })
+
+  it('starts the waiting room turn when the hourly cap frees a slot', async () => {
+    const base = makeTempDir('mr-room-cap-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const started = Date.now()
+    const roomTurns = Array.from({ length: 30 }, (_, index) => started - ORCHESTRATOR_ROOM_WINDOW_MS + 300 + index)
+    writeFileSync(
+      chatFileFor(projectRoot, runs),
+      `${JSON.stringify({ project: projectRoot, sessionId: 'session-1', state: 'idle', messages: [], pending: [], roomTurns })}\n`
+    )
+    let spawned = false
+    const spawnFake = () => {
+      spawned = true
+      const child = new EventEmitter()
+      child.stdout = new PassThrough()
+      child.stderr = new PassThrough()
+      child.kill = () => {}
+      setTimeout(() => {
+        child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+        child.stdout.write(
+          JSON.stringify({ type: 'result', subtype: 'success', result: 'Room turn done.', usage: { input_tokens: 1, output_tokens: 1 } }) + '\n'
+        )
+        child.emit('close', 0)
+      }, 10)
+      return child
+    }
+    const orchestrator = createOrchestrator({ projectRoot, runsFolder: runs, lanes: LANES, promptFile, spawn: spawnFake })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    orchestrator.onFrame(frame('run-opencode7-cap-wait', 'succeeded'))
+    expect(spawned).toBe(false)
+    await waitFor(() => spawned, 5000, 'the capped room turn to start')
+  })
 
   it('kills the turn on stop, pauses and clears the pause on the next owner message', async () => {
     const rig = makeRig()
@@ -1480,7 +1668,51 @@ describe('the orchestrator chat file', () => {
     expect(restored.answer().messages.some((message) => message.text === 'Keep me')).toBe(true)
   })
 
-  it('retries a failed rename on EPERM and EBUSY and cleans up the temporary file', () => {
+  it('reports a chat file that could not be saved and clears the error on the next save', () => {
+    const base = makeTempDir('mr-save-error-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    let failing = true
+    const child = new EventEmitter()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = () => {}
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => child,
+      rename: (from, to) => {
+        if (failing) {
+          const error = new Error('EPERM: operation not permitted')
+          error.code = 'EPERM'
+          throw error
+        }
+        renameSync(from, to)
+      },
+    })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    const sent = orchestrator.send({ text: 'Keep me', confirmed: true })
+    expect(sent.status).toBe(500)
+    expect(sent.body).toEqual({ error: CHAT_SAVE_PROBLEM, id: sent.body.id })
+    expect(orchestrator.answer().saveError).toBe(CHAT_SAVE_PROBLEM)
+
+    failing = false
+    expect(orchestrator.setAutocompact({ on: true, confirmed: true }).status).toBe(200)
+    expect(orchestrator.answer().saveError).toBeNull()
+  })
+
+  it('retries a failed rename on EPERM and EBUSY and keeps the temporary for the next save', () => {
     const rig = makeRig()
     rig.orchestrator.close()
     const file = chatFileFor(rig.projectRoot, rig.runs)
@@ -1527,7 +1759,7 @@ describe('the orchestrator chat file', () => {
     })
     cleanups.push(async () => failingOrchestrator.close())
     expect(failingAttempts).toBe(5)
-    expect(existsSync(tmpFile)).toBe(false)
+    expect(existsSync(tmpFile)).toBe(true)
     failingOrchestrator.close()
   })
 
@@ -1661,6 +1893,27 @@ describe('orchestrator reasoning effort and sessions', () => {
     expect(opencodeNoXhigh.status).toBe(400)
   })
 
+  it('refuses a model or effort change while a turn runs and credits the turn to its own model', async () => {
+    const rig = makeRig()
+    rig.behaviour.mode = 'hold'
+    rig.send('A running turn')
+    await waitFor(() => rig.calls().length === 1, 5000, 'the held turn')
+
+    expect(rig.orchestrator.setModel({ model: 'claude-sonnet-5-5', confirmed: true })).toEqual({
+      status: 409,
+      body: { error: 'A turn is already running.' },
+    })
+    expect(rig.orchestrator.setEffort({ effort: 'high', confirmed: true })).toEqual({
+      status: 409,
+      body: { error: 'A turn is already running.' },
+    })
+
+    writeFileSync(rig.releaseFile, 'go')
+    await waitIdle(rig, 1)
+    expect(rig.answer().model).toBe('opus')
+    expect(recordsOf(rig).at(-1)).toMatchObject({ model: 'opus' })
+  })
+
   it('archives sessions, lists pinned first, resumes an open session, and updates fields', async () => {
     const rig = makeRig()
     rig.send('First conversation task')
@@ -1720,6 +1973,63 @@ describe('orchestrator reasoning effort and sessions', () => {
     const deleted = rig.orchestrator.deleteSession(list2[0].id, { confirmed: true })
     expect(deleted.status).toBe(200)
     expect(rig.orchestrator.listSessions().some((s) => s.id === list2[0].id)).toBe(false)
+  })
+
+  it('refuses a session switch while messages wait and archives a conversation with no owner line', async () => {
+    const rig = makeRig()
+    rig.send('Start')
+    await waitIdle(rig, 1)
+    rig.orchestrator.stop({ confirmed: true })
+    const log = join(rig.runs, 'opencode7-waiting-1.log')
+    writeFileSync(log, 'done\n')
+    appendFileSync(
+      join(rig.runs, 'runs.jsonl'),
+      `${JSON.stringify({ lane: 'opencode7', model: 'm', startedAt: '2026-10-30T12:00:00.000Z', minutes: 1, exitCode: 0, killed: false, log })}\n`
+    )
+    rig.orchestrator.onFrame(frame('run-opencode7-waiting-1', 'succeeded'))
+    expect(rig.orchestrator.newSession({ confirmed: true })).toEqual({
+      status: 409,
+      body: { error: SESSION_PENDING_PROBLEM },
+    })
+    expect(rig.answer().messages.some((message) => message.text.includes('Run opencode7-waiting-1'))).toBe(true)
+    rig.orchestrator.close()
+
+    const file = chatFileFor(rig.projectRoot, rig.runs)
+    const saved = JSON.parse(readFileSync(file, 'utf8'))
+    saved.messages = [{ id: 'm1', from: 'room', text: 'A room wake', at: '2026-10-25T12:00:00.000Z' }]
+    saved.pending = []
+    saved.state = 'idle'
+    writeFileSync(file, `${JSON.stringify(saved)}\n`)
+    const restored = restoreRig(rig)
+    expect(restored.orchestrator.newSession({ confirmed: true }).status).toBe(200)
+    const list = restored.orchestrator.listSessions()
+    expect(list).toHaveLength(1)
+    expect(list[0].title).toBe('A room wake')
+    expect(list[0].count).toBe(1)
+  })
+
+  it('deletes the open conversation and starts a clean one', async () => {
+    const rig = makeRig()
+    rig.send('The conversation to delete')
+    await waitIdle(rig, 1)
+    rig.orchestrator.newSession({ confirmed: true })
+    const archived = rig.orchestrator.listSessions()[0]
+    expect(rig.orchestrator.openSession(archived.id, { confirmed: true }).status).toBe(200)
+    expect(rig.answer().messages).toHaveLength(2)
+
+    expect(rig.orchestrator.deleteSession(archived.id, { confirmed: true }).status).toBe(200)
+    expect(rig.orchestrator.listSessions()).toHaveLength(0)
+    expect(rig.answer().messages).toHaveLength(0)
+
+    rig.send('A new clean start')
+    await waitIdle(rig, 2)
+    expect(rig.calls()[1].args).not.toContain('--resume')
+    expect(rig.calls()[1].args).toContain('--session-id')
+
+    rig.orchestrator.newSession({ confirmed: true })
+    const list = rig.orchestrator.listSessions()
+    expect(list).toHaveLength(1)
+    expect(list[0].title).toBe('A new clean start')
   })
 
   it('evicts the oldest unpinned session when reaching 50 sessions', async () => {

@@ -6,6 +6,19 @@
 - `mr-agent`'s shell tool stops the whole tree on Linux too, since `exec` dropped its process group.
 - The history audit no longer reads punctuation after a key name as a key.
 - List the fixes and features left for later under Later work in `AUDIT-2026-11-SUMMARY.md`.
+- A compact that fails keeps the session, its summary and its context use and says `The compact failed. The session is still open.` (task S26).
+- A lane run that ends while the orchestrator is paused keeps its room message and runs when the room resumes (task S26).
+- The last 200 reported run ends survive a restart, and a repeated end adds no second chat line (task S26).
+- A long queued turn keeps the messages that do not fit in its prompt and runs them in the next turn instead of dropping them (task S26).
+- Deleting the open conversation clears its messages, its waiting queue, its session and its summary (task S26).
+- A stop that lands after a turn's child has exited well keeps the reply and records the run as not killed (task S26).
+- A sub removed during its turn is stopped, saved idle and restores idle when it is added back (task S26).
+- A model or effort change is refused while a turn runs, so the turn keeps the model it started with (task S26).
+- A new or opened session is refused while messages wait, and a conversation with no owner line is archived rather than destroyed (task S26).
+- A sub is rebuilt when its list of siblings changes, so its instructions name the other subs (task S26).
+- A room turn held by the 30 turns an hour cap starts when the oldest turns fall out of the hour (task S26).
+- An approved proposal whose ladder write fails removes the new lane again and keeps the proposal (task S26).
+- A chat file that could not be written reports its error in the chat answer and the message response, and the next save retries it (task S26).
 - Four more bug hunts of the panels, the orchestrator, the runner and the page against the bridge (tasks Q27, Q28, Q29 and Q31).
 - The page commits a snapshot only when a field it reads changes, so a paused replay makes no render and a quiet live room commits once a second for its clock, while a new log line and a status change still show (task U115).
 - The ORCHESTRATOR button and `/` scroll to the conversation and focus its input at 900 pixels and wider (task U115).

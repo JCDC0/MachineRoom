@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource } from '../server/lanes-source.js'
-import { chatFileFor, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT } from '../server/orchestrator.js'
+import { chatFileFor, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import { availableHarnesses, branchChanges, createOrchestrators, NO_TOKEN_PROBLEM, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { gitPath } from '../server/programPath.js'
@@ -906,6 +906,56 @@ describe('the orchestrator registry', () => {
     expect(removed.status).toBe(200)
     expect((await getJson(`${rig.url}/api/orchestrator?id=frontend`)).status).toBe(404)
     expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
+  })
+
+  it('stops a removed sub, saves it idle and restores it without a restart message', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const rig = makeRig(files)
+    files.behaviour.mode = 'hold'
+    rig.registry.find('frontend').send({ text: 'Work', confirmed: true })
+    await waitFor(() => files.calls().length === 1, 15000, 'the sub turn')
+    const pid = files.calls()[0].pid
+
+    const removed = rig.registry.ladderChange({ ladder: { subs: [] }, by: 'owner', confirmed: true }, true)
+    expect(removed.status).toBe(200)
+    await waitFor(() => {
+      try {
+        process.kill(pid, 0)
+        return false
+      } catch {
+        return true
+      }
+    })
+    expect(files.chat('frontend').state).toBe('idle')
+
+    const added = rig.registry.ladderChange({ ladder: { subs: [FRONTEND] }, by: 'owner', confirmed: true }, true)
+    expect(added.status).toBe(200)
+    const restored = rig.registry.find('frontend')
+    expect(restored.answer().state).toBe('idle')
+    expect(restored.answer().messages.some((message) => message.text === RESTART_MESSAGE)).toBe(false)
+  })
+
+  it('rebuilds a sub with a new sibling so its instructions name the sibling', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const rig = makeRig(files)
+    const backend = {
+      id: 'backend',
+      name: 'Backend',
+      harness: 'claude',
+      model: 'sonnet',
+      lanes: ['opencode2'],
+      scope: ['server/**'],
+      restricted: true,
+      setBy: 'owner',
+    }
+    const added = rig.registry.ladderChange({ ladder: { subs: [FRONTEND, backend] }, by: 'owner', confirmed: true }, true)
+    expect(added.status).toBe(200)
+
+    rig.registry.find('frontend').send({ text: 'Check your siblings', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+    const call = files.calls().find((item) => item.args.some((arg) => typeof arg === 'string' && arg.includes('Your id is `frontend`')))
+    const instruction = call.args[call.args.indexOf('--append-system-prompt') + 1]
+    expect(instruction).toContain('Your siblings: `backend` (Backend).')
   })
 
   it('refuses a second room on the same project', async () => {

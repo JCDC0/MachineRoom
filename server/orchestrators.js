@@ -151,22 +151,6 @@ function harnessFor(sub) {
   return h || 'claude'
 }
 
-function sameConfig(left, right) {
-  const shape = (config) => [
-    config.id,
-    config.name,
-    config.harness,
-    config.model,
-    config.bin,
-    config.contextWindow,
-    [...config.lanes].sort(),
-    [...config.scope],
-    config.restricted,
-    config.setBy,
-  ]
-  return JSON.stringify(shape(left)) === JSON.stringify(shape(right))
-}
-
 export function createOrchestrators({
   projectRoot = '',
   runsFolder = runsFolderDefault(),
@@ -258,6 +242,10 @@ export function createOrchestrators({
     const harness = harnessFor(sub)
     const defaults = laneDefaults(harness)
     const fallbackModel = MODELS.find((m) => m.harness === harness)?.id ?? (harness === 'opencode' ? 'opencode/deepseek-v4.1-flash-free' : 'opus')
+    const siblings = readSaved().ladder.subs
+      .map((entry) => entry.id)
+      .filter((id) => id !== sub.id)
+      .sort()
     return {
       id: sub.id,
       name: sub.name,
@@ -269,7 +257,25 @@ export function createOrchestrators({
       scope: [...sub.scope],
       restricted: sub.restricted,
       setBy: sub.setBy,
+      siblings,
     }
+  }
+
+  function sameConfig(left, right) {
+    const shape = (config) => [
+      config.id,
+      config.name,
+      config.harness,
+      config.model,
+      config.bin,
+      config.contextWindow,
+      [...config.lanes].sort(),
+      [...config.scope],
+      config.restricted,
+      config.setBy,
+      [...config.siblings],
+    ]
+    return JSON.stringify(shape(left)) === JSON.stringify(shape(right))
   }
 
   function createSub(sub) {
@@ -336,7 +342,7 @@ export function createOrchestrators({
       if (!next || !config || !sameConfig(config, subConfig(next))) {
         instances.delete(id)
         configs.delete(id)
-        instance.close()
+        instance.close({ removed: true })
       }
     }
     for (const [id, sub] of wanted) {

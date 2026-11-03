@@ -10,7 +10,6 @@ import {
   renameSync,
   rmSync,
   statSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -44,6 +43,7 @@ export const DEFAULT_COMPACT_RULES =
 export const COMPACT_PROMPT =
   'Write a summary of the work so far, the open runs and the next steps, in at most 40 lines. Reply with the summary only.'
 export const COMPACTED_MESSAGE = 'The session was compacted. The next turn starts a new session with the summary.'
+export const COMPACT_FAILED_MESSAGE = 'The compact failed. The session is still open.'
 export const CONFIRM_MESSAGE_PROBLEM = 'Confirm the message first.'
 export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
 export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first.'
@@ -67,12 +67,14 @@ export const SESSION_TITLE_PROBLEM = 'Write a title from 1 to 80 characters.'
 export const SESSION_PINNED_PROBLEM = 'Say whether pinned is true or false.'
 export const SESSION_STARRED_PROBLEM = 'Say whether starred is true or false.'
 export const SESSION_CHANGE_PROBLEM = 'Choose a field to change: pinned, starred or title.'
+export const SESSION_PENDING_PROBLEM = 'Messages are waiting for a turn. Wait for them to run or stop the orchestrator first.'
 export const SESSIONS_LIMIT = 50
 export const SESSION_MESSAGES_LIMIT = 200
 export const CLAUDE_EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max']
 export const OPENCODE_EFFORT_LEVELS = ['low', 'medium', 'high', 'max']
 export const NO_PROJECT_PROBLEM = 'The bridge has no project folder, so the orchestrator has nothing to work on.'
 export const MESSAGE_PROBLEM = 'Write a message from 1 to 8000 characters.'
+export const CHAT_SAVE_PROBLEM = 'The chat file could not be saved.'
 export const EMPTY_REPLY = 'The orchestrator ended its turn without a reply.'
 export const STOPPED_REPLY = 'The orchestrator stopped.'
 export const NO_NEW_REPORT = 'No new report.'
@@ -362,17 +364,19 @@ function blockFor(message) {
   return `${label}: ${message.text}`
 }
 
-function turnText(messages) {
-  if (messages.length === 1 && messages[0].from === 'owner') return messages[0].text
+function fitTurnText(messages) {
+  if (messages.length === 1 && messages[0].from === 'owner') return { text: messages[0].text, used: [...messages] }
   const blocks = []
+  const used = []
   let size = 0
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const block = blockFor(messages[index])
     if (blocks.length > 0 && size + block.length + 2 > PROMPT_LIMIT) break
     blocks.unshift(block)
+    used.unshift(messages[index])
     size += block.length + 2
   }
-  return blocks.join('\n\n')
+  return { text: blocks.join('\n\n'), used }
 }
 
 function recordLine(record) {
@@ -486,6 +490,7 @@ export function createOrchestrator({
   const messages = []
   const pending = []
   const roomTurns = []
+  let roomTimer = null
   let ladder = null
   let sessionId = null
   let ownsRun = false
@@ -505,6 +510,7 @@ export function createOrchestrator({
   const sessions = []
   let summary = ''
   let pendingCompaction = null
+  let persistError = null
   const completedRuns = new Map()
 
   function subExists(id) {
@@ -533,6 +539,7 @@ export function createOrchestrator({
   }
 
   function persist() {
+    let failure = null
     try {
       mkdirSync(folder, { recursive: true })
       const waiting = pending
@@ -558,6 +565,7 @@ export function createOrchestrator({
         currentSessionId,
         currentTitle,
         summary,
+        completedRuns: [...completedRuns.entries()].slice(-200).map(([runId, value]) => [runId, { status: value.status, messageId: value.messageId ?? null }]),
         sessions: sessions.map((s) => ({
           id: s.id,
           title: s.title,
@@ -582,18 +590,19 @@ export function createOrchestrator({
             renamed = true
             break
           } catch (error) {
+            failure = error
             if (error?.code !== 'EPERM' && error?.code !== 'EBUSY') break
             if (attempt < 4) pauseSync(25)
           }
         }
-      } finally {
-        if (!renamed) {
-          try {
-            unlinkSync(temporary)
-          } catch {}
-        }
+      } catch (error) {
+        failure = error
       }
-    } catch {}
+      if (renamed) failure = null
+    } catch (error) {
+      failure = error
+    }
+    persistError = failure ? CHAT_SAVE_PROBLEM : null
   }
 
   function quarantine() {
@@ -767,6 +776,18 @@ export function createOrchestrator({
       )
       if (message && !pending.includes(message)) pending.push(message)
     }
+    const finished = Array.isArray(saved.completedRuns) ? saved.completedRuns : []
+    for (const entry of finished) {
+      if (!Array.isArray(entry) || entry.length !== 2) continue
+      const [runId, value] = entry
+      if (typeof runId !== 'string' || !runId || !value || typeof value !== 'object') continue
+      if (value.status !== 'succeeded' && value.status !== 'failed') continue
+      completedRuns.set(runId, {
+        status: value.status,
+        messageId: typeof value.messageId === 'string' && value.messageId ? value.messageId : null,
+      })
+    }
+    while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
   }
 
   function setState(next) {
@@ -817,6 +838,16 @@ export function createOrchestrator({
     return roomTurns.length < ORCHESTRATOR_ROOM_TURNS
   }
 
+  function scheduleRoomTurn() {
+    if (roomTimer || roomTurns.length === 0) return
+    const wait = Math.max(0, roomTurns[0] + ORCHESTRATOR_ROOM_WINDOW_MS - now()) + 10
+    roomTimer = setTimeout(() => {
+      roomTimer = null
+      maybeStartTurn()
+    }, wait)
+    roomTimer.unref?.()
+  }
+
   function maybeStartTurn() {
     if (stopped || running || state === 'paused') return
     if (pendingCompaction) {
@@ -827,7 +858,10 @@ export function createOrchestrator({
     const ordered = pending.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
     if (!ordered) {
       if (!givenWork()) return
-      if (!roomTurnAllowed()) return
+      if (!roomTurnAllowed()) {
+        scheduleRoomTurn()
+        return
+      }
     }
     startTurn()
   }
@@ -838,11 +872,21 @@ export function createOrchestrator({
   }
 
   function startTurn(options = null) {
+    if (roomTimer) {
+      clearTimeout(roomTimer)
+      roomTimer = null
+    }
     const manualCompacting = Boolean(options?.compacting)
     const keepText = manualCompacting ? (options.keep || '') : (pendingCompaction?.keep || '')
     const compaction = manualCompacting || Boolean(pendingCompaction)
     pendingCompaction = null
-    const turnMessages = compaction ? [] : pending.splice(0, pending.length)
+    const queued = compaction ? [] : pending.splice(0, pending.length)
+    const fit = compaction ? { text: '', used: [] } : fitTurnText(queued)
+    const turnMessages = fit.used
+    if (!compaction && turnMessages.length < queued.length) {
+      pending.unshift(...queued.slice(0, queued.length - turnMessages.length))
+      persist()
+    }
     const hasOwner = turnMessages.some((message) => message.from === 'owner')
     if (!hasOwner) roomTurns.push(now())
     const first = !sessionId
@@ -883,7 +927,7 @@ export function createOrchestrator({
       setState('idle')
       return
     }
-    const message = compaction ? compactPrompt(keepText, compactRules) : turnText(turnMessages)
+    const message = compaction ? compactPrompt(keepText, compactRules) : fit.text
     const baseInstruction = instructionFor(
       promptFile,
       root,
@@ -975,6 +1019,7 @@ export function createOrchestrator({
     const finish = (code, error) => {
       if (ending) return
       ending = true
+      turn.exited = true
       stream.end(() => completeTurn(turn, code, error))
     }
     let child
@@ -1094,11 +1139,16 @@ export function createOrchestrator({
       } catch {}
     }
     if (turn.compacting) {
-      summary = failed ? '' : String(report ?? '').trim()
-      sessionId = null
-      contextTokens = null
-      if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
-      addMessage('room', COMPACTED_MESSAGE)
+      if (failed) {
+        if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
+        addMessage('room', COMPACT_FAILED_MESSAGE)
+      } else {
+        summary = String(report ?? '').trim()
+        sessionId = null
+        contextTokens = null
+        if (!stopped) setState(state === 'paused' ? 'paused' : 'idle')
+        addMessage('room', COMPACTED_MESSAGE)
+      }
       if (!stopped) maybeStartTurn()
       return
     }
@@ -1134,6 +1184,7 @@ export function createOrchestrator({
       defaultCompactRules: DEFAULT_COMPACT_RULES,
       autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
       effort: effort ?? null,
+      saveError: persistError,
       messages: messages.map((message) => ({ ...message })),
     }
   }
@@ -1149,6 +1200,7 @@ export function createOrchestrator({
     const message = addMessage('owner', text)
     pending.push(message)
     maybeStartTurn()
+    if (persistError) return { status: 500, body: { error: persistError, id: message.id } }
     return { status: 202, body: { id: message.id } }
   }
 
@@ -1166,8 +1218,12 @@ export function createOrchestrator({
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
     if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
     if (running && !running.done) {
-      running.killed = true
-      killTree(running.child)
+      if (running.exited) {
+        running.stopping = true
+      } else {
+        running.killed = true
+        killTree(running.child)
+      }
     }
     setState('paused')
     return { status: 200, body: { ok: true } }
@@ -1270,6 +1326,7 @@ export function createOrchestrator({
 
   function setModel(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_MODEL_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
     const nextModel = typeof body?.model === 'string' ? body.model.trim() : ''
     if (!nextModel) return { status: 400, body: { error: MODEL_PROBLEM } }
     const allowed = modelAllowed(harness, nextModel, folder)
@@ -1308,6 +1365,7 @@ export function createOrchestrator({
 
   function setEffort(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_EFFORT_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
     const allowed = harness === 'claude' ? CLAUDE_EFFORT_LEVELS : OPENCODE_EFFORT_LEVELS
     if (body.effort === null) {
       effort = null
@@ -1322,10 +1380,9 @@ export function createOrchestrator({
   }
 
   function archiveCurrentSession() {
-    const hasOwner = messages.some((m) => m.from === 'owner')
-    if (!hasOwner) return null
+    if (messages.length === 0) return null
     const firstOwner = messages.find((m) => m.from === 'owner')
-    const defaultTitle = firstOwner.text.trim().slice(0, 60)
+    const defaultTitle = (firstOwner ?? messages[0]).text.trim().slice(0, 60)
     const title = currentTitle || defaultTitle
     if (currentSessionId) {
       const existing = sessions.find((s) => s.id === currentSessionId)
@@ -1359,6 +1416,7 @@ export function createOrchestrator({
   function newSession(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     archiveCurrentSession()
     currentSessionId = null
     currentTitle = null
@@ -1375,6 +1433,7 @@ export function createOrchestrator({
   function openSession(sid, body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_SESSION_PROBLEM } }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    if (pending.length > 0) return { status: 409, body: { error: SESSION_PENDING_PROBLEM } }
     const target = sessions.find((s) => s.id === sid)
     if (!target) return { status: 404, body: { error: NO_SESSION_ID_PROBLEM } }
     archiveCurrentSession()
@@ -1430,6 +1489,11 @@ export function createOrchestrator({
     if (currentSessionId === sid) {
       currentSessionId = null
       currentTitle = null
+      messages.length = 0
+      pending.length = 0
+      sessionId = null
+      summary = ''
+      contextTokens = null
     }
     persist()
     notify()
@@ -1511,7 +1575,7 @@ export function createOrchestrator({
       if (startedBy !== key && (!recordedStarter || subExists(recordedStarter))) return
     }
     const named = recordedStarter ? (recordedStarter === key || (key === ORCHESTRATOR_KEY && !subExists(recordedStarter))) : false
-    if ((!named && !givenWork()) || state === 'paused') return
+    if (!named && !givenWork()) return
     if (named) ownsRun = true
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
     const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
@@ -1553,13 +1617,10 @@ export function createOrchestrator({
     }
     const prevRun = runId ? completedRuns.get(runId) : null
     if (prevRun) {
+      if (prevRun.status === status) return
       const pendingIndex = pending.findIndex((item) => item.id === prevRun.messageId)
       if (pendingIndex !== -1) {
         pending.splice(pendingIndex, 1)
-      } else if (prevRun.status === status) {
-        addMessage('room', text)
-        completedRuns.set(runId, { status, messageId: null })
-        return
       }
     }
     try {
@@ -1570,12 +1631,18 @@ export function createOrchestrator({
     if (runId) {
       completedRuns.set(runId, { status, messageId: message.id })
       while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
+      persist()
     }
     maybeStartTurn()
   }
 
-  function close() {
+  function close(options = {}) {
     stopped = true
+    if (options?.removed === true) state = 'idle'
+    if (roomTimer) {
+      clearTimeout(roomTimer)
+      roomTimer = null
+    }
     const turn = running
     if (turn) {
       turn.killed = true

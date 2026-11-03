@@ -14,13 +14,16 @@ import {
   ORIGIN_KEY_PROBLEM,
   ORIGIN_LABEL_PROBLEM,
   buildFamilyNodes,
+  createFamilyApi,
   keyFromFile,
   labelsFileFor,
   readKey,
   readKeys,
   readLabels,
   readProposals,
+  saveProposals,
 } from '../server/family.js'
+import { readAgentsConfig } from '../server/agents-config.js'
 import { createBridge } from '../server/index.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { NO_TOKEN_PROBLEM } from '../server/orchestrators.js'
@@ -652,6 +655,50 @@ describe('Approve and decline proposals', () => {
     const roomMessage = orchAnswer.messages.find((m) => m.from === 'room' && m.text.includes('approved Reviewer'))
     expect(roomMessage).toBeDefined()
     expect(roomMessage.text).toBe('The owner approved Reviewer.')
+  })
+
+  it('rolls back the new lane and keeps the proposal when the ladder write fails', async () => {
+    const runsDir = tempDir('mr-fam-rollback-')
+    const proposal = {
+      id: 'proposal-1',
+      from: 'orchestrator',
+      parent: 'frontend',
+      label: 'Reviewer',
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      effort: null,
+      reason: 'Review tasks.',
+      createdAt: new Date().toISOString(),
+    }
+    saveProposals(runsDir, [proposal])
+    const response = {}
+    const api = createFamilyApi({
+      runsFolder: runsDir,
+      projectRoot: '',
+      lanes: () => SAMPLE_LANES,
+      env: { ...process.env, PATH: process.env.PATH },
+      activeLanes: null,
+      orchestrators: () => ({
+        getLadder: () => ({ subs: [{ id: 'frontend', name: 'Frontend', lanes: [] }] }),
+        ladderChange: () => ({ status: 400, body: { error: 'The ladder is not an object.' } }),
+        find: () => null,
+      }),
+      sendJson: (req, res, status, body) => {
+        response.status = status
+        response.body = body
+      },
+      readJsonBody: async () => ({ confirmed: true }),
+    })
+
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/family/proposals/proposal-1/approve')
+    )
+    expect(handled).toBe(true)
+    expect(response).toEqual({ status: 400, body: { error: 'The ladder is not an object.' } })
+    expect(readProposals(runsDir).some((item) => item.id === 'proposal-1')).toBe(true)
+    expect(readAgentsConfig(runsDir).agents).toHaveLength(0)
   })
 
   it('declines proposal, drops it, and sends room message to proposing orchestrator', async () => {
