@@ -18,6 +18,7 @@ import { makeTempDir } from './helpers/tempRoot.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const BIN = join(root, 'bin', 'machine-room.mjs')
+const MACHINEROOM_BIN = join(root, 'bin', 'machineroom.mjs')
 const cleanups = []
 
 afterEach(async () => {
@@ -81,9 +82,9 @@ function childEnv(temp) {
   return withLanePrograms(env, temp)
 }
 
-function runBin(args, env) {
+function runBin(args, env, bin = BIN) {
   return new Promise((resolveRun, rejectRun) => {
-    const child = spawn(process.execPath, [BIN, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] })
+    const child = spawn(process.execPath, [bin, ...args], { env, stdio: ['ignore', 'pipe', 'pipe'] })
     cleanups.push(() => {
       if (child.exitCode === null && child.signalCode === null) child.kill()
     })
@@ -474,6 +475,17 @@ describe('the machineroom command', () => {
 
   it('leaves the browser closed with --no-open', () => {
     expect(upArgs(['--no-open', '--no-sessions'], cwd).args).toEqual(['up', '--root', cwd, '--no-sessions'])
+  })
+
+  it('prints its own usage with the folder argument', async () => {
+    const temp = makeFolder('machine-room-doctor-temp-')
+    const run = await runBin(['--help'], childEnv(temp), MACHINEROOM_BIN)
+
+    expect(run.code).toBe(0)
+    expect(run.stdout).toContain('Usage: machineroom [FOLDER] [options]')
+    expect(run.stdout).toContain('--no-open')
+    expect(run.stdout).not.toContain('Usage: machine-room')
+    expect(run.stdout).not.toContain('starting the room')
   })
 })
 

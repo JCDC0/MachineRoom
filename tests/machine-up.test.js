@@ -227,6 +227,25 @@ describe('machine-room up', () => {
     await kill(run)
   }, 30000)
 
+  it('accepts --no-open with up and leaves the browser closed', async () => {
+    const project = makeProject()
+    const temp = makeFolder('machine-room-up-temp-')
+    const { dist } = makeDist()
+    const env = childEnv(temp)
+    env.PATH = ''
+    delete env.Path
+    delete env.ComSpec
+    delete env.COMSPEC
+    const run = startBin(['up', '--no-open', '--root', project, '--dist', dist, '--port', '0'], env)
+
+    await waitForAddress(run)
+    await new Promise((resolveWait) => setTimeout(resolveWait, 300))
+    expect(run.stdout).not.toContain('Unknown option')
+    expect(run.stdout).not.toContain('program was not found.')
+
+    await kill(run)
+  }, 30000)
+
   it('stops with exit 1 when the build is missing', async () => {
     const project = makeProject()
     const temp = makeFolder('machine-room-up-temp-')

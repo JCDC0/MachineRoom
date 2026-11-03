@@ -21,6 +21,7 @@ const USAGE = [
   '  --lanes             show lane runs live from the run-lane logs (MACHINEROOM_LANES=1)',
   '  --sessions          show Claude Code and OpenCode sessions on the project live (MACHINEROOM_SESSIONS=1)',
   '  --no-sessions       keep the session source off when up runs it by default',
+  '  --no-open           keep up from opening the browser',
   '  --open              open the room in the default browser',
   '  --help              show this help',
 ].join('\n')
@@ -40,6 +41,7 @@ const FLAGS = {
   '--lanes': 'lanes',
   '--sessions': 'sessions',
   '--no-sessions': 'noSessions',
+  '--no-open': 'noOpen',
   '--open': 'open',
 }
 
@@ -199,6 +201,7 @@ async function serve(options) {
 async function up(options) {
   const dist = prepare(options)
   options.dist = dist
+  if (options.noOpen === true) options.open = false
   options.lanes = true
   options.sessions = options.noSessions !== true
   const result = runDoctor(options)
