@@ -30,30 +30,30 @@ describe('lane lock', () => {
     const path = takeLaneLock(folder, 'hermes')
     expect(path).toBe(lockPath(folder))
     expect(readFileSync(path, 'utf8')).toBe(laneLockText({ pid: process.pid }))
-    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: null, folder: '' })
+    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: null, folder: '', projectRun: false })
   })
 
   it('writes the worktree beside the pid and the harness child after it starts', () => {
     const folder = makeTempDir('lane-lock-')
     const path = takeLaneLock(folder, 'hermes', { worktree: 'C:\\work\\hermes' })
-    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: null, folder: 'C:\\work\\hermes' })
+    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: null, folder: 'C:\\work\\hermes', projectRun: false })
     expect(writeLaneChild(path, 4242)).toBe(true)
-    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: 4242, folder: 'C:\\work\\hermes' })
+    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: 4242, folder: 'C:\\work\\hermes', projectRun: false })
     expect(writeLaneChild(path, 0)).toBe(false)
     const other = lockPath(folder, 'other')
     writeFileSync(other, laneLockText({ pid: process.ppid }))
     expect(writeLaneChild(other, 4242)).toBe(false)
-    expect(readLaneLock(other)).toEqual({ pid: process.ppid, child: null, folder: '' })
+    expect(readLaneLock(other)).toEqual({ pid: process.ppid, child: null, folder: '', projectRun: false })
   })
 
   it('reads a lock in the old plain pid format', () => {
     const folder = makeTempDir('lane-lock-')
     const path = lockPath(folder)
     writeFileSync(path, String(process.pid))
-    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: null, folder: '' })
-    expect(readLaneLock(join(folder, 'missing.lock'))).toEqual({ pid: null, child: null, folder: '' })
+    expect(readLaneLock(path)).toEqual({ pid: process.pid, child: null, folder: '', projectRun: false })
+    expect(readLaneLock(join(folder, 'missing.lock'))).toEqual({ pid: null, child: null, folder: '', projectRun: false })
     writeFileSync(path, 'not a lock')
-    expect(readLaneLock(path)).toEqual({ pid: null, child: null, folder: '' })
+    expect(readLaneLock(path)).toEqual({ pid: null, child: null, folder: '', projectRun: false })
   })
 
   it('refuses a lock held by a live process', () => {

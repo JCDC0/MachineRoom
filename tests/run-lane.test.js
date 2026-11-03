@@ -1295,7 +1295,7 @@ describe('scripts/run-lane.mjs', () => {
 
       const emptyTemp = join(folder, 'empty')
       mkdirSync(emptyTemp, { recursive: true })
-      const empty = await runLane(['--outcomes'], { TEMP: emptyTemp })
+      const empty = await runLane(['--outcomes'], { TEMP: emptyTemp, MACHINEROOM_RUNS: join(emptyTemp, 'machineroom-runs') })
       expect(empty.code).toBe(0)
       expect(empty.stdout.trim()).toBe('No runs yet.')
     } finally {
