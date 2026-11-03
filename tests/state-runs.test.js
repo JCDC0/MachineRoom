@@ -76,4 +76,32 @@ describe('two runs of one agent', () => {
 
     expect(state.agents.get('opencode')).toMatchObject({ status: 'error', endedAt: 4, error: 'failed' })
   })
+
+  it('keeps the end label and error of a failed tool call on the agent', () => {
+    const state = createState(tree, agents)
+    apply(state, start('r1', 1))
+    apply(state, tool('r1', 2, 'src/a.js'))
+    apply(state, {
+      type: 'tool.end',
+      agent: 'opencode',
+      runId: 'r1',
+      id: 't-2',
+      ok: false,
+      label: 'read src/a.js: permission denied',
+      error: 'permission denied',
+      time: 3,
+      order: 3,
+    })
+
+    const agent = state.agents.get('opencode')
+    expect(agent).toMatchObject({
+      status: 'working',
+      label: 'read src/a.js: permission denied',
+      error: 'permission denied',
+    })
+    expect(agent.lines[agent.lines.length - 1]).toEqual({
+      text: 'failed read src/a.js: permission denied',
+      tone: 'error',
+    })
+  })
 })

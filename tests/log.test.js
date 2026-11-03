@@ -37,6 +37,20 @@ describe('createLogger', () => {
     expect(entryFor({ ...base, type: 'tool.end', id: 'b', ok: false })).toMatchObject({ text: 'failed npm test', tone: 'error' })
   })
 
+  it('uses the label carried by the failed end', () => {
+    entryFor({ ...base, type: 'tool.start', id: 'c', label: 'read src/missing.js' })
+    expect(
+      entryFor({
+        ...base,
+        type: 'tool.end',
+        id: 'c',
+        ok: false,
+        label: 'read src/missing.js: file not found',
+        error: 'file not found',
+      })
+    ).toMatchObject({ text: 'failed read src/missing.js: file not found', tone: 'error' })
+  })
+
   it('marks finished and failed runs', () => {
     expect(entryFor({ ...base, type: 'run.end', ok: true })).toMatchObject({ text: 'finished', tone: 'done' })
     expect(entryFor({ ...base, type: 'run.end', ok: false, error: 'spawn failed' })).toMatchObject({

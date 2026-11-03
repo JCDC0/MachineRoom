@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An AGY tool call that ends with an error shows the end's label and error in the event log and the agent's callout (task U129).
 - On a reconnect the page asks the bridge for the tree since the newest version it holds (task U126).
 - A failed manual Refresh in Reviews shows its sentence (task U126).
 - A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).
