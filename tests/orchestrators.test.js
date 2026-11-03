@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { createLanesSource } from '../server/lanes-source.js'
-import { chatFileFor, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
+import { chatFileFor, COMPACTED_MESSAGE, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import { availableHarnesses, branchChanges, createOrchestrators, NO_TOKEN_PROBLEM, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { saveEndpoints } from '../server/endpoints.js'
 import { gitPath } from '../server/programPath.js'
@@ -52,17 +52,19 @@ const FAKE_AGENT = [
   "  if (mode === 'hold') await hold()",
   "  const keyReply = 'I read OPENROUTER_API_KEY=' + 'sk-or-v1-' + 'q'.repeat(24) + ' in the file.'",
   "  const reply = mode === 'empty' ? '' : mode === 'no_report' ? 'NO_REPORT' : mode === 'key' ? keyReply : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
-  "  console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: 12, output_tokens: 3 } }))",
+  "  const input = Number(process.env.MR_INPUT ?? 12)",
+  "  console.log(JSON.stringify({ type: 'result', subtype: 'success', result: reply, total_cost_usd: 0.125, usage: { input_tokens: input, output_tokens: 3 } }))",
   '} else {',
   "  const at = args.indexOf('--session')",
-  "  const sessionId = at === -1 ? 'ses_fake_first' : String(args[at + 1] ?? '')",
+  "  const sessionId = at === -1 ? (String(process.env.MR_SESSION_ID || '') || 'ses_fake_first') : String(args[at + 1] ?? '')",
   "  console.log(JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: sessionId, part: { type: 'step-start' } }))",
   "  console.log(JSON.stringify({ type: 'tool_use', timestamp: 2, sessionID: sessionId, part: { id: 'prt_1', type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'src/math.js' } } } }))",
   "  if (mode === 'hold') await hold()",
   "  console.log(JSON.stringify({ type: 'text', timestamp: 3, sessionID: sessionId, part: { type: 'text', text: 'Working.' } }))",
   "  const reply = mode === 'no_report' ? 'NO_REPORT' : 'Reply: ' + prompt.split('\\n').join(' / ').slice(0, 200)",
   "  console.log(JSON.stringify({ type: 'text', timestamp: 4, sessionID: sessionId, part: { type: 'text', text: reply } }))",
-  "  console.log(JSON.stringify({ type: 'step_finish', timestamp: 5, sessionID: sessionId, part: { type: 'step-finish', cost: 0.25, tokens: { input: 12, output: 3 } } }))",
+  "  const input = Number(process.env.MR_INPUT ?? 12)",
+  "  console.log(JSON.stringify({ type: 'step_finish', timestamp: 5, sessionID: sessionId, part: { type: 'step-finish', cost: 0.25, tokens: { input, output: 3 } } }))",
   '}',
 ].join('\n')
 
@@ -152,7 +154,14 @@ function makeBase({ ladder = null, branch = '' } = {}) {
   const releaseFile = join(base, 'release')
   const behaviour = { mode: 'reply' }
   const spawnFake = (file, args, options) => {
-    const env = { ...(options.env ?? process.env), MR_CALLS: callsFile, MR_MODE: behaviour.mode, MR_RELEASE: releaseFile }
+    const env = {
+      ...(options.env ?? process.env),
+      MR_CALLS: callsFile,
+      MR_MODE: behaviour.mode,
+      MR_RELEASE: releaseFile,
+      MR_INPUT: String(behaviour.input ?? 12),
+      MR_SESSION_ID: String(behaviour.sessionId ?? ''),
+    }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
   if (ladder) {
@@ -606,6 +615,106 @@ describe('the orchestrator registry', () => {
     expect((await pagePost(`${rig.url}/api/orchestrator/autocompact`, { id: 'frontend', on: false, percent: 60, confirmed: true })).status).toBe(200)
     expect(rig.chat('frontend').autocompact).toBe(false)
     expect(rig.chat('frontend').autocompactPercent).toBe(60)
+  })
+
+  it('compacts a sub orchestrator on claude and on opencode on its own at 500,000 tokens and does not touch parent chat', async () => {
+    const BACKEND = {
+      id: 'backend',
+      name: 'Backend',
+      harness: 'opencode',
+      model: 'opencode/deepseek-v4.1-flash-free',
+      lanes: ['opencode2'],
+      scope: ['server/**'],
+      restricted: false,
+      setBy: 'owner',
+    }
+    const files = makeBase({ ladder: { subs: [FRONTEND, BACKEND] } })
+    const rig = makeRig(files)
+
+    rig.registry.main.send({ text: 'Main standing rules', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    const mainMessagesBefore = messagesOf(rig.registry, 'orchestrator').length
+
+    const frontend = rig.registry.find('frontend')
+    expect(
+      frontend.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
+    ).toEqual({
+      status: 200,
+      body: { id: 'frontend', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+    })
+
+    files.behaviour.mode = 'no_report'
+    files.behaviour.input = 500000
+    frontend.send({ text: 'Frontend Claude turn reaching 500,000 tokens', confirmed: true })
+    await waitFor(
+      () => files.chat('frontend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE),
+      15000,
+      'frontend compact message'
+    )
+    await waitIdle(rig.registry, 'frontend', 2)
+
+    expect(files.chat('frontend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(files.chat('frontend').sessionId).toBeNull()
+    expect(files.chat('frontend').summary).toBeTruthy()
+
+    expect(messagesOf(rig.registry, 'orchestrator')).toHaveLength(mainMessagesBefore)
+    expect(messagesOf(rig.registry, 'orchestrator').some((m) => m.text === COMPACTED_MESSAGE)).toBe(false)
+    expect(messagesOf(rig.registry, 'orchestrator').some((m) => m.from === 'sub:frontend')).toBe(false)
+
+    const backend = rig.registry.find('backend')
+    expect(
+      backend.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
+    ).toEqual({
+      status: 200,
+      body: { id: 'backend', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+    })
+
+    files.behaviour.input = 500000
+    backend.send({ text: 'Backend OpenCode turn reaching 500,000 tokens', confirmed: true })
+    await waitFor(
+      () => files.chat('backend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE),
+      15000,
+      'backend compact message'
+    )
+    await waitIdle(rig.registry, 'backend', 2)
+
+    expect(files.chat('backend').messages.some((m) => m.from === 'room' && m.text === COMPACTED_MESSAGE)).toBe(true)
+    expect(files.chat('backend').sessionId).toBeNull()
+    expect(files.chat('backend').summary).toBeTruthy()
+
+    expect(messagesOf(rig.registry, 'orchestrator')).toHaveLength(mainMessagesBefore)
+    expect(messagesOf(rig.registry, 'orchestrator').some((m) => m.from === 'sub:backend')).toBe(false)
+  })
+
+  it('never starts a compact turn for a lane run from run-lane', async () => {
+    let answer = null
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const rig = makeRig(files, {
+      readJsonBody: async () => ({ id: 'opencode', confirmed: true }),
+      sendJson: (req, res, status, body) => {
+        answer = { status, body }
+      },
+    })
+
+    rig.registry.main.send({ text: 'Main task', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+
+    appendRecord(rig, { logName: 'opencode-K1-20261025-120000', inputTokens: 600000, costUsd: 1.5 })
+    rig.registry.onFrame(frame('opencode-K1-20261025-120000'))
+    await waitIdle(rig.registry, 'orchestrator', 2)
+
+    const wake = messagesOf(rig.registry, 'orchestrator').find((m) => m.from === 'room' && m.text.includes('opencode-K1-20261025-120000'))
+    expect(wake).toBeTruthy()
+
+    const laneCalls = files.calls().filter((call) => call.args.includes('run-lane') || call.args.includes('--compact'))
+    expect(laneCalls).toHaveLength(0)
+
+    expect(rig.registry.find('opencode')).toBeNull()
+
+    const req = { method: 'POST', headers: { origin: 'http://localhost:5173' } }
+    await rig.registry.handle(req, {}, new URL('http://127.0.0.1/api/orchestrator/compact'))
+    expect(answer.status).toBe(404)
+    expect(answer.body).toEqual({ error: 'There is no orchestrator with that id.' })
   })
 
   it('compacts now and sets the model for an orchestrator', async () => {

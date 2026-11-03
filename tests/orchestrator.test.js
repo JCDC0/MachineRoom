@@ -92,7 +92,7 @@ const FAKE_OPENCODE = [
   "const calls = String(process.env.MR_CALLS ?? '')",
   "if (calls) appendFileSync(calls, JSON.stringify({ pid: process.pid, args, cwd: process.cwd() }) + '\\n')",
   "const at = args.indexOf('--session')",
-  "const sessionId = at === -1 ? 'ses_fake_first' : String(args[at + 1] ?? '')",
+  "const sessionId = at === -1 ? (String(process.env.MR_SESSION_ID || '') || 'ses_fake_first') : String(args[at + 1] ?? '')",
   "const prompt = String(args.at(-1) ?? '')",
   "console.log(JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: sessionId, part: { type: 'step-start' } }))",
   "console.log(JSON.stringify({ type: 'tool_use', timestamp: 2, sessionID: sessionId, part: { id: 'prt_1', type: 'tool', tool: 'read', state: { status: 'completed', input: { filePath: 'src/math.js' } } } }))",
@@ -201,6 +201,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
       MR_CACHE_WRITE: String(behaviour.cacheWrite ?? 0),
       MR_STDERR: String(behaviour.stderr ?? ''),
       MR_EXIT: String(behaviour.exit ?? 0),
+      MR_SESSION_ID: String(behaviour.sessionId ?? ''),
     }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
@@ -707,6 +708,107 @@ describe('autocompact', () => {
     rig.send('Build the room in tokens mode.')
     await waitFor(() => rig.calls().length === 2 && rig.answer().state === 'idle', 15000, 'the compacted tokens session')
     expect(rig.calls()).toHaveLength(2)
+  })
+
+  it('compacts the main orchestrator on claude at 500,000 and not at 499,999, and its next turn starts a new session from the summary', async () => {
+    const rig = makeRig()
+    expect(
+      rig.orchestrator.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
+    ).toEqual({
+      status: 200,
+      body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+    })
+
+    rig.behaviour.input = 499999
+    rig.send('Claude turn at 499,999 tokens.')
+    await waitIdle(rig, 1)
+
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer()).toMatchObject({ contextTokens: 499999, autocompact: true })
+    expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
+    const firstSessionId = valueAfter(rig.calls()[0].args, '--session-id')
+    expect(firstSessionId).toBeTruthy()
+
+    rig.behaviour.input = 500000
+    rig.send('Claude turn reaching 500,000 tokens.')
+    await waitFor(() => rig.calls().length === 3 && rig.answer().state === 'idle', 15000, 'the compacted Claude session')
+
+    const calls = rig.calls()
+    expect(calls).toHaveLength(3)
+    expect(calls[1].args).toContain('--resume')
+    expect(valueAfter(calls[1].args, '--resume')).toBe(firstSessionId)
+    expect(calls[2].args).toContain('--resume')
+    expect(valueAfter(calls[2].args, '--resume')).toBe(firstSessionId)
+    expect(calls[2].args[1]).toBe(compactPrompt())
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+    const saved = stateFile(rig)
+    expect(saved.sessionId).toBeNull()
+    expect(saved.summary).toContain('Reply: Write a summary')
+
+    rig.behaviour.input = 12
+    rig.send('Turn after Claude compaction.')
+    await waitFor(() => rig.calls().length === 4 && rig.answer().state === 'idle', 15000, 'the turn after compaction')
+
+    const nextCalls = rig.calls()
+    expect(nextCalls).toHaveLength(4)
+    const nextArgs = nextCalls[3].args
+    expect(nextArgs).not.toContain('--resume')
+    expect(nextArgs).toContain('--session-id')
+    const nextSessionId = valueAfter(nextArgs, '--session-id')
+    expect(nextSessionId).not.toBe(firstSessionId)
+    expect(nextArgs[1].startsWith('Reply: Write a summary')).toBe(true)
+    expect(nextArgs[1]).toContain('Turn after Claude compaction.')
+  })
+
+  it('compacts the main orchestrator on opencode at 500,000 tokens and not at 499,999, where the session id is OpenCodes sessionID', async () => {
+    const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
+    expect(
+      rig.orchestrator.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
+    ).toEqual({
+      status: 200,
+      body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+    })
+
+    rig.behaviour.input = 499999
+    rig.send('OpenCode turn at 499,999 tokens.')
+    await waitIdle(rig, 1)
+
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.calls()[0].args).not.toContain('--session')
+    expect(rig.answer()).toMatchObject({ contextTokens: 499999, autocompact: true })
+    expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
+    const firstSessionId = stateFile(rig).sessionId
+    expect(firstSessionId).toBe('ses_fake_first')
+
+    rig.behaviour.input = 500000
+    rig.send('OpenCode turn reaching 500,000 tokens.')
+    await waitFor(() => rig.calls().length === 3 && rig.answer().state === 'idle', 15000, 'the compacted OpenCode session')
+
+    const calls = rig.calls()
+    expect(calls).toHaveLength(3)
+    expect(calls[1].args).toContain('--session')
+    expect(valueAfter(calls[1].args, '--session')).toBe('ses_fake_first')
+    expect(calls[2].args).toContain('--session')
+    expect(valueAfter(calls[2].args, '--session')).toBe('ses_fake_first')
+    expect(calls[2].args.at(-1)).toBe(compactPrompt())
+    expect(rig.answer().messages.some((message) => message.from === 'room' && message.text === COMPACTED_MESSAGE)).toBe(true)
+    const saved = stateFile(rig)
+    expect(saved.sessionId).toBeNull()
+    expect(saved.summary).toContain('Reply: Write a summary')
+
+    rig.behaviour.input = 12
+    rig.behaviour.sessionId = 'ses_fake_second'
+    rig.send('Turn after OpenCode compaction.')
+    await waitFor(() => rig.calls().length === 4 && rig.answer().state === 'idle', 15000, 'the turn after OpenCode compaction')
+
+    const nextCalls = rig.calls()
+    expect(nextCalls).toHaveLength(4)
+    const nextArgs = nextCalls[3].args
+    expect(nextArgs).not.toContain('--session')
+    expect(nextArgs.at(-1)).toContain('Reply: Write a summary')
+    expect(nextArgs.at(-1)).toContain('Turn after OpenCode compaction.')
+    const nextSessionId = stateFile(rig).sessionId
+    expect(nextSessionId).toBe('ses_fake_second')
   })
 
   it('uses default rules or owner rules in compactPrompt', async () => {
@@ -2588,6 +2690,75 @@ describe('the lane source and the orchestrator turn', () => {
       expect(secondPrompt).toContain('Second question')
       expect(rig.calls()[1].args).not.toContain('--resume')
       expect(rig.calls()[1].args).not.toContain('--session')
+    })
+
+    it('does not start a compact turn at 500,000 tokens for a harness that runs fresh each turn', async () => {
+      const fakeHarness = {
+        key: 'fake',
+        name: 'Fake',
+        command({ cli, prompt }) {
+          return {
+            file: cli.bin,
+            args: ['--prompt', prompt],
+            cwd: process.cwd(),
+          }
+        },
+        createParser() {
+          return {
+            push() { return [] },
+            flush() { return [] },
+          }
+        },
+        reply(log) {
+          return String(log ?? '').trim()
+        },
+        report(log) {
+          return [String(log ?? '').trim()]
+        },
+        usage() {
+          return { costUsd: 0.05, inputTokens: 500000, outputTokens: 8 }
+        },
+      }
+
+      const rig = makeRig({
+        harness: 'fake',
+        model: 'fake-model',
+        harnesses: { fake: fakeHarness },
+        lanes: {
+          orchestrator: {
+            name: 'Orchestrator',
+            harness: 'Fake',
+            cli: { harness: 'fake', bin: process.execPath, model: 'fake-model' },
+          },
+        },
+      })
+
+      expect(
+        rig.orchestrator.setAutocompact({ on: true, mode: 'tokens', value: 500000, confirmed: true })
+      ).toEqual({
+        status: 200,
+        body: { id: 'orchestrator', autocompact: true, autocompactMode: 'tokens', autocompactValue: 500000, compactRules: '', autocompactPercent: 250 },
+      })
+
+      rig.send('Fresh turn consuming 500,000 tokens')
+      await waitFor(() => rig.answer().state === 'idle', 15000, 'turn to finish')
+
+      expect(rig.calls()).toHaveLength(1)
+      expect(rig.answer().contextTokens).toBe(500000)
+      expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
+      expect(stateFile(rig).sessionId).toBeNull()
+
+      const compactAttempt = rig.orchestrator.compact({ confirmed: true })
+      expect(compactAttempt.status).toBe(400)
+      expect(compactAttempt.body).toEqual({ error: 'The orchestrator has no session yet.' })
+
+      rig.send('Next fresh turn')
+      await waitFor(() => rig.answer().state === 'idle', 15000, 'second turn to finish')
+      expect(rig.calls()).toHaveLength(2)
+      expect(rig.calls()[1].args).not.toContain('--resume')
+      expect(rig.calls()[1].args).not.toContain('--session')
+      expect(rig.calls()[1].args[1]).toContain('Owner: Fresh turn consuming 500,000 tokens')
+      expect(rig.calls()[1].args[1]).toContain('Next fresh turn')
     })
 
     it('says the last stderr line of a failed turn with no reply', async () => {
