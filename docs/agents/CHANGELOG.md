@@ -1,8 +1,8 @@
 # Changelog
 
 ## Unreleased
-- A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 
+- A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.
 - A hunt that ran 464 real run logs through the parsers (task Q30).
 - `mr-agent`'s shell tool stops the whole tree on Linux too, since `exec` dropped its process group.
