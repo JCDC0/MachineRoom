@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { viewInput } from '../src/engine/cards.js'
-import { MAX_CHILD_CARDS, planFolderView } from '../src/model/folderView.js'
+import { BULK_FOLDERS, MAX_CHILD_CARDS, isBulkFolder, planFolderView } from '../src/model/folderView.js'
 import { apply, createState } from '../src/model/state.js'
 import { loadRecording, loadScenario } from './helpers.js'
 
@@ -418,6 +418,92 @@ describe('planFolderView', () => {
       const top = paths(plan).filter((path) => path !== '' && !path.includes('/'))
       expect(top).toHaveLength(30)
     }
+  })
+
+  it('names the bulk folders at any depth', () => {
+    for (const name of BULK_FOLDERS) expect(isBulkFolder(name)).toBe(true)
+    expect(isBulkFolder('NODE_MODULES')).toBe(true)
+    expect(isBulkFolder('.next')).toBe(true)
+    expect(isBulkFolder('src')).toBe(false)
+    expect(isBulkFolder('')).toBe(false)
+    expect(isBulkFolder(null)).toBe(false)
+  })
+
+  it('draws a top-level bulk folder as one closed card with no child cards', () => {
+    const files = ['node_modules/pkg/index.js', 'src/app.js']
+    const plan = planFolderView({ files, alwaysDepth: 3 })
+    const node = byPath(plan).get('node_modules')
+
+    expect(paths(plan)).toEqual(['', 'node_modules', 'src'])
+    expect(node.hiddenFolders).toBe(1)
+    expect(node.back).toBe(1)
+    expect(node.items).toEqual([{ path: 'node_modules/pkg', kind: 'dir' }])
+  })
+
+  it('keeps a nested bulk folder closed at any depth', () => {
+    const files = ['src/node_modules/pkg/index.js', 'src/app.js']
+    const plan = planFolderView({ files, alwaysDepth: 3, maxAlways: 50 })
+
+    expect(paths(plan)).toEqual(['', 'src', 'src/node_modules'])
+    expect(byPath(plan).get('src/node_modules').hiddenFolders).toBe(1)
+  })
+
+  it('opens a bulk folder when the owner clicks it', () => {
+    const files = ['dist/pkg/a.js', 'dist/pkg/b.js', 'src/app.js']
+    const plan = planFolderView({ files, focus: ['dist'], expanded: ['dist'], alwaysDepth: 1, limitItems: false })
+
+    expect(paths(plan)).toContain('dist/pkg')
+    expect(byPath(plan).get('dist').items).toEqual([])
+  })
+
+  it('opens a bulk folder when a pin names it', () => {
+    const files = ['dist/pkg/a.js', 'src/app.js']
+    const plan = planFolderView({ files, focus: ['dist'], alwaysDepth: 0 })
+
+    expect(paths(plan)).toContain('dist')
+    expect(paths(plan)).toContain('dist/pkg')
+  })
+
+  it('draws the card and the folder of a touched file inside dist', () => {
+    const files = ['dist/pkg/a.js', 'dist/pkg/b.js', 'src/app.js']
+    const plain = planFolderView({ files, alwaysDepth: 1 })
+    expect(paths(plain)).toEqual(['', 'dist', 'src'])
+
+    const plan = planFolderView({ files, alwaysDepth: 1, focus: ['dist/pkg/a.js'], touched: ['dist/pkg/a.js'] })
+    const pkg = byPath(plan).get('dist/pkg')
+
+    expect(paths(plan)).toContain('dist')
+    expect(paths(plan)).toContain('dist/pkg')
+    expect(pkg.items).toContainEqual({ path: 'dist/pkg/a.js', kind: 'file' })
+  })
+
+  it('ranks a focused child folder above a changed one', () => {
+    const files = ['lib/a/x.js', 'lib/b/x.js', 'lib/b/y.js', 'lib/c/x.js', 'lib/d/x.js']
+    const plan = planFolderView({
+      files,
+      focus: ['lib', 'lib/d/x.js'],
+      changed: ['lib/b/x.js', 'lib/b/y.js'],
+      maxFolders: 1,
+    })
+
+    expect(paths(plan).filter((path) => path.startsWith('lib/'))).toEqual(['lib/d'])
+  })
+
+  it('ranks a changed child folder above a larger one', () => {
+    const files = ['lib/a/x.js', 'lib/b/x.js', 'lib/c/x.js', 'lib/f/x.js', 'lib/f/y.js']
+    const plan = planFolderView({ files, focus: ['lib'], changed: ['lib/c/x.js'], maxFolders: 1 })
+
+    expect(paths(plan).filter((path) => path.startsWith('lib/'))).toEqual(['lib/c'])
+  })
+
+  it('ranks by file count, then by name, when no folder is focused or changed', () => {
+    const counted = ['lib/a/x.js', 'lib/b/x.js', 'lib/f/x.js', 'lib/f/y.js']
+    const byCount = planFolderView({ files: counted, focus: ['lib'], maxFolders: 1 })
+    expect(paths(byCount).filter((path) => path.startsWith('lib/'))).toEqual(['lib/f'])
+
+    const tied = ['lib/a/x.js', 'lib/b/x.js']
+    const byName = planFolderView({ files: tied, focus: ['lib'], maxFolders: 1 })
+    expect(paths(byName).filter((path) => path.startsWith('lib/'))).toEqual(['lib/a'])
   })
 
   it('keeps the children with the most files when the cap cuts a depth', () => {

@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { isOnlineCall } from '../model/online.js'
-import { createAgents } from './agents.js'
+import { CALLOUT_CROWD_LIMIT, createAgents } from './agents.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
@@ -19,6 +19,7 @@ import { createVoid } from './void.js'
 const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_RADIUS + 160 }
 const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
+const HOVER_CHECK_MS = 100
 
 function workingMask(state) {
   const lit = new Set()
@@ -317,6 +318,25 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     raycaster.setFromCamera(pointer, camera)
     return raycaster.intersectObject(gitTree.hitBox, false).length > 0
   }
+
+  let hoveredKey = null
+  let hoverAt = 0
+
+  function onPointerMove(event) {
+    if (event.target !== renderer.domElement) {
+      hoveredKey = null
+      return
+    }
+    const at = performance.now()
+    if (at - hoverAt < HOVER_CHECK_MS) return
+    hoverAt = at
+    let busy = 0
+    for (const agent of getState().agents.values()) {
+      if (agent.status === 'working') busy += 1
+    }
+    hoveredKey = busy > CALLOUT_CROWD_LIMIT ? agentAt(event) : null
+  }
+  window.addEventListener('pointermove', onPointerMove)
 
   rig.setClickHandler((event) => {
     const key = agentAt(event)
@@ -809,7 +829,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     labels.update(delta)
     messages.update(now)
     world.mask = mask
-    agentSet.update(state, delta, now, world, terminals)
+    agentSet.update(state, delta, now, world, terminals, { focus: followFocus.focused(), hover: hoveredKey })
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'
       const color = status === 'error' ? RED : status === 'done' ? GREEN : WHITE
@@ -1045,6 +1065,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       cssRenderer.domElement.removeEventListener('click', onCardClick, true)
       cssRenderer.domElement.removeEventListener('dblclick', onCardDoubleClick, true)
       cssRenderer.domElement.removeEventListener('wheel', onCardWheel)
+      window.removeEventListener('pointermove', onPointerMove)
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored)
       renderer.dispose()

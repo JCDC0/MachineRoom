@@ -365,6 +365,8 @@
 - The family tree shows the main and each sub orchestrator's state word and a chat button that opens its chat, and a working lane shows its short task (task U82).
 - A sector with one lane parks it at the middle of its arc under its sub, and two or more lanes spread evenly inside the arc with the same gap at each end; `sectorLaneAngles` is pure with tests for one lane, three lanes and an empty sector (task V43).
 - The hub's `setWorking` brightens a sector's arc to full white while its sub or one of its lanes works and returns it over 1 second when none does, at once under reduced motion, and leaves the rest of the ring as it is (task V43).
+- Above four agents at work, only the focused agent, the agent under the pointer and the two that started work most recently keep the full callout, and the rest show the name block alone (`fullCalloutKeys`, pure, with tests; task U123).
+- A bulk folder such as `node_modules`, `dist` or `vendor` stays one closed card with no child cards until an agent touches a path inside it, a pin names it or the owner clicks it, and the child folders a card draws rank by focus, recent touches, changed files and then file count (task U123).
 
 ## 0.1.400
 
