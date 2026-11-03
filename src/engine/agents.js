@@ -6,7 +6,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle, startDanceEnvelope } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_MAX_OPACITY, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
@@ -657,6 +657,8 @@ export function createAgents(scene, roster, cssScene = null) {
   const pendingChipRemovals = new Set()
   let currentLadder = null
   let currentLabels = null
+  let swayTarget = 0
+  let swayLevel = 0
   let sectorList = []
   let slotAngles = sectorSlotAngles(null, parkedKeys)
   const chainCache = { links: null, mask: null, parents: null }
@@ -935,11 +937,17 @@ export function createAgents(scene, roster, cssScene = null) {
     const pulseScale = orchestrator ? ORCHESTRATOR_PULSE_SCALE : sub ? SUB_PULSE_SCALE : PULSE_SCALE
     const rings = [flatRing(130, 0.2, -110)]
     if (orchestrator) rings.push(flatRing(158, 0.14, -110))
+    const beatRings = Array.from({ length: AGENT_RING_POOL }, () => {
+      const line = flatRing(1, 0, -110)
+      line.name = 'beat-ring'
+      line.visible = false
+      return { line, start: -Infinity, strength: 0, pulse: { radius: 1, opacity: 0 } }
+    })
     const label = textSprite(nameLabel(agent.name), { scale: 1.5, color: 'rgba(255,255,255,.7)' })
     label.position.set(0, -150, 0)
     const picker = new THREE.Mesh(new THREE.SphereGeometry(170, 8, 8), new THREE.MeshBasicMaterial({ visible: false }))
     picker.userData.key = agent.key
-    group.add(shape, ...rings, label, picker)
+    group.add(shape, ...rings, ...beatRings.map((slot) => slot.line), label, picker)
     group.position.copy(home)
     group.scale.setScalar(scale)
 
@@ -986,6 +994,8 @@ export function createAgents(scene, roster, cssScene = null) {
       shape,
       shellRadius,
       rings,
+      beatRings,
+      beatNext: 0,
       label,
       picker,
       callout,
@@ -1267,6 +1277,12 @@ export function createAgents(scene, roster, cssScene = null) {
     setEnds(view.orchestratorLink, start, end)
   }
 
+  function setSway(level) {
+    const value = Number(level)
+    swayTarget = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+    return swayTarget
+  }
+
   function beat(strength) {
     const value = Math.min(1, Math.max(0, Number(strength) || 0))
     if (!(value > 0) || still()) return
@@ -1276,6 +1292,29 @@ export function createAgents(scene, roster, cssScene = null) {
       view.danceFrom = next.from
       view.danceTo = next.to
       view.danceAt = next.at
+      const slot = view.beatRings[view.beatNext]
+      view.beatNext = (view.beatNext + 1) % view.beatRings.length
+      slot.start = at
+      slot.strength = value
+      slot.line.visible = true
+    }
+  }
+
+  function updateBeatRings(view, now, isStill) {
+    for (const slot of view.beatRings) {
+      if (!slot.line.visible) continue
+      if (isStill) {
+        slot.line.visible = false
+        continue
+      }
+      const age = now - slot.start
+      ringPulse(AGENT_RING_BASE, AGENT_RING_GROW, age, AGENT_RING_MS, slot.strength, RING_MAX_OPACITY, slot.pulse)
+      if (age >= AGENT_RING_MS) {
+        slot.line.visible = false
+        continue
+      }
+      slot.line.scale.set(slot.pulse.radius, 1, slot.pulse.radius)
+      slot.line.material.opacity = slot.pulse.opacity
     }
   }
 
@@ -1287,6 +1326,7 @@ export function createAgents(scene, roster, cssScene = null) {
     for (const key of pendingChipRemovals) terminals.remove?.(key)
     pendingChipRemovals.clear()
     const isStill = still()
+    swayLevel = isStill ? 0 : swayLevel + (swayTarget - swayLevel) * easeRate(delta, 1.5, false)
     const ended = []
     syncViews(state, terminals)
     let mainView = null
@@ -1319,6 +1359,7 @@ export function createAgents(scene, roster, cssScene = null) {
       const ran = Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
       if (view.sessionReader && !ran) {
         view.group.visible = false
+        for (const slot of view.beatRings) slot.line.visible = false
         view.link.visible = false
         view.callout.object.visible = false
         view.calloutLine.visible = false
@@ -1330,6 +1371,7 @@ export function createAgents(scene, roster, cssScene = null) {
         continue
       }
       view.group.visible = true
+      updateBeatRings(view, now, isStill)
       const presence = agentPresence({ status, orchestrator: view.orchestrator || view.subOrchestrator }, ran)
       if (!view.presenceReady) {
         view.presence = presence.dim ? 0 : 1
@@ -1341,8 +1383,10 @@ export function createAgents(scene, roster, cssScene = null) {
       }
       const opacityFactor = UNSEEN_OPACITY + (1 - UNSEEN_OPACITY) * view.presence
       const scaleFactor = UNSEEN_SCALE + (1 - UNSEEN_SCALE) * view.presence
+      const swayWave = 0.5 + 0.5 * Math.sin(now * SWAY_RATE + Math.atan2(view.home.z, view.home.x))
+      const swayScale = isStill ? 1 : 1 + swayLevel * SWAY_SCALE * swayWave
       view.presenceOpacity = opacityFactor
-      view.group.scale.setScalar(view.scale * scaleFactor)
+      view.group.scale.setScalar(view.scale * scaleFactor * swayScale)
 
       if (view.parentKey) {
         const parentName = state.agents.get(view.parentKey)?.name ?? view.parentKey
@@ -1359,6 +1403,7 @@ export function createAgents(scene, roster, cssScene = null) {
         if (isStill) view.group.position.copy(view.home)
         else view.group.position.lerp(view.home, easeRate(delta, 4, false))
       }
+      view.group.position.y = view.home.y + (isStill ? 0 : swayLevel * SWAY_LIFT * swayWave)
       const parentChipSide = view.parentKey ? views.get(view.parentKey)?.chipSide : null
       view.chipSide = parentChipSide ? -parentChipSide : view.home.x < 0 ? -1 : 1
 
@@ -1583,6 +1628,8 @@ export function createAgents(scene, roster, cssScene = null) {
       view.danceTo = 0
       view.danceAt = 0
       view.danceTurn = 0
+      swayTarget = 0
+      swayLevel = 0
       view.pulseLevels.fill(0)
       restorePulse(view)
       view.group.scale.setScalar(view.scale)
@@ -1615,5 +1662,5 @@ export function createAgents(scene, roster, cssScene = null) {
     pickables.length = 0
   }
 
-  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, setBands, setViewport, dispose, beat, webStart, webEnd, webActive, setOnline }
+  return { views, pickables, update, snap, aimAt, setTasks, setLadder, setLabels, setRoster, setBands, setViewport, dispose, beat, setSway, webStart, webEnd, webActive, setOnline }
 }

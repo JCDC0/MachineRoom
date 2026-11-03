@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A beat counts only when its rise is sharp, and the dance locks to the most common gap in the last 8 seconds, ignoring onsets more than 90 ms off its grid (task U138).
+- While the music is not beat-locked the folder cards and agent shapes sway by up to 6 units and 2 percent of scale, each card by its ring angle, easing over about 1.5 seconds (task U138).
+- On each beat the hub sends a flat ring out 400 units and each agent, sub orchestrator and the main sends a ring from its status ring, both from fixed pools (task U138).
 - The file tunnel draws as a light trail with a 2 pixel core and a 9 pixel sheath in the strip's colour, eases in over 0.3 seconds and out over 0.6 seconds, and starts on the agent's shell (task U136).
 - The payload packets ride only the tunnel, each with a tail of 3 fainter points, and none shows under 30 percent of its opacity (task U136).
 - The blue web beam draws as the same light trail with a thinner core, and the tunnel leaves out the root card when the touched folder's chain does not pass through its link (task U136).

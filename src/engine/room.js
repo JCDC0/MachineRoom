@@ -979,6 +979,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       cards.beat(strength)
       hub.beat(strength)
     },
+    setSway: (level) => {
+      agentSet.setSway(level)
+      cards.setSway(level)
+    },
     setBands: (levels) => agentSet.setBands(levels),
     setBloom,
     reset: sync,

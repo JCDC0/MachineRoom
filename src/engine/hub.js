@@ -167,6 +167,30 @@ export function sectorGlow(level, working, delta, reduced = false) {
 
 export const DANCE_RISE_MS = 90
 export const DANCE_SETTLE_MS = 420
+export const SWAY_LIFT = 6
+export const SWAY_SCALE = 0.02
+export const SWAY_RATE = 0.0018
+export const HUB_RING_GROW = 400
+export const HUB_RING_MS = 1200
+export const HUB_RING_POOL = 6
+export const AGENT_RING_BASE = 130
+export const AGENT_RING_GROW = 130
+export const AGENT_RING_MS = 900
+export const AGENT_RING_POOL = 3
+export const RING_MAX_OPACITY = 0.32
+
+export function ringPulse(base, grow, age, duration, strength, opacity = RING_MAX_OPACITY, out = null) {
+  const target = out ?? {}
+  const from = Math.max(0, Number(base) || 0)
+  const extra = Math.max(0, Number(grow) || 0)
+  const span = Math.max(1, Number(duration) || 1)
+  const level = Math.min(1, Math.max(0, Number(strength) || 0))
+  const elapsed = Number(age)
+  const t = Number.isFinite(elapsed) ? Math.min(1, Math.max(0, elapsed / span)) : 1
+  target.radius = from + extra * (1 - (1 - t) ** 2)
+  target.opacity = Math.min(1, Math.max(0, Number(opacity) || 0)) * level * (1 - t)
+  return target
+}
 
 function danceLevel(value) {
   const level = Number(value)
@@ -228,6 +252,13 @@ function ringPoints(radius, steps, y = 0) {
     const angle = (i / steps) * Math.PI * 2
     return new THREE.Vector3(Math.cos(angle) * radius, y, Math.sin(angle) * radius)
   })
+}
+
+function beatRing(name) {
+  const line = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(1, 96)), lineMaterial(WHITE, 0))
+  line.name = name
+  line.visible = false
+  return line
 }
 
 function segments(values) {
@@ -343,6 +374,13 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   const centreValues = [-40, 0, 0, 40, 0, 0, 0, 0, -40, 0, 0, 40]
   const centre = new THREE.LineSegments(segments(centreValues), lineMaterial(WHITE, 0.14))
   const centreRing = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(24, 32)), lineMaterial(WHITE, 0.14))
+  const beatRings = Array.from({ length: HUB_RING_POOL }, () => ({
+    line: beatRing('beat-ring'),
+    start: -Infinity,
+    strength: 0,
+    pulse: { radius: 1, opacity: 0 },
+  }))
+  let beatNext = 0
 
   let currentLadder = hasSubs(ladder) ? ladder : null
   let ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys)
@@ -376,7 +414,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   slots = buildSlots(slotAngles)
   for (const marker of slots) group.add(marker)
   tickGroup.add(buildTicks(slotAngles))
-  group.add(main, inner, dashes, tickGroup, centre, centreRing, sectorGroup)
+  group.add(main, inner, dashes, tickGroup, centre, centreRing, sectorGroup, ...beatRings.map((slot) => slot.line))
   scene.add(group)
 
   function clearSlots() {
@@ -439,10 +477,16 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     if (still()) return false
     const value = Math.min(1, Math.max(0, Number(amount) || 0))
     if (!(value > 0)) return false
-    const next = startDanceEnvelope({ from: danceFrom, to: danceTo, at: danceAt }, value, performance.now())
+    const at = performance.now()
+    const next = startDanceEnvelope({ from: danceFrom, to: danceTo, at: danceAt }, value, at)
     danceFrom = next.from
     danceTo = next.to
     danceAt = next.at
+    const slot = beatRings[beatNext]
+    beatNext = (beatNext + 1) % beatRings.length
+    slot.start = at
+    slot.strength = value
+    slot.line.visible = true
     return true
   }
 
@@ -460,6 +504,22 @@ export function createHub(scene, agentsOrCount, ladder = null) {
 
   function update(time, delta, camera = null, viewportHeight = 0) {
     const isStill = still()
+    const at = performance.now()
+    for (const slot of beatRings) {
+      if (!slot.line.visible) continue
+      if (isStill) {
+        slot.line.visible = false
+        continue
+      }
+      const age = at - slot.start
+      ringPulse(HUB_RADIUS, HUB_RING_GROW, age, HUB_RING_MS, slot.strength, RING_MAX_OPACITY, slot.pulse)
+      if (age >= HUB_RING_MS) {
+        slot.line.visible = false
+        continue
+      }
+      slot.line.scale.set(slot.pulse.radius, 1, slot.pulse.radius)
+      slot.line.material.opacity = slot.pulse.opacity
+    }
     boost = Math.max(0, boost - delta * 1.2)
     const danceBoost = isStill ? 0 : danceEnvelope(danceFrom, danceTo, performance.now() - danceAt)
     const extra = Math.max(boost, danceBoost)
