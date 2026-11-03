@@ -11,6 +11,7 @@
 - The Claude and AGY parsers forget a call once its end is emitted (task U132).
 - A child agent's shape goes back to the spare list when its view is removed (task U132).
 - The orchestrator chat drops the messages, tickets and loaded marks of a sub that left the list (task U132).
+- Settings lists a Bloom screen effect over the room's WebGL layer on a second canvas inside the lens clip, saved in `effects.bloom` (task U133).
 - A beat lifts the folder cards round the ring as a wave and pulses the hub ring, on top of each card's own glide and pop (task U131).
 - A new Pulse switch beside Dance makes each agent's wireframe shape move with five music bands, and puts the shape back when it is off or the music stops (task U131).
 - The music player picks a playlist or Loose tracks, plays it in order and loops, and saves `music.playlist` (task U130).

@@ -43,6 +43,7 @@ export const DEFAULT_EFFECTS = Object.freeze({
   vignette: Object.freeze({ on: true, strength: 0.2 }),
   grain: Object.freeze({ on: false, strength: 0.2 }),
   dust: Object.freeze({ on: true, strength: 0.2, pulse: false }),
+  bloom: Object.freeze({ on: false, strength: 0.4 }),
 })
 
 function clampVolume(value, fallback) {
@@ -102,6 +103,7 @@ export function effectSettings(saved) {
   const grain = clampEffect(source.grain, false, 0.2)
   const dustRaw = source.dust ?? source.fineDust
   const dust = { ...clampEffect(dustRaw, true, 0.2), pulse: dustRaw?.pulse === true }
+  const bloom = clampEffect(source.bloom, false, 0.4)
 
   return {
     alwaysDepth,
@@ -112,6 +114,7 @@ export function effectSettings(saved) {
     grain,
     dust,
     fineDust: dust,
+    bloom,
   }
 }
 
@@ -159,6 +162,7 @@ function normalizeSettings(raw) {
       vignette: norm.vignette,
       grain: norm.grain,
       dust: norm.dust,
+      bloom: norm.bloom,
     }
   }
 
@@ -243,7 +247,7 @@ export function saveEffectSettings(storage = store(), partial) {
   const current = loadEffectSettings(storage)
   const incoming = partial && typeof partial === 'object' && !Array.isArray(partial) ? partial : {}
   const mergedEffects = {}
-  for (const key of ['aberration', 'vignette', 'grain', 'dust']) {
+  for (const key of ['aberration', 'vignette', 'grain', 'dust', 'bloom']) {
     const inc =
       incoming[key] ??
       (key === 'aberration'
@@ -274,6 +278,7 @@ export function saveEffectSettings(storage = store(), partial) {
       vignette: merged.vignette,
       grain: merged.grain,
       dust: merged.dust,
+      bloom: merged.bloom,
     },
   })
   return merged

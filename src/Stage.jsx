@@ -822,6 +822,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     })
     roomRef.current = room
     room.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles })
+    room.setBloom(effects.bloom)
     room.setIdle(idleRef.current)
     setFineDust(effects.dust)
     if (latestBoardRef.current) {
@@ -1079,7 +1080,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   useEffect(() => {
     setFineDust(effects.dust)
     roomRef.current?.setOptions({ alwaysDepth: effects.alwaysDepth, maxFiles: effects.maxFiles })
-  }, [effects.alwaysDepth, effects.maxFiles, effects.dust])
+    roomRef.current?.setBloom(effects.bloom)
+  }, [effects.alwaysDepth, effects.maxFiles, effects.dust, effects.bloom])
 
   const grainOn = Boolean(effects.grain?.on && effects.grain.strength > 0)
 

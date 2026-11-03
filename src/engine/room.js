@@ -3,6 +3,7 @@ import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { isOnlineCall } from '../model/online.js'
 import { CALLOUT_CROWD_LIMIT, createAgents } from './agents.js'
+import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
@@ -192,6 +193,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   cssRenderer.setSize(width, height)
   cssRenderer.domElement.style.pointerEvents = 'none'
   css.appendChild(cssRenderer.domElement)
+  let bloom = null
 
   const space = createVoid(scene, texture)
   const roster = agents.map(roomAgent)
@@ -768,6 +770,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     camera.updateProjectionMatrix()
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
+    bloom?.resize(width, height)
     rig.resize()
     const shown = boardVisible(width)
     if (shown !== boardShown) {
@@ -859,6 +862,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     hubScreenX = hubPoint ? hubPoint.x : NaN
     terminals.update(state, now, camera, followFocus.focused(), anchorOf, delta, chipSideOf)
     renderer.render(scene, camera)
+    bloom?.render()
     cssRenderer.render(cssScene, camera)
   }
 
@@ -935,6 +939,36 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return true
   }
 
+  function bloomPixelRatio() {
+    const ratio = Number(window.devicePixelRatio)
+    return Number.isFinite(ratio) && ratio > 0 ? Math.min(ratio, 1.5) : 1
+  }
+
+  function setBloom(next) {
+    const settings = next && typeof next === 'object' && !Array.isArray(next) ? next : {}
+    const raw = Number(settings.strength)
+    const strength = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : BLOOM_STRENGTH_DEFAULT
+    if (settings.on !== true || strength <= 0) {
+      if (!bloom) return
+      bloom.dispose()
+      bloom = null
+      return
+    }
+    if (bloom) {
+      bloom.setStrength(strength)
+      return
+    }
+    bloom = createBloomLayer({
+      container: gl,
+      scene,
+      camera,
+      width,
+      height,
+      pixelRatio: bloomPixelRatio(),
+      strength,
+    })
+  }
+
   return {
     onActivity,
     soundAt,
@@ -944,6 +978,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       hub.beat(strength)
     },
     setBands: (levels) => agentSet.setBands(levels),
+    setBloom,
     reset: sync,
     yaw: () => rig.yaw(),
     pitch: () => rig.pitch(),
@@ -1050,6 +1085,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       cancelAnimationFrame(frameId)
       timers.clear()
       observer.disconnect()
+      bloom?.dispose()
+      bloom = null
       rig.dispose()
       agentSet.dispose()
       messages.dispose()
