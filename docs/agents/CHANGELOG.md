@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The orchestrator list's read error shows in the chat beside the status line (task U128).
+- A record time typed just before Settings closes reaches the live room, not only storage (task U128).
 - On a reconnect the page asks the bridge for the tree since the newest version it holds (task U126).
 - A failed manual Refresh in Reviews shows its sentence (task U126).
 - A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).
