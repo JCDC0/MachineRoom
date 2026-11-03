@@ -145,7 +145,7 @@ describe('DispatchPanel split run', () => {
       expect(buttonWithText(container, 'Stopped')).not.toBeNull()
     })
   })
-  it('stops the split run when the control drawer closes', async () => {
+  it('keeps the split run going when the control drawer closes', async () => {
     vi.useFakeTimers()
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
@@ -187,7 +187,7 @@ describe('DispatchPanel split run', () => {
       })
       await settleTimers()
 
-      expect(calls.map((call) => call.lane)).toEqual(['alpha'])
+      expect(calls.map((call) => call.lane)).toEqual(['alpha', 'beta', 'gamma'])
     })
   })
 

@@ -74,13 +74,7 @@ export default function ControlDrawer({
     trap: false,
   })
 
-  const wasOpenRef = useRef(open)
-
-  useEffect(() => {
-    if (wasOpenRef.current && !open) cancelSplitRun()
-    wasOpenRef.current = open
-  }, [open])
-
+  // Closing the drawer keeps a split run going, as its confirm card promises; only leaving the page stops it.
   useEffect(() => {
     return () => {
       cancelSplitRun()
