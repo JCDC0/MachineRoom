@@ -227,7 +227,7 @@ describe('the inspector panel', () => {
       })
 
       expect(container.querySelectorAll('.mr-inspector-entry-btn')).toHaveLength(200)
-      expect(container.textContent).toContain('Showing the first 200 of 205.')
+      expect(container.textContent).toContain('5 more. Open the folder card to see them all.')
     })
   })
 
