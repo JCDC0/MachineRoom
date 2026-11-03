@@ -5,6 +5,7 @@
 - `up` stops with exit 1 when the project folder does not exist (task S33).
 - `doctor` fails when the built viewer is missing and names `npm run build` (task S33).
 - `doctor` warns when the project is not a git repository and says Source control stays empty (task S33).
+- A passing `doctor` and `up` print `All checks passed.` and the next step to start a lane (task S33).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

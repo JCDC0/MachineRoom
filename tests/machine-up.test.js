@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { ALL_CHECKS_PASSED, NEXT_STEP } from '../server/doctor.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -157,13 +158,16 @@ describe('machine-room up', () => {
     expect(health).toMatchObject({ ok: true, lanes: true, sessions: true })
 
     const lines = outputLines(run)
-    expect(lines.slice(-4)).toEqual([
+    expect(lines.slice(-5)).toEqual([
       'MachineRoom is running.',
       `machine-room: open ${address}`,
       'The room fills when a lane or a session works on the project.',
+      NEXT_STEP,
       'Press Ctrl+C in the terminal to stop the room.',
     ])
-    const checks = lines.slice(0, -4)
+    const summaryAt = lines.indexOf(ALL_CHECKS_PASSED)
+    expect(summaryAt).toBeGreaterThan(0)
+    const checks = lines.slice(0, summaryAt)
     expect(checks.length).toBeGreaterThan(3)
     expect(checks.every((line) => /^(ok|warn|FAIL) /.test(line))).toBe(true)
     expect(checks[0]).toContain('The project folder')

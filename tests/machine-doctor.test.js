@@ -3,7 +3,16 @@ import { existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { doctorSettings, openBrowser, openCommand, runDoctor, upArgs, upBlock } from '../server/doctor.js'
+import {
+  ALL_CHECKS_PASSED,
+  NEXT_STEP,
+  doctorSettings,
+  openBrowser,
+  openCommand,
+  runDoctor,
+  upArgs,
+  upBlock,
+} from '../server/doctor.js'
 import { withLanePrograms } from './helpers/lanePrograms.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -283,10 +292,11 @@ describe('the machine-room doctor command', () => {
     expect(run.stderr).toBe('')
     const lines = run.stdout.trim().split(/\r?\n/)
     expect(lines.length).toBeGreaterThan(3)
-    expect(lines.every((line) => /^(ok|warn) /.test(line))).toBe(true)
+    expect(lines.every((line) => /^(ok|warn) /.test(line) || line === ALL_CHECKS_PASSED || line === NEXT_STEP)).toBe(true)
     expect(lines).toContain(
       'warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.'
     )
+    expect(lines.slice(-2)).toEqual([ALL_CHECKS_PASSED, NEXT_STEP])
     expect(existsSync(join(temp, 'machineroom-runs'))).toBe(true)
   })
 
@@ -312,12 +322,13 @@ describe('the machine-room doctor command', () => {
 })
 
 describe('the up block and browser open command', () => {
-  it('formats the short block with the address, waiting room line and Ctrl+C', () => {
+  it('formats the short block with the address, next step and Ctrl+C', () => {
     const url = 'http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174'
     expect(upBlock(url)).toEqual([
       'MachineRoom is running.',
       `machine-room: open ${url}`,
       'The room fills when a lane or a session works on the project.',
+      NEXT_STEP,
       'Press Ctrl+C in the terminal to stop the room.',
     ])
   })

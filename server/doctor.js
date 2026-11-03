@@ -8,6 +8,9 @@ import { programPath } from './programPath.js'
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
+export const ALL_CHECKS_PASSED = 'All checks passed.'
+export const NEXT_STEP = 'Start a lane with npm run run-lane -- opencode T2, or press C in the room for Dispatch.'
+
 export function doctorSettings(options = {}, env = process.env, cwd = process.cwd()) {
   return {
     projectRoot: options.projectRoot ?? env.PROJECT_ROOT ?? cwd,
@@ -235,6 +238,7 @@ export function upBlock(url) {
     'MachineRoom is running.',
     `machine-room: open ${url}`,
     'The room fills when a lane or a session works on the project.',
+    NEXT_STEP,
     'Press Ctrl+C in the terminal to stop the room.',
   ]
 }

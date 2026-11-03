@@ -2,7 +2,7 @@
 import { statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { openBrowser, runDoctor, upBlock } from '../server/doctor.js'
+import { ALL_CHECKS_PASSED, NEXT_STEP, openBrowser, runDoctor, upBlock } from '../server/doctor.js'
 import { createBridge } from '../server/index.js'
 
 const USAGE = [
@@ -205,6 +205,7 @@ async function up(options) {
   for (const line of result.lines) console.log(line)
   if (!result.folderOk) process.exit(1)
   if (result.exitCode !== 0) console.log(SOME_CHECKS_FAILED)
+  else console.log(ALL_CHECKS_PASSED)
   await startRoom(options, dist, { block: true })
 }
 
@@ -230,6 +231,10 @@ if (options.help) {
 if (command === 'doctor') {
   const result = runDoctor(options)
   for (const line of result.lines) console.log(line)
+  if (result.exitCode === 0) {
+    console.log(ALL_CHECKS_PASSED)
+    console.log(NEXT_STEP)
+  }
   process.exitCode = result.exitCode
 } else if (command === 'up') {
   await up(options)
