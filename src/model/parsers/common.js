@@ -71,3 +71,30 @@ export function labelFor(tool, relative, rawPath) {
   const shown = relative === null ? (String(rawPath).split(/[\\/]/).pop() ?? '') : relative || '.'
   return `${tool} ${shown}`
 }
+
+export function mcpPathOf(input) {
+  const direct = input?.path ?? input?.file ?? input?.filePath ?? input?.file_path ?? input?.Path
+  if (typeof direct === 'string' && direct !== '') return direct
+  const nested = input?.arguments ?? input?.Arguments
+  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+    const value = nested.path ?? nested.file ?? nested.filePath ?? nested.file_path ?? nested.Path
+    if (typeof value === 'string' && value !== '') return value
+  }
+  return ''
+}
+
+export function mcpLabelOf(name, input) {
+  if (name === 'mcp_list_tools') {
+    const server = typeof input?.server === 'string' ? input.server.trim() : typeof input?.ServerName === 'string' ? input.ServerName.trim() : ''
+    return server === '' ? 'mcp list tools' : `mcp list tools ${server}`
+  }
+  let server = typeof input?.server === 'string' ? input.server.trim() : typeof input?.ServerName === 'string' ? input.ServerName.trim() : ''
+  let tool = typeof input?.tool === 'string' ? input.tool.trim() : typeof input?.ToolName === 'string' ? input.ToolName.trim() : ''
+  if (name.startsWith('mcp__')) {
+    const parts = name.split('__')
+    server = parts[1] ?? ''
+    tool = parts.slice(2).join('__')
+  }
+  const shown = [server, tool].filter((part) => part !== '').join(' ')
+  return shown === '' ? `mcp ${name}` : `mcp ${shown}`
+}

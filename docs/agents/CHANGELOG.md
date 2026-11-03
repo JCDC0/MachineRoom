@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- AGY tool calls for MCP, tasks and schedules get distinct kinds and descriptive labels (task S29).
+
 - OpenCode search tools touch their target folder and name it in the label (task S29).
 
 - Raise the live lane source partial line limit to 8 MB (task S29).

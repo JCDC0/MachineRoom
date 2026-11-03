@@ -1,4 +1,4 @@
-import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
+import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, mcpLabelOf, mcpPathOf, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const TOOLS = {
   view_file: ['read', 'AbsolutePath'],
@@ -11,6 +11,9 @@ const TOOLS = {
   run_command: ['shell', 'CommandLine'],
   search_web: ['web', null],
   read_url_content: ['web', null],
+  call_mcp_tool: ['mcp', null],
+  manage_task: ['plan', null],
+  schedule: ['wait', null],
 }
 const WEB_FIELDS = {
   search_web: ['query', 'Query'],
@@ -71,6 +74,24 @@ export function createAgyParser(ctx) {
         .map((name) => step.tool_info?.parameters?.[name])
         .find((item) => typeof item === 'string' && item.trim() !== '')
       label = webLabel(step.tool_name, shown ? shown.trim() : '')
+    } else if (tool === 'mcp') {
+      const params = step.tool_info?.parameters ?? {}
+      label = mcpLabelOf(step.tool_name, params)
+      const raw = mcpPathOf(params)
+      if (raw) {
+        const touched = fileTouch(ctx, raw, 'read')
+        touches = touched.touches
+        const shown = touched.relative === null ? (String(raw).split(/[\\/]/).pop() ?? '') : touched.relative || '.'
+        label = `${label} ${shown}`
+      }
+    } else if (tool === 'plan') {
+      const action = typeof step.tool_info?.parameters?.Action === 'string' ? step.tool_info.parameters.Action.trim() : ''
+      const taskId = typeof step.tool_info?.parameters?.TaskId === 'string' ? step.tool_info.parameters.TaskId.trim() : ''
+      label = action && taskId ? `task ${action} ${taskId}` : action ? `task ${action}` : 'task'
+    } else if (tool === 'wait') {
+      const duration = step.tool_info?.parameters?.DurationSeconds
+      const cron = typeof step.tool_info?.parameters?.CronExpression === 'string' ? step.tool_info.parameters.CronExpression.trim() : ''
+      label = duration != null ? `wait ${duration}s` : cron ? `schedule ${cron}` : 'schedule'
     }
     const err = typeof step.tool_info?.error === 'string' ? step.tool_info.error.trim() : ''
     if (err) label = `${label}: ${shorten(err)}`

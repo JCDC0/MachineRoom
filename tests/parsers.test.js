@@ -427,6 +427,68 @@ describe('agy parser', () => {
     expect(out[1]).toMatchObject({ tool: 'web', label: 'web fetch https://example.com/docs', touches: [] })
   })
 
+  it('maps call_mcp_tool to mcp kind and keeps server tool and path in label', () => {
+    const parser = createAgyParser(ctx)
+    const out = parser.push(
+      lines({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'c1',
+          step_index: 1,
+          state: 'ACTIVE',
+          step_type: 'tool',
+          tool_name: 'call_mcp_tool',
+          tool_info: {
+            parameters: {
+              ServerName: 'git',
+              ToolName: 'read_file',
+              Arguments: { Path: 'C:\\Temp\\agent-sandbox\\src\\math.js' },
+            },
+          },
+        },
+      }),
+      550
+    )
+    expect(out[0]).toMatchObject({
+      tool: 'mcp',
+      label: 'mcp git read_file src/math.js',
+      touches: [{ path: 'src/math.js', mode: 'read', kind: 'file' }],
+    })
+  })
+
+  it('maps manage_task and schedule to plan and wait kinds with useful labels', () => {
+    const parser = createAgyParser(ctx)
+    const out = parser.push(
+      lines(
+        {
+          event: 'step_update',
+          step_update: {
+            conversation_id: 'c1',
+            step_index: 1,
+            state: 'ACTIVE',
+            step_type: 'tool',
+            tool_name: 'manage_task',
+            tool_info: { parameters: { Action: 'status', TaskId: 'task-9' } },
+          },
+        },
+        {
+          event: 'step_update',
+          step_update: {
+            conversation_id: 'c1',
+            step_index: 2,
+            state: 'ACTIVE',
+            step_type: 'tool',
+            tool_name: 'schedule',
+            tool_info: { parameters: { DurationSeconds: 30 } },
+          },
+        }
+      ),
+      560
+    )
+    expect(out[0]).toMatchObject({ tool: 'plan', label: 'task status task-9' })
+    expect(out[1]).toMatchObject({ tool: 'wait', label: 'wait 30s' })
+  })
+
   it('spawns an invoked subagent and ends it when a listing shows it idle', () => {
     const parser = createAgyParser({ ...ctx, agentKey: 'agy' })
     const active = {

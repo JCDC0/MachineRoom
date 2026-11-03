@@ -1,5 +1,5 @@
 import { basename, relativeTo } from '../paths.js'
-import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
+import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, mcpLabelOf, mcpPathOf, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const KINDS = [
   [/^read/i, 'read'],
@@ -33,33 +33,6 @@ function commandLabel(command, fallback) {
 
 function kindOf(name) {
   return KINDS.find(([pattern]) => pattern.test(name))?.[1] ?? 'other'
-}
-
-function mcpPathOf(input) {
-  const direct = input?.path ?? input?.file ?? input?.file_path
-  if (typeof direct === 'string' && direct !== '') return direct
-  const nested = input?.arguments
-  if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
-    const value = nested.path ?? nested.file ?? nested.file_path
-    if (typeof value === 'string' && value !== '') return value
-  }
-  return ''
-}
-
-function mcpLabelOf(name, input) {
-  if (name === 'mcp_list_tools') {
-    const server = typeof input?.server === 'string' ? input.server.trim() : ''
-    return server === '' ? 'mcp list tools' : `mcp list tools ${server}`
-  }
-  let server = typeof input?.server === 'string' ? input.server.trim() : ''
-  let tool = typeof input?.tool === 'string' ? input.tool.trim() : ''
-  if (name.startsWith('mcp__')) {
-    const parts = name.split('__')
-    server = parts[1] ?? ''
-    tool = parts.slice(2).join('__')
-  }
-  const shown = [server, tool].filter((part) => part !== '').join(' ')
-  return shown === '' ? `mcp ${name}` : `mcp ${shown}`
 }
 
 export function createClaudeParser(ctx) {
