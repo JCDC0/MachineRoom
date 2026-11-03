@@ -7,6 +7,18 @@ const MAX_ALWAYS_DEPTH = 3
 
 export const MAX_CHILD_CARDS = 10
 
+export const BULK_FOLDERS = new Set(['node_modules', 'dist', 'build', 'coverage', 'vendor', '.next', 'target', 'out', '__pycache__'])
+
+export function isBulkFolder(name) {
+  return typeof name === 'string' && name !== '' && BULK_FOLDERS.has(name.toLowerCase())
+}
+
+function bulkPath(path) {
+  if (path === '') return false
+  const at = path.lastIndexOf('/')
+  return isBulkFolder(at === -1 ? path : path.slice(at + 1))
+}
+
 function clean(raw) {
   if (typeof raw === 'string' && raw !== '.' && !raw.includes('\\') && !raw.includes('//') && !raw.startsWith('./') && !raw.endsWith('/')) return raw
   const value = normalise(raw).replace(/^\.\//, '').replace(/\/+$/, '')
@@ -124,6 +136,7 @@ function alwaysPlan(index, depth, maxAlways) {
     frontier.sort(byName)
     const next = []
     for (const parent of frontier) {
+      if (bulkPath(parent)) continue
       const children = [...(index.children.get(parent) ?? [])].sort(
         (a, b) => (index.fileCount.get(b) ?? 0) - (index.fileCount.get(a) ?? 0) || byName(a, b),
       )
@@ -131,7 +144,7 @@ function alwaysPlan(index, depth, maxAlways) {
       for (const child of kept) {
         if (budget <= 0) break
         pinned.add(child)
-        next.push(child)
+        if (!bulkPath(child)) next.push(child)
         budget -= 1
       }
     }
@@ -144,6 +157,7 @@ export function planFolderView({
   files = [],
   focus = [],
   touched = [],
+  changed = [],
   expanded = [],
   maxFolders = DEFAULT_MAX_FOLDERS,
   maxItems = DEFAULT_MAX_ITEMS,
@@ -165,6 +179,7 @@ export function planFolderView({
 
   const focusPaths = [...new Set(focus.map(clean))]
   const touchedPaths = [...new Set(touched.map(clean))]
+  const changedPaths = [...new Set(changed.map(clean))]
   const expandedPaths = new Set(
     (expanded instanceof Set ? [...expanded] : Array.isArray(expanded) ? expanded : []).map(clean),
   )
@@ -197,22 +212,26 @@ export function planFolderView({
     if (isFolder(path)) touchedFolders.add(path)
   })
 
+  const changedCount = new Map()
+  changedPaths.forEach((path) => {
+    if (path === '') return
+    for (let at = isFolder(path) ? path : parentOf(path); ; at = parentOf(at)) {
+      changedCount.set(at, (changedCount.get(at) ?? 0) + 1)
+      if (at === '') break
+    }
+  })
+
   const children = {
     get: (path) => [...(fileChildren.get(path) ?? []), ...(extraChildren.get(path) ?? [])],
   }
 
-  const sortedChildren = (path) =>
-    [...children.get(path)].sort(
-      (a, b) => rankOf(a, focusFolders, touchedFolders) - rankOf(b, focusFolders, touchedFolders) || byName(a, b),
-    )
+  const childOrder = (a, b) =>
+    rankOf(a, focusFolders, touchedFolders) - rankOf(b, focusFolders, touchedFolders) ||
+    (changedCount.get(b) ?? 0) - (changedCount.get(a) ?? 0) ||
+    (index.fileCount.get(b) ?? 0) - (index.fileCount.get(a) ?? 0) ||
+    byName(a, b)
 
-  const expandedChildren = (path) =>
-    [...children.get(path)].sort(
-      (a, b) =>
-        rankOf(a, focusFolders, touchedFolders) - rankOf(b, focusFolders, touchedFolders) ||
-        (index.fileCount.get(b) ?? 0) - (index.fileCount.get(a) ?? 0) ||
-        byName(a, b),
-    )
+  const sortedChildren = (path) => [...children.get(path)].sort(childOrder)
 
   const drawn = new Set([''])
   focusFolders.forEach((path) => drawn.add(path))
@@ -221,8 +240,7 @@ export function planFolderView({
   focusFolders.forEach((path) => {
     const expanded = expandedPaths.has(path)
     const limit = expanded ? (path === '' ? Number.POSITIVE_INFINITY : MAX_CHILD_CARDS) : folderLimit
-    const order = expanded ? expandedChildren(path) : sortedChildren(path)
-    order.slice(0, limit).forEach((child) => drawn.add(child))
+    sortedChildren(path).slice(0, limit).forEach((child) => drawn.add(child))
   })
 
   const itemsFor = (path) => {
@@ -252,6 +270,7 @@ export function planFolderView({
     [...pinned].sort(byName).join('\n'),
     focusPaths.join('\n'),
     touchedPaths.join('\n'),
+    changedPaths.join('\n'),
     [...expandedPaths].sort(byName).join('\n'),
   ].join('|')
 
