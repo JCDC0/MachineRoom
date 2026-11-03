@@ -77,7 +77,10 @@ export default function MusicPlayer() {
         return
       }
       setList(found)
-      setIndex(0)
+      const playingUrl = sound.musicTrack()
+      const at = playingUrl === '' ? -1 : found.tracks.findIndex((name) => trackUrl(found.base, name) === playingUrl)
+      setIndex(at >= 0 ? at : 0)
+      setPlaying(at >= 0 && sound.musicPlaying())
     })
     return () => {
       active = false
