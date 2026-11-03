@@ -23,6 +23,7 @@ import {
   recordProject,
   resetPruneCache,
   shouldSkipProject,
+  siblingFolders,
 } from '../server/projects.js'
 import { createClient } from '../src/control/client.js'
 import { makeTempDir, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
@@ -166,7 +167,7 @@ describe('projects api', () => {
     })
 
     const folderNames = res.body.folders.map((f) => f.name)
-    expect(folderNames).toContain('current-repo')
+    expect(folderNames).not.toContain('current-repo')
     expect(folderNames).toContain('sibling-git')
     expect(folderNames).toContain('sibling-plain')
     expect(folderNames).toContain('outside-repo')
@@ -179,6 +180,15 @@ describe('projects api', () => {
 
     const plainFolder = res.body.folders.find((f) => f.name === 'sibling-plain')
     expect(plainFolder.git).toBe(false)
+  })
+
+  it('leaves out the current folder from sibling folders', () => {
+    const env = createEnvironment()
+    const siblings = siblingFolders(env.root)
+    const names = siblings.map((s) => s.name)
+    expect(names).not.toContain('current-repo')
+    expect(names).toContain('sibling-git')
+    expect(names).toContain('sibling-plain')
   })
 
   it('says git: true for a subfolder inside a repository', async () => {

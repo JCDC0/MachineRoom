@@ -213,6 +213,7 @@ export function siblingFolders(projectRoot) {
     if (entry.name.startsWith('.')) continue
     if (entry.name === '.worktrees' || entry.name === 'node_modules') continue
     const fullPath = join(parent, entry.name)
+    if (samePath(fullPath, resolved)) continue
     let git = false
     try {
       git = existsSync(join(fullPath, '.git'))

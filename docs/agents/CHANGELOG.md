@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Sibling folders in the project list omit the current folder (task S32).
 - The Claude session reader notices lane meta files written after the session file (task S32).
 - The recent projects list omits skipped folders when read (task S32).
 - The projects route reports git: true for a folder inside a repository (task S32).
