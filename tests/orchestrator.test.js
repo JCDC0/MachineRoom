@@ -972,6 +972,7 @@ describe('waking the orchestrator', () => {
 
     const roomMessage = main.answer().messages.find((m) => m.from === 'room' && m.text.includes('Run opencode7-del-1 on lane opencode7 ended: succeeded.'))
     expect(roomMessage).toBeDefined()
+    expect(roomMessage.text).toContain('started by removed sub deleted-team')
   })
 
   it('wakes once for each real end when a run reopens, and suppresses duplicate turns for the same outcome', async () => {
@@ -1281,15 +1282,16 @@ describe('waking the orchestrator', () => {
     await waitIdle(rig, 3)
 
     const second = rig.calls()[1].args[1]
-    expect(second).toContain('Q3')
-    expect(second).toContain('Q4')
-    expect(second).not.toContain('Q1')
-    expect(second).not.toContain('Q2')
+    expect(second).toContain('Q1')
+    expect(second).toContain('Q2')
+    expect(second).not.toContain('Q3')
+    expect(second).not.toContain('Q4')
 
     const third = rig.calls()[2].args[1]
-    expect(third).toContain('Q1')
-    expect(third).toContain('Q2')
-    expect(third).not.toContain('Q4')
+    expect(third).toContain('Q3')
+    expect(third).toContain('Q4')
+    expect(third).not.toContain('Q1')
+    expect(third).not.toContain('Q2')
   })
 
   it('does not report a stopped turn when stop lands after the child exited well', async () => {
@@ -1329,6 +1331,50 @@ describe('waking the orchestrator', () => {
     )
     child.emit('close', 0)
     expect(orchestrator.stop({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
+
+    await waitFor(() => orchestrator.answer().messages.some((message) => message.from === 'orchestrator'))
+    expect(orchestrator.answer().messages.at(-1).text).toBe('All done.')
+    expect(orchestrator.answer().messages.some((message) => /^The orchestrator stopped/.test(message.text))).toBe(false)
+    expect(readLines(join(runs, 'runs.jsonl')).at(-1)).toMatchObject({ exitCode: 0, killed: false })
+  })
+
+  it('does not report a stopped turn when stop races right before close with complete output', async () => {
+    const base = makeTempDir('mr-stop-race-before-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const child = new EventEmitter()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = () => {}
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => child,
+    })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    expect(orchestrator.send({ text: 'Finish first', confirmed: true }).status).toBe(202)
+    child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+    child.stdout.write(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'All done.',
+        usage: { input_tokens: 12, output_tokens: 3 },
+      }) + '\n'
+    )
+    expect(orchestrator.stop({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
+    child.emit('close', 0)
 
     await waitFor(() => orchestrator.answer().messages.some((message) => message.from === 'orchestrator'))
     expect(orchestrator.answer().messages.at(-1).text).toBe('All done.')
@@ -1402,6 +1448,15 @@ describe('waking the orchestrator', () => {
     rig.behaviour.mode = 'reply'
     rig.send('Go on')
     await waitIdle(rig, 2)
+    expect(rig.answer().state).toBe('idle')
+  })
+
+  it('clears pause and starts a turn on a delivered main orchestrator message to a sub', async () => {
+    const rig = makeRig({ id: 'sub-backend' })
+    rig.orchestrator.stop({ confirmed: true })
+    expect(rig.answer().state).toBe('paused')
+    rig.orchestrator.deliver('orchestrator', 'Resume sub')
+    await waitIdle(rig, 1)
     expect(rig.answer().state).toBe('idle')
   })
 })
@@ -1713,7 +1768,7 @@ describe('the orchestrator chat file', () => {
     expect(orchestrator.answer().saveError).toBeNull()
   })
 
-  it('retries a failed rename on EPERM and EBUSY and keeps the temporary for the next save', () => {
+  it('retries a failed rename on EPERM and EBUSY and removes the temporary on failure', () => {
     const rig = makeRig()
     rig.orchestrator.close()
     const file = chatFileFor(rig.projectRoot, rig.runs)
@@ -1760,7 +1815,8 @@ describe('the orchestrator chat file', () => {
     })
     cleanups.push(async () => failingOrchestrator.close())
     expect(failingAttempts).toBe(5)
-    expect(existsSync(tmpFile)).toBe(true)
+    expect(existsSync(tmpFile)).toBe(false)
+    expect(failingOrchestrator.answer().saveError).toBe(CHAT_SAVE_PROBLEM)
     failingOrchestrator.close()
   })
 
@@ -1769,7 +1825,9 @@ describe('the orchestrator chat file', () => {
     const options = { projectRoot: rig.projectRoot, runsFolder: rig.runs, lanes: rig.lanes, promptFile: rig.promptFile }
     const lock = chatLockFileFor(rig.projectRoot, rig.runs)
     expect(readFileSync(lock, 'utf8')).toBe(String(process.pid))
-    expect(() => createOrchestrator(options)).toThrow(/Another room is already running on this project/)
+    expect(() => createOrchestrator(options)).toThrow(
+      `Another room is already running on this project (process ${process.pid}). Wait for it to end.`
+    )
     rig.orchestrator.close()
     writeFileSync(lock, '99999999')
     const restored = createOrchestrator(options)

@@ -32,6 +32,20 @@
 - Reopened Settings shows the track that is still playing (task U122).
 - A lane row without a saved label shows the lane's own name (task U122).
 - The confirm card for a lane move names every other sub that loses lanes or goes away (task U122).
+- Drop the lock deletion clause from the room lock error sentence to match stale lock handling (task S31).
+
+- A failed orchestrator chat save removes its temporary file instead of leaving it on disk (task S31).
+
+- Remove the unused stopping flag and treat a turn with a successful exit and report as completed (task S31).
+
+- A run started by a removed sub wakes the main orchestrator with a line naming the removed sub (task S31).
+
+- A message from the main orchestrator to a paused sub clears the pause and starts a turn (task S31).
+
+- Queued messages that exceed the prompt limit run oldest first and leave newer messages for the next turn (task S31).
+
+- Changing sibling sub orchestrators leaves a running sub running and passes the new siblings without restarting (task S31).
+
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

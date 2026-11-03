@@ -188,8 +188,8 @@ function processAlive(pid) {
   }
 }
 
-function roomLockProblem(holder, path) {
-  return `Another room is already running on this project (process ${holder}). Wait for it to end, or delete ${path} if no room is going.`
+function roomLockProblem(holder) {
+  return `Another room is already running on this project (process ${holder}). Wait for it to end.`
 }
 
 function isRoomHolderAlive(holder, path, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {
@@ -369,11 +369,11 @@ function fitTurnText(messages) {
   const blocks = []
   const used = []
   let size = 0
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
+  for (let index = 0; index < messages.length; index += 1) {
     const block = blockFor(messages[index])
     if (blocks.length > 0 && size + block.length + 2 > PROMPT_LIMIT) break
-    blocks.unshift(block)
-    used.unshift(messages[index])
+    blocks.push(block)
+    used.push(messages[index])
     size += block.length + 2
   }
   return { text: blocks.join('\n\n'), used }
@@ -461,6 +461,7 @@ export function createOrchestrator({
   harnesses = harnessByKey,
   hasSub = null,
   rename = renameSync,
+  siblings: siblingsOption = [],
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -511,6 +512,7 @@ export function createOrchestrator({
   let summary = ''
   let pendingCompaction = null
   let persistError = null
+  let siblings = Array.isArray(siblingsOption) ? [...siblingsOption] : []
   const completedRuns = new Map()
 
   function subExists(id) {
@@ -597,6 +599,12 @@ export function createOrchestrator({
         }
       } catch (error) {
         failure = error
+      } finally {
+        if (!renamed) {
+          try {
+            rmSync(temporary, { force: true })
+          } catch {}
+        }
       }
       if (renamed) failure = null
     } catch (error) {
@@ -884,7 +892,7 @@ export function createOrchestrator({
     const fit = compaction ? { text: '', used: [] } : fitTurnText(queued)
     const turnMessages = fit.used
     if (!compaction && turnMessages.length < queued.length) {
-      pending.unshift(...queued.slice(0, queued.length - turnMessages.length))
+      pending.unshift(...queued.slice(turnMessages.length))
       persist()
     }
     const hasOwner = turnMessages.some((message) => message.from === 'owner')
@@ -936,7 +944,8 @@ export function createOrchestrator({
       token,
       scratchFolder
     )
-    const instruction = extraInstructions ? `${baseInstruction}\n\n${extraInstructions}` : baseInstruction
+    const extra = typeof extraInstructions === 'function' ? extraInstructions() : extraInstructions
+    const instruction = extra ? `${baseInstruction}\n\n${extra}` : baseInstruction
     let program = binFor(harness)
     let args
     if (harness === 'opencode') {
@@ -1108,6 +1117,9 @@ export function createOrchestrator({
     const failureRaw = descriptor?.failure ? descriptor.failure(logText) : null
     const failureMessage = cleanFailure(failureRaw)
     const stderrMessage = report ? null : cleanFailure(lastStderrLine(turn.stderr))
+    if (code === 0 && !error && report) {
+      turn.killed = false
+    }
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const noReport = !failed && typeof report === 'string' && report.trim() === NO_REPORT
     const text = failed
@@ -1208,6 +1220,9 @@ export function createOrchestrator({
     if (stopped) return null
     const value = typeof text === 'string' ? text.trim() : ''
     if (!value) return null
+    if (state === 'paused' && (from === 'owner' || (key !== ORCHESTRATOR_KEY && from === ORCHESTRATOR_KEY))) {
+      setState('idle')
+    }
     const message = addMessage(from, value)
     pending.push(message)
     maybeStartTurn()
@@ -1218,9 +1233,7 @@ export function createOrchestrator({
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
     if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
     if (running && !running.done) {
-      if (running.exited) {
-        running.stopping = true
-      } else {
+      if (!running.exited) {
         running.killed = true
         killTree(running.child)
       }
@@ -1553,6 +1566,14 @@ export function createOrchestrator({
     notify()
   }
 
+  function getSiblings() {
+    return [...siblings]
+  }
+
+  function setSiblings(list) {
+    siblings = Array.isArray(list) ? [...list] : []
+  }
+
   function onFrame(frame) {
     if (stopped) return
     if (frame?.type !== 'heartbeat.run.status') return
@@ -1578,7 +1599,11 @@ export function createOrchestrator({
     if (!named && !givenWork()) return
     if (named) ownsRun = true
     const logName = runName || (typeof record?.log === 'string' ? basename(record.log).replace(/\.log$/i, '') : 'run')
-    const first = `Run ${logName} on lane ${laneKey} ended: ${status}.`
+    const starterNote =
+      recordedStarter && recordedStarter !== key && !subExists(recordedStarter)
+        ? ` (started by removed sub ${recordedStarter})`
+        : ''
+    const first = `Run ${logName} on lane ${laneKey} ended: ${status}.${starterNote}`
     let text = record ? `${first}\n${recordLine(record)}` : first
     if (status === 'failed') {
       const candidate = typeof record?.log === 'string' && record.log ? resolve(folder, record.log) : (logName ? resolve(folder, `${logName}.log`) : '')
@@ -1681,6 +1706,8 @@ export function createOrchestrator({
     deleteSession,
     getLadder,
     setLadder,
+    getSiblings,
+    setSiblings,
     onFrame,
     close,
     token,

@@ -273,7 +273,6 @@ export function createOrchestrators({
       [...config.scope],
       config.restricted,
       config.setBy,
-      [...config.siblings],
     ]
     return JSON.stringify(shape(left)) === JSON.stringify(shape(right))
   }
@@ -299,7 +298,12 @@ export function createOrchestrators({
       onNotice,
       onMasked,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind),
-      extraInstructions: subPrompt(sub, ORCHESTRATOR_KEY, readSaved().ladder),
+      extraInstructions: () => {
+        const ladder = readSaved().ladder
+        const current = ladder.subs.find((entry) => entry.id === config.id) || sub
+        return subPrompt(current, ORCHESTRATOR_KEY, ladder)
+      },
+      siblings: config.siblings,
       onReply: (text) => {
         if (stopped) return
         if (!instances.has(config.id)) return
@@ -339,10 +343,18 @@ export function createOrchestrators({
       if (id === ORCHESTRATOR_KEY) continue
       const next = wanted.get(id)
       const config = configs.get(id)
-      if (!next || !config || !sameConfig(config, subConfig(next))) {
+      if (!next) {
         instances.delete(id)
         configs.delete(id)
         instance.close({ removed: true })
+      } else if (!config || !sameConfig(config, subConfig(next))) {
+        instances.delete(id)
+        configs.delete(id)
+        instance.close({ removed: false })
+      } else {
+        const nextConfig = subConfig(next)
+        config.siblings = nextConfig.siblings
+        instance.setSiblings?.(nextConfig.siblings)
       }
     }
     for (const [id, sub] of wanted) {
