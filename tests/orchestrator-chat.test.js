@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import OrchestratorChat from '../src/ui/OrchestratorChat.jsx'
 import Waiting from '../src/ui/Waiting.jsx'
-import { click, withDom } from './helpers/uiDom.js'
+import { buttonWithText, click, withDom } from './helpers/uiDom.js'
 import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
@@ -878,6 +878,54 @@ describe('OrchestratorChat panel', () => {
       expect(container.querySelector('.strip-pop.is-compact')).toBeNull()
       expect(compactEscape.cancelBubble).toBe(true)
       expect(closed).toEqual([])
+    })
+  })
+
+  it('re-reads the stopped sub chat at once and hides its Stop button', async () => {
+    let subReads = 0
+    const stopped = []
+    const list = [
+      { id: 'orchestrator', name: 'Orchestrator', harness: 'claude', state: 'idle' },
+      { id: 'sub-1', name: 'Team 1', harness: 'claude', state: 'working' },
+    ]
+    const client = {
+      ...fakeClient({ state: 'idle', messages: [] }),
+      orchestrator: async (id) => {
+        if (id === 'sub-1') {
+          subReads += 1
+          return subReads === 1
+            ? { state: 'working', messages: [{ id: 'm1', from: 'owner', text: 'Build it.' }] }
+            : { state: 'idle', messages: [{ id: 'm1', from: 'owner', text: 'Build it.' }] }
+        }
+        return { state: 'idle', messages: [] }
+      },
+      stopOrchestrator: async (options) => {
+        stopped.push(options)
+        return { ok: true }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            orchestrators: list,
+            initialOrchestrators: list,
+            initialSelected: 'sub-1',
+          })
+        )
+      })
+      await act(async () => {})
+      expect(subReads).toBe(1)
+      const stop = container.querySelector('.mr-orch-stop')
+      expect(stop).not.toBeNull()
+      await click(root, stop)
+      const card = container.querySelector('.mr-orch-confirm.is-stop')
+      expect(card).not.toBeNull()
+      await click(root, buttonWithText(card, 'Stop'))
+      expect(stopped).toEqual([{ confirmed: true, id: 'sub-1' }])
+      expect(subReads).toBe(2)
+      expect(container.querySelector('.mr-orch-stop')).toBeNull()
     })
   })
 

@@ -586,7 +586,7 @@ export default function OrchestratorChat({
       .stopOrchestrator(options)
       .then(async () => {
         setConfirm(null)
-        if (selected === 'orchestrator') await readChatRef.current?.()
+        await readChatRef.current?.()
         await readListRef.current?.()
       })
       .catch((failure) => setError(errorText(failure, 'Could not stop the orchestrator.')))
