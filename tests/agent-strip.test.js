@@ -372,6 +372,7 @@ describe('packets on the tunnel', () => {
 
     const heads = packetPoints(view)
     expect(heads.length).toBeGreaterThan(0)
+    expect(heads.some((point) => Math.hypot(point.x - drawn[0].x, point.y - drawn[0].y, point.z - drawn[0].z) < 1e-6)).toBe(true)
     for (const point of heads) expect(offPolyline(drawn, point)).toBeLessThan(1e-3)
 
     const tails = tailPointList(view)
