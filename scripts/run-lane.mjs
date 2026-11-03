@@ -1226,6 +1226,30 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     })
     if (retryProblem === '' && options?.retried !== true) {
       console.log('retrying this run once, because it made no tool call, no commit and printed the readiness sentence')
+      const retryRecord = laneRunRecord({
+        lane: options.lane,
+        briefs: project ? [] : wanted.map((brief) => brief.id),
+        model: lane.cli.model,
+        reasoning: lane.reasoning ?? null,
+        startedAt,
+        minutes,
+        exitCode: result.code,
+        killed,
+        costUsd: summary.costUsd ?? totalCost(report),
+        inputTokens: summary.inputTokens,
+        outputTokens: summary.outputTokens,
+        log: logPath,
+        branch: git.branch,
+        commits: git.commits,
+        retried: true,
+        startFailed: startFailure !== '' ? true : undefined,
+        ...(start ? { startBranch: start.startBranch } : {}),
+        ...(options.startedBy ? { startedBy: options.startedBy } : {}),
+        ...(project ? { project, task } : {}),
+        ...(queue ? { queue } : {}),
+      })
+      appendFileSync(runsFile(), `${JSON.stringify(retryRecord)}\n`)
+      console.log(`record: ${runsFile()}`)
       const retryName = `${name}-retry`
       return await startLane({
         options: { ...options, retried: true },
