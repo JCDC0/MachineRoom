@@ -5,6 +5,7 @@
 - The session recorder drops old frames with a head index and compacts its list in chunks, not on every push (task U132).
 - The event log's open call labels are capped at 2000, the oldest dropped first (task U132).
 - The pipeline forgets a run and its parser after 30 minutes of feed time with no frame, and a later frame starts a new parser (task U132).
+- The Claude and AGY parsers forget a call once its end is emitted (task U132).
 - A beat lifts the folder cards round the ring as a wave and pulses the hub ring, on top of each card's own glide and pop (task U131).
 - A new Pulse switch beside Dance makes each agent's wireframe shape move with five music bands, and puts the shape back when it is off or the music stops (task U131).
 - The music player picks a playlist or Loose tracks, plays it in order and loops, and saves `music.playlist` (task U130).

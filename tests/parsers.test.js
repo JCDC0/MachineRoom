@@ -423,7 +423,16 @@ describe('agy parser', () => {
       }),
       520
     )
-    expect(out[0]).toMatchObject({ type: 'tool.end', label: 'write_to_file: denied', error: 'denied' })
+    expect(out[0]).toMatchObject({ type: 'tool.start', label: 'write src/b.js: denied' })
+    expect(out[1]).toMatchObject({ type: 'tool.end', label: 'write src/b.js: denied', error: 'denied' })
+  })
+
+  it('forgets a finished step so a later line with the same index starts again', () => {
+    const parser = createAgyParser(ctx)
+    parser.push(lines(step('ACTIVE', 'read_file', { Path: 'src/a.js' })), 500)
+    parser.push(lines(step('DONE', 'read_file', { Path: 'src/a.js' })), 510)
+    const out = parser.push(lines(step('ACTIVE', 'write_file', { Path: 'src/b.js' })), 520)
+    expect(summary(out)).toEqual(['start write src/b.js'])
   })
 
   it('maps write_to_file to a write touch', () => {

@@ -103,6 +103,33 @@ describe('claude stream-json', () => {
     ])
   })
 
+  it('forgets a call once its result is read', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines(
+        assistant([use('t1', 'Read', { file_path: 'src/math.js' })]),
+        result('t1'),
+        assistant([use('t1', 'Write', { file_path: 'src/next.js' })]),
+        result('t1')
+      ),
+      1000
+    )
+    expect(starts(out).map((activity) => activity.label)).toEqual(['read src/math.js', 'write src/next.js'])
+    expect(out.filter((activity) => activity.type === 'tool.end')).toHaveLength(2)
+  })
+
+  it('forgets an acpx call once it finishes', () => {
+    const parser = createClaudeParser(ctx)
+    const call = (status, name) =>
+      line({ type: 'acpx.tool_call', name, toolCallId: 'acpx-1', status, text: name })
+    const out = parser.push(
+      call('pending', 'Read File') + call('completed', 'Read src/math.js') + call('pending', 'Read File') + call('completed', 'Read src/next.js'),
+      1000
+    )
+    expect(starts(out).map((activity) => activity.label)).toEqual(['read src/math.js', 'read src/next.js'])
+    expect(out.filter((activity) => activity.type === 'tool.end')).toHaveLength(2)
+  })
+
   it('spawns a child from Task and gives its lines the child key', () => {
     const parser = createClaudeParser(ctx)
     const out = parser.push(
