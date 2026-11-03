@@ -35,8 +35,8 @@ Q38. I read `git log --merges` and `git diff` on main after Review 2 for U129, U
 
 - Findings 1, 2, 5 and 9 hold on main. 1 and 2 go to brief U142, and 5 and 9 to brief S39.
 - Finding 4 does not hold: `Number(z) || 0` turns -0 into 0, and a corner a shape repeats has the same coordinates each time, so it gets one band.
-- Finding 3 is read again after U138, which rewrites the beat detector in `src/ui/sound.js`.
+- Finding 3 is gone after U138: `sound.dance` reads the levels at most once every 45 ms (`BAND_WINDOW_MS`) and its tracker keeps its own history.
 - Finding 6 holds but costs one envelope reading per card per frame, so it stays.
 - Finding 7 is gone: Q39a removed `bloomPixelRatio`.
 - Finding 8 was already fixed by U132.
-- Finding 10 is read again with finding 3.
+- Finding 10 is gone with finding 3.
