@@ -28,6 +28,7 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 - The owner deletes `C:\deepseek-harness` themselves.
 - `Concepts/` holds the owner's reference stills. It stays out of git (`.gitignore`) and out of every pack.
 - Fix only small review findings yourself (a few lines). Anything larger goes back to a lane as a brief.
+- After a shutdown, a new day means every harness quota is refilled (AGY, OpenCode and the rest), so plan all lanes back in. The exception is when the owner says a weekly quota is not refilled.
 
 ## The loop
 
