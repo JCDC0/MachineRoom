@@ -246,7 +246,24 @@ function createReadJsonBody(sendJson) {
   }
 }
 
-export function trimHistory(history) {
+export const RUN_PIN_TIMEOUT_MS = 2 * 60 * 60 * 1000
+
+export function trimHistory(history, now = Date.now) {
+  const currentTime = typeof now === 'function' ? now() : Number(now ?? Date.now())
+  const lastFrameAt = new Map()
+  for (const item of history) {
+    if (item.runId && typeof item.at === 'number') {
+      const prev = lastFrameAt.get(item.runId)
+      if (prev === undefined || item.at > prev) lastFrameAt.set(item.runId, item.at)
+    }
+  }
+  for (const [runId, latest] of lastFrameAt) {
+    if (currentTime - latest >= RUN_PIN_TIMEOUT_MS) {
+      for (const item of history) {
+        if (item.runId === runId) item.pinned = false
+      }
+    }
+  }
   while (history.length > HISTORY_LIMIT) {
     const index = history.findIndex((item) => !item.pinned)
     if (index === -1) break
@@ -265,6 +282,7 @@ export function createBridge(options = {}) {
   const debounceMs = Number(options.debounceMs ?? 300)
   const pollMs = Number(options.pollMs ?? Math.min(debounceMs, 200))
   const quietMs = Number(options.quietMs ?? WATCH_QUIET_MS)
+  const now = typeof options.now === 'function' ? options.now : Date.now
   const env = options.env ?? process.env
   const origins = namedOrigins(env.MACHINEROOM_ORIGINS)
   for (const entry of origins.skipped) {
@@ -732,14 +750,15 @@ export function createBridge(options = {}) {
     const data = JSON.stringify(parsed)
     const runId = parsed?.payload?.runId
     const endsRun = parsed?.type === 'heartbeat.run.status' && RUN_END_STATUSES.has(parsed.payload?.status)
-    const entry = { id, data, runId, pinned: holdsRunStart(parsed) }
+    const at = typeof now === 'function' ? now() : Date.now()
+    const entry = { id, data, runId, pinned: holdsRunStart(parsed), at }
     history.push(entry)
     if (runId !== undefined && runId !== null && endsRun) {
       for (const item of history) {
         if (item.runId === runId) item.pinned = false
       }
     }
-    trimHistory(history)
+    trimHistory(history, at)
     if (endsRun) gitApi.invalidateCache()
     const notices = changeEvents(parsed)
     if (endsRun) notices.push({ topic: 'git' })

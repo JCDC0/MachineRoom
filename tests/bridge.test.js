@@ -554,6 +554,31 @@ describe('frames from a lane log', () => {
     expect(history.some((entry) => entry.id === 'log')).toBe(false)
   })
 
+  it('unpins a run in history after 2 hours without a frame and trims it (S37)', () => {
+    const twoHoursMs = 2 * 60 * 60 * 1000
+    const start = 1000000
+    const history = [
+      { id: 'start', runId: 'run-1', pinned: true, at: start },
+    ]
+    for (let index = 0; index < 500; index += 1) {
+      history.push({ id: `n${index}`, pinned: false, at: start + twoHoursMs + 10 })
+    }
+    trimHistory(history, start + twoHoursMs + 10)
+    expect(history).toHaveLength(500)
+    expect(history.some((entry) => entry.id === 'start')).toBe(false)
+
+    const activeHistory = [
+      { id: 'start', runId: 'run-2', pinned: true, at: start },
+      { id: 'recent-log', runId: 'run-2', pinned: false, at: start + twoHoursMs },
+    ]
+    for (let index = 0; index < 500; index += 1) {
+      activeHistory.push({ id: `n${index}`, pinned: false, at: start + twoHoursMs + 10 })
+    }
+    trimHistory(activeHistory, start + twoHoursMs + 10)
+    expect(activeHistory).toHaveLength(500)
+    expect(activeHistory.some((entry) => entry.id === 'start')).toBe(true)
+  })
+
   it('sends no history to a client that does not ask', async () => {
     const runs = tempDir()
     const name = 'opencode-Y1-20261024-122000'
