@@ -4,6 +4,7 @@ import { createClaudeParser } from '../src/model/parsers/claude.js'
 import { createHermesParser } from '../src/model/parsers/hermes.js'
 import { createParser } from '../src/model/parsers/index.js'
 import { createOpencodeParser } from '../src/model/parsers/opencode.js'
+import { looksFailed } from '../src/model/parsers/common.js'
 import { unreadableLines } from '../src/model/parsers/unreadable.js'
 import { testContext } from './helpers.js'
 
@@ -484,5 +485,23 @@ describe('tool names that are only inherited names', () => {
       expect(parser.push(lines({ type: 'tool_use', part: { tool: 'read' } }), 1000), name).toEqual([])
       expect(parser.flush(1000)).toEqual([])
     }
+  })
+})
+
+describe('looksFailed failure anchoring', () => {
+  it('does not fail a read-only command quoting failure words', () => {
+    expect(looksFailed('diff --git a/foo.js b/foo.js\n+ const FAILED = false')).toBe(false)
+    expect(looksFailed('+ // FAIL on empty input')).toBe(false)
+    expect(looksFailed('src/app.js:20: catch (Exception) {')).toBe(false)
+    expect(looksFailed('echo "this was not ok"')).toBe(false)
+  })
+
+  it('still detects real failed test outputs', () => {
+    expect(looksFailed('FAIL tests/math.test.js')).toBe(true)
+    expect(looksFailed('FAILED: test_math')).toBe(true)
+    expect(looksFailed('  \u2716 add two numbers')).toBe(true)
+    expect(looksFailed('not ok 1 - subtract numbers')).toBe(true)
+    expect(looksFailed('[exit 1]')).toBe(true)
+    expect(looksFailed('fatal: remote repository not found')).toBe(true)
   })
 })

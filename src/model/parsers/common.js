@@ -1,7 +1,7 @@
 import { relativeTo } from '../paths.js'
 import { touchesForCommand } from '../commands.js'
 
-const FAILURE = /(^|\n)\s*(✖|×)\s|\bnot ok\b|\bFAIL(ED)?\b|\[exit [1-9]\d*\]|\bfatal:|Exception\b/
+const FAILURE = /(?:^|\n)\s*(?:[✖×]\s|not ok\b|FAIL(?:ED)?\b|\[exit [1-9]\d*\]|fatal:|Exception\b)/
 
 export function looksFailed(output) {
   return FAILURE.test(String(output ?? ''))

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Anchor every branch of the parser failure pattern to a line start (task S29).
+
 - An AGY step that ends ERROR ends its call as failed with the error in its label (task S29).
 
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
