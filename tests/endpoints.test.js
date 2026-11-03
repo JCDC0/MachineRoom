@@ -4,6 +4,9 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   BASE_URL_PROBLEM,
+  DELETE_CONFIRM_PROBLEM,
+  DELETE_ORIGIN_PROBLEM,
+  ENDPOINT_NOT_FOUND_PROBLEM,
   KEY_REQUIRED_PROBLEM,
   MAX_ENDPOINT_MODELS,
   MAX_ENDPOINTS,
@@ -150,6 +153,26 @@ describe('/api/endpoints', () => {
     expect(noOrigin.status).toBe(403)
     const unconfirmed = await post(url, '/api/endpoints', endpointBody({ confirmed: false }))
     expect(unconfirmed.status).toBe(400)
+  })
+
+  it('needs a page Origin and a confirmation to delete an endpoint', async () => {
+    const { url } = await startLaneBridge()
+    await post(url, '/api/endpoints', endpointBody({ name: 'Deletable' }))
+    const noOrigin = await post(url, `/api/endpoints/${encodeURIComponent('Deletable')}/delete`, { confirmed: true }, null)
+    expect(noOrigin.status).toBe(403)
+    expect(noOrigin.body).toEqual({ error: DELETE_ORIGIN_PROBLEM })
+
+    const unconfirmed = await post(url, `/api/endpoints/${encodeURIComponent('Deletable')}/delete`, { confirmed: false })
+    expect(unconfirmed.status).toBe(400)
+    expect(unconfirmed.body).toEqual({ error: DELETE_CONFIRM_PROBLEM })
+
+    const missing = await post(url, `/api/endpoints/${encodeURIComponent('Missing')}/delete`, { confirmed: true })
+    expect(missing.status).toBe(404)
+    expect(missing.body).toEqual({ error: ENDPOINT_NOT_FOUND_PROBLEM })
+
+    const deleted = await post(url, `/api/endpoints/${encodeURIComponent('Deletable')}/delete`, { confirmed: true })
+    expect(deleted.status).toBe(200)
+    expect(deleted.body.deleted).toBe('Deletable')
   })
 
   it('creates, replaces by name, lists and deletes an endpoint', async () => {

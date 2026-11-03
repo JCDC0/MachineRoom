@@ -193,6 +193,34 @@ describe('the music routes', () => {
     expect(answer.headers.get('content-range')).toBe('bytes */6')
   })
 
+  it('serves file metadata via HEAD without a body, and answers 400 for a bad name', async () => {
+    const { url } = await bridgeFor()
+    const head = await fetch(`${url}/music/beta.mp3`, { method: 'HEAD' })
+    expect(head.status).toBe(200)
+    expect(head.headers.get('content-type')).toBe('audio/mpeg')
+    expect(head.headers.get('accept-ranges')).toBe('bytes')
+    expect(head.headers.get('content-length')).toBe('6')
+    expect(await head.text()).toBe('')
+
+    const part = await fetch(`${url}/music/beta.mp3`, { method: 'HEAD', headers: { Range: 'bytes=1-3' } })
+    expect(part.status).toBe(206)
+    expect(part.headers.get('content-range')).toBe('bytes 1-3/6')
+    expect(part.headers.get('content-length')).toBe('3')
+    expect(await part.text()).toBe('')
+
+    const bad = await fetch(`${url}/music/%2e%2e%2fsecret.mp3`, { method: 'HEAD' })
+    expect(bad.status).toBe(400)
+    expect(await bad.text()).toBe('')
+
+    const badGet = await fetch(`${url}/music/%2e%2e%2fsecret.mp3`)
+    expect(badGet.status).toBe(400)
+    expect(await badGet.text()).toBe('Bad music name')
+
+    const missing = await fetch(`${url}/music/missing.mp3`, { method: 'HEAD' })
+    expect(missing.status).toBe(404)
+    expect(await missing.text()).toBe('')
+  })
+
   it('answers 404 for a missing file and 400 for a separator or parent link', async () => {
     const { url } = await bridgeFor()
     expect((await fetch(`${url}/music/missing.mp3`)).status).toBe(404)
