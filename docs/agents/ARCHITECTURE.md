@@ -32,6 +32,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-ENGINE.md`: history. The November 2026 audit of the engine.
 - `AUDIT-2026-11-LOGS.md`: history. The November 2026 hunt that ran 464 real run logs through the parsers.
 - `AUDIT-2026-11-ORCHESTRATOR.md`: history. The November 2026 hunt of the orchestrator's turns, wakes and ladder.
+- `AUDIT-2026-11-GROWTH.md`: history. The November 2026 hunt of what grows without a bound in a day-long live room.
 - `AUDIT-2026-11-FIRSTRUN.md`: history. The November 2026 hunt of a first run on a new project, with features.
 - `AUDIT-2026-11-PANELS.md`: history. The November 2026 hunt of the page's panels.
 - `AUDIT-2026-11-PANELS-2.md`: history. The second November 2026 hunt of the page's panels, with features.
