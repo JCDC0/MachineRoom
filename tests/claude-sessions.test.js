@@ -545,6 +545,11 @@ describe('sessions source', () => {
 
     expect(reader.sessions().has('sess-idle')).toBe(false)
     expect(reader.evicted().has('sess-idle')).toBe(true)
+    const evictedEntry = reader.evicted().get('sess-idle')
+    expect(evictedEntry).toMatchObject({ id: 'sess-idle', path: file })
+    expect(typeof evictedEntry.offset).toBe('number')
+    expect(evictedEntry.children).toBeUndefined()
+    expect(evictedEntry.stream).toBeUndefined()
 
     reader.tick()
     expect(reader.sessions().has('sess-idle')).toBe(false)
@@ -562,5 +567,68 @@ describe('sessions source', () => {
     expect(reader.evicted().has('sess-idle')).toBe(false)
     const logs = logFrames(frames)
     expect(logs.length).toBe(2)
+  })
+
+  it('caps the evicted map at 200 entries dropping the oldest', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    let currentTime = 1000000
+    const now = () => currentTime
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames, now, idleMs: 1000, idlePollMs: 1000 })
+    reader.tick()
+
+    const read = join(projectRoot, 'src', 'math.js')
+    for (let i = 1; i <= 205; i++) {
+      const pad = String(i).padStart(4, '0')
+      const file = join(sessionsFolder, `sess-cap-${pad}.jsonl`)
+      writeFileSync(file, jsonLines([
+        sessionLine('user', { role: 'user', content: 'Turn 1' }, {}, projectRoot),
+        sessionLine('assistant', { role: 'assistant', content: [readUse(`t-${i}`, read)], stop_reason: 'end_turn' }, {}, projectRoot),
+      ]))
+    }
+    reader.tick()
+    expect(reader.sessions().size).toBe(205)
+
+    currentTime += 2000
+    reader.tick()
+
+    expect(reader.sessions().size).toBe(0)
+    expect(reader.evicted().size).toBe(200)
+    expect(reader.evicted().has('sess-cap-0001')).toBe(false)
+    expect(reader.evicted().has('sess-cap-0005')).toBe(false)
+    expect(reader.evicted().has('sess-cap-0006')).toBe(true)
+    expect(reader.evicted().has('sess-cap-0205')).toBe(true)
+  })
+
+  it('drops finished subagent buffers from session.children once result is read', () => {
+    const { projectRoot, home, runs, sessionsFolder } = setup()
+    const frames = []
+    const reader = makeReader({ projectRoot, home, runs, frames })
+    reader.tick()
+
+    const read = join(projectRoot, 'src', 'math.js')
+    const childItems = [
+      sessionLine('assistant', { role: 'assistant', content: [readUse('c1', read)] }, { sessionId: 'sess-buf' }, projectRoot),
+      sessionLine('user', { role: 'user', content: [result('c1', 'child words')] }, { sessionId: 'sess-buf' }, projectRoot),
+    ]
+    const childFolder = join(sessionsFolder, 'sess-buf', 'subagents')
+    mkdirSync(childFolder, { recursive: true })
+    writeFileSync(join(childFolder, 'agent-kid.jsonl'), jsonLines(childItems))
+
+    const agentUse = { type: 'tool_use', id: 'task-1', name: 'Agent', input: { description: 'Read notes', subagent_type: 'Explore' } }
+    const items = [
+      sessionLine('user', { role: 'user', content: 'Go.' }, {}, projectRoot),
+      sessionLine('assistant', { role: 'assistant', content: [agentUse] }, {}, projectRoot),
+      sessionLine('user', { role: 'user', content: [result('task-1', 'child done')] }, { toolUseResult: { agentId: 'kid' } }, projectRoot),
+    ]
+    writeFileSync(join(sessionsFolder, 'sess-buf.jsonl'), jsonLines(items))
+    reader.tick()
+
+    const session = reader.sessions().get('sess-buf')
+    expect(session).toBeDefined()
+    const child = session.children.get('kid')
+    expect(child).toBeDefined()
+    expect(child.finished).toBe(true)
+    expect(child.stream.buffer).toBe('')
   })
 })

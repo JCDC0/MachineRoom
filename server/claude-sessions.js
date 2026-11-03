@@ -18,6 +18,7 @@ const DEFAULT_IDLE_POLL_MS = 30 * 1000
 const READ_CHUNK = 64 * 1024
 const MAX_PARTIAL = 1024 * 1024
 const RESULT_TEXT_LIMIT = 2000
+const MAX_EVICTED = 200
 
 export function claudeProjectSlug(folder) {
   return String(folder ?? '').replace(/[^A-Za-z0-9]/g, '-')
@@ -259,6 +260,7 @@ export function createClaudeSessionsReader(options = {}) {
   }
 
   function readChild(session, child) {
+    if (child.finished) return
     const run = session.run
     if (!run?.open) return
     const grew = readStream(child.stream, (line) => handleLine(session, line, child.callId))
@@ -275,9 +277,11 @@ export function createClaudeSessionsReader(options = {}) {
     if (!callId) return
     if (session.children.has(agentId)) return
     const stream = newStream(join(projectsFolder, session.id, 'subagents', `agent-${agentId}.jsonl`), 0)
-    const child = { agentId, callId, stream }
+    const child = { agentId, callId, stream, finished: false }
     session.children.set(agentId, child)
     readChild(session, child)
+    child.finished = true
+    if (child.stream) child.stream.buffer = ''
   }
 
   function handleLine(session, line, callId) {
@@ -339,23 +343,48 @@ export function createClaudeSessionsReader(options = {}) {
     }
   }
 
+  function evictSession(id, session) {
+    sessions.delete(id)
+    if (session.children) session.children.clear()
+    evicted.delete(id)
+    evicted.set(id, {
+      id,
+      path: session.path,
+      offset: session.stream ? session.stream.offset : 0,
+      number: session.number ?? 0,
+      skipped: Boolean(session.skipped),
+    })
+    while (evicted.size > MAX_EVICTED) {
+      const oldest = evicted.keys().next().value
+      evicted.delete(oldest)
+    }
+  }
+
   function scanEvicted() {
     if (evicted.size === 0) return
     const current = now()
     if (current - lastEvictedCheck < idlePollMs) return
     lastEvictedCheck = current
-    for (const [id, session] of evicted.entries()) {
-      if (session.skipped) continue
+    for (const [id, entry] of evicted.entries()) {
+      if (entry.skipped) continue
       let size
       try {
-        size = statSync(session.path).size
+        size = statSync(entry.path).size
       } catch {
         continue
       }
-      if (size !== session.stream.offset) {
+      if (size !== entry.offset) {
         evicted.delete(id)
-        session.lastGrowth = current
-        sessions.set(id, session)
+        sessions.set(id, {
+          id,
+          path: entry.path,
+          skipped: false,
+          stream: newStream(entry.path, entry.offset),
+          children: new Map(),
+          number: entry.number ?? 0,
+          run: null,
+          lastGrowth: current,
+        })
       }
     }
   }
@@ -371,9 +400,9 @@ export function createClaudeSessionsReader(options = {}) {
           if (session.run?.open) endRun(session, 'succeeded')
         }
       }
-      for (const [id, session] of evicted.entries()) {
-        if (!session.skipped && skippedIds.has(id)) {
-          session.skipped = true
+      for (const [id, entry] of evicted.entries()) {
+        if (!entry.skipped && skippedIds.has(id)) {
+          entry.skipped = true
         }
       }
       scan(skippedIds)
@@ -389,8 +418,7 @@ export function createClaudeSessionsReader(options = {}) {
         const run = session.run
         if (run?.open && now() - run.lastGrowth >= quietMs) endRun(session, 'succeeded')
         if (!run?.open && now() - session.lastGrowth >= idleMs) {
-          sessions.delete(id)
-          evicted.set(id, session)
+          evictSession(id, session)
         }
       }
     } finally {
@@ -400,6 +428,8 @@ export function createClaudeSessionsReader(options = {}) {
 
   function stop() {
     stopped = true
+    sessions.clear()
+    evicted.clear()
   }
 
   return { agent: AGENT, agents: [AGENT], tick, stop, sessions: () => sessions, evicted: () => evicted }

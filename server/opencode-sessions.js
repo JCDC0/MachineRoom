@@ -83,6 +83,7 @@ export function createOpencodeSessionsReader(options = {}) {
   const sessions = new Map()
   const open = new Map()
   const sent = new Map()
+  const forgotten = new Map()
   let db = null
   let sessionStmt = null
   let messageStmt = null
@@ -370,11 +371,19 @@ export function createOpencodeSessionsReader(options = {}) {
     const at = now()
     for (const [id, rootId] of included) {
       const sessionRow = rowMap.get(id)
+      const forgottenEntry = forgotten.get(id)
+      if (forgottenEntry) {
+        const timeUpdated = sessionRow?.time_updated ?? 0
+        if (timeUpdated <= forgottenEntry.lastSessionUpdated) {
+          continue
+        }
+        forgotten.delete(id)
+      }
       let info = sessions.get(id)
       if (!info) {
         info = {
           handled: new Map(),
-          since: -1,
+          since: forgottenEntry ? forgottenEntry.since : -1,
           rootId,
           lastSeen: at,
           lastPolled: 0,
@@ -403,12 +412,14 @@ export function createOpencodeSessionsReader(options = {}) {
   function forgetFinished() {
     const at = now()
     for (const [id, info] of sessions) {
-      if (info.handled.size === 0 && !sent.has(id)) continue
       if (open.has(info.rootId) || at - info.lastSeen < retentionMs) continue
-      info.handled.clear()
+      sessions.delete(id)
       sent.delete(id)
-      // The query reads rows at or after since, so without the step the newest row would be handled again.
-      info.since += 1
+      forgotten.set(id, {
+        rootId: info.rootId,
+        lastSessionUpdated: info.lastSessionUpdated ?? 0,
+        since: info.since + 1,
+      })
     }
   }
 
@@ -431,6 +442,7 @@ export function createOpencodeSessionsReader(options = {}) {
     open.clear()
     sessions.clear()
     sent.clear()
+    forgotten.clear()
     if (db) {
       try {
         db.close()
@@ -439,5 +451,5 @@ export function createOpencodeSessionsReader(options = {}) {
     }
   }
 
-  return { agent: { ...OPENCODE_SESSION_AGENT }, tick, stop, problem: () => lastError }
+  return { agent: { ...OPENCODE_SESSION_AGENT }, tick, stop, problem: () => lastError, sessions: () => sessions, forgotten: () => forgotten }
 }
