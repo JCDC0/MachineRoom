@@ -134,6 +134,7 @@ export function createClaudeParser(ctx) {
         label = `${label} ${found.relative === null ? basename(raw) : found.relative}`
       }
     } else if (STREAM_TASKS.has(lower)) {
+      call.kind = 'task'
       const description = typeof input.description === 'string' ? input.description.trim() : ''
       if (input.run_in_background === true) call.background = true
       label = description ? `task: ${shorten(description)}` : 'task'

@@ -126,6 +126,7 @@ describe('claude stream-json', () => {
       [{ path: 'src/strings.js', mode: 'read', kind: 'file' }],
       [{ path: 'docs/notes.md', mode: 'read', kind: 'file' }],
     ])
+    expect(starts(out).find((activity) => activity.id === 'parent-task')).toMatchObject({ agent: 'claude', tool: 'task' })
     expect(starts(out).find((activity) => activity.id === 'p1')).toMatchObject({ agent: 'claude', label: 'read package.json' })
     expect(out.filter((activity) => activity.type === 'tool.end' && activity.agent === 'claude~1')).toHaveLength(2)
     expect(out.filter((activity) => activity.type === 'agent.end')).toEqual([{ time: 3000, type: 'agent.end', agent: 'claude~1', ok: true }])

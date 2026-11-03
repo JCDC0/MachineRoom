@@ -71,6 +71,20 @@ describe('claude parser', () => {
     expect(parser.push(full.slice(0, 20), 1)).toEqual([])
     expect(summary(parser.push(full.slice(20) + '\n', 2))).toEqual(['start read src/math.js'])
   })
+
+  it('gives a Task tool call the task kind', () => {
+    const parser = createClaudeParser(ctx)
+    const out = parser.push(
+      lines({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 't-task', name: 'Task', input: { description: 'Search files' } }],
+        },
+      }),
+      1000
+    )
+    expect(out[0]).toMatchObject({ type: 'tool.start', id: 't-task', tool: 'task', label: 'task: Search files' })
+  })
 })
 
 describe('hermes parser', () => {
