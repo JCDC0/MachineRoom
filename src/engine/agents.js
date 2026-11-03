@@ -6,7 +6,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
+import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle, startDanceEnvelope } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
@@ -62,7 +62,6 @@ export const ORCHESTRATOR_LINK_OPACITY = 0.1
 export const SUB_ORCHESTRATOR_LINK_OPACITY = 0.3
 export const DANCE_SCALE = 0.08
 export const ORCHESTRATOR_DANCE_SCALE = 0.03
-const DANCE_DECAY = 5
 
 export const CALLOUT_CROWD_LIMIT = 4
 export const CALLOUT_RECENT_KEEP = 2
@@ -1037,7 +1036,10 @@ export function createAgents(scene, roster, cssScene = null) {
       presence: orchestrator ? 1 : 0,
       presenceReady: false,
       presenceOpacity: 1,
-      dance: 0,
+      danceFrom: 0,
+      danceTo: 0,
+      danceAt: 0,
+      danceTurn: 0,
       pulseBase,
       pulseLengths,
       pulseBands,
@@ -1268,11 +1270,12 @@ export function createAgents(scene, roster, cssScene = null) {
   function beat(strength) {
     const value = Math.min(1, Math.max(0, Number(strength) || 0))
     if (!(value > 0) || still()) return
+    const at = performance.now()
     for (const view of views.values()) {
-      const less = view.orchestrator || view.subOrchestrator
-      view.dance = Math.max(view.dance, value)
-      view.shape.rotation.y += (less ? 0.08 : 0.2) * value
-      view.shape.rotation.x += (less ? 0.03 : 0.07) * value
+      const next = startDanceEnvelope({ from: view.danceFrom, to: view.danceTo, at: view.danceAt }, value, at)
+      view.danceFrom = next.from
+      view.danceTo = next.to
+      view.danceAt = next.at
     }
   }
 
@@ -1373,13 +1376,20 @@ export function createAgents(scene, roster, cssScene = null) {
         view.shape.rotation.y += delta * style.spin
         view.shape.rotation.x += delta * style.spin * 0.4
       }
-      view.dance = isStill ? 0 : Math.max(0, view.dance - delta * DANCE_DECAY)
+      const dance = isStill ? 0 : danceEnvelope(view.danceFrom, view.danceTo, now - view.danceAt)
+      const less = view.orchestrator || view.subOrchestrator
+      if (!isStill) {
+        const turn = dance - view.danceTurn
+        view.shape.rotation.y += turn * (less ? 0.08 : 0.2)
+        view.shape.rotation.x += turn * (less ? 0.03 : 0.07)
+      }
+      view.danceTurn = dance
       let pulse = 0
       if ((status === 'working' || status === 'queued') && !isStill) {
         pulse = 0.05 * (0.5 + 0.5 * Math.sin(now * 0.0022))
       }
       if (!isStill) {
-        pulse = Math.max(pulse, danceScale(view.dance, view.orchestrator || view.subOrchestrator) - 1)
+        pulse = Math.max(pulse, danceScale(dance, less) - 1)
       }
       view.shape.scale.setScalar(1 + pulse)
       applyPulse(view, delta, isStill)
@@ -1569,7 +1579,10 @@ export function createAgents(scene, roster, cssScene = null) {
       view.presence = 0
       view.presenceReady = false
       view.presenceOpacity = 1
-      view.dance = 0
+      view.danceFrom = 0
+      view.danceTo = 0
+      view.danceAt = 0
+      view.danceTurn = 0
       view.pulseLevels.fill(0)
       restorePulse(view)
       view.group.scale.setScalar(view.scale)

@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
-import { createCards, DANCE_LIFT, DANCE_LIFT_MS } from '../src/engine/cards.js'
+import { createCards, DANCE_LIFT } from '../src/engine/cards.js'
+import { DANCE_RISE_MS, DANCE_SETTLE_MS } from '../src/engine/hub.js'
 import { makeTree } from '../src/model/paths.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -172,7 +173,7 @@ describe('a card depth mesh', () => {
 })
 
 describe('the dance lift on a card', () => {
-  it('lifts the drawn card and leaves its place alone for the camera', () => {
+  it('lifts one card at a time, the root last, and keeps every place for the camera', () => {
     const state = makeState()
     const { cards } = makeCards()
     let clock = 10000
@@ -185,13 +186,26 @@ describe('the dance lift on a card', () => {
     expect(root.object.position.y).toBeCloseTo(placeY, 6)
 
     cards.beat(1)
-    clock += DANCE_LIFT_MS / 2
+    clock += DANCE_RISE_MS
+    cards.update(state, 0.016, camera())
+    expect(root.object.position.y).toBeCloseTo(placeY, 6)
+    const first = cards.cards.get('src')
+    expect(first.object.position.y - first.base.y).toBeCloseTo(DANCE_LIFT, 6)
+    expect(cards.center('src').y).toBeCloseTo(first.base.y, 6)
+    expect(first.occluder.position.distanceTo(first.object.position)).toBe(0)
+
+    clock += DANCE_SETTLE_MS
+    cards.update(state, 0.016, camera())
+    expect(first.object.position.y).toBeCloseTo(first.base.y, 6)
+
+    cards.beat(1)
+    clock += DANCE_RISE_MS
     cards.update(state, 0.016, camera())
     expect(root.object.position.y - root.base.y).toBeCloseTo(DANCE_LIFT, 6)
     expect(cards.center('').y).toBeCloseTo(placeY, 6)
     expect(root.occluder.position.distanceTo(root.object.position)).toBe(0)
 
-    clock += DANCE_LIFT_MS
+    clock += DANCE_SETTLE_MS
     cards.update(state, 0.016, camera())
     expect(root.object.position.y).toBeCloseTo(placeY, 6)
     cards.dispose()

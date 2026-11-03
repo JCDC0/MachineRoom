@@ -19,12 +19,9 @@ import {
   clampFileLimit,
   createCards,
   createRowFrameKey,
-  danceDelay,
-  danceLift,
-  DANCE_LIFT,
-  DANCE_LIFT_MS,
-  DANCE_WAVE_MS,
+  danceOrder,
   fadeProgress,
+  nextDanceCard,
   openChain,
   rowOffset,
   rowWindow,
@@ -776,36 +773,55 @@ describe('the card class string', () => {
   })
 })
 
-describe('the dance wave round the ring', () => {
-  it('starts at the first card and runs round in about 300 ms', () => {
-    expect(danceDelay(0)).toBe(0)
-    expect(danceDelay(Math.PI / 2)).toBeCloseTo(DANCE_WAVE_MS / 4, 6)
-    expect(danceDelay(Math.PI)).toBeCloseTo(DANCE_WAVE_MS / 2, 6)
-    expect(danceDelay(Math.PI * 2)).toBeCloseTo(0, 6)
+describe('the next card in the dance', () => {
+  it('orders the cards by ring angle and puts the root last', () => {
+    const spots = [
+      { path: '', angle: 0, radius: 0 },
+      { path: 'src', angle: 0, radius: 900 },
+      { path: 'docs', angle: Math.PI / 2, radius: 900 },
+      { path: 'src/lib', angle: Math.PI, radius: 900 },
+    ]
+    expect(danceOrder(spots)).toEqual(['src', 'docs', 'src/lib', ''])
+    expect(danceOrder([{ path: 'root', angle: 0 }, { path: '', angle: 0 }])).toEqual(['root', ''])
   })
 
-  it('wraps a negative angle and clamps a broken one', () => {
-    expect(danceDelay(-Math.PI / 2)).toBeCloseTo((DANCE_WAVE_MS * 3) / 4, 6)
-    expect(danceDelay(4 * Math.PI)).toBeCloseTo(0, 6)
-    expect(danceDelay('x')).toBe(0)
-    expect(danceDelay(1, -20)).toBe(0)
+  it('walks to the next card in ring order and wraps after the root', () => {
+    const order = ['src', 'docs', '']
+    expect(nextDanceCard(order, '')).toBe('src')
+    expect(nextDanceCard(order, 'src')).toBe('docs')
+    expect(nextDanceCard(order, 'docs')).toBe('')
+    expect(nextDanceCard(order, 'missing')).toBe('src')
+    expect(nextDanceCard([], '')).toBe('')
+    expect(nextDanceCard(null)).toBe('')
   })
 
-  it('lifts at most 24 units and settles back to none', () => {
-    expect(danceLift(0, 0, 1)).toBe(0)
-    expect(danceLift(-4, 0, 1)).toBe(0)
-    const top = danceLift(DANCE_LIFT_MS / 2, 0, 1)
-    expect(top).toBeCloseTo(DANCE_LIFT, 6)
-    expect(danceLift(DANCE_LIFT_MS, 0, 1)).toBe(0)
-    expect(danceLift(DANCE_LIFT_MS * 2, 0, 1)).toBe(0)
-    expect(danceLift(DANCE_LIFT_MS / 2, 0, 2)).toBe(DANCE_LIFT)
-    expect(danceLift(DANCE_LIFT_MS / 2, 0, 0)).toBe(0)
+  it('lifts one card per beat and leaves the others alone', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [])
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(1000)
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    expect(cards.beat(1)).toBe(true)
+    const lifted = [...cards.cards.values()].filter((card) => card.danceAt === 1000)
+    expect(lifted).toHaveLength(1)
+    clock.mockRestore()
+    cards.dispose()
   })
 
-  it('holds the lift until the wave reaches that card', () => {
-    expect(danceLift(100, 200, 1)).toBe(0)
-    expect(danceLift(200 + DANCE_LIFT_MS / 2, 200, 1)).toBeCloseTo(DANCE_LIFT, 6)
-    expect(danceLift(200 + DANCE_LIFT_MS, 200, 1)).toBe(0)
+  it('does not lift a card under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      const state = createState(makeTree({ root: 'demo', files: ['src/a.js'] }), [])
+      const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+      cards.sync(state)
+      cards.update(state, 0.016, camera())
+      expect(cards.beat(1)).toBe(false)
+      for (const card of cards.cards.values()) expect(card.danceAt).toBe(0)
+      cards.dispose()
+    } finally {
+      globalThis.window = savedWindow
+    }
   })
 })
 

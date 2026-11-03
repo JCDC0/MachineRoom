@@ -3,6 +3,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
+import { danceEnvelope, startDanceEnvelope } from './hub.js'
 import { ROOT_PLACE, layoutRing, ringOf } from './ring.js'
 import { easeRate, still } from './sprites.js'
 
@@ -35,26 +36,31 @@ const DIM_FADE_MS = 1000
 const DIM_OPACITY = 0.25
 const BRACKETS = ['tl', 'tr', 'bl', 'br']
 export const DANCE_LIFT = 24
-export const DANCE_WAVE_MS = 300
-export const DANCE_LIFT_MS = 520
-const TURNS = Math.PI * 2
 
-export function danceDelay(angle, spread = DANCE_WAVE_MS) {
-  const value = Number(angle)
-  const span = Number(spread)
-  if (!Number.isFinite(value) || !Number.isFinite(span)) return 0
-  const wrapped = ((value % TURNS) + TURNS) % TURNS
-  return (wrapped / TURNS) * Math.max(0, span)
+export function danceOrder(spots) {
+  const list = Array.isArray(spots) ? spots : []
+  return list
+    .filter((spot) => spot && typeof spot.path === 'string')
+    .sort((a, b) => {
+      const rootA = a.path === '' ? 1 : 0
+      const rootB = b.path === '' ? 1 : 0
+      if (rootA !== rootB) return rootA - rootB
+      const angleA = Number(a.angle)
+      const angleB = Number(b.angle)
+      const turnA = Number.isFinite(angleA) ? angleA : 0
+      const turnB = Number.isFinite(angleB) ? angleB : 0
+      if (turnA !== turnB) return turnA - turnB
+      const radiusA = Number(a.radius)
+      const radiusB = Number(b.radius)
+      return (Number.isFinite(radiusA) ? radiusA : 0) - (Number.isFinite(radiusB) ? radiusB : 0)
+    })
+    .map((spot) => spot.path)
 }
 
-export function danceLift(age, delay = 0, strength = 1, height = DANCE_LIFT, duration = DANCE_LIFT_MS) {
-  const elapsed = Number(age) - Number(delay)
-  const span = Number(duration)
-  if (!Number.isFinite(elapsed) || elapsed <= 0 || !(span > 0) || elapsed >= span) return 0
-  const amount = Number(strength)
-  const peak = Math.min(1, Math.max(0, Number.isFinite(amount) ? amount : 0))
-  const top = Number.isFinite(Number(height)) ? Math.max(0, Number(height)) : DANCE_LIFT
-  return top * peak * Math.sin((elapsed / span) * Math.PI)
+export function nextDanceCard(order, previous = '') {
+  const list = Array.isArray(order) ? order.filter((path) => typeof path === 'string') : []
+  if (list.length === 0) return ''
+  return list[(list.indexOf(previous) + 1) % list.length]
 }
 
 export function fadeProgress(start, now, stillNow = false, duration = FADE_MS) {
@@ -443,6 +449,8 @@ export function createCards(cssScene, options = {}) {
   let lastSprayVersion = 0
   let sprayVersion = 1
   let lastAgentFocus = []
+  let danceOrderKeys = []
+  let danceNextPath = ''
 
   function focusChanged(state) {
     if (state.agents.size !== lastAgentFocus.length) return true
@@ -538,9 +546,9 @@ export function createCards(cssScene, options = {}) {
       occluder,
       base,
       home: base.clone(),
+      danceFrom: 0,
+      danceTo: 0,
       danceAt: 0,
-      danceStrength: 0,
-      danceDelay: 0,
       lastLift: 0,
       scale,
       rootName,
@@ -892,15 +900,16 @@ export function createCards(cssScene, options = {}) {
     if (layoutChanged) {
       layoutKey = layout.layoutKey
       const sizes = new Map(entries.map((entry) => [entry.path, entry]))
+      const spots = []
       for (const [path, spot] of layout.placed) {
         const size = sizes.get(path)
         homes.set(path, { x: spot.x, y: spot.y, z: spot.z, width: size?.width, height: size?.height, slot: spot.slot })
         const card = cards.get(path)
-        if (card) {
-          card.home.set(spot.x, spot.y, spot.z)
-          card.danceDelay = path === '' ? 0 : danceDelay(ringOf(spot).angle)
-        }
+        if (card) card.home.set(spot.x, spot.y, spot.z)
+        const ring = ringOf(spot)
+        spots.push({ path, angle: ring.angle, radius: ring.radius })
       }
+      danceOrderKeys = danceOrder(spots)
     }
     const nextOverviewKey = entries
       .filter((entry) => entry.path === '' || !entry.path.includes('/'))
@@ -979,11 +988,22 @@ export function createCards(cssScene, options = {}) {
     if (still()) return false
     const value = Math.min(1, Math.max(0, Number(strength) || 0))
     if (!(value > 0)) return false
-    const now = performance.now()
-    for (const card of cards.values()) {
-      card.danceAt = now
-      card.danceStrength = value
+    const order = danceOrderKeys.length > 0 ? danceOrderKeys : [...cards.keys()]
+    let path = nextDanceCard(order, danceNextPath)
+    let card = cards.get(path)
+    let step = 0
+    while ((!card || card.leaving) && step < order.length) {
+      path = nextDanceCard(order, path)
+      card = cards.get(path)
+      step += 1
     }
+    if (!card || card.leaving) return false
+    danceNextPath = path
+    const now = performance.now()
+    const next = startDanceEnvelope({ from: card.danceFrom, to: card.danceTo, at: card.danceAt }, value, now)
+    card.danceFrom = next.from
+    card.danceTo = next.to
+    card.danceAt = next.at
     return true
   }
 
@@ -1149,8 +1169,8 @@ export function createCards(cssScene, options = {}) {
         base.copy(card.home)
         posChanged = true
       }
-      const lift = card.danceAt > 0
-        ? danceLift(now, card.danceAt + card.danceDelay, card.danceStrength)
+      const lift = !isStill && card.danceAt > 0
+        ? DANCE_LIFT * danceEnvelope(card.danceFrom, card.danceTo, now - card.danceAt)
         : 0
       if (posChanged || lift !== card.lastLift) {
         card.lastLift = lift

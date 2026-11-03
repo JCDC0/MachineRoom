@@ -10,6 +10,8 @@
 - `POST /api/music/open` needs a page Origin, makes the music folder and starts the system file manager with an argument array and no shell, answering 204 or 501 (task U134).
 - The music folder opener is tested with a fake opener, and the player's loop modes, shuffle order and autoplay are tested (task U134).
 
+- The dance hears a low group (kick and bass) and a high group (snare and hats), each with its own rise and its own 160 ms rest (task U135).
+- Every dance motion rises over 90 ms and settles over 420 ms, and a second beat starts from where the motion is (task U135).
 - A shared byte-offset cache on runs.jsonl serves run records, issues, stats, costs and reviews (task S38).
 - The Claude session reader caches meta files by mtime and forgets removed meta files (task S38).
 
@@ -20,7 +22,7 @@
 - A child agent's shape goes back to the spare list when its view is removed (task U132).
 - The orchestrator chat drops the messages, tickets and loaded marks of a sub that left the list (task U132).
 - Settings lists a Bloom screen effect over the room's WebGL layer on a second canvas inside the lens clip, saved in `effects.bloom` (task U133).
-- A beat lifts the folder cards round the ring as a wave and pulses the hub ring, on top of each card's own glide and pop (task U131).
+- A beat lifts one folder card at a time in ring order, the root last, on top of each card's own glide and pop, and pulses the hub ring (tasks U131 and U135).
 - A new Pulse switch beside Dance makes each agent's wireframe shape move with five music bands, and puts the shape back when it is off or the music stops (task U131).
 - The music player picks a playlist or Loose tracks, plays it in order and loops, and saves `music.playlist` (task U130).
 - `GET /api/music` lists one playlist per subfolder and serves `GET /music/PLAYLIST/NAME`, with every part checked (task U130).

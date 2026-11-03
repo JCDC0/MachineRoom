@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { minTextScale } from './camera.js'
 import { isOrchestrator, isSubOrchestrator } from './shapes.js'
-import { WHITE, lineMaterial, still, textSprite } from './sprites.js'
+import { WHITE, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
 
 export const HUB_RADIUS = 300
 export const HUB_Y = 200
@@ -165,6 +165,39 @@ export function sectorGlow(level, working, delta, reduced = false) {
   return Math.max(0, current - step)
 }
 
+export const DANCE_RISE_MS = 90
+export const DANCE_SETTLE_MS = 420
+
+function danceLevel(value) {
+  const level = Number(value)
+  if (!Number.isFinite(level)) return 0
+  return Math.min(1, Math.max(0, level))
+}
+
+export function danceEnvelope(from, to, age, rise = DANCE_RISE_MS, settle = DANCE_SETTLE_MS) {
+  const start = danceLevel(from)
+  const target = danceLevel(to)
+  const elapsed = Number(age)
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return start
+  const up = Math.max(1, Number(rise) || DANCE_RISE_MS)
+  const down = Math.max(1, Number(settle) || DANCE_SETTLE_MS)
+  if (elapsed < up) {
+    const t = elapsed / up
+    return start + (target - start) * (1 - (1 - t) ** 3)
+  }
+  const t = Math.min(1, (elapsed - up) / down)
+  return target * (1 - easeInOut(t))
+}
+
+export function startDanceEnvelope(state, strength, now) {
+  const at = Number(state?.at)
+  const from = Number.isFinite(at) ? at : 0
+  const stamp = Number(now)
+  const atStamp = Number.isFinite(stamp) ? stamp : from
+  const current = danceEnvelope(state?.from, state?.to, atStamp - from)
+  return { from: current, to: Math.max(current, danceLevel(strength)), at: atStamp }
+}
+
 const NO_KEYS = Object.freeze([])
 
 export function workingKeys(state, previous = NO_KEYS) {
@@ -323,6 +356,9 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   let workingSet = new Set()
   let ringLines = [main]
   let boost = 0
+  let danceFrom = 0
+  let danceTo = 0
+  let danceAt = 0
 
   function anglesFor(ladderValue) {
     if (parkedKeys.length > 0) {
@@ -372,6 +408,9 @@ export function createHub(scene, agentsOrCount, ladder = null) {
       line.material.opacity = line.userData.baseOpacity ?? RING_OPACITY
     }
     boost = 0
+    danceFrom = 0
+    danceTo = 0
+    danceAt = 0
     ladderKeyValue = ladderKeyOf(currentLadder, parkedKeys)
   }
 
@@ -400,7 +439,10 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     if (still()) return false
     const value = Math.min(1, Math.max(0, Number(amount) || 0))
     if (!(value > 0)) return false
-    boost = Math.max(boost, value)
+    const next = startDanceEnvelope({ from: danceFrom, to: danceTo, at: danceAt }, value, performance.now())
+    danceFrom = next.from
+    danceTo = next.to
+    danceAt = next.at
     return true
   }
 
@@ -419,6 +461,8 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   function update(time, delta, camera = null, viewportHeight = 0) {
     const isStill = still()
     boost = Math.max(0, boost - delta * 1.2)
+    const danceBoost = isStill ? 0 : danceEnvelope(danceFrom, danceTo, performance.now() - danceAt)
+    const extra = Math.max(boost, danceBoost)
     const workingSectors = new Set()
     for (const key of workingSet) workingSectors.add(sectorIdForKey(key, currentLadder))
     for (const [id, level] of sectorLevels) {
@@ -427,7 +471,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     for (const line of ringLines) {
       const base = line.userData.baseOpacity ?? RING_OPACITY
       const level = line.userData.sector ? sectorLevels.get(line.userData.sector) ?? 0 : 0
-      line.material.opacity = Math.min(1, base + boost * 0.5 + (1 - base) * level)
+      line.material.opacity = Math.min(1, base + extra * 0.5 + (1 - base) * level)
       if (level > 0 || boost <= 0.01) line.material.color.setHex(WHITE)
     }
     if (camera && viewportHeight > 0) {

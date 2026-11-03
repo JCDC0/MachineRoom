@@ -51,6 +51,9 @@ export function spatialSound(place = {}) {
 }
 
 export const BEAT_WINDOW = 22
+export const GROUP_REST_MS = 160
+export const LOW_BANDS = Object.freeze([0, 1])
+export const HIGH_BANDS = Object.freeze([2, 3, 4])
 
 // Soft, compressed music never jumps 30 percent over its last moment, so a beat is a rise past the last second's spread instead.
 export function beatDetector(levels, { window = BEAT_WINDOW, spread = 1.2, floor = 0.08, least = 8 } = {}) {
@@ -63,6 +66,61 @@ export function beatDetector(levels, { window = BEAT_WINDOW, spread = 1.2, floor
   const average = recent.reduce((sum, level) => sum + level, 0) / recent.length
   const deviation = Math.sqrt(recent.reduce((sum, level) => sum + (level - average) ** 2, 0) / recent.length)
   return current > floor && current > recent[recent.length - 1] && current > average + spread * Math.max(deviation, 0.01)
+}
+
+function groupLevel(bands, indices) {
+  let sum = 0
+  let count = 0
+  for (const index of indices) {
+    const level = Number(bands[index])
+    if (!Number.isFinite(level) || level < 0) continue
+    sum += level
+    count += 1
+  }
+  return count > 0 ? sum / count : 0
+}
+
+export function bandGroups(bands) {
+  const list = bands && typeof bands === 'object' && Number.isFinite(bands.length) ? bands : []
+  return { low: groupLevel(list, LOW_BANDS), high: groupLevel(list, HIGH_BANDS) }
+}
+
+export function createBandBeatDetector({ rest = GROUP_REST_MS, window = BEAT_WINDOW, spread = 1.2, floor = 0.08, least = 8 } = {}) {
+  const levels = { low: [], high: [] }
+  const lastAt = { low: -Infinity, high: -Infinity }
+  const span = Math.max(0, Number(rest) || 0)
+  const keep = Math.max(1, Math.floor(Number(window) || BEAT_WINDOW)) + 1
+  const options = { window, spread, floor, least }
+  function reset() {
+    levels.low.length = 0
+    levels.high.length = 0
+    lastAt.low = -Infinity
+    lastAt.high = -Infinity
+  }
+  function push(bands, now) {
+    const stamp = Number(now)
+    const at = Number.isFinite(stamp) ? stamp : 0
+    const groups = bandGroups(bands)
+    const fired = { low: false, high: false }
+    let strength = 0
+    let group = ''
+    for (const name of ['low', 'high']) {
+      const history = levels[name]
+      history.push(groups[name])
+      while (history.length > keep) history.shift()
+      if (at - lastAt[name] < span) continue
+      if (!beatDetector(history, options)) continue
+      lastAt[name] = at
+      fired[name] = true
+      const value = Math.min(1, Math.max(0.35, groups[name] * 2))
+      if (value > strength) {
+        strength = value
+        group = name
+      }
+    }
+    return { strength, group, low: fired.low, high: fired.high }
+  }
+  return { push, reset, levels }
 }
 
 const REMOVE_COMMANDS = new Set(['rm', 'del', 'remove-item'])
@@ -175,9 +233,8 @@ const engine = {
   audio: null,
   mediaSource: null,
   limiter: createRateLimit(),
-  levels: [],
+  bandBeats: createBandBeatDetector(),
   lastLevelAt: 0,
-  lastBeatAt: 0,
   musicTrack: '',
   endedListeners: new Set(),
 }
@@ -310,24 +367,14 @@ export const sound = {
   },
   beat(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
     if (!engine.settings.dance || !engine.analyser || !engine.bins || !sound.musicPlaying()) {
-      engine.levels.length = 0
+      engine.bandBeats.reset()
       return 0
     }
     const stamp = Number.isFinite(now) ? now : Date.now()
-    if (stamp - engine.lastLevelAt < 45) return 0
+    if (stamp - engine.lastLevelAt < BAND_WINDOW_MS) return 0
     engine.lastLevelAt = stamp
     if (!sampleBins(stamp)) return 0
-    const bins = Math.min(12, engine.bins.length)
-    if (bins === 0) return 0
-    let total = 0
-    for (let index = 0; index < bins; index += 1) total += engine.bins[index]
-    const level = total / bins / 255
-    engine.levels.push(level)
-    if (engine.levels.length > BEAT_WINDOW + 1) engine.levels.shift()
-    if (stamp - engine.lastBeatAt < 220) return 0
-    if (!beatDetector(engine.levels)) return 0
-    engine.lastBeatAt = stamp
-    return Math.min(1, Math.max(0.35, level * 2))
+    return engine.bandBeats.push(engine.bands, stamp).strength
   },
   bands(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
     if (!engine.settings.pulse || !engine.analyser || !engine.bins || !sound.musicPlaying()) return null

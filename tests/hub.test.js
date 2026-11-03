@@ -1,6 +1,8 @@
 import * as THREE from 'three'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
+  DANCE_RISE_MS,
+  DANCE_SETTLE_MS,
   HUB_RADIUS,
   SECTOR_ARC_OPACITY,
   SECTOR_GLOW_MS,
@@ -9,6 +11,8 @@ import {
   SECTOR_LABEL_OUT,
   SECTOR_LABEL_SPREAD,
   createHub,
+  danceEnvelope,
+  startDanceEnvelope,
   sectorGlow,
   sectorIdForKey,
   sectorLabelAngle,
@@ -280,6 +284,62 @@ describe('how a sector returns to rest', () => {
     expect(sectorGlow(2, false, 0.5)).toBeCloseTo(0.5)
     expect(sectorGlow(0.5, false, Number.NaN)).toBeCloseTo(0.5)
     expect(sectorGlow(0.5, false, -1)).toBeCloseTo(0.5)
+  })
+})
+
+describe('the dance envelope', () => {
+  it('rises over 90 ms with an ease out and settles over 420 ms', () => {
+    expect(DANCE_RISE_MS).toBe(90)
+    expect(DANCE_SETTLE_MS).toBe(420)
+    expect(danceEnvelope(0, 1, 0)).toBe(0)
+    expect(danceEnvelope(0, 1, DANCE_RISE_MS / 2)).toBeCloseTo(1 - 0.5 ** 3, 10)
+    expect(danceEnvelope(0, 1, DANCE_RISE_MS)).toBeCloseTo(1, 10)
+    expect(danceEnvelope(0, 1, DANCE_RISE_MS + DANCE_SETTLE_MS / 2)).toBeCloseTo(0.5, 10)
+    expect(danceEnvelope(0, 1, DANCE_RISE_MS + DANCE_SETTLE_MS)).toBe(0)
+    expect(danceEnvelope(0, 1, DANCE_RISE_MS + DANCE_SETTLE_MS * 2)).toBe(0)
+  })
+
+  it('starts a second beat from the value the first one reached', () => {
+    const first = { from: 0, to: 1, at: 0 }
+    const at = DANCE_RISE_MS + 100
+    const before = danceEnvelope(first.from, first.to, at)
+    const next = startDanceEnvelope(first, 1, at)
+    expect(next.from).toBeCloseTo(before, 10)
+    expect(next.to).toBe(1)
+    expect(danceEnvelope(next.from, next.to, 0)).toBeCloseTo(before, 10)
+    expect(danceEnvelope(next.from, next.to, DANCE_RISE_MS)).toBeCloseTo(1, 10)
+  })
+
+  it('never jumps back to rest when a softer beat lands', () => {
+    const first = { from: 0, to: 1, at: 0 }
+    const at = DANCE_RISE_MS + 100
+    const before = danceEnvelope(first.from, first.to, at)
+    const next = startDanceEnvelope(first, 0.2, at)
+    expect(next.from).toBeCloseTo(before, 10)
+    expect(next.to).toBeGreaterThanOrEqual(before)
+    expect(danceEnvelope(next.from, next.to, 0)).toBeCloseTo(before, 10)
+  })
+})
+
+describe('the hub ring on a beat', () => {
+  it('brightens over the envelope and settles back', () => {
+    let clock = 1000
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    try {
+      const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+      const line = arcCentre(hub.group.getObjectByName('sector:frontend'))
+      const base = line.userData.baseOpacity
+      expect(hub.beat(1)).toBe(true)
+      clock += DANCE_RISE_MS
+      hub.update(0, 0.016)
+      expect(line.material.opacity).toBeGreaterThan(base)
+      clock += DANCE_SETTLE_MS
+      hub.update(0.5, 0.016)
+      expect(line.material.opacity).toBeCloseTo(base)
+      hub.dispose()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

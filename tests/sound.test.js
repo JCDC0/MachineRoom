@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { DANCE_SCALE, ORCHESTRATOR_DANCE_SCALE, danceScale } from '../src/engine/agents.js'
 import {
   BAND_COUNT,
+  GROUP_REST_MS,
   activitySounds,
+  bandGroups,
   bandIndexForBin,
   beatDetector,
+  createBandBeatDetector,
   createRateLimit,
   isDeleteCommand,
   panForScreen,
@@ -141,6 +144,75 @@ describe('the sound bands', () => {
 
   it('has five bands for the shapes to read', () => {
     expect(BAND_COUNT).toBe(5)
+  })
+})
+
+describe('the band beat groups', () => {
+  const quiet = [0.1, 0.1, 0, 0, 0]
+  const kick = [0.9, 0.9, 0, 0, 0]
+  const hats = [0, 0, 0.9, 0.9, 0.9]
+  const both = [0.9, 0.9, 0.9, 0.9, 0.9]
+
+  function beats(levels, options = {}) {
+    const detector = createBandBeatDetector(options)
+    const found = []
+    levels.forEach((bands, index) => {
+      const at = index * 45
+      const result = detector.push(bands, at)
+      if (result.strength > 0) found.push({ ...result, at })
+    })
+    return found
+  }
+
+  it('splits the five bands into a low group and a high group', () => {
+    const groups = bandGroups([0.2, 0.4, 0.6, 0.8, 1])
+    expect(groups.low).toBeCloseTo(0.3, 10)
+    expect(groups.high).toBeCloseTo(0.8, 10)
+    const typed = bandGroups(new Float32Array([0.2, 0.4, 0.6, 0.8, 1]))
+    expect(typed.low).toBeCloseTo(0.3, 6)
+    expect(typed.high).toBeCloseTo(0.8, 6)
+    expect(bandGroups([])).toEqual({ low: 0, high: 0 })
+    expect(bandGroups(null)).toEqual({ low: 0, high: 0 })
+    const mixed = bandGroups([0.5, 'x', 0.4, -1, 0.2])
+    expect(mixed.low).toBeCloseTo(0.5, 10)
+    expect(mixed.high).toBeCloseTo(0.3, 10)
+  })
+
+  it('hears a kick alone in the low group', () => {
+    const found = beats([...Array(9).fill(quiet), kick])
+    expect(found).toHaveLength(1)
+    expect(found[0].low).toBe(true)
+    expect(found[0].high).toBe(false)
+    expect(found[0].group).toBe('low')
+    expect(found[0].strength).toBeGreaterThan(0.35)
+  })
+
+  it('hears hats alone in the high group', () => {
+    const found = beats([...Array(9).fill(quiet), hats])
+    expect(found).toHaveLength(1)
+    expect(found[0].low).toBe(false)
+    expect(found[0].high).toBe(true)
+    expect(found[0].group).toBe('high')
+    expect(found[0].strength).toBeGreaterThan(0.35)
+  })
+
+  it('hears a kick and hats together as one strong beat', () => {
+    const found = beats([...Array(9).fill(quiet), both])
+    expect(found).toHaveLength(1)
+    expect(found[0].low).toBe(true)
+    expect(found[0].high).toBe(true)
+    expect(found[0].strength).toBe(1)
+  })
+
+  it('gives each group its own 160 ms rest', () => {
+    expect(GROUP_REST_MS).toBe(160)
+    const found = beats([...Array(9).fill(quiet), kick, hats])
+    expect(found.map((beat) => beat.group)).toEqual(['low', 'high'])
+  })
+
+  it('holds a group back until its rest is over', () => {
+    const found = beats([...Array(9).fill(quiet), kick, quiet, kick, quiet, quiet, kick])
+    expect(found.map((beat) => beat.at)).toEqual([405, 630])
   })
 })
 
