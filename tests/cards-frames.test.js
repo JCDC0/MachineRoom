@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { createCards, DANCE_LIFT } from '../src/engine/cards.js'
-import { DANCE_RISE_MS, DANCE_SETTLE_MS } from '../src/engine/hub.js'
+import { DANCE_RISE_MS, DANCE_SETTLE_MS, SWAY_LIFT, SWAY_SCALE } from '../src/engine/hub.js'
 import { createStrings } from '../src/engine/strings.js'
 import { makeTree } from '../src/model/paths.js'
 import { apply, createState } from '../src/model/state.js'
@@ -257,6 +257,64 @@ describe('a string on a lifted card', () => {
     expect(endAt(0).distanceTo(cards.anchor(''))).toBeLessThan(0.001)
     strings.dispose()
     cards.dispose()
+  })
+})
+
+describe('the sway on a card', () => {
+  it('lifts and scales the ring with the smoothed loudness', () => {
+    const state = makeState(['src/a.js', 'docs/b.md'])
+    const { cards } = makeCards()
+    let clock = 10000
+    vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    cards.sync(state)
+    for (let step = 0; step < 40; step += 1) cards.update(state, 0.016, camera())
+    const src = cards.cards.get('src')
+    const docs = cards.cards.get('docs')
+    cards.setSway(1)
+    clock += 16
+    cards.update(state, 0.016, camera())
+    expect(src.object.position.y - src.base.y).toBeLessThan(1)
+    let maxLift = 0
+    let maxRatio = 0
+    for (let step = 0; step < 240; step += 1) {
+      clock += 16
+      cards.update(state, 0.016, camera())
+      maxLift = Math.max(maxLift, src.object.position.y - src.base.y)
+      maxRatio = Math.max(maxRatio, src.object.scale.x / src.scale)
+    }
+    expect(maxLift).toBeGreaterThan(1)
+    expect(maxLift).toBeLessThanOrEqual(SWAY_LIFT + 1e-6)
+    expect(maxRatio).toBeGreaterThan(1.005)
+    expect(maxRatio).toBeLessThanOrEqual(1 + SWAY_SCALE + 1e-6)
+    const srcWave = src.object.position.y - src.base.y
+    const docsWave = docs.object.position.y - docs.base.y
+    expect(srcWave).not.toBeCloseTo(docsWave, 3)
+    cards.setSway(0)
+    for (let step = 0; step < 120; step += 1) {
+      clock += 16
+      cards.update(state, 0.016, camera())
+    }
+    expect(src.object.position.y - src.base.y).toBeLessThan(0.05)
+    cards.dispose()
+  })
+
+  it('holds still under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      const state = makeState()
+      const { cards } = makeCards()
+      cards.sync(state)
+      cards.update(state, 0.016, camera())
+      const src = cards.cards.get('src')
+      cards.setSway(1)
+      cards.update(state, 0.016, camera())
+      expect(src.object.position.y).toBeCloseTo(src.base.y, 6)
+      expect(src.object.scale.x).toBeCloseTo(src.scale, 6)
+      cards.dispose()
+    } finally {
+      globalThis.window = savedWindow
+    }
   })
 })
 

@@ -6,6 +6,10 @@ import {
   HUB_RADIUS,
   HUB_Y,
   PARK_LIFT,
+  HUB_RING_GROW,
+  HUB_RING_MS,
+  HUB_RING_POOL,
+  RING_MAX_OPACITY,
   SECTOR_ARC_OPACITY,
   SECTOR_GLOW_MS,
   SECTOR_LABEL_DROP,
@@ -18,6 +22,7 @@ import {
   SUB_RING_Y,
   createHub,
   danceEnvelope,
+  ringPulse,
   startDanceEnvelope,
   sectorGlow,
   sectorIdForKey,
@@ -363,6 +368,47 @@ describe('the dance envelope', () => {
     expect(next.from).toBeCloseTo(before, 10)
     expect(next.to).toBeGreaterThanOrEqual(before)
     expect(danceEnvelope(next.from, next.to, 0)).toBeCloseTo(before, 10)
+  })
+})
+
+describe('the ring a beat sends out', () => {
+  it('grows from its own radius and fades over its time', () => {
+    const start = ringPulse(HUB_RADIUS, HUB_RING_GROW, 0, HUB_RING_MS, 1)
+    expect(start.radius).toBe(HUB_RADIUS)
+    expect(start.opacity).toBeCloseTo(RING_MAX_OPACITY, 10)
+    const half = ringPulse(HUB_RADIUS, HUB_RING_GROW, HUB_RING_MS / 2, HUB_RING_MS, 1)
+    expect(half.radius).toBeCloseTo(HUB_RADIUS + HUB_RING_GROW * (1 - 0.5 ** 2), 10)
+    expect(half.opacity).toBeCloseTo(RING_MAX_OPACITY / 2, 10)
+    const end = ringPulse(HUB_RADIUS, HUB_RING_GROW, HUB_RING_MS, HUB_RING_MS, 1)
+    expect(end.radius).toBe(HUB_RADIUS + HUB_RING_GROW)
+    expect(end.opacity).toBe(0)
+    const soft = ringPulse(HUB_RADIUS, HUB_RING_GROW, 0, HUB_RING_MS, 0.25)
+    expect(soft.opacity).toBeCloseTo(RING_MAX_OPACITY * 0.25, 10)
+    const out = {}
+    expect(ringPulse(130, 130, 450, 900, 1, 0.32, out)).toBe(out)
+  })
+
+  it('takes one ring from a fixed pool on each beat', () => {
+    let clock = 1000
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    try {
+      const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+      const rings = hub.group.children.filter((child) => child.name === 'beat-ring')
+      expect(rings).toHaveLength(HUB_RING_POOL)
+      expect(hub.beat(1)).toBe(true)
+      clock += HUB_RING_MS / 2
+      hub.update(0.6, 0.016)
+      const lit = rings.filter((ring) => ring.visible)
+      expect(lit).toHaveLength(1)
+      expect(lit[0].scale.x).toBeGreaterThan(HUB_RADIUS)
+      expect(lit[0].material.opacity).toBeGreaterThan(0)
+      clock += HUB_RING_MS
+      hub.update(1.2, 0.016)
+      expect(rings.some((ring) => ring.visible)).toBe(false)
+      hub.dispose()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

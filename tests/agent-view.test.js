@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAgents } from '../src/engine/agents.js'
 import { RED, YELLOW } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
@@ -224,6 +224,93 @@ describe('setEnds through a still agent', () => {
     expect(view.link.geometry.attributes.position.version).toBeGreaterThan(linkVersion)
     expect(view.calloutLine.geometry.attributes.position.version).toBeGreaterThan(calloutVersion)
     agents.dispose()
+  })
+})
+
+describe('the beat rings around an agent', () => {
+  it('sends one small ring from the status ring on each beat', () => {
+    let clock = 1000
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    try {
+      const { agents, state, terminals, world } = harness()
+      const view = agents.views.get('a')
+      expect(view.beatRings).toHaveLength(3)
+      agents.beat(1)
+      clock += 450
+      agents.update(state, 0.016, clock, world, terminals)
+      const lit = view.beatRings.filter((slot) => slot.line.visible)
+      expect(lit).toHaveLength(1)
+      expect(lit[0].line.scale.x).toBeGreaterThan(130)
+      expect(lit[0].line.scale.x).toBeLessThan(260)
+      expect(lit[0].line.material.opacity).toBeGreaterThan(0)
+      clock += 900
+      agents.update(state, 0.016, clock, world, terminals)
+      expect(view.beatRings.some((slot) => slot.line.visible)).toBe(false)
+      agents.dispose()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+})
+
+describe('the beat rings on the ladder', () => {
+  it('sends one from the main orchestrator, a sub and a lane', () => {
+    const roster = [
+      { key: 'orchestrator', name: 'Orchestrator', shape: 'armillary' },
+      { key: 'sub-frontend', name: 'Frontend', shape: 'armillary' },
+      { key: 'opencode', name: 'OpenCode', shape: 'opencode' },
+    ]
+    const agents = createAgents(new THREE.Scene(), roster, new THREE.Scene())
+    for (const key of ['orchestrator', 'sub-frontend', 'opencode']) {
+      const view = agents.views.get(key)
+      expect(view.beatRings).toHaveLength(3)
+      agents.beat(1)
+      expect(view.beatRings.some((slot) => slot.line.visible)).toBe(true)
+      for (const slot of view.beatRings) slot.line.visible = false
+    }
+    agents.dispose()
+  })
+})
+
+describe('the agent sway', () => {
+  it('lifts and scales a shape by the smoothed loudness', () => {
+    const { agents, state, terminals, world } = harness()
+    const view = agents.views.get('a')
+    let clock = 1000
+    for (let step = 0; step < 20; step += 1) {
+      clock += 16
+      agents.update(state, 0.016, clock, world, terminals)
+    }
+    const restScale = view.group.scale.x
+    agents.setSway(1)
+    let maxLift = 0
+    let maxScale = 0
+    for (let step = 0; step < 220; step += 1) {
+      clock += 16
+      agents.update(state, 0.016, clock, world, terminals)
+      maxLift = Math.max(maxLift, view.group.position.y - view.home.y)
+      maxScale = Math.max(maxScale, view.group.scale.x)
+    }
+    expect(maxLift).toBeGreaterThan(1)
+    expect(maxLift).toBeLessThanOrEqual(6.0001)
+    expect(maxScale).toBeGreaterThan(restScale * 1.005)
+    expect(maxScale).toBeLessThanOrEqual(view.scale * 1.02 + 1e-6)
+    agents.dispose()
+  })
+
+  it('holds still under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      const { agents, state, terminals, world } = harness()
+      const view = agents.views.get('a')
+      agents.setSway(1)
+      agents.update(state, 0.016, 1000, world, terminals)
+      expect(view.group.position.y).toBe(view.home.y)
+      agents.dispose()
+    } finally {
+      globalThis.window = savedWindow
+    }
   })
 })
 

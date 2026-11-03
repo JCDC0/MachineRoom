@@ -54,6 +54,27 @@ export const BEAT_WINDOW = 22
 export const GROUP_REST_MS = 160
 export const LOW_BANDS = Object.freeze([0, 1])
 export const HIGH_BANDS = Object.freeze([2, 3, 4])
+export const ONSET_STEPS = 2
+export const ONSET_SHARE = 0.6
+export const ONSET_LOOK = 10
+
+export function sharpOnset(levels, { steps = ONSET_STEPS, share = ONSET_SHARE, look = ONSET_LOOK, floor = 0.02 } = {}) {
+  if (!Array.isArray(levels)) return false
+  const clean = levels.filter((level) => Number.isFinite(level) && level >= 0)
+  const stride = Math.max(1, Math.floor(Number(steps) || ONSET_STEPS))
+  if (clean.length < stride + 2) return false
+  const current = clean[clean.length - 1]
+  const before = clean[clean.length - 1 - stride]
+  const start = Math.max(0, clean.length - 1 - stride - Math.max(1, Math.floor(Number(look) || ONSET_LOOK)))
+  let baseline = before
+  for (let index = start; index < clean.length - 1 - stride; index += 1) {
+    baseline = Math.min(baseline, clean[index])
+  }
+  const rise = current - baseline
+  const burst = current - before
+  if (!(rise > 0) || !(burst > 0) || rise < Math.max(0, Number(floor) || 0)) return false
+  return burst >= rise * Math.min(1, Math.max(0, Number(share) || 0))
+}
 
 // Soft, compressed music never jumps 30 percent over its last moment, so a beat is a rise past the last second's spread instead.
 export function beatDetector(levels, { window = BEAT_WINDOW, spread = 1.2, floor = 0.08, least = 8 } = {}) {
@@ -85,7 +106,7 @@ export function bandGroups(bands) {
   return { low: groupLevel(list, LOW_BANDS), high: groupLevel(list, HIGH_BANDS) }
 }
 
-export function createBandBeatDetector({ rest = GROUP_REST_MS, window = BEAT_WINDOW, spread = 1.2, floor = 0.08, least = 8 } = {}) {
+export function createBandBeatDetector({ rest = GROUP_REST_MS, window = BEAT_WINDOW, spread = 1.2, floor = 0.08, least = 8, steps = ONSET_STEPS, share = ONSET_SHARE } = {}) {
   const levels = { low: [], high: [] }
   const lastAt = { low: -Infinity, high: -Infinity }
   const span = Math.max(0, Number(rest) || 0)
@@ -110,6 +131,7 @@ export function createBandBeatDetector({ rest = GROUP_REST_MS, window = BEAT_WIN
       while (history.length > keep) history.shift()
       if (at - lastAt[name] < span) continue
       if (!beatDetector(history, options)) continue
+      if (!sharpOnset(history, { steps, share })) continue
       lastAt[name] = at
       fired[name] = true
       const value = Math.min(1, Math.max(0.35, groups[name] * 2))
@@ -121,6 +143,172 @@ export function createBandBeatDetector({ rest = GROUP_REST_MS, window = BEAT_WIN
     return { strength, group, low: fired.low, high: fired.high }
   }
   return { push, reset, levels }
+}
+
+export const LOCK_WINDOW_MS = 8000
+export const LOCK_MIN_GAP_MS = 300
+export const LOCK_MAX_GAP_MS = 1500
+export const LOCK_MIN_ONSETS = 6
+export const LOCK_TOLERANCE = 0.2
+export const LOCK_GRID_MS = 90
+export const LOCK_STALE_GAPS = 4
+export const LOCK_MIN_GAPS = 3
+export const GAP_STEP_MS = 10
+export const SWAY_MS = 1500
+export const SWAY_GAIN = 1.5
+
+function cleanOnsets(onsets) {
+  const times = []
+  for (const value of Array.isArray(onsets) ? onsets : []) {
+    const at = Number(value)
+    if (Number.isFinite(at) && at >= 0 && !times.includes(at)) times.push(at)
+  }
+  return times.sort((a, b) => a - b)
+}
+
+export function recentOnsets(onsets, at, window = LOCK_WINDOW_MS) {
+  const stamp = Number(at)
+  const span = Math.max(1, Number(window) || LOCK_WINDOW_MS)
+  const times = cleanOnsets(onsets)
+  if (!Number.isFinite(stamp)) return times
+  return times.filter((time) => time <= stamp && stamp - time <= span)
+}
+
+function gapStats(onsets, min = LOCK_MIN_GAP_MS, max = LOCK_MAX_GAP_MS) {
+  const times = cleanOnsets(onsets)
+  const low = Math.max(1, Number(min) || LOCK_MIN_GAP_MS)
+  const high = Math.max(low, Number(max) || LOCK_MAX_GAP_MS)
+  const counts = new Map()
+  const sums = new Map()
+  for (let index = 1; index < times.length; index += 1) {
+    const gap = times[index] - times[index - 1]
+    if (gap < low || gap > high) continue
+    const key = Math.round(gap / GAP_STEP_MS) * GAP_STEP_MS
+    counts.set(key, (counts.get(key) ?? 0) + 1)
+    sums.set(key, (sums.get(key) ?? 0) + gap)
+  }
+  let best = 0
+  let bestCount = 0
+  for (const [gap, count] of counts) {
+    if (count > bestCount || (count === bestCount && gap < best)) {
+      best = gap
+      bestCount = count
+    }
+  }
+  return { gap: bestCount > 0 ? sums.get(best) / bestCount : 0, count: bestCount }
+}
+
+export function findBeatGap(onsets, options = {}) {
+  return gapStats(onsets, options.min, options.max).gap
+}
+
+export function beatGrid(onsets, gap, { tolerance = LOCK_TOLERANCE } = {}) {
+  const times = cleanOnsets(onsets)
+  const span = Number(gap)
+  if (!(span > 0) || times.length === 0) return { anchor: 0, count: 0 }
+  const slack = Math.max(1, span * Math.min(1, Math.max(0, Number(tolerance) || LOCK_TOLERANCE)))
+  let anchor = times[0]
+  let count = 0
+  for (const base of times) {
+    let fitted = 0
+    for (const at of times) {
+      const steps = Math.round((at - base) / span)
+      if (Math.abs(at - (base + steps * span)) <= slack) fitted += 1
+    }
+    if (fitted > count) {
+      anchor = base
+      count = fitted
+    }
+  }
+  return { anchor, count }
+}
+
+export function beatLock(onsets, { at = Infinity, window = LOCK_WINDOW_MS, tolerance = LOCK_TOLERANCE, minOnsets = LOCK_MIN_ONSETS, staleGaps = LOCK_STALE_GAPS } = {}) {
+  const times = recentOnsets(onsets, at, window)
+  const stats = gapStats(times)
+  const gap = stats.gap
+  if (times.length < Math.max(2, Number(minOnsets) || LOCK_MIN_ONSETS) || !(gap > 0) || stats.count < LOCK_MIN_GAPS) {
+    return { locked: false, gap: 0, anchor: 0, count: 0 }
+  }
+  const grid = beatGrid(times, gap, { tolerance })
+  let steady = gap
+  if (grid.count > 0) {
+    const slack = gap * Math.min(1, Math.max(0, Number(tolerance) || LOCK_TOLERANCE))
+    let farthest = grid.anchor
+    for (const time of times) {
+      const steps = Math.round((time - grid.anchor) / gap)
+      if (Math.abs(time - (grid.anchor + steps * gap)) <= slack) farthest = Math.max(farthest, time)
+    }
+    const steps = Math.round((farthest - grid.anchor) / gap)
+    if (steps > 0) steady = (farthest - grid.anchor) / steps
+  }
+  const last = times[times.length - 1]
+  const stamp = Number(at)
+  const stale = Number.isFinite(stamp) && last < stamp - steady * Math.max(1, Number(staleGaps) || LOCK_STALE_GAPS)
+  const locked = !stale && grid.count >= Math.max(2, Number(minOnsets) || LOCK_MIN_ONSETS)
+  return { locked, gap: steady, anchor: grid.anchor, count: grid.count }
+}
+
+export function onBeatGrid(at, lock, tolerance = LOCK_GRID_MS) {
+  if (!lock || lock.locked !== true) return false
+  const stamp = Number(at)
+  const gap = Number(lock.gap)
+  const anchor = Number(lock.anchor)
+  if (!Number.isFinite(stamp) || !(gap > 0) || !Number.isFinite(anchor)) return false
+  const steps = Math.round((stamp - anchor) / gap)
+  return Math.abs(stamp - (anchor + steps * gap)) <= Math.max(0, Number(tolerance) || 0)
+}
+
+export function swayTarget(bands, { gain = SWAY_GAIN } = {}) {
+  const list = bands && typeof bands === 'object' && Number.isFinite(bands.length) ? bands : []
+  let sum = 0
+  let count = 0
+  for (let index = 0; index < list.length; index += 1) {
+    const level = Number(list[index])
+    if (!Number.isFinite(level) || level < 0) continue
+    sum += level
+    count += 1
+  }
+  if (count === 0) return 0
+  return Math.min(1, Math.max(0, (sum / count) * Math.max(0, Number(gain) || 0)))
+}
+
+export function swayStep(previous, target, deltaMs, span = SWAY_MS) {
+  const from = Math.min(1, Math.max(0, Number(previous) || 0))
+  const to = Math.min(1, Math.max(0, Number(target) || 0))
+  const elapsed = Number(deltaMs)
+  const duration = Math.max(1, Number(span) || SWAY_MS)
+  if (!Number.isFinite(elapsed) || elapsed <= 0) return from
+  return from + (to - from) * Math.min(1, elapsed / duration)
+}
+
+export function createDanceTracker({ window = LOCK_WINDOW_MS, swaySpan = SWAY_MS, detector = createBandBeatDetector() } = {}) {
+  let onsets = []
+  let lock = { locked: false, gap: 0, anchor: 0, count: 0 }
+  let sway = 0
+  let lastAt = 0
+  function reset() {
+    onsets = []
+    lock = { locked: false, gap: 0, anchor: 0, count: 0 }
+    sway = 0
+    lastAt = 0
+    detector.reset?.()
+  }
+  function push(bands, now) {
+    const stamp = Number.isFinite(Number(now)) ? Number(now) : lastAt
+    const delta = lastAt > 0 ? Math.max(0, stamp - lastAt) : 0
+    lastAt = stamp
+    const result = detector.push(bands, stamp)
+    if (result.strength > 0) {
+      if (!lock.locked || onBeatGrid(stamp, lock)) onsets.push(stamp)
+    }
+    onsets = recentOnsets(onsets, stamp, window)
+    lock = beatLock(onsets, { at: stamp, window })
+    sway = swayStep(sway, lock.locked ? 0 : swayTarget(bands), delta, swaySpan)
+    const beat = result.strength > 0 && lock.locked && onBeatGrid(stamp, lock) ? result.strength : 0
+    return { beat, sway, locked: lock.locked, lock: { ...lock } }
+  }
+  return { push, reset, onsets: () => [...onsets], lock: () => ({ ...lock }), sway: () => sway }
 }
 
 const REMOVE_COMMANDS = new Set(['rm', 'del', 'remove-item'])
@@ -233,8 +421,10 @@ const engine = {
   audio: null,
   mediaSource: null,
   limiter: createRateLimit(),
-  bandBeats: createBandBeatDetector(),
-  lastLevelAt: 0,
+  danceTracker: createDanceTracker(),
+  sway: 0,
+  lastDanceAt: 0,
+  lastDance: { beat: 0, sway: 0 },
   musicTrack: '',
   endedListeners: new Set(),
 }
@@ -365,16 +555,37 @@ export const sound = {
     oscillator.stop(now + tone.duration + 0.02)
     return true
   },
-  beat(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
-    if (!engine.settings.dance || !engine.analyser || !engine.bins || !sound.musicPlaying()) {
-      engine.bandBeats.reset()
-      return 0
-    }
+  dance(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
     const stamp = Number.isFinite(now) ? now : Date.now()
-    if (stamp - engine.lastLevelAt < BAND_WINDOW_MS) return 0
+    if (!engine.settings.dance || !engine.analyser || !engine.bins || !sound.musicPlaying()) {
+      engine.danceTracker.reset()
+      const delta = engine.lastDanceAt > 0 ? Math.max(0, stamp - engine.lastDanceAt) : 0
+      engine.lastDanceAt = stamp
+      engine.sway = swayStep(engine.sway, 0, delta)
+      engine.lastDance.beat = 0
+      engine.lastDance.sway = engine.sway
+      return engine.lastDance
+    }
+    if (stamp - engine.lastLevelAt < BAND_WINDOW_MS) {
+      engine.lastDance.beat = 0
+      engine.lastDance.sway = engine.sway
+      return engine.lastDance
+    }
     engine.lastLevelAt = stamp
-    if (!sampleBins(stamp)) return 0
-    return engine.bandBeats.push(engine.bands, stamp).strength
+    if (!sampleBins(stamp)) {
+      engine.lastDance.beat = 0
+      engine.lastDance.sway = engine.sway
+      return engine.lastDance
+    }
+    engine.lastDanceAt = stamp
+    const result = engine.danceTracker.push(engine.bands, stamp)
+    engine.sway = result.sway
+    engine.lastDance.beat = result.beat
+    engine.lastDance.sway = result.sway
+    return engine.lastDance
+  },
+  beat(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
+    return sound.dance(now).beat
   },
   bands(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
     if (!engine.settings.pulse || !engine.analyser || !engine.bins || !sound.musicPlaying()) return null

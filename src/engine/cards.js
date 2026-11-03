@@ -3,7 +3,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { planFolderView } from '../model/folderView.js'
 import { basename, dirname, visibleText } from '../model/paths.js'
 import { freshRecent } from '../model/state.js'
-import { danceEnvelope, startDanceEnvelope } from './hub.js'
+import { SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, startDanceEnvelope } from './hub.js'
 import { ROOT_PLACE, layoutRing, ringOf } from './ring.js'
 import { easeRate, still } from './sprites.js'
 
@@ -460,6 +460,8 @@ export function createCards(cssScene, options = {}) {
   let lastAgentFocus = []
   let danceOrderKeys = []
   let danceNextPath = ''
+  let swayTarget = 0
+  let swayLevel = 0
 
   function focusChanged(state) {
     if (state.agents.size !== lastAgentFocus.length) return true
@@ -559,6 +561,7 @@ export function createCards(cssScene, options = {}) {
       danceTo: 0,
       danceAt: 0,
       lastLift: 0,
+      lastSwayScale: 1,
       scale,
       rootName,
       rows: [],
@@ -1005,6 +1008,12 @@ export function createCards(cssScene, options = {}) {
     rowRevision += 1
   }
 
+  function setSway(level) {
+    const value = Number(level)
+    swayTarget = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
+    return swayTarget
+  }
+
   function beat(strength) {
     if (still()) return false
     const value = Math.min(1, Math.max(0, Number(strength) || 0))
@@ -1133,6 +1142,7 @@ export function createCards(cssScene, options = {}) {
     const changed = recompute(state)
     const now = performance.now()
     const isStill = still()
+    swayLevel = isStill ? 0 : swayLevel + (swayTarget - swayLevel) * easeRate(delta, 1.5, false)
     const ease = easeRate(delta, 3, isStill)
     const dimmed = Boolean(mask?.dimmed)
     const dimLit = mask?.lit ?? null
@@ -1190,9 +1200,12 @@ export function createCards(cssScene, options = {}) {
         base.copy(card.home)
         posChanged = true
       }
-      const lift = !isStill && card.danceAt > 0
+      const wave = 0.5 + 0.5 * Math.sin(now * SWAY_RATE + Math.atan2(card.home.z, card.home.x))
+      const swayLift = isStill ? 0 : swayLevel * SWAY_LIFT * wave
+      const danceLift = !isStill && card.danceAt > 0
         ? DANCE_LIFT * danceEnvelope(card.danceFrom, card.danceTo, now - card.danceAt)
         : 0
+      const lift = danceLift + swayLift
       if (posChanged || lift !== card.lastLift) {
         card.lastLift = lift
         position.copy(base)
@@ -1207,11 +1220,13 @@ export function createCards(cssScene, options = {}) {
       } else {
         card.scale = goal
       }
-      if (card.lastScale !== card.scale || card.lastHeight !== card.height) {
+      const swayScale = isStill ? 1 : 1 + swayLevel * SWAY_SCALE * wave
+      if (card.lastScale !== card.scale || card.lastHeight !== card.height || card.lastSwayScale !== swayScale) {
         card.lastScale = card.scale
         card.lastHeight = card.height
-        card.object.scale.setScalar(card.scale)
-        card.occluder.scale.setScalar(card.scale)
+        card.lastSwayScale = swayScale
+        card.object.scale.setScalar(card.scale * swayScale)
+        card.occluder.scale.setScalar(card.scale * swayScale)
       }
       if (!card.object.quaternion.equals(camera.quaternion)) {
         card.object.quaternion.copy(camera.quaternion)
@@ -1422,6 +1437,7 @@ export function createCards(cssScene, options = {}) {
     setOptions,
     update,
     beat,
+    setSway,
     moving: () => movingNow,
     visibleLinks,
     homes: () => homes,

@@ -3,15 +3,23 @@ import { DANCE_SCALE, ORCHESTRATOR_DANCE_SCALE, danceScale } from '../src/engine
 import {
   BAND_COUNT,
   GROUP_REST_MS,
+  LOCK_GRID_MS,
   activitySounds,
   bandGroups,
   bandIndexForBin,
   beatDetector,
+  beatLock,
   createBandBeatDetector,
+  createDanceTracker,
   createRateLimit,
+  findBeatGap,
   isDeleteCommand,
+  onBeatGrid,
   panForScreen,
+  sharpOnset,
   spatialSound,
+  swayStep,
+  swayTarget,
 } from '../src/ui/sound.js'
 
 describe('spatial beeps', () => {
@@ -213,6 +221,139 @@ describe('the band beat groups', () => {
   it('holds a group back until its rest is over', () => {
     const found = beats([...Array(9).fill(quiet), kick, quiet, kick, quiet, quiet, kick])
     expect(found.map((beat) => beat.at)).toEqual([405, 630])
+  })
+})
+
+describe('the beat a dancer hears', () => {
+  const QUIET = [0.08, 0.08, 0, 0, 0]
+  const KICK = [0.9, 0.9, 0, 0, 0]
+  const STRINGS = [0.18, 0.26, 0.34, 0.3, 0.22]
+
+  function warm(tracker, bands = QUIET, count = 9) {
+    let time = 0
+    for (let index = 0; index < count; index += 1) {
+      tracker.push(bands, time)
+      time += 45
+    }
+    return time
+  }
+
+  it('counts a sharp rise and never a slow swell', () => {
+    expect(sharpOnset([...Array(9).fill(0.1), 0.9])).toBe(true)
+    const swell = Array.from({ length: 14 }, (_, index) => 0.1 + 0.5 * (index / 13))
+    expect(sharpOnset(swell)).toBe(false)
+    expect(sharpOnset([...Array(9).fill(0.1)])).toBe(false)
+    expect(sharpOnset(null)).toBe(false)
+  })
+
+  it('finds the common gap between onsets', () => {
+    expect(findBeatGap([0, 600, 1200, 1800, 2400, 3000])).toBeCloseTo(600, 6)
+    expect(findBeatGap([0, 190, 380, 570])).toBe(0)
+    expect(findBeatGap([])).toBe(0)
+  })
+
+  it('locks a steady kick at 100 beats a minute and moves on its grid', () => {
+    const tracker = createDanceTracker()
+    const start = warm(tracker)
+    const plan = Array.from({ length: 14 }, (_, beat) => start + Math.round((beat * 600) / 45) * 45)
+    const beats = []
+    let time = start
+    let next = 0
+    while (time <= plan[plan.length - 1] + 90) {
+      const kick = next < plan.length && time === plan[next]
+      const result = tracker.push(kick ? KICK : QUIET, time)
+      if (result.beat > 0) beats.push(time)
+      if (kick) next += 1
+      time += 45
+    }
+    const lock = tracker.lock()
+    expect(lock.locked).toBe(true)
+    expect(lock.gap).toBeGreaterThan(560)
+    expect(lock.gap).toBeLessThan(640)
+    expect(beats.length).toBeGreaterThanOrEqual(5)
+    for (const at of beats) expect(onBeatGrid(at, lock)).toBe(true)
+
+    const off = tracker.push(KICK, plan[plan.length - 1] + 300)
+    expect(off.locked).toBe(true)
+    expect(off.beat).toBe(0)
+  })
+
+  it('never counts a slow swell as a beat', () => {
+    const tracker = createDanceTracker()
+    let time = warm(tracker)
+    let beats = 0
+    for (let index = 0; index < 24; index += 1) {
+      const level = 0.1 + 0.6 * Math.min(1, index / 12)
+      const result = tracker.push([level, level * 0.8, 0, 0, 0], time)
+      if (result.beat > 0) beats += 1
+      time += 45
+    }
+    for (let index = 0; index < 10; index += 1) {
+      const result = tracker.push([0.7, 0.56, 0, 0, 0], time)
+      if (result.beat > 0) beats += 1
+      time += 45
+    }
+    expect(beats).toBe(0)
+    expect(tracker.lock().locked).toBe(false)
+    expect(tracker.sway()).toBeGreaterThan(0.05)
+  })
+
+  it('never locks on onsets at random and sways instead', () => {
+    const random = [0, 410, 1130, 1650, 2630, 2990, 4230, 4850, 5300, 6660, 7180, 7900]
+    expect(beatLock(random, { at: 8000 }).locked).toBe(false)
+
+    const tracker = createDanceTracker()
+    let time = warm(tracker, STRINGS)
+    let beats = 0
+    for (const at of random) {
+      while (time < at) {
+        tracker.push(STRINGS, time)
+        time += 45
+      }
+      const result = tracker.push(KICK, time)
+      if (result.beat > 0) beats += 1
+      time += 45
+    }
+    expect(beats).toBe(0)
+    expect(tracker.lock().locked).toBe(false)
+    expect(tracker.sway()).toBeGreaterThan(0.2)
+  })
+
+  it('goes from beat-locked to sway when the drums stop', () => {
+    const tracker = createDanceTracker()
+    const start = warm(tracker)
+    let time = start
+    let beats = 0
+    for (let index = 0; index < 10; index += 1) {
+      const result = tracker.push(KICK, time)
+      if (result.beat > 0) beats += 1
+      for (let rest = 1; rest < 14; rest += 1) {
+        tracker.push(QUIET, time + rest * 45)
+      }
+      time += 14 * 45
+    }
+    expect(tracker.lock().locked).toBe(true)
+    expect(beats).toBeGreaterThan(0)
+
+    let after = 0
+    for (let index = 0; index < 90; index += 1) {
+      const result = tracker.push(STRINGS, time)
+      if (!result.locked && result.beat > 0) after += 1
+      time += 45
+    }
+    expect(after).toBe(0)
+    expect(tracker.lock().locked).toBe(false)
+    expect(tracker.sway()).toBeGreaterThan(0.2)
+  })
+
+  it('eases the sway over about a second and a half', () => {
+    expect(swayStep(0, 1, 0)).toBe(0)
+    expect(swayStep(0, 1, 750)).toBeCloseTo(0.5, 6)
+    expect(swayStep(0, 1, 1500)).toBe(1)
+    expect(swayStep(0.4, 0.1, 1500)).toBeCloseTo(0.1, 6)
+    expect(swayTarget([0.2, 0.4, 0.4, 0.2, 0.3])).toBeCloseTo(0.45, 6)
+    expect(swayTarget(null)).toBe(0)
+    expect(LOCK_GRID_MS).toBe(90)
   })
 })
 

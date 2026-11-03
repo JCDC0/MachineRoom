@@ -798,8 +798,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         compassRef.current?.(yaw, pitch)
         player.tick(ms)
         roomRef.current?.setBands(sound.bands())
-        const beat = sound.beat()
-        if (beat > 0) roomRef.current?.setBeat(beat)
+        const dance = sound.dance()
+        if (dance.beat > 0) roomRef.current?.setBeat(dance.beat)
+        roomRef.current?.setSway(dance.sway)
       },
       onPick: (key) => {
         if (key === null || key === undefined) {
