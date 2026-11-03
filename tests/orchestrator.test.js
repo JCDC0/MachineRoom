@@ -1768,7 +1768,7 @@ describe('the orchestrator chat file', () => {
     expect(orchestrator.answer().saveError).toBeNull()
   })
 
-  it('retries a failed rename on EPERM and EBUSY and keeps the temporary for the next save', () => {
+  it('retries a failed rename on EPERM and EBUSY and removes the temporary on failure', () => {
     const rig = makeRig()
     rig.orchestrator.close()
     const file = chatFileFor(rig.projectRoot, rig.runs)
@@ -1815,7 +1815,8 @@ describe('the orchestrator chat file', () => {
     })
     cleanups.push(async () => failingOrchestrator.close())
     expect(failingAttempts).toBe(5)
-    expect(existsSync(tmpFile)).toBe(true)
+    expect(existsSync(tmpFile)).toBe(false)
+    expect(failingOrchestrator.answer().saveError).toBe(CHAT_SAVE_PROBLEM)
     failingOrchestrator.close()
   })
 

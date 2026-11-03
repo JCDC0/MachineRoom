@@ -599,6 +599,12 @@ export function createOrchestrator({
         }
       } catch (error) {
         failure = error
+      } finally {
+        if (!renamed) {
+          try {
+            rmSync(temporary, { force: true })
+          } catch {}
+        }
       }
       if (renamed) failure = null
     } catch (error) {
