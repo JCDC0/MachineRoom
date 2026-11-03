@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Remove the unused stopping flag and treat a turn with a successful exit and report as completed (task S31).
+
 - A run started by a removed sub wakes the main orchestrator with a line naming the removed sub (task S31).
 
 - A message from the main orchestrator to a paused sub clears the pause and starts a turn (task S31).

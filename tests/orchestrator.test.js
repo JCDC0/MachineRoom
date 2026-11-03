@@ -1338,6 +1338,50 @@ describe('waking the orchestrator', () => {
     expect(readLines(join(runs, 'runs.jsonl')).at(-1)).toMatchObject({ exitCode: 0, killed: false })
   })
 
+  it('does not report a stopped turn when stop races right before close with complete output', async () => {
+    const base = makeTempDir('mr-stop-race-before-')
+    const runs = join(base, 'runs')
+    const projectRoot = join(base, 'project')
+    mkdirSync(runs, { recursive: true })
+    mkdirSync(projectRoot, { recursive: true })
+    const promptFile = join(base, 'orchestrator-agent.md')
+    writeFileSync(promptFile, PROMPT)
+    const child = new EventEmitter()
+    child.stdout = new PassThrough()
+    child.stderr = new PassThrough()
+    child.kill = () => {}
+    const orchestrator = createOrchestrator({
+      projectRoot,
+      runsFolder: runs,
+      lanes: LANES,
+      promptFile,
+      spawn: () => child,
+    })
+    cleanups.push(async () => {
+      orchestrator.close()
+      await sleep(20)
+      rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+    })
+
+    expect(orchestrator.send({ text: 'Finish first', confirmed: true }).status).toBe(202)
+    child.stdout.write(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }) + '\n')
+    child.stdout.write(
+      JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        result: 'All done.',
+        usage: { input_tokens: 12, output_tokens: 3 },
+      }) + '\n'
+    )
+    expect(orchestrator.stop({ confirmed: true })).toEqual({ status: 200, body: { ok: true } })
+    child.emit('close', 0)
+
+    await waitFor(() => orchestrator.answer().messages.some((message) => message.from === 'orchestrator'))
+    expect(orchestrator.answer().messages.at(-1).text).toBe('All done.')
+    expect(orchestrator.answer().messages.some((message) => /^The orchestrator stopped/.test(message.text))).toBe(false)
+    expect(readLines(join(runs, 'runs.jsonl')).at(-1)).toMatchObject({ exitCode: 0, killed: false })
+  })
+
   it('starts the waiting room turn when the hourly cap frees a slot', async () => {
     const base = makeTempDir('mr-room-cap-')
     const runs = join(base, 'runs')

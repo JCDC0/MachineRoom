@@ -1111,6 +1111,9 @@ export function createOrchestrator({
     const failureRaw = descriptor?.failure ? descriptor.failure(logText) : null
     const failureMessage = cleanFailure(failureRaw)
     const stderrMessage = report ? null : cleanFailure(lastStderrLine(turn.stderr))
+    if (code === 0 && !error && report) {
+      turn.killed = false
+    }
     const failed = turn.killed || Boolean(error) || !Number.isInteger(code) || code !== 0
     const noReport = !failed && typeof report === 'string' && report.trim() === NO_REPORT
     const text = failed
@@ -1224,9 +1227,7 @@ export function createOrchestrator({
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
     if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
     if (running && !running.done) {
-      if (running.exited) {
-        running.stopping = true
-      } else {
+      if (!running.exited) {
         running.killed = true
         killTree(running.child)
       }
