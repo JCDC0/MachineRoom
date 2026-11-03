@@ -199,6 +199,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const roster = agents.map(roomAgent)
   const hub = createHub(scene, roster)
   const agentSet = createAgents(scene, roster, cssScene)
+  agentSet.setViewport(width, height)
   const messages = createMessages(scene, {
     viewOf: (key) => agentSet.views.get(key)?.group.position ?? null,
   })
@@ -771,6 +772,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     renderer.setSize(width, height)
     cssRenderer.setSize(width, height)
     bloom?.resize(width, height)
+    agentSet.setViewport(width, height)
     rig.resize()
     const shown = boardVisible(width)
     if (shown !== boardShown) {
