@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   DIRECT_HARNESS,
   DIRECT_KEY_PROBLEM,
+  affectedSubText,
   assignSubLanesPlan,
   childConfirmText,
   childDetail,
@@ -23,6 +24,7 @@ import {
   removeSubPlan,
   rowText,
   stateWord,
+  subsLosingLanes,
 } from '../src/ui/family.js'
 
 const HARNESSES = {
@@ -488,6 +490,15 @@ describe('grouping code agents under a sub orchestrator', () => {
     const full = { subs: Array.from({ length: 5 }, (_, index) => ({ id: `sub-${index}`, lanes: [`lane-${index}`] })) }
     expect(groupSubPlan(full, draft, ['a']).problem).toBe('There are at most 5 sub orchestrators.')
   })
+
+  it('names every other sub that loses lanes or goes away', () => {
+    const plan = groupSubPlan(ladder, draft, ['b', 'c'])
+    expect(plan.affected).toEqual([
+      { id: 'frontend', name: 'Frontend', lost: 1, empty: false, removed: false },
+      { id: 'backend', name: 'Backend', lost: 1, empty: true, removed: true },
+    ])
+    expect(affectedSubText(plan.affected)).toBe('Frontend loses 1 agent. Backend goes away.')
+  })
 })
 
 describe('removing a sub orchestrator', () => {
@@ -535,6 +546,12 @@ describe('assigning lanes to a sub orchestrator', () => {
     const missing = assignSubLanesPlan(ladder, 'missing', ['a'])
     expect(missing.problem).toBe('Choose a sub orchestrator.')
     expect(missing.sub).toBeNull()
+  })
+
+  it('names another sub that loses every one of its lanes', () => {
+    const plan = assignSubLanesPlan(ladder, 'backend', ['a', 'b'])
+    expect(plan.affected).toEqual([{ id: 'frontend', name: 'Frontend', lost: 2, empty: true }])
+    expect(affectedSubText(plan.affected)).toBe('Frontend loses all its agents.')
   })
 })
 

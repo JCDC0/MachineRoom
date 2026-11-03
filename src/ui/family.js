@@ -351,6 +351,38 @@ function cleanLaneIds(value) {
   return ids
 }
 
+export function subsLosingLanes(subs, laneIds) {
+  const claimed = new Set(cleanLaneIds(laneIds))
+  const rows = []
+  for (const sub of Array.isArray(subs) ? subs : []) {
+    const before = cleanLaneIds(sub?.lanes)
+    const lost = before.filter((lane) => claimed.has(lane))
+    if (lost.length === 0) continue
+    rows.push({
+      id: cleanText(sub?.id, 80),
+      name: cleanText(sub?.name, AGENT_NAME_MAX) || cleanText(sub?.id, 80) || DEFAULT_LABEL.sub,
+      lost: lost.length,
+      empty: lost.length === before.length,
+    })
+  }
+  return rows
+}
+
+export function affectedSubText(rows) {
+  const parts = []
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!row || typeof row !== 'object') continue
+    const name = cleanText(row.name, AGENT_NAME_MAX) || DEFAULT_LABEL.sub
+    if (row.empty === true) {
+      parts.push(row.removed === true ? `${name} goes away.` : `${name} loses all its agents.`)
+      continue
+    }
+    const count = Number(row.lost)
+    parts.push(`${name} loses ${count} ${count === 1 ? 'agent' : 'agents'}.`)
+  }
+  return parts.join(' ')
+}
+
 function freeSubId(label, currentSubs, laneKeys = [], fallback = '') {
   const taken = new Set()
   for (const sub of Array.isArray(currentSubs) ? currentSubs : []) {
@@ -405,7 +437,7 @@ export function convertPlan(ladder, node, childKey = '', laneKeys = []) {
 
 export function groupSubPlan(ladder, draft, laneIds, laneKeys = []) {
   const currentSubs = ladderSubs(ladder)
-  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null }
+  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null, affected: [] }
   const label = labelProblem(draft?.label)
   if (label) return { ...unchanged, problem: label }
   const selected = cleanLaneIds(laneIds)
@@ -414,6 +446,7 @@ export function groupSubPlan(ladder, draft, laneIds, laneKeys = []) {
     return { ...unchanged, problem: `There are at most ${MAX_SUBS} sub orchestrators.` }
   }
   const claimed = new Set(selected)
+  const affected = subsLosingLanes(currentSubs, selected).map((row) => ({ ...row, removed: row.empty }))
   const subs = []
   for (const sub of currentSubs) {
     const before = Array.isArray(sub.lanes) ? sub.lanes : []
@@ -431,7 +464,7 @@ export function groupSubPlan(ladder, draft, laneIds, laneKeys = []) {
     restricted: false,
     setBy: 'owner',
   }
-  return { problem: '', ladder: { subs: [...subs, sub] }, sub }
+  return { problem: '', ladder: { subs: [...subs, sub] }, sub, affected }
 }
 
 export function removeSubPlan(ladder, subId) {
@@ -449,20 +482,22 @@ export function removeSubPlan(ladder, subId) {
 
 export function assignSubLanesPlan(ladder, subId, laneIds) {
   const currentSubs = ladderSubs(ladder)
-  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null }
+  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null, affected: [] }
   const selected = cleanLaneIds(laneIds)
   if (selected.length === 0) return { ...unchanged, problem: 'Select at least one code agent.' }
   const id = cleanText(subId, 80)
   const index = currentSubs.findIndex((sub) => cleanText(sub?.id, 80) === id)
   if (index === -1) return { ...unchanged, problem: 'Choose a sub orchestrator.' }
   const claimed = new Set(selected)
+  const others = currentSubs.filter((_, at) => at !== index)
+  const affected = subsLosingLanes(others, selected)
   const subs = currentSubs.map((sub, at) => {
     if (at === index) return { ...sub, lanes: selected }
     const before = Array.isArray(sub.lanes) ? sub.lanes : []
     const lanes = before.filter((lane) => !claimed.has(lane))
     return lanes.length === before.length ? sub : { ...sub, lanes }
   })
-  return { problem: '', ladder: { subs }, sub: subs[index] }
+  return { problem: '', ladder: { subs }, sub: subs[index], affected }
 }
 
 export const TEAM_ORCHESTRATORS_MAX = 4

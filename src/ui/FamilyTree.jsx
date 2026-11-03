@@ -6,6 +6,7 @@ import {
   DIRECT_HARNESS,
   DIRECT_KEY_PROBLEM,
   MAX_SUBS,
+  affectedSubText,
   childConfirmText,
   childDetail,
   childDraft,
@@ -21,6 +22,7 @@ import {
   labelProblem,
   rowText,
   stateWord,
+  subsLosingLanes,
 } from './family.js'
 import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs } from './ladderForm.js'
 import { ModelSelect, useHarnessModels } from './ModelRefresh.jsx'
@@ -88,11 +90,12 @@ function groupSubLadder(ladder, draft, laneIds, laneKeys = []) {
   const subs = ladderSubs(ladder)
   const picked = cleanLaneIds(laneIds)
   const problem = labelProblem(draft?.label)
-  if (problem) return { problem, subs, sub: null }
-  if (picked.length === 0) return { problem: 'Select at least one code agent.', subs, sub: null }
+  if (problem) return { problem, subs, sub: null, affected: [] }
+  if (picked.length === 0) return { problem: 'Select at least one code agent.', subs, sub: null, affected: [] }
   if (subs.length >= MAX_SUBS) {
-    return { problem: `There are at most ${MAX_SUBS} sub orchestrators.`, subs, sub: null }
+    return { problem: `There are at most ${MAX_SUBS} sub orchestrators.`, subs, sub: null, affected: [] }
   }
+  const affected = subsLosingLanes(subs, picked).map((row) => ({ ...row, removed: row.empty }))
   const next = []
   for (const sub of subs) {
     const before = cleanLaneIds(sub.lanes)
@@ -115,7 +118,7 @@ function groupSubLadder(ladder, draft, laneIds, laneKeys = []) {
     restricted: false,
     setBy: 'owner',
   }
-  return { problem: '', subs: [...next, sub], sub }
+  return { problem: '', subs: [...next, sub], sub, affected }
 }
 
 function removeSubLadder(ladder, subId) {
@@ -130,17 +133,21 @@ function removeSubLadder(ladder, subId) {
 function assignSubLadder(ladder, subId, laneIds) {
   const subs = ladderSubs(ladder)
   if (!subs.some((sub) => sub.id === subId)) {
-    return { problem: 'This sub orchestrator is not in the ladder.', subs }
+    return { problem: 'This sub orchestrator is not in the ladder.', subs, affected: [] }
   }
   const picked = cleanLaneIds(laneIds)
   if (picked.length === 0) {
-    return { problem: 'Select at least one code agent.', subs }
+    return { problem: 'Select at least one code agent.', subs, affected: [] }
   }
+  const affected = subsLosingLanes(
+    subs.filter((sub) => sub.id !== subId),
+    picked
+  )
   const next = subs.map((sub) => {
     if (sub.id === subId) return { ...sub, lanes: picked }
     return { ...sub, lanes: cleanLaneIds(sub.lanes).filter((key) => !picked.includes(key)) }
   })
-  return { problem: '', subs: next }
+  return { problem: '', subs: next, affected }
 }
 
 function agentCount(count) {
@@ -818,6 +825,7 @@ export function FamilyTree({ client = null, tasks = null }) {
     ask({
       text: `Add "${plan.sub.name}" to lead ${agentCount(plan.sub.lanes.length)}?`,
       detail: childDetail(draftForPlan, harnesses, models),
+      notes: affectedSubText(plan.affected),
       label: 'Create',
       busyText: 'Creating the sub orchestrator...',
       run: async () => {
@@ -864,6 +872,7 @@ export function FamilyTree({ client = null, tasks = null }) {
     ask({
       text: `Save the agents under "${node.label}"?`,
       detail: agentCount(picked.length),
+      notes: affectedSubText(plan.affected),
       label: 'Save',
       busyText: 'Saving the sub orchestrator...',
       run: async () => {
@@ -1779,6 +1788,7 @@ export function FamilyTree({ client = null, tasks = null }) {
           <section className="mr-side-confirm-card">
             <p className="mr-side-confirm-text">{busy && confirm.busyText ? confirm.busyText : confirm.text}</p>
             {confirm.detail ? <p className="mr-family-confirm-detail mono">{confirm.detail}</p> : null}
+            {confirm.notes ? <p className="mr-side-note">{confirm.notes}</p> : null}
             <div className="mr-side-confirm-actions">
               <button
                 type="button"
