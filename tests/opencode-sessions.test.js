@@ -160,6 +160,59 @@ describe('the OpenCode session reader', () => {
     expect(reader.forgotten().has('ses-1')).toBe(false)
   })
 
+  it('caps the forgotten map at 200 entries and reads a dropped session reopened later (S39)', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 5000 }
+    const { reader, frames } = startReader({ dbPath, projectRoot, runsFolder: join(dir, 'runs'), clock })
+    reader.tick()
+
+    withDb(dbPath, (db) => {
+      const sessStmt = db.prepare('INSERT INTO session_v2 (id, parent_id, directory, title, time_updated) VALUES (?, ?, ?, ?, ?)')
+      const msgStmt = db.prepare('INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      for (let i = 1; i <= 201; i++) {
+        const id = `ses-${i}`
+        sessStmt.run(id, null, projectRoot, 'Work', 2000 + i)
+        msgStmt.run(`m-user-${i}`, id, 'user', 1, 2000 + i, 2000 + i, '{}')
+        msgStmt.run(`m-idle-${i}`, id, 'idle', 2, 2000 + i, 2000 + i, JSON.stringify({ outcome: 'succeeded' }))
+      }
+    })
+    reader.tick()
+    expect(reader.sessions().size).toBe(201)
+
+    clock.value += 60 * 60 * 1000
+    reader.tick()
+
+    expect(reader.sessions().size).toBe(0)
+    expect(reader.forgotten().size).toBe(200)
+    expect(reader.forgotten().has('ses-1')).toBe(false)
+    expect(reader.forgotten().has('ses-2')).toBe(true)
+    expect(reader.forgotten().has('ses-201')).toBe(true)
+
+    const before = frames.length
+    addMessage(dbPath, { id: 'm-user-reopened', sessionId: 'ses-1', type: 'user', seq: 3, time: 9000 })
+    addMessage(dbPath, {
+      id: 'm-assistant-reopened',
+      sessionId: 'ses-1',
+      type: 'assistant',
+      seq: 4,
+      time: 9001,
+      data: { content: [toolItem({ id: 'call-reopen', name: 'read', input: { filePath: 'x.txt' } })] },
+    })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(9001, 'ses-1')
+    })
+    clock.value += 10000
+    reader.tick()
+
+    expect(frames.length).toBeGreaterThan(before)
+    expect(reader.sessions().has('ses-1')).toBe(true)
+    expect(reader.forgotten().has('ses-1')).toBe(false)
+    const logs = logFrames(frames)
+    expect(logs.some((f) => chunkOf(f).part?.id === 'call-reopen')).toBe(true)
+    expect(statusFrames(frames).at(-1).payload.runId).toBe('ses-1:3')
+  })
+
   it('reads a turn with a read and an edit, then ends it on idle', () => {
     const { dir, dbPath } = makeDatabase()
     const projectRoot = join(dir, 'project')

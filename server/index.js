@@ -258,11 +258,13 @@ export function trimHistory(history, now = Date.now) {
       if (prev === undefined || item.at > prev) lastFrameAt.set(item.runId, item.at)
     }
   }
+  const expired = new Set()
   for (const [runId, latest] of lastFrameAt) {
-    if (currentTime - latest >= RUN_PIN_TIMEOUT_MS) {
-      for (const item of history) {
-        if (item.runId === runId) item.pinned = false
-      }
+    if (currentTime - latest >= RUN_PIN_TIMEOUT_MS) expired.add(runId)
+  }
+  if (expired.size > 0) {
+    for (const item of history) {
+      if (item.runId && expired.has(item.runId)) item.pinned = false
     }
   }
   while (history.length > HISTORY_LIMIT) {
