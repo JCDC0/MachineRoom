@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Drop the lock deletion clause from the room lock error sentence to match stale lock handling (task S31).
+
 - A failed orchestrator chat save removes its temporary file instead of leaving it on disk (task S31).
 
 - Remove the unused stopping flag and treat a turn with a successful exit and report as completed (task S31).

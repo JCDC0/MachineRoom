@@ -188,8 +188,8 @@ function processAlive(pid) {
   }
 }
 
-function roomLockProblem(holder, path) {
-  return `Another room is already running on this project (process ${holder}). Wait for it to end, or delete ${path} if no room is going.`
+function roomLockProblem(holder) {
+  return `Another room is already running on this project (process ${holder}). Wait for it to end.`
 }
 
 function isRoomHolderAlive(holder, path, { platform = process.platform, list = listProcesses, stat = statSync } = {}) {

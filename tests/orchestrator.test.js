@@ -1825,7 +1825,9 @@ describe('the orchestrator chat file', () => {
     const options = { projectRoot: rig.projectRoot, runsFolder: rig.runs, lanes: rig.lanes, promptFile: rig.promptFile }
     const lock = chatLockFileFor(rig.projectRoot, rig.runs)
     expect(readFileSync(lock, 'utf8')).toBe(String(process.pid))
-    expect(() => createOrchestrator(options)).toThrow(/Another room is already running on this project/)
+    expect(() => createOrchestrator(options)).toThrow(
+      `Another room is already running on this project (process ${process.pid}). Wait for it to end.`
+    )
     rig.orchestrator.close()
     writeFileSync(lock, '99999999')
     const restored = createOrchestrator(options)
