@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Recording files are written through temporary files and renamed atomically.
+
 - Lane reviews run concurrently up to a small bound while keeping their order.
 
 - Quiet OpenCode sessions are queried less often unless their session row moves.
