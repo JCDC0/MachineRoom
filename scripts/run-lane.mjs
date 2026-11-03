@@ -13,6 +13,7 @@ import { isLockHolderStale, killTree, descendantProcesses, leftoverProcesses, li
 import { gitPath } from '../server/programPath.js'
 import { readAllLanes, runsFolder } from '../server/lanes-source.js'
 import { readEndpoints } from '../server/endpoints.js'
+import { readAgentDepth } from '../server/agent-depth.js'
 import { acpRunCommand } from './acp-run.mjs'
 import { processAlive, readLaneLock, releaseLaneLock, takeLaneLock, writeLaneChild } from './lane-lock.mjs'
 import { enabledMcpServers, mcpConfigForClaude, mcpConfigForOpencode } from './mcp-bridge.mjs'
@@ -974,7 +975,7 @@ async function main() {
   const wanted = options.briefs.map((id) => briefs.find((item) => item.id.toUpperCase() === id.toUpperCase()))
   const rules = parseRules(read('HOUSE-RULES.md'))
   const version = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
-  const prompt = unattendedPrompt(buildPrompt({ briefs: wanted, laneKey: options.lane, lanes, rules, version }))
+  const prompt = unattendedPrompt(buildPrompt({ briefs: wanted, laneKey: options.lane, lanes, rules, version, agentDepth: readAgentDepth(runsFolder()).limit }))
   const name = `${options.lane}-${wanted.map((brief) => brief.id).join('-')}-${stamp()}`
   const folder = runsFolder()
   const logPath = join(folder, `${name}.log`)

@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { readAgentDepth } from './agent-depth.js'
+import { runsFolder } from './lanes-source.js'
 import { branchFor, buildPrompt, modelFor, nextVersion, parseBriefs, parseRules } from '../src/briefs/briefs.js'
 
 function readText(path) {
@@ -85,7 +87,7 @@ export function createBriefsApi({ projectRoot = '', briefsDir = '', sendJson }) 
     }
 
     const rules = parseRules(rulesText)
-    const prompt = buildPrompt({ briefs: picked, laneKey: lane, lanes, rules, version })
+    const prompt = buildPrompt({ briefs: picked, laneKey: lane, lanes, rules, version, agentDepth: readAgentDepth(runsFolder()).limit })
     sendJson(req, res, 200, {
       prompt,
       lane,
