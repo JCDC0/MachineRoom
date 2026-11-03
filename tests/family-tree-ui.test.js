@@ -177,6 +177,22 @@ function rowByLabel(container, label) {
 }
 
 describe('FamilyTree rows', () => {
+  it('shows the bridge sentence when the family read fails', async () => {
+    const { client } = makeClient()
+    client.family = async () => {
+      throw new Error('The lane file is missing.')
+    }
+    client.lanes = async () => {
+      throw new Error('The lane file is missing.')
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(container.textContent).toContain('The lane file is missing.')
+      expect(container.querySelector('.mr-side-count').textContent).toBe('Agents failed to load.')
+      expect(container.textContent).not.toContain('The family tree is not available.')
+    })
+  })
+
   it('draws the orchestrator, the sub and every lane in tree order', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {

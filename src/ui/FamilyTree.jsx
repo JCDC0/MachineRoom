@@ -340,7 +340,11 @@ export function FamilyTree({ client = null, tasks = null }) {
   }, [orchestrators])
   const taskMap = tasks instanceof Map ? tasks : liveTaskMap
   const summary = laneSummary(lanes)
-  const countLine = lanes ? agentCountLine(summary.active.length, summary.max) : 'Loading agents...'
+  const countLine = lanes
+    ? agentCountLine(summary.active.length, summary.max)
+    : readError
+      ? 'Agents failed to load.'
+      : 'Loading agents...'
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
 
   const editorHarness = useMemo(() => {
@@ -1770,9 +1774,7 @@ export function FamilyTree({ client = null, tasks = null }) {
           ) : null}
           {family && readError ? <p className="mr-side-note">{readError}</p> : null}
           {!family ? (
-            <p className="mr-side-note">
-              {readError ? 'The family tree is not available.' : 'Loading agents...'}
-            </p>
+            <p className="mr-side-note">{readError || 'Loading agents...'}</p>
           ) : (
             <>
               {renderRequests()}
