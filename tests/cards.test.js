@@ -19,7 +19,6 @@ import {
   cardTitle,
   clampFileLimit,
   createCards,
-  createRowFrameKey,
   danceOrder,
   fadeProgress,
   nextDanceCard,
@@ -499,27 +498,6 @@ describe('fadeProgress', () => {
     expect(fadeProgress(0, 0, true)).toBe(1)
     expect(fadeProgress(0, 200, false)).toBeCloseTo(0.5)
     expect(fadeProgress(0, 900, false)).toBe(1)
-  })
-})
-
-describe('createRowFrameKey', () => {
-  const mask = { dimmed: true, lit: new Set(['', 'src']), targeted: new Set(['src']) }
-
-  it('builds once over idle frames and again when the state, mask, flash or rows change', () => {
-    const cache = createRowFrameKey()
-    const key = cache.key({ latest: 10 }, mask, 0, 0)
-    expect(cache.key({ latest: 10 }, mask, 0, 0)).toBe(key)
-    expect(cache.key({ latest: 10 }, mask, 0, 0)).toBe(key)
-    expect(cache.builds()).toBe(1)
-    expect(cache.key({ latest: 11 }, mask, 0, 0)).not.toBe(key)
-    expect(cache.builds()).toBe(2)
-    const idleMask = { dimmed: false, lit: new Set(), targeted: new Set() }
-    cache.key({ latest: 11 }, idleMask, 0, 0)
-    expect(cache.builds()).toBe(3)
-    cache.key({ latest: 11 }, idleMask, 1, 0)
-    expect(cache.builds()).toBe(4)
-    cache.key({ latest: 11 }, idleMask, 1, 1)
-    expect(cache.builds()).toBe(5)
   })
 })
 

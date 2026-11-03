@@ -6,7 +6,7 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { ownerOf, sectorArcs } from '../model/hierarchy.js'
 import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
-import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_MAX_OPACITY, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace } from './hub.js'
+import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_MAX_OPACITY, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
@@ -135,18 +135,33 @@ function byKey(a, b) {
   return a < b ? -1 : a > b ? 1 : 0
 }
 
-export function fullCalloutKeys(busy, focus = null, hover = null) {
-  const list = []
-  const keys = new Set()
+export function fullCalloutKeys(busy, focus = null, hover = null, scratch = null) {
+  const list = scratch ? scratch.list : []
+  const keys = scratch ? scratch.keys : new Set()
+  const kept = scratch ? scratch.kept : new Set()
+  const pool = scratch ? scratch.pool : []
+  keys.clear()
+  kept.clear()
+  let count = 0
   for (const item of busy ?? []) {
     const key = item?.key
     if (typeof key !== 'string' || key === '' || keys.has(key)) continue
     keys.add(key)
-    list.push({ key, since: busyTime(item) })
+    const slot = pool[count] ?? (pool[count] = { key: '', since: 0 })
+    slot.key = key
+    slot.since = busyTime(item)
+    list[count] = slot
+    count += 1
   }
-  if (list.length <= CALLOUT_CROWD_LIMIT) return keys
-  const ranked = [...list].sort((a, b) => busyTime(b) - busyTime(a) || byKey(a.key, b.key))
-  const kept = new Set(ranked.slice(0, CALLOUT_RECENT_KEEP).map((item) => item.key))
+  list.length = count
+  if (count <= CALLOUT_CROWD_LIMIT) return keys
+  const ranked = scratch ? scratch.ranked : list.slice()
+  if (scratch) {
+    ranked.length = count
+    for (let index = 0; index < count; index += 1) ranked[index] = list[index]
+  }
+  ranked.sort((a, b) => busyTime(b) - busyTime(a) || byKey(a.key, b.key))
+  for (let index = 0; index < ranked.length && index < CALLOUT_RECENT_KEEP; index += 1) kept.add(ranked[index].key)
   if (typeof focus === 'string' && keys.has(focus)) kept.add(focus)
   if (typeof hover === 'string' && keys.has(hover)) kept.add(hover)
   return kept
@@ -221,7 +236,7 @@ export function shapeForNewAgent(agent, used = []) {
   return nextSpareShape([...taken])
 }
 
-export function childOrbit(parentPlace, index = 0, count = 1, time = 0) {
+export function childOrbit(parentPlace, index = 0, count = 1, time = 0, out = null) {
   const x = Number(parentPlace?.x) || 0
   const y = Number(parentPlace?.y) || 0
   const z = Number(parentPlace?.z) || 0
@@ -233,11 +248,11 @@ export function childOrbit(parentPlace, index = 0, count = 1, time = 0) {
   const turn = phase + (Number(time) || 0) * (Math.PI * 2 / CHILD_ORBIT_SECONDS)
   const flatX = Math.cos(turn) * radius
   const flatZ = Math.sin(turn) * radius
-  return {
-    x: x + flatX,
-    y: y + flatZ * Math.sin(CHILD_ORBIT_TILT),
-    z: z + flatZ * Math.cos(CHILD_ORBIT_TILT),
-  }
+  const place = out ?? {}
+  place.x = x + flatX
+  place.y = y + flatZ * Math.sin(CHILD_ORBIT_TILT)
+  place.z = z + flatZ * Math.cos(CHILD_ORBIT_TILT)
+  return place
 }
 
 export function stripPoints(from, to, out = []) {
@@ -278,7 +293,8 @@ export function litChain(dir, links, mask, out = [], cache = null) {
       cache.parents = parents
     }
   }
-  const back = []
+  const back = cache ? (cache.back ??= []) : []
+  back.length = 0
   let at = target
   let steps = 0
   while (at !== '') {
@@ -330,7 +346,22 @@ function spanLength(a, b) {
   return Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)
 }
 
-export function samplePolyline(points, t, out = {}) {
+export function polylineLengths(points, out = []) {
+  const lengths = out ?? []
+  const list = Array.isArray(points) ? points : []
+  const count = list.length
+  lengths.length = count
+  if (count === 0) return lengths
+  lengths[0] = 0
+  let total = 0
+  for (let index = 1; index < count; index += 1) {
+    total += spanLength(list[index - 1], list[index])
+    lengths[index] = total
+  }
+  return lengths
+}
+
+export function samplePolyline(points, t, out = {}, lengths = null) {
   const point = out ?? {}
   const list = Array.isArray(points) ? points : []
   const count = list.length
@@ -348,27 +379,58 @@ export function samplePolyline(points, t, out = {}) {
     point.z = first.z
     return point
   }
+  const spans = Array.isArray(lengths) && lengths.length === count ? lengths : null
   let total = 0
-  for (let index = 1; index < count; index += 1) total += spanLength(list[index - 1], list[index])
+  if (spans) {
+    const last = Number(spans[count - 1])
+    total = Number.isFinite(last) ? last : 0
+  } else {
+    for (let index = 1; index < count; index += 1) total += spanLength(list[index - 1], list[index])
+  }
   if (!(total > 0)) {
     point.x = first.x
     point.y = first.y
     point.z = first.z
     return point
   }
-  let left = walk * total
+  const left = walk * total
+  if (spans) {
+    if (left >= total) {
+      const last = list[count - 1]
+      point.x = last.x
+      point.y = last.y
+      point.z = last.z
+      return point
+    }
+    let low = 1
+    let high = count - 1
+    while (low < high) {
+      const mid = (low + high) >> 1
+      if (spans[mid] > left) high = mid
+      else low = mid + 1
+    }
+    const a = list[low - 1]
+    const b = list[low]
+    const length = spans[low] - spans[low - 1]
+    const fraction = length > 0 ? (left - spans[low - 1]) / length : 0
+    point.x = a.x + (b.x - a.x) * fraction
+    point.y = a.y + (b.y - a.y) * fraction
+    point.z = a.z + (b.z - a.z) * fraction
+    return point
+  }
+  let rest = left
   for (let index = 1; index < count; index += 1) {
     const a = list[index - 1]
     const b = list[index]
     const length = spanLength(a, b)
-    if (length > 0 && left <= length) {
-      const fraction = left / length
+    if (length > 0 && rest <= length) {
+      const fraction = rest / length
       point.x = a.x + (b.x - a.x) * fraction
       point.y = a.y + (b.y - a.y) * fraction
       point.z = a.z + (b.z - a.z) * fraction
       return point
     }
-    left -= length
+    rest -= length
   }
   const last = list[count - 1]
   point.x = last.x
@@ -611,13 +673,13 @@ function setTrailPath(trail, points) {
 }
 
 function trailOpacity(trail, opacity) {
-  trail.core.material.opacity = opacity
-  trail.sheath.material.opacity = opacity * TUNNEL_SHEATH_SHARE
+  writeOpacity(trail.core.material, opacity)
+  writeOpacity(trail.sheath.material, opacity * TUNNEL_SHEATH_SHARE)
 }
 
 function trailColor(trail, color) {
-  trail.core.material.color.setHex(color)
-  trail.sheath.material.color.setHex(color)
+  writeColor(trail.core.material, color)
+  writeColor(trail.sheath.material, color)
 }
 
 function setTrailVisible(trail, visible) {
@@ -668,9 +730,8 @@ function lineBetween(material) {
 }
 
 function setEnds(line, a, b) {
-  const last = line.userData.ends
+  const last = line.userData.ends ?? (line.userData.ends = [0, 0, 0, 0, 0, 0])
   if (
-    last &&
     last[0] === a.x &&
     last[1] === a.y &&
     last[2] === a.z &&
@@ -681,13 +742,12 @@ function setEnds(line, a, b) {
     return false
   }
   const array = line.geometry.attributes.position.array
-  array[0] = a.x
-  array[1] = a.y
-  array[2] = a.z
-  array[3] = b.x
-  array[4] = b.y
-  array[5] = b.z
-  line.userData.ends = [a.x, a.y, a.z, b.x, b.y, b.z]
+  array[0] = last[0] = a.x
+  array[1] = last[1] = a.y
+  array[2] = last[2] = a.z
+  array[3] = last[3] = b.x
+  array[4] = last[4] = b.y
+  array[5] = last[5] = b.z
   line.geometry.attributes.position.needsUpdate = true
   return true
 }
@@ -764,8 +824,18 @@ export function createAgents(scene, roster, cssScene = null) {
   let swayLevel = 0
   let sectorList = []
   let slotAngles = sectorSlotAngles(null, parkedKeys)
-  const chainCache = { links: null, mask: null, parents: null }
+  const chainCache = { links: null, mask: null, parents: null, back: [] }
   let pulseSource = null
+  const busyList = []
+  const busyPool = []
+  const endedList = []
+  const endedPool = []
+  const viewScratch = []
+  const focusScratch = { dir: '', file: null }
+  const orbitSlotScratch = { index: 0, count: 0 }
+  const parentPlaceScratch = { x: 0, y: 0, z: 0, radius: 0 }
+  const orbitPlaceScratch = { x: 0, y: 0, z: 0 }
+  const calloutScratch = { list: [], keys: new Set(), kept: new Set(), ranked: [], pool: [] }
 
   function setBands(levels) {
     pulseSource = levels && typeof levels.length === 'number' && levels.length > 0 ? levels : null
@@ -777,6 +847,16 @@ export function createAgents(scene, roster, cssScene = null) {
     attribute.array.set(view.pulseBase)
     attribute.needsUpdate = true
     view.pulseApplied = false
+  }
+
+  function pulseUnchanged(view) {
+    if (!view.pulseApplied || view.pulseWrittenScale !== view.pulseScale) return false
+    const levels = view.pulseLevels
+    const written = view.pulseWrittenLevels
+    for (let band = 0; band < levels.length; band += 1) {
+      if (levels[band] !== written[band]) return false
+    }
+    return true
   }
 
   function applyPulse(view, delta, isStill) {
@@ -800,6 +880,7 @@ export function createAgents(scene, roster, cssScene = null) {
       restorePulse(view)
       return
     }
+    if (pulseUnchanged(view)) return
     const attribute = view.shape.geometry.getAttribute('position')
     const array = attribute.array
     const base = view.pulseBase
@@ -820,6 +901,8 @@ export function createAgents(scene, roster, cssScene = null) {
       array[at + 2] = base[at + 2] * factor
     }
     attribute.needsUpdate = true
+    view.pulseWrittenLevels.set(levels)
+    view.pulseWrittenScale = view.pulseScale
     view.pulseApplied = true
   }
 
@@ -844,7 +927,8 @@ export function createAgents(scene, roster, cssScene = null) {
     return new THREE.Vector3(Math.cos(angle) * HUB_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * HUB_RADIUS)
   }
 
-  function orbitSlot(view) {
+  function orbitSlot(view, out = null) {
+    const slot = out ?? { index: 0, count: 0 }
     let index = 0
     let count = 0
     for (const other of views.values()) {
@@ -852,17 +936,18 @@ export function createAgents(scene, roster, cssScene = null) {
       if (other === view) index = count
       count += 1
     }
-    return { index, count }
+    slot.index = index
+    slot.count = count
+    return slot
   }
 
   function orbitHome(view, parent, time) {
-    const slot = orbitSlot(view)
-    const place = childOrbit(
-      { x: parent.group.position.x, y: parent.group.position.y, z: parent.group.position.z, radius: parent.shellRadius * parent.scale },
-      slot.index,
-      slot.count,
-      time
-    )
+    const slot = orbitSlot(view, orbitSlotScratch)
+    parentPlaceScratch.x = parent.group.position.x
+    parentPlaceScratch.y = parent.group.position.y
+    parentPlaceScratch.z = parent.group.position.z
+    parentPlaceScratch.radius = parent.shellRadius * parent.scale
+    const place = childOrbit(parentPlaceScratch, slot.index, slot.count, time, orbitPlaceScratch)
     view.home.set(place.x, place.y, place.z)
   }
 
@@ -1001,13 +1086,13 @@ export function createAgents(scene, roster, cssScene = null) {
       array[base + 2] = from.z + dz * t
     }
     geometry.setDrawRange(0, spots.length)
-    attr.needsUpdate = true
-    view.beamPackets.material.color.setHex(WEB)
-    view.beamPackets.material.opacity = fade
+    if (spots.length > 0) attr.needsUpdate = true
+    writeColor(view.beamPackets.material, WEB)
+    writeOpacity(view.beamPackets.material, fade)
     view.beamPackets.visible = spots.length > 0
   }
 
-  function updatePackets(view, now, fade, sending, path) {
+  function updatePackets(view, now, fade, sending, path, lengths) {
     if (sending && (view.packetNextAt === 0 || now >= view.packetNextAt)) {
       queuePacket(view, now)
       view.packetNextAt = now + PACKET_INTERVAL
@@ -1017,16 +1102,16 @@ export function createAgents(scene, roster, cssScene = null) {
     const attr = geometry.getAttribute('position')
     const array = attr.array
     for (let i = 0; i < spots.length; i += 1) {
-      const point = samplePolyline(path, spots[i], packetPoint)
+      const point = samplePolyline(path, spots[i], packetPoint, lengths)
       const base = i * 3
       array[base] = point.x
       array[base + 1] = point.y
       array[base + 2] = point.z
     }
     geometry.setDrawRange(0, spots.length)
-    attr.needsUpdate = true
-    view.packets.material.color.setHex(view.stripColor)
-    view.packets.material.opacity = view.stripOpacity * fade
+    if (spots.length > 0) attr.needsUpdate = true
+    writeColor(view.packets.material, view.stripColor)
+    writeOpacity(view.packets.material, view.stripOpacity * fade)
     view.packets.visible = spots.length > 0
 
     const tails = tailSpots(spots, view.packetTails, TAIL_GAP)
@@ -1034,16 +1119,16 @@ export function createAgents(scene, roster, cssScene = null) {
     const tailAttr = tailGeometry.getAttribute('position')
     const tailArray = tailAttr.array
     for (let i = 0; i < tails.length; i += 1) {
-      const point = samplePolyline(path, tails[i], packetTailPoint)
+      const point = samplePolyline(path, tails[i], packetTailPoint, lengths)
       const base = i * 3
       tailArray[base] = point.x
       tailArray[base + 1] = point.y
       tailArray[base + 2] = point.z
     }
     tailGeometry.setDrawRange(0, tails.length)
-    tailAttr.needsUpdate = true
-    view.packetTail.material.color.setHex(view.stripColor)
-    view.packetTail.material.opacity = view.stripOpacity * fade * TAIL_SHARE
+    if (tails.length > 0) tailAttr.needsUpdate = true
+    writeColor(view.packetTail.material, view.stripColor)
+    writeOpacity(view.packetTail.material, view.stripOpacity * fade * TAIL_SHARE)
     view.packetTail.visible = tails.length > 0
   }
 
@@ -1145,6 +1230,7 @@ export function createAgents(scene, roster, cssScene = null) {
       path: [],
       route: [],
       chain: [],
+      pathLengths: [],
       stripOpacity: 0,
       stripColor: YELLOW,
       tunnel: 0,
@@ -1187,6 +1273,8 @@ export function createAgents(scene, roster, cssScene = null) {
       pulseLengths,
       pulseBands,
       pulseLevels: new Float32Array(PULSE_BANDS),
+      pulseWrittenLevels: new Float32Array(PULSE_BANDS),
+      pulseWrittenScale: 0,
       pulseScale,
       pulseApplied: false,
     }
@@ -1231,7 +1319,9 @@ export function createAgents(scene, roster, cssScene = null) {
   }
 
   function syncViews(state, chips = null) {
-    for (const view of [...views.values()]) {
+    viewScratch.length = 0
+    for (const view of views.values()) viewScratch.push(view)
+    for (const view of viewScratch) {
       if (rosterKeys.has(view.key)) continue
       if (!state.agents.has(view.key)) removeView(view, chips)
     }
@@ -1399,11 +1489,18 @@ export function createAgents(scene, roster, cssScene = null) {
     }
   }
 
-  function focusPointer(state, entry) {
+  function focusPointer(state, entry, out = null) {
     const path = entry?.focus?.[0]
     if (path === undefined) return null
-    if (state.files.has(path)) return { dir: dirname(path), file: path }
-    return { dir: path, file: null }
+    const point = out ?? { dir: '', file: null }
+    if (state.files.has(path)) {
+      point.dir = dirname(path)
+      point.file = path
+    } else {
+      point.dir = path
+      point.file = null
+    }
+    return point
   }
 
   function aimOrchestratorLine(view, mainView) {
@@ -1452,7 +1549,7 @@ export function createAgents(scene, roster, cssScene = null) {
         continue
       }
       slot.line.scale.set(slot.pulse.radius, 1, slot.pulse.radius)
-      slot.line.material.opacity = slot.pulse.opacity
+      writeOpacity(slot.line.material, slot.pulse.opacity)
     }
   }
 
@@ -1465,7 +1562,7 @@ export function createAgents(scene, roster, cssScene = null) {
     pendingChipRemovals.clear()
     const isStill = still()
     swayLevel = isStill ? 0 : swayLevel + (swayTarget - swayLevel) * easeRate(delta, 1.5, false)
-    const ended = []
+    endedList.length = 0
     syncViews(state, terminals)
     let mainView = null
     for (const view of views.values()) {
@@ -1479,15 +1576,20 @@ export function createAgents(scene, roster, cssScene = null) {
       if (view.subOrchestrator) subCount += 1
     }
     const nameLift = orchestratorNameLift(subCount)
-    const busy = []
+    let busyCount = 0
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
       setStatus(view, entry?.status ?? 'idle', now)
       if (view.style === 'working' || view.style === 'queued') {
-        busy.push({ key: view.key, since: view.busySince })
+        const item = busyPool[busyCount] ?? (busyPool[busyCount] = { key: '', since: 0 })
+        item.key = view.key
+        item.since = view.busySince
+        busyList[busyCount] = item
+        busyCount += 1
       }
     }
-    const full = fullCalloutKeys(busy, callout?.focus ?? null, callout?.hover ?? null)
+    busyList.length = busyCount
+    const full = fullCalloutKeys(busyList, callout?.focus ?? null, callout?.hover ?? null, calloutScratch)
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
@@ -1537,7 +1639,12 @@ export function createAgents(scene, roster, cssScene = null) {
         terminals.ensure?.(view.key, `${parentName} > ${entry?.name ?? view.name}`)
         terminals.setVisible?.(view.key, true)
         terminals.setFade?.(view.key, fade)
-        if (fade <= 0) ended.push({ view, entry })
+        if (fade <= 0) {
+          const item = endedPool[endedList.length] ?? (endedPool[endedList.length] = { view: null, entry: null })
+          item.view = view
+          item.entry = entry
+          endedList.push(item)
+        }
       } else {
         terminals.setVisible?.(view.key, !presence.dim)
       }
@@ -1557,14 +1664,15 @@ export function createAgents(scene, roster, cssScene = null) {
 
       const fresh = status === 'done' && now - view.doneAt < DONE_GLOW_MS
       const opacity = status === 'done' ? (fresh ? 1 : 0.6) : style.opacity
-      view.shape.material.color.setHex(style.color)
-      view.shape.material.opacity = opacity * fade * opacityFactor
-      view.label.material.opacity = fade * opacityFactor
+      writeColor(view.shape.material, style.color)
+      writeOpacity(view.shape.material, opacity * fade * opacityFactor)
+      writeOpacity(view.label.material, fade * opacityFactor)
       const ringColor = status === 'working' || status === 'queued' ? YELLOW : style.color
-      view.rings.forEach((ring, index) => {
-        ring.material.color.setHex(ringColor)
-        ring.material.opacity = opacity * fade * opacityFactor * (index === 0 ? 0.55 : 0.4)
-      })
+      for (let index = 0; index < view.rings.length; index += 1) {
+        const ring = view.rings[index]
+        writeColor(ring.material, ringColor)
+        writeOpacity(ring.material, opacity * fade * opacityFactor * (index === 0 ? 0.55 : 0.4))
+      }
       if (!isStill) {
         const spin = style.spin + (THINKING_SPIN - style.spin) * view.thinking
         view.shape.rotation.y += delta * spin
@@ -1573,8 +1681,8 @@ export function createAgents(scene, roster, cssScene = null) {
       if (view.thinking > 0.001) {
         const spinnerFade = view.thinking * fade * opacityFactor
         view.spinner.group.visible = true
-        view.spinner.ringMaterial.opacity = SPINNER_RING_OPACITY * spinnerFade
-        view.spinner.arcMaterial.opacity = SPINNER_ARC_OPACITY * spinnerFade
+        writeOpacity(view.spinner.ringMaterial, SPINNER_RING_OPACITY * spinnerFade)
+        writeOpacity(view.spinner.arcMaterial, SPINNER_ARC_OPACITY * spinnerFade)
         const arc = thinkingArc(now, 0, SPINNER_SWEEP_SECONDS, isStill)
         view.spinner.arcs[0].rotation.z = arc
         view.spinner.arcs[1].rotation.z = arc + SPINNER_PHASE
@@ -1624,9 +1732,9 @@ export function createAgents(scene, roster, cssScene = null) {
 
       if (calloutTone && fade > 0.01) {
         view.callout.object.visible = true
-        const calloutClass = `mr-callout is-${calloutTone}`
-        if (view.callout.element.className !== calloutClass) {
-          view.callout.element.className = calloutClass
+        if (view.calloutTone !== calloutTone) {
+          view.calloutTone = calloutTone
+          view.callout.element.className = `mr-callout is-${calloutTone}`
         }
         const taskText = currentTasks?.get(view.key) ?? ''
         if (view.callout.task.textContent !== taskText) {
@@ -1644,7 +1752,7 @@ export function createAgents(scene, roster, cssScene = null) {
         view.callout.object.quaternion.setFromRotationMatrix(rotMatrix)
 
         setEnds(view.calloutLine, view.group.position, calloutPos)
-        view.calloutLine.material.color.setHex(WHITE)
+        writeColor(view.calloutLine.material, WHITE)
         view.calloutLine.visible = true
       } else {
         view.callout.object.visible = false
@@ -1653,15 +1761,15 @@ export function createAgents(scene, roster, cssScene = null) {
 
       terminals.edgePoint(view.key, -view.chipSide, chipNear)
       setEnds(view.link, view.group.position, chipNear)
-      view.link.material.color.setHex(style.color)
-      view.link.material.opacity = (working ? 0.6 : status === 'idle' ? 0.18 : 0.4) * fade * opacityFactor
+      writeColor(view.link.material, style.color)
+      writeOpacity(view.link.material, (working ? 0.6 : status === 'idle' ? 0.18 : 0.4) * fade * opacityFactor)
       view.link.visible = !presence.dim
       if (view.parentLink) {
         const parentView = views.get(view.parentKey)
         if (parentView) {
           setEnds(view.parentLink, parentView.group.position, view.group.position)
-          view.parentLink.material.color.setHex(parentView.shape.material.color.getHex())
-          view.parentLink.material.opacity = 0.3 * fade
+          writeColor(view.parentLink.material, parentView.shape.material.color.getHex())
+          writeOpacity(view.parentLink.material, 0.3 * fade)
           view.parentLink.visible = fade > 0.01
         } else {
           view.parentLink.visible = false
@@ -1669,15 +1777,15 @@ export function createAgents(scene, roster, cssScene = null) {
       }
       if (view.orchestratorLink) {
         aimOrchestratorLine(view, mainView)
-        view.orchestratorLink.material.color.setHex(WHITE)
-        view.orchestratorLink.material.opacity = view.subOrchestrator ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY
+        writeColor(view.orchestratorLink.material, WHITE)
+        writeOpacity(view.orchestratorLink.material, view.subOrchestrator ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY)
         view.orchestratorLink.visible = true
       }
 
       if (view.web && (!online || (status !== 'working' && status !== 'queued'))) view.web = false
       const webOn = view.web && online && (status === 'working' || status === 'queued')
       const beamReturning = !isStill && now < view.beamReturnUntil
-      const pointer = view.pointer ?? (working ? focusPointer(state, entry) : null)
+      const pointer = view.pointer ?? (working ? focusPointer(state, entry, focusScratch) : null)
       let color = null
       if (pointer) {
         if (working && lastFailed) color = RED
@@ -1712,7 +1820,7 @@ export function createAgents(scene, roster, cssScene = null) {
           const radius = view.shellRadius * view.group.scale.x
           shellStart(view.group.position, radius, view.path[1], view.path[0])
         }
-        setTrailPath(view.trail, view.path)
+        if (setTrailPath(view.trail, view.path)) polylineLengths(view.path, view.pathLengths)
         trailColor(view.trail, view.stripColor)
         trailOpacity(view.trail, view.stripOpacity * fade)
       }
@@ -1745,7 +1853,7 @@ export function createAgents(scene, roster, cssScene = null) {
       }
       if (stripVisible && tunnelGate(view.tunnel)) {
         if (!isStill) {
-          updatePackets(view, now, fade, status === 'working' && stripOn, view.path)
+          updatePackets(view, now, fade, status === 'working' && stripOn, view.path, view.pathLengths)
         } else {
           hidePackets(view)
         }
@@ -1753,7 +1861,7 @@ export function createAgents(scene, roster, cssScene = null) {
         hidePacketPoints(view)
       }
     }
-    for (const item of ended) {
+    for (const item of endedList) {
       if (item.entry) retired.add(item.entry)
       terminals.setVisible?.(item.view.key, false)
       terminals.setOpen?.(item.view.key, false)

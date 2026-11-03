@@ -437,6 +437,56 @@ describe('idle frames', () => {
     expect(entry.row.className).not.toContain('is-flash-white')
   })
 
+  it('walks only the card a flash names, not a resting card beside it', () => {
+    const state = makeState(['src/a.js', 'docs/b.md'], ['src/a.js'])
+    const docs = countReads(state, 'docs/b.md')
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const before = docs()
+
+    cards.flashFile('src', 'src/a.js', 'white')
+    cards.update(state, 0.016, camera())
+    expect(docs()).toBe(before)
+    const entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(entry.row.className).toContain('is-flash-white')
+    cards.dispose()
+  })
+
+  it('walks every card when the room marks the rows after a run', () => {
+    const state = makeState(['src/a.js', 'docs/b.md'], ['src/a.js'])
+    const docs = countReads(state, 'docs/b.md')
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const before = docs()
+
+    cards.markRows()
+    cards.update(state, 0.016, camera())
+    expect(docs()).toBeGreaterThan(before)
+    cards.dispose()
+  })
+
+  it('paints a finished file when the room marks the rows at a run end', () => {
+    const state = makeState()
+    apply(state, touch('write', 'src/a.js', 1000, 'c1'))
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(entry.row.className).toContain('is-written')
+
+    state.files.get('src/a.js').yellow = true
+    state.latest += 1
+    cards.update(state, 0.016, camera())
+    expect(entry.row.className).toContain('is-written')
+
+    cards.markRows()
+    cards.update(state, 0.016, camera())
+    expect(entry.row.className).toContain('is-finished')
+    cards.dispose()
+  })
+
   it('still paints a fade while the newest activity stays put', () => {
     const state = makeState(['src/deep/a.js'], ['src/deep/a.js'])
     const { cards } = makeCards(0)

@@ -165,37 +165,6 @@ export function openChain(state, extra = []) {
   return chain
 }
 
-export function createRowFrameKey() {
-  let latest = null
-  let mask = null
-  let flash = -1
-  let revision = -1
-  let value = ''
-  let builds = 0
-  return {
-    key(state, maskValue, flashValue, revisionValue) {
-      if (
-        value !== '' &&
-        state.latest === latest &&
-        maskValue === mask &&
-        flashValue === flash &&
-        revisionValue === revision
-      ) {
-        return value
-      }
-      const maskKey = maskValue?.dimmed ? `1|${[...(maskValue.lit ?? [])].join('\n')}|${[...(maskValue.targeted ?? [])].join('\n')}` : '0'
-      latest = state.latest
-      mask = maskValue
-      flash = flashValue
-      revision = revisionValue
-      value = `${latest}|${maskKey}|${flash}|${revision}`
-      builds += 1
-      return value
-    },
-    builds: () => builds,
-  }
-}
-
 export function cardHeight(rows) {
   return HEAD_H + rows * ROW_H + CARD_PAD
 }
@@ -430,8 +399,8 @@ export function createCards(cssScene, options = {}) {
   const sprayed = new Set()
   let selected = null
   const flashes = new Map()
-  let flashVersion = 0
-  const rowFrame = createRowFrameKey()
+  const rowDirty = new Set()
+  let rowDirtyAll = true
   const initialDepth = Number(alwaysDepth)
   let alwaysLevel = Number.isFinite(initialDepth) ? Math.min(3, Math.max(0, Math.floor(initialDepth))) : 2
   let maxFilesLevel = clampFileLimit(options.maxFiles)
@@ -446,7 +415,7 @@ export function createCards(cssScene, options = {}) {
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
   let inspected = null
   let rowRevision = 0
-  let lastRowFrameKey = null
+  let lastRowRevision = -1
   let movingNow = false
   let lastState = null
   let linksCache = null
@@ -491,6 +460,15 @@ export function createCards(cssScene, options = {}) {
     let at = path
     while (at !== '' && (!cards.has(at) || cards.get(at).leaving)) at = dirname(at)
     return cards.get(at) ?? null
+  }
+
+  function markRowPath(path) {
+    const card = nearestCard(dirname(path))
+    if (card) rowDirty.add(card.path)
+  }
+
+  function markRows() {
+    rowDirtyAll = true
   }
 
   function makeCard(path) {
@@ -1004,8 +982,7 @@ export function createCards(cssScene, options = {}) {
   function flash(path, tone, text = '') {
     const duration = tone === 'red' ? FAIL_MS : FLASH_MS
     flashes.set(path, { tone, text, until: performance.now() + duration })
-    flashVersion += 1
-    rowRevision += 1
+    markRowPath(path)
   }
 
   function setSway(level) {
@@ -1039,7 +1016,6 @@ export function createCards(cssScene, options = {}) {
 
   function sync(state) {
     flashes.clear()
-    flashVersion += 1
     pinnedVersion += 1
     sprayed.clear()
     sprayVersion += 1
@@ -1148,21 +1124,17 @@ export function createCards(cssScene, options = {}) {
     const dimLit = mask?.lit ?? null
     const targeted = mask?.targeted ?? null
     const dimStep = delta / (DIM_FADE_MS / 1000)
-    let flashesEnded = false
     for (const [path, hit] of flashes) {
       if (hit.until <= now) {
         flashes.delete(path)
-        flashesEnded = true
+        markRowPath(path)
       }
     }
-    if (flashesEnded) {
-      flashVersion += 1
-      rowRevision += 1
-    }
     const hasFlashes = flashes.size > 0
-    const rowFrameKey = rowFrame.key(state, mask, flashVersion, rowRevision)
-    const rowsDue = rowFrameKey !== lastRowFrameKey
-    lastRowFrameKey = rowFrameKey
+    if (rowRevision !== lastRowRevision) {
+      lastRowRevision = rowRevision
+      rowDirtyAll = true
+    }
     let removed = false
     for (const card of cards.values()) {
       if (card.fade) {
@@ -1176,14 +1148,19 @@ export function createCards(cssScene, options = {}) {
         if (t >= 1) card.listFade = null
       }
       if (card.ghosts.length > 0) {
-        const keep = []
-        for (const ghost of card.ghosts) {
+        let keptGhosts = 0
+        for (let index = 0; index < card.ghosts.length; index += 1) {
+          const ghost = card.ghosts[index]
           const t = fadeProgress(ghost.start, now, isStill)
           ghost.element.style.opacity = String(1 - t)
-          if (t < 1) keep.push(ghost)
-          else ghost.element.remove()
+          if (t < 1) {
+            card.ghosts[keptGhosts] = ghost
+            keptGhosts += 1
+          } else {
+            ghost.element.remove()
+          }
         }
-        card.ghosts = keep
+        card.ghosts.length = keptGhosts
       }
       if (card.leaving && !card.fade) {
         removeCard(card)
@@ -1315,7 +1292,7 @@ export function createCards(cssScene, options = {}) {
         paintCardOpacity(card)
       }
 
-      if (!rowsDue) continue
+      if (!rowDirtyAll && !rowDirty.has(card.path)) continue
       for (const entry of card.rows) {
         const path = entry.item.path
         if (entry.item.kind === 'file') {
@@ -1365,6 +1342,8 @@ export function createCards(cssScene, options = {}) {
         }
       }
     }
+    if (rowDirtyAll) rowDirtyAll = false
+    rowDirty.clear()
     return changed || removed
   }
 
@@ -1436,6 +1415,7 @@ export function createCards(cssScene, options = {}) {
     sync,
     setOptions,
     update,
+    markRows,
     beat,
     setSway,
     moving: () => movingNow,

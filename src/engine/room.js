@@ -290,6 +290,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const pointer = new THREE.Vector2()
   const followFocus = createFollowFocus()
   const masks = createWorkingMaskCache()
+  const calloutInput = { focus: null, hover: null }
   const openCalls = new Map()
   const touchLog = new Map()
   let inspected = null
@@ -757,6 +758,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       const color = activity.ok ? GREEN : RED
       hub.pulse(color, 1)
       firePulse(position, view.home, color, 900)
+      cards.markRows()
     } else if (activity.type === 'error') {
       hub.pulse(RED, 0.6)
     }
@@ -835,7 +837,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     labels.update(delta)
     messages.update(now)
     world.mask = mask
-    agentSet.update(state, delta, now, world, terminals, { focus: followFocus.focused(), hover: hoveredKey })
+    calloutInput.focus = followFocus.focused()
+    calloutInput.hover = hoveredKey
+    agentSet.update(state, delta, now, world, terminals, calloutInput)
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'
       const color = status === 'error' ? RED : status === 'done' ? GREEN : WHITE
@@ -844,13 +848,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     }
 
     const isStill = still()
-    pulses.forEach((pulse) => {
-      if (!pulse.active) return
+    for (const pulse of pulses) {
+      if (!pulse.active) continue
       const t = (now - pulse.start) / pulse.duration
       if (t >= 1) {
         pulse.active = false
         pulse.sprite.material.opacity = 0
-        return
+        continue
       }
       if (isStill) {
         pulse.sprite.position.copy(pulse.to)
@@ -858,7 +862,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         pulse.sprite.position.lerpVectors(pulse.from, pulse.to, t)
       }
       pulse.sprite.material.opacity = t < 0.1 ? t * 10 : t > 0.85 ? (1 - t) / 0.15 : 1
-    })
+    }
 
     rig.update(delta)
     const hubPoint = projectPoint(camera, HUB_CENTER, width, height)
