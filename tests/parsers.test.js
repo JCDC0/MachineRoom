@@ -320,6 +320,47 @@ describe('agy parser', () => {
     expect(out[out.length - 1]).toMatchObject({ type: 'tool.end', ok: false })
   })
 
+  it('ends an error step as failed with the error in its label', () => {
+    const parser = createAgyParser(ctx)
+    const out = parser.push(
+      lines({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'c1',
+          step_index: 4,
+          state: 'ERROR',
+          step_type: 'tool',
+          tool_name: 'read_file',
+          tool_info: { error: 'file not found', parameters: { Path: 'src/missing.js' } },
+        },
+      }),
+      350
+    )
+    expect(out[0]).toMatchObject({ type: 'tool.start', label: 'read src/missing.js: file not found' })
+    expect(out[1]).toMatchObject({ type: 'tool.end', ok: false, label: 'read src/missing.js: file not found' })
+  })
+
+  it('ends an active step that errors as failed with the error in its label', () => {
+    const parser = createAgyParser(ctx)
+    const first = parser.push(lines(step('ACTIVE', 'read_file', { Path: 'src/missing.js' })), 360)
+    expect(first[0]).toMatchObject({ type: 'tool.start', label: 'read src/missing.js' })
+    const second = parser.push(
+      lines({
+        event: 'step_update',
+        step_update: {
+          conversation_id: 'c1',
+          step_index: 4,
+          state: 'ERROR',
+          step_type: 'tool',
+          tool_name: 'read_file',
+          tool_info: { error: 'permission denied', parameters: { Path: 'src/missing.js' } },
+        },
+      }),
+      370
+    )
+    expect(second[0]).toMatchObject({ type: 'tool.end', ok: false, label: 'read src/missing.js: permission denied' })
+  })
+
   it('maps write_to_file to a write touch', () => {
     const parser = createAgyParser(ctx)
     const out = parser.push(lines(step('ACTIVE', 'write_to_file', { TargetFile: 'C:\\Temp\\agent-sandbox\\docs\\agy-report.md' })), 400)

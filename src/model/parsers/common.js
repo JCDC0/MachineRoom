@@ -54,8 +54,11 @@ export function toolStart({ time, id, tool, label, touches }) {
   return { time, type: 'tool.start', id, tool, label, touches }
 }
 
-export function toolEnd({ time, id, ok }) {
-  return { time, type: 'tool.end', id, ok }
+export function toolEnd({ time, id, ok, label, error }) {
+  const activity = { time, type: 'tool.end', id, ok }
+  if (label !== undefined) activity.label = label
+  if (error !== undefined) activity.error = error
+  return activity
 }
 
 export function labelFor(tool, relative, rawPath) {
