@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runsFolder } from './lanes-source.js'
 import { programPath } from './programPath.js'
@@ -8,11 +8,15 @@ import { programPath } from './programPath.js'
 const REPO_ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
+export const ALL_CHECKS_PASSED = 'All checks passed.'
+export const NEXT_STEP = 'Start a lane with npm run run-lane -- opencode T2, or press C in the room for Dispatch.'
+
 export function doctorSettings(options = {}, env = process.env, cwd = process.cwd()) {
   return {
     projectRoot: options.projectRoot ?? env.PROJECT_ROOT ?? cwd,
     runsFolder: options.runsFolder ?? runsFolder(env),
     lanesFile: options.lanesFile ?? join(REPO_ROOT, 'docs', 'agents', 'lanes.json'),
+    dist: resolve(options.dist ?? join(REPO_ROOT, 'dist')),
   }
 }
 
@@ -64,10 +68,42 @@ function folderLine(projectRoot) {
   return { ok: true, text: `The project folder ${folder} exists.` }
 }
 
-function gitLine(env) {
+function insideGitRepository(projectRoot) {
+  let current = resolve(projectRoot)
+  for (;;) {
+    let dotGit = null
+    try {
+      dotGit = statSync(join(current, '.git'))
+    } catch {}
+    if (dotGit) return true
+    const parent = dirname(current)
+    if (parent === current) return false
+    current = parent
+  }
+}
+
+function gitLines(projectRoot, env) {
   const found = programPath('git', { env })
-  if (!found) return { ok: false, text: 'Git is not on the PATH.' }
-  return { ok: true, text: `Git is found at ${found}.` }
+  if (!found) return [{ ok: false, text: 'Git is not on the PATH.' }]
+  const lines = [{ ok: true, text: `Git is found at ${found}.` }]
+  const folder = resolve(projectRoot)
+  let folderExists = false
+  try {
+    folderExists = statSync(folder).isDirectory()
+  } catch {}
+  if (folderExists && !insideGitRepository(folder)) {
+    lines.push({
+      warn: true,
+      text: 'This folder is not a git repository. Source control stays empty. Run git init here to fill it.',
+    })
+  }
+  return lines
+}
+
+function viewerLine(dist) {
+  const index = join(dist, 'index.html')
+  if (isFile(index)) return { ok: true, text: `The built viewer is ready in ${dist}.` }
+  return { ok: false, text: `The built viewer is missing ${index}. Run npm run build in ${REPO_ROOT}.` }
 }
 
 function runsLine(folder) {
@@ -137,16 +173,22 @@ export function runDoctor(options = {}) {
   let ok = true
 
   function add(result) {
+    if (result.warn) {
+      lines.push(`warn ${result.text}`)
+      return
+    }
     if (!result.ok) ok = false
     lines.push(`${result.ok ? 'ok' : 'FAIL'} ${result.text}`)
   }
 
-  add(folderLine(settings.projectRoot))
-  add(gitLine(env))
+  const folder = folderLine(settings.projectRoot)
+  add(folder)
+  for (const line of gitLines(settings.projectRoot, env)) add(line)
+  add(viewerLine(settings.dist))
   add(runsLine(settings.runsFolder))
   for (const line of laneLines(settings.lanesFile, env)) add(line)
 
-  return { exitCode: ok ? 0 : 1, lines }
+  return { exitCode: ok ? 0 : 1, lines, folderOk: folder.ok }
 }
 
 export function openProgramName(platform = process.platform) {
@@ -201,11 +243,14 @@ export function openBrowser(url, options = {}) {
   }
 }
 
-export function upBlock(url) {
+export function upBlock(url, { pid = process.pid, port } = {}) {
+  const actualPort = port ?? new URL(url).port
   return [
     'MachineRoom is running.',
+    `machine-room: pid ${pid}, port ${actualPort}`,
     `machine-room: open ${url}`,
     'The room fills when a lane or a session works on the project.',
+    NEXT_STEP,
     'Press Ctrl+C in the terminal to stop the room.',
   ]
 }

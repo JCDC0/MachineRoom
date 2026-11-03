@@ -11,6 +11,14 @@
 - Escape closes the chat's model, effort or Compact card before it closes the chat (task U121).
 - Confirm cards in Settings, the family tree, Build a team and the chat take focus and trap Tab through the shared dialog focus (task U121).
 - Stopping a sub orchestrator re-reads that sub's chat at once, so its Stop button goes away (task U121).
+- `up` stops with exit 1 when the project folder does not exist (task S33).
+- `doctor` fails when the built viewer is missing and names `npm run build` (task S33).
+- `doctor` warns when the project is not a git repository and says Source control stays empty (task S33).
+- A passing `doctor` and `up` print `All checks passed.` and the next step to start a lane (task S33).
+- The `up` block names the room's process id and port (task S33).
+- `machine-room up` takes `--no-open`, and `machineroom --help` prints its own usage with the folder argument (task S33).
+- `/api/health` lists `problems` for a missing root, a missing built viewer, the last tree read error and a stopped session source, and `ok` is false when there is one (task S33).
+- The OpenCode session reader keeps its last error and `/api/health` names it as a problem (task S33).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

@@ -57,5 +57,20 @@ export function createSessionsSource(options = {}) {
     }
   }
 
-  return { agents, readers, start, stop, tick }
+  function problems() {
+    const list = []
+    for (const reader of readers) {
+      if (typeof reader.problem !== 'function') continue
+      let message = ''
+      try {
+        message = String(reader.problem() ?? '')
+      } catch {
+        message = 'The reader failed.'
+      }
+      if (message) list.push({ name: reader.agent?.name ?? 'A session', message })
+    }
+    return list
+  }
+
+  return { agents, readers, start, stop, tick, problems }
 }
