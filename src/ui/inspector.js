@@ -91,7 +91,8 @@ export function explorerView(path = '', tree = {}) {
 }
 
 export function explorerMoreText(total) {
-  return `Showing the first ${EXPLORER_LIMIT} of ${total}.`
+  const hidden = Math.max(0, Number(total) - EXPLORER_LIMIT)
+  return `${hidden} more. Open the folder card to see them all.`
 }
 
 export function breadcrumbRows(path = '', rootName = '') {

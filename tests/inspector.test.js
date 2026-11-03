@@ -93,7 +93,7 @@ describe('the folder explorer rows', () => {
     expect(view.rows).toHaveLength(EXPLORER_LIMIT)
     expect(view.total).toBe(EXPLORER_LIMIT + 5)
     expect(view.more).toBe(true)
-    expect(explorerMoreText(view.total)).toBe('Showing the first 200 of 205.')
+    expect(explorerMoreText(view.total)).toBe('5 more. Open the folder card to see them all.')
     expect(explorerView('', big).more).toBe(false)
   })
 

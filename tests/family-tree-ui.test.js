@@ -433,6 +433,35 @@ describe('FamilyTree rows', () => {
     })
   })
 
+  it('names the sub that a new sub takes its last lane from', async () => {
+    const { client } = makeClient()
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      const check = rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-check')
+      await act(async () => {
+        check.checked = true
+        check.click()
+      })
+      await click(root, buttonWithText(container, 'Add sub orchestrator'))
+      const form = container.querySelector('.mr-family-sub-form')
+      const label = form.querySelector('input[aria-label="Sub orchestrator label"]')
+      await act(async () => {
+        label.focus()
+        label.dispatchEvent({ type: 'focusin', bubbles: true, cancelable: true })
+        label.value = 'Platform'
+        label.dispatchEvent({ type: 'keyup', bubbles: true, cancelable: true })
+      })
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+      await settle()
+
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Add "Platform" to lead 1 agent?')
+      expect(card.textContent).toContain('Frontend goes away.')
+    })
+  })
+
   it('removes a lane from its trash button behind a danger confirm', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
