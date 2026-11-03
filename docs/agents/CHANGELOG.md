@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Send unparsed plain log lines as an error event when a run fails (task S29).
+
 - AGY tool calls for MCP, tasks and schedules get distinct kinds and descriptive labels (task S29).
 
 - OpenCode search tools touch their target folder and name it in the label (task S29).

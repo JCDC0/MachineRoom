@@ -310,6 +310,17 @@ describe('the live lane source', () => {
     const ended = await waitFor(() => endFrame(frames), { what: 'the failed end' })
     expect(ended.payload).toMatchObject({ status: 'failed', error: 'exit 1' })
 
+    const unreadRuns = join(base, 'runs-plain')
+    const unread = startSource({ runs: unreadRuns, lanes })
+    const unreadLog = join(unreadRuns, 'opencode-S6a-20261024-123000.log')
+    const plainError = 'Error: harness died unexpectedly\n    at init (cli.js:10:5)\n    at run (cli.js:20:1)'
+    writeFileSync(unreadLog, `${plainError}\n`)
+    appendFileSync(join(unreadRuns, 'runs.jsonl'), `${JSON.stringify({ lane: 'opencode', log: unreadLog, exitCode: 1, killed: false })}\n`)
+    await waitFor(() => endFrame(unread.frames), { what: 'the failed plain run' })
+    const event = unread.frames.find((frame) => frame.type === 'heartbeat.run.event')
+    expect(event).toBeDefined()
+    expect(event.payload).toMatchObject({ level: 'error', message: plainError })
+
     const otherRuns = join(base, 'runs-killed')
     const other = startSource({ runs: otherRuns, lanes })
     const otherLog = join(otherRuns, 'opencode2-S6b-20261024-122000.log')
