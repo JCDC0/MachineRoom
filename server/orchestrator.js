@@ -299,6 +299,42 @@ function readText(file) {
   }
 }
 
+export const LOG_TAIL_BYTES = 64 * 1024
+
+export function readTail(file, maxBytes = LOG_TAIL_BYTES) {
+  let stat
+  try {
+    stat = statSync(file)
+  } catch {
+    return ''
+  }
+  if (!stat.size) return ''
+  const length = Math.min(stat.size, maxBytes)
+  const position = Math.max(0, stat.size - length)
+  let fd
+  try {
+    fd = openSync(file, 'r')
+  } catch {
+    return ''
+  }
+  try {
+    const buffer = Buffer.alloc(length)
+    const got = readSync(fd, buffer, 0, length, position)
+    const text = buffer.toString('utf8', 0, got)
+    if (position > 0) {
+      const firstNewline = text.indexOf('\n')
+      return firstNewline >= 0 ? text.slice(firstNewline + 1) : text
+    }
+    return text
+  } catch {
+    return ''
+  } finally {
+    try {
+      closeSync(fd)
+    } catch {}
+  }
+}
+
 function cleanFailure(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null
   const safe = maskKeys(raw).text.trim()
@@ -1258,7 +1294,7 @@ export function createOrchestrator({
         rmSync(turn.mcpConfigPath, { force: true })
       } catch {}
     }
-    const logText = readText(turn.logPath)
+    const logText = readTail(turn.logPath)
     let runStats
     let report
     const descriptor = (harnesses && harnesses[harness]) || harnessByKey[harness]
@@ -1797,7 +1833,7 @@ export function createOrchestrator({
       const rel = candidate ? relative(folder, candidate) : ''
       const inside = Boolean(candidate && rel && !rel.startsWith('..') && !isAbsolute(rel))
       const logFile = inside ? candidate : ''
-      const logContent = logFile ? readText(logFile) : ''
+      const logContent = logFile ? readTail(logFile) : ''
       if (logContent) {
         const laneEntry = lanes && Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
         const laneHarnessKey = laneEntry?.cli?.harness || laneEntry?.harness || laneKey
