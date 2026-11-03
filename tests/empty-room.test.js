@@ -18,6 +18,10 @@ describe('the empty room line', () => {
     expect(emptyRoomLine({ ...room, agents: [{ key: 'opencode', runs: '2' }] })).toBe('')
   })
 
+  it('goes away while an agent works before its first run ends', () => {
+    expect(emptyRoomLine({ ...room, agents: [{ key: 'claude-session', status: 'working', runs: 0 }] })).toBe('')
+  })
+
   it('never shows in a replay or a demo', () => {
     expect(emptyRoomLine({ ...room, live: false })).toBe('')
     expect(emptyRoomLine({ ...room, simulated: true, files: 0 })).toBe('')

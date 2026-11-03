@@ -11,6 +11,7 @@
 - A failed lane pill reads that lane's newest record, not only the newest 20 records (task U129).
 - The CONTROL count is a button of its own, so the keyboard reaches it and it opens Reviews (task U129).
 - A click on the spend opens the Costs drawer and leaves an open one open (task U129).
+- The empty room line goes away while any agent works, before its first run ends (task U129).
 - On a reconnect the page asks the bridge for the tree since the newest version it holds (task U126).
 - A failed manual Refresh in Reviews shows its sentence (task U126).
 - A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).

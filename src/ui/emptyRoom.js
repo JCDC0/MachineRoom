@@ -6,6 +6,6 @@ export function emptyRoomLine({ live = false, simulated = false, status = '', fi
   if (status !== 'live') return ''
   if (Number(files) > 0) return ''
   const roster = Array.isArray(agents) ? agents : []
-  if (roster.some((agent) => Number(agent?.runs) > 0)) return ''
+  if (roster.some((agent) => agent?.status === 'working' || Number(agent?.runs) > 0)) return ''
   return EMPTY_ROOM_TEXT
 }
