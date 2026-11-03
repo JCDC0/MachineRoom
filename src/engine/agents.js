@@ -49,9 +49,38 @@ export const DANCE_SCALE = 0.08
 export const ORCHESTRATOR_DANCE_SCALE = 0.03
 const DANCE_DECAY = 5
 
+export const CALLOUT_CROWD_LIMIT = 4
+export const CALLOUT_RECENT_KEEP = 2
+
 export function danceScale(pulse, orchestrator = false) {
   const value = Math.min(1, Math.max(0, Number(pulse) || 0))
   return 1 + (orchestrator ? ORCHESTRATOR_DANCE_SCALE : DANCE_SCALE) * value
+}
+
+function busyTime(item) {
+  const value = Number(item?.since)
+  return Number.isFinite(value) ? value : 0
+}
+
+function byKey(a, b) {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+export function fullCalloutKeys(busy, focus = null, hover = null) {
+  const list = []
+  const keys = new Set()
+  for (const item of busy ?? []) {
+    const key = item?.key
+    if (typeof key !== 'string' || key === '' || keys.has(key)) continue
+    keys.add(key)
+    list.push({ key, since: busyTime(item) })
+  }
+  if (list.length <= CALLOUT_CROWD_LIMIT) return keys
+  const ranked = [...list].sort((a, b) => busyTime(b) - busyTime(a) || byKey(a.key, b.key))
+  const kept = new Set(ranked.slice(0, CALLOUT_RECENT_KEEP).map((item) => item.key))
+  if (typeof focus === 'string' && keys.has(focus)) kept.add(focus)
+  if (typeof hover === 'string' && keys.has(hover)) kept.add(hover)
+  return kept
 }
 
 export function orchestratorNameLift(subCount) {
@@ -739,6 +768,8 @@ export function createAgents(scene, roster, cssScene = null) {
       side: -1,
       chipSide: 1,
       doneAt: 0,
+      busySince: 0,
+      calloutCompact: false,
       style: 'idle',
       presence: orchestrator ? 1 : 0,
       presenceReady: false,
@@ -909,6 +940,7 @@ export function createAgents(scene, roster, cssScene = null) {
       if (status === 'queued') view.pointer = null
       if (status === 'working' && view.style !== 'queued') view.pointer = null
       if (status === 'done' || status === 'error') view.doneAt = now
+      if (status === 'working' || status === 'queued') view.busySince = now
       if (view.parentKey) {
         if (status === 'working' || status === 'queued') view.fadeStart = 0
         else if (status === 'done' || status === 'error') view.fadeStart = now
@@ -970,7 +1002,7 @@ export function createAgents(scene, roster, cssScene = null) {
     }
   }
 
-  function update(state, delta, now, world, terminals) {
+  function update(state, delta, now, world, terminals, callout = null) {
     if (world.back && world.right) {
       camUp.crossVectors(world.back, world.right).normalize()
       rotMatrix.makeBasis(world.right, camUp, world.back)
@@ -992,11 +1024,19 @@ export function createAgents(scene, roster, cssScene = null) {
       if (view.subOrchestrator) subCount += 1
     }
     const nameLift = orchestratorNameLift(subCount)
+    const busy = []
+    for (const view of views.values()) {
+      const entry = state.agents.get(view.key)
+      setStatus(view, entry?.status ?? 'idle', now)
+      if ((view.style === 'working' || view.style === 'queued') && entry?.label) {
+        busy.push({ key: view.key, since: view.busySince })
+      }
+    }
+    const full = fullCalloutKeys(busy, callout?.focus ?? null, callout?.hover ?? null)
 
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
-      const status = entry?.status ?? 'idle'
-      setStatus(view, status, now)
+      const status = view.style
       const style = STYLE[status] ?? STYLE.idle
       const fade = view.parentKey ? (view.fadeStart > 0 ? childFade(now - view.fadeStart, isStill) : 1) : 1
       const ran = Boolean(entry) && (entry.status !== 'idle' || (entry.runs ?? 0) > 0 || (entry.lines?.length ?? 0) > 0)
@@ -1083,6 +1123,13 @@ export function createAgents(scene, roster, cssScene = null) {
       } else if (fresh) {
         calloutTone = 'done'
         calloutText = 'FINISHED'
+      }
+
+      const compact = Boolean(working) && !full.has(view.key)
+      if (view.calloutCompact !== compact) {
+        view.calloutCompact = compact
+        view.callout.task.style.display = compact ? 'none' : ''
+        view.callout.cmd.style.display = compact ? 'none' : ''
       }
 
       if (calloutTone && fade > 0.01) {
