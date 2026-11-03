@@ -325,7 +325,6 @@ function pagePost(url, path, body, headers = {}) {
   })
 }
 
-
 describe('MCP server registry', () => {
   it('answers an empty list when mcp.json is missing', () => {
     expect(readMcpServers(useTempDir('mr-mcp-runs-'))).toEqual([])
