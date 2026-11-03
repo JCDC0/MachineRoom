@@ -16,6 +16,9 @@ import {
   NO_KEY_PROBLEM,
   PROVIDERS,
   PROVIDER_PROBLEM,
+  SAVE_CONFIRM_PROBLEM,
+  SAVE_ORIGIN_PROBLEM,
+  TOO_MANY_PROBLEM,
   cleanEndpoint,
   createEndpointsApi,
   endpointProblem,
@@ -151,8 +154,10 @@ describe('/api/endpoints', () => {
     const { url } = await startLaneBridge()
     const noOrigin = await post(url, '/api/endpoints', endpointBody(), null)
     expect(noOrigin.status).toBe(403)
+    expect(noOrigin.body).toEqual({ error: SAVE_ORIGIN_PROBLEM })
     const unconfirmed = await post(url, '/api/endpoints', endpointBody({ confirmed: false }))
     expect(unconfirmed.status).toBe(400)
+    expect(unconfirmed.body).toEqual({ error: SAVE_CONFIRM_PROBLEM })
   })
 
   it('needs a page Origin and a confirmation to delete an endpoint', async () => {
@@ -222,7 +227,7 @@ describe('/api/endpoints', () => {
     saveEndpoints(runsDir, endpoints)
     const refused = await post(url, '/api/endpoints', endpointBody({ name: 'One more' }))
     expect(refused.status).toBe(400)
-    expect(refused.body.error).toContain('At most 20')
+    expect(refused.body.error).toBe(TOO_MANY_PROBLEM)
   })
 })
 

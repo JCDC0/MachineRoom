@@ -95,8 +95,6 @@ async function startLaneBridge({ lanes = true } = {}) {
     projectRoot: base,
     port: 0,
     env: {},
-    reconnectMinMs: 60000,
-    reconnectMaxMs: 60000,
     lanesSource: lanes ? { folder: runs, lanes: LANES, repoRoot: base, pollMs: 20, quietMs: 60000 } : null,
   })
   cleanups.push(() => bridge.stop())

@@ -75,10 +75,10 @@ describe('the agent depth file', () => {
   it('keeps a deep limit only while it is unlocked, and survives a broken file', () => {
     const runs = tempDir('mr-depth-broken-')
     saveAgentDepth(runs, { limit: 4, unlocked: false })
-    expect(readAgentDepth(runs)).toEqual({ limit: 2, unlocked: false })
+    expect(readAgentDepth(runs)).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false })
 
     writeFileSync(agentDepthFileFor(runs), 'not json')
-    expect(readAgentDepth(runs)).toEqual({ limit: 2, unlocked: false })
+    expect(readAgentDepth(runs)).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false })
   })
 })
 
@@ -87,7 +87,7 @@ describe('GET and POST /api/agent-depth', () => {
     const { url } = await startBridge()
     const answer = await request(`${url}/api/agent-depth`, { origin: '' })
     expect(answer.status).toBe(200)
-    expect(answer.body).toEqual({ limit: 2, unlocked: false })
+    expect(answer.body).toEqual({ limit: AGENT_DEPTH_DEFAULT, unlocked: false })
   })
 
   it('refuses a write without a page Origin', async () => {
@@ -159,10 +159,10 @@ describe('GET and POST /api/agent-depth', () => {
 
     const locked = await request(`${url}/api/agent-depth`, {
       method: 'POST',
-      body: { limit: 2, unlocked: false, confirmed: true },
+      body: { limit: AGENT_DEPTH_DEFAULT, unlocked: false, confirmed: true },
     })
     expect(locked.status).toBe(200)
-    expect(locked.body).toEqual({ ok: true, limit: 2, unlocked: false })
+    expect(locked.body).toEqual({ ok: true, limit: AGENT_DEPTH_DEFAULT, unlocked: false })
   })
 
   it('sends an agents notice after a write', async () => {

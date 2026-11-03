@@ -8,7 +8,6 @@ import { createSessionsSource } from '../server/sessions-source.js'
 import { buildActivities } from '../src/model/pipeline.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
 const AGENT = {
   id: 'agent-claude-session',
   key: 'claude-session',
@@ -523,14 +522,9 @@ describe('sessions source', () => {
       },
     }
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-sessions',
       projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       sessionsSource: { projectRoot, runsFolder: runs, readers: [reader], pollMs: 20 },
     })
     cleanups.push(() => bridge.stop())

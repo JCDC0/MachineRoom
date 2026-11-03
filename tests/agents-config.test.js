@@ -5,10 +5,18 @@ import { tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  CONFIRM_CREATE_PROBLEM,
   HARNESS_EFFORTS,
   HARNESS_KEYS,
+  LANES_JSON_DELETE_PROBLEM,
+  LANES_JSON_UPDATE_PROBLEM,
+  NAME_LENGTH_PROBLEM,
+  ORIGIN_CREATE_PROBLEM,
   buildMadeLane,
+  createAgentsConfigApi,
+  effortUnavailableProblem,
   isHarnessAvailable,
+  laneRunningProblem,
   listHarnesses,
   nextFreeKey,
   readAgentsConfig,
@@ -289,7 +297,7 @@ describe('POST /api/lanes/create', () => {
       body: JSON.stringify({ name: 'Test', harness: 'claude', model: 'claude-haiku-5-5', confirmed: true }),
     })
     expect(status).toBe(403)
-    expect(body.error).toBe('A request to create a lane needs a page Origin.')
+    expect(body.error).toBe(ORIGIN_CREATE_PROBLEM)
   })
 
   it('refuses unconfirmed create with 400', async () => {
@@ -300,7 +308,7 @@ describe('POST /api/lanes/create', () => {
       body: JSON.stringify({ name: 'Test', harness: 'claude', model: 'claude-haiku-5-5' }),
     })
     expect(status).toBe(400)
-    expect(body.error).toBe('Confirm creating the lane first.')
+    expect(body.error).toBe(CONFIRM_CREATE_PROBLEM)
   })
 
   it('refuses empty name or name over 40 characters with 400 and one sentence', async () => {
@@ -311,7 +319,7 @@ describe('POST /api/lanes/create', () => {
       body: JSON.stringify({ name: '   ', harness: 'claude', model: 'claude-haiku-5-5', confirmed: true }),
     })
     expect(emptyRes.status).toBe(400)
-    expect(emptyRes.body.error).toBe('The lane name must be 1 to 40 characters.')
+    expect(emptyRes.body.error).toBe(NAME_LENGTH_PROBLEM)
 
     const longRes = await getJson(`${url}/api/lanes/create`, {
       method: 'POST',
@@ -319,7 +327,7 @@ describe('POST /api/lanes/create', () => {
       body: JSON.stringify({ name: 'A'.repeat(41), harness: 'claude', model: 'claude-haiku-5-5', confirmed: true }),
     })
     expect(longRes.status).toBe(400)
-    expect(longRes.body.error).toBe('The lane name must be 1 to 40 characters.')
+    expect(longRes.body.error).toBe(NAME_LENGTH_PROBLEM)
   })
 
   it('refuses unavailable harness, unlisted model or unlisted effort', async () => {
@@ -347,7 +355,7 @@ describe('POST /api/lanes/create', () => {
       body: JSON.stringify({ name: 'Test', harness: 'claude', model: 'claude-haiku-5-5', effort: 'ultra', confirmed: true }),
     })
     expect(badEffort.status).toBe(400)
-    expect(badEffort.body.error).toBe('The effort ultra is not available for claude.')
+    expect(badEffort.body.error).toBe(effortUnavailableProblem('ultra', 'claude'))
   })
 
   it('creates lane, saves to agents.json, updates active lanes and answers new lane', async () => {
@@ -408,7 +416,7 @@ describe('POST /api/lanes/:key/update', () => {
       body: JSON.stringify({ name: 'New Name', confirmed: true }),
     })
     expect(laneJsonRefusal.status).toBe(400)
-    expect(laneJsonRefusal.body.error).toBe('A lane from lanes.json cannot be updated.')
+    expect(laneJsonRefusal.body.error).toBe(LANES_JSON_UPDATE_PROBLEM)
   })
 
   it('updates owner-made lane name, model and effort', async () => {
@@ -445,7 +453,7 @@ describe('POST /api/lanes/:key/delete', () => {
       body: JSON.stringify({ confirmed: true }),
     })
     expect(res.status).toBe(400)
-    expect(res.body.error).toBe('A lane from lanes.json cannot be deleted; make it inactive instead.')
+    expect(res.body.error).toBe(LANES_JSON_DELETE_PROBLEM)
   })
 
   it('deletes a lane from lanes.json by adding it to removed and dropping it from active lanes', async () => {
@@ -497,20 +505,39 @@ describe('POST /api/lanes/:key/delete', () => {
   })
 
   it('refuses delete for running lane with 409', async () => {
-    const { url, client, runsFolder } = await startBridgeRig()
-    const created = await client.createLane({
-      name: 'Running Lane',
-      harness: 'claude',
-      model: 'claude-haiku-5-5',
-      confirmed: true,
+    const runs = tempDir('mr-running-')
+    saveAgentsConfig(runs, {
+      agents: [
+        {
+          key: 'claude-2',
+          name: 'Running Claude',
+          harness: 'claude',
+          model: 'claude-haiku-5-5',
+          effort: 'low',
+          createdAt: '2026-10-25T10:00:00.000Z',
+        },
+      ],
+    })
+    let statusSent = 0
+    let bodySent = null
+    const api = createAgentsConfigApi({
+      runsFolder: runs,
+      isWorking: (key) => key === 'claude-2',
+      sendJson: (req, res, status, body) => {
+        statusSent = status
+        bodySent = body
+      },
+      readJsonBody: async () => ({ confirmed: true }),
     })
 
-    const resRunning = await getJson(`${url}/api/lanes/${created.key}/delete`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', origin: url },
-      body: JSON.stringify({ confirmed: true }),
-    })
-    expect(resRunning.status).toBe(200)
+    const handled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://localhost:5173' } },
+      {},
+      new URL('http://localhost:5173/api/lanes/claude-2/delete')
+    )
+    expect(handled).toBe(true)
+    expect(statusSent).toBe(409)
+    expect(bodySent.error).toBe(laneRunningProblem('claude-2'))
   })
 
   it('deletes owner-made lane from config and active lanes', async () => {

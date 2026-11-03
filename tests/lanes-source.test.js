@@ -1,6 +1,5 @@
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
-import { createServer } from 'node:http'
 import { basename, join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
@@ -12,7 +11,6 @@ import { readFrames, waitFor } from './helpers/bridge.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const realLanes = JSON.parse(readFileSync(new URL('../docs/agents/lanes.json', import.meta.url), 'utf8'))
-const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
 
 const cleanups = []
 
@@ -182,14 +180,9 @@ describe('the live lane source', () => {
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-lanes',
       projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
     })
     cleanups.push(() => bridge.stop())
@@ -211,14 +204,9 @@ describe('the live lane source', () => {
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-lanes',
       projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
     })
     cleanups.push(() => bridge.stop())
@@ -404,14 +392,9 @@ describe('the live lane source', () => {
   it('adds no lane agent when the option is off', async () => {
     const projectRoot = tempDir()
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-lanes',
       projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
     })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
@@ -581,14 +564,9 @@ describe('the V5 audit fixes in the lane source', () => {
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
     const bridge = createBridge({
-      paperclipUrl: DEAD_PAPERCLIP,
-      companyId: 'comp-lanes',
       projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
     })
     cleanups.push(() => bridge.stop())
@@ -722,36 +700,17 @@ describe('the V5 audit fixes in the lane source', () => {
     expect(frames.some((frame) => frame.payload?.runId === 'run-opencode-elsewhere-20261024-140000')).toBe(false)
   })
 
-  it('registers the lane parsers at bridge start without asking a Paperclip for agents (X16)', async () => {
+  it('registers the lane parsers and agents when a lane is activated (X16)', async () => {
     const base = tempDir()
     const runs = join(base, 'runs')
     const projectRoot = join(base, 'MachineRoom')
     mkdirSync(projectRoot, { recursive: true })
     const worktree = join(base, 'MachineRoom-opencode3')
     const lanes = lanesFor({ opencode: worktree })
-    const requests = []
-    const upstream = createServer((req, res) => {
-      requests.push(req.url ?? '')
-      res.writeHead(500, { 'content-type': 'application/json' })
-      res.end('{}')
-    })
-    cleanups.push(
-      () =>
-        new Promise((resolveClose) => {
-          upstream.closeAllConnections()
-          upstream.close(() => resolveClose())
-        })
-    )
-    await new Promise((resolveListen) => upstream.listen(0, '127.0.0.1', resolveListen))
     const bridge = createBridge({
-      paperclipUrl: `http://127.0.0.1:${upstream.address().port}`,
-      companyId: 'comp-lanes',
       projectRoot,
       port: 0,
       env: {},
-      surfaceEveryMs: 0,
-      reconnectMinMs: 60000,
-      reconnectMaxMs: 60000,
       lanesSource: { folder: runs, lanes, repoRoot: projectRoot, quietMs: 60000, pollMs: 20 },
     })
     cleanups.push(() => bridge.stop())
@@ -768,13 +727,10 @@ describe('the V5 audit fixes in the lane source', () => {
 
     const agents = await fetch(`${url}/api/agents`).then((response) => response.json())
     expect(agents.some((agent) => agent.key === 'opencode')).toBe(true)
-    expect(requests.filter((path) => path.endsWith('/agents'))).toEqual([])
 
     writeFileSync(join(runs, 'opencode-S6a-20261024-134000.log'), `${toolLine(`${worktree}\\src\\a.js`)}\n`)
     const frames = await readFrames(url, (list) => list.some((frame) => frame.type === 'heartbeat.run.log'))
     expect(frames).toHaveLength(3)
-    await sleep(300)
-    expect(requests).toEqual([])
   })
 })
 

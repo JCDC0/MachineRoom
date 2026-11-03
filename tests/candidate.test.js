@@ -4,7 +4,7 @@ import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { buildCommand, candidatePlan, laneEnv, parseCandidateArgs, runCandidate } from '../scripts/candidate.mjs'
+import { DEFAULT_PORT, buildCommand, candidatePlan, laneEnv, parseCandidateArgs, runCandidate } from '../scripts/candidate.mjs'
 import { killTree } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
@@ -138,7 +138,7 @@ describe('parseCandidateArgs', () => {
 
   it('defaults to port 5175 and accepts the equals form', () => {
     expect(parseCandidateArgs(['hermes', '--port=6176'])).toMatchObject({ lane: 'hermes', port: 6176 })
-    expect(parseCandidateArgs(['hermes'])).toMatchObject({ lane: 'hermes', port: 5175 })
+    expect(parseCandidateArgs(['hermes'])).toMatchObject({ lane: 'hermes', port: DEFAULT_PORT })
   })
 
   it('refuses an unknown option, a bad port and a missing lane', () => {
@@ -149,7 +149,7 @@ describe('parseCandidateArgs', () => {
   })
 
   it('asks for help without a lane', () => {
-    expect(parseCandidateArgs(['--help'])).toMatchObject({ help: true, lane: '', port: 5175 })
+    expect(parseCandidateArgs(['--help'])).toMatchObject({ help: true, lane: '', port: DEFAULT_PORT })
   })
 })
 
@@ -167,7 +167,7 @@ describe('candidatePlan', () => {
   })
 
   it('uses 5175 when no port is given', () => {
-    expect(candidatePlan({ lanes: { opencode: { worktree } }, lane: 'opencode' })).toMatchObject({ port: 5175 })
+    expect(candidatePlan({ lanes: { opencode: { worktree } }, lane: 'opencode' })).toMatchObject({ port: DEFAULT_PORT })
   })
 
   it('refuses an unknown lane and __proto__', () => {

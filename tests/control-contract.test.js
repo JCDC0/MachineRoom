@@ -199,8 +199,6 @@ async function makeHarness({ records = [] } = {}) {
     runnerCommand: { file: process.execPath, args: [runnerPath] },
     lanesSource: { folder: runs, lanes, repoRoot: RUN_ROOM, pollMs: 20, quietMs: 60000 },
     env: {},
-    reconnectMinMs: 60000,
-    reconnectMaxMs: 60000,
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
