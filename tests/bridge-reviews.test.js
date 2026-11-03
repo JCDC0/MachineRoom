@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
-import { createReviewsApi, NOT_OWNER_PROBLEM } from '../server/reviews.js'
+import { createReviewsApi, DEFAULT_REVIEW_CONCURRENCY, mapConcurrent, NOT_OWNER_PROBLEM } from '../server/reviews.js'
 import { requestJson } from './helpers/httpJson.js'
 import { makeTempDir as makeTempRoot, processTempRoot, removeTempDir } from './helpers/tempRoot.js'
 
@@ -668,5 +668,35 @@ describe('merge route', { timeout: 30000 }, () => {
     const refused = first.status === 409 ? first : second
     expect(await refused.json()).toEqual({ error: 'A merge is already running.' })
     expect(head).not.toBe(manyHead)
+  })
+
+  it('bounds review concurrency and preserves item order in mapConcurrent', async () => {
+    const items = [0, 1, 2, 3, 4, 5, 6, 7]
+    let current = 0
+    let maxConcurrent = 0
+    const results = await mapConcurrent(items, 3, async (item) => {
+      current += 1
+      if (current > maxConcurrent) maxConcurrent = current
+      await new Promise((r) => setTimeout(r, (items.length - item) * 5))
+      current -= 1
+      return `result-${item}`
+    })
+    expect(maxConcurrent).toBeLessThanOrEqual(3)
+    expect(results).toEqual(items.map((i) => `result-${i}`))
+  })
+
+  it('bounds concurrency across lanes and keeps their order', async () => {
+    const { repo } = makeLaneRepo()
+    const lanes = {}
+    const keys = ['lane-a', 'lane-b', 'lane-c', 'lane-d', 'lane-e']
+    for (const key of keys) {
+      const { worktree } = makeLaneRepo()
+      lanes[key] = { name: key, worktree }
+    }
+    const { url } = await startReviewsBridge(lanes, { projectRoot: repo, concurrency: 2 })
+    const res = await requestJson(`${url}/api/control/reviews`)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.lanes.map((l) => l.lane)).toEqual(keys)
   })
 })

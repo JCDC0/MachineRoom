@@ -172,7 +172,7 @@ server/           the bridge: frames from the lane runs and the sessions, the ag
   mcp.js            MCP servers in `<runs>/mcp.json`, JSON-RPC tool lists and calls over stdio or http, and the /api/mcp routes (H14)
   briefs.js         /api/control/briefs and brief-prompt
   plans.js          /api/control/plans
-  reviews.js        /api/control/reviews, diff and merge, against main or the project's current branch; the merge takes the same repo-wide write lock as the git routes, invalidates the git state and sends a `git` notice, and a lane's last run comes from every record, not the newest 20
+  reviews.js        /api/control/reviews, diff and merge, against main or the project's current branch; the lane reviews run concurrently up to a small bound while keeping their order, the merge takes the same repo-wide write lock as the git routes, invalidates the git state and sends a `git` notice, and a lane's last run comes from every record, not the newest 20
   policy.js         /api/control/route
   git.js            /api/git, /api/git/switch and /api/git/branch: the project's branches, commits and uncommitted changes, switching and making a branch
   files.js          /api/file: a read-only text preview inside the project root, with the page Origin check, the real path check, the refused names, the 256 KB cut and key masking
