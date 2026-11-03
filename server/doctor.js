@@ -233,9 +233,11 @@ export function openBrowser(url, options = {}) {
   }
 }
 
-export function upBlock(url) {
+export function upBlock(url, { pid = process.pid, port } = {}) {
+  const actualPort = port ?? new URL(url).port
   return [
     'MachineRoom is running.',
+    `machine-room: pid ${pid}, port ${actualPort}`,
     `machine-room: open ${url}`,
     'The room fills when a lane or a session works on the project.',
     NEXT_STEP,

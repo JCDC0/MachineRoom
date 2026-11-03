@@ -322,10 +322,11 @@ describe('the machine-room doctor command', () => {
 })
 
 describe('the up block and browser open command', () => {
-  it('formats the short block with the address, next step and Ctrl+C', () => {
+  it('formats the short block with the pid, port, next step and Ctrl+C', () => {
     const url = 'http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174'
-    expect(upBlock(url)).toEqual([
+    expect(upBlock(url, { pid: 1234 })).toEqual([
       'MachineRoom is running.',
+      'machine-room: pid 1234, port 5174',
       `machine-room: open ${url}`,
       'The room fills when a lane or a session works on the project.',
       NEXT_STEP,

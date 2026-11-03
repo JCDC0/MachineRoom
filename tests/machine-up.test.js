@@ -158,8 +158,9 @@ describe('machine-room up', () => {
     expect(health).toMatchObject({ ok: true, lanes: true, sessions: true })
 
     const lines = outputLines(run)
-    expect(lines.slice(-5)).toEqual([
+    expect(lines.slice(-6)).toEqual([
       'MachineRoom is running.',
+      `machine-room: pid ${run.child.pid}, port ${new URL(address).port}`,
       `machine-room: open ${address}`,
       'The room fills when a lane or a session works on the project.',
       NEXT_STEP,

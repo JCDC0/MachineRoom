@@ -163,7 +163,7 @@ async function startRoom(options, dist, { block = false } = {}) {
 
   const url = `http://127.0.0.1:${info.port}/?live&bridge=http://127.0.0.1:${info.port}`
   if (block) {
-    for (const line of upBlock(url)) console.log(line)
+    for (const line of upBlock(url, { pid: process.pid, port: info.port })) console.log(line)
   } else {
     console.log(`machine-room: open ${url}`)
   }
