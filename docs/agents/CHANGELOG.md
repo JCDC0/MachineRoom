@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The architecture no longer promises a Detach button and its unused styles are gone (task U122).
 - SearchSettings uses the page's client and is left out in a replay (task U122).
 - Every effect, Beeps and Dance switch has an accessible name (task U122).
 - The inspector keeps only the newest network answer and lets an offline event win (task U122).

@@ -6402,24 +6402,6 @@ body:has(#hud-orchestrator-chat) .waiting {
   background: var(--red);
 }
 
-.mr-orch-tab-detach {
-  padding: 0 6px;
-  border: none;
-  border-left: 1px solid rgb(255 255 255 / 0.18);
-  border-radius: 0;
-  background: transparent;
-  color: rgb(255 255 255 / 0.45);
-  font-size: 9px;
-  letter-spacing: 0.04em;
-}
-
-.mr-orch-tab-detach:hover:not(:disabled) {
-  border: none;
-  border-left: 1px solid var(--red);
-  background: rgb(255 42 42 / 0.12);
-  color: var(--red);
-}
-
 .mr-orch-attach {
   display: flex;
   flex-direction: column;
@@ -6507,11 +6489,6 @@ body:has(#hud-orchestrator-chat) .waiting {
   gap: 6px;
   color: rgb(255 255 255 / 0.8);
   font-size: 11px;
-}
-
-.mr-orch-confirm.is-detach {
-  border-color: var(--red);
-  background: rgb(255 42 42 / 0.07);
 }
 
 .mr-orch-confirm-detail {
@@ -8194,8 +8171,7 @@ body:has(#hud-orchestrator-chat) .waiting {
   }
 
   .mr-orch.is-inline .mr-orch-attach,
-  .mr-orch.is-inline .mr-orch-confirm.is-attach,
-  .mr-orch.is-inline .mr-orch-confirm.is-detach {
+  .mr-orch.is-inline .mr-orch-confirm.is-attach {
     flex: 0 0 auto;
     margin: 0 32px;
     max-height: 30vh;
