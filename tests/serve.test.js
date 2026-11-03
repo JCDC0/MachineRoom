@@ -120,8 +120,6 @@ function waitForExit(child, timeoutMs = 8000) {
 
 function childEnv(tempRoot) {
   const env = { ...process.env, PORT: '5174' }
-  delete env.PAPERCLIP_URL
-  delete env.PAPERCLIP_COMPANY_ID
   if (tempRoot) {
     env.TEMP = tempRoot
     env.TMP = tempRoot

@@ -1,9 +1,10 @@
 import { spawn, spawnSync } from 'node:child_process'
-import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
-import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue } from '../src/briefs/queue.js'
+import { commitMessage, formatQueueSummary, parseQueue, parseQueueArgs, runQueue, QUEUE_SUBJECT_LIMIT, QUEUE_TASK_LIMIT, QUEUE_TASK_TEXT_LIMIT } from '../src/briefs/queue.js'
+import { DEFAULT_MINUTES } from '../src/briefs/run.js'
 import { gitPath } from '../server/programPath.js'
 import { releaseLaneLock } from '../scripts/lane-lock.mjs'
 import { takeProjectLock } from '../scripts/run-lane.mjs'
@@ -159,14 +160,14 @@ describe('parseQueue', () => {
   })
 
   it('takes 20 tasks and refuses 21', () => {
-    const twenty = Array.from({ length: 20 }, (_, index) => `Task ${index + 1}.`).join('\n---\n')
-    expect(parseQueue(twenty)).toHaveLength(20)
-    expect(() => parseQueue(`${twenty}\n---\nTask 21.`)).toThrow('A queue holds at most 20 tasks.')
+    const twenty = Array.from({ length: QUEUE_TASK_LIMIT }, (_, index) => `Task ${index + 1}.`).join('\n---\n')
+    expect(parseQueue(twenty)).toHaveLength(QUEUE_TASK_LIMIT)
+    expect(() => parseQueue(`${twenty}\n---\nTask ${QUEUE_TASK_LIMIT + 1}.`)).toThrow(`A queue holds at most ${QUEUE_TASK_LIMIT} tasks.`)
   })
 
   it('takes a task of 4000 characters and refuses 4001', () => {
-    expect(parseQueue('x'.repeat(4000))).toEqual(['x'.repeat(4000)])
-    expect(() => parseQueue('x'.repeat(4001))).toThrow('Write each task in 1 to 4000 characters.')
+    expect(parseQueue('x'.repeat(QUEUE_TASK_TEXT_LIMIT))).toEqual(['x'.repeat(QUEUE_TASK_TEXT_LIMIT)])
+    expect(() => parseQueue('x'.repeat(QUEUE_TASK_TEXT_LIMIT + 1))).toThrow(`Write each task in 1 to ${QUEUE_TASK_TEXT_LIMIT} characters.`)
   })
 })
 
@@ -179,7 +180,7 @@ describe('commitMessage', () => {
 
   it('cuts the subject to 72 characters', () => {
     const message = commitMessage(`${'a'.repeat(100)}\nMore detail.`, 1, 1, 'hermes')
-    expect(message.split('\n')[0]).toBe('a'.repeat(72))
+    expect(message.split('\n')[0]).toBe('a'.repeat(QUEUE_SUBJECT_LIMIT))
     expect(message).toContain('Task 1 of 1, run by MachineRoom on the hermes lane.')
   })
 })
@@ -195,7 +196,7 @@ describe('parseQueueArgs', () => {
       lane: 'opencode', briefs: [], project: 'C:\\work', queue: 'queue.txt', test: 'npm test', dryRun: false, minutes: 20,
     })
     expect(parseQueueArgs(['--queue=queue.txt', '--project=C:\\work', 'opencode', '--dry-run'])).toMatchObject({
-      lane: 'opencode', dryRun: true, minutes: 100,
+      lane: 'opencode', dryRun: true, minutes: DEFAULT_MINUTES,
     })
   })
 

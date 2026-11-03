@@ -2,7 +2,7 @@ import { appendFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { cachedRunRecords as cachedRunRecordsLaneCosts } from '../server/lane-costs.js'
-import { cachedRunRecords, clearRunsCache, readAllRunRecords } from '../server/runs.js'
+import { clearRunsCache, readAllRunRecords } from '../server/runs.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const cleanups = []

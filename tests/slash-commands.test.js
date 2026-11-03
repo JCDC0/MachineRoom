@@ -413,21 +413,23 @@ describe('the commands route', () => {
 
   it('answers 404 for an unknown orchestrator', async () => {
     const { registry, sent } = rig()
-    await registry.handle(
+    const handled = await registry.handle(
       { method: 'GET', headers: {} },
       {},
       new URL('http://127.0.0.1/api/orchestrator/commands?id=frontend')
     )
+    expect(handled).toBe(true)
     expect(sent[0].status).toBe(404)
   })
 
   it('refuses a write', async () => {
     const { registry, sent } = rig()
-    await registry.handle(
+    const handled = await registry.handle(
       { method: 'POST', headers: {} },
       {},
       new URL('http://127.0.0.1/api/orchestrator/commands')
     )
+    expect(handled).toBe(true)
     expect(sent[0].status).toBe(405)
   })
 

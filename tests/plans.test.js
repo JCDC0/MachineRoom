@@ -34,8 +34,6 @@ async function setup() {
     projectRoot: root,
     port: 0,
     env: {},
-    reconnectMinMs: 60000,
-    reconnectMaxMs: 60000,
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()

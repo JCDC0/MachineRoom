@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { descendantProcesses, isCreatedAfterLock, isLockHolderStale, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, treeSpawnOptions } from '../server/processTree.js'
+import { KILL_TIMEOUT_MS, WINDOWS_LIST_COMMAND, descendantProcesses, isCreatedAfterLock, isLockHolderStale, killTree, leftoverProcesses, listProcesses, parseProcessList, processListCommand, treeSpawnOptions } from '../server/processTree.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const PARENT = [
@@ -33,11 +33,7 @@ describe('the process list', () => {
     const command = processListCommand('win32')
     expect(command.file).toBe('powershell')
     expect(command.args.slice(0, 2)).toEqual(['-NoProfile', '-Command'])
-    expect(command.args[2]).toContain('Get-CimInstance Win32_Process')
-    expect(command.args[2]).toContain('ProcessId')
-    expect(command.args[2]).toContain('ParentProcessId')
-    expect(command.args[2]).toContain('CommandLine')
-    expect(command.args[2]).toContain('CreationDate')
+    expect(command.args[2]).toBe(WINDOWS_LIST_COMMAND)
     expect(processListCommand('linux')).toEqual({ file: 'ps', args: ['-eo', 'pid,ppid,args'] })
   })
 
@@ -212,7 +208,7 @@ describe('killTree', () => {
     expect(calls[0].file).toBe('taskkill')
     expect(calls[0].args).toEqual(['/T', '/F', '/PID', '4242'])
     expect(calls[0].options.windowsHide).toBe(true)
-    expect(calls[0].options.timeout).toBeGreaterThan(0)
+    expect(calls[0].options.timeout).toBe(KILL_TIMEOUT_MS)
   })
 
   it('kills the process group away from Windows', () => {

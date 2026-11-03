@@ -4,8 +4,6 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
-const DEAD_PAPERCLIP = 'http://127.0.0.1:3999'
-
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 async function waitFor(check, { timeoutMs = 5000, everyMs = 10 } = {}) {
@@ -60,12 +58,9 @@ function makeRoot() {
 
 function startBridge({ readTree, root, debounceMs = 15, pollMs, quietMs }) {
   const bridge = createBridge({
-    paperclipUrl: DEAD_PAPERCLIP,
-    companyId: 'tree-read-test',
     projectRoot: root,
     port: 0,
     env: {},
-    surfaceEveryMs: 0,
     debounceMs,
     pollMs,
     quietMs,

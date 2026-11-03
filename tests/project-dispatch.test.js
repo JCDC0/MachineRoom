@@ -7,7 +7,7 @@ import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
 import { runsFolder } from '../server/lanes-source.js'
 import { gitPath } from '../server/programPath.js'
-import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi, writeQueue } from '../server/runs.js'
+import { BRIEF_PROJECT_PROBLEM, QUEUE_DIRTY_PROBLEM, RUN_KIND_PROBLEM, TASK_PROBLEM, TASK_SEPARATOR_PROBLEM, TASKS_PROBLEM, createRunsApi, writeQueue } from '../server/runs.js'
 import { createMockClient } from '../src/control/mock.js'
 import {
   PROJECT_CONFIRM_LIMIT,
@@ -20,7 +20,6 @@ import { makeTempDir } from './helpers/tempRoot.js'
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const REAL_REPO_ROOT = realpathSync.native(REPO_ROOT)
-const TASK_PROBLEM = 'Write the task in 1 to 4000 characters.'
 const cleanups = []
 
 afterEach(async () => {
@@ -95,15 +94,9 @@ async function startBridge({ projectRoot, runnerPath }) {
   mkdirSync(runs, { recursive: true })
   writeActiveLanes(activeLanesFileFor(projectRoot, runs), ['opencode', 'opencode2'])
   const bridge = createBridge({
-    paperclipUrl: 'http://127.0.0.1:3999',
-    companyId: 'comp-1',
     projectRoot,
     port: 0,
     runnerCommand: { file: process.execPath, args: [runnerPath] },
-    surfaceEveryMs: 60 * 60 * 1000,
-    upstreamTimeoutMs: 500,
-    reconnectMinMs: 60 * 1000,
-    reconnectMaxMs: 60 * 1000,
   })
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()

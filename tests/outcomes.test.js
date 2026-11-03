@@ -305,7 +305,7 @@ describe('outcome route', () => {
         JSON.stringify({ branch: 'feat/b', outcome: 'rejected', grade: 'C', fixes: 1 }),
       ].join('\n')
     )
-    const bridge = createBridge({ paperclipUrl: 'http://127.0.0.1:9', companyId: 'comp-1', projectRoot: '', port: 0 })
+    const bridge = createBridge({ projectRoot: '', port: 0 })
     cleanups.push(() => bridge.stop())
     const { url } = await bridge.start()
 
