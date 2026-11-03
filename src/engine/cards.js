@@ -357,6 +357,7 @@ export function createCards(cssScene, options = {}) {
   let inspected = null
   let rowRevision = 0
   let lastRowFrameKey = null
+  let movingNow = false
   let lastState = null
   let linksCache = null
 
@@ -987,6 +988,7 @@ export function createCards(cssScene, options = {}) {
 
   function update(state, delta, camera, mask = null) {
     lastState = state
+    movingNow = false
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)
@@ -1051,6 +1053,7 @@ export function createCards(cssScene, options = {}) {
       }
       if (posChanged) {
         card.occluder.position.copy(position)
+        movingNow = true
       }
       const view = card.view
       const goal = CARD_SCALES[view.state] ?? 1
@@ -1247,6 +1250,7 @@ export function createCards(cssScene, options = {}) {
     sync,
     setOptions,
     update,
+    moving: () => movingNow,
     visibleLinks,
     homes: () => homes,
     overviewSpheres: overview,

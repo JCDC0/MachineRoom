@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Folder strings reuse each link's cached endpoints until a card moves.
 - The pointer hover reads the lens rectangle once per resize instead of on every move.
 - `layoutRing` walks its folder queue with an index instead of shifting it, so a deep folder chain lays out in one pass.
 - `makeTree` builds its folders by walking the sorted prefixes of the file list, so a 200,000-file tree costs less to load.
