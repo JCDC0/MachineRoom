@@ -27,6 +27,7 @@ import { modelAllowed } from './harness-models.js'
 import { DEFAULT_CONTEXT_WINDOW, MODELS, resolveContextWindow } from './models.js'
 import { isLockHolderStale, killTree, listProcesses } from './processTree.js'
 import { programPath } from './programPath.js'
+import { createRecordsCache } from './lanes-source.js'
 
 export const ORCHESTRATOR_KEY = 'orchestrator'
 export const ORCHESTRATOR_CHAT_LIMIT = 200
@@ -639,10 +640,12 @@ export function createOrchestrator({
   hasSub = null,
   rename = renameSync,
   siblings: siblingsOption = [],
+  recordsCache: recordsCacheOption = null,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
+  const recordsCache = recordsCacheOption ?? createRecordsCache(join(folder, 'runs.jsonl'), folder)
   const key = String(id) === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : String(id)
   const logPrefix = key === ORCHESTRATOR_KEY ? ORCHESTRATOR_KEY : `sub-${key}`
   const lockFile = key === ORCHESTRATOR_KEY ? chatLockFileFor(root, folder) : null
@@ -991,30 +994,11 @@ export function createOrchestrator({
     return message
   }
 
-  function records() {
-    const list = []
-    for (const line of readText(join(folder, 'runs.jsonl')).split(/\r?\n/)) {
-      if (!line.trim()) continue
-      let record
-      try {
-        record = JSON.parse(line)
-      } catch {
-        continue
-      }
-      if (record && typeof record === 'object') list.push(record)
-    }
-    return list
-  }
-
   function recordFor(runName) {
     if (!runName) return null
     const wanted = pathKey(join(folder, `${runName}.log`))
-    let found = null
-    for (const record of records()) {
-      if (typeof record.log !== 'string' || !record.log) continue
-      if (pathKey(record.log) === wanted) found = record
-    }
-    return found
+    const map = recordsCache.read()
+    return map.get(wanted) ?? null
   }
 
   function roomTurnAllowed() {
@@ -1777,14 +1761,14 @@ export function createOrchestrator({
     siblings = Array.isArray(list) ? [...list] : []
   }
 
-  function onFrame(frame) {
+  function onFrame(frame, preloadedRecord) {
     if (stopped) return
     if (frame?.type !== 'heartbeat.run.status') return
     const status = frame.payload?.status
     if (status !== 'succeeded' && status !== 'failed') return
     const runId = typeof frame.payload?.runId === 'string' ? frame.payload.runId : ''
     const runName = runId.startsWith('run-') ? runId.slice(4) : ''
-    const record = recordFor(runName)
+    const record = preloadedRecord !== undefined ? preloadedRecord : recordFor(runName)
     if (record && typeof record.log === 'string' && TURN_LOG.test(basename(record.log))) return
     const laneKey = record?.lane ?? String(frame.payload?.agentId ?? '').replace(/^agent-/, '')
     if (!laneKey || laneKey === ORCHESTRATOR_KEY) return

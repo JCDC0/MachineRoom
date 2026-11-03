@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
-import { createLanesSource } from '../server/lanes-source.js'
+import { createLanesSource, createRecordsCache } from '../server/lanes-source.js'
 import { chatFileFor, COMPACTED_MESSAGE, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import { availableHarnesses, branchChanges, createOrchestrators, NO_TOKEN_PROBLEM, OWNER_HARNESS_PROBLEM, SCOPE_UNREAD_PROBLEM } from '../server/orchestrators.js'
 import { saveEndpoints } from '../server/endpoints.js'
@@ -1869,6 +1869,37 @@ describe('sub orchestrator agents', () => {
       'the sub chat log line'
     )
     expect(line.payload.chunk).toContain('tool_use')
+  })
+
+  it('reads runs.jsonl once across all orchestrators on a run end and tails from last read (S37)', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    let readCalls = 0
+    const realCache = createRecordsCache(join(files.runs, 'runs.jsonl'), files.runs)
+    const trackedCache = {
+      read: () => {
+        readCalls += 1
+        return realCache.read()
+      },
+      get reads() {
+        return realCache.reads
+      },
+    }
+    const rig = makeRig(files, { recordsCache: trackedCache })
+    expect(rig.registry.subs().length).toBe(1)
+
+    appendRecord(rig, { logName: 'opencode-run-1' })
+    readCalls = 0
+    rig.registry.onFrame(frame('opencode-run-1', 'succeeded'))
+
+    expect(readCalls).toBe(1)
+    expect(trackedCache.reads).toBe(1)
+
+    appendRecord(rig, { logName: 'opencode-run-2' })
+    readCalls = 0
+    rig.registry.onFrame(frame('opencode-run-2', 'succeeded'))
+
+    expect(readCalls).toBe(1)
+    expect(trackedCache.reads).toBe(2)
   })
 })
 

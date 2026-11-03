@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { closeSync, mkdirSync, openSync, readFileSync, readdirSync, readSync, statSync, watch } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { agentsFile, createRunLineReader, failureText } from '../src/briefs/recording.js'
@@ -127,7 +127,7 @@ function laneLockAlive(folder, lane) {
   }
 }
 
-export function createRecordsCache(file) {
+export function createRecordsCache(file, folder = dirname(file)) {
   let size = -1
   let mtimeMs = -1
   let tail = ''
@@ -152,7 +152,10 @@ export function createRecordsCache(file) {
       } catch {
         continue
       }
-      if (record && typeof record.log === 'string') records.set(pathKey(record.log), record)
+      if (record && typeof record.log === 'string') {
+        const fullLog = isAbsolute(record.log) ? record.log : resolve(folder, record.log)
+        records.set(pathKey(fullLog), record)
+      }
     }
   }
 
