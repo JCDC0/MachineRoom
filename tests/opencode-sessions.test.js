@@ -73,13 +73,14 @@ function updateMessage(dbPath, id, time, data) {
   })
 }
 
-function startReader({ dbPath, projectRoot, runsFolder, quietMs = 30000, clock = { value: 5000 } }) {
+function startReader({ dbPath, projectRoot, runsFolder, quietMs = 30000, retentionMs, clock = { value: 5000 } }) {
   const frames = []
   const reader = createOpencodeSessionsReader({
     projectRoot,
     runsFolder,
     dbPath,
     quietMs,
+    retentionMs,
     now: () => clock.value,
     emit: (frame) => frames.push(frame),
   })
@@ -141,14 +142,22 @@ describe('the OpenCode session reader', () => {
 
     clock.value += 60 * 60 * 1000
     reader.tick()
+    expect(reader.sessions().has('ses-1')).toBe(false)
+    expect(reader.forgotten().has('ses-1')).toBe(true)
     reader.tick()
     expect(frames).toHaveLength(before)
+    expect(reader.sessions().has('ses-1')).toBe(false)
 
     addMessage(dbPath, { id: 'm-user-2', sessionId: 'ses-1', type: 'user', seq: 4, time: 9000 })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(9000, 'ses-1')
+    })
     clock.value += 10000
     reader.tick()
     expect(frames.length).toBeGreaterThan(before)
     expect(frames[before].payload.runId).toBe('ses-1:4')
+    expect(reader.sessions().has('ses-1')).toBe(true)
+    expect(reader.forgotten().has('ses-1')).toBe(false)
   })
 
   it('reads a turn with a read and an edit, then ends it on idle', () => {
@@ -588,5 +597,47 @@ describe('the OpenCode session reader', () => {
     clock.value += 1000
     reader.tick()
     expect(frames.length).toBeGreaterThan(countAfterQuiet)
+  })
+
+  it('drops a session that forgetFinished forgets from the scan and finds it again when reopened', () => {
+    const { dir, dbPath } = makeDatabase()
+    const projectRoot = join(dir, 'project')
+    const clock = { value: 1000 }
+    const { reader, frames } = startReader({
+      dbPath,
+      projectRoot,
+      runsFolder: join(dir, 'runs'),
+      clock,
+      quietMs: 1000,
+      retentionMs: 5000,
+    })
+
+    reader.tick()
+    addSession(dbPath, { id: 'ses-drop', directory: projectRoot, time: 1000 })
+    addMessage(dbPath, { id: 'm-1', sessionId: 'ses-drop', type: 'user', seq: 1, time: 1000 })
+    addMessage(dbPath, { id: 'm-2', sessionId: 'ses-drop', type: 'idle', seq: 2, time: 1001, data: { outcome: 'succeeded' } })
+    reader.tick()
+    expect(reader.sessions().has('ses-drop')).toBe(true)
+
+    clock.value += 6000
+    reader.tick()
+    expect(reader.sessions().has('ses-drop')).toBe(false)
+    expect(reader.forgotten().has('ses-drop')).toBe(true)
+
+    reader.tick()
+    expect(reader.sessions().has('ses-drop')).toBe(false)
+
+    const before = frames.length
+    addMessage(dbPath, { id: 'm-3', sessionId: 'ses-drop', type: 'user', seq: 3, time: 8000 })
+    withDb(dbPath, (db) => {
+      db.prepare('UPDATE session_v2 SET time_updated = ? WHERE id = ?').run(8000, 'ses-drop')
+    })
+    clock.value += 1000
+    reader.tick()
+
+    expect(reader.sessions().has('ses-drop')).toBe(true)
+    expect(reader.forgotten().has('ses-drop')).toBe(false)
+    expect(frames.length).toBeGreaterThan(before)
+    expect(frames[before].payload.runId).toBe('ses-drop:3')
   })
 })
