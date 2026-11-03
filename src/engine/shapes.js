@@ -9,10 +9,11 @@ export const PULSE_SCALE = 0.12
 export const SUB_PULSE_SCALE = 0.06
 export const ORCHESTRATOR_PULSE_SCALE = 0.04
 
-export function bandForVertex(index, bandCount = PULSE_BANDS) {
+// A line shape repeats each corner once per segment, so the band comes from where the point sits, not its index, and the lines stay joined.
+export function bandForPoint(x, z, bandCount = PULSE_BANDS) {
   const total = Math.max(1, Math.floor(Number(bandCount) || 0))
-  const slot = Math.floor(Number(index) || 0)
-  return ((slot % total) + total) % total
+  const angle = Math.atan2(Number(z) || 0, Number(x) || 0)
+  return Math.min(total - 1, Math.floor((angle / (Math.PI * 2) + 0.5) * total))
 }
 
 export function vertexOffset(length, level, scale = PULSE_SCALE) {

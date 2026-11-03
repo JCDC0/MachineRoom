@@ -5,7 +5,7 @@ import { dirname } from '../model/paths.js'
 import { CHILD_LIFE_MS } from '../model/state.js'
 import { HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, hasSubs, isSessionReader, parkedKeysFor, readerPoint, sectorSlotAngles, slotAngle } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
-import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForVertex, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
+import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
 import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 import { linkOnPath } from './strings.js'
 
@@ -749,7 +749,7 @@ export function createAgents(scene, roster, cssScene = null) {
     for (let vertex = 0; vertex < pulseVertices; vertex += 1) {
       const at = vertex * 3
       pulseLengths[vertex] = Math.hypot(pulseBase[at], pulseBase[at + 1], pulseBase[at + 2])
-      pulseBands[vertex] = bandForVertex(vertex, PULSE_BANDS)
+      pulseBands[vertex] = bandForPoint(pulseBase[at], pulseBase[at + 2], PULSE_BANDS)
     }
     const pulseScale = orchestrator ? ORCHESTRATOR_PULSE_SCALE : sub ? SUB_PULSE_SCALE : PULSE_SCALE
     const rings = [flatRing(130, 0.2, -110)]

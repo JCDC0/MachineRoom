@@ -4,19 +4,20 @@ import {
   PULSE_BANDS,
   PULSE_SCALE,
   SUB_PULSE_SCALE,
-  bandForVertex,
+  bandForPoint,
   vertexOffset,
 } from '../src/engine/shapes.js'
 import { BAND_COUNT } from '../src/ui/sound.js'
 
 describe('the pulse bands on a shape', () => {
-  it('picks a band from the vertex index and wraps', () => {
-    expect(bandForVertex(0, 5)).toBe(0)
-    expect(bandForVertex(4, 5)).toBe(4)
-    expect(bandForVertex(5, 5)).toBe(0)
-    expect(bandForVertex(12, 5)).toBe(2)
-    expect(bandForVertex(-1, 5)).toBe(4)
-    expect(bandForVertex(7, 0)).toBe(0)
+  it('picks a band from where the point sits, so a repeated corner keeps one band', () => {
+    expect(bandForPoint(-1, -0.0001, 5)).toBe(0)
+    expect(bandForPoint(1, 0, 5)).toBe(2)
+    expect(bandForPoint(-1, 0, 5)).toBe(4)
+    expect(bandForPoint(0, 1, 5)).toBe(3)
+    expect(bandForPoint(0, -1, 5)).toBe(1)
+    expect(bandForPoint(3, 4, 5)).toBe(bandForPoint(3, 4, 5))
+    expect(bandForPoint(1, 1, 0)).toBe(0)
   })
 
   it('uses the same count as the sound bands', () => {

@@ -120,9 +120,9 @@ describe('the sound of a file touch', () => {
 describe('the sound bands', () => {
   it('runs from bass to treble across the analyser bins', () => {
     expect(bandIndexForBin(0, 100, 5)).toBe(0)
-    expect(bandIndexForBin(19, 100, 5)).toBe(0)
-    expect(bandIndexForBin(20, 100, 5)).toBe(1)
-    expect(bandIndexForBin(59, 100, 5)).toBe(2)
+    expect(bandIndexForBin(1, 100, 5)).toBe(0)
+    expect(bandIndexForBin(2, 100, 5)).toBe(1)
+    expect(bandIndexForBin(20, 100, 5)).toBe(3)
     expect(bandIndexForBin(99, 100, 5)).toBe(4)
   })
 

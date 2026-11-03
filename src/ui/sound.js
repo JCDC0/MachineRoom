@@ -10,7 +10,8 @@ export function bandIndexForBin(bin, binCount, bandCount = BAND_COUNT) {
   const bins = Number(binCount)
   const bands = Math.max(1, Math.floor(Number(bandCount) || 0))
   if (!Number.isFinite(index) || !Number.isFinite(bins) || bins <= 0 || index < 0) return 0
-  const band = Math.floor((index / bins) * bands)
+  // Music holds most of its energy in the low bins, so the bands split the bins on a log scale.
+  const band = Math.floor((Math.log2(1 + index) / Math.log2(1 + bins)) * bands)
   return Math.min(bands - 1, Math.max(0, band))
 }
 
