@@ -772,3 +772,32 @@ describe('the card class string', () => {
     cards.dispose()
   })
 })
+
+describe('the file list behind the plan', () => {
+  it('appends a new file to the same list instead of walking the map again', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'docs/b.md'] }), [])
+    const first = viewInput(state, [])
+    const files = first.files
+    state.files.set('src/new.js', { path: 'src/new.js', exists: true, reads: 0, writes: 0, failed: false, yellow: false })
+    const next = viewInput(state, [])
+    expect(next.files).toBe(files)
+    expect(next.files).toEqual(['docs/b.md', 'src/a.js', 'src/new.js'])
+  })
+
+  it('rebuilds the list when a created file becomes real', () => {
+    const state = createState(makeTree({ root: 'demo', files: ['src/a.js', 'src/new.js'], created: ['src/new.js'] }), [
+      { key: 'hermes', name: 'Hermes' },
+    ])
+    expect(viewInput(state, []).files).toEqual(['src/a.js'])
+    apply(state, {
+      type: 'tool.start',
+      agent: 'hermes',
+      time: 1,
+      id: 'call-1',
+      label: 'write src/new.js',
+      touches: [{ kind: 'file', path: 'src/new.js', mode: 'write' }],
+    })
+    expect(state.fileVersion).toBe(1)
+    expect(viewInput(state, []).files).toEqual(['src/a.js', 'src/new.js'])
+  })
+})

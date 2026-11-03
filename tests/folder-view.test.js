@@ -512,3 +512,18 @@ describe('planFolderView', () => {
     expect(second).toEqual(first)
   })
 })
+
+describe('the incremental plan', () => {
+  it('rebuilds only the folder a new file lands in', () => {
+    planFolderView({ files: [] })
+    const files = ['README.md', 'docs/a.md', 'src/a.js', 'src/b.js']
+    const focus = ['docs/a.md', 'src/a.js']
+    const first = byPath(planFolderView({ files, focus }))
+    const second = byPath(planFolderView({ files: [...files, 'src/c.js'], focus }))
+
+    expect(second.get('docs')).toBe(first.get('docs'))
+    expect(second.get('')).toBe(first.get(''))
+    expect(second.get('src')).not.toBe(first.get('src'))
+    expect(second.get('src').items.map((item) => item.path)).toContain('src/c.js')
+  })
+})

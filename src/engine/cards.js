@@ -47,17 +47,70 @@ function viewFocus(state, pinned) {
   return focus
 }
 
-let cachedFiles = null
+let cachedFiles = []
 let cachedCount = -1
 let cachedMap = null
+let cachedVersion = -1
+let cachedIterator = null
+let cachedIteratorDone = true
+let cachedSeen = 0
+
+function rebuildFileList(state) {
+  const files = []
+  for (const file of state.files.values()) if (file.exists) files.push(file.path)
+  cachedFiles = files
+  cachedMap = state.files
+  cachedCount = Number.isFinite(state.existingFiles) ? state.existingFiles : files.length
+  cachedVersion = Number.isFinite(state.fileVersion) ? state.fileVersion : -1
+  cachedSeen = state.files.size
+  cachedIterator = null
+  cachedIteratorDone = true
+}
+
+function tailIterator(state) {
+  if (!cachedIteratorDone) return
+  cachedIterator = state.files.values()
+  for (let at = 0; at < cachedSeen; at += 1) {
+    if (cachedIterator.next().done) break
+  }
+  cachedIteratorDone = false
+}
+
+function appendFileList(state) {
+  const count = Number.isFinite(state.existingFiles) ? state.existingFiles : cachedFiles.length
+  const mapDelta = state.files.size - cachedSeen
+  const countDelta = count - cachedCount
+  const version = Number.isFinite(state.fileVersion) ? state.fileVersion : null
+  const versionDelta = version !== null && cachedVersion >= 0 ? version - cachedVersion : null
+  const appended =
+    countDelta > 0 &&
+    mapDelta >= countDelta &&
+    (versionDelta === null || versionDelta === countDelta || (versionDelta === 0 && mapDelta === countDelta))
+  if (!appended) {
+    rebuildFileList(state)
+    return
+  }
+  tailIterator(state)
+  let found = 0
+  for (let next = cachedIterator.next(); !next.done; next = cachedIterator.next()) {
+    if (next.value.exists) {
+      cachedFiles.push(next.value.path)
+      found += 1
+    }
+  }
+  cachedIteratorDone = true
+  cachedSeen = state.files.size
+  cachedCount = count
+  if (version !== null) cachedVersion = version
+  if (found !== countDelta) rebuildFileList(state)
+}
 
 export function viewInput(state, pinned = []) {
-  if (cachedMap !== state.files || cachedCount !== state.existingFiles) {
-    const files = []
-    for (const file of state.files.values()) if (file.exists) files.push(file.path)
-    cachedFiles = files
-    cachedCount = state.existingFiles
-    cachedMap = state.files
+  if (cachedMap !== state.files) rebuildFileList(state)
+  else {
+    const count = Number.isFinite(state.existingFiles) ? state.existingFiles : cachedFiles.length
+    if (count !== cachedCount) appendFileList(state)
+    else if (Number.isFinite(state.fileVersion) && cachedVersion >= 0 && state.fileVersion !== cachedVersion) rebuildFileList(state)
   }
   return { files: cachedFiles, focus: viewFocus(state, pinned), touched: state.recent ?? [] }
 }

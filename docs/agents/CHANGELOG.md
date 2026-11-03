@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A new file appends to the cached file list and rebuilds only its own folder's card plan, so one new file at 200,000 files costs a few milliseconds.
 - The card frame loop walks its map in place and builds a class string only when a card's class inputs change.
 - Folder strings reuse each link's cached endpoints until a card moves.
 - The pointer hover reads the lens rectangle once per resize instead of on every move.

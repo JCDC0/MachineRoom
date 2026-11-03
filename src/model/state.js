@@ -50,6 +50,7 @@ export function createState(tree, agents) {
     recentAt: new Map(),
     latest: 0,
     missingFiles,
+    fileVersion: 0,
     get existingFiles() {
       return this.files.size - this.missingFiles
     },
@@ -121,6 +122,7 @@ function applyTouch(state, agent, touch) {
     if (!file.exists) {
       file.exists = true
       state.missingFiles -= 1
+      state.fileVersion = (state.fileVersion ?? 0) + 1
     }
     file.failed = false
     agent.runWrites.add(touch.path)
