@@ -165,7 +165,7 @@ describe('machine-room up', () => {
     ])
     const checks = lines.slice(0, -4)
     expect(checks.length).toBeGreaterThan(3)
-    expect(checks.every((line) => /^(ok|FAIL) /.test(line))).toBe(true)
+    expect(checks.every((line) => /^(ok|warn|FAIL) /.test(line))).toBe(true)
     expect(checks[0]).toContain('The project folder')
     expect(checks[1]).toContain('Git is found at')
     expect(lines).not.toContain(SOME_CHECKS_FAILED)

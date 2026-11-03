@@ -120,13 +120,14 @@ describe('machine-room doctor', () => {
 
     expect(result.exitCode).toBe(0)
     expect(failures(result.lines)).toEqual([])
-    expect(result.lines).toHaveLength(6)
+    expect(result.lines).toHaveLength(7)
     expect(result.lines[0]).toContain('The project folder')
     expect(result.lines[1]).toContain('Git is found at')
-    expect(result.lines[2]).toContain('The built viewer is ready')
-    expect(result.lines[3]).toBe(`ok The runs folder ${runs} is ready.`)
-    expect(result.lines[4]).toContain('The OpenCode lane starts from')
-    expect(result.lines[5]).toContain('The Claude Code lane starts from')
+    expect(result.lines[2]).toBe('warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.')
+    expect(result.lines[3]).toContain('The built viewer is ready')
+    expect(result.lines[4]).toBe(`ok The runs folder ${runs} is ready.`)
+    expect(result.lines[5]).toContain('The OpenCode lane starts from')
+    expect(result.lines[6]).toContain('The Claude Code lane starts from')
     expect(statSync(runs).isDirectory()).toBe(true)
   })
 
@@ -165,6 +166,24 @@ describe('machine-room doctor', () => {
 
     expect(result.exitCode).toBe(1)
     expect(failures(result.lines)).toContain('FAIL Git is not on the PATH.')
+  })
+
+  it('warns when the project is not a git repository without failing', () => {
+    const result = doctor()
+
+    expect(result.exitCode).toBe(0)
+    expect(result.lines).toContain(
+      'warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.'
+    )
+  })
+
+  it('does not warn inside a git repository', () => {
+    const project = makeFolder('machine-room-doctor-project-')
+    mkdirSync(join(project, '.git'))
+    const result = doctor({ projectRoot: project })
+
+    expect(result.exitCode).toBe(0)
+    expect(result.lines.join('\n')).not.toContain('not a git repository')
   })
 
   it('fails when the built viewer is missing and names the build command', () => {
@@ -264,7 +283,10 @@ describe('the machine-room doctor command', () => {
     expect(run.stderr).toBe('')
     const lines = run.stdout.trim().split(/\r?\n/)
     expect(lines.length).toBeGreaterThan(3)
-    expect(lines.every((line) => line.startsWith('ok '))).toBe(true)
+    expect(lines.every((line) => /^(ok|warn) /.test(line))).toBe(true)
+    expect(lines).toContain(
+      'warn This folder is not a git repository. Source control stays empty. Run git init here to fill it.'
+    )
     expect(existsSync(join(temp, 'machineroom-runs'))).toBe(true)
   })
 

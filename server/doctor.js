@@ -65,10 +65,26 @@ function folderLine(projectRoot) {
   return { ok: true, text: `The project folder ${folder} exists.` }
 }
 
-function gitLine(env) {
+function gitLines(projectRoot, env) {
   const found = programPath('git', { env })
-  if (!found) return { ok: false, text: 'Git is not on the PATH.' }
-  return { ok: true, text: `Git is found at ${found}.` }
+  if (!found) return [{ ok: false, text: 'Git is not on the PATH.' }]
+  const lines = [{ ok: true, text: `Git is found at ${found}.` }]
+  const folder = resolve(projectRoot)
+  let folderExists = false
+  try {
+    folderExists = statSync(folder).isDirectory()
+  } catch {}
+  let dotGit = null
+  try {
+    dotGit = statSync(join(folder, '.git'))
+  } catch {}
+  if (folderExists && !dotGit) {
+    lines.push({
+      warn: true,
+      text: 'This folder is not a git repository. Source control stays empty. Run git init here to fill it.',
+    })
+  }
+  return lines
 }
 
 function viewerLine(dist) {
@@ -144,13 +160,17 @@ export function runDoctor(options = {}) {
   let ok = true
 
   function add(result) {
+    if (result.warn) {
+      lines.push(`warn ${result.text}`)
+      return
+    }
     if (!result.ok) ok = false
     lines.push(`${result.ok ? 'ok' : 'FAIL'} ${result.text}`)
   }
 
   const folder = folderLine(settings.projectRoot)
   add(folder)
-  add(gitLine(env))
+  for (const line of gitLines(settings.projectRoot, env)) add(line)
   add(viewerLine(settings.dist))
   add(runsLine(settings.runsFolder))
   for (const line of laneLines(settings.lanesFile, env)) add(line)
