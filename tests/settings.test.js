@@ -271,9 +271,10 @@ describe('the content files setting', () => {
     const html = renderToString(
       createElement(Settings, { effects: { alwaysDepth: 2 }, onChange: () => {}, onClose: () => {} })
     )
-    for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Beeps', 'Dance', 'Pulse']) {
+    for (const label of ['Chromatic aberration', 'Vignette', 'Grain', 'Fine dust', 'Bloom', 'Beeps', 'Dance', 'Pulse']) {
       expect(html).toContain(`aria-label="${label}"`)
     }
+    expect(html).toContain('aria-label="Bloom strength"')
   })
 })
 
@@ -288,12 +289,13 @@ describe('validateBridgeUrl', () => {
 })
 
 describe('effectSettings', () => {
-  it('lists four screen effects without a fish eye row', () => {
+  it('lists five screen effects without a fish eye row', () => {
     expect(EFFECTS.map((effect) => effect.label)).toEqual([
       'Chromatic aberration',
       'Vignette',
       'Grain',
       'Fine dust',
+      'Bloom',
     ])
   })
 
@@ -308,10 +310,38 @@ describe('effectSettings', () => {
     expect(defaults.grain).toEqual({ on: false, strength: 0.2 })
     expect(defaults.dust).toEqual({ on: true, strength: 0.2, pulse: false })
     expect(defaults.fineDust).toEqual({ on: true, strength: 0.2, pulse: false })
+    expect(defaults.bloom).toEqual({ on: false, strength: 0.4 })
 
     expect(effectSettings(null)).toEqual(defaults)
     expect(effectSettings({})).toEqual(defaults)
     expect(effectSettings('invalid')).toEqual(defaults)
+  })
+
+  it('starts bloom off at 0.4 and clamps its strength between 0 and 1', () => {
+    expect(DEFAULT_EFFECTS.bloom).toEqual({ on: false, strength: 0.4 })
+    expect(effectSettings({ bloom: { on: true } }).bloom).toEqual({ on: true, strength: 0.4 })
+    expect(effectSettings({ bloom: { on: true, strength: 4 } }).bloom).toEqual({ on: true, strength: 1 })
+    expect(effectSettings({ bloom: { on: true, strength: -2 } }).bloom).toEqual({ on: true, strength: 0 })
+    expect(effectSettings({ bloom: { on: 'yes', strength: 'soon' } }).bloom).toEqual({ on: false, strength: 0.4 })
+    expect(effectSettings({ bloom: true }).bloom).toEqual({ on: true, strength: 0.4 })
+    expect(effectSettings({ bloom: 0.6 }).bloom).toEqual({ on: true, strength: 0.6 })
+    expect(effectSettings({ bloom: 'invalid' }).bloom).toEqual({ on: false, strength: 0.4 })
+    expect(effectSettings({ effects: { bloom: { on: true, strength: 0.25 } } }).bloom).toEqual({ on: true, strength: 0.25 })
+  })
+
+  it('saves and loads bloom beside the other screen effects', () => {
+    const storage = makeStorage()
+    expect(loadEffectSettings(storage).bloom).toEqual({ on: false, strength: 0.4 })
+
+    const saved = saveEffectSettings(storage, { bloom: { on: true } })
+    expect(saved.bloom).toEqual({ on: true, strength: 0.4 })
+    expect(loadEffectSettings(storage).bloom).toEqual({ on: true, strength: 0.4 })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY)).effects.bloom).toEqual({ on: true, strength: 0.4 })
+
+    const weaker = saveEffectSettings(storage, { bloom: { strength: 0.6 } })
+    expect(weaker.bloom).toEqual({ on: true, strength: 0.6 })
+    expect(saveEffectSettings(storage, { bloom: { on: false } }).bloom).toEqual({ on: false, strength: 0.6 })
+    expect(loadEffectSettings(storage).vignette.on).toBe(true)
   })
 
   it('clamps alwaysDepth between 1 and 3', () => {

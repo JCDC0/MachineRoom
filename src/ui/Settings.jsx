@@ -14,6 +14,7 @@ export const EFFECTS = [
   { key: 'vignette', label: 'Vignette', costly: false },
   { key: 'grain', label: 'Grain', costly: false },
   { key: 'dust', label: 'Fine dust', costly: false },
+  { key: 'bloom', label: 'Bloom', costly: false },
 ]
 
 export default function Settings({ open = true, effects, onChange, onSettingsChange, onClose, client = null, focusDirectApi = 0 }) {
