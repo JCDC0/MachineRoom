@@ -1169,7 +1169,7 @@ export function createCards(cssScene, options = {}) {
         base.copy(card.home)
         posChanged = true
       }
-      const lift = card.danceAt > 0
+      const lift = !isStill && card.danceAt > 0
         ? DANCE_LIFT * danceEnvelope(card.danceFrom, card.danceTo, now - card.danceAt)
         : 0
       if (posChanged || lift !== card.lastLift) {

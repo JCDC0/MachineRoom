@@ -807,6 +807,22 @@ describe('the next card in the dance', () => {
     clock.mockRestore()
     cards.dispose()
   })
+
+  it('does not lift a card under reduced motion', () => {
+    const savedWindow = globalThis.window
+    globalThis.window = { matchMedia: () => ({ matches: true }) }
+    try {
+      const state = createState(makeTree({ root: 'demo', files: ['src/a.js'] }), [])
+      const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+      cards.sync(state)
+      cards.update(state, 0.016, camera())
+      expect(cards.beat(1)).toBe(false)
+      for (const card of cards.cards.values()) expect(card.danceAt).toBe(0)
+      cards.dispose()
+    } finally {
+      globalThis.window = savedWindow
+    }
+  })
 })
 
 describe('the file list behind the plan', () => {
