@@ -293,8 +293,8 @@ async function postOpen(url, { origin, body = { confirmed: true } } = {}) {
 
 describe('the music folder opener', () => {
   it('builds the command for each platform and fails when the program is missing', () => {
-    expect(musicOpenCommand('C:\\music', { platform: 'win32' })).toEqual({
-      command: 'explorer.exe',
+    expect(musicOpenCommand('C:\\music', { platform: 'win32', env: { SystemRoot: 'C:\\Windows' } })).toEqual({
+      command: 'C:\\Windows\\explorer.exe',
       args: ['C:\\music'],
     })
     expect(musicOpenCommand('/music', {
@@ -331,7 +331,7 @@ describe('the music folder opener', () => {
     expect(opened.status).toBe(204)
     expect(existsSync(folder)).toBe(true)
     expect(opener.calls).toHaveLength(1)
-    expect(opener.calls[0].command).toBe('explorer.exe')
+    expect(opener.calls[0].command).toMatch(/^[A-Za-z]:\\.*explorer\.exe$/i)
     expect(opener.calls[0].args).toEqual([resolve(folder)])
     expect(opener.calls[0].options).toMatchObject({ detached: true, stdio: 'ignore', shell: false })
     expect(opener.calls[0].child.unreferenced).toBe(true)

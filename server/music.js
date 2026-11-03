@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 import { mkdir, readdir, stat } from 'node:fs/promises'
-import { dirname, extname, join, resolve } from 'node:path'
+import { dirname, extname, join, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { programPath } from './programPath.js'
 
@@ -126,7 +126,7 @@ export function parseRange(header, size) {
 
 export function musicOpenCommand(folder, { platform = process.platform, env = process.env, check } = {}) {
   if (typeof folder !== 'string' || folder === '') return null
-  if (platform === 'win32') return { command: 'explorer.exe', args: [folder] }
+  if (platform === 'win32') return { command: win32.join(env.SystemRoot || env.windir || 'C:\\Windows', 'explorer.exe'), args: [folder] }
   const name = platform === 'darwin' ? 'open' : 'xdg-open'
   const program = programPath(name, { platform, env, check })
   if (!program) return null
