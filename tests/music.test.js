@@ -1,15 +1,17 @@
 import { EventEmitter } from 'node:events'
-import { createReadStream, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   MUSIC_LIMIT,
+  MUSIC_OPEN_PROBLEM,
   createMusicApi,
   isSafeMusicName,
   listMusic,
   listMusicLibrary,
   musicFolderFor,
   musicLibrary,
+  musicOpenCommand,
   musicTrackNames,
   musicType,
   parseRange,
@@ -262,5 +264,88 @@ describe('the music routes', () => {
     expect(stream.destroyed).toBe(false)
     res.emit('close')
     expect(stream.destroyed).toBe(true)
+  })
+})
+
+function fakeOpener({ fail = false } = {}) {
+  const calls = []
+  function spawn(command, args, options) {
+    const child = {
+      once(event, fn) {
+        if ((event === 'spawn' && !fail) || (event === 'error' && fail)) queueMicrotask(fn)
+        return child
+      },
+      unref() {
+        child.unreferenced = true
+      },
+    }
+    calls.push({ command, args, options, child })
+    return child
+  }
+  return { calls, spawn }
+}
+
+async function postOpen(url, { origin, body = { confirmed: true } } = {}) {
+  const headers = { 'content-type': 'application/json' }
+  if (origin) headers.origin = origin
+  return fetch(`${url}/api/music/open`, { method: 'POST', headers, body: JSON.stringify(body) })
+}
+
+describe('the music folder opener', () => {
+  it('builds the command for each platform and fails when the program is missing', () => {
+    expect(musicOpenCommand('C:\\music', { platform: 'win32' })).toEqual({
+      command: 'explorer.exe',
+      args: ['C:\\music'],
+    })
+    expect(musicOpenCommand('/music', {
+      platform: 'darwin',
+      env: { PATH: '/usr/bin' },
+      check: (path) => path === '/usr/bin/open',
+    })).toEqual({ command: '/usr/bin/open', args: ['/music'] })
+    expect(musicOpenCommand('/music', {
+      platform: 'linux',
+      env: { PATH: '/usr/bin' },
+      check: (path) => path === '/usr/bin/xdg-open',
+    })).toEqual({ command: '/usr/bin/xdg-open', args: ['/music'] })
+    expect(musicOpenCommand('/music', {
+      platform: 'linux',
+      env: { PATH: '/usr/bin' },
+      check: () => false,
+    })).toBeNull()
+  })
+
+  it('opens a confirmed page request and makes the folder first', async () => {
+    const folder = join(tempDir(), 'music')
+    const opener = fakeOpener()
+    const started = await startLaneBridge({ bridge: { musicFolder: folder, musicPlatform: 'win32', musicSpawn: opener.spawn } })
+    cleanups.push(() => started.stop())
+
+    const noOrigin = await postOpen(started.url)
+    expect(noOrigin.status).toBe(403)
+
+    const unconfirmed = await postOpen(started.url, { origin: started.url, body: { confirmed: false } })
+    expect(unconfirmed.status).toBe(400)
+    expect(existsSync(folder)).toBe(false)
+
+    const opened = await postOpen(started.url, { origin: started.url })
+    expect(opened.status).toBe(204)
+    expect(existsSync(folder)).toBe(true)
+    expect(opener.calls).toHaveLength(1)
+    expect(opener.calls[0].command).toBe('explorer.exe')
+    expect(opener.calls[0].args).toEqual([resolve(folder)])
+    expect(opener.calls[0].options).toMatchObject({ detached: true, stdio: 'ignore', shell: false })
+    expect(opener.calls[0].child.unreferenced).toBe(true)
+  })
+
+  it('answers 501 with one sentence when no file manager can be started', async () => {
+    const folder = join(tempDir(), 'music')
+    const opener = fakeOpener({ fail: true })
+    const started = await startLaneBridge({ bridge: { musicFolder: folder, musicPlatform: 'win32', musicSpawn: opener.spawn } })
+    cleanups.push(() => started.stop())
+
+    const answer = await postOpen(started.url, { origin: started.url })
+    expect(answer.status).toBe(501)
+    expect(await answer.json()).toEqual({ error: MUSIC_OPEN_PROBLEM })
+    expect(existsSync(folder)).toBe(true)
   })
 })

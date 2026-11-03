@@ -1,10 +1,11 @@
 import { act, createElement } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import MusicPlayer from '../src/ui/MusicPlayer.jsx'
+import MusicPlayer, { nextLoop, shuffleOrder, shuffleOrderFrom } from '../src/ui/MusicPlayer.jsx'
 import { sound } from '../src/ui/sound.js'
-import { buttonWithText, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, classesOf, settle, withDom } from './helpers/uiDom.js'
 
 const originalFetch = globalThis.fetch
+const originalRandom = Math.random
 
 const audio = {
   paused: true,
@@ -28,6 +29,7 @@ const audio = {
 
 afterEach(() => {
   globalThis.fetch = originalFetch
+  Math.random = originalRandom
   sound.pauseMusic()
 })
 
@@ -61,6 +63,10 @@ function libraryAnswer(tracks, playlists) {
   })
 }
 
+function control(container, label) {
+  return container.querySelector(`button[aria-label="${label}"]`)
+}
+
 async function choosePlaylist(container, value) {
   await act(async () => {
     const select = container.querySelector('#music-playlist')
@@ -85,10 +91,10 @@ describe('the music player', () => {
       })
       await settle(5)
       await act(async () => {
-        buttonWithText(container, 'Play').click()
+        control(container, 'Play').click()
       })
       await settle(5)
-      expect(buttonWithText(container, 'Pause')).not.toBeNull()
+      expect(control(container, 'Pause')).not.toBeNull()
       expect(player.paused).toBe(false)
 
       await act(async () => {
@@ -100,7 +106,7 @@ describe('the music player', () => {
       await settle(5)
 
       expect(container.textContent).toContain('alpha.mp3')
-      expect(buttonWithText(container, 'Pause')).not.toBeNull()
+      expect(control(container, 'Pause')).not.toBeNull()
     })
   })
 
@@ -114,12 +120,12 @@ describe('the music player', () => {
       })
       await settle(5)
       await act(async () => {
-        buttonWithText(container, 'Play').click()
+        control(container, 'Play').click()
       })
       await settle(5)
 
       expect(container.textContent).toContain('Could not play alpha.mp3.')
-      expect(buttonWithText(container, 'Play')).not.toBeNull()
+      expect(control(container, 'Play')).not.toBeNull()
     })
   })
 
@@ -168,7 +174,7 @@ describe('the music player', () => {
       ])
 
       await act(async () => {
-        buttonWithText(container, 'Play').click()
+        control(container, 'Play').click()
       })
       await settle(5)
       expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
@@ -180,11 +186,12 @@ describe('the music player', () => {
       await endTrack(player)
       expect(player.src.endsWith('/music/loose.mp3')).toBe(true)
       await endTrack(player)
-      expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+      expect(control(container, 'Play')).not.toBeNull()
+      expect(player.paused).toBe(true)
     })
   })
 
-  it('plays the chosen playlist in order, loops, and saves the choice', async () => {
+  it('plays the chosen playlist in order and saves the choice', async () => {
     globalThis.fetch = libraryAnswer(['loose.mp3'], [
       { name: 'Lofi', tracks: ['one.mp3', 'two.mp3'] },
       { name: 'Technical Calm', tracks: ['focus.mp3'] },
@@ -203,39 +210,260 @@ describe('the music player', () => {
       expect(container.textContent).toContain('focus.mp3')
 
       await act(async () => {
-        buttonWithText(container, 'Play').click()
+        control(container, 'Play').click()
       })
       await settle(5)
       expect(player.src.endsWith('/music/Technical%20Calm/focus.mp3')).toBe(true)
       await endTrack(player)
-      expect(player.src.endsWith('/music/Technical%20Calm/focus.mp3')).toBe(true)
-
-      await choosePlaylist(container, 'loose')
-      expect(player.src.endsWith('/music/loose.mp3')).toBe(true)
+      expect(control(container, 'Play')).not.toBeNull()
+      expect(player.paused).toBe(true)
     })
   })
 
-  it('opens on the saved playlist and leaves Loose tracks out when nothing sits at the top', async () => {
+  it('cycles loop off, all and one, and saves the mode', async () => {
+    expect(nextLoop('off')).toBe('all')
+    expect(nextLoop('all')).toBe('one')
+    expect(nextLoop('one')).toBe('off')
     globalThis.fetch = libraryAnswer([], [{ name: 'Lofi', tracks: ['one.mp3', 'two.mp3'] }])
-    await withDom(async ({ container, dom, root, window }) => {
-      const player = installAudio(dom)
-      window.localStorage.setItem('machineroom.settings', JSON.stringify({
-        source: 'bridge',
-        bridge: 'http://127.0.0.1:5174',
-        music: { playlist: 'playlist:Lofi' },
-      }))
+    await withDom(async ({ container, dom, root }) => {
+      installAudio(dom)
       await act(async () => {
         root.render(createElement(MusicPlayer))
       })
       await settle(5)
 
-      expect(container.querySelector('#music-playlist').options.map((option) => option.textContent)).toEqual(['All', 'Lofi'])
-      expect(container.textContent).toContain('one.mp3')
+      expect(control(container, 'Loop off')).not.toBeNull()
       await act(async () => {
-        buttonWithText(container, 'Play').click()
+        control(container, 'Loop off').click()
+      })
+      expect(control(container, 'Loop all')).not.toBeNull()
+      expect(classesOf(control(container, 'Loop all'))).toContain('is-on')
+      expect(JSON.parse(dom.window.localStorage.getItem('machineroom.settings')).music.loop).toBe('all')
+
+      await act(async () => {
+        control(container, 'Loop all').click()
+      })
+      expect(control(container, 'Loop one')).not.toBeNull()
+      expect(JSON.parse(dom.window.localStorage.getItem('machineroom.settings')).music.loop).toBe('one')
+
+      await act(async () => {
+        control(container, 'Loop one').click()
+      })
+      expect(control(container, 'Loop off')).not.toBeNull()
+      expect(JSON.parse(dom.window.localStorage.getItem('machineroom.settings')).music.loop).toBe('off')
+    })
+  })
+
+  it('stops after the last track when loop is off, wraps when all and repeats when one', async () => {
+    globalThis.fetch = libraryAnswer([], [{ name: 'Lofi', tracks: ['one.mp3', 'two.mp3'] }])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await choosePlaylist(container, 'playlist:Lofi')
+
+      await act(async () => {
+        control(container, 'Play').click()
       })
       await settle(5)
       expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+      await endTrack(player)
+      expect(player.src.endsWith('/music/Lofi/two.mp3')).toBe(true)
+      await endTrack(player)
+      expect(control(container, 'Play')).not.toBeNull()
+      expect(player.paused).toBe(true)
+
+      await act(async () => {
+        control(container, 'Loop off').click()
+      })
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/Lofi/two.mp3')).toBe(true)
+      await endTrack(player)
+      expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+
+      await act(async () => {
+        control(container, 'Loop all').click()
+      })
+      await endTrack(player)
+      expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+      expect(control(container, 'Pause')).not.toBeNull()
+    })
+  })
+
+  it('plays every track once before wrapping in shuffle order', () => {
+    expect(shuffleOrder(4, () => 0.5)).toEqual([0, 3, 1, 2])
+    expect(shuffleOrderFrom(0, 4, () => 0.5)).toEqual([0, 3, 1, 2])
+    expect(shuffleOrderFrom(2, 4, () => 0.5)).toEqual([2, 0, 3, 1])
+    expect(shuffleOrderFrom(0, 0, () => 0.5)).toEqual([])
+  })
+
+  it('walks the shuffle order and saves the shuffle switch', async () => {
+    Math.random = () => 0.5
+    globalThis.fetch = libraryAnswer([], [{ name: 'Lofi', tracks: ['a.mp3', 'b.mp3', 'c.mp3', 'd.mp3'] }])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await choosePlaylist(container, 'playlist:Lofi')
+
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/Lofi/a.mp3')).toBe(true)
+
+      await act(async () => {
+        control(container, 'Shuffle').click()
+      })
+      expect(classesOf(control(container, 'Shuffle'))).toContain('is-on')
+      expect(JSON.parse(dom.window.localStorage.getItem('machineroom.settings')).music.shuffle).toBe(true)
+
+      const played = []
+      for (let step = 0; step < 4; step += 1) {
+        await act(async () => {
+          control(container, 'Next track').click()
+        })
+        await settle(5)
+        played.push(player.src.split('/').pop())
+      }
+      expect(played).toEqual(['d.mp3', 'b.mp3', 'c.mp3', 'a.mp3'])
+    })
+  })
+
+  it('plays the track Next, Previous and a track name move to, also when paused', async () => {
+    globalThis.fetch = listAnswer(['alpha.mp3', 'beta.mp3', 'gamma.mp3'])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/alpha.mp3')).toBe(true)
+
+      await act(async () => {
+        control(container, 'Pause').click()
+      })
+      expect(player.paused).toBe(true)
+
+      await act(async () => {
+        control(container, 'Next track').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/beta.mp3')).toBe(true)
+      expect(player.paused).toBe(false)
+      expect(control(container, 'Pause')).not.toBeNull()
+
+      await act(async () => {
+        control(container, 'Pause').click()
+      })
+      await act(async () => {
+        control(container, 'Previous track').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/alpha.mp3')).toBe(true)
+      expect(player.paused).toBe(false)
+
+      await act(async () => {
+        buttonWithText(container, 'gamma.mp3').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/gamma.mp3')).toBe(true)
+      expect(player.paused).toBe(false)
+      expect(container.textContent).toContain('gamma.mp3')
+    })
+  })
+
+  it('refreshes the list, keeps the playing track and shows the count', async () => {
+    let calls = 0
+    globalThis.fetch = async () => {
+      calls += 1
+      const body = calls === 1
+        ? { folder: '/music', tracks: [], playlists: [{ name: 'Lofi', tracks: ['one.mp3', 'two.mp3'] }] }
+        : { folder: '/music', tracks: ['loose.mp3'], playlists: [{ name: 'Lofi', tracks: ['one.mp3', 'two.mp3', 'three.mp3'] }] }
+      return { ok: true, json: async () => body }
+    }
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await choosePlaylist(container, 'playlist:Lofi')
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+
+      await act(async () => {
+        control(container, 'Refresh').click()
+      })
+      await settle(5)
+
+      expect(container.textContent).toContain('4 tracks in 1 playlists.')
+      expect(container.querySelector('#music-playlist').options.map((option) => option.textContent)).toEqual(['All', 'Lofi', 'Loose tracks'])
+      expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+      expect(player.paused).toBe(false)
+      expect(control(container, 'Pause')).not.toBeNull()
+    })
+  })
+
+  it('shows an icon button for each control and opens the folder once confirmed', async () => {
+    const posts = []
+    let openStatus = 204
+    globalThis.fetch = async (url, options = {}) => {
+      if (String(url).includes('/api/music/open')) {
+        posts.push({ url, options })
+        return {
+          status: openStatus,
+          json: async () => ({ error: 'No file manager could be started.' }),
+        }
+      }
+      return { ok: true, json: async () => ({ folder: '/music', tracks: ['alpha.mp3'], playlists: [] }) }
+    }
+    await withDom(async ({ container, dom, root }) => {
+      installAudio(dom)
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+
+      const labels = ['Previous track', 'Play', 'Next track', 'Shuffle', 'Loop off', 'Open folder', 'Refresh']
+      for (const label of labels) {
+        const button = control(container, label)
+        expect(button).not.toBeNull()
+        expect(button.getAttribute('title')).not.toBeNull()
+        expect(button.querySelector('svg')).not.toBeNull()
+      }
+
+      await act(async () => {
+        control(container, 'Open folder').click()
+      })
+      await settle(5)
+      expect(posts).toHaveLength(1)
+      expect(posts[0].options.method).toBe('POST')
+      expect(JSON.parse(posts[0].options.body)).toEqual({ confirmed: true })
+      expect(container.textContent).not.toContain('No file manager could be started.')
+
+      openStatus = 501
+      await act(async () => {
+        control(container, 'Open folder').click()
+      })
+      await settle(5)
+      expect(posts).toHaveLength(2)
+      expect(container.textContent).toContain('No file manager could be started.')
     })
   })
 })
