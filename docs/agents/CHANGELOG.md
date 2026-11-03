@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A lane row without a saved label shows the lane's own name (task U122).
 - The confirm card for a lane move names every other sub that loses lanes or goes away (task U122).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
