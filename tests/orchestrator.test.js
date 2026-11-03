@@ -1161,6 +1161,20 @@ describe('waking the orchestrator', () => {
     expect(roomMessage.text).toContain('Error: bounded tail error')
   })
 
+  it('keeps at most the newest 200 completed runs (S37)', async () => {
+    const rig = makeRig()
+    rig.send('Ready')
+    await waitIdle(rig, 1)
+
+    for (let index = 0; index < 210; index += 1) {
+      rig.orchestrator.onFrame(frame(`run-fill-${index}`, 'succeeded'))
+    }
+    const chat = JSON.parse(readFileSync(chatFileFor(rig.projectRoot, rig.runs), 'utf8'))
+    expect(chat.completedRuns).toHaveLength(200)
+    expect(chat.completedRuns[0][0]).toBe('run-fill-10')
+    expect(chat.completedRuns.at(-1)[0]).toBe('run-fill-209')
+  })
+
   it('remembers a reported run end across a restart and adds no duplicate line', async () => {
     const rig = makeRig()
     rig.send('Ready')
