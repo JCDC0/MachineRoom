@@ -5,6 +5,7 @@
 - An AGY tool call that ends with an error shows the end's label and error in the event log and the agent's callout (task U129).
 - A folder keeps its cached card view until that folder's own content, drawn children or item ranks change, and a stale recent touch no longer forces a plan rebuild (task U129).
 - This month's spend starts at local midnight on the first, as today's spend does (task U129).
+- The camera's pointer drift reads the surface rect again after a page scroll, and still not on every pointer move (task U129).
 - On a reconnect the page asks the bridge for the tree since the newest version it holds (task U126).
 - A failed manual Refresh in Reviews shows its sentence (task U126).
 - A dialog holds Tab even when focus starts outside it or it has no focusable child (task U126).

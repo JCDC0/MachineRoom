@@ -69,10 +69,13 @@ function openRig({ still = false } = {}) {
   const move = (x, y) => {
     for (const handler of listeners.pointermove ?? []) handler({ clientX: x, clientY: y })
   }
+  const scroll = () => {
+    for (const handler of listeners.scroll ?? []) handler({ type: 'scroll' })
+  }
   const close = () => {
     globalThis.window = saved
   }
-  return { rig, drag, wheel, rest, move, close, camera, rectReads: () => rectReads }
+  return { rig, drag, wheel, rest, move, scroll, close, camera, rectReads: () => rectReads }
 }
 
 describe('camera rig yaw and pitch', () => {
@@ -718,6 +721,22 @@ describe('the pointer hover rect', () => {
       rig.resize()
       expect(rectReads()).toBe(reads + 1)
       for (let index = 0; index < 10; index += 1) move(500, 400 + index)
+      expect(rectReads()).toBe(reads + 1)
+    } finally {
+      close()
+    }
+  })
+
+  it('reads the surface rect once more after a page scroll', () => {
+    const { move, scroll, close, rectReads } = openRig()
+    try {
+      const reads = rectReads()
+      for (let index = 0; index < 10; index += 1) move(500 + index, 400)
+      expect(rectReads()).toBe(reads)
+      scroll()
+      move(500, 400)
+      expect(rectReads()).toBe(reads + 1)
+      for (let index = 0; index < 10; index += 1) move(500 + index, 400)
       expect(rectReads()).toBe(reads + 1)
     } finally {
       close()
