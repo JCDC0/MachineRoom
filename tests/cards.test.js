@@ -751,3 +751,24 @@ describe('existingFiles', () => {
     expect(state.existingFiles).toBe(3)
   })
 })
+
+describe('the card class string', () => {
+  it('builds only when a class input changes, not on every frame', () => {
+    const state = recentState()
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    for (const card of cards.cards.values()) card.classBuilds = 0
+
+    for (let frame = 0; frame < 5; frame += 1) cards.update(state, 0.016, camera())
+    for (const card of cards.cards.values()) expect(card.classBuilds, card.path || 'root').toBe(0)
+
+    expect(cards.setSelected('docs')).toBe(true)
+    cards.update(state, 0.016, camera())
+    expect(cards.cards.get('docs').classBuilds).toBe(1)
+    for (const card of cards.cards.values()) {
+      if (card.path !== 'docs') expect(card.classBuilds, card.path || 'root').toBe(0)
+    }
+    cards.dispose()
+  })
+})

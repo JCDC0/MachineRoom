@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The card frame loop walks its map in place and builds a class string only when a card's class inputs change.
 - Folder strings reuse each link's cached endpoints until a card moves.
 - The pointer hover reads the lens rectangle once per resize instead of on every move.
 - `layoutRing` walks its folder queue with an index instead of shifting it, so a deep folder chain lays out in one pass.

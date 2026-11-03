@@ -478,6 +478,7 @@ export function createCards(cssScene, options = {}) {
       occluderKey: '',
       baseClass: 'mr-card is-closed',
       className: 'mr-card is-closed',
+      classBuilds: 0,
       bandText: '',
       bandFailed: false,
       height: 0,
@@ -1016,7 +1017,7 @@ export function createCards(cssScene, options = {}) {
     const rowsDue = rowFrameKey !== lastRowFrameKey
     lastRowFrameKey = rowFrameKey
     let removed = false
-    for (const card of [...cards.values()]) {
+    for (const card of cards.values()) {
       if (card.fade) {
         const t = fadeProgress(card.fade.start, now, isStill)
         setCardOpacity(card, t >= 1 ? card.fade.to : card.fade.from + (card.fade.to - card.fade.from) * t)
@@ -1102,19 +1103,44 @@ export function createCards(cssScene, options = {}) {
         }
       }
 
-      let className = card.baseClass ?? `mr-card is-${view.state}`
-      if (active.dirs.has(card.path)) className += ' is-active'
-      else if (active.path.has(card.path)) className += ' is-path'
-      if (pinned.has(card.path) || sprayed.has(card.path)) className += ' is-pinned'
+      const isActive = active.dirs.has(card.path)
+      const isPath = !isActive && active.path.has(card.path)
+      const isPinned = pinned.has(card.path) || sprayed.has(card.path)
       const selectedNow = selected !== null && selected === card.path
-      if (selectedNow) className += ' is-selected'
-      if (tone) className += ` is-flash-${tone}`
       const lit = dimmed && Boolean(dimLit?.has(card.path))
-      if (dimmed) className += lit ? ' is-lit' : ' is-dim'
-      if (targeted?.has(card.path)) className += ' is-targeted'
-      if (card.className !== className) {
-        card.className = className
-        card.element.className = className
+      const isTargeted = Boolean(targeted?.has(card.path))
+      const dimFlag = dimmed ? (lit ? 1 : 2) : 0
+      if (
+        card.classBase !== card.baseClass ||
+        card.classActive !== isActive ||
+        card.classPath !== isPath ||
+        card.classPinned !== isPinned ||
+        card.classSelected !== selectedNow ||
+        card.classTone !== tone ||
+        card.classDim !== dimFlag ||
+        card.classTargeted !== isTargeted
+      ) {
+        card.classBase = card.baseClass
+        card.classActive = isActive
+        card.classPath = isPath
+        card.classPinned = isPinned
+        card.classSelected = selectedNow
+        card.classTone = tone
+        card.classDim = dimFlag
+        card.classTargeted = isTargeted
+        let className = card.baseClass ?? `mr-card is-${view.state}`
+        if (isActive) className += ' is-active'
+        else if (isPath) className += ' is-path'
+        if (isPinned) className += ' is-pinned'
+        if (selectedNow) className += ' is-selected'
+        if (tone) className += ` is-flash-${tone}`
+        if (dimmed) className += lit ? ' is-lit' : ' is-dim'
+        if (isTargeted) className += ' is-targeted'
+        card.classBuilds = (card.classBuilds ?? 0) + 1
+        if (card.className !== className) {
+          card.className = className
+          card.element.className = className
+        }
       }
 
       const dimGoal = dimmed && !lit && !selectedNow ? 1 : 0
