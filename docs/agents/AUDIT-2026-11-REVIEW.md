@@ -5,6 +5,8 @@ Branch: `feat/q32-review-of-the` (`0.1.401`)
 Brief: `Q32`
 Merges reviewed: `U114` (`8fa7511`), `U115` (`8edc084`), `U116` (`c897535`), `S25` (`fbce797`), `Q26` (`3388ae3`), `S26` (`45567fb`), `S27` (`d0caebb`), `S28` (`b86c3c8`), `U117` (`aa66d14`).
 
+The orchestrator checked this review on 2026-11-04. It cites files that do not exist in this repository (`src/engine/scene.js`, `characters.js`, `server/sub-orchestrators.js`, `task-queue.js`, `presets.js`, `SubOrchestrators.jsx`, `RunsPanel.jsx`, `QueuePanel.jsx`), so the verdicts on U115 and U116 and the file lists in the other verdicts are not reliable. Findings 1, 2, 3 and 8 were read against the code and hold. Finding 9 holds but only costs a whole tree list on a late reconnect. The rest are unchecked.
+
 ## Findings (most severe first)
 
 | # | Severity | Where (`file:line`) | The case and what goes wrong | Smallest fix |
