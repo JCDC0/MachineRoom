@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A shared byte-offset cache on runs.jsonl serves run records, issues, stats, costs and reviews (task S38).
 - The Claude session reader caches meta files by mtime and forgets removed meta files (task S38).
 
 - A beat lifts the folder cards round the ring as a wave and pulses the hub ring, on top of each card's own glide and pop (task U131).
