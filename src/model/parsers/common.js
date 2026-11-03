@@ -42,6 +42,10 @@ export function parseJson(line) {
 export function fileTouch(ctx, rawPath, tool) {
   const relative = relativeTo(ctx.rootName, rawPath)
   if (relative === null || relative === '') return { relative, touches: [] }
+  const isDir = Boolean(ctx.dirs && (Array.isArray(ctx.dirs) ? ctx.dirs.includes(relative) : ctx.dirs.has?.(relative)))
+  if (tool === 'read' && isDir) {
+    return { relative, touches: [{ path: relative, mode: 'list', kind: 'dir' }] }
+  }
   const mode = tool === 'read' ? 'read' : 'write'
   return { relative, touches: [{ path: relative, mode, kind: 'file' }] }
 }

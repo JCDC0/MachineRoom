@@ -169,6 +169,15 @@ describe('hermes parser', () => {
 })
 
 describe('opencode parser', () => {
+  it('maps a read of a folder to a dir touch', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(
+      lines({ type: 'tool_use', part: { id: 'p0', tool: 'read', state: { status: 'completed', input: { path: 'C:\\Temp\\agent-sandbox\\src' }, output: '' } } }),
+      9000
+    )
+    expect(out[0].touches).toEqual([{ path: 'src', mode: 'list', kind: 'dir' }])
+  })
+
   it('maps a read tool_use to a read touch', () => {
     const parser = createOpencodeParser(ctx)
     const out = parser.push(

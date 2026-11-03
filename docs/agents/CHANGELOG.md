@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A file read that names a directory emits a folder touch instead of a file touch (task S29).
+
 - Send unparsed plain log lines as an error event when a run fails (task S29).
 
 - AGY tool calls for MCP, tasks and schedules get distinct kinds and descriptive labels (task S29).
