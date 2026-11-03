@@ -38,6 +38,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-PANELS-2.md`: history. The second November 2026 hunt of the page's panels, with features.
 - `AUDIT-2026-11-REVIEW.md`: history. The November 2026 review of the merges that answered the five audits, with the orchestrator's corrections.
 - `AUDIT-2026-11-REVIEW-2.md`: history. The review of the merges of 2026-11-03, with the orchestrator's corrections.
+- `AUDIT-2026-11-REVIEW-3.md`: history. The review of the merges since the second review, with findings ranked by owner impact.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.
