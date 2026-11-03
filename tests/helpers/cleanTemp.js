@@ -36,7 +36,11 @@ export function cleanTempRoot(root = TEMP_ROOT, alive = isAlive) {
     return []
   }
   const stale = staleFolders(names, alive)
-  for (const name of stale) rmSync(join(root, name), { recursive: true, force: true })
+  for (const name of stale) {
+    try {
+      rmSync(join(root, name), { recursive: true, force: true })
+    } catch {}
+  }
   return stale
 }
 

@@ -1537,6 +1537,10 @@ describe('a run the main starts on a sub lane', () => {
     expect(unnamed.status).toBe(202)
     await waitFor(() => readLines(rig.runnerCalls).length === 2)
     expect(readLines(rig.runnerCalls)[1].slice(-2)).toEqual(['--started-by', 'backend'])
+    await waitFor(async () => {
+      const state = await fetch(`${rig.url}/api/control/runs`).then((reply) => reply.json())
+      return !state.running.some((run) => run.lane === 'opencode')
+    })
 
     const pageRun = await fetch(`${rig.url}/api/control/runs`, {
       method: 'POST',

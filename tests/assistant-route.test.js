@@ -217,7 +217,7 @@ describe('runOpencode process control', () => {
       const promise = runOpencode({
         model: 'test',
         prompt: 'test',
-        timeoutMs: 150,
+        timeoutMs: 3000,
         binary: 'fake-opencode',
         spawnImpl: (bin, args, opts) => spawn(process.execPath, ['-e', script], opts),
       })

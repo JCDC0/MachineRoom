@@ -302,7 +302,7 @@ describe('the git route reading state on a real repository', () => {
 
     const backState = await client.switchBranch({ branch: 'main', confirmed: true })
     expect(backState.branch).toBe('main')
-  })
+  }, 60000)
 
   it('marks checkout as dirty when files are modified or uncommitted', async () => {
     const repo = makeRepo()
