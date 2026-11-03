@@ -7,6 +7,11 @@ import { WHITE, easeInOut, lineMaterial, still, textSprite } from './sprites.js'
 export const HUB_RADIUS = 300
 export const HUB_Y = 200
 export const PARK_LIFT = 90
+export const SUB_RING_SCALE = 0.6
+export const SUB_RING_RADIUS = HUB_RADIUS * SUB_RING_SCALE
+export const SUB_RING_DROP = 260
+export const SUB_RING_Y = HUB_Y - SUB_RING_DROP
+export const SUB_RING_OPACITY = 0.16
 export const ORCHESTRATOR_LIFT = 360
 export const READER_RADIUS = HUB_RADIUS * 1.4
 export const HUB_CENTER = new THREE.Vector3(0, HUB_Y, 0)
@@ -66,6 +71,12 @@ export function parkedKeysFor(roster) {
 export function readerPoint(index, count, out = new THREE.Vector3()) {
   const angle = slotAngle(index, count)
   return out.set(Math.cos(angle) * READER_RADIUS, HUB_Y + PARK_LIFT, Math.sin(angle) * READER_RADIUS)
+}
+
+export function subRingPlace(angle, out = new THREE.Vector3()) {
+  const raw = Number(angle)
+  const theta = Number.isFinite(raw) ? raw : 0
+  return out.set(Math.cos(theta) * SUB_RING_RADIUS, SUB_RING_Y + PARK_LIFT, Math.sin(theta) * SUB_RING_RADIUS)
 }
 
 export function hasSubs(ladder) {
@@ -330,6 +341,10 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   main.name = 'ring'
   main.userData.baseOpacity = RING_OPACITY
   const inner = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(HUB_RADIUS * 0.86, 160)), lineMaterial(WHITE, 0.1))
+  const subRing = new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(ringPoints(SUB_RING_RADIUS, 128)), lineMaterial(WHITE, SUB_RING_OPACITY))
+  subRing.name = 'sub-ring'
+  subRing.position.y = -SUB_RING_DROP
+  subRing.visible = false
 
   const dashValues = []
   for (let i = 0; i < DASHES; i++) {
@@ -376,7 +391,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   slots = buildSlots(slotAngles)
   for (const marker of slots) group.add(marker)
   tickGroup.add(buildTicks(slotAngles))
-  group.add(main, inner, dashes, tickGroup, centre, centreRing, sectorGroup)
+  group.add(main, inner, subRing, dashes, tickGroup, centre, centreRing, sectorGroup)
   scene.add(group)
 
   function clearSlots() {
@@ -402,6 +417,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
     sectorGroups = built.groups
     sectorLevels = new Map(sectorGroups.map((sector) => [sector.userData.id, 0]))
     main.visible = !currentLadder
+    subRing.visible = Boolean(currentLadder)
     ringLines = currentLadder ? sectorLines : [main]
     for (const line of ringLines) {
       line.material.color.setHex(WHITE)
