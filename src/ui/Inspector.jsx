@@ -153,29 +153,40 @@ export default function Inspector({
       return undefined
     }
     let active = true
+    let ticket = 0
+    let offline = false
     async function read() {
+      ticket += 1
+      const mine = ticket
       try {
         const answer = await client.network()
-        if (active) setConnection(answer?.online === true)
+        if (!active || mine !== ticket || offline) return
+        setConnection(answer?.online === true)
       } catch {
-        if (active) setConnection(null)
+        if (active && mine === ticket && !offline) setConnection(null)
       }
     }
     function onOffline() {
+      offline = true
+      ticket += 1
       if (active) setConnection(false)
+    }
+    function onOnline() {
+      offline = false
+      read()
     }
     read()
     const timer = setInterval(read, 30000)
     const unsubscribe = client.subscribe?.((notice) => {
       if (notice?.topic === 'network') read()
     })
-    window.addEventListener('online', read)
+    window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
     return () => {
       active = false
       clearInterval(timer)
       if (typeof unsubscribe === 'function') unsubscribe()
-      window.removeEventListener('online', read)
+      window.removeEventListener('online', onOnline)
       window.removeEventListener('offline', onOffline)
     }
   }, [item?.kind, bridge, client])

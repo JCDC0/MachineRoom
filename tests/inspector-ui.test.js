@@ -257,6 +257,38 @@ describe('the inspector panel', () => {
     })
   })
 
+  it('keeps only the newest network answer and lets offline win', async () => {
+    let resolveNetwork = null
+    const client = makeClient({
+      network: () =>
+        new Promise((resolve) => {
+          resolveNetwork = resolve
+        }),
+    })
+
+    await withDom(async ({ container, dom, root }) => {
+      await mount(root, {
+        target: { kind: 'internet', id: 'internet' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [],
+      })
+      expect(container.textContent).toContain('Connection not reported')
+
+      await act(async () => {
+        dom.window.dispatchEvent({ type: 'offline' })
+      })
+      expect(container.textContent).toContain('No connection')
+
+      await act(async () => {
+        resolveNetwork({ online: true, checkedAt: 1 })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      expect(container.textContent).toContain('No connection')
+    })
+  })
+
   it('shows the internet connection and the agents on the web', async () => {
     const client = makeClient({ network: async () => ({ online: false, checkedAt: 2 }) })
 
