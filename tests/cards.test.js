@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import {
+  CARD_FACE_BORDER,
   CARD_NAME_MAX,
   CARD_SCALES,
   CARD_W,
@@ -28,6 +29,7 @@ import {
   openChain,
   rowOffset,
   rowWindow,
+  tabAnchorOffset,
   viewInput,
   viewKey,
 } from '../src/engine/cards.js'
@@ -142,6 +144,26 @@ const view = (state, items = 0, hiddenItems = 0, back = 0) => ({
   back,
   items: Array.from({ length: items }, (_, i) => ({ path: `src/f${i}.js`, kind: 'file' })),
   hiddenItems,
+})
+
+describe('the tab anchor', () => {
+  it('sits at the middle of the tab, four units above the face top', () => {
+    const width = CARD_W + CARD_FACE_BORDER
+    const height = cardHeight(0) + CARD_FACE_BORDER
+    const offset = tabAnchorOffset(width, height)
+    expect(offset.x).toBeCloseTo(36 - width / 2, 6)
+    expect(offset.y - height / 2).toBeCloseTo(4, 6)
+  })
+
+  it('scales the offset with the card and follows a taller face', () => {
+    const width = CARD_W + CARD_FACE_BORDER
+    const short = tabAnchorOffset(width, cardHeight(0) + CARD_FACE_BORDER)
+    const tall = tabAnchorOffset(width, cardHeight(3) + CARD_FACE_BORDER)
+    const scaled = tabAnchorOffset(width, cardHeight(0) + CARD_FACE_BORDER, 2)
+    expect(tall.y).toBeGreaterThan(short.y)
+    expect(scaled.x).toBeCloseTo(short.x * 2, 6)
+    expect(scaled.y).toBeCloseTo(short.y * 2, 6)
+  })
 })
 
 describe('card size', () => {
