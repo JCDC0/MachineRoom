@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createMockClient } from '../src/control/mock.js'
 
 const NOW = Date.parse('2026-10-20T08:00:00.000Z')
@@ -16,7 +17,7 @@ describe('mock run totals', () => {
     }
     expect(stats.rows).toHaveLength(1)
     expect(stats.rows[0]).toMatchObject({ lane: 'opencode', runs: 1, finished: 1 })
-    await expect(client.runStats({ since: '2026-02-30' })).rejects.toThrow('--since needs a date like 2026-10-19.')
+    await expect(client.runStats({ since: '2026-02-30' })).rejects.toThrow(SINCE_PROBLEM)
   })
 })
 

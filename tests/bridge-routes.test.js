@@ -5,6 +5,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { extractReplyText } from '../server/assistant.js'
+import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { createClient } from '../src/control/client.js'
 import { choice } from '../src/decider/wire.js'
 import { startFakeDecisions } from './fakeDecisions.js'
@@ -505,7 +506,7 @@ describe('run routes', () => {
 
     const bad = await fetch(`${url}/api/control/runs/stats?since=2026-02-30`)
     expect(bad.status).toBe(400)
-    expect(await bad.json()).toEqual({ error: '--since needs a date like 2026-10-19.' })
+    expect(await bad.json()).toEqual({ error: SINCE_PROBLEM })
 
     const wrongMethod = await fetch(`${url}/api/control/runs/stats`, { method: 'POST' })
     expect(wrongMethod.status).toBe(405)
@@ -581,7 +582,7 @@ describe('run routes', () => {
       },
     ])
 
-    await expect(client.runStats({ since: 'yesterday' })).rejects.toThrow('--since needs a date like 2026-10-19.')
+    await expect(client.runStats({ since: 'yesterday' })).rejects.toThrow(SINCE_PROBLEM)
   })
 
   it('answers an empty recent list when the records file is missing', async () => {

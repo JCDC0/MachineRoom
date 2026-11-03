@@ -48,7 +48,7 @@ describe('control client request limits', () => {
     expect(timers).toHaveLength(1)
     expect(timers[0].ms).toBe(REQUEST_TIMEOUT_MS)
     timers[0].fn()
-    await expect(pending).rejects.toThrow('The bridge did not answer within 30 seconds.')
+    await expect(pending).rejects.toThrow(`The bridge did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds.`)
     expect(seen.options.signal.aborted).toBe(true)
     expect(cleared).toEqual([timers[0].id])
   })
@@ -66,7 +66,7 @@ describe('control client request limits', () => {
       const pending = call(client)
       expect(timers[0].ms).toBe(REQUEST_TIMEOUT_MS)
       timers[0].fn()
-      await expect(pending).rejects.toThrow('The bridge did not answer within 30 seconds.')
+      await expect(pending).rejects.toThrow(`The bridge did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds.`)
     }
   })
 
@@ -130,7 +130,7 @@ describe('control client request limits', () => {
     expect(seen.options.signal.aborted).toBe(false)
     timers[0].fn()
     expect(seen.options.signal.aborted).toBe(true)
-    await expect(pending).rejects.toThrow('The bridge did not answer within 30 seconds.')
+    await expect(pending).rejects.toThrow(`The bridge did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds.`)
   })
 
   it('gives up while the body is still being read', async () => {
@@ -156,6 +156,6 @@ describe('control client request limits', () => {
     const pending = client.issues()
     await started
     timers[0].fn()
-    await expect(pending).rejects.toThrow('The bridge did not answer within 30 seconds.')
+    await expect(pending).rejects.toThrow(`The bridge did not answer within ${REQUEST_TIMEOUT_MS / 1000} seconds.`)
   })
 })

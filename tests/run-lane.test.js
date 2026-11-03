@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { gitPath } from '../server/programPath.js'
-import { briefProblems, briefWorktreeProblems, commandFor, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
+import { briefProblems, briefWorktreeProblems, commandFor, DEFAULT_MINUTES, filterRunsSince, laneCommandProblem, readinessLine, retryStartProblem, SINCE_PROBLEM, startFailureText, worktreeFor, formatOutcomes, formatStats, formatSummary, laneLockPids, laneLockText, laneStats, laneStopProblem, laneWithOverrides, nextTestStep, parseRunArgs, projectRunGit, runListLine, runRecord, sessionToolLines, summarizeRun, UNATTENDED_NOTE, unattendedPrompt } from '../src/briefs/run.js'
 import { branchFor, parseBriefs } from '../src/briefs/briefs.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { startLane } from '../scripts/run-lane.mjs'
@@ -148,35 +148,35 @@ describe('parseRunArgs', () => {
   })
 
   it('accepts --stats without a lane or a brief', () => {
-    expect(parseRunArgs(['--stats'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: 100, list: false, stats: true })
+    expect(parseRunArgs(['--stats'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: DEFAULT_MINUTES, list: false, stats: true })
     expect(parseRunArgs(['--stats', '--minutes', '5'])).toMatchObject({ stats: true, minutes: 5 })
   })
 
   it('accepts --outcomes without a lane or a brief', () => {
-    expect(parseRunArgs(['--outcomes'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: 100, list: false, outcomes: true })
+    expect(parseRunArgs(['--outcomes'])).toEqual({ lane: '', briefs: [], dryRun: false, minutes: DEFAULT_MINUTES, list: false, outcomes: true })
     expect(parseRunArgs(['--outcomes', '--minutes', '5'])).toMatchObject({ outcomes: true, minutes: 5 })
     expect(parseRunArgs(['--outcomes', '--since', '2026-10-19'])).toEqual({
-      lane: '', briefs: [], dryRun: false, minutes: 100, list: false, outcomes: true, since: '2026-10-19',
+      lane: '', briefs: [], dryRun: false, minutes: DEFAULT_MINUTES, list: false, outcomes: true, since: '2026-10-19',
     })
     expect(parseRunArgs(['--outcomes', '--since=2026-01-02'])).toMatchObject({ outcomes: true, since: '2026-01-02' })
-    expect(() => parseRunArgs(['--outcomes', '--since', 'yesterday'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--outcomes', '--since', 'yesterday'])).toThrow(SINCE_PROBLEM)
   })
 
   it('takes --since with a day', () => {
     expect(parseRunArgs(['--stats', '--since', '2026-10-19'])).toEqual({
-      lane: '', briefs: [], dryRun: false, minutes: 100, list: false, stats: true, since: '2026-10-19',
+      lane: '', briefs: [], dryRun: false, minutes: DEFAULT_MINUTES, list: false, stats: true, since: '2026-10-19',
     })
     expect(parseRunArgs(['--stats', '--since=2026-01-02'])).toMatchObject({ since: '2026-01-02' })
   })
 
   it('refuses a since that is not a day', () => {
-    expect(() => parseRunArgs(['--stats', '--since'])).toThrow('--since needs a date like 2026-10-19.')
-    expect(() => parseRunArgs(['--stats', '--since', '19-10-2026'])).toThrow('--since needs a date like 2026-10-19.')
-    expect(() => parseRunArgs(['--stats', '--since', '2026-10-19T00:00:00Z'])).toThrow('--since needs a date like 2026-10-19.')
-    expect(() => parseRunArgs(['--stats', '--since', '2026-13-01'])).toThrow('--since needs a date like 2026-10-19.')
-    expect(() => parseRunArgs(['--stats', '--since', '2026-02-30'])).toThrow('--since needs a date like 2026-10-19.')
-    expect(() => parseRunArgs(['--stats', '--since', 'yesterday'])).toThrow('--since needs a date like 2026-10-19.')
-    expect(() => parseRunArgs(['--stats', '--since', '--list'])).toThrow('--since needs a date like 2026-10-19.')
+    expect(() => parseRunArgs(['--stats', '--since'])).toThrow(SINCE_PROBLEM)
+    expect(() => parseRunArgs(['--stats', '--since', '19-10-2026'])).toThrow(SINCE_PROBLEM)
+    expect(() => parseRunArgs(['--stats', '--since', '2026-10-19T00:00:00Z'])).toThrow(SINCE_PROBLEM)
+    expect(() => parseRunArgs(['--stats', '--since', '2026-13-01'])).toThrow(SINCE_PROBLEM)
+    expect(() => parseRunArgs(['--stats', '--since', '2026-02-30'])).toThrow(SINCE_PROBLEM)
+    expect(() => parseRunArgs(['--stats', '--since', 'yesterday'])).toThrow(SINCE_PROBLEM)
+    expect(() => parseRunArgs(['--stats', '--since', '--list'])).toThrow(SINCE_PROBLEM)
   })
 
   it('refuses input that names no lane, no brief or a bad time', () => {

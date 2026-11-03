@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { chooseRoute, escalate, readPolicy, tierFor } from '../src/policy/route.js'
+import { chooseRoute, escalate, readPolicy, tierFor, TIERS } from '../src/policy/route.js'
 
 const POLICY_TEXT = readFileSync(new URL('../docs/agents/policy.json', import.meta.url), 'utf8')
 const policyFile = () => JSON.parse(POLICY_TEXT)
@@ -204,7 +204,7 @@ describe('chooseRoute', () => {
 describe('readPolicy', () => {
   it('reads the real policy file', () => {
     const policy = readPolicy(POLICY_TEXT)
-    expect(Object.keys(policy.tiers)).toEqual(['small', 'medium', 'large'])
+    expect(Object.keys(policy.tiers)).toEqual(TIERS)
     expect(policy.tiers.small).toHaveLength(2)
     expect(policy.tiers.medium).toHaveLength(2)
     expect(policy.tiers.large).toHaveLength(2)

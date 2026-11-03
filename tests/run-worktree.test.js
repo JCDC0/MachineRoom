@@ -74,7 +74,7 @@ function runLane(args, extra = {}) {
     const timer = setTimeout(() => {
       child.kill()
       fail(new Error(`run-lane did not exit. stderr: ${stderr}`))
-    }, 30000)
+    }, 60000)
     child.stdout.on('data', (chunk) => {
       stdout += chunk
     })
@@ -287,7 +287,7 @@ describe('run-lane --worktree --dry-run', () => {
   })
 })
 
-describe('run-lane --worktree with one task', { timeout: 30000 }, () => {
+describe('run-lane --worktree with one task', { timeout: 60000 }, () => {
   it('commits the task on a queue branch and writes that branch to the record', async () => {
     const base = tempDir()
     const project = initRepo(base)

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { SINCE_PROBLEM } from '../src/briefs/run.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const ROOT = process.cwd()
@@ -163,7 +164,7 @@ describe('policy-propose command', () => {
     for (const value of ['not-a-date', '2026-02-30', '2026-1-5']) {
       const result = runPolicy(temp, ['--since', value])
       expect(result.status, value).toBe(1)
-      expect(`${result.stdout}${result.stderr}`, value).toContain('--since needs a date like 2026-10-19.')
+      expect(`${result.stdout}${result.stderr}`, value).toContain(SINCE_PROBLEM)
       expect(patchFiles(temp), value).toEqual([])
     }
   })

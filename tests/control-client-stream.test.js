@@ -76,7 +76,7 @@ describe('control client change stream', () => {
     timers.at(-1).fn()
     sources[2].open()
     sources[2].giveUp()
-    expect(timers.map((timer) => timer.ms)).toEqual([1000, 2000, STREAM_START])
+    expect(timers.map((timer) => timer.ms)).toEqual([STREAM_START, 2000, STREAM_START])
     unsubscribe()
   })
 
