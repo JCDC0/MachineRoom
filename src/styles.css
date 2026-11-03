@@ -10081,6 +10081,111 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   border-color: var(--white);
 }
 
+/* U124. Saved key names in Settings, never their values. */
+.mr-keys {
+  gap: var(--space);
+}
+
+.mr-keys-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mr-keys-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space);
+  padding: 4px var(--space);
+  border: 1px solid var(--line);
+}
+
+.mr-keys-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.mr-keys-delete {
+  flex: 0 0 auto;
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.mr-keys-delete:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.mr-keys-state {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-keys-state.is-error {
+  color: var(--red);
+}
+
+.mr-keys-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--space);
+  border: 1px solid var(--red);
+}
+
+.mr-keys-confirm-text {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.mr-keys-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space);
+}
+
+.mr-keys-confirm-btn {
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.mr-keys-confirm-btn.is-start {
+  color: var(--white);
+  background: rgb(255 42 42 / 0.18);
+  border-color: var(--red);
+}
+
+.mr-keys-confirm-btn.is-cancel:hover:not(:disabled) {
+  border-color: var(--white);
+}
+
 /* U45: the left drawer in Chat, Projects and Agents tabs, and Attach at the foot of Agents */
 .mr-side-tabs {
   display: grid;
