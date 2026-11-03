@@ -154,4 +154,27 @@ describe('the crowded room callouts', () => {
     }
     agents.dispose()
   })
+
+  it('counts a working agent with no label toward the crowd limit', () => {
+    const { agents, state, terminals, world } = harness(5)
+    const tasks = new Map()
+    for (let index = 0; index < 5; index += 1) {
+      tasks.set(`a${index}`, `task ${index}`)
+      const time = 1000 + index * 100
+      if (index === 4) {
+        apply(state, { time, type: 'run.start', agent: 'a4', runId: 'r4' })
+      } else {
+        apply(state, { time, type: 'tool.start', agent: `a${index}`, id: `t${index}`, label: `work ${index}`, touches: [] })
+      }
+      agents.update(state, 0.016, time, world, terminals, { focus: null, hover: null })
+    }
+    agents.setTasks(tasks)
+    agents.update(state, 0.016, 5000, world, terminals, { focus: 'a0', hover: null })
+
+    expect(agents.views.get('a0').callout.task.style.display).not.toBe('none')
+    expect(agents.views.get('a1').callout.task.style.display).toBe('none')
+    expect(agents.views.get('a2').callout.task.style.display).toBe('none')
+    expect(agents.views.get('a3').callout.task.style.display).not.toBe('none')
+    agents.dispose()
+  })
 })

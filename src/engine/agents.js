@@ -1028,7 +1028,7 @@ export function createAgents(scene, roster, cssScene = null) {
     for (const view of views.values()) {
       const entry = state.agents.get(view.key)
       setStatus(view, entry?.status ?? 'idle', now)
-      if ((view.style === 'working' || view.style === 'queued') && entry?.label) {
+      if (view.style === 'working' || view.style === 'queued') {
         busy.push({ key: view.key, since: view.busySince })
       }
     }
