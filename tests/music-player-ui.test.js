@@ -452,7 +452,7 @@ describe('the music player', () => {
       })
       await settle(5)
 
-      expect(container.textContent).toContain('4 tracks in 1 playlists.')
+      expect(container.textContent).toContain('4 tracks in 1 playlist.')
       expect(container.querySelector('#music-playlist').options.map((option) => option.textContent)).toEqual(['All', 'Lofi', 'Loose tracks'])
       expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
       expect(player.paused).toBe(false)

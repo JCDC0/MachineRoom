@@ -410,7 +410,9 @@ export async function refreshMusicList() {
   }
   publish({ failed: false })
   applyList(found)
-  flashStatus(`${trackCount(found)} tracks in ${found.playlists.length} playlists.`)
+  const tracks = trackCount(found)
+  const lists = found.playlists.length
+  flashStatus(`${tracks} ${tracks === 1 ? 'track' : 'tracks'} in ${lists} ${lists === 1 ? 'playlist' : 'playlists'}.`)
 }
 
 export async function openMusicFolder() {
