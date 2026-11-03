@@ -943,6 +943,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       cards.beat(strength)
       hub.beat(strength)
     },
+    setBands: (levels) => agentSet.setBands(levels),
     reset: sync,
     yaw: () => rig.yaw(),
     pitch: () => rig.pitch(),

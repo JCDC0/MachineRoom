@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { DANCE_SCALE, ORCHESTRATOR_DANCE_SCALE, danceScale } from '../src/engine/agents.js'
 import {
+  BAND_COUNT,
   activitySounds,
+  bandIndexForBin,
   beatDetector,
   createRateLimit,
   isDeleteCommand,
@@ -112,6 +114,28 @@ describe('the sound of a file touch', () => {
       { path: 'src/a.js', kind: 'deleted' },
     ])
     expect(activitySounds({ type: 'tool.start', touches: [{ kind: 'dir', path: 'src', mode: 'list' }] }, known)).toEqual([])
+  })
+})
+
+describe('the sound bands', () => {
+  it('runs from bass to treble across the analyser bins', () => {
+    expect(bandIndexForBin(0, 100, 5)).toBe(0)
+    expect(bandIndexForBin(19, 100, 5)).toBe(0)
+    expect(bandIndexForBin(20, 100, 5)).toBe(1)
+    expect(bandIndexForBin(59, 100, 5)).toBe(2)
+    expect(bandIndexForBin(99, 100, 5)).toBe(4)
+  })
+
+  it('keeps a bin inside the bands and gives a broken one the bass', () => {
+    expect(bandIndexForBin(-4, 100, 5)).toBe(0)
+    expect(bandIndexForBin(100, 100, 5)).toBe(4)
+    expect(bandIndexForBin(4, 0, 5)).toBe(0)
+    expect(bandIndexForBin('x', 100, 5)).toBe(0)
+    expect(bandIndexForBin(3, 10, 0)).toBe(0)
+  })
+
+  it('has five bands for the shapes to read', () => {
+    expect(BAND_COUNT).toBe(5)
   })
 })
 

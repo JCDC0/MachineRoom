@@ -2,6 +2,17 @@ import { DEFAULT_SETTINGS } from './settings.js'
 
 export const SOUND_LIMIT = 8
 export const SOUND_WINDOW_MS = 1000
+export const BAND_COUNT = 5
+export const BAND_WINDOW_MS = 45
+
+export function bandIndexForBin(bin, binCount, bandCount = BAND_COUNT) {
+  const index = Number(bin)
+  const bins = Number(binCount)
+  const bands = Math.max(1, Math.floor(Number(bandCount) || 0))
+  if (!Number.isFinite(index) || !Number.isFinite(bins) || bins <= 0 || index < 0) return 0
+  const band = Math.floor((index / bins) * bands)
+  return Math.min(bands - 1, Math.max(0, band))
+}
 
 const TONES = {
   read: { frequency: 620, type: 'sine', duration: 0.07 },
@@ -153,6 +164,10 @@ const engine = {
   musicGain: null,
   analyser: null,
   bins: null,
+  bands: new Float32Array(BAND_COUNT),
+  bandSums: new Float32Array(BAND_COUNT),
+  bandCounts: new Uint16Array(BAND_COUNT),
+  lastBandsAt: -Infinity,
   audio: null,
   mediaSource: null,
   limiter: createRateLimit(),
@@ -208,6 +223,29 @@ function attachAudio() {
   } catch {
     engine.mediaSource = null
   }
+}
+
+function sampleBins(now) {
+  if (!engine.analyser || !engine.bins) return false
+  if (now - engine.lastBandsAt < BAND_WINDOW_MS) return true
+  engine.lastBandsAt = now
+  engine.analyser.getByteFrequencyData(engine.bins)
+  const bins = engine.bins.length
+  if (bins === 0) return false
+  for (let band = 0; band < BAND_COUNT; band += 1) {
+    engine.bandSums[band] = 0
+    engine.bandCounts[band] = 0
+  }
+  for (let bin = 0; bin < bins; bin += 1) {
+    const band = bandIndexForBin(bin, bins, BAND_COUNT)
+    engine.bandSums[band] += engine.bins[bin]
+    engine.bandCounts[band] += 1
+  }
+  for (let band = 0; band < BAND_COUNT; band += 1) {
+    const count = engine.bandCounts[band]
+    engine.bands[band] = count > 0 ? engine.bandSums[band] / count / 255 : 0
+  }
+  return true
 }
 
 export const sound = {
@@ -274,7 +312,7 @@ export const sound = {
     const stamp = Number.isFinite(now) ? now : Date.now()
     if (stamp - engine.lastLevelAt < 45) return 0
     engine.lastLevelAt = stamp
-    engine.analyser.getByteFrequencyData(engine.bins)
+    if (!sampleBins(stamp)) return 0
     const bins = Math.min(12, engine.bins.length)
     if (bins === 0) return 0
     let total = 0
@@ -286,6 +324,11 @@ export const sound = {
     if (!beatDetector(engine.levels)) return 0
     engine.lastBeatAt = stamp
     return Math.min(1, Math.max(0.35, level * 2))
+  },
+  bands(now = typeof performance === 'undefined' ? Date.now() : performance.now()) {
+    if (!engine.settings.pulse || !engine.analyser || !engine.bins || !sound.musicPlaying()) return null
+    const stamp = Number.isFinite(now) ? now : Date.now()
+    return sampleBins(stamp) ? engine.bands : null
   },
   playMusic(url) {
     const audio = ensureAudio()

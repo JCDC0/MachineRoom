@@ -4,6 +4,27 @@ export const PREFERRED = { claude: 'compound', hermes: 'knot', opencode: 'stella
 export const ORCHESTRATOR_SHAPE = 'armillary'
 export const SPARE = ['shells', 'knot35', 'helix', 'prism']
 export const SHAPE_NAMES = ['compound', 'knot', 'stella', 'geodesic', ORCHESTRATOR_SHAPE, ...SPARE]
+export const PULSE_BANDS = 5
+export const PULSE_SCALE = 0.12
+export const SUB_PULSE_SCALE = 0.06
+export const ORCHESTRATOR_PULSE_SCALE = 0.04
+
+export function bandForVertex(index, bandCount = PULSE_BANDS) {
+  const total = Math.max(1, Math.floor(Number(bandCount) || 0))
+  const slot = Math.floor(Number(index) || 0)
+  return ((slot % total) + total) % total
+}
+
+export function vertexOffset(length, level, scale = PULSE_SCALE) {
+  const size = Number(length)
+  const amount = Number(level)
+  const factor = Number(scale)
+  if (!Number.isFinite(size) || size <= 0) return 0
+  if (!Number.isFinite(amount) || amount <= 0) return 0
+  const band = Math.min(1, amount)
+  const share = Number.isFinite(factor) ? Math.max(0, factor) : PULSE_SCALE
+  return size * share * band
+}
 
 const ORCHESTRATOR = /orchestrat/i
 const SUB_PREFIX = 'sub-'
