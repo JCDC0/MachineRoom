@@ -6,12 +6,17 @@ import { CopyShader } from 'three/addons/shaders/CopyShader.js'
 export const BLOOM_STRENGTH_DEFAULT = 0.4
 export const BLOOM_THRESHOLD = 0.15
 export const BLOOM_RADIUS = 0.4
+export const BLOOM_SCALE = 0.5
 
-function pixelSpan(width, height, pixelRatio) {
-  const ratio = Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1
+function lensRatio(pixelRatio) {
+  return Number.isFinite(pixelRatio) && pixelRatio > 0 ? pixelRatio : 1
+}
+
+export function bloomPixels(width, height, pixelRatio) {
+  const ratio = lensRatio(pixelRatio)
   return {
-    width: Math.max(1, Math.round(width * ratio)),
-    height: Math.max(1, Math.round(height * ratio)),
+    width: Math.max(1, Math.round(width * ratio * BLOOM_SCALE)),
+    height: Math.max(1, Math.round(height * ratio * BLOOM_SCALE)),
   }
 }
 
@@ -48,14 +53,14 @@ export function createBloomLayer({
   let spanWidth = Math.max(1, Math.round(width))
   let spanHeight = Math.max(1, Math.round(height))
   let disposed = false
-  const pixels = pixelSpan(spanWidth, spanHeight, pixelRatio)
+  const pixels = bloomPixels(spanWidth, spanHeight, pixelRatio)
 
   const renderer = createRenderer
     ? createRenderer({ alpha: true, antialias: false })
     : new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'high-performance' })
   renderer.setClearColor(0x000000, 0)
-  renderer.setPixelRatio(pixelRatio)
-  renderer.setSize(spanWidth, spanHeight)
+  renderer.setPixelRatio(1)
+  renderer.setSize(pixels.width, pixels.height, false)
   renderer.domElement.className = 'screen-bloom'
   container.appendChild(renderer.domElement)
 
@@ -89,8 +94,8 @@ export function createBloomLayer({
     if (disposed) return
     spanWidth = Math.max(1, Math.round(Number(nextWidth) || 1))
     spanHeight = Math.max(1, Math.round(Number(nextHeight) || 1))
-    const next = pixelSpan(spanWidth, spanHeight, pixelRatio)
-    renderer.setSize(spanWidth, spanHeight)
+    const next = bloomPixels(spanWidth, spanHeight, pixelRatio)
+    renderer.setSize(next.width, next.height, false)
     target.setSize(next.width, next.height)
     pass.setSize(next.width, next.height)
   }
