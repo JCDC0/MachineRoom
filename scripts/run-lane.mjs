@@ -1090,7 +1090,9 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       }
       const descendants = harnessDescendants(child.pid)
       stopped += stopDescendants(descendants).stopped
-      stopped += stopLeftovers({ worktree: '', childPid: child.pid ?? 0 }).stopped
+      // The worktree's name finds a harness child whose parent chain is already gone, such as an orphaned server.
+      const folder = project ? (options.worktree ? project : '') : lane.worktree
+      stopped += stopLeftovers({ worktree: folder, childPid: child.pid ?? 0 }).stopped
       extraStopped += stopped
       try {
         child.stdout?.destroy()
@@ -1174,7 +1176,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
     process.removeListener('SIGTERM', onTerm)
     process.removeListener('SIGHUP', onHup)
     process.removeListener('exit', onExit)
-    const stoppedLeftovers = stopLeftovers({ worktree: '', childPid: child.pid ?? 0 }).stopped
+    const stoppedLeftovers = stopLeftovers({ worktree: project ? (options.worktree ? project : '') : lane.worktree, childPid: child.pid ?? 0 }).stopped
     const totalStoppedLeftovers = stoppedLeftovers + extraStopped
     laneLog.flush()
     await new Promise((done) => log.end(done))
