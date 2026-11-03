@@ -413,9 +413,7 @@ export function createBridge(options = {}) {
     runsFolder: resolve(options.runsFolder ?? options.orchestratorFolder ?? lanesSourceObject.folder ?? runsFolder()),
     sendJson,
     readJsonBody,
-    notify: (event) => {
-      for (const client of clients) writeSseChange(client, event)
-    },
+    notify: notifyHeard,
   })
   const maskedSince = new Date().toISOString()
   let maskedTotal = 0
@@ -456,9 +454,7 @@ export function createBridge(options = {}) {
     runsFolder: bridgeRunsFolder,
     sendJson,
     readJsonBody,
-    notify: (event) => {
-      for (const client of clients) writeSseChange(client, event)
-    },
+    notify: notifyHeard,
   })
   const projects = createProjectsApi({
     projectRoot,
@@ -543,6 +539,11 @@ export function createBridge(options = {}) {
 
   function writeSseChange(res, event) {
     res.write(`event: change\ndata: ${JSON.stringify(event)}\n\n`)
+  }
+
+  function notifyHeard(event) {
+    if (event?.topic === 'endpoints' || event?.topic === 'mcp') return
+    for (const client of clients) writeSseChange(client, event)
   }
 
   function rememberTreeVersion(files) {

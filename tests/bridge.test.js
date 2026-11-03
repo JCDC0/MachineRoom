@@ -554,6 +554,35 @@ describe('frames from a lane log', () => {
     const notice = await sse.next((e) => e.event === 'change' && JSON.parse(e.data).topic === 'runs')
     expect(JSON.parse(notice.data)).toEqual({ topic: 'runs' })
   })
+
+  it('sends no endpoints or mcp notice that no panel hears', async () => {
+    const loop = await laneBridge()
+    const sse = await openSse(loop.url)
+    cleanups.push(() => sse.close())
+    const headers = { 'content-type': 'application/json', origin: loop.url }
+    const endpoint = await getJson(`${loop.url}/api/endpoints`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'Work',
+        provider: 'OpenRouter',
+        baseUrl: 'https://openrouter.ai/api/v1',
+        keyName: 'openrouter',
+        models: ['alpha'],
+        confirmed: true,
+      }),
+    })
+    expect(endpoint.status).toBe(200)
+    const server = await getJson(`${loop.url}/api/mcp/servers`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'files', transport: 'stdio', command: 'node', enabled: true, confirmed: true }),
+    })
+    expect(server.status).toBe(200)
+    await expect(
+      sse.next((e) => e.event === 'change' && ['endpoints', 'mcp'].includes(JSON.parse(e.data).topic), 300)
+    ).rejects.toThrow('timed out waiting for SSE event')
+  })
 })
 
 describe('the assistant route', () => {
