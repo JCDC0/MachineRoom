@@ -436,9 +436,54 @@ export default function OrchestratorChat({
   }, [open, selected, lines.length, teamRows.length])
 
   useEffect(() => {
+    if (!modelConfirm && !effortConfirm && !compactOpen) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      if (modelSaving || effortSaving) return
+      if (modelConfirm) {
+        setModelConfirm(null)
+        setModelError('')
+        return
+      }
+      if (effortConfirm) {
+        setEffortConfirm('')
+        setEffortError('')
+        return
+      }
+      setCompactOpen(false)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [modelConfirm, effortConfirm, compactOpen, modelSaving, effortSaving])
+
+  useEffect(() => {
     if (!open) return undefined
     function onKey(event) {
       if (event.key !== 'Escape') return
+      if (modelsOpen) {
+        setModelsOpen(false)
+        return
+      }
+      if (effortOpen) {
+        setEffortOpen(false)
+        return
+      }
+      if (modelConfirm) {
+        setModelConfirm(null)
+        setModelError('')
+        return
+      }
+      if (effortConfirm) {
+        setEffortConfirm('')
+        setEffortError('')
+        return
+      }
+      if (compactOpen) {
+        setCompactOpen(false)
+        return
+      }
       if (confirm) {
         setConfirm(null)
         return
@@ -447,7 +492,7 @@ export default function OrchestratorChat({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, confirm, onClose])
+  }, [open, confirm, onClose, modelsOpen, effortOpen, modelConfirm, effortConfirm, compactOpen])
 
   useEffect(() => {
     function onOpenChat(event) {
