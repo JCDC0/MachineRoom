@@ -35,6 +35,8 @@ import { still } from './engine/sprites.js'
 import { createIdleWatch, idleAllowed, stageClassName } from './ui/idleView.js'
 import { LiveBadgeContext, OrchestratorsContext } from './ui/Transport.jsx'
 import { orchestratorAnswerList } from './ui/transportOrchestrators.js'
+import { displayName } from './ui/agentList.js'
+import { addFailureActivities, emptyFailureTray, failureAge, failureRows, FAILURE_TRAY_LIMIT } from './ui/failureTray.js'
 import Waiting from './ui/Waiting.jsx'
 import LensRail from './ui/LensRail.jsx'
 import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, lensShareAfterWheel, lensShareFromRail, multiplierText } from './ui/lensResize.js'
@@ -672,6 +674,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [dockCosts, setDockCosts] = useState(null)
   const [dockRuns, setDockRuns] = useState(NONE)
   const [dockTasks, setDockTasks] = useState(NONE)
+  const [failures, setFailures] = useState(emptyFailureTray)
   const targetCount = useRef(0)
   const latestBoardRef = useRef(null)
   const latestTasksRef = useRef(null)
@@ -1198,6 +1201,9 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         recorder?.push(frame)
         const activities = pipeline.push(frame)
         player.push(activities)
+        if (activities.length > 0) {
+          setFailures((current) => addFailureActivities(current, activities))
+        }
         learned()
         const added = activities
           .map((activity) => {
@@ -1418,6 +1424,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   })
   const inspectorTouches = inspector?.kind === 'file' ? roomRef.current?.touches?.(inspector.id) ?? NONE : NONE
   const webAgents = roomRef.current?.webAgents?.() ?? NONE
+  const failureList = failureRows(failures, FAILURE_TRAY_LIMIT)
+  const failureName = (key) => {
+    const agent = snapshot.agents.find((entry) => entry.key === key)
+    if (!agent) return key
+    return labels ? displayName(agent.key, labels) : agent.name
+  }
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
@@ -1481,6 +1493,36 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
               </div>
               <p className={`lens-corner is-bottom mono is-${lens.tone}`}>{lens.activity}</p>
             </div>
+            {mode === 'live' && live && failureList.rows.length > 0 && (
+              <div className="lens-failures" role="region" aria-label="Failures">
+                <div className="lens-failures-head">
+                  <span className="lens-failures-title mono">Failures</span>
+                  {failureList.more > 0 && (
+                    <span className="lens-failures-more mono">{`+${failureList.more}`}</span>
+                  )}
+                  <button
+                    type="button"
+                    className="lens-failures-clear mono"
+                    onClick={() => setFailures(emptyFailureTray())}
+                  >
+                    Clear
+                  </button>
+                </div>
+                {failureList.rows.map((row) => (
+                  <button
+                    key={row.id}
+                    type="button"
+                    className="lens-failure"
+                    aria-label={`Inspect ${failureName(row.agent)}`}
+                    onClick={() => focus(row.agent)}
+                  >
+                    <span className="lens-failure-agent">{failureName(row.agent)}</span>
+                    <span className="lens-failure-text">{row.text}</span>
+                    <span className="lens-failure-age mono">{failureAge(row.at, Date.now())}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {inspector && (
               <Inspector
                 target={inspector}

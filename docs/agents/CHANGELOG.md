@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A red tray in the live lens keeps this page session's failed runs and tool calls, newest first, until Clear or the lane ends a run well, and a click inspects the agent (task U119).
 - A yellow count on the Control button shows lane branches with commits ahead and opens Control on Reviews, and the Orchestrator button counts pending proposals plus orchestrators that wait for the owner (task U119).
 - A new branch whose name differs from an existing one only by case is refused on every platform, not only on Windows.
 - Reviews read each lane's last run from the bridge's own runs folder, not the default one.
