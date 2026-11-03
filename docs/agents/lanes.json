@@ -109,7 +109,6 @@
   "opencode4": {
     "name": "OpenCode 4",
     "harness": "OpenCode",
-    "retired": true,
     "model": "DeepSeek V4.1 Flash 1017",
     "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
     "reasoning": "max",
@@ -132,7 +131,6 @@
   "opencode5": {
     "name": "OpenCode 5",
     "harness": "OpenCode",
-    "retired": true,
     "model": "DeepSeek V4.1 Flash 1017",
     "modelHint": "in OpenCode's list it appears as opencode-go/deepseek-v4.1-flash",
     "reasoning": "max",

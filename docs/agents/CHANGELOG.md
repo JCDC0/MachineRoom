@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `opencode4` and `opencode5` are live lanes again, on the same DeepSeek V4.1 Flash model as the other OpenCode lanes.
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 
