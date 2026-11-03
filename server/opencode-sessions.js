@@ -88,6 +88,7 @@ export function createOpencodeSessionsReader(options = {}) {
   let messageStmt = null
   let primed = false
   let stopped = false
+  let lastError = ''
 
   function safeEmit(frame) {
     try {
@@ -102,7 +103,8 @@ export function createOpencodeSessionsReader(options = {}) {
       // Loaded on first use, so a bridge without --sessions never loads SQLite or prints its experimental warning.
       const { DatabaseSync } = process.getBuiltinModule('node:sqlite')
       db = new DatabaseSync(dbPath, { readOnly: true })
-    } catch {
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
       db = null
     }
     return db
@@ -418,7 +420,10 @@ export function createOpencodeSessionsReader(options = {}) {
       scan()
       quietEnds()
       forgetFinished()
-    } catch {}
+      lastError = ''
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error)
+    }
   }
 
   function stop() {
@@ -434,5 +439,5 @@ export function createOpencodeSessionsReader(options = {}) {
     }
   }
 
-  return { agent: { ...OPENCODE_SESSION_AGENT }, tick, stop }
+  return { agent: { ...OPENCODE_SESSION_AGENT }, tick, stop, problem: () => lastError }
 }

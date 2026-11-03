@@ -9,6 +9,7 @@
 - The `up` block names the room's process id and port (task S33).
 - `machine-room up` takes `--no-open`, and `machineroom --help` prints its own usage with the folder argument (task S33).
 - `/api/health` lists `problems` for a missing root, a missing built viewer, the last tree read error and a stopped session source, and `ok` is false when there is one (task S33).
+- The OpenCode session reader keeps its last error and `/api/health` names it as a problem (task S33).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

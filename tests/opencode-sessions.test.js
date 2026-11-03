@@ -412,6 +412,20 @@ describe('the OpenCode session reader', () => {
     expect(existsSync(dbPath)).toBe(false)
   })
 
+  it('keeps the last tick error and clears it after a good tick', () => {
+    const dir = tempDir()
+    const dbPath = join(dir, 'opencode.db')
+    withDb(dbPath, (db) => db.exec('CREATE TABLE wrong (id TEXT)'))
+    const { reader } = startReader({ dbPath, projectRoot: dir, runsFolder: join(dir, 'runs') })
+
+    reader.tick()
+    expect(reader.problem()).toContain('no such table: session_v2')
+
+    withDb(dbPath, createTables)
+    reader.tick()
+    expect(reader.problem()).toBe('')
+  })
+
   it('reads the database under XDG_DATA_HOME when dbPath is not given', () => {
     const base = tempDir()
     const xdg = join(base, 'xdg')
