@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   DANCE_RISE_MS,
   DANCE_SETTLE_MS,
@@ -318,6 +318,28 @@ describe('the dance envelope', () => {
     expect(next.from).toBeCloseTo(before, 10)
     expect(next.to).toBeGreaterThanOrEqual(before)
     expect(danceEnvelope(next.from, next.to, 0)).toBeCloseTo(before, 10)
+  })
+})
+
+describe('the hub ring on a beat', () => {
+  it('brightens over the envelope and settles back', () => {
+    let clock = 1000
+    const spy = vi.spyOn(performance, 'now').mockImplementation(() => clock)
+    try {
+      const hub = createHub(new THREE.Scene(), ROSTER, LADDER)
+      const line = arcCentre(hub.group.getObjectByName('sector:frontend'))
+      const base = line.userData.baseOpacity
+      expect(hub.beat(1)).toBe(true)
+      clock += DANCE_RISE_MS
+      hub.update(0, 0.016)
+      expect(line.material.opacity).toBeGreaterThan(base)
+      clock += DANCE_SETTLE_MS
+      hub.update(0.5, 0.016)
+      expect(line.material.opacity).toBeCloseTo(base)
+      hub.dispose()
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

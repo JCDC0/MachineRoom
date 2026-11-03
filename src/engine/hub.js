@@ -461,7 +461,7 @@ export function createHub(scene, agentsOrCount, ladder = null) {
   function update(time, delta, camera = null, viewportHeight = 0) {
     const isStill = still()
     boost = Math.max(0, boost - delta * 1.2)
-    const danceBoost = isStill ? 0 : danceEnvelope(danceFrom, danceTo, time * 1000 - danceAt)
+    const danceBoost = isStill ? 0 : danceEnvelope(danceFrom, danceTo, performance.now() - danceAt)
     const extra = Math.max(boost, danceBoost)
     const workingSectors = new Set()
     for (const key of workingSet) workingSectors.add(sectorIdForKey(key, currentLadder))
