@@ -26,6 +26,10 @@ import McpSettings, {
 import Settings from '../src/ui/Settings.jsx'
 import { buttonWithText, click, withDom } from './helpers/uiDom.js'
 
+function isDisabled(node) {
+  return node.disabled === true || node.getAttribute('disabled') !== null
+}
+
 const SERVERS = [
   {
     name: 'docs',
@@ -281,6 +285,10 @@ describe('the MCP settings panel', () => {
       await click(root, buttonWithText(row, 'Remove'))
       const card = container.querySelector('.brief-confirm-card')
       expect(card).not.toBeNull()
+      const rows = container.querySelectorAll('.mr-mcp-server')
+      expect(isDisabled(rows[0].querySelector('[role="switch"]'))).toBe(true)
+      expect(isDisabled(buttonWithText(rows[0], 'Remove'))).toBe(true)
+      expect(isDisabled(buttonWithText(rows[1], 'Remove'))).toBe(true)
       const first = buttonWithText(card, 'Remove server')
       const last = buttonWithText(card, 'Cancel')
       expect(dom.document.activeElement).toBe(first)
@@ -297,6 +305,8 @@ describe('the MCP settings panel', () => {
       })
       expect(container.querySelector('.brief-confirm-card')).toBeNull()
       expect(event.cancelBubble).toBe(true)
+      expect(isDisabled(rows[0].querySelector('[role="switch"]'))).toBe(false)
+      expect(isDisabled(buttonWithText(rows[0], 'Remove'))).toBe(false)
       expect(calls.remove).toEqual([])
     })
   })

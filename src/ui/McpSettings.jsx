@@ -396,6 +396,7 @@ export default function McpSettings({
   for (const item of [...servers.map((server) => server.name), ...tools.map((tool) => tool.server)]) {
     if (item !== '' && !serverNames.includes(item)) serverNames.push(item)
   }
+  const rowLocked = busy !== '' || removeConfirm !== null
 
   return (
     <section className="hud-settings-section mr-mcp" aria-labelledby="mr-mcp-title">
@@ -421,7 +422,7 @@ export default function McpSettings({
                     aria-checked={server.enabled}
                     aria-label={`${server.enabled ? 'Disable' : 'Enable'} ${server.name}`}
                     className={`hud-settings-switch ${server.enabled ? 'is-on' : ''}`}
-                    disabled={busy !== ''}
+                    disabled={rowLocked}
                     onClick={() => toggleServer(server)}
                   >
                     {server.enabled ? 'On' : 'Off'}
@@ -429,7 +430,7 @@ export default function McpSettings({
                   <button
                     type="button"
                     className="mr-mcp-remove mono"
-                    disabled={busy !== ''}
+                    disabled={rowLocked}
                     onClick={() => setRemoveConfirm(server)}
                   >
                     Remove
