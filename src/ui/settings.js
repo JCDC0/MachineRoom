@@ -174,6 +174,10 @@ function normalizeSettings(raw) {
     }
   }
 
+  if (raw.music && typeof raw.music === 'object' && !Array.isArray(raw.music)) {
+    out.music = { ...raw.music }
+  }
+
   return out
 }
 
