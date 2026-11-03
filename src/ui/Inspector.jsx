@@ -11,7 +11,8 @@ import {
   breadcrumbRows,
   cutPath,
   effortForAgent,
-  explorerRows,
+  explorerMoreText,
+  explorerView,
   formatBytes,
   formatTime,
   gitGraphRows,
@@ -152,29 +153,40 @@ export default function Inspector({
       return undefined
     }
     let active = true
+    let ticket = 0
+    let offline = false
     async function read() {
+      ticket += 1
+      const mine = ticket
       try {
         const answer = await client.network()
-        if (active) setConnection(answer?.online === true)
+        if (!active || mine !== ticket || offline) return
+        setConnection(answer?.online === true)
       } catch {
-        if (active) setConnection(null)
+        if (active && mine === ticket && !offline) setConnection(null)
       }
     }
     function onOffline() {
+      offline = true
+      ticket += 1
       if (active) setConnection(false)
+    }
+    function onOnline() {
+      offline = false
+      read()
     }
     read()
     const timer = setInterval(read, 30000)
     const unsubscribe = client.subscribe?.((notice) => {
       if (notice?.topic === 'network') read()
     })
-    window.addEventListener('online', read)
+    window.addEventListener('online', onOnline)
     window.addEventListener('offline', onOffline)
     return () => {
       active = false
       clearInterval(timer)
       if (typeof unsubscribe === 'function') unsubscribe()
-      window.removeEventListener('online', read)
+      window.removeEventListener('online', onOnline)
       window.removeEventListener('offline', onOffline)
     }
   }, [item?.kind, bridge, client])
@@ -239,8 +251,8 @@ export default function Inspector({
     }
   }, [item?.kind, item?.id, orchestratorAgent, bridge, client])
 
-  const folderRows = useMemo(
-    () => (item?.kind === 'folder' ? explorerRows(item.id, tree ?? {}) : []),
+  const folderView = useMemo(
+    () => (item?.kind === 'folder' ? explorerView(item.id, tree ?? {}) : { rows: [], total: 0, more: false }),
     [item?.kind, item?.id, tree]
   )
   const crumbs = useMemo(
@@ -366,11 +378,11 @@ export default function Inspector({
                 </span>
               ))}
             </nav>
-            {folderRows.length === 0 ? (
+            {folderView.rows.length === 0 ? (
               <p className="mr-inspector-note mono">This folder is empty.</p>
             ) : (
               <ul className="mr-inspector-explorer" aria-label="Folder contents">
-                {folderRows.map((row) => (
+                {folderView.rows.map((row) => (
                   <li className={`mr-inspector-entry is-${row.kind}`} key={`${row.kind}-${row.path}`}>
                     <button
                       type="button"
@@ -384,6 +396,9 @@ export default function Inspector({
                 ))}
               </ul>
             )}
+            {folderView.more ? (
+              <p className="mr-inspector-note mono">{explorerMoreText(folderView.total)}</p>
+            ) : null}
           </>
         )}
 

@@ -3,7 +3,7 @@ import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
 import FamilyTree from '../src/ui/FamilyTree.jsx'
-import { DIRECT_KEY_PROBLEM } from '../src/ui/family.js'
+import { DIRECT_KEY_PROBLEM, LANES_JSON_SAVE_PROBLEM } from '../src/ui/family.js'
 import { buttonWithText, classesOf, click, settle, withDom } from './helpers/uiDom.js'
 
 const NODES = [
@@ -177,6 +177,22 @@ function rowByLabel(container, label) {
 }
 
 describe('FamilyTree rows', () => {
+  it('shows the bridge sentence when the family read fails', async () => {
+    const { client } = makeClient()
+    client.family = async () => {
+      throw new Error('The lane file is missing.')
+    }
+    client.lanes = async () => {
+      throw new Error('The lane file is missing.')
+    }
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      expect(container.textContent).toContain('The lane file is missing.')
+      expect(container.querySelector('.mr-side-count').textContent).toBe('Agents failed to load.')
+      expect(container.textContent).not.toContain('The family tree is not available.')
+    })
+  })
+
   it('draws the orchestrator, the sub and every lane in tree order', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
@@ -343,6 +359,34 @@ describe('FamilyTree rows', () => {
       } finally {
         dom.window.removeEventListener('machineroom:open-chat', onOpen)
       }
+    })
+  })
+
+  it('offers Save on the lane editor only for a lane the owner made', async () => {
+    const { client } = makeClient()
+    client.updateLane = async () => ({ ok: true })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, rowByLabel(container, 'OpenCode').querySelector('.mr-family-open'))
+      const editor = container.querySelector('.mr-family-editor')
+      const save = buttonWithText(editor, 'Save')
+      expect(save.getAttribute('disabled')).not.toBeNull()
+      expect(editor.textContent).toContain(LANES_JSON_SAVE_PROBLEM)
+    })
+  })
+
+  it('offers Save on a lane the owner made', async () => {
+    const { client } = makeClient()
+    client.updateLane = async () => ({ ok: true })
+    const nodes = FAMILY.nodes.map((node) => (node.id === 'opencode' ? { ...node, custom: true } : node))
+    client.family = async () => ({ ...FAMILY, nodes })
+    await withDom(async ({ container, root }) => {
+      await mount(root, client)
+      await click(root, rowByLabel(container, 'OpenCode').querySelector('.mr-family-open'))
+      const editor = container.querySelector('.mr-family-editor')
+      const save = buttonWithText(editor, 'Save')
+      expect(save.getAttribute('disabled')).toBeNull()
+      expect(editor.textContent).not.toContain(LANES_JSON_SAVE_PROBLEM)
     })
   })
 

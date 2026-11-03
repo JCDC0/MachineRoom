@@ -21,10 +21,15 @@ function musicBases() {
   return [...new Set(bases)]
 }
 
-async function readMusicList() {
+async function readMusicList(signal = null) {
   for (const base of musicBases()) {
+    if (signal?.aborted) return null
+    const controller = new AbortController()
+    const stop = () => controller.abort()
+    if (signal) signal.addEventListener('abort', stop)
+    const timer = setTimeout(stop, 5000)
     try {
-      const response = await fetch(`${base}/api/music`, { signal: AbortSignal.timeout(5000) })
+      const response = await fetch(`${base}/api/music`, { signal: controller.signal })
       if (!response.ok) continue
       const body = await response.json()
       if (!body || !Array.isArray(body.tracks)) continue
@@ -33,7 +38,12 @@ async function readMusicList() {
         folder: typeof body.folder === 'string' ? body.folder : '',
         tracks: body.tracks.filter((name) => typeof name === 'string'),
       }
-    } catch {}
+    } catch {
+      if (signal?.aborted) return null
+    } finally {
+      clearTimeout(timer)
+      if (signal) signal.removeEventListener('abort', stop)
+    }
   }
   return null
 }
@@ -63,13 +73,15 @@ export default function MusicPlayer() {
   const [failed, setFailed] = useState(false)
   const [index, setIndex] = useState(0)
   const [playing, setPlaying] = useState(false)
+  const [playError, setPlayError] = useState('')
   const [shuffle, setShuffle] = useState(false)
   const [repeat, setRepeat] = useState(false)
   const [volume, setVolume] = useState(() => loadSoundSettings(store()).musicVolume)
 
   useEffect(() => {
     let active = true
-    readMusicList().then((found) => {
+    const controller = new AbortController()
+    readMusicList(controller.signal).then((found) => {
       if (!active) return
       setLoading(false)
       if (!found) {
@@ -77,10 +89,14 @@ export default function MusicPlayer() {
         return
       }
       setList(found)
-      setIndex(0)
+      const playingUrl = sound.musicTrack()
+      const at = playingUrl === '' ? -1 : found.tracks.findIndex((name) => trackUrl(found.base, name) === playingUrl)
+      setIndex(at >= 0 ? at : 0)
+      setPlaying(at >= 0 && sound.musicPlaying())
     })
     return () => {
       active = false
+      controller.abort()
     }
   }, [])
 
@@ -109,9 +125,15 @@ export default function MusicPlayer() {
       : previousIndex(index, list.tracks.length)
     if (next < 0) return
     setIndex(next)
+    setPlayError('')
     if (playing) {
       sound.arm()
-      sound.playMusic(trackUrl(list.base, list.tracks[next]))
+      const started = sound.playMusic(trackUrl(list.base, list.tracks[next]))
+      started.then((ok) => {
+        if (ok) return
+        setPlaying(false)
+        setPlayError(`Could not play ${list.tracks[next]}.`)
+      })
     }
   }
 
@@ -120,13 +142,17 @@ export default function MusicPlayer() {
     if (playing) {
       sound.pauseMusic()
       setPlaying(false)
+      setPlayError('')
       return
     }
     sound.arm()
+    setPlayError('')
     const started = sound.playMusic(trackUrl(list.base, list.tracks[index]))
     setPlaying(true)
     started.then((ok) => {
-      if (!ok) setPlaying(false)
+      if (ok) return
+      setPlaying(false)
+      setPlayError(`Could not play ${list.tracks[index]}.`)
     })
   }
 
@@ -198,6 +224,7 @@ export default function MusicPlayer() {
         </div>
       )}
       {failed && <p className="hud-sound-empty">Could not read the music folder.</p>}
+      {playError && <p className="hud-sound-empty">{playError}</p>}
     </div>
   )
 }

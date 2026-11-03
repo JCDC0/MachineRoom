@@ -19,6 +19,19 @@
 - `machine-room up` takes `--no-open`, and `machineroom --help` prints its own usage with the folder argument (task S33).
 - `/api/health` lists `problems` for a missing root, a missing built viewer, the last tree read error and a stopped session source, and `ok` is false when there is one (task S33).
 - The OpenCode session reader keeps its last error and `/api/health` names it as a problem (task S33).
+- The architecture no longer promises a Detach button and its unused styles are gone (task U122).
+- SearchSettings uses the page's client and is left out in a replay (task U122).
+- Every effect, Beeps and Dance switch has an accessible name (task U122).
+- The inspector keeps only the newest network answer and lets an offline event win (task U122).
+- The lane editor offers Save only on a lane the owner made and says why otherwise (task U122).
+- A failed family read shows the bridge's sentence and a failed count line (task U122).
+- The inspector's folder list draws at most 200 rows and says how many more (task U122).
+- A key saved by the quick form appears in the custom form's slot list at once (task U122).
+- The music list read stops when the panel closes (task U122).
+- A failed music start says which track could not play (task U122).
+- Reopened Settings shows the track that is still playing (task U122).
+- A lane row without a saved label shows the lane's own name (task U122).
+- The confirm card for a lane move names every other sub that loses lanes or goes away (task U122).
 - A lane merge from Reviews sends the git notice to open pages, as the git routes do.
 - Give Claude subagent Task calls the task kind (task S29).
 

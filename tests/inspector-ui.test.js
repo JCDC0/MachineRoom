@@ -211,6 +211,26 @@ describe('the inspector panel', () => {
     })
   })
 
+  it('caps a big folder at 200 rows and says how many more', async () => {
+    const files = Array.from(
+      { length: 205 },
+      (_, index) => `big/f${String(index).padStart(3, '0')}.js`
+    )
+    const tree = { rootName: 'demo', dirs: ['', 'big'], files }
+
+    await withDom(async ({ container, root }) => {
+      await mount(root, {
+        target: { kind: 'folder', id: 'big' },
+        live: true,
+        tree,
+        lanes: [],
+      })
+
+      expect(container.querySelectorAll('.mr-inspector-entry-btn')).toHaveLength(200)
+      expect(container.textContent).toContain('Showing the first 200 of 205.')
+    })
+  })
+
   it('lists a folder and follows an inner folder click', async () => {
     const onOpenPath = vi.fn()
     const tree = {
@@ -234,6 +254,38 @@ describe('the inspector panel', () => {
       expect(onOpenPath).toHaveBeenCalledWith('src/ui')
       await click(root, container.querySelectorAll('.mr-inspector-crumb-btn')[0])
       expect(onOpenPath).toHaveBeenCalledWith('')
+    })
+  })
+
+  it('keeps only the newest network answer and lets offline win', async () => {
+    let resolveNetwork = null
+    const client = makeClient({
+      network: () =>
+        new Promise((resolve) => {
+          resolveNetwork = resolve
+        }),
+    })
+
+    await withDom(async ({ container, dom, root }) => {
+      await mount(root, {
+        target: { kind: 'internet', id: 'internet' },
+        live: true,
+        bridge: true,
+        client,
+        lanes: [],
+      })
+      expect(container.textContent).toContain('Connection not reported')
+
+      await act(async () => {
+        dom.window.dispatchEvent({ type: 'offline' })
+      })
+      expect(container.textContent).toContain('No connection')
+
+      await act(async () => {
+        resolveNetwork({ online: true, checkedAt: 1 })
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      expect(container.textContent).toContain('No connection')
     })
   })
 

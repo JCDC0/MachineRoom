@@ -119,6 +119,38 @@ function rowByLabel(container, label) {
 }
 
 describe('FamilyTree ladder changes', () => {
+  it('names the other sub that loses its lanes on the add card', async () => {
+    const orchestrators = [
+      { id: 'orchestrator', name: 'Orchestrator' },
+      { id: 'frontend', name: 'Frontend', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', lanes: ['opencode2'] },
+    ]
+    const { client } = makeClient(orchestrators)
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(FamilyTree, { client }))
+      })
+      await settle()
+
+      for (const label of ['OpenCode 2', 'OpenCode']) {
+        const check = rowByLabel(container, label).querySelector('.mr-family-check')
+        await act(async () => {
+          check.checked = true
+          check.click()
+        })
+      }
+      await act(async () => {
+        buttonWithText(container, 'Add sub orchestrator').click()
+      })
+      const form = container.querySelector('.mr-family-sub-form')
+      await act(async () => {
+        form.dispatchEvent({ type: 'submit', bubbles: true, cancelable: true })
+      })
+
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Frontend goes away.')
+    })
+  })
+
   it('keeps a sub that was added while the remove card was open', async () => {
     const orchestrators = [
       { id: 'orchestrator', name: 'Orchestrator' },

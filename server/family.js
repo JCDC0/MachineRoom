@@ -281,10 +281,12 @@ export function buildFamilyNodes({
       mainNode.children.push(lane.key)
     }
     const working = typeof isWorking === 'function' ? Boolean(isWorking(lane.key)) : false
+    const savedLabel = typeof labels[lane.key] === 'string' ? labels[lane.key].trim() : ''
+    const laneName = typeof lane.name === 'string' ? lane.name.trim() : ''
     laneNodes.push({
       id: lane.key,
       kind: 'lane',
-      label: typeof labels[lane.key] === 'string' ? labels[lane.key] : 'Code agent',
+      label: savedLabel || laneName || 'Code agent',
       harness: lane.harness,
       model: lane.model,
       effort: lane.effort ?? null,

@@ -52,6 +52,8 @@ export function agentStateWord(agent = {}) {
   return { word: 'idle', tool: '', command }
 }
 
+export const EXPLORER_LIMIT = 200
+
 export function explorerRows(path = '', tree = {}) {
   const folder = String(path ?? '')
   const dirs = Array.isArray(tree?.dirs) ? tree.dirs : []
@@ -76,6 +78,20 @@ export function explorerRows(path = '', tree = {}) {
     return left.name.localeCompare(right.name)
   })
   return rows
+}
+
+export function explorerView(path = '', tree = {}) {
+  const rows = explorerRows(path, tree)
+  const total = rows.length
+  return {
+    rows: total > EXPLORER_LIMIT ? rows.slice(0, EXPLORER_LIMIT) : rows,
+    total,
+    more: total > EXPLORER_LIMIT,
+  }
+}
+
+export function explorerMoreText(total) {
+  return `Showing the first ${EXPLORER_LIMIT} of ${total}.`
 }
 
 export function breadcrumbRows(path = '', rootName = '') {

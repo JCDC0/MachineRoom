@@ -158,11 +158,25 @@ describe('buildFamilyNodes pure helper', () => {
     expect(lane).toMatchObject({
       id: 'opencode',
       kind: 'lane',
-      label: 'Code agent',
+      label: 'OpenCode',
       parent: 'orchestrator',
       active: false,
       custom: false,
     })
+  })
+
+  it('falls back to the lane name and then Code agent', () => {
+    const root = tempDir('mr-bn-name-')
+    const runs = tempDir('mr-bn-name-runs-')
+    const lanes = {
+      ...SAMPLE_LANES,
+      opencode: { name: '  ', cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/deepseek-v4.1-flash' } },
+      opencode2: { cli: { harness: 'opencode', bin: process.execPath, model: 'opencode-go/deepseek-v4.1-flash' } },
+    }
+    const nodes = buildFamilyNodes({ projectRoot: root, runsFolder: runs, lanesConfig: lanes })
+    expect(nodes.find((n) => n.id === 'opencode').label).toBe('Code agent')
+    expect(nodes.find((n) => n.id === 'opencode2').label).toBe('opencode2')
+    expect(nodes.find((n) => n.id === 'claude').label).toBe('Claude Code')
   })
 
   it('uses custom labels from labels file', () => {

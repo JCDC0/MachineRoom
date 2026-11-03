@@ -159,6 +159,7 @@ const engine = {
   levels: [],
   lastLevelAt: 0,
   lastBeatAt: 0,
+  musicTrack: '',
   endedListeners: new Set(),
 }
 
@@ -295,6 +296,7 @@ export const sound = {
       audio.src = url
       if (audio.dataset) audio.dataset.mrSrc = url
     }
+    if (typeof url === 'string' && url) engine.musicTrack = url
     audio.volume = Math.min(1, Math.max(0, Number(engine.settings.musicVolume) || 0))
     try {
       return Promise.resolve(audio.play()).then(() => true).catch(() => false)
@@ -304,6 +306,9 @@ export const sound = {
   },
   pauseMusic() {
     engine.audio?.pause()
+  },
+  musicTrack() {
+    return engine.musicTrack
   },
   musicPlaying() {
     return Boolean(engine.audio && !engine.audio.paused && !engine.audio.ended)
