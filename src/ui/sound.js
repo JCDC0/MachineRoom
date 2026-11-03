@@ -81,7 +81,7 @@ function groupLevel(bands, indices) {
 }
 
 export function bandGroups(bands) {
-  const list = Array.isArray(bands) ? bands : []
+  const list = bands && typeof bands === 'object' && Number.isFinite(bands.length) ? bands : []
   return { low: groupLevel(list, LOW_BANDS), high: groupLevel(list, HIGH_BANDS) }
 }
 
