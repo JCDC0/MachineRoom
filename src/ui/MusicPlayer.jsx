@@ -253,6 +253,7 @@ export default function MusicPlayer() {
     setVolume(next)
     sound.setMusicVolume(next)
     saveSoundSettings(store(), { musicVolume: next })
+    saveMusicPlaylist(shownChoice, store())
   }
 
   return (
