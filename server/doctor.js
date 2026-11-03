@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { accessSync, constants, mkdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readTree } from './index.js'
 import { runsFolder } from './lanes-source.js'
 import { programPath } from './programPath.js'
 
@@ -10,6 +11,10 @@ const VARIABLE = /%([A-Za-z_][A-Za-z0-9_]*)%/g
 
 export const ALL_CHECKS_PASSED = 'All checks passed.'
 export const NEXT_STEP = 'Start a lane with npm run run-lane -- opencode T2, or press C in the room for Dispatch.'
+export const PROJECT_READ_LIMIT_MS = 10000
+const PROJECT_READ_TIMEOUT = 'The folder did not answer in time.'
+const PROJECT_READ_FAILED = 'The folder could not be listed.'
+const PROJECT_READ_EMPTY = 'The read returned no file list.'
 
 export function doctorSettings(options = {}, env = process.env, cwd = process.cwd()) {
   return {
@@ -189,6 +194,60 @@ export function runDoctor(options = {}) {
   for (const line of laneLines(settings.lanesFile, env)) add(line)
 
   return { exitCode: ok ? 0 : 1, lines, folderOk: folder.ok }
+}
+
+export function projectCounts(files) {
+  const folders = new Set()
+  let count = 0
+  for (const file of Array.isArray(files) ? files : []) {
+    if (typeof file !== 'string' || file === '') continue
+    count += 1
+    const parts = file.split('/')
+    if (parts.length === 1) folders.add('')
+    for (let depth = 1; depth < parts.length; depth += 1) folders.add(parts.slice(0, depth).join('/'))
+  }
+  return { files: count, folders: folders.size }
+}
+
+export function projectLine(files) {
+  const counts = projectCounts(files)
+  const fileWord = counts.files === 1 ? 'file' : 'files'
+  const folderWord = counts.folders === 1 ? 'folder' : 'folders'
+  return { ok: true, text: `The project holds ${counts.files} ${fileWord} in ${counts.folders} ${folderWord}.` }
+}
+
+export async function readProjectLine(projectRoot, { read = readTree, limit = PROJECT_READ_LIMIT_MS } = {}) {
+  let timer = null
+  try {
+    const tree = await Promise.race([
+      Promise.resolve().then(() => read(projectRoot)),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(PROJECT_READ_TIMEOUT)), limit)
+      }),
+    ])
+    if (!tree || !Array.isArray(tree.files)) {
+      return { ok: false, text: `The project could not be read: ${PROJECT_READ_EMPTY}` }
+    }
+    return projectLine(tree.files)
+  } catch (error) {
+    const reason = error instanceof Error && error.message === PROJECT_READ_TIMEOUT ? PROJECT_READ_TIMEOUT : PROJECT_READ_FAILED
+    return { ok: false, text: `The project could not be read: ${reason}` }
+  } finally {
+    if (timer !== null) clearTimeout(timer)
+  }
+}
+
+export async function runDoctorWithProject(options = {}) {
+  const env = options.env ?? process.env
+  const result = runDoctor(options)
+  if (!result.folderOk) return { ...result, project: null }
+  const project = await readProjectLine(doctorSettings(options, env).projectRoot, {
+    read: options.readProject ?? readTree,
+    limit: options.projectReadLimitMs ?? PROJECT_READ_LIMIT_MS,
+  })
+  const lines = [...result.lines]
+  lines.splice(1, 0, `${project.ok ? 'ok' : 'FAIL'} ${project.text}`)
+  return { ...result, lines, project, exitCode: project.ok ? result.exitCode : 1 }
 }
 
 export function openProgramName(platform = process.platform) {

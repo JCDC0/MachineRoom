@@ -172,7 +172,8 @@ describe('machine-room up', () => {
     expect(checks.length).toBeGreaterThan(3)
     expect(checks.every((line) => /^(ok|warn|FAIL) /.test(line))).toBe(true)
     expect(checks[0]).toContain('The project folder')
-    expect(checks[1]).toContain('Git is found at')
+    expect(checks[1]).toBe('ok The project holds 0 files in 0 folders.')
+    expect(checks[2]).toContain('Git is found at')
     expect(lines).not.toContain(SOME_CHECKS_FAILED)
 
     await kill(run)
