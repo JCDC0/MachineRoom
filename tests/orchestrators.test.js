@@ -1017,6 +1017,25 @@ describe('the orchestrator registry', () => {
     expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
   })
 
+  it('carries the saved subagent depth in the main and sub instructions', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    writeFileSync(join(files.runs, 'agent-depth.json'), `${JSON.stringify({ limit: 4, unlocked: true })}\n`)
+    const rig = makeRig(files)
+
+    rig.registry.find('orchestrator').send({ text: 'Plan the work', confirmed: true })
+    await waitIdle(rig.registry, 'orchestrator', 1)
+    rig.registry.find('frontend').send({ text: 'Plan your sector', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+
+    const instructions = files
+      .calls()
+      .filter((call) => call.args.includes('--append-system-prompt'))
+      .map((call) => call.args[call.args.indexOf('--append-system-prompt') + 1])
+    const line = 'Spawn subagents at most 4 levels deep. A subagent at depth 4 spawns none.'
+    expect(instructions.some((text) => text.includes(line))).toBe(true)
+    expect(instructions.some((text) => text.includes('Your id is `frontend`') && text.includes(line))).toBe(true)
+  })
+
   it('stops a removed sub, saves it idle and restores it without a restart message', async () => {
     const files = makeBase({ ladder: { subs: [FRONTEND] } })
     const rig = makeRig(files)

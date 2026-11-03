@@ -384,6 +384,13 @@ describe('subPrompt', () => {
     expect(text).not.toContain('\u2014')
   })
 
+  it('tells the sub how deep its subagents may spawn', () => {
+    expect(text).toContain('Spawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.')
+    expect(subPrompt(ladder.subs[0], 'orchestrator', ladder, 3)).toContain(
+      'Spawn subagents at most 3 levels deep. A subagent at depth 3 spawns none.',
+    )
+  })
+
   it('says an open scope is open and lists no lanes when there are none', () => {
     const open = subPrompt(sub({ lanes: [], restricted: false }), { id: 'main-2', name: 'Main' })
     expect(open).toContain('Your lanes: none.')

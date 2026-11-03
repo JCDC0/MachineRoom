@@ -366,7 +366,7 @@ describe('one orchestrator turn', () => {
     expect(rig.orchestrator.token).toHaveLength(32)
     expect(rig.answer().token).toBeUndefined()
     expect(valueAfter(calls[0].args, '--append-system-prompt')).toBe(
-      `project=${rig.projectRoot}\nmachineroom=${REPO_ROOT}\nruns=${rig.runs}\nbridge=http://127.0.0.1:5999\nSend the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token} on every bridge request.`
+      `project=${rig.projectRoot}\nmachineroom=${REPO_ROOT}\nruns=${rig.runs}\nbridge=http://127.0.0.1:5999\nSend the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token} on every bridge request.\n\nSpawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.`
     )
     const reply = rig.answer().messages.at(-1)
     expect(reply.from).toBe('orchestrator')
@@ -496,7 +496,8 @@ describe('one orchestrator turn', () => {
     expect(instruction).toContain(rig.projectRoot)
     expect(instruction).toContain('Never push')
     expect(instruction).toContain(`Send the header X-MachineRoom-Orchestrator: ${rig.orchestrator.token}`)
-    expect(instruction.split(/\.\s+/)).toHaveLength(4)
+    expect(instruction).toContain('Spawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.')
+    expect(instruction.split(/\.\s+/)).toHaveLength(6)
   })
 
   it('fills the scratch folder in the guide and makes it before the turn', async () => {

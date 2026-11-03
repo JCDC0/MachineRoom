@@ -1,4 +1,5 @@
 import { OWNER_ORDER } from '../harnesses/index.js'
+import { agentDepthLine } from '../model/hierarchy.js'
 
 const BRIEF_LINE = /^\*\*([A-Z]\d+[a-z]?)\. (.+?)\.\*\*\s*(.*)$/
 const OWNER_TAIL = /^(.*?)\s*\(([^()]*)\)$/
@@ -90,7 +91,7 @@ export function modelFor(lane, briefId) {
   return lane.models?.[briefId] ?? lane.model
 }
 
-export function buildPrompt({ briefs, laneKey, lanes, rules, version }) {
+export function buildPrompt({ briefs, laneKey, lanes, rules, version, agentDepth = 2 }) {
   const lane = Object.hasOwn(lanes, laneKey) ? lanes[laneKey] : null
   if (!lane) throw new Error(`There is no lane named ${laneKey}.`)
   if (!Array.isArray(briefs) || briefs.length === 0) throw new Error('Choose at least one brief.')
@@ -110,6 +111,8 @@ export function buildPrompt({ briefs, laneKey, lanes, rules, version }) {
   for (const rule of rules.rules) lines.push(`- ${rule}`)
   for (const note of lane.notes ?? []) lines.push(`- ${note}`)
   if (lane.forbidden.length) lines.push(`- Do not touch these paths: ${lane.forbidden.join(', ')}. If you need a change there, stop and say so in your report.`)
+  lines.push('')
+  lines.push(agentDepthLine(agentDepth))
   lines.push('')
   lines.push('Read first, in this order: AGENTS.md (it points to the real guide), docs/agents/ARCHITECTURE.md, then the brief below in docs/agents/TASKS.md.')
   for (const brief of briefs) {

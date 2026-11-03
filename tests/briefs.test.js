@@ -160,6 +160,20 @@ describe('buildPrompt', () => {
     expect(prompt).not.toContain('undefined')
   })
 
+  it('tells the lane how deep subagents may spawn, from the saved limit', () => {
+    const prompt = make(['U4'], 'opencode')
+    expect(prompt).toContain('Spawn subagents at most 2 levels deep. A subagent at depth 2 spawns none.')
+    const deeper = buildPrompt({
+      briefs: [byId('U4')],
+      laneKey: 'opencode',
+      lanes,
+      rules,
+      version: '0.1.35',
+      agentDepth: 4,
+    })
+    expect(deeper).toContain('Spawn subagents at most 4 levels deep. A subagent at depth 4 spawns none.')
+  })
+
   it('builds one prompt for several tasks and says how to commit and report', () => {
     const prompt = make(['G5', 'P5'], 'hermes')
     expect(prompt).toContain('Model to select in Hermes: deepseek/deepseek-v4.1-flash-1017 (the OpenRouter id')
