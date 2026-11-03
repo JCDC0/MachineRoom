@@ -1,5 +1,5 @@
 import { basename } from '../paths.js'
-import { commandTouch, createLineReader, fileTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
+import { commandTouch, createLineReader, fileTouch, folderTouch, labelFor, looksFailed, parseJson, shorten, toolEnd, toolStart } from './common.js'
 
 const TOOLS = { shell: 'shell', bash: 'shell', read: 'read', write: 'write', edit: 'edit', glob: 'search', grep: 'search', list: 'search', websearch: 'web', webfetch: 'web' }
 const MCP_TOOL = /^(mcp__|mcp_call_tool$|mcp_list_tools$)/
@@ -121,7 +121,10 @@ export function createOpencodeParser(ctx) {
       touches = commandTouch(ctx, command)
       label = `$ ${shorten(command)}`
     } else if (tool === 'search') {
-      label = `${name} ${shorten(input.pattern ?? input.path ?? '')}`
+      const raw = typeof input.path === 'string' ? input.path : ''
+      const touch = folderTouch(ctx, raw)
+      if (touch) touches = [touch]
+      label = `${name} ${touch ? touch.path || '.' : basename(raw) || '.'}`
     } else if (tool === 'web') {
       const shown = name === 'webfetch' ? input.url ?? '' : input.query ?? ''
       label = shown ? `web ${name === 'webfetch' ? 'fetch' : 'search'} ${shorten(shown)}` : `web ${name === 'webfetch' ? 'fetch' : 'search'}`

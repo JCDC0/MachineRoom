@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- OpenCode search tools touch their target folder and name it in the label (task S29).
+
 - Raise the live lane source partial line limit to 8 MB (task S29).
 
 - Anchor every branch of the parser failure pattern to a line start (task S29).

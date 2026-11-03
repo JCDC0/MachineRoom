@@ -200,6 +200,26 @@ describe('opencode parser', () => {
     expect(out[2]).toMatchObject({ tool: 'web', label: 'web fetch https://example.com/docs', touches: [] })
   })
 
+  it('maps an opencode search to a folder touch and names the folder in its label', () => {
+    const parser = createOpencodeParser(ctx)
+    const out = parser.push(
+      lines({
+        type: 'tool_use',
+        part: {
+          id: 's1',
+          tool: 'grep',
+          state: { status: 'completed', input: { pattern: 'render', path: 'C:\\Temp\\agent-sandbox\\src' } },
+        },
+      }),
+      9000
+    )
+    expect(out[0]).toMatchObject({
+      tool: 'search',
+      label: 'grep src',
+      touches: [{ path: 'src', mode: 'list', kind: 'dir' }],
+    })
+  })
+
   it('turns an error event into an error activity', () => {
     const parser = createOpencodeParser(ctx)
     const out = parser.push(lines({ type: 'error', error: { message: 'Upstream request failed' } }), 7000)

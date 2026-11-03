@@ -46,6 +46,12 @@ export function fileTouch(ctx, rawPath, tool) {
   return { relative, touches: [{ path: relative, mode, kind: 'file' }] }
 }
 
+export function folderTouch(ctx, raw) {
+  const relative = raw === undefined || raw === null || raw === '' ? '' : relativeTo(ctx.rootName, raw)
+  if (relative === null) return null
+  return { path: relative, mode: 'list', kind: 'dir' }
+}
+
 export function commandTouch(ctx, command) {
   return touchesForCommand(command, ctx.files, ctx.dirs)
 }
