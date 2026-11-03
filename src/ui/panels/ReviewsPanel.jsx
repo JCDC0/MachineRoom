@@ -81,6 +81,7 @@ export default function ReviewsPanel({
   const [reviews, setReviews] = useState(() => (Array.isArray(initialReviews) ? initialReviews : []))
   const [loading, setLoading] = useState(() => initialReviews == null)
   const [loadError, setLoadError] = useState(null)
+  const [refreshError, setRefreshError] = useState(null)
 
   const [selectedLane, setSelectedLane] = useState(() => initialDiff?.lane ?? null)
   const [diff, setDiff] = useState(initialDiff)
@@ -110,6 +111,7 @@ export default function ReviewsPanel({
       setLoading(false)
       return
     }
+    setRefreshError(null)
     if (isInitial) {
       setLoading(true)
       setLoadError(null)
@@ -121,6 +123,8 @@ export default function ReviewsPanel({
     } catch (err) {
       if (isInitial) {
         setLoadError(err.message || 'Could not load reviews.')
+      } else {
+        setRefreshError(err?.message || 'Could not refresh reviews.')
       }
     } finally {
       if (isInitial) {
@@ -250,6 +254,8 @@ export default function ReviewsPanel({
           Refresh
         </button>
       </div>
+
+      {refreshError && <p className="panel-error-message" role="alert">{refreshError}</p>}
 
       {base && !loading && (
         <div className="review-last-run mono">{`Each lane is compared against ${visibleText(base)}.`}</div>
