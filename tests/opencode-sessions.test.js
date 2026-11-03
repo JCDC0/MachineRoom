@@ -170,12 +170,14 @@ describe('the OpenCode session reader', () => {
     withDb(dbPath, (db) => {
       const sessStmt = db.prepare('INSERT INTO session_v2 (id, parent_id, directory, title, time_updated) VALUES (?, ?, ?, ?, ?)')
       const msgStmt = db.prepare('INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      db.exec('BEGIN')
       for (let i = 1; i <= 201; i++) {
         const id = `ses-${i}`
         sessStmt.run(id, null, projectRoot, 'Work', 2000 + i)
         msgStmt.run(`m-user-${i}`, id, 'user', 1, 2000 + i, 2000 + i, '{}')
         msgStmt.run(`m-idle-${i}`, id, 'idle', 2, 2000 + i, 2000 + i, JSON.stringify({ outcome: 'succeeded' }))
       }
+      db.exec('COMMIT')
     })
     reader.tick()
     expect(reader.sessions().size).toBe(201)
