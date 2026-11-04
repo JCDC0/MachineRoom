@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Reviews panel sets no state once it has closed, so a review read that ends after the drawer closes no longer throws.
 - Tests across the suite import the constants and sentences they check instead of copies typed by hand, drop Paperclip-era options and fixtures, fix checks that could never fail, and lose duplicates (tasks T36a to T36g).
 - Test runs use at most 4 worker threads (`maxWorkers` in `vite.config.js`), and lanes run only the tests for what they changed; the orchestrator runs the full suite once before each push.
 - The music Refresh line says `1 track` and `1 playlist` for one, instead of `1 tracks` and `1 playlists`.

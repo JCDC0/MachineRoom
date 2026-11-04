@@ -88,6 +88,7 @@ export default function ReviewsPanel({
   const [diffLoading, setDiffLoading] = useState(false)
   const [diffError, setDiffError] = useState(null)
   const diffReqRef = useRef(0)
+  const mountedRef = useRef(true)
 
   const [confirmTarget, setConfirmTarget] = useState(null)
   const [mergeMessage, setMergeMessage] = useState('')
@@ -118,20 +119,29 @@ export default function ReviewsPanel({
     }
     try {
       const list = await client.reviews()
+      if (!mountedRef.current) return
       setReviews(Array.isArray(list) ? list : [])
       setLoadError(null)
     } catch (err) {
+      if (!mountedRef.current) return
       if (isInitial) {
         setLoadError(err.message || 'Could not load reviews.')
       } else {
         setRefreshError(err?.message || 'Could not refresh reviews.')
       }
     } finally {
-      if (isInitial) {
+      if (isInitial && mountedRef.current) {
         setLoading(false)
       }
     }
   }
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     if (initialReviews == null) {
