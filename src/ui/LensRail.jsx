@@ -1,11 +1,54 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { railShareFromPointer, railStep } from './lensResize.js'
+
+export const RAIL_REACH = 64
+export const RAIL_WHEEL_HOLD_MS = 1000
+
+export function railNear(x, rect, side, reach = RAIL_REACH) {
+  if (side !== 'left' && side !== 'right') return false
+  const point = Number(x)
+  const gap = Number(reach)
+  const edge = Number(side === 'left' ? rect?.left : rect?.right)
+  if (!Number.isFinite(point) || !Number.isFinite(edge) || !Number.isFinite(gap) || gap < 0) return false
+  return Math.abs(point - edge) <= gap
+}
+
+function lensAround(node) {
+  let current = node?.parentNode
+  while (current) {
+    if (current.nodeType === 1 && String(current.className).split(/\s+/).includes('lens')) return current
+    current = current.parentNode
+  }
+  return null
+}
 
 export default function LensRail({ side, label, share, multiplier, ariaLabel, valueText, onShare, onWheel }) {
   const dragRef = useRef(null)
   const railRef = useRef(null)
   const wheelRef = useRef(onWheel)
+  const hotTimer = useRef(null)
+  const [near, setNear] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [hot, setHot] = useState(false)
   wheelRef.current = onWheel
+
+  useEffect(() => {
+    const rail = railRef.current
+    const lens = lensAround(rail)
+    if (!lens) return undefined
+    function move(event) {
+      setNear(railNear(event.clientX, lens.getBoundingClientRect(), side))
+    }
+    function leave() {
+      setNear(false)
+    }
+    lens.addEventListener('pointermove', move)
+    lens.addEventListener('pointerleave', leave)
+    return () => {
+      lens.removeEventListener('pointermove', move)
+      lens.removeEventListener('pointerleave', leave)
+    }
+  }, [side])
 
   useEffect(() => {
     const rail = railRef.current
@@ -14,11 +57,18 @@ export default function LensRail({ side, label, share, multiplier, ariaLabel, va
       event.preventDefault()
       event.stopPropagation()
       wheelRef.current(event.deltaY)
+      setHot(true)
+      if (hotTimer.current) clearTimeout(hotTimer.current)
+      hotTimer.current = setTimeout(() => setHot(false), RAIL_WHEEL_HOLD_MS)
     }
     rail.addEventListener('wheel', wheel, { passive: false })
-    return () => rail.removeEventListener('wheel', wheel)
+    return () => {
+      rail.removeEventListener('wheel', wheel)
+      if (hotTimer.current) clearTimeout(hotTimer.current)
+    }
   }, [])
   const position = Math.min(1, Math.max(0, Number(share) || 0))
+  const shown = near || dragging || hot
 
   function down(event) {
     if (event.button !== 0) return
@@ -26,8 +76,10 @@ export default function LensRail({ side, label, share, multiplier, ariaLabel, va
     event.stopPropagation()
     const track = event.currentTarget.querySelector('.lens-rail-track')
     dragRef.current = track ? track.getBoundingClientRect() : null
+    if (!dragRef.current) return
+    setDragging(true)
     event.currentTarget.setPointerCapture?.(event.pointerId)
-    if (dragRef.current) onShare(railShareFromPointer(event.clientY, dragRef.current), false)
+    onShare(railShareFromPointer(event.clientY, dragRef.current), false)
   }
 
   function move(event) {
@@ -39,7 +91,14 @@ export default function LensRail({ side, label, share, multiplier, ariaLabel, va
     if (!dragRef.current) return
     onShare(railShareFromPointer(event.clientY, dragRef.current), true)
     dragRef.current = null
+    setDragging(false)
     event.currentTarget.releasePointerCapture?.(event.pointerId)
+  }
+
+  function lost() {
+    if (!dragRef.current) return
+    dragRef.current = null
+    setDragging(false)
   }
 
   function key(event) {
@@ -52,11 +111,12 @@ export default function LensRail({ side, label, share, multiplier, ariaLabel, va
 
   return (
     <div
-      className={`lens-rail is-${side}`}
+      className={`lens-rail is-${side}${shown ? ' is-shown' : ''}`}
       onPointerDown={down}
       onPointerMove={move}
       onPointerUp={up}
       onPointerCancel={up}
+      onLostPointerCapture={lost}
       ref={railRef}
     >
       <span className="lens-rail-label mono">{label}</span>

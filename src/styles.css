@@ -7963,6 +7963,37 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   user-select: none;
 }
 
+.lens .lens-rail {
+  opacity: 0.18;
+  transition: opacity 200ms ease;
+}
+
+.lens .lens-rail.is-shown,
+.lens .lens-rail:has(.lens-rail-track:focus-visible) {
+  opacity: 1;
+}
+
+.lens .lens-rail .lens-rail-label,
+.lens .lens-rail .lens-rail-value {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.lens .lens-rail.is-shown .lens-rail-label,
+.lens .lens-rail.is-shown .lens-rail-value,
+.lens .lens-rail:has(.lens-rail-track:focus-visible) .lens-rail-label,
+.lens .lens-rail:has(.lens-rail-track:focus-visible) .lens-rail-value {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lens .lens-rail,
+  .lens .lens-rail .lens-rail-label,
+  .lens .lens-rail .lens-rail-value {
+    transition: none;
+  }
+}
+
 .lens-rail.is-left {
   left: 6px;
   display: none;
