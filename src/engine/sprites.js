@@ -5,13 +5,32 @@ export const YELLOW = 0xe5ff00
 export const RED = 0xff2a2a
 export const GREEN = 0x2aff80
 export const WEB = 0x2a9dff
-export const BLUE = 0x3d7bff
+
+const RANDOM_RANGE = 4294967296
+const RANDOM_STEP = 1664525
+const RANDOM_OFFSET = 1013904223
+
+const MOTION_QUERY = '(prefers-reduced-motion: reduce)'
+
+const GLOW_SIZE = 128
+const GLOW_STOPS = [
+  { at: 0, color: 'rgba(255,255,255,1)' },
+  { at: 0.25, color: 'rgba(255,255,255,.45)' },
+  { at: 1, color: 'rgba(255,255,255,0)' },
+]
+
+const LABEL_COLOR = 'rgba(255,255,255,.55)'
+const LABEL_FONT = '400 28px "Space Mono", monospace'
+const LABEL_SCALE = 1.6
+const LABEL_HEIGHT = 40
+const LABEL_BASELINE = 30
+const LABEL_PAD = 8
 
 export function seeded(seed) {
   let state = seed
   return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296
-    return state / 4294967296
+    state = (state * RANDOM_STEP + RANDOM_OFFSET) % RANDOM_RANGE
+    return state / RANDOM_RANGE
   }
 }
 
@@ -23,106 +42,126 @@ export function easeRate(delta, speed, still = false) {
   return still ? 1 : 1 - Math.exp(-delta * speed)
 }
 
-export function reducedMotion(win = (typeof window !== 'undefined' ? window : null)) {
+function browserWindow() {
+  return typeof window === 'undefined' ? null : window
+}
+
+export function reducedMotion(win = browserWindow()) {
   let mql = null
-  let fromChange = null
+  let changed = null
   let listening = false
+
   const onChange = (event) => {
-    fromChange = Boolean(event?.matches)
+    changed = Boolean(event?.matches)
   }
+
+  const listen = (query) => {
+    if (typeof query.addEventListener === 'function') {
+      query.addEventListener('change', onChange)
+      return true
+    }
+    if (typeof query.addListener === 'function') {
+      query.addListener(onChange)
+      return true
+    }
+    return false
+  }
+
+  const release = () => {
+    if (!listening || !mql) return
+    if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onChange)
+    else if (typeof mql.removeListener === 'function') mql.removeListener(onChange)
+    listening = false
+    changed = null
+  }
+
   try {
     if (win && typeof win.matchMedia === 'function') {
-      mql = win.matchMedia('(prefers-reduced-motion: reduce)')
-      if (mql && typeof mql.addEventListener === 'function') {
-        mql.addEventListener('change', onChange)
-        listening = true
-      } else if (mql && typeof mql.addListener === 'function') {
-        mql.addListener(onChange)
-        listening = true
-      }
+      mql = win.matchMedia(MOTION_QUERY)
+      if (mql) listening = listen(mql)
     }
   } catch {
     mql = null
     listening = false
   }
+
   return {
     mql,
-    still: () => (fromChange === null ? Boolean(mql?.matches) : fromChange),
-    dispose: () => {
-      if (!listening || !mql) return
-      if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onChange)
-      else if (typeof mql.removeListener === 'function') mql.removeListener(onChange)
-      listening = false
-      fromChange = null
-    },
+    still: () => (changed === null ? Boolean(mql?.matches) : changed),
+    dispose: release,
   }
 }
 
-let defaultHelper = null
-let lastWindow
-let lastMatchMedia
+let shared = null
+let sharedWindow
+let sharedMatchMedia
 
 export function still() {
-  const currentWindow = typeof window !== 'undefined' ? window : null
-  const currentMatchMedia = currentWindow ? currentWindow.matchMedia : null
-  if (!defaultHelper || lastWindow !== currentWindow || lastMatchMedia !== currentMatchMedia) {
-    defaultHelper?.dispose()
-    defaultHelper = reducedMotion(currentWindow)
-    lastWindow = currentWindow
-    lastMatchMedia = currentMatchMedia
+  const win = browserWindow()
+  const matchMedia = win ? win.matchMedia : null
+  if (!shared || sharedWindow !== win || sharedMatchMedia !== matchMedia) {
+    shared?.dispose()
+    shared = reducedMotion(win)
+    sharedWindow = win
+    sharedMatchMedia = matchMedia
   }
-  return defaultHelper.still()
+  return shared.still()
 }
 
 export function disposeStill() {
-  defaultHelper?.dispose()
-  defaultHelper = null
-  lastWindow = undefined
-  lastMatchMedia = undefined
+  shared?.dispose()
+  shared = null
+  sharedWindow = undefined
+  sharedMatchMedia = undefined
 }
 
 export function glowTexture() {
   const canvas = document.createElement('canvas')
-  canvas.width = canvas.height = 128
+  canvas.width = canvas.height = GLOW_SIZE
   const context = canvas.getContext('2d')
-  const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64)
-  gradient.addColorStop(0, 'rgba(255,255,255,1)')
-  gradient.addColorStop(0.25, 'rgba(255,255,255,.45)')
-  gradient.addColorStop(1, 'rgba(255,255,255,0)')
+  const centre = GLOW_SIZE / 2
+  const gradient = context.createRadialGradient(centre, centre, 0, centre, centre, centre)
+  for (const stop of GLOW_STOPS) gradient.addColorStop(stop.at, stop.color)
   context.fillStyle = gradient
-  context.fillRect(0, 0, 128, 128)
+  context.fillRect(0, 0, GLOW_SIZE, GLOW_SIZE)
   return new THREE.CanvasTexture(canvas)
 }
 
+function labelCanvas(label, { color, background, font, spacing, pad }) {
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+  const useFont = () => {
+    context.font = font
+    if ('letterSpacing' in context) context.letterSpacing = `${spacing}px`
+  }
+
+  useFont()
+  canvas.width = Math.ceil(context.measureText(label).width) + pad * 2
+  canvas.height = LABEL_HEIGHT
+  if (background) {
+    context.fillStyle = background
+    context.fillRect(0, 0, canvas.width, canvas.height)
+  }
+  useFont()
+  context.fillStyle = color
+  context.fillText(label, pad, LABEL_BASELINE)
+  return canvas
+}
+
 export function textSprite(text, {
-  color = 'rgba(255,255,255,.55)',
+  color = LABEL_COLOR,
   background = null,
-  scale = 1.6,
-  font = '28px "Space Mono", monospace',
+  scale = LABEL_SCALE,
+  font = LABEL_FONT,
   spacing = 0,
-  pad = 8,
+  pad = LABEL_PAD,
 } = {}) {
   const material = new THREE.SpriteMaterial({ transparent: true, depthWrite: false })
   const sprite = new THREE.Sprite(material)
   let label = String(text ?? '')
 
-  function draw() {
-    const canvas = document.createElement('canvas')
-    const context = canvas.getContext('2d')
-    const prepare = () => {
-      context.font = font
-      if ('letterSpacing' in context) context.letterSpacing = `${spacing}px`
-    }
-    prepare()
-    canvas.width = Math.ceil(context.measureText(label).width) + pad * 2
-    canvas.height = 40
-    if (background) {
-      context.fillStyle = background
-      context.fillRect(0, 0, canvas.width, canvas.height)
-    }
-    prepare()
-    context.fillStyle = color
-    context.fillText(label, pad, 30)
+  const draw = () => {
+    const canvas = labelCanvas(label, { color, background, font, spacing, pad })
     if (material.map) material.map.dispose()
     material.map = new THREE.CanvasTexture(canvas)
     material.needsUpdate = true

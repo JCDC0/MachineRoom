@@ -42,6 +42,11 @@ afterAll(() => {
 })
 
 describe('a text sprite', () => {
+  it('draws in Space Mono at weight 400', () => {
+    textSprite('Alpha', { scale: 1 })
+    expect(context2d.font).toBe('400 28px "Space Mono", monospace')
+  })
+
   it('redraws its canvas with new text and leaves the same text alone', () => {
     drawn.length = 0
     const sprite = textSprite('Alpha', { scale: 1 })
