@@ -41,26 +41,6 @@ function arrange(agents) {
   return { children, roots }
 }
 
-function flatten(roots, children) {
-  const rows = []
-  const seen = new Set()
-  let number = 0
-  function visit(agent, depth) {
-    if (!agent || seen.has(agent.key)) return
-    seen.add(agent.key)
-    if (depth === 0) number += 1
-    rows.push({ agent, depth, number: depth === 0 ? number : null })
-    for (const child of children.get(agent.key) ?? []) visit(child, depth + 1)
-  }
-  for (const root of roots) visit(root, 0)
-  return rows
-}
-
-export function agentRows(agents) {
-  const { children, roots } = arrange(agents)
-  return flatten(roots, children)
-}
-
 function subtreeActive(agent, children, seen = new Set()) {
   if (!agent || seen.has(agent.key)) return false
   seen.add(agent.key)

@@ -10,7 +10,6 @@ export const MAX_SUBS = 5
 
 const KINDS = new Set(['orchestrator', 'sub', 'lane'])
 const DEFAULT_LABEL = { orchestrator: 'Orchestrator', sub: 'Sub orchestrator', lane: 'Code agent' }
-const KEY_NAME = /^[A-Za-z0-9 _-]+$/
 const OPENCODE_DEFAULT_MODEL = 'opencode-go/deepseek-v4.1-flash'
 
 export function labelProblem(value) {
@@ -174,16 +173,6 @@ export function keyNames(value) {
     if (name && !names.includes(name)) names.push(name)
   }
   return names
-}
-
-export function keyFormProblem(name, value) {
-  const text = cleanText(name)
-  if (!text) return 'Write a name for the key slot.'
-  if (text.length > 40) return 'Keep the key name to 40 characters.'
-  if (!KEY_NAME.test(text)) return 'Use letters, digits, spaces, dashes or underscores in the key name.'
-  if (typeof value !== 'string' || value.length === 0) return 'Write the key.'
-  if (value.length > 500) return 'Keep the key to 500 characters.'
-  return ''
 }
 
 function modelRows(value) {
@@ -434,71 +423,6 @@ export function convertPlan(ladder, node, childKey = '', laneKeys = []) {
     sub,
     inactive: [id],
   }
-}
-
-export function groupSubPlan(ladder, draft, laneIds, laneKeys = []) {
-  const currentSubs = ladderSubs(ladder)
-  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null, affected: [] }
-  const label = labelProblem(draft?.label)
-  if (label) return { ...unchanged, problem: label }
-  const selected = cleanLaneIds(laneIds)
-  if (selected.length === 0) return { ...unchanged, problem: 'Select at least one code agent.' }
-  if (currentSubs.length >= MAX_SUBS) {
-    return { ...unchanged, problem: `There are at most ${MAX_SUBS} sub orchestrators.` }
-  }
-  const claimed = new Set(selected)
-  const affected = subsLosingLanes(currentSubs, selected).map((row) => ({ ...row, removed: row.empty }))
-  const subs = []
-  for (const sub of currentSubs) {
-    const before = Array.isArray(sub.lanes) ? sub.lanes : []
-    const lanes = before.filter((lane) => !claimed.has(lane))
-    if (before.length > 0 && lanes.length === 0) continue
-    subs.push(lanes.length === before.length ? sub : { ...sub, lanes })
-  }
-  const sub = {
-    id: freeSubId(draft.label, currentSubs, laneKeys),
-    name: String(draft.label ?? '').trim(),
-    harness: draft.harness || 'opencode',
-    model: draft.model || '',
-    lanes: selected,
-    scope: ['**'],
-    restricted: false,
-    setBy: 'owner',
-  }
-  return { problem: '', ladder: { subs: [...subs, sub] }, sub, affected }
-}
-
-export function removeSubPlan(ladder, subId) {
-  const subs = ladderSubs(ladder)
-  const id = cleanText(subId, 80)
-  const index = subs.findIndex((sub) => cleanText(sub?.id, 80) === id)
-  if (index === -1) return { problem: 'Choose a sub orchestrator to remove.', ladder, removed: null }
-  const removed = subs[index]
-  return {
-    problem: '',
-    ladder: { subs: subs.filter((_, at) => at !== index) },
-    removed,
-  }
-}
-
-export function assignSubLanesPlan(ladder, subId, laneIds) {
-  const currentSubs = ladderSubs(ladder)
-  const unchanged = { problem: '', ladder: { subs: currentSubs }, sub: null, affected: [] }
-  const selected = cleanLaneIds(laneIds)
-  if (selected.length === 0) return { ...unchanged, problem: 'Select at least one code agent.' }
-  const id = cleanText(subId, 80)
-  const index = currentSubs.findIndex((sub) => cleanText(sub?.id, 80) === id)
-  if (index === -1) return { ...unchanged, problem: 'Choose a sub orchestrator.' }
-  const claimed = new Set(selected)
-  const others = currentSubs.filter((_, at) => at !== index)
-  const affected = subsLosingLanes(others, selected)
-  const subs = currentSubs.map((sub, at) => {
-    if (at === index) return { ...sub, lanes: selected }
-    const before = Array.isArray(sub.lanes) ? sub.lanes : []
-    const lanes = before.filter((lane) => !claimed.has(lane))
-    return lanes.length === before.length ? sub : { ...sub, lanes }
-  })
-  return { problem: '', ladder: { subs }, sub: subs[index], affected }
 }
 
 export const TEAM_ORCHESTRATORS_MAX = 4
