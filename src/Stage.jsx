@@ -1505,9 +1505,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                   {name} {version}
                 </span>
               </p>
-              <p className="lens-corner is-center">
-                <span className="lens-project">{project}</span>
-              </p>
               <div className="lens-corner is-right">
                 <span className="lens-clock mono">{clock}</span>
                 <span className="lens-lanes mono">

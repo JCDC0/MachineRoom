@@ -677,16 +677,6 @@ summary:focus-visible,
   top: 40px;
 }
 
-.lens-corner.is-center {
-  display: none;
-  left: 50%;
-  top: calc(6% + 16px + var(--lens-bow, 28px));
-  transform: translateX(-50%);
-  align-items: center;
-  max-width: 60%;
-  white-space: nowrap;
-}
-
 .lens-corner.is-right {
   right: 24px;
   top: calc(40px + var(--lens-bow, 28px));
@@ -702,10 +692,6 @@ summary:focus-visible,
 @media (min-width: 900px) {
   .lens-corner.is-left {
     display: none;
-  }
-
-  .lens-corner.is-center {
-    display: flex;
   }
 
   .lens-clock {
