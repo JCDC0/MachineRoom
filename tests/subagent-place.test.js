@@ -18,7 +18,8 @@ import { nextSpareShape } from '../src/engine/shapes.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { createLivePlayer } from '../src/live/livePlayer.js'
 import { apply, createState } from '../src/model/state.js'
-import Hud, { agentRows } from '../src/ui/Hud.jsx'
+import { agentList } from '../src/ui/agentList.js'
+import Hud from '../src/ui/Hud.jsx'
 
 const parentPlace = { x: 0, y: 290, z: 300 }
 const ORBIT_RADIUS = CHILD_RADIUS * CHILD_ORBIT_SCALE
@@ -344,8 +345,8 @@ describe('the HUD agent list', () => {
     { key: 'b', name: 'Beta', status: 'idle' },
   ]
 
-  it('puts a child under its parent and numbers only the top agents', () => {
-    expect(agentRows(agents).map((row) => [row.agent.key, row.depth, row.number])).toEqual([
+  it('numbers only the top agents', () => {
+    expect(agentList(agents, true).rows.map((row) => [row.agent.key, row.depth, row.number])).toEqual([
       ['a', 0, 1],
       ['a~1', 1, null],
       ['a~1~1', 2, null],
@@ -354,7 +355,7 @@ describe('the HUD agent list', () => {
   })
 
   it('finds the parent even when the child comes first in the list', () => {
-    expect(agentRows([agents[1], agents[0]]).map((row) => row.agent.key)).toEqual(['a', 'a~1'])
+    expect(agentList([agents[1], agents[0]], true).rows.map((row) => row.agent.key)).toEqual(['a', 'a~1'])
   })
 
   it('renders the child indented with its subagent tag', () => {

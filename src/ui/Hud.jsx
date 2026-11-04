@@ -37,8 +37,6 @@ import {
 } from './terminalButtons.js'
 import { OPEN_CHAT_EVENT } from './transportOrchestrators.js'
 
-export { agentRows } from './agentList.js'
-
 const STATUS_TEXT = {
   idle: 'idle',
   queued: 'queued',

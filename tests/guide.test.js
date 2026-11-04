@@ -193,7 +193,6 @@ describe('confirm cards', () => {
 
   it('asks for every confirm card class', () => {
     expect(CONFIRM_SELECTOR).toContain('.brief-confirm-card')
-    expect(CONFIRM_SELECTOR).toContain('.backup-confirm-card')
     expect(CONFIRM_SELECTOR).toContain('.mr-orch-confirm')
     expect(CONFIRM_SELECTOR).toContain('.mr-assistant-btn-confirm')
   })

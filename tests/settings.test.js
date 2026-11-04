@@ -33,7 +33,6 @@ describe('settings', () => {
       source: 'bridge',
       bridge: 'http://127.0.0.1:9999',
       logOpen: true,
-      dockOpen: true,
       speed: 4,
       helpSeen: true,
     })
@@ -42,7 +41,6 @@ describe('settings', () => {
       source: 'bridge',
       bridge: 'http://127.0.0.1:9999',
       logOpen: true,
-      dockOpen: true,
       speed: 4,
       helpSeen: true,
       sidebarTab: 'chat',
@@ -90,7 +88,6 @@ describe('settings', () => {
         bridge: 123,
         speed: -5,
         logOpen: 'yes',
-        dockOpen: 'yes',
         helpSeen: true,
       }),
     })
@@ -125,8 +122,18 @@ describe('settings', () => {
       ...DEFAULT_SETTINGS,
       speed: 2,
       logOpen: true,
-      dockOpen: false,
     })
+  })
+
+  it('drops a saved dockOpen and loads the rest', () => {
+    const storage = makeStorage({
+      [SETTINGS_KEY]: JSON.stringify({ source: 'bridge', speed: 2, dockOpen: true }),
+    })
+    const loaded = loadSettings(storage)
+    expect(loaded).toEqual({ ...DEFAULT_SETTINGS, speed: 2 })
+    expect(loaded).not.toHaveProperty('dockOpen')
+    expect(saveSettings(storage, { speed: 3 })).not.toHaveProperty('dockOpen')
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY))).not.toHaveProperty('dockOpen')
   })
 
   it('saves and loads assistantPosition when provided', () => {

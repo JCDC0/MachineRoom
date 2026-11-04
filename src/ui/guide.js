@@ -104,8 +104,7 @@ export const LIVE_TOUR_STEPS = [
   },
 ]
 
-export const CONFIRM_SELECTOR =
-  '.brief-confirm-card, .backup-confirm-card, .mr-orch-confirm, .mr-assistant-btn-confirm'
+export const CONFIRM_SELECTOR = '.brief-confirm-card, .mr-orch-confirm, .mr-assistant-btn-confirm'
 
 export const DEFAULT_CARD_SIZE = Object.freeze({ width: 420, height: 220 })
 export const DEFAULT_VIEWPORT = Object.freeze({ width: 1280, height: 800 })
