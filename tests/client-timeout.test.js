@@ -88,11 +88,13 @@ describe('control client request limits', () => {
     expect(seen.options.signal.aborted).toBe(true)
   })
 
-  it('gives the merge, the review list and the decision model their own limits', async () => {
+  it('gives the merge, the review list, the decision model and the git writes their own limits', async () => {
     const calls = [
       [REQUEST_LIMITS.mergeReview, (client) => client.mergeReview('opencode', { head: 'a'.repeat(40), message: 'Merge it' })],
       [REQUEST_LIMITS.reviews, (client) => client.reviews()],
       [REQUEST_LIMITS.decide, (client) => client.decide({ state: 'open', questions: { ready: { type: 'noul' } } })],
+      [REQUEST_LIMITS.switchBranch, (client) => client.switchBranch({ branch: 'main' })],
+      [REQUEST_LIMITS.createBranch, (client) => client.createBranch({ name: 'next', from: 'main' })],
     ]
     for (const [limit, call] of calls) {
       const { fetchImpl } = hangingFetch()

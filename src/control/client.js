@@ -10,6 +10,8 @@ export const REQUEST_LIMITS = {
   reviewDiff: 50000,
   reviews: 210000,
   mergeReview: 140000,
+  switchBranch: 140000,
+  createBranch: 140000,
   decide: 10000,
   quickEndpoint: 60000,
 }
@@ -562,9 +564,9 @@ export function createClient({
 
     network: () => request('GET', '/api/network'),
 
-    switchBranch: ({ branch, confirmed = true } = {}) => request('POST', '/api/git/switch', { branch, confirmed }),
+    switchBranch: ({ branch, confirmed = true } = {}) => request('POST', '/api/git/switch', { branch, confirmed }, REQUEST_LIMITS.switchBranch),
 
-    createBranch: ({ name, from, confirmed = true } = {}) => request('POST', '/api/git/branch', { name, from, confirmed }),
+    createBranch: ({ name, from, confirmed = true } = {}) => request('POST', '/api/git/branch', { name, from, confirmed }, REQUEST_LIMITS.createBranch),
 
     subscribe(listener) {
       listeners.add(listener)
