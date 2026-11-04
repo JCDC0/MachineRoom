@@ -129,7 +129,7 @@ Every lane run writes its log to `<runs>`, which is `%TEMP%\machineroom-runs` on
 - `<lane>-<briefs>-<stamp>.log` for a run on briefs.
 - `<lane>-project-<stamp>.log` for one task on a project without `--worktree`.
 - `<lane>-queue-<stamp>-<number>.log` for a task in a queue, and for one task with `--worktree`.
-- `<log name>.meta.json` beside a run on a project, with the lane, the project folder and the session id, and the queue branch when there is one.
+- `<log name>.meta.json` beside a run on a project, with the lane, the project folder, the session id and the commit the run started from, and the queue branch when there is one.
 - `runs.jsonl` has one record for each run: lane, model, start, minutes, exit code, cost, tokens, log and branch. A queue run puts its queue branch in `branch` and in `queue`. A stopped run can carry `stoppedLeftovers` with the number of processes the runner had to stop.
 - `outcomes.jsonl` has the outcomes you record with `npm run outcome`.
 - The orchestrator's chat and session live in `orchestrator-<hash>.json`, each sub orchestrator has its own chat file beside it, and each turn writes a `...-chat-<stamp>.log` beside the chat file.
