@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.
 - The page drops dead code: `keyFormProblem`, `groupSubPlan`, `removeSubPlan` and `assignSubLanesPlan` in `family.js`, `agentRows` in `agentList.js` with its re-export, the unused `dockOpen` setting and the dead `.backup-confirm-card` confirm class (task U145).
 - The control client and its mock drop createIssue, hireAgent and updateAgent, the bridge drops the routes that only refused them, and the assistant drops the hireAgent check (task S40).

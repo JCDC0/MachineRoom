@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
-import { createLanesSource, createRecordsCache } from '../server/lanes-source.js'
+import { createLanesSource, createRecordsCache, subOrchestratorAgent } from '../server/lanes-source.js'
 import { chatFileFor, COMPACT_RUNNING_PROBLEM, COMPACTED_MESSAGE, CONFIRM_AUTOCOMPACT_PROBLEM, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import {
   availableHarnesses,
@@ -137,6 +137,7 @@ function readLines(file) {
 function git(folder, args) {
   const result = spawnSync(gitPath(), args, { cwd: folder, encoding: 'utf8', windowsHide: true })
   if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${String(result.stderr ?? '').trim()}`)
+  return String(result.stdout ?? '').trim()
 }
 
 function makeWorktree(project, base) {
@@ -338,6 +339,48 @@ describe('branchChanges', () => {
     git(worktree, ['commit', '-m', 'change'])
 
     expect(branchChanges({ project: worktree }, {}, { project })).toEqual(['server/x.js', 'src/ui/a.jsx'])
+  })
+
+  it('reads only a lane own changes from the base commit its newest record names', () => {
+    const base = makeTempDir('mr-branch-')
+    cleanups.push(() => removeTempDir(base))
+    const project = join(base, 'project')
+    mkdirSync(join(project, 'src'), { recursive: true })
+    writeFileSync(join(project, 'src', 'a.js'), 'one\n')
+    git(project, ['init', '-b', 'main'])
+    git(project, ['config', 'user.email', 'test@example.com'])
+    git(project, ['config', 'user.name', 'Test'])
+    git(project, ['add', '.'])
+    git(project, ['commit', '-m', 'base'])
+    const fork = git(project, ['rev-parse', 'HEAD'])
+
+    git(project, ['switch', '-c', 'feat/other'])
+    mkdirSync(join(project, 'server'), { recursive: true })
+    writeFileSync(join(project, 'server', 'other.js'), 'other\n')
+    git(project, ['add', '.'])
+    git(project, ['commit', '-m', 'other'])
+    const laneBase = git(project, ['rev-parse', 'HEAD'])
+
+    git(project, ['switch', 'main'])
+    writeFileSync(join(project, 'README.md'), 'the project moved on\n')
+    git(project, ['add', '.'])
+    git(project, ['commit', '-m', 'later'])
+
+    const worktree = join(base, 'worktree')
+    git(project, ['worktree', 'add', '-b', 'feat/lane', worktree, laneBase])
+    writeFileSync(join(worktree, 'src', 'a.js'), 'two\n')
+    git(worktree, ['add', '.'])
+    git(worktree, ['commit', '-m', 'lane change'])
+
+    expect(branchChanges({ project: worktree, lane: 'opencode' }, {}, { project })).toEqual(['server/other.js', 'src/a.js'])
+    expect(branchChanges({ project: worktree, lane: 'opencode' }, {}, {
+      project,
+      records: [{ lane: 'opencode', base: fork }, { lane: 'opencode', base: laneBase }],
+    })).toEqual(['src/a.js'])
+    expect(branchChanges({ project: worktree, lane: 'opencode' }, {}, {
+      project,
+      records: [{ lane: 'opencode', base: laneBase }, { lane: 'opencode' }],
+    })).toEqual(['server/other.js', 'src/a.js'])
   })
 
   it('lists paths relative to a project that sits below the repository root', () => {
@@ -1910,6 +1953,19 @@ describe('sub orchestrator agents', () => {
       'the sub chat log line'
     )
     expect(line.payload.chunk).toContain('tool_use')
+  })
+
+  it('shows a sub with its own model, not the first lane model of its harness', () => {
+    const own = { ...FRONTEND, harness: 'opencode', model: 'opencode-go/other' }
+    const rig = makeRig(makeBase({ ladder: { subs: [own] } }))
+    const [sub] = rig.registry.subs()
+    expect(sub).toEqual({ id: 'frontend', name: 'Frontend', harness: 'opencode', model: 'opencode-go/other' })
+    expect(subOrchestratorAgent(sub, LANES)).toMatchObject({
+      key: 'sub-frontend',
+      harness: 'opencode',
+      model: 'opencode-go/other',
+      subOrchestrator: true,
+    })
   })
 
   it('reads runs.jsonl once across all orchestrators on a run end and tails from last read (S37)', async () => {

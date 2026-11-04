@@ -558,6 +558,7 @@ describe('a queue that stops', () => {
       copyFileSync(fileURLToPath(new URL('fixtures/fake-lane.cjs', import.meta.url)), join(repo, 'run'))
       git(repo, ['add', 'run'])
       git(repo, ['commit', '-m', 'the fake lane program'])
+      const head = git(repo, ['rev-parse', 'HEAD']).trim()
       const lanes = laneFile(parent, {
         name: 'fake',
         worktree: join(parent, 'worktree'),
@@ -571,8 +572,10 @@ describe('a queue that stops', () => {
       expect(result.code).toBe(1)
       expect(result.stdout).toContain('1. failed: tests')
       const records = readFileSync(join(runs, 'runs.jsonl'), 'utf8').trim().split(/\r?\n/).map((line) => JSON.parse(line))
-      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests' })
+      expect(records.at(-1)).toMatchObject({ lane: 'fake', exitCode: 1, queueStatus: 'failed: tests', base: head })
       expect(records.at(-1).commits).toEqual([])
+      const meta = JSON.parse(readFileSync(records.at(-1).log.replace(/\.log$/i, '.meta.json'), 'utf8'))
+      expect(meta.base).toBe(head)
     } finally {
       remove(parent)
     }
