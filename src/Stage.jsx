@@ -134,7 +134,7 @@ export const LENS_BOW = 28
 export const LENS_DEFAULT_WIDTH = 1440
 export const LENS_PIXELS_PER_DEGREE = 6
 export const LENS_TICK_DEGREES = 5
-export const LENS_LABEL_DEGREES = 15
+export const LENS_LABEL_DEGREES = 45
 export const LENS_CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
 function spanOf(width) {
@@ -328,41 +328,17 @@ export function compassHeading(yaw = 0) {
 
 export function compassBearingLabel(bearing) {
   const degrees = bearingDegrees(bearing)
-  const text = String(degrees).padStart(3, '0')
-  const cardinal = degrees % 45 === 0 ? LENS_CARDINALS[degrees / 45] : ''
-  return cardinal ? `${cardinal} ${text}` : text
+  return LENS_CARDINALS[degrees / 45] ?? ''
 }
 
-export function compassBottomHeading(yaw = 0) {
-  return (compassHeading(yaw) + 180) % 360
-}
-
-export function compassBottomLabel(bearing, pitch = 0) {
-  const degrees = bearingDegrees(bearing)
-  const text = String(degrees).padStart(3, '0')
-  const cardinal = degrees % 45 === 0 ? LENS_CARDINALS[degrees / 45] : ''
-  return cardinal ? `${text} ${cardinal}` : `${text}°`
-}
-
-export function lensEdgeTicks(width = LENS_DEFAULT_WIDTH, yaw = 0, side = 'top') {
+export function lensEdgeTicks(width = LENS_DEFAULT_WIDTH, yaw = 0) {
   const span = spanOf(width)
   if (span <= 0) return []
-  const bottom = side === 'bottom'
-  const heading = bottom ? compassBottomHeading(yaw) : compassHeading(yaw)
+  const heading = compassHeading(yaw)
   const half = span / 2 / LENS_PIXELS_PER_DEGREE
-  const ticks = []
-  if (bottom) {
-    const first = Math.floor((heading + half) / LENS_TICK_DEGREES) * LENS_TICK_DEGREES
-    const last = heading - half
-    for (let bearing = first; bearing >= last - 1e-9; bearing -= LENS_TICK_DEGREES) {
-      const normalized = bearingDegrees(bearing)
-      const x = Math.round((span / 2 - (bearing - heading) * LENS_PIXELS_PER_DEGREE) * 1000) / 1000
-      ticks.push({ x, tall: normalized % LENS_LABEL_DEGREES === 0, bearing: normalized })
-    }
-    return ticks
-  }
   const first = Math.ceil((heading - half) / LENS_TICK_DEGREES) * LENS_TICK_DEGREES
   const last = heading + half
+  const ticks = []
   for (let bearing = first; bearing <= last + 1e-9; bearing += LENS_TICK_DEGREES) {
     const normalized = bearingDegrees(bearing)
     const x = Math.round((span / 2 + (bearing - heading) * LENS_PIXELS_PER_DEGREE) * 1000) / 1000
@@ -371,16 +347,14 @@ export function lensEdgeTicks(width = LENS_DEFAULT_WIDTH, yaw = 0, side = 'top')
   return ticks
 }
 
-export function lensEdgeLabels(width = LENS_DEFAULT_WIDTH, yaw = 0, side = 'top', pitch = 0) {
+export function lensEdgeLabels(width = LENS_DEFAULT_WIDTH, yaw = 0) {
   const span = spanOf(width)
-  const bottom = side === 'bottom'
-  return lensEdgeTicks(width, yaw, side)
+  return lensEdgeTicks(width, yaw)
     .filter((tick) => tick.tall && tick.x >= 24 && tick.x <= span - 24)
     .map((tick) => ({
       x: tick.x,
       bearing: tick.bearing,
-      cardinal: tick.bearing % 45 === 0,
-      text: bottom ? compassBottomLabel(tick.bearing, pitch) : compassBearingLabel(tick.bearing),
+      text: compassBearingLabel(tick.bearing),
     }))
 }
 
@@ -445,7 +419,7 @@ export function snapshotSink(player, setSnapshot, initial) {
   }
 }
 
-function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
+function LensEdge({ side, yaw = 0, disconnected = false }) {
   const ref = useRef(null)
   const [width, setWidth] = useState(0)
   const top = side === 'top'
@@ -480,7 +454,7 @@ function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
         aria-hidden="true"
       >
         <path className="lens-edge-line" d={rule} />
-        {lensEdgeTicks(width, yaw, side).map((tick) => {
+        {top && lensEdgeTicks(width, yaw).map((tick) => {
           const length = tick.tall ? 11 : 5
           const curve = curveY(tick.x)
           return (
@@ -489,17 +463,17 @@ function LensEdge({ side, yaw = 0, pitch = 0, disconnected = false }) {
               className={`lens-edge-tick${tick.tall ? ' is-tall' : ''}`}
               x1={tick.x + 0.5}
               x2={tick.x + 0.5}
-              y1={top ? curve + 1 : curve - 1}
-              y2={top ? curve + length : curve - length}
+              y1={curve + 1}
+              y2={curve + length}
             />
           )
         })}
-        {lensEdgeLabels(width, yaw, side, pitch).map((label) => (
+        {top && lensEdgeLabels(width, yaw).map((label) => (
           <text
             key={`label-${label.x}`}
-            className={`lens-edge-label${label.cardinal ? ' is-cardinal' : ''}`}
+            className="lens-edge-label"
             x={label.x + 4}
-            y={top ? curveY(label.x) + 22 : curveY(label.x) - 15}
+            y={curveY(label.x) + 22}
           >
             {label.text}
           </text>
@@ -515,8 +489,8 @@ export const LensCompass = memo(function LensCompass({ updateRef, disconnected =
 
   useEffect(() => {
     if (!updateRef) return undefined
-    updateRef.current = (yaw, pitch) => {
-      const next = lensPoseStep(poseRef.current, yaw, pitch)
+    updateRef.current = (yaw) => {
+      const next = lensPoseStep(poseRef.current, yaw, poseRef.current.pitch)
       if (next === poseRef.current) return
       poseRef.current = next
       setPose(next)
@@ -529,7 +503,7 @@ export const LensCompass = memo(function LensCompass({ updateRef, disconnected =
   return (
     <>
       <LensEdge side="top" yaw={pose.yaw} disconnected={disconnected} />
-      <LensEdge side="bottom" yaw={pose.yaw} pitch={pose.pitch} disconnected={disconnected} />
+      <LensEdge side="bottom" yaw={pose.yaw} disconnected={disconnected} />
     </>
   )
 })
@@ -1516,9 +1490,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                 <span className="lens-version mono">
                   {name} {version}
                 </span>
-              </p>
-              <p className="lens-corner is-center">
-                <span className="lens-project">{project}</span>
               </p>
               <div className="lens-corner is-right">
                 <span className="lens-clock mono">{clock}</span>

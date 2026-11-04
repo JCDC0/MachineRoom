@@ -260,7 +260,7 @@ describe('HUD concept style structure', () => {
   it('defines the curved lens edges and the waiting card inside the lens in styles.css', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('.hud-band-project')
-    expect(css).toContain('.lens-corner.is-center')
+    expect(css).not.toContain('.lens-corner.is-center')
     expect(css).toContain('.lens-clock')
     expect(css).toContain('.lens-edge.is-top')
     expect(css).toContain('.lens-edge.is-bottom')

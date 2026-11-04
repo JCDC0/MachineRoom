@@ -9,6 +9,10 @@
 - The Height rail defaults to 56 percent and runs to 85 percent, every lens height is capped so the transport stays on screen, and the split is saved as `lensSplit` (task U146).
 - Idle grows the lens to the full window over 0.8 seconds and returns it over 0.3 seconds on wake (task U146).
 - The Height and Zoom rails fade to 0.18 opacity with no label or multiplier until the pointer comes within 64 pixels of their lens edge, a drag, a second after a wheel turn or keyboard focus, over 0.2 seconds and at once under reduced motion (task U148).
+- The bottom lens edge keeps only its bowed line, its corner brackets and its `+` lubber mark, with no ticks and no labels (task U147).
+- The top lens edge keeps its small ticks and shows a taller tick and the letter alone, `N` to `NW`, every 45 degrees (task U147).
+- The lens drops its duplicate top middle `/NAME` label, and the menu band keeps `/NAME` (task U147).
+- The void drops its floating coordinate number sprites and keeps the lattice, its tick crosses and the dust (task U147).
 - MachineRoom is released under the MIT licence: `LICENSE` and the `license` field in `package.json`.
 - A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.
