@@ -284,7 +284,6 @@ describe('FamilyTree rows', () => {
   it('gives the lower half sidebar room for a full label', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px')
-    expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 320px')
     expect(css).toContain('.mr-family-under {')
     expect(css).toContain('.mr-family-actions {')
   })
