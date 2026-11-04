@@ -26,6 +26,12 @@ export function chipHalfWidth(open) {
   return ((open ? OPEN_W : CHIP_W) * SCALE) / 2
 }
 
+export function chipTitle(name, status, open) {
+  const label = typeof name === 'string' ? name : ''
+  if (!open) return label
+  return status ? `${label} // ${status}` : label
+}
+
 export const CHIP_SIDE_DEAD_BAND = 24
 
 export function chipSideFromScreen(agentX, hubX, previous = 1, deadBand = CHIP_SIDE_DEAD_BAND) {
@@ -361,7 +367,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       }
       const className = `mr-term is-${entry.status}${term.open ? ' is-open' : ''}${focusKey && focusKey !== term.key ? ' is-muted' : ''}`
       if (term.element.className !== className) term.element.className = className
-      const title = term.open ? `${term.name} // ${entry.status}` : term.name
+      const title = chipTitle(term.name, entry.status, term.open)
       if (term.title.textContent !== title) term.title.textContent = title
 
       const muted = Boolean(focusKey && focusKey !== term.key)

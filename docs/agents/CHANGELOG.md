@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- A closed terminal chip is one line with its state dot, label and state word, and a long label is cut by an ellipsis (task U149).
+- A finished terminal chip is black with a 1 pixel green border and green text, with no fill or glow (task U149).
 - MachineRoom is released under the MIT licence: `LICENSE` and the `license` field in `package.json`.
 - A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.
