@@ -179,6 +179,10 @@ describe('HUD concept style structure', () => {
       expect(html).toContain('>Connect</button>')
       expect(html).toContain('class="hud-lower-costs"')
       expect(html).toContain('id="hud-dock-costs"')
+      const detail = html.indexOf('class="hud-lower-detail"')
+      const costs = html.indexOf('id="hud-dock-costs"')
+      expect(detail).toBeGreaterThan(-1)
+      expect(costs).toBeGreaterThan(detail)
       expect(html).not.toMatch(/class="hud-strip[ "]/)
       expect(html).not.toContain('class="hud-dock"')
     } finally {
