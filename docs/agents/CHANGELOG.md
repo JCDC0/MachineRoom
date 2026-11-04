@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The bottom lens edge keeps only its bowed line, its corner brackets and its `+` lubber mark, with no ticks and no labels (task U147).
+- The top lens edge keeps its small ticks and shows a taller tick and the letter alone, `N` to `NW`, every 45 degrees (task U147).
 - MachineRoom is released under the MIT licence: `LICENSE` and the `license` field in `package.json`.
 - A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.

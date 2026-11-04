@@ -354,14 +354,14 @@ describe('lens compass', () => {
       expect(bottom.querySelectorAll('line, text')).toHaveLength(0)
       expect(container.querySelector('.lens-edge.is-top').querySelectorAll('line').length).toBeGreaterThan(0)
       const centre = () => container.querySelectorAll('text').find((label) => label.getAttribute('x') === '604')
-      expect(centre()?.textContent).toBe('N 000')
+      expect(centre()?.textContent).toBe('N')
 
       await act(async () => updateRef.current(-Math.PI / 2, 0))
-      expect(centre()?.textContent).toBe('E 090')
+      expect(centre()?.textContent).toBe('E')
 
       await act(async () => root.render(createElement(Host, { tick: 1 })))
       expect(container.textContent).toContain('1')
-      expect(centre()?.textContent).toBe('E 090')
+      expect(centre()?.textContent).toBe('E')
     })
   })
 })

@@ -134,7 +134,7 @@ export const LENS_BOW = 28
 export const LENS_DEFAULT_WIDTH = 1440
 export const LENS_PIXELS_PER_DEGREE = 6
 export const LENS_TICK_DEGREES = 5
-export const LENS_LABEL_DEGREES = 15
+export const LENS_LABEL_DEGREES = 45
 export const LENS_CARDINALS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
 function spanOf(width) {
@@ -328,9 +328,7 @@ export function compassHeading(yaw = 0) {
 
 export function compassBearingLabel(bearing) {
   const degrees = bearingDegrees(bearing)
-  const text = String(degrees).padStart(3, '0')
-  const cardinal = degrees % 45 === 0 ? LENS_CARDINALS[degrees / 45] : ''
-  return cardinal ? `${cardinal} ${text}` : text
+  return LENS_CARDINALS[degrees / 45] ?? ''
 }
 
 export function lensEdgeTicks(width = LENS_DEFAULT_WIDTH, yaw = 0) {
@@ -356,7 +354,6 @@ export function lensEdgeLabels(width = LENS_DEFAULT_WIDTH, yaw = 0) {
     .map((tick) => ({
       x: tick.x,
       bearing: tick.bearing,
-      cardinal: tick.bearing % 45 === 0,
       text: compassBearingLabel(tick.bearing),
     }))
 }
@@ -474,7 +471,7 @@ function LensEdge({ side, yaw = 0, disconnected = false }) {
         {top && lensEdgeLabels(width, yaw).map((label) => (
           <text
             key={`label-${label.x}`}
-            className={`lens-edge-label${label.cardinal ? ' is-cardinal' : ''}`}
+            className="lens-edge-label"
             x={label.x + 4}
             y={top ? curveY(label.x) + 22 : curveY(label.x) - 15}
           >
