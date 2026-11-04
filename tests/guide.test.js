@@ -195,6 +195,8 @@ describe('confirm cards', () => {
     expect(CONFIRM_SELECTOR).toContain('.brief-confirm-card')
     expect(CONFIRM_SELECTOR).toContain('.mr-orch-confirm')
     expect(CONFIRM_SELECTOR).toContain('.mr-assistant-btn-confirm')
+    expect(CONFIRM_SELECTOR).toContain('.mr-side-confirm')
+    expect(CONFIRM_SELECTOR).toContain('.strip-pop.is-confirm')
   })
 
   it('treats a missing or broken document as no confirm card', () => {

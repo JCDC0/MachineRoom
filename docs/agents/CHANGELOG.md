@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The tour also waits while the family tree, Build a team or the chat has a confirm card open.
 - The page drops dead code: `keyFormProblem`, `groupSubPlan`, `removeSubPlan` and `assignSubLanesPlan` in `family.js`, `agentRows` in `agentList.js` with its re-export, the unused `dockOpen` setting and the dead `.backup-confirm-card` confirm class (task U145).
 - The Reviews panel sets no state once it has closed, so a review read that ends after the drawer closes no longer throws.
 - Tests across the suite import the constants and sentences they check instead of copies typed by hand, drop Paperclip-era options and fixtures, fix checks that could never fail, and lose duplicates (tasks T36a to T36g).
