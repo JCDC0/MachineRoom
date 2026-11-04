@@ -39,6 +39,12 @@ describe('control client request limits', () => {
     expect(client.backupStatus).toBeUndefined()
     expect(client.backupNow).toBeUndefined()
     expect(REQUEST_LIMITS.backupNow).toBeUndefined()
+    expect(client.createIssue).toBeUndefined()
+    expect(client.hireAgent).toBeUndefined()
+    expect(client.updateAgent).toBeUndefined()
+    expect(REQUEST_LIMITS.createIssue).toBeUndefined()
+    expect(REQUEST_LIMITS.hireAgent).toBeUndefined()
+    expect(REQUEST_LIMITS.updateAgent).toBeUndefined()
   })
 
   it('gives up on a request that never answers at the default limit', async () => {
@@ -73,11 +79,11 @@ describe('control client request limits', () => {
   it('gives a long route a limit above the bridge limit', async () => {
     const { fetchImpl, seen } = hangingFetch()
     const { client, timers } = harness(fetchImpl)
-    const pending = client.hireAgent({ name: 'New lane' })
-    expect(timers[0].ms).toBe(REQUEST_LIMITS.hireAgent)
+    const pending = client.quickEndpoint({ provider: 'openrouter', key: 'k', confirmed: true })
+    expect(timers[0].ms).toBe(REQUEST_LIMITS.quickEndpoint)
     timers[0].fn()
     await expect(pending).rejects.toThrow(
-      `The bridge did not answer within ${REQUEST_LIMITS.hireAgent / 1000} seconds.`
+      `The bridge did not answer within ${REQUEST_LIMITS.quickEndpoint / 1000} seconds.`
     )
     expect(seen.options.signal.aborted).toBe(true)
   })

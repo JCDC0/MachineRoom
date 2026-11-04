@@ -51,15 +51,15 @@ Every method is `async`, returns plain data, and rejects with an `Error` whose `
 | --- | --- |
 | `agents()` | `Agent[]` |
 | `issues({ status? })` | `Issue[]`, newest first |
-| `createIssue(draft)` | `Issue` |
+| `createIssue(draft)` | `Issue` (removed in task S40) |
 | `comments(issueId)` | `Comment[]`, oldest first |
 | `postComment(issueId, body)` | `Comment` |
 | `approvals()` | `Approval[]`, newest first |
 | `decideApproval(id, decision, note?)` | `Approval` |
 | `costs()` | `Costs` |
 | `setAgentBudget(agentId, budgetMonthlyCents)` | `Agent` |
-| `hireAgent(draft)` | `{ agent, approval }`. `approval` is `null` when no approval is needed (task C3c) |
-| `updateAgent(agentId, patch)` | `Agent` (C3c) |
+| `hireAgent(draft)` | `{ agent, approval }`. `approval` is `null` when no approval is needed (task C3c; removed in S40) |
+| `updateAgent(agentId, patch)` | `Agent` (C3c; removed in S40) |
 | `models()` | `ModelOption[]` |
 | `suggestRoute(profile, { failures } = {})` | `RouteSuggestion`, the tier, the choice and the reason from `docs/agents/policy.json`, read by the bridge (C4b; the mock holds a copy of the policy) |
 | `subscribe(listener)` | an `unsubscribe` function (not async) |
@@ -155,7 +155,7 @@ Times are ISO strings. Money is whole cents. A budget of `0` means no budget is 
 
 When the lane source is on and Paperclip does not answer, `costs()` comes from the lane run records: one row per lane with this calendar month's spend, no budget, null tokens and no quota, and the Backups section says Paperclip is not running.
 
-Lane mode: with the lane source on and Paperclip not answering, `issues()` and `liveRuns()` read the lane runs, `comments()` and `approvals()` are empty, `createIssue` and `postComment` reject with `Lane runs start from Dispatch, not from a task.`, and the real client's `health()` reads `/api/health` (`lanes: true`, `paperclip: false`). When `health()` says `lanes: true`, the Dispatch panel lists the lane agents with a command line and starts a task on the room's project folder with `startRun(lane, { task, allowDirty })` (L3).
+Lane mode: with the lane source on and Paperclip not answering, `issues()` and `liveRuns()` read the lane runs, `comments()` and `approvals()` are empty, `postComment` rejects with `Lane runs start from Dispatch, not from a task.` (`createIssue` was removed in S40), and the real client's `health()` reads `/api/health` (`lanes: true`, `paperclip: false`). When `health()` says `lanes: true`, the Dispatch panel lists the lane agents with a command line and starts a task on the room's project folder with `startRun(lane, { task, allowDirty })` (L3).
 
 ## The orchestrator (K1)
 
@@ -163,7 +163,7 @@ The orchestrator is a lane in `docs/agents/lanes.json` (Claude Code on `opus`) t
 
 ## Hiring and updating an agent (C3c)
 
-`src/control/agents.js` holds the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). The mock and the bridge both use them, so a bad request is refused the same way in both.
+`src/control/agents.js` held the lists, the number limits (`LIMITS`, `TEXT_LIMITS`) and the checks (`cleanAgentDraft`, `cleanAgentPatch`, `hireSummary`, and `fieldProblem(key, value)`, which gives the plain sentence for one bad field or `null`). These methods and validation checks were removed in task S40.
 
 - `hireAgent` refuses a draft without a name or a harness, a value outside its range, an unknown setting, a name that is taken, and a `reportsToAgentId` that does not exist. Every refusal is a plain sentence.
 - When approval is required (the Paperclip company flag `requireBoardApprovalForNewAgents`; the mock defaults to on, `createMockClient({ requireApproval: false })` turns it off) the new agent has status `pending_approval` and `approval` is a pending `hire_agent` approval with `agentId` set. Approving it makes the agent `idle`. Rejecting it terminates the agent, which both clients report as `error`. Asking for a revision leaves it waiting. When approval is not required the agent is `idle` and `approval` is `null`.

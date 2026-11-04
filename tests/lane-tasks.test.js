@@ -339,15 +339,11 @@ describe('the lane routes', () => {
     expect(cost.body.summary.spendCents).toBe(50)
     expect(cost.body.quota).toEqual([])
 
-    const created = await postJson(url, '/api/control/issues', { title: 'Make a task', assigneeAgentId: 'agent-opencode' })
-    expect(created).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })
-    const withoutAgent = await postJson(url, '/api/control/issues', { title: 'Make a task' })
-    expect(withoutAgent).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })
     const commented = await postJson(url, '/api/control/comments', { issueId: openName, body: 'Please read this.' })
     expect(commented).toEqual({ status: 409, body: { error: LANE_TASK_REFUSAL } })
   })
 
-  it('lists the lane agents and refuses every agent write', async () => {
+  it('lists the lane agents and refuses an agent budget write', async () => {
     const { url } = await startLaneBridge()
     const agents = await getJson(url, '/api/control/agents')
     expect(agents.status).toBe(200)
@@ -357,14 +353,6 @@ describe('the lane routes', () => {
       ['agy', 'agy', null, 0],
     ])
 
-    expect(await postJson(url, '/api/control/agents', { name: 'Scout', adapterType: 'claude_local' })).toEqual({
-      status: 409,
-      body: { error: AGENT_REFUSAL },
-    })
-    expect(await patchJson(url, '/api/control/agents/agent-opencode', { model: 'm' })).toEqual({
-      status: 409,
-      body: { error: AGENT_REFUSAL },
-    })
     expect(await postJson(url, '/api/control/agents/agent-opencode/budget', { budgetMonthlyCents: 250 })).toEqual({
       status: 409,
       body: { error: AGENT_REFUSAL },

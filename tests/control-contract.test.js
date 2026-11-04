@@ -261,10 +261,8 @@ describe('the control client contract', () => {
     expect(blocked.map((issue) => issue.identifier)).toEqual(['U4'])
   })
 
-  it('refuses every task and comment write', async () => {
+  it('refuses comment writes', async () => {
     const { client } = await makeHarness()
-    const agents = await client.agents()
-    await expect(client.createIssue({ title: 'Do it', assigneeAgentId: agents[0].id })).rejects.toThrow(LANE_TASK_REFUSAL)
     await expect(client.postComment('opencode-B6-20261024-120000', 'Hello.')).rejects.toThrow(LANE_TASK_REFUSAL)
   })
 
@@ -275,10 +273,8 @@ describe('the control client contract', () => {
     await expect(client.decideApproval('approval-1', 'approve')).rejects.toThrow('That approval no longer exists.')
   })
 
-  it('refuses every agent write', async () => {
+  it('refuses agent budget writes', async () => {
     const { client } = await makeHarness()
-    await expect(client.hireAgent({ name: 'Scout', adapterType: 'claude_local' })).rejects.toThrow(AGENT_REFUSAL)
-    await expect(client.updateAgent('agent-opencode', { model: 'm2' })).rejects.toThrow(AGENT_REFUSAL)
     await expect(client.setAgentBudget('agent-opencode', 250)).rejects.toThrow(AGENT_REFUSAL)
   })
 
@@ -382,7 +378,7 @@ describe('the control client contract', () => {
     const evil = await fetch(`${url}/api/control/models`, { headers: { Origin: 'https://evil.example' } })
     expect(evil.status).toBe(403)
 
-    const plainText = await fetch(`${url}/api/control/issues`, {
+    const plainText = await fetch(`${url}/api/control/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body: 'hello',
@@ -390,10 +386,10 @@ describe('the control client contract', () => {
     expect(plainText.status).toBe(415)
     expect(await plainText.json()).toEqual({ error: 'Send JSON.' })
 
-    const huge = await fetch(`${url}/api/control/issues`, {
+    const huge = await fetch(`${url}/api/control/comments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'x'.repeat(70000) }),
+      body: JSON.stringify({ body: 'x'.repeat(70000) }),
     })
     expect(huge.status).toBe(413)
     expect(await huge.json()).toEqual({ error: 'That request is too large.' })

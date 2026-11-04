@@ -104,12 +104,9 @@ describe('settings requests', () => {
     expect(keys.message).toMatch(/Nothing was stored/)
     expect(host.calls).toEqual([['focusAgent', 'hermes', 'close']])
     host.calls.length = 0
-    expect((await dispatcher.run({ type: 'open_config', agent: 'agy', section: 'model' })).message).toMatch(/does not offer/)
-    host.calls.length = 0
-    const withBuilder = makeHost({ client: fast() })
-    const opened = await createDispatcher(withBuilder).run({ type: 'open_config', agent: 'opencode3', section: 'subagents' })
-    expect(opened.message).toBe('Opened the Agents tab. Pick OpenCode 3 in the list to change its subagents settings.')
-    expect(withBuilder.calls).toEqual([['focusAgent', 'opencode3', 'close'], ['openPanel', 'agents']])
+    const opened = await dispatcher.run({ type: 'open_config', agent: 'agy', section: 'subagents' })
+    expect(opened.message).toBe('Opened the Agents tab. Pick agy in the list to change its subagents settings.')
+    expect(host.calls).toEqual([['focusAgent', 'agy', 'close'], ['openPanel', 'agents']])
   })
 
   it('opens the agents tab by name', async () => {

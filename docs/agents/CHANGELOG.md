@@ -4,6 +4,8 @@
 
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.
 - The page drops dead code: `keyFormProblem`, `groupSubPlan`, `removeSubPlan` and `assignSubLanesPlan` in `family.js`, `agentRows` in `agentList.js` with its re-export, the unused `dockOpen` setting and the dead `.backup-confirm-card` confirm class (task U145).
+- The control client and its mock drop createIssue, hireAgent and updateAgent, the bridge drops the routes that only refused them, and the assistant drops the hireAgent check (task S40).
+
 - The Reviews panel sets no state once it has closed, so a review read that ends after the drawer closes no longer throws.
 - Tests across the suite import the constants and sentences they check instead of copies typed by hand, drop Paperclip-era options and fixtures, fix checks that could never fail, and lose duplicates (tasks T36a to T36g).
 - Test runs use at most 4 worker threads (`maxWorkers` in `vite.config.js`), and lanes run only the tests for what they changed; the orchestrator runs the full suite once before each push.

@@ -42,11 +42,6 @@ describe('mock control client', () => {
     expect(todo.every((issue) => issue.status === 'todo')).toBe(true)
   })
 
-  it('refuses to create an issue with the bridge refusal', async () => {
-    const client = fast()
-    await expect(client.createIssue({ title: 'Add a test', assigneeAgentId: 'agent-opencode' })).rejects.toThrow(LANE_TASK_REFUSAL)
-  })
-
   it('refuses to post a comment with the bridge refusal', async () => {
     const client = fast()
     await expect(client.postComment('issue-18', 'Looks good.')).rejects.toThrow(LANE_TASK_REFUSAL)
@@ -68,12 +63,6 @@ describe('mock control client', () => {
   it('refuses to set an agent budget with the bridge refusal', async () => {
     const client = fast()
     await expect(client.setAgentBudget('agent-claude', 250)).rejects.toThrow(AGENT_REFUSAL)
-  })
-
-  it('refuses to hire or update an agent with the bridge refusal', async () => {
-    const client = fast()
-    await expect(client.hireAgent({ name: 'Scout', adapterType: 'claude_local' })).rejects.toThrow(AGENT_REFUSAL)
-    await expect(client.updateAgent('agent-opencode', { model: 'm2' })).rejects.toThrow(AGENT_REFUSAL)
   })
 
   it('lists models in tiers and marks the free one', async () => {

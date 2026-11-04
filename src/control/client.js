@@ -3,12 +3,9 @@ export const STREAM_LIMIT = 15000
 export const REQUEST_TIMEOUT_MS = 30000
 
 export const REQUEST_LIMITS = {
-  createIssue: 40000,
   postComment: 40000,
   decideApproval: 40000,
   setAgentBudget: 40000,
-  hireAgent: 70000,
-  updateAgent: 85000,
   askPlanner: 40000,
   reviewDiff: 50000,
   reviews: 210000,
@@ -134,8 +131,6 @@ export function createClient({
       return request('GET', `/api/control/issues${query}`)
     },
 
-    createIssue: (draft) => request('POST', '/api/control/issues', draft ?? {}, REQUEST_LIMITS.createIssue),
-
     comments: (issueId) => request('GET', `/api/control/comments?issueId=${encodeURIComponent(issueId ?? '')}`),
 
     postComment: (issueId, body) => request('POST', '/api/control/comments', { issueId, body }, REQUEST_LIMITS.postComment),
@@ -159,11 +154,6 @@ export function createClient({
         { budgetMonthlyCents },
         REQUEST_LIMITS.setAgentBudget
       ),
-
-    hireAgent: (draft) => request('POST', '/api/control/agents', draft ?? {}, REQUEST_LIMITS.hireAgent),
-
-    updateAgent: (agentId, patch) =>
-      request('PATCH', `/api/control/agents/${encodeURIComponent(agentId ?? '')}`, patch ?? {}, REQUEST_LIMITS.updateAgent),
 
     models: () => request('GET', '/api/control/models'),
 
