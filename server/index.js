@@ -68,6 +68,8 @@ const HISTORY_LIMIT = 500
 const TREE_VERSIONS_KEPT = 4
 const TREE_REUSE_MS = 1000
 const WATCH_QUIET_MS = 2000
+const WATCH_BURST_QUIET_MS = 300
+const TREE_LAST_FILE_BUDGET_MS = 3000
 const POLL_READ_GAP = 3
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', '.worktrees'])
 const TREE_MAX_BUFFER = 64 * 1024 * 1024
@@ -245,6 +247,14 @@ function createReadJsonBody(sendJson) {
       req.on('error', () => stop(null))
     })
   }
+}
+
+export function treeReadDue({ now, lastReadEndAt, lastReadMs, lastReadChanged, lastTreeAt, quietMs, pollMs, budgetMs }) {
+  if (lastReadChanged) {
+    const gap = Math.max(pollMs, budgetMs - lastReadMs)
+    return now - lastReadEndAt >= gap
+  }
+  return now - lastTreeAt >= quietMs
 }
 
 export const RUN_PIN_TIMEOUT_MS = 2 * 60 * 60 * 1000
@@ -561,6 +571,9 @@ export function createBridge(options = {}) {
   let lastTreeError = ''
   let treeChangedAt = 0
   let lastReadMs = 0
+  let lastReadEndAt = 0
+  let lastReadChanged = false
+  let watchFallback = false
   let treePrimed = false
   let treeVersion = 0
   const treeVersions = new Map()
@@ -594,7 +607,7 @@ export function createBridge(options = {}) {
   }
 
   function publishTree(current) {
-    if (stopped) return
+    if (stopped) return false
     lastTree = current
     lastTreeAt = Date.now()
     if (!treePrimed) {
@@ -602,12 +615,12 @@ export function createBridge(options = {}) {
       treeChangedAt = lastTreeAt
       lastFiles = current.files
       rememberTreeVersion(current.files)
-      return
+      return false
     }
     const changed =
       current.files.length !== lastFiles.length ||
       current.files.some((file, index) => file !== lastFiles[index])
-    if (!changed) return
+    if (!changed) return false
     treeChangedAt = lastTreeAt
     lastFiles = current.files
     rememberTreeVersion(current.files)
@@ -621,11 +634,13 @@ export function createBridge(options = {}) {
       treeSent.set(client, current.files)
       if (events.get(key)) client.write(events.get(key))
     }
+    return true
   }
 
   function startTreeRead() {
     if (stopped) return Promise.resolve(null)
     if (treeReading) return treeReading
+    let changed = false
     const read = (async () => {
       let tree
       try {
@@ -640,18 +655,25 @@ export function createBridge(options = {}) {
         tree = { root: '', files: [], created: [] }
       }
       if (stopped) return tree
-      publishTree(tree)
+      changed = publishTree(tree)
       return tree
     })()
     treeReading = read
     const began = Date.now()
     const done = () => {
       lastReadMs = Date.now() - began
+      lastReadEndAt = Date.now()
+      lastReadChanged = changed
       if (treeReading === read) treeReading = null
-      if (treeDirty && !stopped) {
+      if (!treeDirty && watcher && pollTimer) {
+        clearInterval(pollTimer)
+        pollTimer = null
+      }
+      if (treeDirty && watchFallback && !stopped) {
         treeDirty = false
         startTreeRead().catch(() => {})
       }
+      if (treeDirty && !pollTimer && !watchFallback) beginPolling(false)
     }
     read.then(done, done)
     return read
@@ -688,12 +710,20 @@ export function createBridge(options = {}) {
         beginPolling()
       })
       current.on('error', () => {
-        if (watcher === current) beginPolling(false)
+        if (watcher !== current) return
+        try {
+          current.close()
+        } catch {}
+        watcher = null
+        watchFallback = true
+        beginPolling(false)
       })
       watcher = current
+      watchFallback = false
       return true
     } catch {
       watcher = null
+      watchFallback = true
       return false
     }
   }
@@ -708,18 +738,41 @@ export function createBridge(options = {}) {
     }
     if (pollTimer) return
     if (readNow) checkTreeChange()
-    pollTimer = setInterval(() => {
-      if (stopped) return
-      if (treeReading) return
-      if (Date.now() - treeChangedAt >= quietMs && armWatcher()) {
+    pollTimer = setInterval(pollTreeChange, pollMs)
+  }
+
+  function pollTreeChange() {
+    if (stopped) return
+    if (treeReading) return
+    const at = Date.now()
+    if (!watchFallback) {
+      const due = treeReadDue({
+        now: at,
+        lastReadEndAt,
+        lastReadMs,
+        lastReadChanged,
+        lastTreeAt,
+        quietMs: WATCH_BURST_QUIET_MS,
+        pollMs,
+        budgetMs: TREE_LAST_FILE_BUDGET_MS,
+      })
+      if (!due) return
+      if (!lastReadChanged && armWatcher()) {
         clearInterval(pollTimer)
         pollTimer = null
-        startTreeRead().catch(() => {})
-        return
       }
-      if (Date.now() - lastTreeAt < Math.max(pollMs, lastReadMs * POLL_READ_GAP)) return
-      checkTreeChange()
-    }, pollMs)
+      treeDirty = false
+      startTreeRead().catch(() => {})
+      return
+    }
+    if (at - treeChangedAt >= quietMs && armWatcher()) {
+      clearInterval(pollTimer)
+      pollTimer = null
+      startTreeRead().catch(() => {})
+      return
+    }
+    if (at - lastTreeAt < Math.max(pollMs, lastReadMs * POLL_READ_GAP)) return
+    checkTreeChange()
   }
 
   function rememberParsers() {

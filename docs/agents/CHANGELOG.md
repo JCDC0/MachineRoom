@@ -3,6 +3,7 @@
 ## Unreleased
 
 - A git write gets 120 seconds and a git read keeps 10, so a merge, its fast forward, a merge abort, a switch and a new branch are not cut at 10 seconds on a big checkout, and a timed-out write says it took too long and where the checkout stands (task S42).
+- The tree watcher starts the next read after a burst read once the rest of the 3 second last-file budget is left, so the last file of a 2000 file burst reaches the page in 2.2 seconds at 40,000 files instead of 4.2 to 4.5 (task S43).
 - `opencode6` and `opencode7` return as experiment lanes that try Crouton Alpha Free (`opencode/crouton-alpha-free`) at high reasoning on ordinary briefs, and the OpenCode model list names that model.
 - The history audit reads the private folder names to look for from `MACHINEROOM_AUDIT_PRIVATE` instead of naming one in the code, and treats `someuser` as a placeholder user folder.
 - At 900 pixels and wider the right column of the lower half holds one inspector in place of the in-lens inspector and the Overview card, at rest it shows `AgentDock` above the cost board, and the transport spend click scrolls that board into view (task U150).
