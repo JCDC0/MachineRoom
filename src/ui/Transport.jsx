@@ -8,7 +8,7 @@ import {
 } from './contextRing.js'
 import { OPEN_CHAT_EVENT, orchestratorChips } from './transportOrchestrators.js'
 import { inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
-import { openCostsDrawer, spendText } from './transportSpend.js'
+import { showCostBoard, spendText } from './transportSpend.js'
 
 export const LiveBadgeContext = createContext('live')
 export const OrchestratorsContext = createContext(null)
@@ -218,9 +218,9 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
             <button
               type="button"
               className="transport-spend mono"
-              onClick={() => openCostsDrawer()}
-              title="Open the Costs drawer"
-              aria-label={`${spend}. Open the Costs drawer`}
+              onClick={() => showCostBoard()}
+              title="Show the cost board"
+              aria-label={`${spend}. Show the cost board`}
             >
               {spend}
             </button>

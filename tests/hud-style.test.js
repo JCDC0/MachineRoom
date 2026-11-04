@@ -168,20 +168,88 @@ describe('HUD concept style structure', () => {
       expect(html).toContain('class="hud-lower"')
       expect(html).toContain('class="hud-lower-left"')
       expect(html).toContain('class="hud-lower-main"')
+      expect(html).toContain('class="hud-lower-right"')
       expect(html).toContain('class="hud-lower-crumb mono"')
       expect(html).toContain('PROJECT / New conversation')
-      expect(html).toContain('class="hud-overview"')
-      expect(html).toContain('>Overview</h2>')
-      expect(html).toContain('>Settings</span>')
-      expect(html).toContain('>Agent</span>')
-      expect(html).toContain('>Costs</span>')
-      expect(html).toContain('>Log</span>')
+      expect(html).not.toContain('class="hud-overview"')
+      expect(html).not.toContain('class="hud-drawer"')
+      expect(html).toContain('class="hud-lower-detail"')
+      expect(html).toContain('class="agent-dock"')
       expect(html).toContain('This is a recorded run. Connect to your project to talk to the orchestrator.')
       expect(html).toContain('>Connect</button>')
-      expect(html).toContain('class="hud-drawer"')
+      expect(html).toContain('class="hud-lower-costs"')
       expect(html).toContain('id="hud-dock-costs"')
       expect(html).not.toMatch(/class="hud-strip[ "]/)
       expect(html).not.toContain('class="hud-dock"')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
+  })
+
+  it('shows the inspector in the right column above the cost board at 900 pixels wide', () => {
+    const savedWindow = globalThis.window
+    const storage = {
+      getItem: (key) => (key === 'machineroom.guide' ? '1' : null),
+      setItem: () => {},
+    }
+    globalThis.window = {
+      innerWidth: 1200,
+      location: { search: '' },
+      localStorage: storage,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }
+    try {
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot: SAMPLE_SNAPSHOT,
+          speeds: [1, 2, 4],
+          inspector: createElement('section', { className: 'mr-inspector' }, 'Inspect'),
+        })
+      )
+      const column = html.indexOf('class="hud-lower-right"')
+      const inspector = html.indexOf('class="mr-inspector"')
+      const costs = html.indexOf('id="hud-dock-costs"')
+      expect(column).toBeGreaterThan(-1)
+      expect(inspector).toBeGreaterThan(column)
+      expect(costs).toBeGreaterThan(inspector)
+      expect(html).not.toContain('class="hud-lower-detail"')
+      expect(html).not.toContain('class="agent-dock"')
+      expect(html).not.toContain('class="hud-overview"')
+      expect(html).not.toContain('class="hud-drawer"')
+      expect(html).not.toContain('class="hud-drawer-back mono"')
+    } finally {
+      if (savedWindow === undefined) delete globalThis.window
+      else globalThis.window = savedWindow
+    }
+  })
+
+  it('keeps the inspector outside the lower half below 900 pixels', () => {
+    const savedWindow = globalThis.window
+    const storage = {
+      getItem: (key) => (key === 'machineroom.guide' ? '1' : null),
+      setItem: () => {},
+    }
+    globalThis.window = {
+      innerWidth: 800,
+      location: { search: '' },
+      localStorage: storage,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }
+    try {
+      const html = renderToString(
+        createElement(Hud, {
+          mode: 'replay',
+          snapshot: SAMPLE_SNAPSHOT,
+          speeds: [1, 2, 4],
+          inspector: createElement('section', { className: 'mr-inspector' }, 'Inspect'),
+        })
+      )
+      expect(html).toContain('class="mr-inspector"')
+      expect(html).not.toContain('class="hud-lower"')
     } finally {
       if (savedWindow === undefined) delete globalThis.window
       else globalThis.window = savedWindow
@@ -291,8 +359,12 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.hud-lower')
     expect(css).toContain('grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px')
     expect(css).toContain('.hud-lower-crumb')
-    expect(css).toContain('.hud-overview')
-    expect(css).toContain('.hud-drawer')
+    expect(css).toContain('.hud-lower-right')
+    expect(css).toContain('.hud-lower-detail')
+    expect(css).toContain('.hud-lower-costs')
+    expect(css).toContain('.hud-lower-right .mr-inspector')
+    expect(css).not.toContain('.hud-overview')
+    expect(css).not.toContain('.hud-drawer')
     expect(css).toContain('--lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 56vh)))')
     expect(css).toContain('.hud-dock[hidden]')
   })

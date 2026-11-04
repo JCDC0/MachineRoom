@@ -7,10 +7,9 @@ import Transport, {
   TransportCostsContext,
 } from '../src/ui/Transport.jsx'
 import {
-  COSTS_DRAWER_SELECTOR,
-  COSTS_ENTRY_SELECTOR,
+  COST_BOARD_SELECTOR,
   money,
-  openCostsDrawer,
+  showCostBoard,
   spendText,
   spendTotals,
 } from '../src/ui/transportSpend.js'
@@ -56,43 +55,23 @@ describe('the spend text', () => {
 })
 
 describe('the spend click', () => {
-  it('opens the Costs drawer and brings it into view', () => {
+  it('scrolls the cost board into view in the right column', () => {
     const calls = []
     const documentStub = {
       querySelector(selector) {
-        if (selector === COSTS_ENTRY_SELECTOR) return { click: () => calls.push('click') }
-        if (selector === COSTS_DRAWER_SELECTOR) return { scrollIntoView: (options) => calls.push(options) }
+        if (selector === COST_BOARD_SELECTOR) return { scrollIntoView: (options) => calls.push(options) }
         return null
       },
     }
-    expect(openCostsDrawer(documentStub)).toBe(true)
-    expect(calls[0]).toBe('click')
-    expect(calls[1]).toMatchObject({ block: 'center' })
-  })
-
-  it('leaves an open Costs drawer open and still brings it into view', () => {
-    const calls = []
-    const documentStub = {
-      querySelector(selector) {
-        if (selector === COSTS_ENTRY_SELECTOR) {
-          return {
-            getAttribute: (name) => (name === 'aria-expanded' ? 'true' : null),
-            click: () => calls.push('click'),
-          }
-        }
-        if (selector === COSTS_DRAWER_SELECTOR) return { scrollIntoView: (options) => calls.push(options) }
-        return null
-      },
-    }
-    expect(openCostsDrawer(documentStub)).toBe(true)
-    expect(calls).not.toContain('click')
+    expect(showCostBoard(documentStub)).toBe(true)
+    expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({ block: 'center' })
   })
 
-  it('does nothing without a document or the Overview entry', () => {
-    expect(openCostsDrawer(null)).toBe(false)
-    expect(openCostsDrawer({})).toBe(false)
-    expect(openCostsDrawer({ querySelector: () => null })).toBe(false)
+  it('does nothing without a document or the cost board', () => {
+    expect(showCostBoard(null)).toBe(false)
+    expect(showCostBoard({})).toBe(false)
+    expect(showCostBoard({ querySelector: () => null })).toBe(false)
   })
 })
 
@@ -143,6 +122,8 @@ describe('the transport with lanes and spend', () => {
     expect(html).toContain('OpenCode · U120 · working · 12 min')
     expect(html).toContain('transport-spend')
     expect(html).toContain('$1.25 today · $3.50 mo')
+    expect(html).toContain('title="Show the cost board"')
+    expect(html).toContain('aria-label="$1.25 today · $3.50 mo. Show the cost board"')
   })
 
   it('shows no spend without a cost and no pill without a live or failed lane', () => {
