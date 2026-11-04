@@ -782,6 +782,7 @@ async function runQueueProject({ options, lane, lanes }) {
     const startHead = gitRead(options.worktree && !plan.made ? plan.path : project, ['rev-parse', 'HEAD']) || ''
     const test = projectTestCommand(plan.made ? project : plan.path, options.test)
     const target = options.worktree ? prepareWorktree(project, options.lane) : plan
+    const base = gitRead(target.path, ['rev-parse', 'HEAD']) || startHead
     let pending = null
     let testsFailed = false
     const queueStartedAt = Date.now()
@@ -809,7 +810,7 @@ async function runQueueProject({ options, lane, lanes }) {
           const run = await startLane({
             options, lane, lanes, wanted: [], prompt, logPath, usageFile, name,
             project: target.path, task, queue: { branch, index: number }, lockPath: lock,
-            projectBranch: startBranch, deferRecord: true,
+            projectBranch: startBranch, deferRecord: true, base,
           })
           pending = { record: run.record, folder: target.path, startHead: run.startHead, startBranch }
           if (run.code !== 0 || run.killed) finishPending()
@@ -841,6 +842,7 @@ async function runQueueProject({ options, lane, lanes }) {
           outputTokens: null,
           log: null,
           branch,
+          base,
           queue: { branch, index: 1 },
           project,
           task: tasks[0] || '',
@@ -1007,13 +1009,17 @@ async function main() {
   }
 }
 
-export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false }) {
+export async function startLane({ options, lane, lanes, wanted, prompt, logPath, usageFile, name, project = '', task = '', queue = null, lockPath = '', projectBranch = null, deferRecord = false, base = '' }) {
   let start = null
   if (!project) {
     const status = gitStatus(lane.worktree)
     if (status.trim() !== '') throw new Error(`The worktree ${lane.worktree} is not clean. Commit or discard its changes first.`)
     start = laneWorktreeStart({ worktree: lane.worktree, move: true })
   }
+  const baseFolder = project || lane.worktree
+  const runBase = typeof base === 'string' && base.trim() !== ''
+    ? base.trim()
+    : (baseFolder ? gitRead(baseFolder, ['rev-parse', 'HEAD']) || '' : '')
 
   const folder = runsFolder()
   const enabledServers = enabledMcpServers(folder)
@@ -1038,7 +1044,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       ...(project ? { cwd: project } : {}),
     })
     if (project) {
-      const meta = { lane: options.lane, project, sessionId }
+      const meta = { lane: options.lane, project, sessionId, ...(runBase ? { base: runBase } : {}) }
       if (queue) {
         meta.queue = queue.branch
         meta.index = queue.index
@@ -1274,6 +1280,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         log: logPath,
         branch: git.branch,
         commits: git.commits,
+        base: runBase,
         retried: true,
         startFailed: startFailure !== '' ? true : undefined,
         ...(start ? { startBranch: start.startBranch } : {}),
@@ -1289,7 +1296,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
         lane, lanes, wanted, prompt,
         logPath: join(dirname(logPath), `${retryName}.log`),
         usageFile: join(dirname(usageFile), `${retryName}.usage.json`),
-        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord,
+        name: retryName, project, task, queue, lockPath, projectBranch, deferRecord, base: runBase,
       })
     }
     const record = laneRunRecord({
@@ -1307,6 +1314,7 @@ export async function startLane({ options, lane, lanes, wanted, prompt, logPath,
       log: logPath,
       branch: git.branch,
       commits: git.commits,
+      base: runBase,
       stoppedLeftovers: totalStoppedLeftovers > 0 ? totalStoppedLeftovers : undefined,
       note: leftoversCleaned ? 'leftovers were stopped' : undefined,
       startFailed: startFailure !== '' ? true : undefined,

@@ -92,6 +92,19 @@ function projectPrefix(project) {
   }
 }
 
+function newestBase(record, options) {
+  const lane = typeof record?.lane === 'string' ? record.lane.trim() : ''
+  let newest = record && typeof record === 'object' && !Array.isArray(record) ? record : null
+  if (lane !== '') {
+    for (const item of Array.isArray(options?.records) ? options.records : []) {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+      if (typeof item.lane !== 'string' || item.lane.trim() !== lane) continue
+      newest = item
+    }
+  }
+  return typeof newest?.base === 'string' ? newest.base.trim() : ''
+}
+
 export function branchChanges(record, lanes = {}, options = {}) {
   let folder = typeof record?.project === 'string' && record.project.trim() ? record.project.trim() : ''
   const laneEntry = lanes && typeof lanes === 'object' && typeof record?.lane === 'string' && Object.hasOwn(lanes, record.lane)
@@ -100,15 +113,17 @@ export function branchChanges(record, lanes = {}, options = {}) {
   if (!folder && laneEntry?.worktree) folder = laneEntry.worktree
   if (!folder) return []
   const project = typeof options?.project === 'string' && options.project.trim() ? options.project.trim() : folder
-  const base = projectBranch(project)
-  if (!base) return null
+  const commit = newestBase(record, options)
+  const branch = commit ? '' : projectBranch(project)
+  if (!commit && !branch) return null
   try {
     const prefix = projectPrefix(project)
     const relativePath = (path) => {
       if (!path) return ''
       return prefix && path.startsWith(prefix) ? path.slice(prefix.length) : path
     }
-    const committed = gitText(folder, ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '--relative', `${base}...HEAD`])
+    const range = commit ? `${commit}..HEAD` : `${branch}...HEAD`
+    const committed = gitText(folder, ['diff', '--no-ext-diff', '--no-textconv', '--name-only', '--relative', range])
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean)
@@ -333,7 +348,7 @@ export function createOrchestrators({
       },
       outsideFiles: (record) => {
         if (sub.restricted !== true) return []
-        const changes = changedFiles(record, lanes, { project: root })
+        const changes = changedFiles(record, lanes, { project: root, records: [...sharedCache.read().values()] })
         if (!Array.isArray(changes)) {
           if (!stopped && instances.has(config.id)) {
             const parent = instances.get(ORCHESTRATOR_KEY)
@@ -439,7 +454,13 @@ export function createOrchestrators({
     return readSaved().ladder.subs.map((sub) => {
       const instance = instances.get(sub.id)
       const answer = instance ? instance.answer() : null
-      return { id: sub.id, name: sub.name, harness: answer?.harness ?? harnessFor(sub) }
+      const own = typeof sub.model === 'string' ? sub.model.trim() : ''
+      return {
+        id: sub.id,
+        name: sub.name,
+        harness: answer?.harness ?? harnessFor(sub),
+        model: answer?.model ?? (own || null),
+      }
     })
   }
 

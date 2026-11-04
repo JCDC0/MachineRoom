@@ -868,6 +868,12 @@ describe('runRecord', () => {
     expect(runRecord({ lane: 'opencode' })).not.toHaveProperty('retried')
   })
 
+  it('writes the base commit only when the runner knows it', () => {
+    expect(runRecord({ lane: 'opencode', base: 'abc1234' }).base).toBe('abc1234')
+    expect(runRecord({ lane: 'opencode', base: '   ' })).not.toHaveProperty('base')
+    expect(runRecord({ lane: 'opencode' })).not.toHaveProperty('base')
+  })
+
   it('writes nulls where the run reported nothing', () => {
     const record = runRecord({ lane: 'opencode', briefs: 'T3', startedAt: 1760000000000, exitCode: null, costUsd: undefined })
     expect(record.briefs).toEqual([])

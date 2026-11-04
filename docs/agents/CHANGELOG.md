@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.
 - The page drops dead code: `keyFormProblem`, `groupSubPlan`, `removeSubPlan` and `assignSubLanesPlan` in `family.js`, `agentRows` in `agentList.js` with its re-export, the unused `dockOpen` setting and the dead `.backup-confirm-card` confirm class (task U145).
 - The Reviews panel sets no state once it has closed, so a review read that ends after the drawer closes no longer throws.
