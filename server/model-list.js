@@ -2,6 +2,7 @@ export const DEFAULT_CONTEXT_WINDOW = 200000
 
 export const MODELS = [
   { id: 'opencode/deepseek-v4.1-flash-free', label: 'DeepSeek v4.1 Flash (free)', harness: 'opencode', tier: 'small', free: true },
+  { id: 'opencode/crouton-alpha-free', label: 'Crouton Alpha (free)', harness: 'opencode', tier: 'small', free: true },
   { id: 'opencode-go/qwen3.8-flash', label: 'Qwen 3.8 Flash', harness: 'opencode', tier: 'small', free: false },
   { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', harness: 'claude', tier: 'small', free: false, contextWindow: 1000000 },
   { id: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', harness: 'claude', tier: 'medium', free: false, contextWindow: 1000000 },

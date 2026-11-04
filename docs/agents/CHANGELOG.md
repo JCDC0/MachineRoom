@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `opencode6` and `opencode7` return as experiment lanes that try Crouton Alpha Free (`opencode/crouton-alpha-free`) at high reasoning on ordinary briefs, and the OpenCode model list names that model.
 - The history audit reads the private folder names to look for from `MACHINEROOM_AUDIT_PRIVATE` instead of naming one in the code, and treats `someuser` as a placeholder user folder.
 - At 900 pixels and wider the right column of the lower half holds one inspector in place of the in-lens inspector and the Overview card, at rest it shows `AgentDock` above the cost board, and the transport spend click scrolls that board into view (task U150).
 - The room writes its own sprites module: its five colours, the seeded random numbers that keep a room repeatable, the easing helpers, the shared reduced motion reading, the glow texture, the Space Mono 400 text sprite and the additive line material (task U151).
