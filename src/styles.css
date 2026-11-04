@@ -7400,10 +7400,6 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
     overflow: hidden;
   }
 
-  .hud-lower.has-drawer {
-    grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 320px;
-  }
-
   .hud-lower [hidden] {
     display: none !important;
   }
@@ -7496,153 +7492,41 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
     display: flex;
     flex-direction: column;
     border-left: 1px solid rgb(255 255 255 / 0.12);
-    overflow: hidden;
-  }
-
-  .hud-overview {
-    min-height: 0;
-    margin: 16px;
-    padding: 16px;
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    border: 1px solid rgb(255 255 255 / 0.12);
-    border-radius: 12px;
-    background: rgb(255 255 255 / 0.02);
+    overflow-x: hidden;
+    scrollbar-width: thin;
   }
 
-  .hud-overview-title {
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: rgb(255 255 255 / 0.55);
-  }
-
-  .hud-overview-list {
-    margin: 0;
-    padding: 0;
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .hud-overview-entry {
-    width: 100%;
-    padding: 10px 8px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border: 0;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--white);
-    font-family: var(--sans);
-    font-size: 14px;
-    font-weight: 400;
-    letter-spacing: 0;
-    text-transform: none;
-    text-align: left;
-  }
-
-  .hud-overview-entry:hover:not(:disabled) {
-    background: rgb(255 255 255 / 0.08);
-  }
-
-  .hud-overview-icon {
+  .hud-lower-detail {
     flex: 0 0 auto;
-    display: inline-flex;
-    color: rgb(255 255 255 / 0.7);
-  }
-
-  .hud-overview-icon svg {
-    display: block;
-  }
-
-  .hud-overview-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .hud-drawer {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .hud-drawer-head {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    border-bottom: 1px solid rgb(255 255 255 / 0.12);
-  }
-
-  .hud-drawer-back {
-    padding: 2px 8px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: transparent;
-    color: var(--white);
-    font-size: 10px;
-    letter-spacing: 0.04em;
-  }
-
-  .hud-drawer-title {
-    font-family: var(--mono);
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: rgb(255 255 255 / 0.8);
-  }
-
-  .hud-drawer-body {
-    flex: 1 1 auto;
-    min-height: 0;
     padding: 12px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
   }
 
-  .hud-drawer-section {
-    min-height: 0;
-  }
-
-  .hud-drawer .hud-settings {
-    border: 0;
-    background-color: transparent;
-    background-image: none;
-  }
-
-  .hud-drawer .hud-settings-header {
-    display: none;
-  }
-
-  .hud-drawer .hud-settings-body {
-    padding: 0;
-    max-height: none;
-  }
-
-  .hud-drawer .agent-dock {
+  .hud-lower-detail .agent-dock {
     border: 0;
     background-color: transparent;
     background-image: none;
     padding: 0;
   }
 
-  .hud-drawer .hud-log-body {
-    padding: 0;
+  .hud-lower-costs {
+    flex: 0 0 auto;
+    padding: 12px;
+    border-top: 1px solid rgb(255 255 255 / 0.12);
+  }
+
+  .hud-lower-right .mr-inspector {
+    position: static;
+    z-index: auto;
+    width: auto;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    background-image: none;
+  }
+
+  .hud-lower-right .mr-inspector-body {
     overflow-y: visible;
   }
 
@@ -7917,8 +7801,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 
 @media (min-width: 900px) and (max-width: 1099px) {
-  .hud-lower,
-  .hud-lower.has-drawer {
+  .hud-lower {
     grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) clamp(200px, calc(40vw - 160px), 280px);
   }
 }

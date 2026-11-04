@@ -1,5 +1,4 @@
-export const COSTS_ENTRY_SELECTOR = '.hud-overview-entry.is-costs'
-export const COSTS_DRAWER_SELECTOR = '.hud-lower-right'
+export const COST_BOARD_SELECTOR = '.hud-lower-right #hud-dock-costs'
 
 function cents(value) {
   return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0
@@ -31,16 +30,11 @@ function reducedMotion() {
   )
 }
 
-export function openCostsDrawer(doc = typeof document === 'undefined' ? null : document) {
+export function showCostBoard(doc = typeof document === 'undefined' ? null : document) {
   const find = doc && typeof doc.querySelector === 'function' ? (selector) => doc.querySelector(selector) : null
   if (!find) return false
-  const entry = find(COSTS_ENTRY_SELECTOR)
-  if (!entry || typeof entry.click !== 'function') return false
-  const expanded = typeof entry.getAttribute === 'function' ? entry.getAttribute('aria-expanded') : null
-  if (expanded !== 'true') entry.click()
-  const drawer = find(COSTS_DRAWER_SELECTOR)
-  if (drawer && typeof drawer.scrollIntoView === 'function') {
-    drawer.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' })
-  }
+  const board = find(COST_BOARD_SELECTOR)
+  if (!board || typeof board.scrollIntoView !== 'function') return false
+  board.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' })
   return true
 }

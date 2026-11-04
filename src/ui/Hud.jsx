@@ -23,9 +23,7 @@ import { lensProject } from './lens.js'
 import {
   REPLAY_LINE,
   currentSessionTitle,
-  drawerEntry,
   lowerBreadcrumb,
-  overviewEntries,
 } from './lowerHalf.js'
 import { latestOnly } from './panels/notices.js'
 import { orchestratorOn } from './orchestratorChat.js'
@@ -97,94 +95,6 @@ function EventLogBody({ entries, bodyRef = null, onScroll = null }) {
   )
 }
 
-function OverviewIcon({ id }) {
-  const props = {
-    viewBox: '0 0 16 16',
-    width: 16,
-    height: 16,
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 1.2,
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    'aria-hidden': true,
-  }
-  if (id === 'agent') {
-    return (
-      <svg {...props}>
-        <circle cx="8" cy="5.5" r="2.5" />
-        <path d="M3 13c0-2.2 2.2-3.5 5-3.5s5 1.3 5 3.5" />
-      </svg>
-    )
-  }
-  if (id === 'costs') {
-    return (
-      <svg {...props}>
-        <path d="M3 12V8M8 12V4M13 12V6" />
-      </svg>
-    )
-  }
-  return (
-    <svg {...props}>
-      <circle cx="8" cy="8" r="5" />
-    </svg>
-  )
-}
-
-export function OverviewCard({ entries = overviewEntries(), onOpen = () => {}, hidden = false, open = null }) {
-  return (
-    <aside className="hud-overview" aria-label="Overview" hidden={hidden}>
-      <h2 className="hud-overview-title">Overview</h2>
-      <ul className="hud-overview-list">
-        {entries.map((entry) => (
-          <li key={entry.id}>
-            <button
-              type="button"
-              className={`hud-overview-entry is-${entry.id}`}
-              aria-expanded={entry.id === open}
-              onClick={() => onOpen(entry.id)}
-            >
-              <span className="hud-overview-icon" aria-hidden="true">
-                <OverviewIcon id={entry.id} />
-              </span>
-              <span className="hud-overview-label">{entry.title}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </aside>
-  )
-}
-
-export function LowerDrawer({
-  entry = null,
-  hidden = false,
-  onBack = () => {},
-  children = null,
-}) {
-  return (
-    <aside
-      id="hud-drawer"
-      className="hud-drawer"
-      aria-label={entry ? `${entry.title} drawer` : 'Drawer'}
-      hidden={hidden}
-    >
-      <header className="hud-drawer-head">
-        <button
-          type="button"
-          className="hud-drawer-back mono"
-          onClick={onBack}
-          aria-label="Back to overview"
-        >
-          Back
-        </button>
-        <h2 className="hud-drawer-title">{entry ? entry.title : ''}</h2>
-      </header>
-      <div className="hud-drawer-body">{children}</div>
-    </aside>
-  )
-}
-
 export default function Hud({
   snapshot,
   project = '',
@@ -223,6 +133,7 @@ export default function Hud({
   onSettingsChange = () => {},
   sidebar = null,
   settingsRequest = 0,
+  inspector = null,
 }) {
   const [logOpen, setLogOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -237,7 +148,6 @@ export default function Hud({
   const [orchestratorList, setOrchestratorList] = useState([])
   const [sessionTitle, setSessionTitle] = useState('')
   const [idleOpen, setIdleOpen] = useState(false)
-  const [drawer, setDrawer] = useState(null)
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? Number(window.innerWidth) || 0 : 0
   )
@@ -339,16 +249,6 @@ export default function Hud({
   useEffect(() => {
     if (wide) setSessionsOpen(false)
   }, [wide])
-
-  function openDrawer(id) {
-    setDrawer(id)
-    setLogOpen(false)
-    setSettingsOpen(false)
-  }
-
-  function closeDrawer() {
-    setDrawer(null)
-  }
 
   function toggleLog() {
     const next = !logOpen
@@ -601,7 +501,6 @@ export default function Hud({
         setMenuOpen(false)
         setSessionsOpen(false)
         setChatListOpen(false)
-        if (wide) setDrawer(null)
         return
       }
       if (event.defaultPrevented) return
@@ -632,7 +531,7 @@ export default function Hud({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [client, chatAvailable, floatingChat, wide, drawer, logOpen])
+  }, [client, chatAvailable, floatingChat, wide, logOpen])
 
   function renderAgentRow(row, indent = 0) {
     const { agent, depth, number, group, visible } = row
@@ -1046,6 +945,8 @@ export default function Hud({
         />
       )}
 
+      {!wide && inspector}
+
       {wide && (
         <Transport
           snapshot={snapshot}
@@ -1085,7 +986,7 @@ export default function Hud({
       )}
 
       {wide && (
-        <div className={`hud-lower${drawer ? ' has-drawer' : ''}`}>
+        <div className="hud-lower">
           <div className="hud-lower-left">
             {sidebar ?? (
               <Sidebar
@@ -1142,17 +1043,8 @@ export default function Hud({
             )}
           </div>
           <div className="hud-lower-right">
-            <OverviewCard
-              hidden={Boolean(drawer)}
-              open={drawer}
-              onOpen={openDrawer}
-            />
-            <LowerDrawer
-              entry={drawer ? drawerEntry(drawer) : null}
-              hidden={!drawer}
-              onBack={closeDrawer}
-            >
-              <div className="hud-drawer-section" hidden={drawer !== 'agent'}>
+            {inspector ?? (
+              <div className="hud-lower-detail">
                 <AgentDock
                   agent={focused}
                   working={workingAgent}
@@ -1167,15 +1059,14 @@ export default function Hud({
                   onToggleTerminal={onToggleTerminal}
                   onOpenChat={() => {
                     setChatFocus((value) => value + 1)
-                    setDrawer(null)
                   }}
                   onSaved={() => setOrchestratorNonce((value) => value + 1)}
                 />
               </div>
-              <div className="hud-drawer-section" hidden={drawer !== 'costs'}>
-                <div id="hud-dock-costs" className="hud-dock-costs" />
-              </div>
-            </LowerDrawer>
+            )}
+            <div className="hud-lower-costs">
+              <div id="hud-dock-costs" className="hud-dock-costs" />
+            </div>
           </div>
         </div>
       )}

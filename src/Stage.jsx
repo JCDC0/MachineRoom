@@ -47,8 +47,7 @@ import { LENS_SHARE_DEFAULT, clampLensShare, heightRailShare, lensHeightValue, l
 const SPEEDS = [1, 2, 4, 8]
 const NONE = []
 const COVER_PANEL = '.control-drawer, .hud-settings, .hud-dropdown, .mr-side-overlay, .hud-help-backdrop, .hud-band-list, .hud-menu.is-open, .mr-assistant, .mr-guide-backdrop, .mr-launcher, .mr-setup-backdrop'
-const OPEN_PANEL = `${COVER_PANEL}, .hud-drawer:not([hidden])`
-const IDLE_PANEL = `${OPEN_PANEL}, .mr-inspector, .brief-confirm-card, .mr-side-confirm-card, .endpoints-confirm`
+const IDLE_PANEL = `${COVER_PANEL}, .mr-inspector, .brief-confirm-card, .mr-side-confirm-card, .endpoints-confirm`
 const BADGE = {
   position: 'absolute',
   bottom: 96,
@@ -81,7 +80,7 @@ export function handleRoomKey(event, view = {}) {
   const room = view.room?.current ?? null
   const follow = view.follow?.current
   if (event.key === 'Escape') {
-    if (document.querySelector(OPEN_PANEL)) return
+    if (document.querySelector(COVER_PANEL)) return
     if (view.inspector?.current) {
       view.closeInspector?.()
       return
@@ -1445,6 +1444,28 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!agent) return key
     return labels ? displayName(agent.key, labels) : agent.name
   }
+  const inspectorPanel = inspector ? (
+    <Inspector
+      target={inspector}
+      live={Boolean(live)}
+      bridge={bridgeLive}
+      client={client}
+      lanes={inspectorLanes}
+      working={workingInspector}
+      costs={dockCosts}
+      liveRuns={dockRuns}
+      tasks={dockTasks}
+      log={log}
+      orchestrator={orchestrators}
+      family={familyNodes}
+      tree={inspectorTree}
+      touches={inspectorTouches}
+      webAgents={webAgents}
+      onClose={closeInspector}
+      onSelect={selectInspector}
+      onOpenPath={navigateInspector}
+    />
+  ) : null
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
@@ -1534,28 +1555,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                   </button>
                 ))}
               </div>
-            )}
-            {inspector && (
-              <Inspector
-                target={inspector}
-                live={Boolean(live)}
-                bridge={bridgeLive}
-                client={client}
-                lanes={inspectorLanes}
-                working={workingInspector}
-                costs={dockCosts}
-                liveRuns={dockRuns}
-                tasks={dockTasks}
-                log={log}
-                orchestrator={orchestrators}
-                family={familyNodes}
-                tree={inspectorTree}
-                touches={inspectorTouches}
-                webAgents={webAgents}
-                onClose={closeInspector}
-                onSelect={selectInspector}
-                onOpenPath={navigateInspector}
-              />
             )}
           </div>
           <LensRail
@@ -1697,6 +1696,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
                     labels={labels}
                     effects={effects}
                     onSettingsChange={handleSettingsChange}
+                    inspector={inspectorPanel}
                   />
                 </TransportCostsContext.Provider>
               </LanePillsContext.Provider>

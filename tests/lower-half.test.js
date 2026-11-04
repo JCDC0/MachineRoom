@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  OVERVIEW_ENTRIES,
   REPLAY_LINE,
   currentSessionTitle,
-  drawerEntry,
   lowerBreadcrumb,
-  overviewEntries,
 } from '../src/ui/lowerHalf.js'
 
 describe('the lower half breadcrumb', () => {
@@ -44,31 +41,6 @@ describe('the current conversation title', () => {
     expect(currentSessionTitle({ current: null })).toBe('')
     expect(currentSessionTitle({ current: { title: 7 } })).toBe('')
     expect(currentSessionTitle({ current: { title: '  ' } })).toBe('')
-  })
-})
-
-describe('the Overview entries', () => {
-  it('holds Agent and Costs in that order, since Log and Settings open from the menu', () => {
-    expect(overviewEntries()).toEqual([
-      { id: 'agent', title: 'Agent' },
-      { id: 'costs', title: 'Costs' },
-    ])
-    expect(OVERVIEW_ENTRIES.map((entry) => entry.id)).toEqual(['agent', 'costs'])
-  })
-
-  it('returns a fresh list each time', () => {
-    const first = overviewEntries()
-    first[0].title = 'Changed'
-    first.push({ id: 'extra', title: 'Extra' })
-    expect(overviewEntries()[0].title).toBe('Agent')
-    expect(overviewEntries()).toHaveLength(2)
-  })
-
-  it('finds one entry by id and refuses an unknown id', () => {
-    expect(drawerEntry('costs')).toEqual({ id: 'costs', title: 'Costs' })
-    expect(drawerEntry('log')).toBeNull()
-    expect(drawerEntry('missing')).toBeNull()
-    expect(drawerEntry(null)).toBeNull()
   })
 })
 
