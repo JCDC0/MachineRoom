@@ -4,6 +4,7 @@ import { resolve } from 'node:path'
 import { gitPath } from './programPath.js'
 
 export const GIT_TIMEOUT_MS = 10000
+export const GIT_WRITE_TIMEOUT_MS = 120 * 1000
 export const CACHE_TTL_MS = 1000
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const MAX_COMMITS = 200
@@ -24,6 +25,27 @@ export const BAD_FROM_BRANCH_PROBLEM = 'Choose a known branch to branch from.'
 export const NOT_GIT_PROBLEM = 'That folder is not a git repository.'
 export const STATUS_FAILED_PROBLEM = 'Could not check for uncommitted changes.'
 export const WRITE_IN_FLIGHT_PROBLEM = 'Another git change is running.'
+export const SWITCH_TIMEOUT_PROBLEM = 'The switch took too long, so it was stopped.'
+export const BRANCH_TIMEOUT_PROBLEM = 'Making the branch took too long, so it was stopped.'
+
+function timedOut(error) {
+  return error?.killed === true || error?.code === 'ETIMEDOUT'
+}
+
+async function checkoutSummary(folder, runner) {
+  try {
+    const branch = (await runner(folder, ['branch', '--show-current'], { timeout: GIT_TIMEOUT_MS })).trim()
+    const status = await runner(folder, ['status', '--porcelain', '--untracked-files=no'], { timeout: GIT_TIMEOUT_MS })
+    return { branch: branch || null, clean: status.trim() === '' }
+  } catch {
+    return null
+  }
+}
+
+function checkoutStateSentence(state) {
+  if (!state) return ' The checkout could not be read.'
+  return ` The checkout is on ${state.branch ?? 'no branch'} and it ${state.clean ? 'is clean' : 'has uncommitted changes'}.`
+}
 
 function pathKey(p) {
   try {
@@ -124,7 +146,7 @@ export async function isGitCheckout(folder, runner = defaultGitRunner) {
     return false
   }
   try {
-    const inside = await runner(resolved, ['rev-parse', '--is-inside-work-tree'])
+    const inside = await runner(resolved, ['rev-parse', '--is-inside-work-tree'], { timeout: GIT_TIMEOUT_MS })
     return inside.trim() === 'true'
   } catch {
     return false
@@ -133,7 +155,7 @@ export async function isGitCheckout(folder, runner = defaultGitRunner) {
 
 async function gitTopLevel(folder, runner = defaultGitRunner) {
   try {
-    const top = (await runner(folder, ['rev-parse', '--show-toplevel'])).trim()
+    const top = (await runner(folder, ['rev-parse', '--show-toplevel'], { timeout: GIT_TIMEOUT_MS })).trim()
     return top ? resolve(top) : resolve(folder)
   } catch {
     return resolve(folder)
@@ -143,7 +165,7 @@ async function gitTopLevel(folder, runner = defaultGitRunner) {
 async function otherWorktreeBranches(runner, folder) {
   const held = new Set()
   try {
-    const out = await runner(folder, ['worktree', 'list', '--porcelain'])
+    const out = await runner(folder, ['worktree', 'list', '--porcelain'], { timeout: GIT_TIMEOUT_MS })
     for (const block of out.split(/(?:\r?\n){2,}/)) {
       const lines = block.trim().split(/\r?\n/)
       const path = lines.find((line) => line.startsWith('worktree '))?.slice('worktree '.length).trim()
@@ -170,7 +192,7 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
   let branch = null
   let detached = false
   try {
-    const current = (await runner(resolved, ['branch', '--show-current'])).trim()
+    const current = (await runner(resolved, ['branch', '--show-current'], { timeout: GIT_TIMEOUT_MS })).trim()
     if (current) {
       branch = current
       detached = false
@@ -185,7 +207,7 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
 
   let head = null
   try {
-    head = (await runner(resolved, ['rev-parse', 'HEAD'])).trim() || null
+    head = (await runner(resolved, ['rev-parse', 'HEAD'], { timeout: GIT_TIMEOUT_MS })).trim() || null
   } catch {
     head = null
   }
@@ -193,7 +215,7 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
   let changes = []
   let changeCount = 0
   try {
-    const status = await runner(resolved, ['status', '--porcelain', '-z'])
+    const status = await runner(resolved, ['status', '--porcelain', '-z'], { timeout: GIT_TIMEOUT_MS })
     const parsed = parseStatus(status)
     changeCount = parsed.length
     changes = parsed.slice(0, MAX_CHANGES)
@@ -210,7 +232,7 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
   const branchRefs = new Map()
   try {
     const format = '%(refname)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)'
-    const refsOut = await runner(resolved, ['for-each-ref', `--format=${format}`, 'refs/heads/'])
+    const refsOut = await runner(resolved, ['for-each-ref', `--format=${format}`, 'refs/heads/'], { timeout: GIT_TIMEOUT_MS })
     const lines = refsOut.split(/\r?\n/).filter(Boolean)
     for (const line of lines) {
       const [refname, objSha, upShort, track] = line.split('\0')
@@ -263,7 +285,7 @@ export async function computeGitState(projectRoot, runner = defaultGitRunner) {
         '-n',
         String(MAX_COMMITS + 1),
       ]
-      const logOut = await runner(resolved, logArgs)
+      const logOut = await runner(resolved, logArgs, { timeout: GIT_TIMEOUT_MS })
       const records = logOut.split('\x1e').map((r) => r.trim()).filter(Boolean)
       truncated = records.length > MAX_COMMITS
       const kept = records.slice(0, MAX_COMMITS)
@@ -351,7 +373,7 @@ export function createGitApi({
 
   async function branchRefExists(folder, branchName) {
     try {
-      await gitRunner(folder, ['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`])
+      await gitRunner(folder, ['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`], { timeout: GIT_TIMEOUT_MS })
       return true
     } catch {
       return false
@@ -360,7 +382,7 @@ export function createGitApi({
 
   async function branchExistsLoose(folder, branchName) {
     try {
-      const refs = await gitRunner(folder, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'])
+      const refs = await gitRunner(folder, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/'], { timeout: GIT_TIMEOUT_MS })
       return String(refs)
         .split(/\r?\n/)
         .map((name) => name.trim())
@@ -372,7 +394,7 @@ export function createGitApi({
 
   async function checkRefFormat(folder, branchName) {
     try {
-      await gitRunner(folder, ['check-ref-format', '--branch', branchName])
+      await gitRunner(folder, ['check-ref-format', '--branch', branchName], { timeout: GIT_TIMEOUT_MS })
       return true
     } catch {
       return false
@@ -462,7 +484,7 @@ export function createGitApi({
 
         let dirty = false
         try {
-          const status = await gitRunner(resolved, ['status', '--porcelain'])
+          const status = await gitRunner(resolved, ['status', '--porcelain'], { timeout: GIT_TIMEOUT_MS })
           dirty = status.trim().length > 0
         } catch {
           sendJson(req, res, 409, { error: STATUS_FAILED_PROBLEM })
@@ -479,8 +501,13 @@ export function createGitApi({
         }
 
         try {
-          await gitRunner(resolved, ['switch', '--', branch])
-        } catch {
+          await gitRunner(resolved, ['switch', '--', branch], { timeout: GIT_WRITE_TIMEOUT_MS })
+        } catch (error) {
+          if (timedOut(error)) {
+            const state = await checkoutSummary(resolved, gitRunner)
+            sendJson(req, res, 500, { error: `${SWITCH_TIMEOUT_PROBLEM}${checkoutStateSentence(state)}` })
+            return true
+          }
           sendJson(req, res, 500, { error: 'The bridge could not switch branches.' })
           return true
         }
@@ -568,8 +595,15 @@ export function createGitApi({
 
       try {
         try {
-          await gitRunner(resolved, ['branch', '--', name, `refs/heads/${from}`])
-        } catch {
+          await gitRunner(resolved, ['branch', '--', name, `refs/heads/${from}`], { timeout: GIT_WRITE_TIMEOUT_MS })
+        } catch (error) {
+          if (timedOut(error)) {
+            const state = await checkoutSummary(resolved, gitRunner)
+            const created = await branchRefExists(resolved, name)
+            const branchWord = created ? 'The branch was created.' : 'The branch was not created.'
+            sendJson(req, res, 500, { error: `${BRANCH_TIMEOUT_PROBLEM}${checkoutStateSentence(state)} ${branchWord}` })
+            return true
+          }
           sendJson(req, res, 500, { error: 'The bridge could not create that branch.' })
           return true
         }

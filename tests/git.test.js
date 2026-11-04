@@ -10,13 +10,17 @@ import {
   BAD_FROM_BRANCH_PROBLEM,
   BRANCH_NOT_FOUND_PROBLEM,
   BRANCH_TAKEN_PROBLEM,
+  BRANCH_TIMEOUT_PROBLEM,
   CHECKOUT_DIRTY_PROBLEM,
   CONFIRM_BRANCH_PROBLEM,
   CONFIRM_SWITCH_PROBLEM,
+  GIT_TIMEOUT_MS,
+  GIT_WRITE_TIMEOUT_MS,
   LANE_RUN_OPEN_PROBLEM,
   ORIGIN_BRANCH_PROBLEM,
   ORIGIN_SWITCH_PROBLEM,
   STATUS_FAILED_PROBLEM,
+  SWITCH_TIMEOUT_PROBLEM,
   TURN_RUNNING_PROBLEM,
   WORKTREE_HOLDS_BRANCH_PROBLEM,
   WRITE_IN_FLIGHT_PROBLEM,
@@ -512,6 +516,77 @@ describe('successful switch and notices', () => {
 
     const change = await changePromise
     expect(change).toEqual({ topic: 'git' })
+  })
+})
+
+describe('git write limits', () => {
+  it('keeps the short limit on reads and gives the switch and the new branch the long one', async () => {
+    const repo = makeRepo()
+    testGit(repo, ['branch', 'feature-a'])
+    const calls = []
+    const recordingRunner = async (cwd, args, opts) => {
+      calls.push({ args, timeout: opts?.timeout })
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const { url } = await startBridge({ projectRoot: repo, gitRunner: recordingRunner })
+
+    calls.length = 0
+    const state = await getJson(url, '/api/git')
+    expect(state.status).toBe(200)
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls.every((call) => call.timeout === GIT_TIMEOUT_MS)).toBe(true)
+
+    calls.length = 0
+    const switched = await postJson(url, '/api/git/switch', { branch: 'feature-a', confirmed: true })
+    expect(switched.status).toBe(200)
+    const switchCalls = calls.filter((call) => call.args[0] === 'switch')
+    expect(switchCalls).toHaveLength(1)
+    expect(switchCalls[0].timeout).toBe(GIT_WRITE_TIMEOUT_MS)
+    expect(calls.filter((call) => call !== switchCalls[0]).every((call) => call.timeout === GIT_TIMEOUT_MS)).toBe(true)
+
+    calls.length = 0
+    const created = await postJson(url, '/api/git/branch', { name: 'feature-b', from: 'main', confirmed: true })
+    expect(created.status).toBe(200)
+    const branchCall = calls.find((call) => call.args[0] === 'branch' && call.args[1] === '--')
+    expect(branchCall.timeout).toBe(GIT_WRITE_TIMEOUT_MS)
+  })
+
+  it('says a switch took too long and where the checkout is', async () => {
+    const repo = makeRepo()
+    testGit(repo, ['branch', 'feature-a'])
+    const failingRunner = async (cwd, args, opts) => {
+      if (Array.isArray(args) && args[0] === 'switch') {
+        const error = new Error('git timed out')
+        error.killed = true
+        throw error
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const { url } = await startBridge({ projectRoot: repo, gitRunner: failingRunner })
+
+    const res = await postJson(url, '/api/git/switch', { branch: 'feature-a', confirmed: true })
+    expect(res.status).toBe(500)
+    expect(res.body.error).toBe(`${SWITCH_TIMEOUT_PROBLEM} The checkout is on main and it is clean.`)
+    expect(testGit(repo, ['branch', '--show-current']).trim()).toBe('main')
+  })
+
+  it('says a new branch took too long, where the checkout is and whether the branch was made', async () => {
+    const repo = makeRepo()
+    const failingRunner = async (cwd, args, opts) => {
+      if (Array.isArray(args) && args[0] === 'branch' && args[1] === '--') {
+        const error = new Error('git timed out')
+        error.killed = true
+        throw error
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const { url } = await startBridge({ projectRoot: repo, gitRunner: failingRunner })
+
+    const res = await postJson(url, '/api/git/branch', { name: 'feature-b', from: 'main', confirmed: true })
+    expect(res.status).toBe(500)
+    expect(res.body.error).toBe(
+      `${BRANCH_TIMEOUT_PROBLEM} The checkout is on main and it is clean. The branch was not created.`
+    )
   })
 })
 

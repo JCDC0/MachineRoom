@@ -5,10 +5,16 @@ import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
 import { mainCheckoutOf } from './lanes-source.js'
 import { gitPath } from './programPath.js'
-import { beginRepoWrite, endRepoWrite, invalidateGitCache, WRITE_IN_FLIGHT_PROBLEM } from './git.js'
+import {
+  beginRepoWrite,
+  endRepoWrite,
+  GIT_TIMEOUT_MS,
+  GIT_WRITE_TIMEOUT_MS,
+  invalidateGitCache,
+  WRITE_IN_FLIGHT_PROBLEM,
+} from './git.js'
 import { readAllRunRecords, runsFile } from './runs.js'
 
-const GIT_TIMEOUT_MS = 10 * 1000
 const GIT_MAX_BUFFER = 64 * 1024 * 1024
 const COMMIT_LIMIT = 50
 const MESSAGE_LIMIT = 200
@@ -21,6 +27,7 @@ const ROOM_BRIEFS = join(REPO_ROOT, 'docs', 'agents')
 export const DEFAULT_PATCH_LIMIT = 400 * 1024
 export const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
+export const MERGE_TIMEOUT_PROBLEM = 'The merge took too long, so it was stopped.'
 let codeCheckoutPath = null
 
 function codeCheckout() {
@@ -46,7 +53,7 @@ function readText(path) {
   }
 }
 
-function git(worktree, args, extraEnv = null) {
+function defaultGitRunner(worktree, args, { timeout = GIT_TIMEOUT_MS, extraEnv = null } = {}) {
   return new Promise((resolveGit, rejectGit) => {
     execFile(
       gitPath(),
@@ -55,7 +62,7 @@ function git(worktree, args, extraEnv = null) {
         cwd: worktree,
         shell: false,
         windowsHide: true,
-        timeout: GIT_TIMEOUT_MS,
+        timeout,
         maxBuffer: GIT_MAX_BUFFER,
         encoding: 'utf8',
         env: extraEnv ? { ...process.env, ...extraEnv } : process.env,
@@ -72,6 +79,26 @@ function git(worktree, args, extraEnv = null) {
   })
 }
 
+function timedOut(error) {
+  return error?.killed === true || error?.code === 'ETIMEDOUT'
+}
+
+async function checkoutState(runGit, cwd) {
+  try {
+    const head = (await runGit(cwd, ['rev-parse', 'HEAD'])).trim()
+    const status = await runGit(cwd, ['status', '--porcelain', '--untracked-files=no'])
+    if (!head) return null
+    return { head, clean: status.trim() === '' }
+  } catch {
+    return null
+  }
+}
+
+function timeoutProblem(state) {
+  if (!state) return `${MERGE_TIMEOUT_PROBLEM} The checkout could not be read.`
+  return `${MERGE_TIMEOUT_PROBLEM} The checkout is at ${state.head.slice(0, 12)} and it ${state.clean ? 'is clean' : 'has uncommitted changes'}.`
+}
+
 function worktreeError(error) {
   if (error?.code === 'ENOGIT') return 'Git is not on the PATH.'
   if (error?.code === 'ENOENT') return 'That worktree is missing.'
@@ -83,9 +110,9 @@ function worktreeUnreadable(error) {
   return error?.code === 'ENOENT' || /not a git repository/i.test(String(error?.gitStderr ?? ''))
 }
 
-async function isAncestor(cwd, ancestor, descendant) {
+async function isAncestor(runGit, cwd, ancestor, descendant) {
   try {
-    await git(cwd, ['merge-base', '--is-ancestor', ancestor, descendant])
+    await runGit(cwd, ['merge-base', '--is-ancestor', ancestor, descendant])
     return true
   } catch (error) {
     if (error?.code === 1) return false
@@ -93,34 +120,34 @@ async function isAncestor(cwd, ancestor, descendant) {
   }
 }
 
-async function conflictedPaths(cwd) {
-  const text = await git(cwd, ['diff', '--name-only', '--diff-filter=U'])
+async function conflictedPaths(runGit, cwd) {
+  const text = await runGit(cwd, ['diff', '--name-only', '--diff-filter=U'])
   return text.split(/\r?\n/).filter(Boolean)
 }
 
-async function mergeInProgress(cwd) {
+async function mergeInProgress(runGit, cwd) {
   try {
-    await git(cwd, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
+    await runGit(cwd, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])
     return true
   } catch {
     return false
   }
 }
 
-async function abortMerge(cwd) {
+async function abortMerge(runGit, cwd) {
   try {
-    await git(cwd, ['merge', '--abort'])
+    await runGit(cwd, ['merge', '--abort'], { timeout: GIT_WRITE_TIMEOUT_MS })
     return true
   } catch {
     return false
   }
 }
 
-async function checkoutMatches(cwd, sha) {
+async function checkoutMatches(runGit, cwd, sha) {
   try {
-    const head = (await git(cwd, ['rev-parse', 'HEAD'])).trim()
+    const head = (await runGit(cwd, ['rev-parse', 'HEAD'])).trim()
     if (head !== sha) return false
-    const status = await git(cwd, ['status', '--porcelain', '--untracked-files=no'])
+    const status = await runGit(cwd, ['status', '--porcelain', '--untracked-files=no'])
     return status.trim() === ''
   } catch {
     return false
@@ -186,6 +213,7 @@ export function createReviewsApi({
   readRuns = readAllRunRecords,
   runsFolder = '',
   notify = () => {},
+  gitRunner = defaultGitRunner,
 }) {
   const resolvedRoot = projectRoot ? resolve(projectRoot) : ''
   const resolvedBriefs = briefsDir ? resolve(briefsDir) : resolvedRoot ? join(resolvedRoot, 'docs', 'agents') : ''
@@ -201,6 +229,7 @@ export function createReviewsApi({
         : resolvedBriefs
   const lanesCheckout = lanesFolder ? mainCheckoutOf(lanesFolder) : ''
   const onProject = Boolean(roomCheckout && lanesCheckout && pathKey(roomCheckout) !== pathKey(lanesCheckout))
+  const runGit = (cwd, args, options = {}) => gitRunner(cwd, args, { timeout: GIT_TIMEOUT_MS, ...options })
   let merging = false
 
   function ownerRequest(req) {
@@ -251,7 +280,7 @@ export function createReviewsApi({
 
   async function projectBase() {
     try {
-      const branch = (await git(resolvedRoot, ['symbolic-ref', '--short', 'HEAD'])).trim()
+      const branch = (await runGit(resolvedRoot, ['symbolic-ref', '--short', 'HEAD'])).trim()
       return branch ? { ref: `refs/heads/${branch}`, name: branch } : null
     } catch {
       return null
@@ -263,12 +292,12 @@ export function createReviewsApi({
   }
 
   async function laneReview(lane, worktree, base, runs = null) {
-    const branch = (await git(worktree, ['branch', '--show-current'])).trim()
-    const head = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
-    const log = await git(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
+    const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
+    const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
+    const log = await runGit(worktree, ['log', '--oneline', `${base.ref}..HEAD`])
     const commits = log.split(/\r?\n/).filter(Boolean)
-    const status = await git(worktree, ['status', '--porcelain'])
-    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
+    const status = await runGit(worktree, ['status', '--porcelain'])
+    const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', `${base.ref}...HEAD`]))
     return {
       lane,
       worktree,
@@ -286,11 +315,11 @@ export function createReviewsApi({
   }
 
   async function laneDiff(lane, worktree, base) {
-    const branch = (await git(worktree, ['branch', '--show-current'])).trim()
-    const head = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
+    const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
+    const head = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
     const range = `${base.ref}...${head}`
-    const stat = parseNumstat(await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', range]))
-    const full = await git(worktree, ['diff', '--no-ext-diff', '--no-textconv', range])
+    const stat = parseNumstat(await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', '--numstat', range]))
+    const full = await runGit(worktree, ['diff', '--no-ext-diff', '--no-textconv', range])
     const truncated = full.length > limit
     return {
       lane,
@@ -307,18 +336,18 @@ export function createReviewsApi({
       return { status: 500, body: { error: 'The bridge could not read the main checkout.' } }
     }
 
-    const mainBranch = (await git(resolvedRoot, ['branch', '--show-current'])).trim()
+    const mainBranch = (await runGit(resolvedRoot, ['branch', '--show-current'])).trim()
     if (mainBranch !== 'main') {
       return { status: 409, body: { error: 'The main checkout is not on main.' } }
     }
-    const mainStatus = await git(resolvedRoot, ['status', '--porcelain', '--untracked-files=no'])
+    const mainStatus = await runGit(resolvedRoot, ['status', '--porcelain', '--untracked-files=no'])
     if (mainStatus.trim() !== '') {
       return { status: 409, body: { error: 'The main checkout has uncommitted changes.' } }
     }
 
     let laneHead
     try {
-      laneHead = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
+      laneHead = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
     } catch (error) {
       if (worktreeUnreadable(error)) {
         return { status: 404, body: { error: worktreeError(error) } }
@@ -328,45 +357,81 @@ export function createReviewsApi({
     if (laneHead !== head) {
       return { status: 409, body: { error: 'The lane moved since you read it. Read it again.' } }
     }
-    const laneStatus = await git(worktree, ['status', '--porcelain'])
+    const laneStatus = await runGit(worktree, ['status', '--porcelain'])
     if (laneStatus.trim() !== '') {
       return { status: 409, body: { error: 'The lane has uncommitted changes.' } }
     }
-    if (await isAncestor(resolvedRoot, laneHead, MAIN_REF)) {
+    if (await isAncestor(runGit, resolvedRoot, laneHead, MAIN_REF)) {
       return { status: 409, body: { error: 'Nothing to merge.' } }
     }
 
-    const branch = (await git(worktree, ['branch', '--show-current'])).trim()
-    const oldHead = (await git(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
+    const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
+    const oldHead = (await runGit(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
     try {
-      await git(resolvedRoot, ['merge', '--no-ff', '--no-edit', '-m', message, laneHead], MERGE_ENV)
-    } catch {
+      await runGit(resolvedRoot, ['merge', '--no-ff', '--no-edit', '-m', message, laneHead], {
+        timeout: GIT_WRITE_TIMEOUT_MS,
+        extraEnv: MERGE_ENV,
+      })
+    } catch (error) {
+      const timed = timedOut(error)
       let files = []
       try {
-        files = await conflictedPaths(resolvedRoot)
+        files = await conflictedPaths(runGit, resolvedRoot)
       } catch {}
       if (files.length > 0) {
-        const aborted = await abortMerge(resolvedRoot)
-        const restored = aborted && (await checkoutMatches(resolvedRoot, oldHead))
+        const aborted = await abortMerge(runGit, resolvedRoot)
+        const restored = aborted && (await checkoutMatches(runGit, resolvedRoot, oldHead))
         if (restored) {
           return {
             status: 409,
-            body: { error: 'The merge stopped on a conflict. Nothing changed.', files },
+            body: {
+              error: timed
+                ? 'The merge took too long and stopped on a conflict. The checkout was put back.'
+                : 'The merge stopped on a conflict. Nothing changed.',
+              files,
+            },
           }
         }
-        return { status: 500, body: { error: 'The merge stopped on a conflict and the checkout could not be put back.' } }
-      }
-      if (await mergeInProgress(resolvedRoot)) {
-        const aborted = await abortMerge(resolvedRoot)
-        const restored = aborted && (await checkoutMatches(resolvedRoot, oldHead))
-        if (!restored) {
-          return { status: 500, body: { error: 'The merge failed and the checkout could not be put back.' } }
+        return {
+          status: 500,
+          body: {
+            error: timed
+              ? 'The merge took too long and stopped on a conflict. The checkout could not be put back.'
+              : 'The merge stopped on a conflict and the checkout could not be put back.',
+          },
         }
+      }
+      if (await mergeInProgress(runGit, resolvedRoot)) {
+        const aborted = await abortMerge(runGit, resolvedRoot)
+        const restored = aborted && (await checkoutMatches(runGit, resolvedRoot, oldHead))
+        if (!restored) {
+          return {
+            status: 500,
+            body: {
+              error: timed
+                ? `${MERGE_TIMEOUT_PROBLEM} The checkout could not be put back.`
+                : 'The merge failed and the checkout could not be put back.',
+            },
+          }
+        }
+        if (timed) {
+          return { status: 500, body: { error: `${MERGE_TIMEOUT_PROBLEM} The checkout was put back.` } }
+        }
+        return { status: 500, body: { error: 'The merge failed.' } }
+      }
+      if (timed) {
+        if (await checkoutMatches(runGit, resolvedRoot, laneHead)) {
+          return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit: laneHead } }
+        }
+        if (await checkoutMatches(runGit, resolvedRoot, oldHead)) {
+          return { status: 500, body: { error: `${MERGE_TIMEOUT_PROBLEM} The checkout was not changed.` } }
+        }
+        return { status: 500, body: { error: timeoutProblem(await checkoutState(runGit, resolvedRoot)) } }
       }
       return { status: 500, body: { error: 'The merge failed.' } }
     }
 
-    const commit = (await git(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
+    const commit = (await runGit(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
     return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit } }
   }
 
@@ -379,14 +444,14 @@ export function createReviewsApi({
     if (!base) {
       return { status: 409, body: { error: 'The project is not on a branch.' } }
     }
-    const projectStatus = await git(resolvedRoot, ['status', '--porcelain', '--untracked-files=no'])
+    const projectStatus = await runGit(resolvedRoot, ['status', '--porcelain', '--untracked-files=no'])
     if (projectStatus.trim() !== '') {
       return { status: 409, body: { error: 'The project has uncommitted changes.' } }
     }
 
     let laneHead
     try {
-      laneHead = (await git(worktree, ['rev-parse', 'HEAD'])).trim()
+      laneHead = (await runGit(worktree, ['rev-parse', 'HEAD'])).trim()
     } catch (error) {
       if (worktreeUnreadable(error)) {
         return { status: 404, body: { error: worktreeError(error) } }
@@ -396,28 +461,41 @@ export function createReviewsApi({
     if (laneHead !== head) {
       return { status: 409, body: { error: 'The lane moved since you read it. Read it again.' } }
     }
-    const laneStatus = await git(worktree, ['status', '--porcelain'])
+    const laneStatus = await runGit(worktree, ['status', '--porcelain'])
     if (laneStatus.trim() !== '') {
       return { status: 409, body: { error: 'The lane has uncommitted changes.' } }
     }
-    if (await isAncestor(resolvedRoot, laneHead, base.ref)) {
+    if (await isAncestor(runGit, resolvedRoot, laneHead, base.ref)) {
       return { status: 409, body: { error: 'Nothing to merge.' } }
     }
-    if (!(await isAncestor(resolvedRoot, base.ref, laneHead))) {
+    if (!(await isAncestor(runGit, resolvedRoot, base.ref, laneHead))) {
       return {
         status: 409,
         body: { error: `The lane is not a fast forward of ${base.name}. Rebase it onto ${base.name} and read it again.` },
       }
     }
 
-    const branch = (await git(worktree, ['branch', '--show-current'])).trim()
+    const branch = (await runGit(worktree, ['branch', '--show-current'])).trim()
+    const oldHead = (await runGit(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
     try {
-      await git(resolvedRoot, ['merge', '--ff-only', laneHead], MERGE_ENV)
-    } catch {
+      await runGit(resolvedRoot, ['merge', '--ff-only', laneHead], {
+        timeout: GIT_WRITE_TIMEOUT_MS,
+        extraEnv: MERGE_ENV,
+      })
+    } catch (error) {
+      if (timedOut(error)) {
+        if (await checkoutMatches(runGit, resolvedRoot, laneHead)) {
+          return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit: laneHead } }
+        }
+        if (await checkoutMatches(runGit, resolvedRoot, oldHead)) {
+          return { status: 500, body: { error: `${MERGE_TIMEOUT_PROBLEM} The checkout was not changed.` } }
+        }
+        return { status: 500, body: { error: timeoutProblem(await checkoutState(runGit, resolvedRoot)) } }
+      }
       return { status: 500, body: { error: 'The merge failed.' } }
     }
 
-    const commit = (await git(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
+    const commit = (await runGit(resolvedRoot, ['rev-parse', 'HEAD'])).trim()
     return { status: 200, body: { ok: true, lane, branch, head: laneHead, commit } }
   }
 
