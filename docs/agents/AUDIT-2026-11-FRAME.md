@@ -3,12 +3,12 @@
 Date: 2026-11-03
 Author: AGY (Gemini 3.8 Flash)
 Branch: `feat/q39-frame-cost-of`
-Commit read: `7267d0ee26c7f9a0fbe644f90974239f8a34c227` (0.1.401)
+Commit read: `c55f5b8f24c08f78ac63e9404a1d391d9dcc94d4` (0.1.401)
 Brief: Q39
 
 ## Scope
 
-Read `src/engine/agents.js`, `src/engine/cards.js`, `src/engine/hub.js`, `src/engine/bloom.js`, `src/engine/room.js`, `src/engine/strings.js` and `src/ui/sound.js` on main at commit `7267d0e`.
+Read `src/engine/agents.js`, `src/engine/cards.js`, `src/engine/hub.js`, `src/engine/bloom.js`, `src/engine/room.js`, `src/engine/strings.js` and `src/ui/sound.js` on main at commit `c55f5b8`.
 
 The review inspects the cost of one frame when 10 agents work and music is playing with dance, vertex pulsing, bloom and light trails enabled. AGY lanes do not edit the engine; an OpenCode lane fixes what this audit lists.
 

@@ -36,7 +36,7 @@ Checked means Claude read the code and the fault is there. Reported means a lane
 | 16 | C7, C8, C9, C10, C11 | Small parser faults: a capitalized OpenCode tool name reads as `other`, repeated paths break a base name match, and Copilot sends run events the pipeline also sends. | Small | Checked in part |
 | 17 | B1 | `POST /api/orchestrator/stop` takes no token, so a local process can stop a turn. Other sites are already refused and it needs `confirmed`, so this is low, not high. | Small | Checked |
 
-Fixed while auditing: the scrolled menu strip from U111 hid the top of the lower half. The fix is in commit f784648.
+Fixed while auditing: the scrolled menu strip from U111 hid the top of the lower half. The fix is in commit b9fc6de.
 
 ## What the lanes got wrong
 

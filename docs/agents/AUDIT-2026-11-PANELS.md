@@ -1,6 +1,6 @@
 # Audit of the page's panels, November 2026
 
-Written 2026-11-03 by OpenCode 2 on the branch `feat/q27-bug-hunt-the`, cut from `refs/heads/main` at `f11a48c` (0.1.401), for brief Q27. File and line numbers are those of that commit. This run read code only. It changed no code, ran no test suite and started no bridge, lane or agent.
+Written 2026-11-03 by OpenCode 2 on the branch `feat/q27-bug-hunt-the`, cut from `refs/heads/main` at `c5e75f7` (0.1.401), for brief Q27. File and line numbers are those of that commit. This run read code only. It changed no code, ran no test suite and started no bridge, lane or agent.
 
 Scope: `src/ui/Settings.jsx`, `EndpointsPanel.jsx`, `McpSettings.jsx`, `SearchSettings.jsx`, `MusicPlayer.jsx`, `FamilyTeam.jsx`, `FamilyTree.jsx`, `family.js`, `Inspector.jsx`, `inspector.js`, `OrchestratorChat.jsx`, `orchestratorChat.js`, `RepositoryPanel.jsx`, `repository.js`, `Assistant.jsx`, `ModelRefresh.jsx`, `modelRefresh.js`, `AutocompactInput.jsx`, `autocompact.js`, `Guide.jsx`, `guide.js`, `Connect.jsx`, `Launcher.jsx`, `launcher.js`, `settings.js` and the helpers in `src/ui/panels/`. Desktop only. Nothing below is in `AUDIT-2026-11-SUMMARY.md` or in an `AUDIT-2026-11-*.md` file; where one of those already names a fault, it is left out even if it still stands.
 
@@ -39,7 +39,7 @@ No finding is High. Nothing here leaks a key, writes outside the project or star
 
 ## Commands run
 
-- `git switch -c feat/q27-bug-hunt-the refs/heads/main`: pass, at `f11a48c` (0.1.401).
+- `git switch -c feat/q27-bug-hunt-the refs/heads/main`: pass, at `c5e75f7` (0.1.401).
 - `node .q27-proof.mjs`: pass, printed the two different team plans quoted in finding 2. File deleted afterwards.
 - `node .q27-proof2.mjs`: pass, printed the class counts quoted in finding 11. File deleted afterwards.
 - `grep` over `src` for `hud-strip-settings`, `mr-orch-attach`, `.music` and `sound.setSettings` to confirm findings 11 and 13.

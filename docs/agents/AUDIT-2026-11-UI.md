@@ -1,6 +1,6 @@
 # Audit of the page, November 2026
 
-Written 2026-11-03 by OpenCode 2 on the branch `feat/q21-audit-of-the`, cut from `refs/heads/main` at `cd4581b` (0.1.401), for brief Q21. File and line numbers are those of that commit. This run read code only. It changed no code, ran no test suite and started no bridge, lane or agent, as the brief asks.
+Written 2026-11-03 by OpenCode 2 on the branch `feat/q21-audit-of-the`, cut from `refs/heads/main` at `ebf9f59` (0.1.401), for brief Q21. File and line numbers are those of that commit. This run read code only. It changed no code, ran no test suite and started no bridge, lane or agent, as the brief asks.
 
 Scope: `src/Stage.jsx`, `src/App.jsx`, `src/live/**`, `src/ui/**`, `src/ui/panels/**` and `src/styles.css`. Desktop only, so nothing below 900 pixels is listed. The findings below are not in `AUDIT-2026-10-V10.md` and not in the fixed or open items of `AUDIT-2026-11.md`. Where one of those audits already names a fault, it is left out even if it still stands.
 
@@ -64,7 +64,7 @@ No dead UI module is claimed. The brief's reading stopped before several files (
 - A browser, a screen or a 1280 by 800 window. Every layout claim above is a code read.
 - A live bridge, a lane run or an orchestrator. Finding 2 was read, never started; no run or write was made.
 - The real behaviour of focus with a screen reader. Finding 3 was read from the DOM order and the missing focus calls.
-- The test count. The brief says this run only reads, so no test suite was run. The last recorded full runs are 3,391 tests in 192 files at `dd9c236` (`AUDIT-2026-10-V10.md:3`) and 3,662 tests in 213 files at `2e67a08` (`AUDIT-2026-11.md:21`); the count at `cd4581b` was not measured and is unchanged by this branch, which touches only this file.
+- The test count. The brief says this run only reads, so no test suite was run. The last recorded full runs are 3,391 tests in 192 files at `03e92db` (`AUDIT-2026-10-V10.md:3`) and 3,662 tests in 213 files at `f13792e` (`AUDIT-2026-11.md:21`); the count at `ebf9f59` was not measured and is unchanged by this branch, which touches only this file.
 
 ## What I did not reach
 
@@ -76,7 +76,7 @@ The brief asks for the audit by minute 30 even unfinished, so the reading stops 
 
 ## Commands run
 
-- `git switch -c feat/q21-audit-of-the refs/heads/main`: pass, at `cd4581b` (0.1.401).
+- `git switch -c feat/q21-audit-of-the refs/heads/main`: pass, at `ebf9f59` (0.1.401).
 - `wc -l` over `src/ui/*.jsx`, `src/ui/*.js`, `src/ui/panels/*`, `src/live/*.js`, `src/Stage.jsx`, `src/App.jsx`, `src/styles.css`: 31,683 lines in the named files.
 - One read-only Node scan over `src/styles.css` and 155 source files for class names that appear in the stylesheet and in no source file: 130 names, filtered by hand to the groups above.
 - `grep` over `src` for each candidate family to confirm no use: `.plan-*`, `.dispatch-route-*`, the `.strip-*` subset, the `mr-orch-*` and `mr-side-lane*` groups, and the single rules.

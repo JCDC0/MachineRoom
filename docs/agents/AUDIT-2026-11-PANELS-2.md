@@ -1,6 +1,6 @@
 # Second audit of the page's panels, November 2026
 
-Written 2026-11-03 by OpenCode 2 on the branch `feat/q33-hunt-of-the`, cut from `refs/heads/main` at `0e602a0` (0.1.401), for brief Q33. File and line numbers are those of that commit. This run read code only. It changed no code, ran no test suite and started no bridge, lane or agent.
+Written 2026-11-03 by OpenCode 2 on the branch `feat/q33-hunt-of-the`, cut from `refs/heads/main` at `f687cf0` (0.1.401), for brief Q33. File and line numbers are those of that commit. This run read code only. It changed no code, ran no test suite and started no bridge, lane or agent.
 
 Scope: `src/ui/Settings.jsx`, `EndpointsPanel.jsx`, `McpSettings.jsx`, `SearchSettings.jsx`, `MusicPlayer.jsx`, `FamilyTeam.jsx`, `FamilyTree.jsx`, `Guide.jsx`, `Connect.jsx`, `Inspector.jsx` and `OrchestratorChat.jsx`, with `src/ui/family.js`, `src/ui/inspector.js`, `src/ui/orchestratorChat.js`, `src/ui/settings.js`, `src/ui/sound.js` and `src/ui/agentContext.js` where a panel calls them, the methods they call in `src/control/client.js`, and the bridge routes they write to in `server/endpoints.js`, `server/mcp.js`, `server/search.js`, `server/family.js`, `server/agents-config.js`, `server/orchestrators.js`, `server/orchestrator.js` and `server/music.js`.
 
@@ -62,7 +62,7 @@ Nothing below repeats a finding in `AUDIT-2026-11-PANELS.md` or `AUDIT-2026-11-C
 
 ## Commands run
 
-- `git switch -c feat/q33-hunt-of-the refs/heads/main`: pass, at `0e602a0` (0.1.401).
+- `git switch -c feat/q33-hunt-of-the refs/heads/main`: pass, at `f687cf0` (0.1.401).
 - `node -p "require('./package.json').version"`: printed `0.1.401`.
 - `rg`, `nl` and `sed` over the panels, their helpers, `src/control/client.js` and the named server routes: read only.
 - `git status --short` and `git diff --stat` after writing this file: only this file is new.

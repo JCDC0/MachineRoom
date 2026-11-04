@@ -28,8 +28,8 @@ Q38. I read `git log --merges` and `git diff` on main after Review 2 for U129, U
 - S36: sound with one leak. Pack-start verifies `run-lane --dry-run` and `mr-agent` from the unpacked package; `claude-sessions.js` caps evicted sessions at 200. Finding 5: `server/opencode-sessions.js` introduced `forgotten` Map for finished sessions without an upper bound or cleanup.
 - S37: sound with one efficiency note. Lanes source throttles old log stat polling to 10 seconds; run completions share one `runs.jsonl` read; turn logs read only the last 64 KB; unpins inactive runs after 2 hours; parser index drops retired agents. Finding 9: `trimHistory` does quadratic unpinning passes on every frame.
 - S38: sound. Implemented byte-offset reading for `runs.jsonl` via `cachedRunRecords`, shared across runs API, costs, tasks and reviews; resets cleanly when file shrinks or mtime goes backward; Claude session reader caches `.meta.json` files by mtime.
-- Orchestrator fixes to `src/ui/sound.js` (`ecb689d`): replaced 30 percent jump check with standard deviation spread over recent levels. Works for soft music, but still runs on every animation frame without throttling to `sampleBins` interval.
-- Orchestrator fixes to `src/engine/shapes.js` (`f70658e`): mapped frequency bands by point angle in X-Z plane so line segments stay joined. Finding 4: at `x < 0, z = 0`, opposite zero signs produce bands 0 and 4, tearing vertices apart.
+- Orchestrator fixes to `src/ui/sound.js` (`bfae983`): replaced 30 percent jump check with standard deviation spread over recent levels. Works for soft music, but still runs on every animation frame without throttling to `sampleBins` interval.
+- Orchestrator fixes to `src/engine/shapes.js` (`3855600`): mapped frequency bands by point angle in X-Z plane so line segments stay joined. Finding 4: at `x < 0, z = 0`, opposite zero signs produce bands 0 and 4, tearing vertices apart.
 
 ## Orchestrator's corrections
 

@@ -1,6 +1,6 @@
 # Audit of the page and the bridge contract, November 2026
 
-Date: 2026-11-03. Version 0.1.401. Branch `feat/q31-bug-hunt-the`, cut from `refs/heads/main` at `f11a48c`. Brief Q31.
+Date: 2026-11-03. Version 0.1.401. Branch `feat/q31-bug-hunt-the`, cut from `refs/heads/main` at `c5e75f7`. Brief Q31.
 
 This run read `src/control/client.js`, `src/live/source.js`, `src/live/bridge.js`, `src/live/livePlayer.js`, `src/live/tree.js`, `server/index.js`, `server/control.js`, `server/lanes-source.js`, `server/sessions-source.js`, `server/files.js` and `server/static.js` in full, and the page and server code each finding names. It started a real bridge on a temporary folder with `tests/helpers/bridge.js` and called its routes. It changed no code.
 
