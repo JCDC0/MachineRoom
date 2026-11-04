@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createBridge } from '../server/index.js'
+import { createBridge, treeReadDue } from '../server/index.js'
 import { makeTempDir } from './helpers/tempRoot.js'
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -149,6 +149,39 @@ describe('a tree read in flight', () => {
     const response = await pending
     expect(response.status).toBe(200)
     expect(await response.json()).toEqual({ root: 'project', files: ['src/a.js'], created: [] })
+  })
+})
+
+describe('the tree read timing rule', () => {
+  const base = {
+    lastReadEndAt: 1000,
+    lastReadMs: 1600,
+    lastReadChanged: true,
+    lastTreeAt: 1000,
+    quietMs: 300,
+    pollMs: 200,
+    budgetMs: 3000,
+  }
+
+  it('waits the budget minus the last read after a read that saw changes', () => {
+    expect(treeReadDue({ ...base, now: 2399 })).toBe(false)
+    expect(treeReadDue({ ...base, now: 2400 })).toBe(true)
+  })
+
+  it('starts at once after a long read that used the budget', () => {
+    const long = { ...base, lastReadMs: 3700 }
+    expect(treeReadDue({ ...long, now: 1199 })).toBe(false)
+    expect(treeReadDue({ ...long, now: 1200 })).toBe(true)
+  })
+
+  it('waits for quiet after a read that saw no change', () => {
+    const same = { ...base, lastReadChanged: false }
+    expect(treeReadDue({ ...same, now: 1299 })).toBe(false)
+    expect(treeReadDue({ ...same, now: 1300 })).toBe(true)
+  })
+
+  it('does not use the quiet wait after a read that saw changes', () => {
+    expect(treeReadDue({ ...base, now: 1100 })).toBe(false)
   })
 })
 
