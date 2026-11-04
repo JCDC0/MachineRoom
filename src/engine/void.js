@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { WHITE, seeded, still, textSprite } from './sprites.js'
+import { WHITE, seeded, still } from './sprites.js'
 
 export const LATTICE_STEP = 2000
 export const LATTICE_CELLS = 5
@@ -209,19 +209,6 @@ export function latticeTicks(step = LATTICE_STEP, cells = LATTICE_CELLS) {
   return values
 }
 
-export function labelPoints(step = LATTICE_STEP, cells = LATTICE_CELLS) {
-  const points = []
-  for (const layer of [-LATTICE_LAYER, LATTICE_LAYER]) {
-    for (let x = -cells; x <= cells; x++) {
-      for (let z = -cells; z <= cells; z++) {
-        const far = Math.max(Math.abs(x), Math.abs(z))
-        if (far >= 2 && (x * 7 + layer * 3 + z * 5) % 9 === 0) points.push([x * step, layer * step, z * step])
-      }
-    }
-  }
-  return points
-}
-
 function lineSet(values, opacity) {
   const geometry = new THREE.BufferGeometry()
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(values, 3))
@@ -232,11 +219,6 @@ export function createVoid(scene, texture) {
   const group = new THREE.Group()
   group.add(lineSet(latticeLines(), 0.035))
   group.add(lineSet(latticeTicks(), 0.12))
-  for (const [x, y, z] of labelPoints()) {
-    const label = textSprite(`${x},${y},${z}`, { color: 'rgba(255,255,255,.32)', scale: 3.2 })
-    label.position.set(x, y + 90, z)
-    group.add(label)
-  }
 
   const dustGeometry = new THREE.BufferGeometry().setFromPoints(dustPoints())
   dustGeometry.userData.base = new Float32Array(dustGeometry.attributes.position.array)

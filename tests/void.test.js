@@ -17,7 +17,6 @@ import {
   driftPoint,
   driftSpecks,
   dustPoints,
-  labelPoints,
   latticeLines,
   latticeTicks,
   motePoints,
@@ -110,11 +109,14 @@ describe('lattice', () => {
     }
   })
 
-  it('labels only the two layers', () => {
-    const points = labelPoints()
-    expect(points.length).toBeGreaterThan(0)
-    const levels = [...new Set(points.map(([, y]) => y))].sort((a, b) => a - b)
-    expect(levels).toEqual(layers)
+  it('draws no sprite among the lattice lines and ticks', () => {
+    const space = createVoid(new THREE.Scene(), null)
+    let sprites = 0
+    space.group.traverse((object) => {
+      if (object.isSprite) sprites += 1
+    })
+    expect(sprites).toBe(0)
+    space.dispose()
   })
 })
 
