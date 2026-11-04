@@ -55,7 +55,7 @@ Phones are out of scope: the bridge accepts pages only from localhost, so a phon
 
 Open now:
 
-1. The owner's P4: the public release. The licence is MIT (2026-11-04); the names and `src/engine/sprites.js` are still to decide in G2, and the push is G6.
+1. The owner's P4: the public release. The licence is MIT (2026-11-04) and `src/engine/sprites.js` is being rewritten (U151); the names are still to decide in G2, and the push is G6. The six design changes of `AUDIT-2026-11-SUMMARY.md` were approved on 2026-11-04 and run as U146 to U150.
 2. The room by eye in a live room, at 1280 by 800, 900 by 700 and 768 by 1024, including the U86 conversation column and the U87 and U88 placements. The replay was checked on 2026-10-30; the live room has not been. A lane cannot see the screen, so the orchestrator checks it in a browser.
 3. The open audit findings:
    - The October audit (`AUDIT-2026-10.md`): N5 (a lane worktree's git config and hooks reach the merge), N6 (the merge stops after 10 seconds), N12 (the runs route starts the runner from the folder the room watches) and N16 (an all-zero cost reads as not reported, a design question).
@@ -157,7 +157,7 @@ Paperclip will change its API and its event stream without asking us. The rules 
 You said: publish it with a clean README. Pushing leaves your machine, so nothing here happens without your yes, and Claude never pushes.
 
 - **G1 (Claude).** Audit the full history for keys, e-mail addresses, your Windows profile name and local paths. Report what to scrub before anything goes out.
-- **G2 (you).** The licence is MIT, chosen on 2026-11-04 (`LICENSE`). Still to decide: the repository and package name, whether to name Paperclip and the show at all (recommended: name Paperclip as the thing it controls, state that MachineRoom is not affiliated, and do not use the show's name, logo or imagery), and what to do with `src/engine/sprites.js`, which was copied from your graded portfolio (keep it with your own credit, or rewrite it).
+- **G2 (you).** The licence is MIT, chosen on 2026-11-04 (`LICENSE`). `src/engine/sprites.js`, copied from your graded portfolio, is rewritten for the room (U151). Still to decide: the repository and package name, and whether to name Paperclip and the show at all (recommended: name Paperclip as the thing it controls, state that MachineRoom is not affiliated, and do not use the show's name, logo or imagery).
 - **G3 (Claude, Hermes drafts).** The README. Plain words, no em dashes, no emoji. Sections: what it is in two lines; a screenshot and a short loop; what you need (Node, Paperclip at the pinned version, at least one harness); three command quick start; demo mode that needs no Paperclip; how it works in five lines; supported harnesses and what each shows, with the known limits; what it does not do; the safety note (loopback only, keys never go through the assistant); where the plan lives; how agents contribute (`docs/agents/`); licence and credits.
 - **G4 (AGY).** Fresh screenshots after the drawer and assistant exist: overview, close-up, control drawer, assistant, cost board.
 - **G5 (OpenCode).** GitHub Actions: Node 24, `npm ci`, `npm test`, `npm run build`. Keep `package-lock.json` in sync.
@@ -167,5 +167,5 @@ You said: publish it with a clean README. Pushing leaves your machine, so nothin
 
 1. Worktrees (`enableIsolatedWorkspaces`): say yes when C2 is merged, and Claude will list the exact setting changes first.
 2. Private GitHub repository now, as a backup? Recommended.
-3. The names in G2, and `src/engine/sprites.js`.
+3. The names in G2.
 4. D1 needs your OpenRouter key in the environment of the shell that runs it, so it can try the decision models on our probe set. It costs cents. Say yes and run it yourself, or tell Claude to run it.
