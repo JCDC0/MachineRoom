@@ -16,15 +16,12 @@ function laneHasHarness(lanes, harness) {
 export const CLIENT_METHODS = [
   'agents',
   'issues',
-  'createIssue',
   'comments',
   'postComment',
   'approvals',
   'decideApproval',
   'costs',
   'setAgentBudget',
-  'hireAgent',
-  'updateAgent',
   'models',
   'searchProvider',
   'setSearchProvider',
@@ -857,11 +854,6 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     issues: ({ status } = {}) => call('issues', () => (status ? state.issues.filter((issue) => issue.status === status) : state.issues)),
 
-    createIssue: (draft) =>
-      call('createIssue', () => {
-        throw new Error(LANE_TASK_REFUSAL)
-      }),
-
     comments: (issueId) => call('comments', () => (Object.hasOwn(state.comments, issueId) ? state.comments[issueId] : [])),
 
     postComment: () =>
@@ -880,16 +872,6 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     setAgentBudget: () =>
       call('setAgentBudget', () => {
-        throw new Error(AGENT_REFUSAL)
-      }),
-
-    hireAgent: () =>
-      call('hireAgent', () => {
-        throw new Error(AGENT_REFUSAL)
-      }),
-
-    updateAgent: () =>
-      call('updateAgent', () => {
         throw new Error(AGENT_REFUSAL)
       }),
 

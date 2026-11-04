@@ -218,26 +218,6 @@ export function createControlApi(options) {
       return true
     }
 
-    if (method === 'POST' && path === '/api/control/agents') {
-      const body = await readJsonBody(req, res)
-      if (body === null) return true
-      fail(req, res, 409, AGENT_REFUSAL)
-      return true
-    }
-
-    const updateAgent = /^\/api\/control\/agents\/([^/]+)$/.exec(path)
-    if (method === 'PATCH' && updateAgent) {
-      const id = decodedId(updateAgent[1])
-      if (id === null) {
-        fail(req, res, 404, 'That agent no longer exists.')
-        return true
-      }
-      const body = await readJsonBody(req, res)
-      if (body === null) return true
-      fail(req, res, 409, AGENT_REFUSAL)
-      return true
-    }
-
     if (method === 'GET' && path === '/api/control/issues') {
       const status = url.searchParams.get('status')
       const issues = laneState().issues
@@ -247,13 +227,6 @@ export function createControlApi(options) {
 
     if (method === 'GET' && path === '/api/control/live-runs') {
       sendJson(req, res, 200, { runs: laneState().liveRuns })
-      return true
-    }
-
-    if (method === 'POST' && path === '/api/control/issues') {
-      const body = await readJsonBody(req, res)
-      if (body === null) return true
-      fail(req, res, 409, LANE_TASK_REFUSAL)
       return true
     }
 

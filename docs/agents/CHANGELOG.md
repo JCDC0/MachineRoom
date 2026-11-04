@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The control client and its mock drop createIssue, hireAgent and updateAgent, the bridge drops the routes that only refused them, and the assistant drops the hireAgent check (task S40).
+
 - The Reviews panel sets no state once it has closed, so a review read that ends after the drawer closes no longer throws.
 - Tests across the suite import the constants and sentences they check instead of copies typed by hand, drop Paperclip-era options and fixtures, fix checks that could never fail, and lose duplicates (tasks T36a to T36g).
 - Test runs use at most 4 worker threads (`maxWorkers` in `vite.config.js`), and lanes run only the tests for what they changed; the orchestrator runs the full suite once before each push.

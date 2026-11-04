@@ -14,7 +14,6 @@ export function createDispatcher(host) {
     }
     host.focusAgent(agent, 'close')
     if (section === 'keys') return done(`The masked key form for ${name} is not built yet (task A6). Nothing was stored.`)
-    if (typeof host.client?.hireAgent !== 'function') return done(`The ${section} settings for ${name} need the agent builder, which this connection does not offer.`)
     host.openPanel('agents')
     return done(`Opened the Agents tab. Pick ${name} in the list to change its ${section} settings.`)
   }
