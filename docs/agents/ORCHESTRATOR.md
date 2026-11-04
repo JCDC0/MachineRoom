@@ -21,7 +21,7 @@ You cannot see the screen. A branch that changes what the room or the drawer loo
 ## Standing rules from the owner
 
 - Push only when the owner says yes for that push, and only `main` to `origin` (`git push origin refs/heads/main:refs/heads/main`), after `npm run history-audit` shows no finding in the new commits. Never merge into anything but `main` in this checkout.
-- Never open or touch `C:\GitHub\coursework`. The owner's portfolio lives there; its look is written down in brief V2.
+- Never open or touch the owner's coursework folder, which holds the owner's portfolio; its look is written down in brief V2.
 - Paperclip is gone from the room. Never start it or a fake of it.
 - Start OpenCode only through `npm run run-lane` or the orchestrator, which pass `--standalone`. A hand-started `opencode run` without it keeps working in the OpenCode service after its terminal is gone.
 - Never read, print or store a key. `OPENROUTER_API_KEY` stays in the owner's shell.

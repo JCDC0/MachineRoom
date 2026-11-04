@@ -7,6 +7,7 @@ import { countLeaks, findLeaks, LEAK_KINDS } from '../src/briefs/audit.js'
 import { gitPath } from '../server/programPath.js'
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024
+const PRIVATE_NAMES = String(process.env.MACHINEROOM_AUDIT_PRIVATE ?? '').split(',')
 const TRACKED = '(tracked)'
 const HISTORY_ARGS = ['log', '-p', '--no-color', '--no-ext-diff', '--no-textconv', 'refs/heads/main', '--tags']
 
@@ -87,7 +88,7 @@ export async function readHistory(repo, args, profileName, findings, { removed =
   let inHunk = false
   let messageLine = 0
   const add = (text, line, where) => {
-    for (const hit of findLeaks(text, { profileName })) {
+    for (const hit of findLeaks(text, { profileName, privateNames: PRIVATE_NAMES })) {
       findings.push({ kind: hit.kind, commit, file: where, line, sample: hit.sample })
     }
   }
@@ -163,7 +164,7 @@ function readTracked(repo, profileName, findings) {
         continue
       }
       if (text.includes('\0')) continue
-      for (const hit of findLeaks(text, { profileName })) {
+      for (const hit of findLeaks(text, { profileName, privateNames: PRIVATE_NAMES })) {
         findings.push({ kind: hit.kind, commit: null, file: name, line: hit.line, sample: hit.sample })
       }
     }

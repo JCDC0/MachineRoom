@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The history audit reads the private folder names to look for from `MACHINEROOM_AUDIT_PRIVATE` instead of naming one in the code, and treats `someuser` as a placeholder user folder.
 - At 900 pixels and wider the right column of the lower half holds one inspector in place of the in-lens inspector and the Overview card, at rest it shows `AgentDock` above the cost board, and the transport spend click scrolls that board into view (task U150).
 - The room writes its own sprites module: its five colours, the seeded random numbers that keep a room repeatable, the easing helpers, the shared reduced motion reading, the glow texture, the Space Mono 400 text sprite and the additive line material (task U151).
 - A closed terminal chip is one line with its state dot, label and state word, and a long label is cut by an ellipsis (task U149).
@@ -1960,7 +1961,7 @@
 
 ## 0.1.93
 
-- Review fixes on G1a: the email, path, profile and graded samples printed the raw line, so a key on the same line showed in full; every key on a line is now masked before the other kinds are read. The `sk-` pattern missed keys with hyphens (`sk-ant-api03-…`, `sk-proj-…`) and Google keys (`AIza…`) were not looked for; both are found now. On the real history the audit finds 20 keys, all fakes in tests (the key guard cases in `tests/assistant.test.js`, a variable in `tests/bridge.test.js`, the audit's own tests), 31 e-mail addresses (test fixtures and docs), 84 Windows user paths (mostly the recorded fixtures in `public/fixtures/`), 1 profile name and 5 mentions of coursework in the docs. No real key. These need a decision before G6: scrub the fixtures' paths, or allow them.
+- Review fixes on G1a: the email, path, profile and graded samples printed the raw line, so a key on the same line showed in full; every key on a line is now masked before the other kinds are read. The `sk-` pattern missed keys with hyphens (`sk-ant-api03-…`, `sk-proj-…`) and Google keys (`AIza…`) were not looked for; both are found now. On the real history the audit finds 20 keys, all fakes in tests (the key guard cases in `tests/assistant.test.js`, a variable in `tests/bridge.test.js`, the audit's own tests), 31 e-mail addresses (test fixtures and docs), 84 Windows user paths (mostly the recorded fixtures in `public/fixtures/`), 1 profile name and 5 mentions of the coursework folder in the docs. No real key. These need a decision before G6: scrub the fixtures' paths, or allow them.
 - Outcome log (task C6a): `npm run outcome -- BRANCH merged|rejected [--grade A-] [--fixes N] [--note TEXT]` appends `{ branch, outcome, grade, fixes, note, version, recordedAt }` to `outcomes.jsonl` beside `runs.jsonl`, refuses a branch no run made and a bad outcome, grade, fixes or note before writing, and lets the newest outcome for a branch win; `outcomeTable(runs, outcomes)` in `server/outcomes.js` counts merged, rejected and pending runs per lane and model with the merge rate, average fixes and cost per merge, `GET /api/control/runs/outcomes` answers `{ rows }`, `outcomes()` joins the control client and its mock, and `OutcomeRow` joins CONTROL-CLIENT.md.
 
 ## 0.1.92

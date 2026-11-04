@@ -19,7 +19,7 @@ const fakeAws = 'AKIA' + 'F'.repeat(16)
 const fakeMail = 'someone' + '@' + 'site.com'
 const fakeHome = 'C:' + '\\Users\\' + 'mira'
 const fakeHomeSlash = 'c:' + '/users/' + 'mira'
-const fakeGraded = 'D:' + '\\School\\' + '6' + 'APSI' + '\\notes.md'
+const fakeGraded = 'D:' + '\\School\\' + 'Coursework' + '\\notes.md'
 
 function kindsOf(text, options) {
   return findLeaks(text, options).map((finding) => finding.kind)
@@ -119,7 +119,9 @@ describe('findLeaks addresses and paths', () => {
   })
 
   it('finds a path into the graded folder', () => {
-    expect(findLeaks(fakeGraded)).toEqual([{ kind: 'graded', line: 1, sample: fakeGraded }])
+    expect(findLeaks(fakeGraded, { privateNames: ['Coursework'] })).toEqual([{ kind: 'graded', line: 1, sample: fakeGraded }])
+    expect(findLeaks(fakeGraded)).toEqual([])
+    expect(findLeaks('C:\\Users\\someuser\\x')).toEqual([])
   })
 })
 
@@ -492,8 +494,8 @@ describe('history audit profile check on GitHub Actions', () => {
 describe('findLeaks on a line that holds a key', () => {
   it('masks the key in the samples of every other kind on that line', () => {
     const key = 'sk-or-v1-' + 'q'.repeat(48)
-    const line = `OPENROUTER_API_KEY=${key} set by someuser at C:/Users/someuser/x, mail someone@site.com`
-    const found = findLeaks(line, { profileName: 'someuser' })
+    const line = `OPENROUTER_API_KEY=${key} set by mira at C:/Users/mira/x, mail someone@site.com`
+    const found = findLeaks(line, { profileName: 'mira' })
     expect(found.map((finding) => finding.kind)).toEqual(expect.arrayContaining(['key', 'profile', 'userpath', 'email']))
     for (const finding of found) expect(finding.sample).not.toContain('q'.repeat(20))
   })

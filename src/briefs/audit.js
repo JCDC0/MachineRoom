@@ -10,7 +10,6 @@ const KEY_SETTING = /(?<![A-Za-z0-9_])(OPENROUTER_API_KEY|ANTHROPIC_API_KEY|OPEN
 const HEADER_SETTING = /(?<![A-Za-z0-9_-])([Xx]-[Mm]achine[Rr]oom-[Oo]rchestrator)(?![A-Za-z0-9_-])\s*(?::|=)(?![=>])\s*(['"]?)([^\s'"]*)\2/gi
 const EMAIL = /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g
 const USER_PATH = /[A-Za-z]:[\\/]Users[\\/](<[^<>\s]{1,64}>|\$env:[A-Za-z_][A-Za-z0-9_]*|%[A-Za-z_][A-Za-z0-9_]*%|[^\s\\/"'`,;:<>|?*)\]}]+)/gi
-const GRADED_PATH = /(?<![A-Za-z0-9])coursework(?![A-Za-z0-9])/gi
 
 const PLACEHOLDER = /^(?:your[-_ ]?(?:key|token|api[-_ ]?key).*|your[-_ ]?api.*|x{3,}|changeme|change[-_ ]?me|placeholder|redacted|example.*|todo|none|null|secret|key|\*+|\$\{.*\}|\$[A-Za-z_][A-Za-z0-9_]*)$/i
 
@@ -24,6 +23,7 @@ const PLACEHOLDER_USER_FOLDERS = new Set([
   'you',
   'me',
   'someone',
+  'someuser',
   'example',
   'username',
   '%username%',
@@ -93,7 +93,7 @@ function eachMatch(re, line, visit) {
   }
 }
 
-function scanLine(line, profileName) {
+function scanLine(line, profileName, privateNames) {
   const found = []
   const values = []
   eachMatch(KEY_SETTING, line, (match) => {
@@ -139,21 +139,25 @@ function scanLine(line, profileName) {
       found.push({ kind: 'profile', index: match.index, sample: windowAround(line, match.index, match[0].length) })
     })
   }
-  eachMatch(GRADED_PATH, line, (match) => {
-    found.push({ kind: 'graded', index: match.index, sample: windowAround(line, match.index, match[0].length) })
-  })
+  for (const privateName of privateNames) {
+    const graded = new RegExp(`(?<![A-Za-z0-9])${escapeWord(privateName)}(?![A-Za-z0-9])`, 'gi')
+    eachMatch(graded, line, (match) => {
+      found.push({ kind: 'graded', index: match.index, sample: windowAround(line, match.index, match[0].length) })
+    })
+  }
   found.sort((a, b) => a.index - b.index || LEAK_KINDS.indexOf(a.kind) - LEAK_KINDS.indexOf(b.kind))
   return found
 }
 
-export function findLeaks(text, { profileName } = {}) {
+export function findLeaks(text, { profileName, privateNames = [] } = {}) {
   if (typeof text !== 'string' || text === '') return []
   const name = typeof profileName === 'string' ? profileName.trim() : ''
+  const privates = (Array.isArray(privateNames) ? privateNames : []).map((value) => String(value).trim()).filter(Boolean)
   const lines = text.split(/\r\n|\r|\n/)
   const findings = []
   lines.forEach((line, index) => {
     if (line === '') return
-    for (const hit of scanLine(line, name)) findings.push({ kind: hit.kind, line: index + 1, sample: hit.sample })
+    for (const hit of scanLine(line, name, privates)) findings.push({ kind: hit.kind, line: index + 1, sample: hit.sample })
   })
   return findings
 }
