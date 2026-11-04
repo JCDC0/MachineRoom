@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- At 900 pixels and wider the right column of the lower half holds one inspector in place of the in-lens inspector and the Overview card, at rest it shows `AgentDock` above the cost board, and the transport spend click scrolls that board into view (task U150).
 - The room writes its own sprites module: its five colours, the seeded random numbers that keep a room repeatable, the easing helpers, the shared reduced motion reading, the glow texture, the Space Mono 400 text sprite and the additive line material (task U151).
 - A closed terminal chip is one line with its state dot, label and state word, and a long label is cut by an ellipsis (task U149).
 - A finished terminal chip is black with a 1 pixel green border and green text, with no fill or glow (task U149).
