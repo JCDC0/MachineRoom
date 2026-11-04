@@ -99,12 +99,6 @@ describe('stage class', () => {
     expect(stageClassName({ idle: true, disconnected: true })).toBe('stage is-disconnected')
     expect(stageClassName({ disconnected: true })).toBe('stage is-disconnected')
   })
-
-  it('adds is-scrolled when the page has scrolled under the menu', () => {
-    expect(stageClassName({ scrolled: true })).toBe('stage is-scrolled')
-    expect(stageClassName({ scrolled: true, idle: true })).toBe('stage is-scrolled is-idle')
-    expect(stageClassName({ scrolled: true, idle: true, disconnected: true })).toBe('stage is-scrolled is-disconnected')
-  })
 })
 
 describe('idle watch', () => {

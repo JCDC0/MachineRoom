@@ -195,16 +195,12 @@ describe('stage idle class', () => {
     expect(stageClassName({ disconnected: true })).toBe('stage is-disconnected')
   })
 
-  it('marks the stage is-scrolled once the page leaves its top', () => {
-    expect(stageClassName({ scrolled: true })).toBe('stage is-scrolled')
-    expect(stageClassName({ scrolled: true, disconnected: true })).toBe('stage is-scrolled is-disconnected')
-  })
-
-  it('renders no is-idle class before the timer', () => {
+  it('renders the default split and no scroll state before the timer', () => {
     const html = stageHtml()
     expect(html).toContain('class="stage"')
     expect(html).not.toContain('class="stage is-idle"')
     expect(html).not.toContain('is-scrolled')
+    expect(html).toContain('--lens-h-user:min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 56.0vh))')
   })
 })
 

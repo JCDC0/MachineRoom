@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- At 900 pixels and wider the menu, lens, transport and lower half stack in one window-high frame with no page scroll, and the lower half takes the height left and scrolls in its three columns (task U146).
+- The Height rail defaults to 56 percent and runs to 85 percent, every lens height is capped so the transport stays on screen, and the split is saved as `lensSplit` (task U146).
+- Idle grows the lens to the full window over 0.8 seconds and returns it over 0.3 seconds on wake (task U146).
 - MachineRoom is released under the MIT licence: `LICENSE` and the `license` field in `package.json`.
 - A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.

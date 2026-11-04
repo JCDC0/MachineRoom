@@ -1,6 +1,6 @@
 export const LENS_SHARE_MIN = 0.3
-export const LENS_SHARE_MAX = 0.8
-export const LENS_SHARE_DEFAULT = 0.8
+export const LENS_SHARE_MAX = 0.85
+export const LENS_SHARE_DEFAULT = 0.56
 
 export function clampLensShare(value) {
   const num = Number(value)
@@ -10,8 +10,8 @@ export function clampLensShare(value) {
 
 export function lensHeightValue(share) {
   const clamped = clampLensShare(share)
-  if (clamped >= LENS_SHARE_MAX) return 'calc(100vh - var(--menu-h) - var(--transport-h))'
-  return `max(240px, ${(clamped * 100).toFixed(1)}vh)`
+  const wanted = `max(240px, ${(clamped * 100).toFixed(1)}vh)`
+  return `min(calc(100vh - var(--menu-h) - var(--transport-h)), ${wanted})`
 }
 
 export const RAIL_STEP = 0.05
@@ -37,7 +37,7 @@ export function heightRailShare(lensShare) {
 
 export function lensShareFromRail(share) {
   const s = Math.min(1, Math.max(0, Number(share) || 0))
-  return LENS_SHARE_MIN + s * (LENS_SHARE_MAX - LENS_SHARE_MIN)
+  return Math.min(LENS_SHARE_MAX, LENS_SHARE_MIN + s * (LENS_SHARE_MAX - LENS_SHARE_MIN))
 }
 
 export function lensShareAfterWheel(lensShare, deltaY) {
