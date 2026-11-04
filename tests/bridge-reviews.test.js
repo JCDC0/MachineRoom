@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { defaultGitRunner, GIT_TIMEOUT_MS, GIT_WRITE_TIMEOUT_MS } from '../server/git.js'
 import { gitPath } from '../server/programPath.js'
 import { createReviewsApi, mapConcurrent, NOT_OWNER_PROBLEM } from '../server/reviews.js'
 import { requestJson } from './helpers/httpJson.js'
@@ -716,5 +717,127 @@ describe('merge route', { timeout: 30000 }, () => {
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.lanes.map((l) => l.lane)).toEqual(keys)
+  })
+})
+
+const MERGE_URL = new URL('http://127.0.0.1/api/control/reviews/opencode/merge')
+
+function reviewsApiOn(repo, worktree, gitRunner, { head, message = 'Merge the lane' } = {}) {
+  const dir = makeTempDir()
+  const agentsDir = join(dir, 'docs', 'agents')
+  mkdirSync(agentsDir, { recursive: true })
+  writeFileSync(join(agentsDir, 'lanes.json'), JSON.stringify({ opencode: { name: 'OpenCode', worktree } }))
+  const answers = []
+  const api = createReviewsApi({
+    projectRoot: repo,
+    briefsDir: agentsDir,
+    sendJson: (req, res, status, body) => answers.push({ status, body }),
+    readJsonBody: async () => ({ confirmed: true, head, message }),
+    orchestrators: () => null,
+    gitRunner,
+    readRuns: () => [],
+  })
+  return { api, answers }
+}
+
+describe('merge write limits', { timeout: 30000 }, () => {
+  it('keeps the short limit on review reads and gives the merge the long one', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const calls = []
+    const recordingRunner = async (cwd, args, opts) => {
+      calls.push({ args, timeout: opts?.timeout })
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const { api, answers } = reviewsApiOn(repo, worktree, recordingRunner, { head })
+
+    await api.handle({ method: 'GET', headers: {} }, {}, new URL('http://127.0.0.1/api/control/reviews/opencode/diff'))
+    expect(answers[0].status).toBe(200)
+    expect(calls.length).toBeGreaterThan(0)
+    expect(calls.every((call) => call.timeout === GIT_TIMEOUT_MS)).toBe(true)
+
+    calls.length = 0
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+    expect(answers[1].status).toBe(200)
+    const write = calls.find((call) => call.args[0] === 'merge')
+    expect(write.timeout).toBe(GIT_WRITE_TIMEOUT_MS)
+    expect(calls.filter((call) => call !== write).every((call) => call.timeout === GIT_TIMEOUT_MS)).toBe(true)
+  })
+
+  it('puts the checkout back after a merge write times out and says so', async () => {
+    const { repo, worktree } = makeLaneRepo()
+    writeFileSync(join(repo, 'notes.txt'), 'changed on main\n')
+    git(repo, ['add', 'notes.txt'])
+    git(repo, ['commit', '-m', 'main change'])
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const oldMain = git(repo, ['rev-parse', 'HEAD']).trim()
+    const calls = []
+    const timeoutRunner = async (cwd, args, opts) => {
+      calls.push({ args, timeout: opts?.timeout })
+      if (args[0] === 'merge' && args[1] === '--no-ff') {
+        try {
+          await defaultGitRunner(cwd, args, opts)
+        } catch {}
+        const error = new Error('git timed out')
+        error.killed = true
+        throw error
+      }
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const { api, answers } = reviewsApiOn(repo, worktree, timeoutRunner, { head })
+
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+    expect(answers[0].status).toBe(409)
+    expect(answers[0].body).toEqual({
+      error: 'The merge took too long and stopped on a conflict. The checkout was put back.',
+      files: ['notes.txt'],
+    })
+    const abort = calls.find((call) => call.args[0] === 'merge' && call.args[1] === '--abort')
+    expect(abort.timeout).toBe(GIT_WRITE_TIMEOUT_MS)
+    expect(git(repo, ['rev-parse', 'HEAD']).trim()).toBe(oldMain)
+    expect(git(repo, ['status', '--porcelain'])).toBe('')
+    expect(gitExit(repo, ['rev-parse', '-q', '--verify', 'MERGE_HEAD'])).not.toBe(0)
+  })
+
+  it('gives the fast forward the long limit too', async () => {
+    const base = makeTempDir()
+    const room = join(base, 'room')
+    const project = join(base, 'project')
+    const worktree = join(project, '.worktrees', 'opencode')
+    mkdirSync(join(room, 'docs', 'agents'), { recursive: true })
+    git(room, ['init', '-b', 'main'])
+    writeFileSync(join(room, 'docs', 'agents', 'lanes.json'), JSON.stringify({ opencode: { name: 'OpenCode' } }))
+    mkdirSync(project, { recursive: true })
+    git(project, ['init', '-b', 'trunk'])
+    writeFileSync(join(project, 'notes.txt'), 'hello\n')
+    git(project, ['add', 'notes.txt'])
+    git(project, ['commit', '-m', 'first'])
+    git(project, ['worktree', 'add', '-b', 'feat/x', worktree])
+    writeFileSync(join(worktree, 'extra.js'), 'export const x = 1\n')
+    git(worktree, ['add', 'extra.js'])
+    git(worktree, ['commit', '-m', 'lane work'])
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+
+    const calls = []
+    const recordingRunner = async (cwd, args, opts) => {
+      calls.push({ args, timeout: opts?.timeout })
+      return defaultGitRunner(cwd, args, opts)
+    }
+    const answers = []
+    const api = createReviewsApi({
+      projectRoot: project,
+      briefsDir: join(room, 'docs', 'agents'),
+      sendJson: (req, res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ confirmed: true, head, message: 'Merge the lane' }),
+      orchestrators: () => null,
+      gitRunner: recordingRunner,
+      readRuns: () => [],
+    })
+
+    await api.handle({ method: 'POST', headers: { origin: 'http://localhost:5173' } }, {}, MERGE_URL)
+    expect(answers[0].status).toBe(200)
+    const write = calls.find((call) => call.args[0] === 'merge' && call.args[1] === '--ff-only')
+    expect(write.timeout).toBe(GIT_WRITE_TIMEOUT_MS)
+    expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
   })
 })
