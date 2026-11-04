@@ -348,12 +348,12 @@ The guide is `docs/agents/ARCHITECTURE.md`. The order of work is in `docs/agents
 
 - One branch per task, in the agent's own worktree.
 - Touch only the files the brief names.
-- Run `npm test` and `npm run build` before a commit. Both must pass.
+- Run the tests for what you changed and `npm run build` before a commit. Both must pass. The orchestrator runs the full `npm test` before each push.
 - Never push. The orchestrator reviews and merges each branch.
 
 ## Licence
 
-The licence is not chosen yet.
+MachineRoom is released under the MIT licence. See [LICENSE](LICENSE).
 
 ## History
 

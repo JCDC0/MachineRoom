@@ -2,6 +2,7 @@
   "name": "machine-room",
   "private": true,
   "version": "0.1.401",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=24"
