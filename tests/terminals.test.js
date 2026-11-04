@@ -1,7 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { CHIP_SIDE_DEAD_BAND, addressIn, addressUrl, chipSideFromScreen, consoleRows } from '../src/engine/terminals.js'
+import { CHIP_SIDE_DEAD_BAND, addressIn, addressUrl, chipSideFromScreen, chipTitle, consoleRows } from '../src/engine/terminals.js'
 
 const line = (text, tone = 'normal') => ({ text, tone })
+
+describe('chipTitle', () => {
+  it('keeps a closed chip to its label', () => {
+    expect(chipTitle('ORCHESTRATOR', 'working', false)).toBe('ORCHESTRATOR')
+  })
+
+  it('adds the state word to an open chip', () => {
+    expect(chipTitle('ORCHESTRATOR', 'working', true)).toBe('ORCHESTRATOR // working')
+  })
+
+  it('leaves out a missing status', () => {
+    expect(chipTitle('OPENCODE', '', true)).toBe('OPENCODE')
+  })
+})
 
 describe('chipSideFromScreen', () => {
   it('puts the chip on the side away from the hub', () => {
