@@ -463,8 +463,8 @@ function LensEdge({ side, yaw = 0, disconnected = false }) {
               className={`lens-edge-tick${tick.tall ? ' is-tall' : ''}`}
               x1={tick.x + 0.5}
               x2={tick.x + 0.5}
-              y1={top ? curve + 1 : curve - 1}
-              y2={top ? curve + length : curve - length}
+              y1={curve + 1}
+              y2={curve + length}
             />
           )
         })}
@@ -473,7 +473,7 @@ function LensEdge({ side, yaw = 0, disconnected = false }) {
             key={`label-${label.x}`}
             className="lens-edge-label"
             x={label.x + 4}
-            y={top ? curveY(label.x) + 22 : curveY(label.x) - 15}
+            y={curveY(label.x) + 22}
           >
             {label.text}
           </text>
