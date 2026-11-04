@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The Height and Zoom rails fade to 0.18 opacity with no label or multiplier until the pointer comes within 64 pixels of their lens edge, a drag, a second after a wheel turn or keyboard focus, over 0.2 seconds and at once under reduced motion (task U148).
 - MachineRoom is released under the MIT licence: `LICENSE` and the `license` field in `package.json`.
 - A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.
