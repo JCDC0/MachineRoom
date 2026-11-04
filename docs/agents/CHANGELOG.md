@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The room writes its own sprites module: its five colours, the seeded random numbers that keep a room repeatable, the easing helpers, the shared reduced motion reading, the glow texture, the Space Mono 400 text sprite and the additive line material (task U151).
 - MachineRoom is released under the MIT licence: `LICENSE` and the `license` field in `package.json`.
 - A lane run records its base commit and the scope check diffs the lane from it, and a sub orchestrator shows its own model instead of the first lane model of its harness (task S41).
 - The tour also waits while the family tree, Build a team or the chat has a confirm card open.
