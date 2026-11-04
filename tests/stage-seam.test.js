@@ -350,6 +350,9 @@ describe('lens compass', () => {
 
       await act(async () => root.render(createElement(Host, { tick: 0 })))
       expect(updateRef.current).toBeTypeOf('function')
+      const bottom = container.querySelector('.lens-edge.is-bottom')
+      expect(bottom.querySelectorAll('line, text')).toHaveLength(0)
+      expect(container.querySelector('.lens-edge.is-top').querySelectorAll('line').length).toBeGreaterThan(0)
       const centre = () => container.querySelectorAll('text').find((label) => label.getAttribute('x') === '604')
       expect(centre()?.textContent).toBe('N 000')
 

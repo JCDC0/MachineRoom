@@ -5,8 +5,6 @@ import Stage, {
   LENS_BOW,
   LENS_EDGE_HEIGHT,
   compassBearingLabel,
-  compassBottomHeading,
-  compassBottomLabel,
   compassHeading,
   isBridgeDown,
   labelsFromFamily,
@@ -297,16 +295,10 @@ describe('lens edge compass tape', () => {
     expect(lensEdgeLabels()).toContainEqual({ x: 720, bearing: 0, cardinal: true, text: 'N 000' })
   })
 
-  it('keeps the top tape on the camera heading and the bottom tape opposite', () => {
-    expect(lensEdgeLabels(1440, 0, 'top').filter((label) => label.cardinal).map((label) => label.text)).toEqual([
+  it('keeps the top tape on the camera heading', () => {
+    expect(lensEdgeLabels(1440, 0).filter((label) => label.cardinal).map((label) => label.text)).toEqual([
       'W 270', 'NW 315', 'N 000', 'NE 045', 'E 090',
     ])
-    expect(lensEdgeTicks(600, -Math.PI / 2, 'bottom').find((tick) => tick.x === 300)).toEqual({
-      x: 300,
-      tall: true,
-      bearing: 270,
-    })
-    expect(lensEdgeTicks(0, 0, 'bottom')).toEqual([])
   })
 })
 
@@ -405,54 +397,3 @@ describe('seam pose', () => {
   })
 })
 
-describe('bottom lens edge compass', () => {
-  it('turns the heading half a turn', () => {
-    expect(compassBottomHeading()).toBe(180)
-    expect(compassBottomHeading(0)).toBe(180)
-    expect(compassBottomHeading(-Math.PI / 2)).toBeCloseTo(270)
-    expect(compassBottomHeading(Math.PI / 2)).toBeCloseTo(90)
-    expect(compassBottomHeading(Math.PI)).toBeCloseTo(0)
-    expect(compassBottomHeading(-Math.PI * 2)).toBeCloseTo(180)
-    expect(compassBottomHeading('x')).toBe(180)
-  })
-
-  it('puts the cardinal after the degrees and a degree sign at the other marks', () => {
-    expect(compassBottomLabel(180)).toBe('180 S')
-    expect(compassBottomLabel(135)).toBe('135 SE')
-    expect(compassBottomLabel(90)).toBe('090 E')
-    expect(compassBottomLabel(45)).toBe('045 NE')
-    expect(compassBottomLabel(0)).toBe('000 N')
-    expect(compassBottomLabel(315)).toBe('315 NW')
-    expect(compassBottomLabel(270)).toBe('270 W')
-    expect(compassBottomLabel(225)).toBe('225 SW')
-    expect(compassBottomLabel(165)).toBe('165°')
-    expect(compassBottomLabel(150)).toBe('150°')
-    expect(compassBottomLabel(360)).toBe('000 N')
-    expect(compassBottomLabel(-15)).toBe('345°')
-    expect(compassBottomLabel(180, 0.3)).toBe('180 S')
-  })
-
-  it('runs the ticks the other way from the opposite heading', () => {
-    const ticks = lensEdgeTicks(1200, 0, 'bottom')
-    expect(ticks).toHaveLength(41)
-    expect(ticks[0]).toEqual({ x: 0, tall: false, bearing: 280 })
-    expect(ticks.find((tick) => tick.x === 600)).toEqual({ x: 600, tall: true, bearing: 180 })
-    expect(ticks.at(-1)).toEqual({ x: 1200, tall: false, bearing: 80 })
-    expect(ticks.map((tick) => tick.bearing).slice(0, 3)).toEqual([280, 275, 270])
-    expect(ticks.every((tick, index) => index === 0 || tick.x > ticks[index - 1].x)).toBe(true)
-    expect(ticks.filter((tick) => tick.tall).map((tick) => tick.bearing)).toEqual([
-      270, 255, 240, 225, 210, 195, 180, 165, 150, 135, 120, 105, 90,
-    ])
-  })
-
-  it('labels the bottom tape in reverse with the pitch passed through', () => {
-    const labels = lensEdgeLabels(1440, 0, 'bottom', 0.35)
-    expect(labels[0]).toEqual({ x: 90, bearing: 285, cardinal: false, text: '285°' })
-    expect(labels.at(-1)).toEqual({ x: 1350, bearing: 75, cardinal: false, text: '075°' })
-    expect(labels).toContainEqual({ x: 720, bearing: 180, cardinal: true, text: '180 S' })
-    expect(labels.filter((label) => label.cardinal).map((label) => label.text)).toEqual([
-      '270 W', '225 SW', '180 S', '135 SE', '090 E',
-    ])
-    expect(labels.every((label) => label.x >= 24 && label.x <= 1416)).toBe(true)
-  })
-})
