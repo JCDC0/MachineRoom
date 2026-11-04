@@ -293,14 +293,19 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.hud-lower-crumb')
     expect(css).toContain('.hud-overview')
     expect(css).toContain('.hud-drawer')
-    expect(css).toContain('--lens-h: var(--lens-h-user, calc(100vh - var(--menu-h) - var(--transport-h)))')
+    expect(css).toContain('--lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 56vh)))')
     expect(css).toContain('.hud-dock[hidden]')
   })
 
-  it('paints the scrolled menu past the bow and keeps a virtual row gap out of the way', () => {
+  it('keeps the one-screen frame and the idle lens in styles.css', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
-    expect(css).toContain('.stage.is-scrolled .hud-menu::before')
-    expect(css).toMatch(/\.stage\.is-scrolled \.hud-menu::before \{[^}]*bottom: calc\(-1 \* var\(--lens-bow, 28px\)\);[^}]*z-index: -1;[^}]*pointer-events: none;/)
+    expect(css).not.toContain('is-scrolled')
+    expect(css).not.toContain('max(520px, calc(100vh - var(--menu-h)))')
+    expect(css).toMatch(/\.hud-lower \{[^}]*flex: 1 1 auto;[^}]*min-height: 0;/)
+    expect(css).toContain('.stage.is-idle .lens {')
+    expect(css).toMatch(/\.stage\.is-idle \.lens \{\s+height: 100vh;/)
+    expect(css).toMatch(/\.stage\.is-idle \{[\s\S]*transition: padding-top 800ms ease-out;/)
+    expect(css).toMatch(/\.lens \{\s+transition: height 300ms ease;/)
     expect(css).toMatch(/\.hud-lower \{[^}]*padding-top: var\(--lens-bow, 28px\);/)
     expect(css).toContain('.mr-card-gap + .mr-item')
     expect(css).toContain('.mr-card-gap {')

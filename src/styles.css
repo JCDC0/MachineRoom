@@ -7388,7 +7388,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 /* Task U34: the lower half, with the conversation in the middle and Overview on the right. */
 @media (min-width: 900px) {
   .stage {
-    --lens-h: var(--lens-h-user, calc(100vh - var(--menu-h) - var(--transport-h)));
+    --lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 56vh)));
   }
 
   .transport {
@@ -7401,23 +7401,6 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
   .hud-menu {
     background: transparent;
-  }
-
-  .stage.is-scrolled .hud-menu {
-    background: var(--black);
-  }
-
-  .stage.is-scrolled .hud-menu::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: calc(-1 * var(--lens-bow, 28px));
-    left: 0;
-    z-index: -1;
-    border-radius: 0 0 50% 50% / 0 0 var(--lens-bow, 28px) var(--lens-bow, 28px);
-    background: var(--black);
-    pointer-events: none;
   }
 
   .hud-lower {
@@ -8050,34 +8033,6 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 @media (min-width: 900px) {
   .lens-rail.is-left {
     display: flex;
-  }
-}
-
-/* The whole page scrolls at 900 pixels and wider: the lens on top, the lower half below it */
-@media (min-width: 900px) {
-  html {
-    height: auto;
-    min-height: 100%;
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  body,
-  #root {
-    height: auto;
-    min-height: 100%;
-    overflow: visible;
-  }
-
-  .stage {
-    position: relative;
-    inset: auto;
-    min-height: 100vh;
-  }
-
-  .hud-lower {
-    flex: none;
-    height: max(520px, calc(100vh - var(--menu-h)));
   }
 }
 
@@ -10296,6 +10251,39 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 .lens-rail,
 .lens-labels {
   transition: transform 300ms ease, opacity 300ms ease;
+}
+
+@media (min-width: 900px) {
+  .stage.is-idle {
+    padding-top: 0;
+  }
+
+  .stage.is-idle .lens {
+    height: 100vh;
+  }
+}
+
+@media (min-width: 900px) and (prefers-reduced-motion: no-preference) {
+  .stage {
+    transition: padding-top 300ms ease;
+  }
+
+  .lens {
+    transition: height 300ms ease;
+  }
+
+  .stage:not(.is-idle) .lens:has(.lens-rail:hover),
+  .stage:not(.is-idle) .lens:has(.lens-rail:focus-within) {
+    transition: none;
+  }
+
+  .stage.is-idle {
+    transition: padding-top 800ms ease-out;
+  }
+
+  .stage.is-idle .lens {
+    transition: height 800ms ease-out;
+  }
 }
 
 .stage.is-idle .hud-menu,

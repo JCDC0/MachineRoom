@@ -14,7 +14,7 @@ import {
   railShareFromPointer,
   railStep,
 } from '../src/ui/lensResize.js'
-import { loadSettings, saveSettings } from '../src/ui/settings.js'
+import { SETTINGS_KEY, loadSettings, saveSettings } from '../src/ui/settings.js'
 
 function memoryStore() {
   const map = new Map()
@@ -26,8 +26,9 @@ function memoryStore() {
 }
 
 describe('lens rails', () => {
-  it('clamps the lens share and falls back to the full lens', () => {
-    expect(LENS_SHARE_DEFAULT).toBe(LENS_SHARE_MAX)
+  it('clamps the lens share and falls back to the default split', () => {
+    expect(LENS_SHARE_DEFAULT).toBe(0.56)
+    expect(LENS_SHARE_MAX).toBe(0.85)
     expect(clampLensShare(0.1)).toBe(LENS_SHARE_MIN)
     expect(clampLensShare(2)).toBe(LENS_SHARE_MAX)
     expect(clampLensShare('x')).toBe(LENS_SHARE_DEFAULT)
@@ -67,13 +68,13 @@ describe('lens rails', () => {
     expect(lensShareAfterWheel(0.79, -1000)).toBe(LENS_SHARE_MAX)
   })
 
-  it('fills to the transport at the maximum share and keeps a floor below it', () => {
-    const full = 'calc(100vh - var(--menu-h) - var(--transport-h))'
-    expect(lensHeightValue(0.52)).toBe('max(240px, 52.0vh)')
-    expect(lensHeightValue(0.79)).toBe('max(240px, 79.0vh)')
-    expect(lensHeightValue(LENS_SHARE_MAX)).toBe(full)
-    expect(lensHeightValue(1)).toBe(full)
-    expect(lensHeightValue('x')).toBe(full)
+  it('caps every height so the transport stays on screen', () => {
+    const cap = 'calc(100vh - var(--menu-h) - var(--transport-h))'
+    expect(lensHeightValue(0.52)).toBe(`min(${cap}, max(240px, 52.0vh))`)
+    expect(lensHeightValue(0.79)).toBe(`min(${cap}, max(240px, 79.0vh))`)
+    expect(lensHeightValue(LENS_SHARE_MAX)).toBe(`min(${cap}, max(240px, 85.0vh))`)
+    expect(lensHeightValue(1)).toBe(`min(${cap}, max(240px, 85.0vh))`)
+    expect(lensHeightValue('x')).toBe(`min(${cap}, max(240px, 56.0vh))`)
     expect(multiplierText(1)).toBe('1.0x')
     expect(multiplierText(2.46)).toBe('2.5x')
     expect(multiplierText(12.4)).toBe('12x')
@@ -89,13 +90,20 @@ describe('lens rails', () => {
     expect(distanceFromShare(0.5)).toBeCloseTo(Math.sqrt(500 * 8000))
   })
 
-  it('keeps the lens share in the saved settings', () => {
+  it('keeps the lens split under its new settings key and ignores the old one', () => {
     const storage = memoryStore()
-    expect(loadSettings(storage).lensShare).toBeUndefined()
-    saveSettings(storage, { lensShare: 0.7 })
-    expect(loadSettings(storage).lensShare).toBe(0.7)
-    saveSettings(storage, { lensShare: 5 })
-    expect(loadSettings(storage).lensShare).toBe(LENS_SHARE_MAX)
+    expect(loadSettings(storage).lensSplit).toBeUndefined()
+    saveSettings(storage, { lensSplit: 0.7 })
+    expect(loadSettings(storage).lensSplit).toBe(0.7)
+    saveSettings(storage, { lensSplit: 5 })
+    expect(loadSettings(storage).lensSplit).toBe(LENS_SHARE_MAX)
+
+    storage.setItem(SETTINGS_KEY, JSON.stringify({ lensShare: 0.8, speed: 2 }))
+    const loaded = loadSettings(storage)
+    expect(loaded.lensSplit).toBeUndefined()
+    expect(loaded.speed).toBe(2)
+    saveSettings(storage, { speed: 3 })
+    expect(JSON.parse(storage.getItem(SETTINGS_KEY))).not.toHaveProperty('lensShare')
   })
 })
 

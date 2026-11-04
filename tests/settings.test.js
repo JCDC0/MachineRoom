@@ -166,12 +166,12 @@ describe('settings', () => {
     expect(loadSettings(storage).speed).toBe(2)
   })
 
-  it('keeps a lens share, sidebar tab and record time while saving other keys', () => {
+  it('keeps a lens split, sidebar tab and record time while saving other keys', () => {
     const storage = makeStorage()
-    saveSettings(storage, { lensShare: 0.6, sidebarTab: 'agents', recordMinutes: 45 })
+    saveSettings(storage, { lensSplit: 0.6, sidebarTab: 'agents', recordMinutes: 45 })
     saveEffectSettings(storage, { vignette: { on: true, strength: 0.4 } })
     const saved = loadSettings(storage)
-    expect(saved.lensShare).toBe(0.6)
+    expect(saved.lensSplit).toBe(0.6)
     expect(saved.sidebarTab).toBe('agents')
     expect(saved.recordMinutes).toBe(45)
   })

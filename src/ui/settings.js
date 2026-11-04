@@ -136,8 +136,8 @@ function normalizeSettings(raw) {
     sound: soundSettings(raw.sound),
   }
 
-  if (raw.lensShare !== undefined && Number.isFinite(Number(raw.lensShare))) {
-    out.lensShare = clampLensShare(raw.lensShare)
+  if (raw.lensSplit !== undefined && Number.isFinite(Number(raw.lensSplit))) {
+    out.lensSplit = clampLensShare(raw.lensSplit)
   }
 
   const depth = raw.alwaysDepth ?? raw.effects?.alwaysDepth

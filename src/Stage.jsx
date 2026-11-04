@@ -607,7 +607,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const idleRef = useRef(false)
   const idleWatchRef = useRef(null)
   const bridgeDownRef = useRef(false)
-  const [scrolled, setScrolled] = useState(false)
   const [liveLog, setLiveLog] = useState(NONE)
   const followRef = useRef(false)
   const [controlTarget, setControlTarget] = useState(null)
@@ -615,14 +614,14 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const [chromaMap, setChromaMap] = useState('')
   const [lensSize, setLensSize] = useState({ width: 0, height: 0 })
   const layersRef = useRef(null)
-  const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensShare ?? null)
+  const [lensShare, setLensShare] = useState(() => loadSettings(store()).lensSplit ?? LENS_SHARE_DEFAULT)
   const compassRef = useRef(null)
   const [zoom, setZoom] = useState({ share: 0, multiplier: 1 })
 
   function changeLensShare(next, save = true) {
     const share = clampLensShare(next)
     setLensShare(share)
-    if (save) saveSettings(store(), { lensShare: share })
+    if (save) saveSettings(store(), { lensSplit: share })
   }
 
   useEffect(() => {
@@ -1433,19 +1432,6 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     else idleWatchRef.current?.arm()
   }, [bridgeDown])
 
-  useEffect(() => {
-    let current = (window.scrollY ?? window.pageYOffset ?? 0) > 0
-    setScrolled(current)
-    function onScroll() {
-      const next = (window.scrollY ?? window.pageYOffset ?? 0) > 0
-      if (next === current) return
-      current = next
-      setScrolled(next)
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-
   const chromaOn = Boolean(effects.aberration?.on && effects.aberration?.strength > 0)
   const chromaChannels = aberrationChannels(effects.aberration?.strength)
   const chromaFilter = chromaOn && chromaMap ? 'url(#mr-screen-filter)' : undefined
@@ -1488,7 +1474,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   return (
     <LiveBadgeContext.Provider value={live?.simulated ? 'demo' : 'live'}>
-      <div className={stageClassName({ disconnected: bridgeDown, idle, scrolled })} style={{ '--lens-bow': `${LENS_BOW}px`, ...(lensShare === null ? null : { '--lens-h-user': lensHeightValue(lensShare) }) }}>
+      <div className={stageClassName({ disconnected: bridgeDown, idle })} style={{ '--lens-bow': `${LENS_BOW}px`, '--lens-h-user': lensHeightValue(lensShare) }}>
         {clipLens && (
           <svg
             className="lens-clip-defs"
@@ -1604,12 +1590,12 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
           <LensRail
             side="left"
             label="Height"
-            share={heightRailShare(lensShare ?? undefined)}
-            multiplier={multiplierText((lensShare ?? LENS_SHARE_DEFAULT) / LENS_SHARE_DEFAULT)}
+            share={heightRailShare(lensShare)}
+            multiplier={multiplierText(lensShare / LENS_SHARE_DEFAULT)}
             ariaLabel="Lens height"
-            valueText={`${Math.round((lensShare ?? LENS_SHARE_DEFAULT) * 100)} percent of the window`}
+            valueText={`${Math.round(lensShare * 100)} percent of the window`}
             onShare={(share, done) => changeLensShare(lensShareFromRail(share), done)}
-            onWheel={(deltaY) => changeLensShare(lensShareAfterWheel(lensShare ?? undefined, deltaY))}
+            onWheel={(deltaY) => changeLensShare(lensShareAfterWheel(lensShare, deltaY))}
           />
           <LensRail
             side="right"
