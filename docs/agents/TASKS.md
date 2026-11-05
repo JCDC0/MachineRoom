@@ -1515,4 +1515,6 @@ Tests: put the pure parts in `stars.js` and test them in `tests/stars.test.js`: 
 
 Check it on screen before you finish: `npm run build`, `npm run serve -- up --root <this worktree> --port 5181 --no-open` in the background, open `/?replay&fixture=scenario-i`, and confirm that no speck leaves any agent or the hub centre, that stars leave the agents' centres and land on rows and cards with their labels, that two agents on one chain show two colours, and that a seek clears stars in flight. Stop the server when you finish.
 
+Addendum from the owner, after the lane started: the tunnel and the star end on the touched card, at its tab anchor (the same `cards.anchor` its folder string ends on), and draw no second segment across the card to the edge of the file's row. The row only flashes.
+
 Files: src/engine/stars.js, src/engine/agents.js, src/engine/room.js, src/engine/messages.js, src/engine/strings.js, src/engine/sprites.js, src/Stage.jsx, tests/stars.test.js, tests/messages.test.js, tests/e2e-room.test.js, tests/agent-strip.test.js.
