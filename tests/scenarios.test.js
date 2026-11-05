@@ -210,10 +210,10 @@ describe('scenario I: the sub orchestrators work', () => {
     ])
   })
 
-  it('counts nine runs, twenty three tool calls and nine touched files in about two minutes', () => {
+  it('counts nine runs, twenty five tool calls and nine touched files in about two minutes', () => {
     expect(starts).toHaveLength(9)
     expect(ends).toHaveLength(9)
-    expect(calls).toHaveLength(23)
+    expect(calls).toHaveLength(25)
     expect(touchedFiles(activities)).toEqual([
       'server/control.js',
       'server/index.js',

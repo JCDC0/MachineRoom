@@ -4,6 +4,7 @@ import {
   STAR_MAX_SECONDS,
   STAR_MIN_SECONDS,
   STAR_SPEED,
+  agentStar,
   starAdvance,
   starDuration,
   starEase,
@@ -107,5 +108,60 @@ describe('the star pool', () => {
   it('lands the oldest star when every slot is busy', () => {
     expect(starSlot([{ active: true, start: 4 }, { active: true, start: 2 }, { active: true, start: 3 }])).toBe(1)
     expect(starSlot([])).toBe(-1)
+  })
+})
+
+describe('the star between agents', () => {
+  const ladder = {
+    subs: [
+      { id: 'frontend', lanes: ['opencode'] },
+      { id: 'backend', lanes: ['claude'] },
+    ],
+  }
+
+  it('sends a lane run start from the sub that leads it', () => {
+    expect(agentStar({ type: 'run.start', agent: 'opencode' }, ladder)).toEqual({ from: 'sub-frontend', to: 'opencode' })
+    expect(agentStar({ type: 'run.start', agent: 'claude' }, ladder)).toEqual({ from: 'sub-backend', to: 'claude' })
+  })
+
+  it('sends a lane run start in no sub from the main orchestrator', () => {
+    expect(agentStar({ type: 'run.start', agent: 'hermes' }, ladder)).toEqual({ from: 'orchestrator', to: 'hermes' })
+    expect(agentStar({ type: 'run.start', agent: 'opencode' }, null)).toEqual({ from: 'orchestrator', to: 'opencode' })
+  })
+
+  it('sends a sub run start from the main orchestrator and a main run start from nobody', () => {
+    expect(agentStar({ type: 'run.start', agent: 'sub-frontend' }, ladder)).toEqual({ from: 'orchestrator', to: 'sub-frontend' })
+    expect(agentStar({ type: 'run.start', agent: 'orchestrator' }, ladder)).toBeNull()
+  })
+
+  it('sends a spawn from the parent to the child', () => {
+    expect(agentStar({ type: 'agent.spawn', agent: 'claude', child: 'claude~1' }, ladder)).toEqual({
+      from: 'claude',
+      to: 'claude~1',
+    })
+  })
+
+  it('sends order, report and wake messages from the sender to the receiver', () => {
+    for (const kind of ['order', 'report', 'wake']) {
+      expect(agentStar({ type: 'agent.message', agent: 'orchestrator', to: 'sub-frontend', kind }, ladder)).toEqual({
+        from: 'orchestrator',
+        to: 'sub-frontend',
+      })
+    }
+  })
+
+  it('sends no star for dispatch or any other activity', () => {
+    expect(agentStar({ type: 'agent.message', agent: 'sub-frontend', to: 'opencode', kind: 'dispatch' }, ladder)).toBeNull()
+    expect(agentStar({ type: 'agent.message', agent: 'orchestrator', to: 'opencode', kind: 'other' }, ladder)).toBeNull()
+    expect(agentStar({ type: 'tool.start', agent: 'opencode' }, ladder)).toBeNull()
+    expect(agentStar({ type: 'run.end', agent: 'opencode' }, ladder)).toBeNull()
+    expect(agentStar(null, ladder)).toBeNull()
+  })
+
+  it('sends nothing when a message or spawn has no other side', () => {
+    expect(agentStar({ type: 'agent.message', agent: 'orchestrator', kind: 'order' }, ladder)).toBeNull()
+    expect(agentStar({ type: 'agent.message', to: 'opencode', kind: 'order' }, ladder)).toBeNull()
+    expect(agentStar({ type: 'agent.spawn', agent: 'claude' }, ladder)).toBeNull()
+    expect(agentStar({ type: 'agent.spawn', child: 'claude~1' }, ladder)).toBeNull()
   })
 })

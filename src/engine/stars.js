@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { polylineLengths, samplePolyline, speckPolyline } from './agents.js'
+import { lineParentKey, polylineLengths, samplePolyline, speckPolyline } from './agents.js'
 import { WHITE, glowTexture } from './sprites.js'
 
 export const STAR_POOL = 48
@@ -9,6 +9,28 @@ export const STAR_MAX_SECONDS = 0.9
 export const STAR_CORE_PIXELS = 22
 export const STAR_HALO_PIXELS = 40
 export const STAR_HALO_OPACITY = 0.35
+
+const MESSAGE_STAR_KINDS = new Set(['order', 'report', 'wake'])
+
+export function agentStar(activity, ladder) {
+  if (!activity || typeof activity !== 'object') return null
+  const agent = typeof activity.agent === 'string' ? activity.agent : ''
+  if (activity.type === 'run.start') {
+    if (agent === '') return null
+    const from = lineParentKey(agent, ladder)
+    return from === agent ? null : { from, to: agent }
+  }
+  if (activity.type === 'agent.spawn') {
+    const child = typeof activity.child === 'string' ? activity.child : ''
+    return agent === '' || child === '' ? null : { from: agent, to: child }
+  }
+  if (activity.type === 'agent.message') {
+    const to = typeof activity.to === 'string' ? activity.to : ''
+    if (agent === '' || to === '' || !MESSAGE_STAR_KINDS.has(activity.kind)) return null
+    return { from: agent, to }
+  }
+  return null
+}
 
 export function starDuration(length) {
   const value = Number(length)
