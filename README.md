@@ -1,17 +1,25 @@
-# Machine Room
+# MachineRoom
 
-MachineRoom shows coding agents working on one project as a 3D machine room in your browser. It follows the room's lane runs, task queues and your own Claude Code and OpenCode sessions live, and it can replay a recorded run.
+MachineRoom shows coding agents working on one project as a 3D machine room in your browser.
 
-## What you need
+![The overview of the room](docs/images/overview.png)
 
-- Node 24 or newer. The version is pinned in `package.json` and `.nvmrc`.
-- git on the PATH. Worktrees and queues need a git project.
-- OpenCode, Claude Code or AGY installed and signed in, or a Direct API key in Settings. A lane uses the program or endpoint its entry in `docs/agents/lanes.json` names. The orchestrator uses Claude Code, or OpenCode when its entry says so.
-- A browser with WebGL.
+## What you see
 
-## Start it on your project
+The room puts each agent on a ring in the middle, as its own wireframe shape. Your project folders sit around it as flat cards, and a working agent sends a light trail to the row of the file it touches. White is activity, yellow is active, green is finished work and red is failure.
 
-The short way: link the `machineroom` command once, then start the room from any project folder.
+## What you can do
+
+- Watch your own Claude Code and OpenCode sessions live on the project.
+- Ask the orchestrator for work and let it plan, start and follow the runs.
+- Run tasks on lanes, each in its own git worktree.
+- Review a lane's branch and merge it when it passes.
+- Replay a recorded run.
+- See the cost per lane for this month.
+
+## Quick start
+
+You need Node 24 or newer, git, a browser with WebGL, and Claude Code, OpenCode or AGY signed in, or a Direct API key.
 
 ```
 cd <MachineRoom folder>
@@ -20,336 +28,38 @@ npm run build
 npm link
 ```
 
+Then, from any project folder:
+
 ```
-cd <your project folder>
 machineroom
 ```
 
-`machineroom` runs `up` on the folder you are in, prints `MachineRoom is running.` with the address, and opens the room in your browser. `machineroom <folder>` starts it on another folder, `--no-open` leaves the browser closed, and `--port`, `--no-sessions` and `--help` work as below. After you pull a new MachineRoom version, run `npm run build` in the MachineRoom folder again. `npm unlink -g machine-room` removes the command.
+The room opens in your browser on that folder after a short check of the project, git and the lane programs. Run `npm run build` again in the MachineRoom folder after you pull a new version.
 
-The long way runs these in the MachineRoom folder:
-
-```
-npm install
-npm run build
-npm run serve -- up --root <your project folder>
-```
-
-`up` checks the project folder, git, the runs folder and the lane programs. It prints one line for each check, then serves the room on one port. After the checks, it prints a short block: the address to open (for example `http://127.0.0.1:5174/?live&bridge=http://127.0.0.1:5174`), a line saying the room fills when a lane or a session works on the project, and how to stop it with Ctrl+C. Open that address in your browser. The page opens live, on your folder.
-
-- Pass `--open` to open that address in your default browser automatically.
-- `up` turns both sources on, so `--lanes` and `--sessions` are only needed with a plain `npm run serve`. `--lanes` shows the runs started by the lane runner and by Dispatch; `--sessions` shows your own Claude Code and OpenCode sessions on that folder.
-- `--no-sessions` leaves your sessions out. `--port <n>` picks another port.
-- Quote the folder when its path has spaces.
-- A first visit with no saved connection opens the connect screen with two short sentences and `Take the tour` focused; it opens `/?replay&fixture=scenario-i&tour`, steps through the room's parts on the demo ladder with a yellow outline, and offers `Connect to my project` and `Keep watching` on the last step.
-
-Press Ctrl+C in the terminal to stop the room.
-
-## What you see
-
-- The hub: a flat ring in the middle. Each agent parks at its own slot, working or not. The orchestrator floats above the centre.
-- Sectors: when sub orchestrators are set, the ring splits into one named arc for each sub and one for the main orchestrator. Each lane parks inside its arc. A sub orchestrator floats above its arc, smaller than the main one and joined to it by a thin line. `?replay&fixture=scenario-i` plays a two minute demo where two sub orchestrators and their lanes work. With no ladder the ring is as above.
-- Folder cards: flat cards on one ring around the hub, always facing you. The root card sits directly under the hub circle and carries the project name; it has no line. Lines join each top-level folder to the root card, and every other folder to its parent. The first top-level folder is at 12 o'clock and the rest run clockwise at equal angles, up to 12 on the ring; more folders, and the child folders, branch outward in rows. Each card lists its own files. Folders down to depth 2 are always drawn, up to 300 cards. Deeper folders appear while an agent works on them. They also appear if they were touched in the last 90 seconds, or if you pin them. A folder with unexpanded child folders shows up to three folder blocks behind it and counts the hidden folders in its meta line.
-- The tunnel: while an agent works, one solid line runs from it to the row of the file it touches. It goes from the agent to the root card and then down the same lit folder links the yellow line runs through; when the root has no lit link to the file's folder, it is the straight line. It is yellow, with yellow stripes and small packets running toward the file. Four yellow corner brackets sit around that card.
-- Colours:
-  - White is activity. A read or write flashes the file row and its card white.
-  - Yellow is active. The folder and the file an agent works on right now carry faint yellow stripes, and the tunnel is yellow.
-  - Green is finished work. A run that ends well turns the agent, its chip and the files it wrote green.
-  - Red is failure. A failed tool call, test or run flashes red and leaves the file red until it is written again. A failed run turns the agent, its chip and the tunnel red.
-- Terminal chips: a chip beside each agent, joined by a thin line. It shows the name and a status word: yellow working, red error, green done. Click it, or the Log button in the agent dock, to read its log. `T` opens the focused agent's chip, or every chip when no agent is focused. An agent whose latest tool call is a shell command or another command also shows a cyan `CONSOLE` above its head with the last five log lines; it stays for 6 seconds after the call ends.
-- The page: a menu across the top and the room in a lens below it. The room is made for a desktop window. At 900 pixels and wider the lens fills the window from the menu to the transport by default, and the lower half sits under the transport: the sidebar on the left, the conversation in the middle, and an Overview card on the right whose Agent and Costs entries open in its place. The Agent drawer, and the dock's context column below 900 pixels, show status, model, task, command, cost and the last log lines. An orchestrator also shows its context share and an Autocompact switch. In a live room at 900 pixels and wider the orchestrator chat sits in the middle of the lower half; in a replay, or below 900 pixels, it floats at the bottom right. Below 900 pixels the page folds into one column: the menu folds into one button and the dock holds the agent list, the selected agent's context, and the settings and the cost board. Phones are not a target.
-- The agent list: below 900 pixels, in the dock, one row for each agent, with its lane key, status and a Log button. At 900 pixels and wider the sidebar's Agents tab holds the family tree instead, and the selected agent's Log button is in the Overview card's Agent drawer. With a ladder, the list groups under the main orchestrator, then a header for each sub with its name, state and lane count, then a `Main` header for the lanes in no sub. Working, queued, failed and recently finished lanes come first in each group. The rest sit under one collapsible idle row.
-- A subagent appears beside its parent as a smaller shape with its own chip.
-- Follow mode: `F` cycles wide, close up and off. It follows the card an agent is touching. A click on an agent focuses it, a click on empty space ends follow mode, and `0`, `1` to `9` or `Escape` leave it. A click on a folder card body holds the camera on that card; `0`, `Escape` with no panel open or a double click on empty space returns to the park view.
-- CONTROL at the top right, or `C`: opens the drawer with Dispatch, Tasks, Meters, Team and Reviews.
-- ORCHESTRATOR beside it, or `/`: opens the chat with the room's orchestrator. It is there when the room runs with `--lanes`.
-- The cost board shows this month's spend per lane from the run records in a live room. At 900 pixels and wider it is in the Overview card's Costs drawer; below 900 pixels it is in the dock. In a replay or the demo it reads `Sample costs`, made up for the replay.
-- While any agent works, cards off its path dim, and the cards on the path glow.
-- There is no randomness. The same recording always draws the same room.
-
-## Settings
-
-The Settings button in the menu opens the Settings panel. At 900 pixels and wider it is a dropdown under the menu; below 900 pixels it sits in the dock.
-
-- Folder depth draws every folder down to that level as a card, from 1 to 3, 2 by default. Content files sets how many file rows a card shows, from 4 to 20, 6 by default.
-- Four screen effects each have a switch and a strength: chromatic aberration, vignette, grain and fine dust. Aberration and grain start off; vignette and fine dust start on. Fine dust also has a Pulse switch.
-- Record time sets how many minutes the page keeps for its own replay, from 1 to 240, 10 by default.
-- Sound holds the beeps, their volume, the music, its volume and Dance. Music plays from the MachineRoom music folder.
-- Direct API holds up to 20 OpenAI-compatible endpoints, each with a provider preset, a base URL, an optional key slot and up to 1000 models. Web search picks the provider for the harness web tools. MCP tools lists the Model Context Protocol servers and runs their tools.
-- Key slots, endpoints, the web search provider and the MCP servers are saved in the runs folder, never in this repository.
-
-## Ask the orchestrator for work
-
-With `--lanes` on, click ORCHESTRATOR or press `/`. Write what you want built, press Send, then Start on the confirm card. Stop asks for confirmation before it stops a turn.
-
-The orchestrator reads your project's own guide (`AGENTS.md`, `CLAUDE.md` or `docs/agents`) before it plans. It asks short questions, at most three at a time, and waits for the answers. Then it:
-
-- splits the work into tasks that touch different files;
-- starts each task as a lane run in its own git worktree inside your project, at `<project folder>/.worktrees/<lane>`; the bridge starts them, so a run keeps going after the orchestrator's turn ends;
-- wakes when a run ends, reads its log and record, checks the branch, and runs your project's tests and build;
-- merges a passing branch into your project's current branch with a straight-line history, and makes no merge commit;
-- writes a follow-up task when a branch fails;
-- reports what landed, what failed and what is next.
-
-It starts at most one run per lane. It never pushes. It ends its turn after it starts the runs, so the runs do not stop when the turn does.
-
-When a session passes 80 percent of its context window, the orchestrator writes a short summary of the work and starts a new session from it. The Autocompact switch turns this off.
-
-### Sub orchestrators
-
-With the chat open, Attach adds a sub orchestrator. Give it a name, an id, a harness and model, the lanes it owns, one scope glob per line, and Restricted, which is on by default. A restricted sub is expected to change only the files in its scope. The bridge warns its parent when a lane branch goes outside it. Each sub gets its own sector of the ring and its own tab in the chat. Detach stops it behind a confirm card and returns its lanes to the main orchestrator. Lanes in no sub stay with the main orchestrator.
-
-## Start one lane by hand
-
-A lane is one agent on one harness. Press `C` or click CONTROL, then open Dispatch. The `Run on this project` section appears when the room runs with `--lanes`.
-
-- Pick a lane, such as OpenCode or Claude Code.
-- Write one task in the box.
-- Press Run, then Confirm. The confirm card says the run spends money.
-- Own worktree is on by default: the lane works in `<project folder>/.worktrees/<lane>` inside your project, on its own queue branch, so several lanes can work at once and your folder is never touched. Each task is committed there when your project's tests pass.
-- With Own worktree off, one task runs in your project folder itself. The runner then makes no branch, writes no recording, and does not run your tests.
-- For several tasks, put a line with only `---` between them. The button reads `Run N tasks in order`. A queue needs a clean git folder: commit or stash first.
-- To give several tasks to different lanes, turn on `One lane per task`. The button reads `Run N tasks on N lanes`. The confirm card lists each task with the idle lane it goes to, and each run starts in its own worktree. The button refuses when there are fewer idle lanes than tasks.
-- A queue makes the branch `machineroom/queue-<lane>-<stamp>`. It runs your project's tests after each task, using `npm test` when `package.json` has a test script. It commits each task that passes and stops at the first failed task or test. It never touches your current branch and never pushes. It leaves the folder on the queue branch. `git switch -` goes back. With Own worktree on, the worktree stays on the queue branch and your project folder stays where it was.
-
-The Runs list in the panel shows the running and recent runs with their last lines.
-
-## Replay a recorded run
-
-- `/?replay` plays the frames this page recorded while it was live. Before the first conversation it says `Nothing recorded yet. Replay starts with the first conversation.` It needs no lane and no project.
-- `/?replay&fixture=scenario-i` plays the demo ladder: two sub orchestrators and their lanes work, so the sectors and the chat tabs have something to show.
-- A lane run on a brief writes a recording under `public/recordings/` in the MachineRoom folder and prints `room: /?recording=<name>`. Run `npm run build` again so the built room serves it, then open that link on the room's address.
-- A run on a project and a queue write no recording. They are live only.
-- `?replay&scale=200000` plays a seeded room of 200000 files in a tenth as many folders. `&fps` adds a frame time line. `?live&simulate` plays the recording through the live path with no lane and the badge reads `Demo`.
-
-## Where the logs and records are
-
-Every lane run writes its log to `<runs>`, which is `%TEMP%\machineroom-runs` on Windows, or the system temp folder elsewhere. `MACHINEROOM_RUNS` names another runs folder, and the runner, the room and the doctor all use it.
-
-- `<lane>-<briefs>-<stamp>.log` for a run on briefs.
-- `<lane>-project-<stamp>.log` for one task on a project without `--worktree`.
-- `<lane>-queue-<stamp>-<number>.log` for a task in a queue, and for one task with `--worktree`.
-- `<log name>.meta.json` beside a run on a project, with the lane, the project folder, the session id and the commit the run started from, and the queue branch when there is one.
-- `runs.jsonl` has one record for each run: lane, model, start, minutes, exit code, cost, tokens, log and branch. A queue run puts its queue branch in `branch` and in `queue`. A stopped run can carry `stoppedLeftovers` with the number of processes the runner had to stop.
-- `outcomes.jsonl` has the outcomes you record with `npm run outcome`.
-- The orchestrator's chat and session live in `orchestrator-<hash>.json`, each sub orchestrator has its own chat file beside it, and each turn writes a `...-chat-<stamp>.log` beside the chat file.
-
-The runner prints `log:` and `record:` at the end of a run.
-
-## Five common problems
-
-### A lane program is not found
-
-The doctor prints `FAIL The OpenCode lane program was not found: <path>.` or the same for another lane. The room still opens, but that lane cannot start.
-
-Install the program, sign in, and check that it starts in the same shell (`opencode --version`, `claude --version`). If it is installed somewhere else, put its full path in `cli.bin` for that lane in `docs/agents/lanes.json`, then run the doctor again.
-
-### The doctor prints FAIL lines
-
-Run the doctor on the folder you watch:
-
-```
-npm run serve -- doctor --root <your project folder>
-```
-
-It checks that the project folder exists, git is on the PATH, the runs folder can be written, and every lane program is found. It prints `ok` or `FAIL` for each line and exits 1 on a failure. Fix the failed line and run it again. `up` prints the same lines and opens the room anyway, with `Some checks failed. The room opens anyway.`
-
-A line that names an environment variable that is not set means the lane's `cli.bin` uses `%NAME%`. Set that variable, or use a full path.
-
-### A dirty project is refused
-
-The run is refused with `The project folder <folder> has uncommitted changes. Commit or discard them, or pass --allow-dirty.` Commit or stash your work, then start the run again. In Dispatch, a single task can start with `Allow uncommitted changes` turned on. A queue always needs a clean folder, so that switch stays off for several tasks.
-
-### A port is taken
-
-The room stops with `machine-room could not start:` and a message that the address is already in use. Another room or program has the port, 5174 by default. Pick another one:
-
-```
-npm run serve -- up --root <your project folder> --port 5175
-```
-
-Or set `PORT`. The room prints the new address. `--port 0` picks a free port.
-
-If another room is already running on the same project, the message names that room instead, and a new port does not help. Open the address the first room printed, or stop that room.
-
-### No agents are shown
-
-When `--lanes` is on, the room lists one agent for each active lane in `docs/agents/lanes.json` that is not retired and has a `cli` block. If the list is empty:
-
-- You started `npm run serve` without `--lanes` or without `up`. Start with `up`, or add `--lanes`.
-- Every lane is turned off. Open Agents in the sidebar and turn one on.
-- The page is in replay mode. Open the `/?live&bridge=...` address the command printed, or press Live.
-- The bridge is not answering. The waiting card says the feed is unreachable. Start the room again and open the printed address.
-
-## Screenshots
-
-![The overview of the room](docs/images/overview.png)
-
-The overview, with the hub, the parked agents and the folder cards.
+No project at hand? Open `/?replay&fixture=scenario-i&tour` on the room's address to take the demo tour.
 
 ![One touched card, close up](docs/images/closeup.png)
 
 Follow mode close up on the card an agent is touching.
 
-![The connect screen](docs/images/connect.png)
-
-The connect screen.
-
-![The control drawer](docs/images/drawer.png)
+![The control drawer open on Dispatch](docs/images/drawer.png)
 
 The control drawer open on Dispatch.
 
-![A seeded room](docs/images/scale.png)
+## Learn more
 
-A seeded room at 40000 files.
+- [Using the room](docs/GUIDE.md): settings, the orchestrator, lanes, replay, keys and common problems.
+- [Working on MachineRoom](CONTRIBUTING.md): setup for development, tests and the review loop.
+- [How it is built](docs/agents/ARCHITECTURE.md): the room, the bridge and the data flow.
 
-## Harnesses
+## Made with
 
-| Harness | State | What the room reads |
-| --- | --- | --- |
-| OpenCode | In use: lanes `opencode`, `opencode2` and `opencode3` | `tool_use` lines, with the tool, its file or command and its result |
-| Claude Code | In use: lane `claude` and the orchestrator | stream-json `tool_use` and `tool_result` lines, and a `Task` or `Agent` child while it works |
-| Direct API | In use when the owner adds a lane on the `machineroom` harness with a saved endpoint | Claude Code's stream-json lines from `scripts/mr-agent.mjs` over an OpenAI-compatible endpoint |
-| Hermes | Supported, retired | plain `read` and `delegate` lines |
-| AGY | In use: backend lanes `agy`, `agy2` and `agy3` on Flash | `step_update` lines, and `invoke_subagent` for a subagent |
-| ACP | Supported: no lane yet | `tool_call` updates, with each kind and location mapped to a touch |
-| Codex | Supported: no lane yet | `exec --json` item lines |
-| GitHub Copilot | Supported: no lane yet | `-p --output-format json` lines, or plain tool lines |
+MachineRoom is built by coding agents that the room itself shows, all under the owner's direction:
 
-Hermes is retired in `docs/agents/lanes.json`; remove `"retired": true` from its entry to bring it back, then check its `cli` block and model. AGY is supported, and `agy`, `agy2` and `agy3` are live backend lanes on Flash. A Direct API lane names a saved endpoint in its `cli.endpoint` and runs on the `machineroom` harness; add its key and endpoint in Settings, Direct API, then pick its model in the family tree. Any Agent Client Protocol agent can be added as a lane with its own `cli.bin` and args; it runs through `scripts/acp-run.mjs`. The harness plan is in `docs/agents/HARNESSES.md`.
-
-## Develop it
-
-`npm run dev` serves the viewer on port 5173, with no build. It needs a bridge for live data: run `npm run build` once, start `npm run serve -- up --lanes` in another terminal with `MACHINEROOM_ORIGINS=http://localhost:5173` set in its environment so the bridge allows the dev page, then open `http://localhost:5173/?live&bridge=http://127.0.0.1:5174`. `npm run build` then `npm run serve` serves the built viewer and the bridge on one port. `npm run preview` serves the built viewer through Vite, with no bridge.
-
-The project folder defaults to the folder you start in; `--root <folder>` or `PROJECT_ROOT` names another. The bridge listens on port 5174 by default; `--port <n>` or `PORT` changes it.
-
-## Big repositories
-
-The room was measured on seeded trees of 40000 and 200000 files.
-
-- `GET /api/tree` holds about 0.6 MB in the folder shape at 40000 files, and 115 KB gzipped. At 200000 files it holds about 3.1 MB, and 570 KB gzipped.
-- The answer carries a version. A page's first `tree` event holds only the files added since the list it read, and each later event only the files that page has not had.
-- Shell commands and Hermes reads look names up from an index, so they cost the same at any repository size.
-- The flat ring places the top-level cards in one pass, and each folder's children go on their own shotgun grid, so stacks and fans take one pass. The room runs the layout when a card appears, leaves or changes size, or a clicked folder changes, and a warm start keeps every card whose parent and slot did not change.
-- The overview fits the hub, the root and the top-level cards, so the cards are small in the overview. Follow mode is the way to read the card an agent touches.
-
-Try it with the dev server:
-
-```
-npm run dev
-```
-
-Open `/?replay&scale=200000&fps`. The frame line appears at the top of the dock's agent column below 900 pixels. `npm run scale-probe` times each stage of the room on a seeded tree in memory and prints the covered top cards, the tallest layout and the overview distance; `--files` and `--folders` change its size.
-
-## The control drawer
-
-The drawer needs a control client. It is there in replay, the demo and a live room through a bridge. With a control client, the drawer has five tabs: Dispatch, Tasks, Meters, Team and Reviews.
-
-- Dispatch: pick an open brief to see its prompt, or run a task on your project when `--lanes` is on. The Runs list shows running and recent lane runs.
-- Tasks: open and finished tasks from the lane runs. A task with a live run reads `running AGENT` or `queued AGENT`. Open one to read its thread. A write is refused.
-- Meters: this month's spend per lane from the run records. A budget change is refused.
-- Team: the lanes from `docs/agents/lanes.json`, read only. Add a lane, or turn one off, in the sidebar's Agents tab.
-- Reviews: each lane's branch, commits ahead, files and last run. Click a row for the diff. Merge opens a confirm card with a message and merges the head you read.
-
-## Working with lanes
-
-A lane is one agent. On this repository, each lane has its own worktree and branch, listed in `docs/agents/lanes.json`. Three OpenCode lanes (`opencode`, `opencode2` and `opencode3`), three AGY backend lanes (`agy`, `agy2` and `agy3`) and the `claude` lane are live. `opencode4` to `opencode10` and `hermes` are retired, so `npm run run-lane` refuses them. Remove `"retired": true` from an entry to bring it back. The drawer can start a local lane run on an open brief and show the result.
-
-- Start a lane run. Press `C`, open Dispatch, pick a brief, then Run now. The confirm card names the lane, model and brief and says it spends money. Confirm starts the lane in its own worktree. The Runs list shows its last lines and its record.
-- Start one from a terminal. `npm run run-lane -- opencode <brief>` starts a lane on the open brief you name. The `claude` lane runs Claude Code, and `npm run run-lane -- claude --project <folder> --task "Fix the failing test."` starts it on another folder. A task with `--worktree` runs as a queue of one, so it makes a branch and commits the work when the project's tests pass. `--dry-run` prints the command, `--list` shows the last 10 runs, and `--stats` shows runs, minutes and cost per lane and model.
-- Stop a run. `npm run run-lane -- --stop <lane>` stops that lane's run, its harness and every process still working in its worktree, prints what it stopped and removes the lock. A new run refuses a live harness child or a worktree leftover and names `--stop`.
-- Record an outcome. `npm run outcome -- <branch> merged --grade A-` records how a lane run ended. `npm run run-lane -- --outcomes [--since YYYY-MM-DD]` prints the merge table.
-- See it in the room. With `--lanes`, the room draws a run live as its log grows, with its reads and writes on the project's cards, and turns the lane green or red when the run ends. A run on a brief also writes a recording under `public/recordings/` and prints `room: /?recording=<name>`.
-- Try a lane's build beside the stable room. `npm run candidate -- <lane>` builds that worktree and serves it on port 5175, with its own bridge. Leave the stable room running and compare the two. It refuses a lane with no worktree, a worktree with uncommitted changes, and a port in use. See `docs/agents/CANDIDATE.md`.
-- Clean up the worktrees a project leaves. `npm run worktrees -- --project <folder>` lists each `<project folder>/.worktrees/<lane>` with its branch, commits ahead of the project's branch, uncommitted changes and whether it is merged. Add `--clean` to remove only the clean merged ones. It never deletes a branch and never forces a removal. It leaves a lane whose lock file names a live process.
-- Review and merge. Press `C`, open Reviews. Each lane shows its branch, commits ahead, files and last run; click it for the diff. Merge is offered on a lane with commits ahead and no uncommitted changes, after a confirm card with a one-line message. The bridge merges one lane at a time, needs the main checkout on main with no uncommitted changes, a clean lane and the lane's exact head, stops on a conflict and leaves main as it was. It never pushes.
-
-## Run a lane from a terminal
-
-To start a lane on a folder without Dispatch, name the folder with `--project` and give it a task or a UTF-8 file that holds it:
-
-```
-npm run run-lane -- opencode --project <folder> --task "Fix the failing test."
-npm run run-lane -- opencode --project <folder> --task-file task.md
-```
-
-Add `--dry-run` to print the program, its arguments and the folder, or the worktree and the queue branch when `--worktree` is on, and start nothing.
-
-The runner refuses the MachineRoom checkout, a lane worktree, the user profile folder itself, the OS temp folder, the runs folder and a git folder with uncommitted changes. Pass `--allow-dirty` to allow a dirty folder. Without `--worktree` it runs the harness in that folder, makes no branch, reads no brief and writes no recording. The room shows the run live, with its reads and writes on that folder's cards.
-
-Add `--worktree` to run in a git worktree of the project instead of the project itself. The runner puts the worktree inside the project at `<project>/.worktrees/<lane>` and adds `/.worktrees/` to the project's `.git/info/exclude`, so git, the project's own files and the room's file tree leave it out and nothing in the project's tracked files changes. It makes the worktree from the project's HEAD when it is missing, and reuses it when it is there and clean. It refuses a worktree with uncommitted changes and names its path. When the project has `node_modules`, the worktree gets a junction to it on Windows or a symlink elsewhere. A task with `--worktree` runs as a queue of one. It makes the branch `machineroom/queue-<lane>-<stamp>` in the worktree, runs the project's tests and commits the task when they pass. A queue with `--worktree` makes its branch in the worktree too. The run's record names the worktree as the project, so a room started on the project still shows the run.
-
-To run a queue of tasks on that folder, write them in a plain text file with a line that holds only `---` between them, then:
-
-```
-npm run run-lane -- opencode --project <folder> --queue queue.txt --test "npm test"
-```
-
-A queue needs a clean git folder, so keep the queue file outside it or commit it first. Before the first task the runner makes the branch `machineroom/queue-<lane>-<stamp>` from the folder's current HEAD. Each task runs as its own run, then the test command runs. A task that ends well and passes its tests is committed on that branch with its first line as the subject; a task with no change is noted and the queue goes on. The first failed task or failed test stops the queue and leaves that task's changes uncommitted for you to look at. `--test` defaults to `npm test` when the folder's `package.json` has a test script, and to none otherwise, so a task then passes on the exit code alone. `--minutes` limits each task. The queue never pushes and never touches the main branch. It leaves the folder on the queue branch and prints the branch and one line per task; without `--worktree`, `git switch -` goes back. With `--worktree`, the worktree stays on the queue branch and your project folder stays where it was.
-
-With `--lanes`, the Dispatch panel can start the same kind of run on the room's own folder: pick a lane, write one task or several separated by a line of `---`, and turn on `Allow uncommitted changes` when the folder has them and you run a single task. A queue needs a clean folder, so that switch is off then.
-
-With `--sessions`, the room follows your own Claude Code and OpenCode sessions on that folder too. Start it with `npm run serve -- up --sessions --root <folder>`. It reads the session files Claude Code keeps in `.claude/projects` under your profile for that folder. It keeps only the lines whose `cwd` is the folder or inside it. It shows each prompt as a run and each tool call on the room's cards, and follows a subagent through its own file. A run that `run-lane` starts on the same folder is skipped, because the runner names its session and the bridge leaves that session out. The room does not show it twice. OpenCode sessions come from OpenCode's own database (`.local/share/opencode/opencode.db` under your profile), opened read-only. The bridge reads only its two session tables, never the ones that hold your accounts and keys. Only tool calls and their results reach the room, never your prompts or the replies.
-
-A lane's `cli.model` can name a `provider/model` from any OpenAI-compatible provider in OpenCode's own config. The key stays in that config or an environment variable, never in `docs/agents/lanes.json` or this repository. MachineRoom does not set up a provider and does not read the key.
-
-## What it never does
-
-- It never pushes to a remote.
-- The Reviews panel merges a lane only after its confirm card. The bridge also refuses a merge without an explicit confirm and the lane's exact head.
-- The room starts a lane run from a button only after a confirm card that says it spends money. The orchestrator starts the runs you asked it for after you confirm your first message.
-- A run on a project refuses the MachineRoom checkout, the lane worktrees in `docs/agents/lanes.json`, the user profile folder itself, the OS temp folder and the runs folder.
-
-## Keys
-
-- `Space` play or pause replay
-- `0` return to the overview or park view
-- `Escape` return to the park view when no panel is open
-- `1` to `9` focus agent 1 to 9
-- `F` follow the card an agent is touching: wide, close up, off
-- `T` show or hide the log of the selected agent, or of every agent
-- `Left` and `Right` arrows seek backward or forward 5 seconds
-- `[` and `]` decrease or increase replay speed
-- `/` open the orchestrator chat, or the assistant terminal when the room has no orchestrator
-- `L` toggle the event log
-- `C` toggle the control drawer
-- `?` toggle keyboard help
-
-MachineRoom prints no key and puts none in the repository or `lanes.json`. A Direct API key goes in Settings, Direct API: choose a provider, paste the key, then press `Save key`. Keys are saved in `<runs>/keys.json` outside the repository, with mode 0o600. The bridge needs no key to run: the assistant route runs OpenCode, which uses the login on this computer, and only the optional decision route reads `OPENROUTER_API_KEY` from the environment (without it that route answers 404). The assistant refuses text that looks like a key. The bridge masks key-shaped text in the log chunks, messages and errors it sends, including a key split across two or more chunks; a held chunk delays frames by at most 1 second.
-
-A lane started with `npm run run-lane` sees only a short allow-list of the shell's names: `PATH`, `Path`, `PATHEXT`, `SystemRoot`, `WINDIR`, `COMSPEC`, `TEMP`, `TMP`, `USERPROFILE`, `HOMEDRIVE`, `HOMEPATH`, `APPDATA`, `LOCALAPPDATA`, `PROGRAMFILES`, `PROGRAMFILES(X86)`, `PROGRAMDATA`, `NUMBER_OF_PROCESSORS`, `OS`, `PROCESSOR_ARCHITECTURE`, `LANG`, `LC_ALL`, `TERM`, `HOME` and `SHELL`, its own `PWD`, and `MACHINEROOM_RUNS` and `MACHINEROOM_LANES_FILE` when the runner sets them. No key reaches a lane except the one its harness needs. The Direct API harness gets `MACHINEROOM_API_KEY` or `OPENROUTER_API_KEY`, or the key of its saved endpoint, and `MACHINEROOM_API_URL` for its base address. Hermes gets `OPENROUTER_API_KEY`; OpenCode and Claude Code use the login on this computer. The runner also writes the run's log through the same `[key]` mask, so a key an agent prints is masked on disk.
-
-## Recordings
-
-Every run started with `npm run run-lane` on a brief, including Run now in Dispatch for a brief, writes a recording under `public/recordings/` when it ends, and prints `room: /?recording=<name>`. If it cannot write one, it prints why. A project run and a queue run write no recording; they show live in the room with `--lanes`. The name is the run's log name. `public/recordings/index.json` lists the last 50, newest first, with lane, briefs, model, start, minutes, exit code, frames and tool calls. `npm run run-recording -- 1` writes a recording from the newest run record again. The folder is not in git.
-
-The built room serves the recordings from `dist/recordings`, so run `npm run build` again after a new one.
-
-## Checks
-
-```
-npm test
-npm run build
-npm run serve -- doctor --root <your project folder>
-npm run history-audit
-npm run pack-check
-```
-
-- `npm test` runs vitest in Node with no browser.
-- `npm run build` also catches broken imports.
-- `npm run serve -- doctor --root <folder>` checks the project folder, git, the runs folder and the lane programs, starts nothing, and exits 1 when a check fails.
-- `npm run history-audit` scans main, the tags and the tracked files for keys, e-mail addresses, Windows user paths, the profile name and paths into one private folder. A key shows only its first 4 characters and its length. It exits 1 on any finding.
-- `npm run pack-check` checks what `npm pack` would hold. It fails on a file the one-port command needs but the pack leaves out, and on `.env`, tests, recordings, `node_modules`, `.git` or a log file in the pack.
-
-## Working on MachineRoom
-
-The guide is `docs/agents/ARCHITECTURE.md`. The order of work is in `docs/agents/PLAN.md`, the briefs are in `docs/agents/TASKS.md` and the rules every agent follows are in `docs/agents/HOUSE-RULES.md`.
-
-- One branch per task, in the agent's own worktree.
-- Touch only the files the brief names.
-- Run the tests for what you changed and `npm run build` before a commit. Both must pass. The orchestrator runs the full `npm test` before each push.
-- Never push. The orchestrator reviews and merges each branch.
+- [Claude Code](https://claude.com/claude-code) as the orchestrator and a lane.
+- [OpenCode](https://opencode.ai) as a build lane.
+- [AGY](https://antigravity.google) (Google Antigravity) as a build lane.
+- [Hermes Agent](https://github.com/NousResearch/hermes-agent) as an earlier orchestrator.
 
 ## Licence
 
