@@ -31,7 +31,7 @@ Several agents work on MachineRoom in parallel, each in its own git worktree and
 - Work only in your own worktree and branch. Never edit files in the main checkout. Never switch branches there.
 - One branch per task, in the agent's own worktree.
 - Touch only the files the task needs. If another file seems to need a change, stop and say so in your report.
-- Start each commit message with the version prefix, such as 0.1.402, followed by one plain sentence.
+- Start each commit message with the version from `package.json` as a prefix, then one plain sentence, as in `0.1.401: Add the live bridge`.
 - Use plain words and short sentences. No em dashes. No bold text. No emoji in code or copy. No single-line explanatory comments.
 - Never read, print, store or commit an API key or token.
 - Never write the owner's Windows user name or a real home path into a file, a test, a fixture, a doc or a commit message. Write `C:\Users\<name>` instead, and build test paths from `os.userInfo().username` at run time.
@@ -125,9 +125,9 @@ This lists each `<project folder>/.worktrees/<lane>` with its branch, commits ah
 
 Press `C` or click CONTROL in the room to open Reviews. Each lane shows its branch, commits ahead, files and last run. Click a row to see the diff.
 
-The orchestrator reviews lane branches against `refs/heads/main` using `npm run review-lane -- <lane>`. It checks commits ahead, uncommitted changes, forbidden paths, brief file lists, em dashes, keys, user paths, email addresses, emoji, bold text, dependencies, lint rules, commit prefixes and tests.
+The orchestrator reviews lane branches against `refs/heads/main` using `npm run review-lane -- <lane>`. It checks commits ahead, uncommitted changes, forbidden paths, brief file lists, em dashes, keys, user paths, email addresses, emoji, bold text, new dependencies, heuristics such as bare git and fetch without a signal, commit prefixes, and then `npm test` and `npm run build` on the merge.
 
-The bridge merges one lane at a time. It requires a clean main checkout on main, a clean lane and the lane's exact head. It merges with a fast forward or straight-line history, makes no merge commit, and never pushes.
+The bridge merges one lane at a time. On this repository it needs the main checkout on main with no uncommitted changes, a clean lane and the lane's exact head, makes one merge commit, and stops on a conflict with main left as it was. On another project it compares the lane with that project's current branch and merges only by fast forward. It never pushes.
 
 ### Harness notes
 
