@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The specks are gone: no packets on the tunnels or the web beam, no message packets between agents, no pulses from the hub centre or towards a touched card, and the folder strands stand still. In their place one star leaves the centre of an agent, travels the lines and lands on the touched card, where the row flashes and the read or write label shows; a lane start sends one from its orchestrator, a subagent from its parent and a web call along the beam. Each agent has its own colour from AGENT_COLORS, the tunnel is dimmer (0.45) and starts at the agent centre and ends on the card tab, and stars follow the replay speed, hold on pause and clear on a seek (task U152). The docs still describe the old specks until the owner's docs rework.
 - New screenshots of the room in docs/images, taken from the built viewer by `npm run screenshots` (scripts/screenshots.mjs, a dev tool left out of the pack): overview, close up, the control drawer, the connect screen and a scale room (task D21).
 - `docs/GUIDE.md` holds the user manual that left the README, checked against the code, with the sidebar, the transport, the inspector and every Settings section added (task D19).
 - `CONTRIBUTING.md` holds the developer guide that left the README: setup, checks, the house rules for a change, lane runs, reviews, recordings and the big repository numbers (task D20).
