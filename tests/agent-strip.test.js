@@ -532,7 +532,7 @@ function drawnPoints(line) {
 
 describe('the tunnel rides the lit folder chain', () => {
   it('draws the strip along the chain from the agent centre', () => {
-    const { agents, state, terminals, world, edge } = chainHarness()
+    const { agents, state, terminals, world } = chainHarness()
     startWrite(state, 1000, 'r1', 'src/ui/a.js')
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
@@ -547,7 +547,8 @@ describe('the tunnel rides the lit folder chain', () => {
 
     const route = tunnelRoute(['', 'src', 'src/ui'], world.links, world.mask)
     expect(route).toEqual(['', 'src', 'src/ui'])
-    const expected = speckPolyline(view.group.position, route, world.anchor, edge)
+    const tab = { ...world.anchor('src/ui') }
+    const expected = speckPolyline(view.group.position, route, world.anchor, tab)
     const drawn = drawnPoints(view.strip)
     expect(drawn).toHaveLength(expected.length)
     drawn.forEach((point, index) => {
@@ -558,14 +559,14 @@ describe('the tunnel rides the lit folder chain', () => {
     expect(drawn[0].x).toBeCloseTo(view.group.position.x, 3)
     expect(drawn[0].y).toBeCloseTo(view.group.position.y, 3)
     expect(drawn[0].z).toBeCloseTo(view.group.position.z, 3)
-    expect(drawn.at(-1).x).toBeCloseTo(edge.x, 3)
-    expect(drawn.at(-1).y).toBeCloseTo(edge.y, 3)
-    expect(drawn.at(-1).z).toBeCloseTo(edge.z, 3)
+    expect(drawn.at(-1).x).toBeCloseTo(tab.x, 3)
+    expect(drawn.at(-1).y).toBeCloseTo(tab.y, 3)
+    expect(drawn.at(-1).z).toBeCloseTo(tab.z, 3)
     agents.dispose()
   })
 
-  it('puts its waypoints on the folder tab anchors, not the card centres', () => {
-    const { agents, state, terminals, world, anchors, edge } = chainHarness()
+  it('puts its waypoints on the folder tab anchors and ends on the touched card tab', () => {
+    const { agents, state, terminals, world, anchors } = chainHarness()
     const asked = []
     const anchorOf = world.anchor
     world.anchor = (path) => {
@@ -575,18 +576,18 @@ describe('the tunnel rides the lit folder chain', () => {
     startWrite(state, 1000, 'r1', 'src/ui/a.js')
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
-    expect(asked.slice(0, 3)).toEqual(['', 'src', 'src/ui'])
+    expect(asked.slice(1, 4)).toEqual(['', 'src', 'src/ui'])
     const drawn = drawnPoints(view.strip)
-    expect(drawn).toHaveLength(5)
+    expect(drawn).toHaveLength(4)
     expect(drawn[1]).toEqual(anchors.get(''))
     expect(drawn[2]).toEqual(anchors.get('src'))
     expect(drawn[3]).toEqual(anchors.get('src/ui'))
-    expect(drawn.at(-1)).toEqual({ x: edge.x, y: edge.y, z: edge.z })
+    expect(drawn.at(-1)).toEqual(anchors.get('src/ui'))
     agents.dispose()
   })
 
   it('follows a card that moves instead of the old span', () => {
-    const { agents, state, terminals, world, anchors, edge } = chainHarness()
+    const { agents, state, terminals, world, anchors } = chainHarness()
     startWrite(state, 1000, 'r1', 'src/ui/a.js')
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
@@ -600,13 +601,13 @@ describe('the tunnel rides the lit folder chain', () => {
     expect(after[2].x).toBeCloseTo(anchors.get('src').x, 3)
     expect(after[3].z).toBeCloseTo(anchors.get('src/ui').z, 3)
 
-    const expected = speckPolyline(view.group.position, ['', 'src', 'src/ui'], world.anchor, edge)
+    const expected = speckPolyline(view.group.position, ['', 'src', 'src/ui'], world.anchor, { ...anchors.get('src/ui') })
     expect(after).toHaveLength(expected.length)
     agents.dispose()
   })
 
-  it('goes straight from the agent to the file when the folder has no card on the path', () => {
-    const { agents, state, terminals, world, edge } = chainHarness()
+  it('goes straight from the agent to the card tab when the folder has no lit link to the root', () => {
+    const { agents, state, terminals, world, anchors } = chainHarness()
     startWrite(state, 1000, 'r1', 'src/ui/a.js')
     world.links = [{ from: '', to: 'src' }]
     agents.update(state, 0.016, 1000, world, terminals)
@@ -616,7 +617,7 @@ describe('the tunnel rides the lit folder chain', () => {
     expect(drawn[0].x).toBeCloseTo(view.group.position.x, 6)
     expect(drawn[0].y).toBeCloseTo(view.group.position.y, 6)
     expect(drawn[0].z).toBeCloseTo(view.group.position.z, 6)
-    expect(drawn[1]).toEqual({ x: edge.x, y: edge.y, z: edge.z })
+    expect(drawn[1]).toEqual(anchors.get('src/ui'))
     agents.dispose()
   })
 })

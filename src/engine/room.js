@@ -9,7 +9,7 @@ import { createCards } from './cards.js'
 import { boardVisible, createCostBoard } from './board.js'
 import { HUB_CENTER, HUB_RADIUS, createHub, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
-import { createInternet } from './internet.js'
+import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
 import { createStars, starRoute } from './stars.js'
 import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
@@ -714,7 +714,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const isFile = touch.kind === 'file'
     const dir = isFile ? dirname(touch.path) : touch.path
     const file = isFile ? touch.path : null
-    world.edge(dir, file, world.side(dir), starEnd)
+    if (!cardAnchorOf(dir, starEnd)) world.edge(dir, file, world.side(dir), starEnd)
     const chain = litChain(dir, world.links, world.mask, starChain)
     const route = tunnelRoute(chain, world.links, world.mask, starRoutePoints)
     const points = starRoute(view.group.position, route, cardAnchorOf, starEnd, starPath)

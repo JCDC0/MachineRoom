@@ -322,7 +322,8 @@ export function speckPolyline(start, chain, anchorOf, end, out = []) {
   if (routed) {
     for (let index = 0; index < chain.length; index += 1) write(anchorOf(chain[index]))
   }
-  write(end)
+  const last = points[count - 1]
+  if (!(routed && last.x === end.x && last.y === end.y && last.z === end.z)) write(end)
   points.length = count
   return points
 }
@@ -1567,7 +1568,9 @@ export function createAgents(scene, roster, cssScene = null) {
       setTrailVisible(view.trail, stripVisible)
       if (pointer) {
         view.side = world.side(pointer.dir)
-        world.edge(pointer.dir, pointer.file, view.side, traceEnd)
+        const tab = world.anchor?.(pointer.dir)
+        if (tab) traceEnd.copy(tab)
+        else world.edge(pointer.dir, pointer.file, view.side, traceEnd)
         view.touch.copy(traceEnd)
       } else if (!webOn && !stripVisible) {
         view.touch.copy(view.home)
