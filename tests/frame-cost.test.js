@@ -168,7 +168,7 @@ describe('a resting pulse', () => {
   })
 })
 
-describe('the path lengths a packet samples', () => {
+describe('the path lengths a star samples', () => {
   const bend = [
     { x: 0, y: 0, z: 0 },
     { x: 300, y: 0, z: 0 },
@@ -202,38 +202,7 @@ describe('the path lengths a packet samples', () => {
   })
 })
 
-describe('the packet buffers', () => {
-  it('uploads no packet position while no packet is drawn', () => {
-    const { agents, state, terminals, world } = harness()
-    startWrite(state, 1000)
-    apply(state, { time: 1100, type: 'run.queued', agent: 'a' })
-    agents.update(state, 0.4, 1400, world, terminals)
-    const view = agents.views.get('a')
-    expect(view.strip.visible).toBe(true)
-    expect(view.packetSends).toHaveLength(0)
-    expect(view.packets.geometry.drawRange.count).toBe(0)
-
-    const heads = view.packets.geometry.getAttribute('position').version
-    const tails = view.packetTail.geometry.getAttribute('position').version
-    for (let frame = 0; frame < 5; frame += 1) {
-      agents.update(state, 0.016, 1416 + frame * 16, world, terminals)
-    }
-    expect(view.packets.geometry.getAttribute('position').version).toBe(heads)
-    expect(view.packetTail.geometry.getAttribute('position').version).toBe(tails)
-    agents.dispose()
-  })
-
-  it('uploads the packets while one is drawn', () => {
-    const { agents, state, terminals, world } = harness()
-    startWrite(state, 1000)
-    agents.update(state, 0.4, 1400, world, terminals)
-    const view = agents.views.get('a')
-    const heads = view.packets.geometry.getAttribute('position').version
-    agents.update(state, 0.016, 1416, world, terminals)
-    expect(view.packets.geometry.getAttribute('position').version).toBeGreaterThan(heads)
-    agents.dispose()
-  })
-
+describe('the path lengths a star samples', () => {
   it('keeps the path lengths until the path itself moves', () => {
     const { agents, state, terminals, world } = harness()
     startWrite(state, 1000)

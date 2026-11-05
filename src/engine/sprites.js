@@ -5,6 +5,13 @@ export const YELLOW = 0xe5ff00
 export const RED = 0xff2a2a
 export const GREEN = 0x2aff80
 export const WEB = 0x2a9dff
+export const AGENT_COLORS = [0xffb347, 0xff5ad1, 0xa98bff, 0x3ee6e6, 0xff8a3d, 0xff8fb1, 0xc8d94a, 0x4fd1b5]
+
+export function agentColor(index) {
+  const value = Number(index)
+  if (!Number.isFinite(value) || value < 0) return AGENT_COLORS[0]
+  return AGENT_COLORS[Math.floor(value) % AGENT_COLORS.length]
+}
 
 const RANDOM_RANGE = 4294967296
 const RANDOM_STEP = 1664525

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { PACKET_POOL, childOrbit, packetSpots, stripPoints } from '../src/engine/agents.js'
+import { childOrbit, stripPoints } from '../src/engine/agents.js'
 import { cardPlan } from '../src/engine/cards.js'
 import { HUB_CENTER, ORCHESTRATOR_HOME, slotPoint } from '../src/engine/hub.js'
 import { nearestDrawnPath } from '../src/engine/room.js'
@@ -17,6 +17,7 @@ const context2d = {
   fillStyle: '',
   strokeStyle: '',
   globalAlpha: 1,
+  globalCompositeOperation: 'source-over',
   letterSpacing: '',
   measureText: (text) => ({ width: String(text).length * 10 }),
   createRadialGradient: () => ({ addColorStop() {} }),
@@ -29,8 +30,13 @@ const context2d = {
   moveTo() {},
   lineTo() {},
   stroke() {},
+  fill() {},
   arc() {},
   closePath() {},
+  save() {},
+  restore() {},
+  translate() {},
+  rotate() {},
 }
 
 function fakeElement(tag = 'div') {
@@ -335,7 +341,6 @@ function runRoom(frames, agents, tree) {
   const homes = new Map()
   const activities = []
   const layouts = []
-  const sends = new Map()
   const children = new Map()
   let largest = 0
   const parked = new Map()
@@ -378,14 +383,6 @@ function runRoom(frames, agents, tree) {
 
     for (const agent of state.agents.values()) {
       if (agent.status !== 'working') continue
-      const list = sends.get(agent.key) ?? []
-      list.push(activity.time)
-      if (list.length > PACKET_POOL * 4) list.shift()
-      sends.set(agent.key, list)
-      const spots = packetSpots(activity.time, list)
-      expect(spots.length, `${agent.key} packets`).toBeLessThanOrEqual(PACKET_POOL)
-      for (const fraction of spots) expect(Number.isFinite(fraction)).toBe(true)
-
       const focus = agent.focus ?? []
       for (const path of focus) {
         const dir = state.files.has(path) ? dirname(path) : path
@@ -472,8 +469,6 @@ describe('the room, played from a recorded lane run', () => {
       expect(first.state.agents.has(key), `${key} has left the state`).toBe(false)
     }
 
-    const flood = Array.from({ length: PACKET_POOL * 3 }, (_, index) => first.state.latest - index * 4)
-    expect(packetSpots(first.state.latest, flood)).toHaveLength(PACKET_POOL)
   })
 
   it('caps the base ring at twelve folders and sprays the rest outside it', () => {

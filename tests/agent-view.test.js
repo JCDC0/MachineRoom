@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { createAgents } from '../src/engine/agents.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, SWAY_LIFT, SWAY_SCALE } from '../src/engine/hub.js'
-import { RED, YELLOW } from '../src/engine/sprites.js'
+import { AGENT_COLORS, RED } from '../src/engine/sprites.js'
 import { createTerminals } from '../src/engine/terminals.js'
 import { apply, createState } from '../src/model/state.js'
 
@@ -99,7 +99,7 @@ describe('a failed tool call on a working agent', () => {
     agents.update(state, 0.016, 1000, world, terminals)
     const view = agents.views.get('a')
     expect(view.callout.element.className).toBe('mr-callout is-working')
-    expect(view.stripColor).toBe(YELLOW)
+    expect(view.stripColor).toBe(AGENT_COLORS[0])
 
     apply(state, { time: 1100, type: 'tool.end', agent: 'a', id: 't1', ok: false })
     agents.update(state, 0.016, 1100, world, terminals)
