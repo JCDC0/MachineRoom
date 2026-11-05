@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js'
 import { basename, dirname } from '../model/paths.js'
 import { isOnlineCall } from '../model/online.js'
-import { CALLOUT_CROWD_LIMIT, createAgents, lineParentKey, litChain, tunnelRoute, webTunnelEnd } from './agents.js'
+import { CALLOUT_CROWD_LIMIT, createAgents, litChain, tunnelRoute, webTunnelEnd } from './agents.js'
 import { BLOOM_STRENGTH_DEFAULT, createBloomLayer } from './bloom.js'
 import { ANCHOR_DIST, FOV, OVERVIEW, createCameraRig, fitView, followTarget, projectPoint } from './camera.js'
 import { createCards } from './cards.js'
@@ -11,7 +11,7 @@ import { HUB_CENTER, HUB_RADIUS, createHub, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
-import { createStars, starRoute } from './stars.js'
+import { agentStar, createStars, starRoute } from './stars.js'
 import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, chipSideFromScreen, createTerminals } from './terminals.js'
@@ -721,11 +721,13 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     stars.launch({ points, color: view.color, onLand: () => showTouch(touch) })
   }
 
-  function launchRunStar(activity, view) {
-    if (view.orchestrator) return
-    const parent = agentSet.views.get(lineParentKey(activity.agent, ladder))
-    if (!parent) return
-    launchStarPath(parent.group.position, view.group.position, parent.color)
+  function launchAgentStar(activity) {
+    const pair = agentStar(activity, ladder)
+    if (!pair) return
+    const from = agentSet.views.get(pair.from)
+    const to = agentSet.views.get(pair.to)
+    if (!from || !to) return
+    launchStarPath(from.group.position, to.group.position, from.color)
   }
 
   function launchWebStar(view) {
@@ -733,21 +735,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     launchStarPath(view.group.position, starEnd, view.color)
   }
 
-  function launchMessageStar(activity) {
-    if (activity.kind !== 'order' && activity.kind !== 'report' && activity.kind !== 'wake') return
-    const from = agentSet.views.get(activity.agent)
-    const to = agentSet.views.get(activity.to)
-    if (!from || !to) return
-    launchStarPath(from.group.position, to.group.position, from.color)
-  }
-
   function flushSpawnStars() {
     if (pendingSpawns.length === 0) return
-    for (const item of pendingSpawns) {
-      const parent = agentSet.views.get(item.parentKey)
-      const child = agentSet.views.get(item.childKey)
-      if (parent && child) launchStarPath(parent.group.position, child.group.position, parent.color)
-    }
+    for (const activity of pendingSpawns) launchAgentStar(activity)
     pendingSpawns.length = 0
   }
 
@@ -764,7 +754,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
     if (activity.type === 'run.start') {
       hub.pulse(WHITE, 1)
-      if (!still()) launchRunStar(activity, view)
+      if (!still()) launchAgentStar(activity)
     } else if (activity.type === 'tool.start') {
       for (const touch of activity.touches ?? []) {
         if (touch.kind === 'file') {
@@ -796,9 +786,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     } else if (activity.type === 'error') {
       hub.pulse(RED, 0.6)
     } else if (activity.type === 'agent.spawn' && typeof activity.child === 'string') {
-      pendingSpawns.push({ parentKey: activity.agent, childKey: activity.child })
+      pendingSpawns.push(activity)
     } else if (activity.type === 'agent.message' && !still()) {
-      launchMessageStar(activity)
+      launchAgentStar(activity)
     }
   }
 
