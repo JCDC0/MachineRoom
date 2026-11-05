@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- New screenshots of the room in docs/images, taken from the built viewer by `npm run screenshots` (scripts/screenshots.mjs, a dev tool left out of the pack): overview, close up, the control drawer, the connect screen and a scale room (task D21).
 - `docs/GUIDE.md` holds the user manual that left the README, checked against the code, with the sidebar, the transport, the inspector and every Settings section added (task D19).
 - `CONTRIBUTING.md` holds the developer guide that left the README: setup, checks, the house rules for a change, lane runs, reviews, recordings and the big repository numbers (task D20).
 - The README is a short page for users: what MachineRoom is, what you can do with it, a quick start, three images, links to the guides and the agents it is made with (task D18).
