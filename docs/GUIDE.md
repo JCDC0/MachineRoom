@@ -194,7 +194,7 @@ Each sub orchestrator gets its own ring sector and its own tab in the chat. Deta
 
 A lane is one agent on one harness. Press C or click CONTROL, then open Dispatch. The `Run on this project` section appears when the room runs with `--lanes`.
 
-- Pick a lane, such as OpenCode, Claude Code, AGY, or a Direct API lane.
+- Pick a lane, such as OpenCode, Claude Code or a Direct API lane. An AGY lane shows here only when you added it yourself in the sidebar's Agents tab.
 - Write one task in the box.
 - Press Run, then Confirm. The confirm card notes that the run spends money.
 - Own worktree is on by default: the lane works in `<project folder>/.worktrees/<lane>` inside your project, on its own queue branch. Several lanes can work at once and your project folder is never touched. Each task is committed there when your project tests pass.

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `docs/GUIDE.md` holds the user manual that left the README, checked against the code, with the sidebar, the transport, the inspector and every Settings section added (task D19).
 - `CONTRIBUTING.md` holds the developer guide that left the README: setup, checks, the house rules for a change, lane runs, reviews, recordings and the big repository numbers (task D20).
 - The README is a short page for users: what MachineRoom is, what you can do with it, a quick start, three images, links to the guides and the agents it is made with (task D18).
 - A git write gets 120 seconds and a git read keeps 10, so a merge, its fast forward, a merge abort, a switch and a new branch are not cut at 10 seconds on a big checkout, and a timed-out write says it took too long and where the checkout stands (task S42).
