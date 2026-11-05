@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The README is a short page for users: what MachineRoom is, what you can do with it, a quick start, three images, links to the guides and the agents it is made with (task D18).
 - A git write gets 120 seconds and a git read keeps 10, so a merge, its fast forward, a merge abort, a switch and a new branch are not cut at 10 seconds on a big checkout, and a timed-out write says it took too long and where the checkout stands (task S42).
 - The tree watcher starts the next read after a burst read once the rest of the 3 second last-file budget is left, so the last file of a 2000 file burst reaches the page in 2.2 seconds at 40,000 files instead of 4.2 to 4.5 (task S43).
 - `opencode6` and `opencode7` return as experiment lanes that try Crouton Alpha Free (`opencode/crouton-alpha-free`) at high reasoning on ordinary briefs, and the OpenCode model list names that model.
