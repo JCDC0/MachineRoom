@@ -78,6 +78,7 @@
     "bump": "node scripts/bump.mjs",
     "scale-probe": "node scripts/scale-probe.mjs",
     "scale-live": "node scripts/scale-live.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
     "serve": "node bin/machine-room.mjs"
   },
   "dependencies": {
