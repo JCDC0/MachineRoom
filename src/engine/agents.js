@@ -9,7 +9,7 @@ import { CHILD_LIFE_MS } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_MAX_OPACITY, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
-import { GREEN, RED, WEB, WHITE, YELLOW, easeRate, lineMaterial, still, textSprite } from './sprites.js'
+import { GREEN, RED, WEB, WHITE, YELLOW, agentColor, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 import { linkOnPath } from './strings.js'
 
 const STYLE = {
@@ -26,30 +26,15 @@ const AIM_HOLD = 4500
 const DONE_GLOW_MS = 5000
 const CHILD_FADE_MS = 1500
 export const CHILD_HOLD_MS = CHILD_LIFE_MS - CHILD_FADE_MS
-const STRIP_OPACITY = 0.75
+const STRIP_OPACITY = 0.45
 export const TUNNEL_CORE_WIDTH = 2
 export const TUNNEL_SHEATH_WIDTH = 9
 export const TUNNEL_SHEATH_SHARE = 0.25
 export const TUNNEL_IN_SECONDS = 0.3
 export const TUNNEL_OUT_SECONDS = 0.6
-export const TUNNEL_GATE = 0.3
-export const PACKET_POOL = 24
-export const PACKET_DURATION = 450
-export const PACKET_INTERVAL = 90
-export const PACKET_BURST = 5
-const PACKET_BURST_GAP = 30
-const PACKET_SIZE = 4
-export const TAIL_POINTS = 3
-export const TAIL_GAP = 0.02
-const TAIL_SIZE = 3
-const TAIL_SHARE = 0.35
 export const BEAM_OPACITY = 1
 export const BEAM_CORE_WIDTH = 1.5
 export const BEAM_SHEATH_WIDTH = 7
-export const BEAM_PACKET_SIZE = 2
-export const BEAM_PACKET_INTERVAL = 160
-export const BEAM_PACKET_BURST = 3
-const BEAM_PACKET_GAP = 40
 const MAX_CHAIN = 32
 export const CHILD_SCALE = 0.35
 export const CHILD_RADIUS = 100
@@ -337,7 +322,8 @@ export function speckPolyline(start, chain, anchorOf, end, out = []) {
   if (routed) {
     for (let index = 0; index < chain.length; index += 1) write(anchorOf(chain[index]))
   }
-  write(end)
+  const last = points[count - 1]
+  if (!(routed && last.x === end.x && last.y === end.y && last.z === end.z)) write(end)
   points.length = count
   return points
 }
@@ -485,52 +471,6 @@ export function webTunnelEnd(agentPlace, internetPlace, radius = INTERNET_RADIUS
   return point
 }
 
-export function packetSpots(now, sends, duration = PACKET_DURATION, reduced = false, out = []) {
-  const spots = out ?? []
-  spots.length = 0
-  if (reduced || !Number.isFinite(now) || !(duration > 0)) return spots
-  if (!sends || sends.length === 0) return spots
-  for (let i = 0; i < sends.length; i += 1) {
-    const sent = sends[i]
-    const age = now - sent
-    if (!(age >= 0) || age > duration) continue
-    spots.push(age / duration)
-    if (spots.length > PACKET_POOL) spots.shift()
-  }
-  return spots
-}
-
-export function shellStart(centre, radius, toward, out = {}) {
-  const point = out ?? {}
-  const cx = Number(centre?.x)
-  const cy = Number(centre?.y)
-  const cz = Number(centre?.z)
-  const reach = Math.max(0, Number.isFinite(Number(radius)) ? Number(radius) : 0)
-  const tx = Number(toward?.x)
-  const ty = Number(toward?.y)
-  const tz = Number(toward?.z)
-  const hasCentre = Number.isFinite(cx) && Number.isFinite(cy) && Number.isFinite(cz)
-  const bx = hasCentre ? cx : 0
-  const by = hasCentre ? cy : 0
-  const bz = hasCentre ? cz : 0
-  const hasToward = Number.isFinite(tx) && Number.isFinite(ty) && Number.isFinite(tz)
-  const dx = hasToward ? tx - bx : 0
-  const dy = hasToward ? ty - by : 0
-  const dz = hasToward ? tz - bz : 0
-  const length = Math.hypot(dx, dy, dz)
-  if (!hasToward || reach === 0 || !(length > 0)) {
-    point.x = bx
-    point.y = by
-    point.z = bz
-    return point
-  }
-  const scale = reach / length
-  point.x = bx + dx * scale
-  point.y = by + dy * scale
-  point.z = bz + dz * scale
-  return point
-}
-
 function litRootLink(to, links, mask) {
   if (!Array.isArray(links)) return false
   for (const link of links) {
@@ -552,26 +492,6 @@ export function tunnelRoute(chain, links, mask, out = []) {
   return route
 }
 
-export function tailSpots(spots, out = [], gap = TAIL_GAP) {
-  const tails = out ?? []
-  tails.length = 0
-  const list = Array.isArray(spots) ? spots : []
-  const step = Number.isFinite(Number(gap)) ? Math.max(0, Number(gap)) : TAIL_GAP
-  for (let index = 0; index < list.length; index += 1) {
-    const raw = Number(list[index])
-    const head = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : 0
-    for (let tail = 1; tail <= TAIL_POINTS; tail += 1) {
-      tails.push(Math.max(0, head - step * tail))
-    }
-  }
-  return tails
-}
-
-export function tunnelGate(level) {
-  const value = Number(level)
-  return Number.isFinite(value) && value >= TUNNEL_GATE
-}
-
 export function tunnelLevel(level, on, delta, reduced = false) {
   const value = Number(level)
   const current = Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0
@@ -583,28 +503,6 @@ export function tunnelLevel(level, on, delta, reduced = false) {
   if (current > target) return Math.max(target, current - step)
   return current
 }
-
-function packetPoints(size = PACKET_SIZE, capacity = PACKET_POOL) {
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(capacity * 3), 3))
-  geometry.setDrawRange(0, 0)
-  const material = new THREE.PointsMaterial({
-    color: YELLOW,
-    size,
-    sizeAttenuation: false,
-    transparent: true,
-    opacity: 0.9,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-  })
-  const points = new THREE.Points(geometry, material)
-  points.frustumCulled = false
-  points.visible = false
-  return points
-}
-
-const packetPoint = new THREE.Vector3()
-const packetTailPoint = new THREE.Vector3()
 
 function trailMaterial(color, width) {
   return new LineMaterial({
@@ -687,17 +585,9 @@ function setTrailVisible(trail, visible) {
   trail.sheath.visible = visible
 }
 
-function beamPoints() {
-  const points = packetPoints(BEAM_PACKET_SIZE)
-  points.material.color.setHex(WEB)
-  points.material.blending = THREE.NormalBlending
-  return points
-}
-
 const chipNear = new THREE.Vector3()
 const traceEnd = new THREE.Vector3()
 const webEdgePoint = new THREE.Vector3()
-const webReturnPoint = new THREE.Vector3()
 const calloutPos = new THREE.Vector3()
 const camUp = new THREE.Vector3()
 const rotMatrix = new THREE.Matrix4()
@@ -956,27 +846,6 @@ export function createAgents(scene, roster, cssScene = null) {
     slotAngles = sectorSlotAngles(ladder, parkedKeys)
   }
 
-  function queuePacket(view, at) {
-    view.packetSends.push(at)
-    if (view.packetSends.length > PACKET_POOL) view.packetSends.shift()
-  }
-
-  function hidePackets(view) {
-    view.packets.visible = false
-    view.packetTail.visible = false
-    view.packetNextAt = 0
-    view.packetSends.length = 0
-    view.packetFractions.length = 0
-    view.packetTails.length = 0
-  }
-
-  function hidePacketPoints(view) {
-    view.packets.visible = false
-    view.packetTail.visible = false
-    view.packets.geometry.setDrawRange(0, 0)
-    view.packetTail.geometry.setDrawRange(0, 0)
-  }
-
   let online = true
   let viewportX = 1
   let viewportY = 1
@@ -997,22 +866,9 @@ export function createAgents(scene, roster, cssScene = null) {
     }
   }
 
-  function queueBeamPacket(view, at) {
-    view.beamSends.push(at)
-    if (view.beamSends.length > PACKET_POOL) view.beamSends.shift()
-  }
-
-  function hideBeamPackets(view) {
-    view.beamPackets.visible = false
-    view.beamNextAt = 0
-    view.beamSends.length = 0
-    view.beamFractions.length = 0
-  }
-
   function hideBeam(view) {
     view.beam.visible = false
     view.beamSheath.visible = false
-    hideBeamPackets(view)
   }
 
   function setOnline(next) {
@@ -1020,7 +876,6 @@ export function createAgents(scene, roster, cssScene = null) {
     if (!online) {
       for (const view of views.values()) {
         view.web = false
-        view.beamReturnUntil = 0
         hideBeam(view)
       }
     }
@@ -1031,27 +886,16 @@ export function createAgents(scene, roster, cssScene = null) {
     const view = views.get(key)
     if (!view || !online) return false
     view.web = true
-    view.beamReturnUntil = 0
-    view.beamSends.length = 0
-    view.beamFractions.length = 0
-    view.beamNextAt = 0
     if (place) view.webPlace.set(place.x, place.y, place.z)
     return true
   }
 
-  function webEnd(key, now) {
+  function webEnd(key) {
     const view = views.get(key)
     if (!view || !view.web) return false
     view.web = false
     view.beam.visible = false
     view.beamSheath.visible = false
-    view.beamSends.length = 0
-    for (let index = 0; index < BEAM_PACKET_BURST; index += 1) {
-      view.beamSends.push(now + index * BEAM_PACKET_GAP)
-    }
-    view.beamFractions.length = 0
-    view.beamNextAt = 0
-    view.beamReturnUntil = now + PACKET_DURATION + (BEAM_PACKET_BURST - 1) * BEAM_PACKET_GAP
     return true
   }
 
@@ -1063,76 +907,7 @@ export function createAgents(scene, roster, cssScene = null) {
     return count
   }
 
-  function beamEdge(view, out) {
-    return webTunnelEnd(view.group.position, view.webPlace, INTERNET_RADIUS, out)
-  }
-
-  function drawBeamPackets(view, now, fade, forward) {
-    const edge = beamEdge(view, webReturnPoint)
-    const spots = packetSpots(now, view.beamSends, PACKET_DURATION, false, view.beamFractions)
-    const geometry = view.beamPackets.geometry
-    const attr = geometry.getAttribute('position')
-    const array = attr.array
-    const from = forward ? view.group.position : edge
-    const to = forward ? edge : view.group.position
-    const dx = to.x - from.x
-    const dy = to.y - from.y
-    const dz = to.z - from.z
-    for (let index = 0; index < spots.length; index += 1) {
-      const t = spots[index]
-      const base = index * 3
-      array[base] = from.x + dx * t
-      array[base + 1] = from.y + dy * t
-      array[base + 2] = from.z + dz * t
-    }
-    geometry.setDrawRange(0, spots.length)
-    if (spots.length > 0) attr.needsUpdate = true
-    writeColor(view.beamPackets.material, WEB)
-    writeOpacity(view.beamPackets.material, fade)
-    view.beamPackets.visible = spots.length > 0
-  }
-
-  function updatePackets(view, now, fade, sending, path, lengths) {
-    if (sending && (view.packetNextAt === 0 || now >= view.packetNextAt)) {
-      queuePacket(view, now)
-      view.packetNextAt = now + PACKET_INTERVAL
-    }
-    const spots = packetSpots(now, view.packetSends, PACKET_DURATION, false, view.packetFractions)
-    const geometry = view.packets.geometry
-    const attr = geometry.getAttribute('position')
-    const array = attr.array
-    for (let i = 0; i < spots.length; i += 1) {
-      const point = samplePolyline(path, spots[i], packetPoint, lengths)
-      const base = i * 3
-      array[base] = point.x
-      array[base + 1] = point.y
-      array[base + 2] = point.z
-    }
-    geometry.setDrawRange(0, spots.length)
-    if (spots.length > 0) attr.needsUpdate = true
-    writeColor(view.packets.material, view.stripColor)
-    writeOpacity(view.packets.material, view.stripOpacity * fade)
-    view.packets.visible = spots.length > 0
-
-    const tails = tailSpots(spots, view.packetTails, TAIL_GAP)
-    const tailGeometry = view.packetTail.geometry
-    const tailAttr = tailGeometry.getAttribute('position')
-    const tailArray = tailAttr.array
-    for (let i = 0; i < tails.length; i += 1) {
-      const point = samplePolyline(path, tails[i], packetTailPoint, lengths)
-      const base = i * 3
-      tailArray[base] = point.x
-      tailArray[base + 1] = point.y
-      tailArray[base + 2] = point.z
-    }
-    tailGeometry.setDrawRange(0, tails.length)
-    if (tails.length > 0) tailAttr.needsUpdate = true
-    writeColor(view.packetTail.material, view.stripColor)
-    writeOpacity(view.packetTail.material, view.stripOpacity * fade * TAIL_SHARE)
-    view.packetTail.visible = tails.length > 0
-  }
-
-  function addView(agent, { index, shapeName, home, scale = 1, parentKey = null, subOrchestrator = false, childIndex = 0 }) {
+  function addView(agent, { index, shapeName, home, scale = 1, parentKey = null, subOrchestrator = false, childIndex = 0, color = agentColor(0) }) {
     const group = new THREE.Group()
     const shape = new THREE.LineSegments(shapeGeometry(shapeName), lineMaterial(WHITE, 0.35))
     shape.geometry.computeBoundingSphere()
@@ -1170,15 +945,12 @@ export function createAgents(scene, roster, cssScene = null) {
     const trail = createTrail(YELLOW, TUNNEL_CORE_WIDTH, TUNNEL_SHEATH_WIDTH)
     const strip = trail.core
     const stripSheath = trail.sheath
-    const packets = packetPoints(PACKET_SIZE, PACKET_POOL)
-    const packetTail = packetPoints(TAIL_SIZE, PACKET_POOL * TAIL_POINTS)
     const beamTrail = createTrail(WEB, BEAM_CORE_WIDTH, BEAM_SHEATH_WIDTH)
     applyResolution(trail)
     applyResolution(beamTrail)
     const beam = beamTrail.core
     const beamSheath = beamTrail.sheath
     const beamPath = [{ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }]
-    const beamPackets = beamPoints()
     const parentLink = parentKey ? lineBetween(lineMaterial(WHITE, 0.3)) : null
     const orchestratorLink = parentKey === null && !orchestrator
       ? lineBetween(lineMaterial(WHITE, sub ? SUB_ORCHESTRATOR_LINK_OPACITY : ORCHESTRATOR_LINK_OPACITY))
@@ -1189,7 +961,7 @@ export function createAgents(scene, roster, cssScene = null) {
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
     calloutLine.visible = false
 
-    scene.add(group, link, strip, stripSheath, packets, packetTail, beam, beamSheath, beamPackets, calloutLine)
+    scene.add(group, link, strip, stripSheath, beam, beamSheath, calloutLine)
     if (parentLink) scene.add(parentLink)
     if (orchestratorLink) scene.add(orchestratorLink)
     cssScene?.add(callout.object)
@@ -1233,25 +1005,14 @@ export function createAgents(scene, roster, cssScene = null) {
       pathLengths: [],
       stripOpacity: 0,
       stripColor: YELLOW,
+      color,
       tunnel: 0,
-      packets,
-      packetTail,
-      packetSends: [],
-      packetFractions: [],
-      packetTails: [],
-      packetNextAt: 0,
-      packetBurstAt: -Infinity,
       web: false,
       webPlace: new THREE.Vector3(),
       beam,
       beamSheath,
       beamTrail,
       beamPath,
-      beamPackets,
-      beamSends: [],
-      beamFractions: [],
-      beamNextAt: 0,
-      beamReturnUntil: 0,
       home,
       touch: home.clone(),
       aim: null,
@@ -1288,10 +1049,10 @@ export function createAgents(scene, roster, cssScene = null) {
     else pendingChipRemovals.add(view.key)
     view.callout.object.removeFromParent()
     view.callout.element.remove()
-    scene.remove(view.group, view.link, view.strip, view.stripSheath, view.packets, view.packetTail, view.beam, view.beamSheath, view.beamPackets, view.calloutLine)
+    scene.remove(view.group, view.link, view.strip, view.stripSheath, view.beam, view.beamSheath, view.calloutLine)
     if (view.parentLink) scene.remove(view.parentLink)
     if (view.orchestratorLink) scene.remove(view.orchestratorLink)
-    for (const root of [view.group, view.link, view.strip, view.stripSheath, view.packets, view.packetTail, view.beam, view.beamSheath, view.beamPackets, view.calloutLine, view.parentLink, view.orchestratorLink]) {
+    for (const root of [view.group, view.link, view.strip, view.stripSheath, view.beam, view.beamSheath, view.calloutLine, view.parentLink, view.orchestratorLink]) {
       if (!root) continue
       root.traverse((object) => {
         object.geometry?.dispose()
@@ -1346,6 +1107,7 @@ export function createAgents(scene, roster, cssScene = null) {
         scale: parentView.scale * CHILD_SCALE,
         parentKey: entry.parent,
         childIndex: index,
+        color: parentView.color,
       })
     }
   }
@@ -1409,8 +1171,12 @@ export function createAgents(scene, roster, cssScene = null) {
     rosterKeys = new Set(currentRoster.map((agent) => agent.key))
     parkedKeys = parkedKeysFor(currentRoster)
     const added = []
-    for (const agent of currentRoster) {
-      if (views.has(agent.key)) continue
+    currentRoster.forEach((agent, rosterIndex) => {
+      const existing = views.get(agent.key)
+      if (existing) {
+        existing.color = agentColor(rosterIndex)
+        return
+      }
       const sub = isSubOrchestrator(agent)
       const shapeName = shapeForNewAgent(agent, [...usedShapes])
       usedShapes.add(shapeName)
@@ -1420,9 +1186,15 @@ export function createAgents(scene, roster, cssScene = null) {
         home: new THREE.Vector3(),
         scale: sub ? SUB_ORCHESTRATOR_SCALE : 1,
         subOrchestrator: sub,
+        color: agentColor(rosterIndex),
       })
       chips?.ensure?.(agent.key, agent.name)
       added.push(view)
+    })
+    for (const view of views.values()) {
+      if (!view.parentKey) continue
+      const parent = views.get(view.parentKey)
+      if (parent) view.color = parent.color
     }
     layoutHomes(currentLadder)
     placeViews()
@@ -1441,6 +1213,7 @@ export function createAgents(scene, roster, cssScene = null) {
       home: new THREE.Vector3(),
       scale: sub ? SUB_ORCHESTRATOR_SCALE : 1,
       subOrchestrator: sub,
+      color: agentColor(rosterIndex),
     })
   })
   placeViews()
@@ -1483,10 +1256,6 @@ export function createAgents(scene, roster, cssScene = null) {
     if (!view) return
     view.aim = { dir, file, until: now + AIM_HOLD }
     view.pointer = { dir, file }
-    if (now - view.packetBurstAt > 4) {
-      view.packetBurstAt = now
-      for (let i = 0; i < PACKET_BURST; i += 1) queuePacket(view, now + i * PACKET_BURST_GAP)
-    }
   }
 
   function focusPointer(state, entry, out = null) {
@@ -1605,7 +1374,6 @@ export function createAgents(scene, roster, cssScene = null) {
         view.calloutLine.visible = false
         if (view.orchestratorLink) view.orchestratorLink.visible = false
         setTrailVisible(view.trail, false)
-        hidePackets(view)
         hideBeam(view)
         terminals.setVisible?.(view.key, false)
         continue
@@ -1784,12 +1552,11 @@ export function createAgents(scene, roster, cssScene = null) {
 
       if (view.web && (!online || (status !== 'working' && status !== 'queued'))) view.web = false
       const webOn = view.web && online && (status === 'working' || status === 'queued')
-      const beamReturning = !isStill && now < view.beamReturnUntil
       const pointer = view.pointer ?? (working ? focusPointer(state, entry, focusScratch) : null)
       let color = null
       if (pointer) {
         if (working && lastFailed) color = RED
-        else if (working) color = YELLOW
+        else if (working) color = view.color
         else if (fresh) color = GREEN
         else if (status === 'error') color = RED
       }
@@ -1801,9 +1568,11 @@ export function createAgents(scene, roster, cssScene = null) {
       setTrailVisible(view.trail, stripVisible)
       if (pointer) {
         view.side = world.side(pointer.dir)
-        world.edge(pointer.dir, pointer.file, view.side, traceEnd)
+        const tab = world.anchor?.(pointer.dir)
+        if (tab) traceEnd.copy(tab)
+        else world.edge(pointer.dir, pointer.file, view.side, traceEnd)
         view.touch.copy(traceEnd)
-      } else if (!webOn && !beamReturning && !stripVisible) {
+      } else if (!webOn && !stripVisible) {
         view.touch.copy(view.home)
       }
       if (stripVisible) {
@@ -1816,15 +1585,11 @@ export function createAgents(scene, roster, cssScene = null) {
         } else {
           stripPoints(view.group.position, view.touch, view.path)
         }
-        if (view.path.length > 1) {
-          const radius = view.shellRadius * view.group.scale.x
-          shellStart(view.group.position, radius, view.path[1], view.path[0])
-        }
         if (setTrailPath(view.trail, view.path)) polylineLengths(view.path, view.pathLengths)
         trailColor(view.trail, view.stripColor)
         trailOpacity(view.trail, view.stripOpacity * fade)
       }
-      if (webOn || beamReturning) {
+      if (webOn) {
         webTunnelEnd(view.group.position, view.webPlace, INTERNET_RADIUS, webEdgePoint)
       }
       const beamVisible = webOn && fade > 0.01
@@ -1839,26 +1604,6 @@ export function createAgents(scene, roster, cssScene = null) {
         setTrailPath(view.beamTrail, view.beamPath)
         trailColor(view.beamTrail, WEB)
         trailOpacity(view.beamTrail, BEAM_OPACITY * fade)
-      }
-      if (beamVisible && !isStill) {
-        if (view.beamNextAt === 0 || now >= view.beamNextAt) {
-          queueBeamPacket(view, now)
-          view.beamNextAt = now + BEAM_PACKET_INTERVAL
-        }
-        drawBeamPackets(view, now, fade, true)
-      } else if (beamReturning) {
-        drawBeamPackets(view, now, fade, false)
-      } else {
-        hideBeamPackets(view)
-      }
-      if (stripVisible && tunnelGate(view.tunnel)) {
-        if (!isStill) {
-          updatePackets(view, now, fade, status === 'working' && stripOn, view.path, view.pathLengths)
-        } else {
-          hidePackets(view)
-        }
-      } else {
-        hidePacketPoints(view)
       }
     }
     for (const item of endedList) {
@@ -1880,10 +1625,7 @@ export function createAgents(scene, roster, cssScene = null) {
       view.tunnel = 0
       setTrailVisible(view.trail, false)
       view.web = false
-      view.beamReturnUntil = 0
       hideBeam(view)
-      hidePackets(view)
-      view.packetBurstAt = -Infinity
       view.group.position.copy(view.home)
       view.touch.copy(view.home)
       view.style = 'idle'

@@ -4,7 +4,6 @@ import { WHITE, YELLOW, glowTexture, seeded, still } from './sprites.js'
 const SEGMENTS = 16
 const LINE_LEVEL = 0.1
 const DIM_FACTOR = 0.25
-const STRAND_SPEED = 2000
 const STRAND_JITTER = 0.6
 
 const COLOR_WHITE = new THREE.Color(WHITE)
@@ -111,7 +110,6 @@ function getFractions(strand, count) {
   }
   strand.fractions = strandFractions(count, strand.seed)
   strand.fractionsCount = count
-  strand.phase = 0
   return strand.fractions
 }
 
@@ -172,27 +170,6 @@ function fillStrand(strand, points) {
   }
   geometry.dispose()
   strand.mesh.geometry = new THREE.BufferGeometry().setFromPoints(points)
-}
-
-function travelStrand(strand, delta) {
-  const fractions = strand.fractions
-  if (!fractions || fractions.length === 0) return
-  const len = strand.from.distanceTo(strand.to)
-  if (len <= 0) return
-  const attr = strand.mesh.geometry.getAttribute('position')
-  if (!attr || attr.count !== fractions.length) return
-  strand.phase = (strand.phase + (delta * STRAND_SPEED) / len) % 1
-  const array = attr.array
-  const ax = strand.from.x, ay = strand.from.y, az = strand.from.z
-  const dx = strand.to.x - ax, dy = strand.to.y - ay, dz = strand.to.z - az
-  for (let i = 0; i < fractions.length; i += 1) {
-    const t = (fractions[i] + strand.phase) % 1
-    const base = i * 3
-    array[base] = ax + dx * t
-    array[base + 1] = ay + dy * t
-    array[base + 2] = az + dz * t
-  }
-  attr.needsUpdate = true
 }
 
 export function createStrings(scene) {
@@ -342,7 +319,6 @@ export function createStrings(scene) {
         to: new THREE.Vector3(NaN, NaN, NaN),
         fractions: null,
         fractionsCount: 0,
-        phase: 0,
       }
       mesh.onBeforeRender = () => {
         const now = performance.now()
@@ -357,7 +333,6 @@ export function createStrings(scene) {
         } else if (strand.yellowLevel > 0) {
           strand.yellowLevel = Math.max(0, strand.yellowLevel - delta / 1.5)
         }
-        if (active && !isStill) travelStrand(strand, delta)
         const lit = active
         if (strand.paintedYellow === strand.yellowLevel && strand.paintedLit === lit && strand.paintedDim === dimLevel) return
         strand.paintedYellow = strand.yellowLevel

@@ -770,6 +770,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         const yaw = roomRef.current?.yaw?.()
         const pitch = roomRef.current?.pitch?.()
         compassRef.current?.(yaw, pitch)
+        roomRef.current?.setSpeed(live ? 1 : player.playing ? player.speed : 0)
         player.tick(ms)
         roomRef.current?.setBands(sound.bands())
         const dance = sound.dance()
