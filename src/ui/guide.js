@@ -16,7 +16,7 @@ export const GUIDE_STEPS = [
   },
   {
     label: 'The tunnel',
-    text: 'A working agent sends a yellow tunnel to the file it touches, and packets run along it; white is a read or write, green is finished and red is a failure.',
+    text: 'A working agent sends a tunnel in its own colour to the file it touches, and a star travels along it to the card; white is a read or write, green is finished and red is a failure.',
   },
   {
     label: 'The chat',
@@ -42,7 +42,7 @@ export const TOUR_STEPS = [
   {
     label: 'A working tunnel',
     selector: '.mr-card.is-targeted, .mr-callout.is-working, .mr-term.is-working',
-    text: 'This yellow tunnel runs from a working agent to the file it touches, with packets along it.',
+    text: 'This tunnel runs from a working agent to the file it touches in its own colour, with a star along it.',
   },
   {
     label: 'The sidebar',
