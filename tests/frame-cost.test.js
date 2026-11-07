@@ -202,7 +202,7 @@ describe('the path lengths a star samples', () => {
   })
 })
 
-describe('the path lengths a star samples', () => {
+describe('the path lengths a tunnel keeps', () => {
   it('keeps the path lengths until the path itself moves', () => {
     const { agents, state, terminals, world } = harness()
     startWrite(state, 1000)

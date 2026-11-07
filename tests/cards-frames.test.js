@@ -222,6 +222,16 @@ describe('the dance lift on a card', () => {
   })
 })
 
+describe('the tab anchor without a card', () => {
+  it('answers null until the root card is drawn', () => {
+    const { cards } = makeCards()
+    expect(cards.anchor('')).toBeNull()
+    cards.sync(makeState())
+    expect(cards.anchor('')).toBeTruthy()
+    cards.dispose()
+  })
+})
+
 describe('a string on a lifted card', () => {
   it('moves its end with the tab as the card lifts', () => {
     const state = makeState()
