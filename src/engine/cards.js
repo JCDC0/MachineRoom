@@ -638,7 +638,7 @@ export function createCards(cssScene, options = {}) {
       short = shortParts.join(' · ')
     }
     const hit = flashes.get(path)
-    const tone = hit && hit.until > performance.now() ? hit.tone : null
+    const tone = hit ? hit.tone : null
     let rowClass = `mr-item is-${kind}`
     if (mark) rowClass += ` is-${mark}`
     const isActive = active.files.has(path) || active.dirs.has(path)
@@ -992,7 +992,7 @@ export function createCards(cssScene, options = {}) {
 
   function flash(path, tone, text = '') {
     const duration = tone === 'red' ? FAIL_MS : FLASH_MS
-    flashes.set(path, { tone, text, until: performance.now() + duration })
+    flashes.set(path, { tone, text, life: duration / 1000 })
     markRowPath(path)
   }
 
@@ -1120,7 +1120,7 @@ export function createCards(cssScene, options = {}) {
     }
   }
 
-  function update(state, delta, camera, mask = null) {
+  function update(state, delta, camera, mask = null, speed = 1) {
     lastState = state
     movingNow = false
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
@@ -1142,8 +1142,10 @@ export function createCards(cssScene, options = {}) {
     const dimLit = mask?.lit ?? null
     const targeted = mask?.targeted ?? null
     const dimStep = delta / (DIM_FADE_MS / 1000)
+    const flashStep = delta * (Number.isFinite(Number(speed)) ? Number(speed) : 1)
     for (const [path, hit] of flashes) {
-      if (hit.until <= now) {
+      hit.life -= flashStep
+      if (hit.life <= 0) {
         flashes.delete(path)
         markRowPath(path)
       }
@@ -1231,7 +1233,7 @@ export function createCards(cssScene, options = {}) {
       }
 
       const flashing = hasFlashes ? flashes.get(card.path) : null
-      const tone = flashing && flashing.until > now ? flashing.tone : null
+      const tone = flashing?.tone === 'red' ? 'red' : null
       let failedText = ''
       if (tone === 'red') {
         const failedName = visibleText(flashing.text || (card.path === '' ? rootName : basename(card.path)))
@@ -1350,7 +1352,7 @@ export function createCards(cssScene, options = {}) {
           }
         }
         const hit = hasFlashes ? flashes.get(path) : null
-        const rowTone = hit && hit.until > now ? hit.tone : null
+        const rowTone = hit ? hit.tone : null
         const activeRow = active.files.has(path) || active.dirs.has(path)
         let rowClass = entry.baseClass
         if (entry.mark) rowClass += ` is-${entry.mark}`
@@ -1437,8 +1439,12 @@ export function createCards(cssScene, options = {}) {
     edgePoint,
     flashFile: (dir, file, tone) => {
       const name = basename(file)
-      flash(file, tone === 'red' ? 'red' : 'white', name)
-      flash(dir, tone === 'red' ? 'red' : 'white', name)
+      if (tone === 'red') {
+        flash(file, 'red', name)
+        flash(dir, 'red', name)
+      } else {
+        flash(file, 'white', name)
+      }
     },
     flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
     sync,

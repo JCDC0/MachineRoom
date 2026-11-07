@@ -55,6 +55,7 @@ function fakeElement(tag = 'div') {
     cloneNode() {
       return fakeElement(tag)
     },
+    classList: { add() {}, remove() {}, contains: () => false },
   }
   Object.defineProperty(node, 'textContent', {
     get() {
@@ -433,18 +434,69 @@ describe('idle frames', () => {
     const { cards } = makeCards()
     cards.sync(state)
     cards.update(state, 0.016, camera())
-    const now = performance.now()
-    const clock = vi.spyOn(performance, 'now').mockReturnValue(now)
     cards.flashFile('src', 'src/a.js', 'white')
     const walked = reads()
     cards.update(state, 0.016, camera())
     expect(reads()).toBeGreaterThan(walked)
     let entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
     expect(entry.row.className).toContain('is-flash-white')
-    clock.mockReturnValue(now + 1200)
-    cards.update(state, 0.016, camera())
+    cards.update(state, 1.2, camera())
     entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
     expect(entry.row.className).not.toContain('is-flash-white')
+  })
+
+  it('holds a flash while the replay is paused', () => {
+    const state = makeState()
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    cards.flashFile('src', 'src/a.js', 'white')
+    for (let step = 0; step < 20; step += 1) cards.update(state, 0.5, camera(), null, 0)
+    const entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(entry.row.className).toContain('is-flash-white')
+    cards.dispose()
+  })
+
+  it('flashes only the file row white, never its folder card or folder row', () => {
+    const state = makeState(['src/a.js'], ['src/a.js'])
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    cards.flashFile('src', 'src/a.js', 'white')
+    cards.update(state, 0.016, camera())
+    const fileRow = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(fileRow.row.className).toContain('is-flash-white')
+    expect(cards.cards.get('src').element.className).not.toContain('is-flash-white')
+    const folderRow = cards.cards.get('').rows.find((row) => row.item.path === 'src')
+    if (folderRow) expect(folderRow.row.className).not.toContain('is-flash-white')
+    cards.dispose()
+  })
+
+  it('flashes a folder touch on its row in the parent card and not its own card', () => {
+    const state = makeState(['src/a.js', 'docs/b.md', 'alpha/a.txt', 'beta/b.txt', 'gamma/c.txt'], ['src/a.js'])
+    const { cards } = makeCards(0)
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    cards.flashCluster('gamma', 'white')
+    cards.update(state, 0.016, camera())
+    const folderRow = cards.cards.get('').rows.find((row) => row.item.path === 'gamma')
+    expect(folderRow.row.className).toContain('is-flash-white')
+    expect(cards.cards.get('gamma')).toBeUndefined()
+    cards.dispose()
+  })
+
+  it('keeps a red failure on the file row and its card with the FAILED band', () => {
+    const state = makeState(['src/a.js'], ['src/a.js'])
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    cards.flashFile('src', 'src/a.js', 'red')
+    cards.update(state, 0.016, camera())
+    const fileRow = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(fileRow.row.className).toContain('is-flash-red')
+    expect(cards.cards.get('src').element.className).toContain('is-flash-red')
+    expect(cards.cards.get('src').band.textContent).toBe('FAILED a.js')
+    cards.dispose()
   })
 
   it('walks only the card a flash names, not a resting card beside it', () => {
