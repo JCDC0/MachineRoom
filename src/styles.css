@@ -5427,36 +5427,19 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   color: var(--red);
 }
 
-.mr-item.is-active:not(.is-failed)::before,
-.mr-item.is-active:not(.is-failed)::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  bottom: 2px;
-  width: 7px;
-  pointer-events: none;
-}
-
-.mr-item.is-active:not(.is-failed)::before {
-  left: 1px;
+.mr-item.is-active:not(.is-failed) .mr-item-name {
+  padding: 2px 5px;
+  margin-left: -5px;
+  color: var(--mr-target, var(--yellow));
   background:
     linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) left top / 6px 1.5px no-repeat,
     linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) left top / 1.5px 6px no-repeat,
-    linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) left bottom / 6px 1.5px no-repeat,
-    linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) left bottom / 1.5px 6px no-repeat;
-}
-
-.mr-item.is-active:not(.is-failed)::after {
-  right: 1px;
-  background:
     linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) right top / 6px 1.5px no-repeat,
     linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) right top / 1.5px 6px no-repeat,
+    linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) left bottom / 6px 1.5px no-repeat,
+    linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) left bottom / 1.5px 6px no-repeat,
     linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) right bottom / 6px 1.5px no-repeat,
     linear-gradient(var(--mr-target, var(--yellow)), var(--mr-target, var(--yellow))) right bottom / 1.5px 6px no-repeat;
-}
-
-.mr-item.is-active:not(.is-failed) .mr-item-name {
-  color: var(--mr-target, var(--yellow));
 }
 
 .mr-item.is-flash-white {
