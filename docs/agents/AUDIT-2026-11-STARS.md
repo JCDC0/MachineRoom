@@ -7,7 +7,7 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 ### 1. A failed tool call turns white when its star lands
 
 - File: `src/engine/room.js:769`, with `showTouch` at `src/engine/room.js:745` and the failure path at `src/engine/room.js:818`.
-- When: a `tool.start` launches a star that takes 0.25 to 0.9 seconds. If the matching `tool.end` fails before the star lands, the red flash and the `failed NAME` label show at once, then the star lands. `showTouch` stores a white flash over the red one and shows `read NAME` or `write NAME`. The owner sees a failed write go white and a success label appear after the failure.
+- When: a `tool.start` launches a star that takes 0.25 to 0.9 seconds. If the matching `tool.end` fails before the star lands, the red flash and the `failed NAME` label show at once, then the star lands. `showTouch` stores a white flash over the red one and shows `read NAME` or `write NAME`. The owner sees a failed write go white and a success label appear after the failure, or a failed folder card flash white.
 - How sure: high. The landing callback always calls `showTouch`, and nothing cancels or checks the call result.
 - Smallest fix: carry the call id with the star and drop its landing when that call ends failed, or have the landing read the call result and keep the red flash and failure label. Add a room test with a tool that fails inside the star's flight time.
 
