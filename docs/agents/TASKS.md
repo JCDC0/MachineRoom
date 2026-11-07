@@ -1530,3 +1530,30 @@ Files: src/engine/stars.js, src/engine/agents.js, src/engine/room.js, src/engine
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/engine/stars.js, src/engine/room.js, tests/stars.test.js, public/fixtures/scenario-i-run.jsonl, tests/scenarios.test.js, tests/replay.test.js, tests/build-fixtures.test.js.
+
+## A camera indicator on the touched folder and file, and a check of the stars (2026-11-07, the owner's request)
+
+The owner drew the target of a working agent as a camera viewfinder: four corner brackets in the agent's own colour around the folder card it works in, four small brackets around the file row, and the file's name in that colour, with no diagonal stripes on the card or the row.
+
+**U154. A camera indicator in the agent's colour on the folder and the file (OpenCode).** Read no part of TASKS.md beyond this brief and the paragraph above it. Use no subagents. Commit as you go. Do not edit any file under `docs/`: the owner will rework the docs after more design changes.
+
+1. Delete the yellow diagonal stripes from a working target: the `var(--stripes-yellow)` background on `.mr-card.is-active .mr-card-face` and on `.mr-item.is-active:not(.is-failed)` in `src/styles.css`. Keep the card's white border and its corner ticks. Delete `--stripes-yellow` if nothing else uses it.
+2. The card's four corner brackets (`.mr-card-bracket`, shown on `.mr-card.is-targeted`) take the colour of the agent working there instead of `--yellow`: read it from a custom property, `--mr-target`, set on the card element, with `var(--yellow)` as its fallback.
+3. The active file row (`.mr-item.is-active`) shows four small corner brackets around the row, about 6 pixels long and 1.5 pixels thick, just outside its name, like a camera's focus marks, and its name (`.mr-item-name`) in the same colour, from `--mr-target` set on the row. Draw them with the row's `::before` and `::after` (or background gradients) so the DOM contract keeps its classes and no element is added per row. A failed row stays red and shows no brackets; a row that flashes white still flashes.
+4. The colour: the room knows each agent's colour (`view.color` in `src/engine/agents.js`, from `agentColor`). `workingMask` in `src/engine/room.js` already finds the targeted folders and the focused files of the working agents. Let it also answer which agent's colour each targeted folder and each focused file takes (the first working agent in roster order wins when two share one), as `#rrggbb` text, and pass that to `cards.js`, which sets `--mr-target` on the card and on the row only when the value changes, and removes it when the card or row is no longer a target. The cache in `createWorkingMaskCache` must also rebuild when the roster's colours change. Rows drawn later by the scroll window get the same value. Keep the frame loop free of new allocations; reuse the maps.
+5. Keep the tunnel, the star and their colours as they are.
+
+Tests: test the colour choice in `workingMask` (one agent, two agents on one folder, a child agent, a file and its folder) and the `#rrggbb` text in `tests/`. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Check it on screen before you finish: `npm run build`, `npm run serve -- up --root <this worktree> --port 5181 --no-open` in the background, open `/?replay&fixture=scenario-i` at 1280 by 800, and confirm that a working agent's folder card shows corner brackets in that agent's colour, that the file it touches shows small brackets and its name in the same colour, that no stripes are left, and that two agents show two colours. Stop the server when you finish.
+
+Files: src/styles.css, src/engine/cards.js, src/engine/room.js, tests/.
+
+**U155. Review the stars, the agent colours and the replay (OpenCode 2).** Read no part of TASKS.md beyond this brief and the U152 and U153 briefs above it. Use no subagents. Change no code. Read what U152 and U153 changed (`git diff 67ebba80 896370aa -- src tests public/fixtures`) and the code it touches: `src/engine/stars.js`, the star, touch, flash and label paths and `setSpeed` and `reset` in `src/engine/room.js`, the tunnel and the web beam in `src/engine/agents.js`, `src/engine/strings.js`, `src/engine/sprites.js` and where `src/Stage.jsx` calls `room.setSpeed`. Look for:
+- bugs: a star whose card leaves the plan, whose agent leaves the roster or whose run ends while it flies; a landing after a seek or a `room.reset`; a touch whose flash or label never shows (the pool full, reduced motion, a hidden tab, a speed of 0 in a live room, a seek while paused); a failed tool call shown out of order with its star; two touches on one file in one frame; the wrong colour on a child, a sub orchestrator or a session reader;
+- cost: allocations per frame, buffers or textures not disposed when the room goes, work done for stars that are not drawn;
+- dead code the deletions left: exports, constants, CSS rules, test helpers and fixture fields that nothing uses now (search the whole tree, `docs/` aside);
+- what the owner would see: a star drawn over or under a card in the wrong order, a star that lands far from the label, colours too close to each other or to the room's meaning colours (white, `#e5ff00`, `#ff2a2a`, `#2aff80`, `#2a9dff`), and a star too small or too large at the overview distance.
+Write each finding in `docs/agents/AUDIT-2026-11-STARS.md`: a number, the file and line, what goes wrong and when, how sure you are, and the smallest fix, ranked by what the owner would notice first, then a short list of design ideas kept apart from the findings. Prove a bug with a small test or a script when you can, and keep that test out of the commit when it fails on purpose. You may run the related tests and `npm run build`; do not run the full `npm test`.
+
+Files: docs/agents/AUDIT-2026-11-STARS.md.
