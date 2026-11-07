@@ -374,6 +374,11 @@ function el(tag, className, text) {
   return node
 }
 
+function paintTarget(node, value) {
+  if (value) node.style.setProperty('--mr-target', value)
+  else node.style.removeProperty('--mr-target')
+}
+
 function occluderGeometry(view, rootName = 'root') {
   const parts = occluderParts(view, rootName)
   const positions = new Float32Array(parts.length * 18)
@@ -413,6 +418,9 @@ export function createCards(cssScene, options = {}) {
   let layoutKey = ''
   let overviewLayoutKey = ''
   let active = { files: new Set(), dirs: new Set(), path: new Set() }
+  let targetDirColors = null
+  let targetFileColors = null
+  let lastTargetVersion = -1
   let inspected = null
   let rowRevision = 0
   let lastRowRevision = -1
@@ -469,6 +477,11 @@ export function createCards(cssScene, options = {}) {
 
   function markRows() {
     rowDirtyAll = true
+  }
+
+  function targetColour(kind, path) {
+    const map = kind === 'dir' ? targetDirColors : targetFileColors
+    return map?.get(path) ?? null
   }
 
   function makeCard(path) {
@@ -558,6 +571,7 @@ export function createCards(cssScene, options = {}) {
       baseClass: 'mr-card is-closed',
       className: 'mr-card is-closed',
       classBuilds: 0,
+      targetColor: null,
       bandText: '',
       bandFailed: false,
       height: 0,
@@ -627,15 +641,18 @@ export function createCards(cssScene, options = {}) {
     const tone = hit && hit.until > performance.now() ? hit.tone : null
     let rowClass = `mr-item is-${kind}`
     if (mark) rowClass += ` is-${mark}`
-    if (active.files.has(path) || active.dirs.has(path)) rowClass += ' is-active'
+    const isActive = active.files.has(path) || active.dirs.has(path)
+    if (isActive) rowClass += ' is-active'
     if (tone) rowClass += ` is-flash-${tone}`
     if (inspected === path) rowClass += ' is-inspected'
-    return { file, mark, short, rowClass }
+    const target = isActive && !file?.failed ? targetColour(kind, path) : null
+    return { file, mark, short, rowClass, target }
   }
 
   function makeRow(item, state) {
     const look = rowLook(state, item.path, item.kind)
     const row = el('div', look.rowClass)
+    if (look.target) paintTarget(row, look.target)
     const label = el('span', 'mr-item-name', visibleText(item.kind === 'dir' ? `${basename(item.path)}/` : basename(item.path)))
     const note = el('span', 'mr-item-note', look.short)
     row.append(label, note)
@@ -664,6 +681,7 @@ export function createCards(cssScene, options = {}) {
       lastYellow: look.file ? look.file.yellow : null,
       mark: look.mark,
       short: look.short,
+      targetColor: look.target,
     }
   }
 
@@ -1115,6 +1133,13 @@ export function createCards(cssScene, options = {}) {
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     back.set(0, 0, 1).applyQuaternion(camera.quaternion)
+    targetDirColors = mask?.dirColors ?? null
+    targetFileColors = mask?.fileColors ?? null
+    const targetVersion = mask?.targetVersion ?? -1
+    if (targetVersion !== lastTargetVersion) {
+      lastTargetVersion = targetVersion
+      rowDirtyAll = true
+    }
     const changed = recompute(state)
     const now = performance.now()
     const isStill = still()
@@ -1279,6 +1304,12 @@ export function createCards(cssScene, options = {}) {
         }
       }
 
+      const targetColor = isTargeted ? targetColour('dir', card.path) : null
+      if (card.targetColor !== targetColor) {
+        card.targetColor = targetColor
+        paintTarget(card.element, targetColor)
+      }
+
       const dimGoal = dimmed && !lit && !selectedNow ? 1 : 0
       if (isStill) {
         card.dimLevel = dimGoal
@@ -1327,14 +1358,20 @@ export function createCards(cssScene, options = {}) {
         }
         const hit = hasFlashes ? flashes.get(path) : null
         const rowTone = hit && hit.until > now ? hit.tone : null
+        const activeRow = active.files.has(path) || active.dirs.has(path)
         let rowClass = entry.baseClass
         if (entry.mark) rowClass += ` is-${entry.mark}`
-        if (active.files.has(path) || active.dirs.has(path)) rowClass += ' is-active'
+        if (activeRow) rowClass += ' is-active'
         if (rowTone) rowClass += ` is-flash-${rowTone}`
         if (inspected === path) rowClass += ' is-inspected'
         if (entry.rowClass !== rowClass) {
           entry.rowClass = rowClass
           entry.row.className = rowClass
+        }
+        const target = activeRow && !entry.file?.failed ? targetColour(entry.item.kind, path) : null
+        if (entry.targetColor !== target) {
+          entry.targetColor = target
+          paintTarget(entry.row, target)
         }
         if (entry.noteText !== entry.short) {
           entry.noteText = entry.short

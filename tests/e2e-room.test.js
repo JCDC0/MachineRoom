@@ -39,12 +39,23 @@ const context2d = {
   rotate() {},
 }
 
+function fakeStyle() {
+  const style = {}
+  style.setProperty = (name, value) => {
+    style[name] = String(value)
+  }
+  style.removeProperty = (name) => {
+    delete style[name]
+  }
+  return style
+}
+
 function fakeElement(tag = 'div') {
   const listeners = new Map()
   const node = {
     tagName: String(tag).toUpperCase(),
     className: '',
-    style: {},
+    style: fakeStyle(),
     dataset: {},
     title: '',
     children: [],

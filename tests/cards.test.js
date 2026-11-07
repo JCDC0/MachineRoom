@@ -33,11 +33,22 @@ import { HUB_CENTER } from '../src/engine/hub.js'
 import { makeTree } from '../src/model/paths.js'
 import { RECENT_KEEP_MS, apply, createState } from '../src/model/state.js'
 
+function fakeStyle() {
+  const style = {}
+  style.setProperty = (name, value) => {
+    style[name] = String(value)
+  }
+  style.removeProperty = (name) => {
+    delete style[name]
+  }
+  return style
+}
+
 function fakeElement(tag = 'div') {
   const node = {
     tagName: String(tag).toUpperCase(),
     className: '',
-    style: {},
+    style: fakeStyle(),
     dataset: {},
     children: [],
     parentNode: null,
@@ -249,6 +260,45 @@ describe('the folder blocks behind a card', () => {
       'translate3d(-36px, 0px, -18px)',
     ])
     expect(cards.cards.get('').backs.children).toHaveLength(0)
+    cards.dispose()
+  })
+})
+
+describe('the camera target colour', () => {
+  it('puts the agent colour on the targeted card and its active row, then takes it away', () => {
+    const tree = makeTree({ root: 'demo', files: ['src/a.js', 'src/b.js'] })
+    const state = createState(tree, [{ key: 'hermes', name: 'Hermes' }])
+    state.agents.get('hermes').status = 'working'
+    state.agents.get('hermes').focus = ['src/a.js']
+    const cards = createCards(fakeScene(), { glScene: fakeScene(), alwaysDepth: 2 })
+    cards.sync(state)
+    const mask = {
+      dimmed: true,
+      lit: new Set(['', 'src']),
+      targeted: new Set(['src']),
+      dirColors: new Map([['src', '#ffb347']]),
+      fileColors: new Map([['src/a.js', '#ffb347']]),
+      targetVersion: 1,
+    }
+    cards.update(state, 0.016, camera(), mask)
+    const card = cards.cards.get('src')
+    expect(card.element.style['--mr-target']).toBe('#ffb347')
+    expect(card.drawn.get('src/a.js').row.style['--mr-target']).toBe('#ffb347')
+    expect(card.drawn.get('src/b.js').row.style['--mr-target']).toBeUndefined()
+
+    state.agents.get('hermes').status = 'done'
+    state.agents.get('hermes').focus = []
+    cards.update(state, 0.016, camera(), {
+      ...mask,
+      dimmed: false,
+      lit: new Set(),
+      targeted: new Set(),
+      dirColors: new Map(),
+      fileColors: new Map(),
+      targetVersion: 2,
+    })
+    expect(card.element.style['--mr-target']).toBeUndefined()
+    expect(card.drawn.get('src/a.js').row.style['--mr-target']).toBeUndefined()
     cards.dispose()
   })
 })

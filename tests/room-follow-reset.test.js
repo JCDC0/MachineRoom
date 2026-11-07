@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek, inspectorNamesPath, noteTouch, TOUCH_ENTRY_LIMIT, TOUCH_PATH_LIMIT } from '../src/engine/room.js'
+import { createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek, inspectorNamesPath, noteTouch, TOUCH_ENTRY_LIMIT, TOUCH_PATH_LIMIT, workingMask } from '../src/engine/room.js'
 
 function state(status, focus, recent = []) {
   return {
@@ -50,7 +50,14 @@ describe('the working mask', () => {
     const cache = createWorkingMaskCache()
     const state = working(['src/a.js'])
     const mask = cache.of(state)
-    expect(mask).toEqual({ dimmed: true, lit: new Set(['', 'src']), targeted: new Set(['src']) })
+    expect(mask).toEqual({
+      dimmed: true,
+      lit: new Set(['', 'src']),
+      targeted: new Set(['src']),
+      dirColors: new Map(),
+      fileColors: new Map(),
+      targetVersion: 0,
+    })
     for (let frame = 0; frame < 5; frame += 1) expect(cache.of(state)).toBe(mask)
     expect(cache.builds()).toBe(1)
     state.latest = 11
@@ -76,6 +83,81 @@ describe('the working mask', () => {
     expect(mask.lit).toEqual(new Set(['', 'src']))
     expect(mask.lit.has('docs')).toBe(false)
     expect(mask.targeted).toEqual(new Set(['src']))
+  })
+})
+
+describe('the target colours', () => {
+  const colours = new Map([
+    ['orchestrator', 0xffb347],
+    ['opencode', 0xff5ad1],
+    ['child', 0xffb347],
+  ])
+  const colourOf = (key) => colours.get(key)
+  const stateWith = (agents, files = ['src/a.js', 'src/b.js', 'docs/c.md']) => ({
+    latest: 1,
+    files: new Map(files.map((path) => [path, { path, exists: true }])),
+    agents: new Map(
+      agents.map((agent) => [
+        agent.key,
+        { key: agent.key, status: agent.status ?? 'working', focus: agent.focus },
+      ]),
+    ),
+  })
+
+  it('gives the folder and the file the working agent colour as hex text', () => {
+    const mask = workingMask(stateWith([{ key: 'orchestrator', focus: ['src/a.js'] }]), colourOf)
+    expect(mask.dirColors).toEqual(new Map([['src', '#ffb347']]))
+    expect(mask.fileColors).toEqual(new Map([['src/a.js', '#ffb347']]))
+  })
+
+  it('keeps the first working agent in roster order on a folder two agents share', () => {
+    const mask = workingMask(
+      stateWith([
+        { key: 'orchestrator', focus: ['src/a.js'] },
+        { key: 'opencode', focus: ['src/b.js'] },
+      ]),
+      colourOf,
+    )
+    expect(mask.dirColors).toEqual(new Map([['src', '#ffb347']]))
+    expect(mask.fileColors).toEqual(
+      new Map([
+        ['src/a.js', '#ffb347'],
+        ['src/b.js', '#ff5ad1'],
+      ]),
+    )
+  })
+
+  it('takes the colour the room gives a child agent', () => {
+    const mask = workingMask(
+      stateWith([
+        { key: 'orchestrator', focus: ['src/a.js'] },
+        { key: 'child', focus: ['docs/c.md'] },
+      ]),
+      colourOf,
+    )
+    expect(mask.dirColors.get('docs')).toBe('#ffb347')
+    expect(mask.fileColors.get('docs/c.md')).toBe('#ffb347')
+  })
+
+  it('ignores an idle agent and pads a short colour to six digits', () => {
+    const idle = workingMask(stateWith([{ key: 'opencode', status: 'done', focus: ['src/a.js'] }]), colourOf)
+    expect(idle.dirColors.size).toBe(0)
+    expect(idle.fileColors.size).toBe(0)
+    const short = workingMask(stateWith([{ key: 'orchestrator', focus: ['src/a.js'] }]), () => 0x0000ff)
+    expect(short.dirColors.get('src')).toBe('#0000ff')
+  })
+
+  it('rebuilds the cache when the roster colour changes', () => {
+    const roster = new Map([['hermes', 0xffb347]])
+    const cache = createWorkingMaskCache((key) => roster.get(key))
+    const state = stateWith([{ key: 'hermes', focus: ['src/a.js'] }])
+    const first = cache.of(state)
+    expect(first.dirColors.get('src')).toBe('#ffb347')
+    roster.set('hermes', 0xff5ad1)
+    const second = cache.of(state)
+    expect(second.dirColors.get('src')).toBe('#ff5ad1')
+    expect(second.targetVersion).toBe(first.targetVersion + 1)
+    expect(cache.builds()).toBe(2)
   })
 })
 
