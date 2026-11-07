@@ -22,16 +22,35 @@ const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
 const HOVER_CHECK_MS = 100
 
-function workingMask(state) {
-  const lit = new Set()
-  const targeted = new Set()
+function colourText(value) {
+  if (value === null || value === undefined) return null
+  const number = Number(value)
+  if (!Number.isFinite(number)) return null
+  return `#${(Math.floor(number) & 0xffffff).toString(16).padStart(6, '0')}`
+}
+
+export function workingMask(state, colourOf = null, into = null) {
+  const lit = into?.lit ?? new Set()
+  const targeted = into?.targeted ?? new Set()
+  const dirColors = into?.dirColors ?? new Map()
+  const fileColors = into?.fileColors ?? new Map()
+  lit.clear()
+  targeted.clear()
+  dirColors.clear()
+  fileColors.clear()
   let touched = false
   for (const agent of state.agents.values()) {
     if (agent.status !== 'working') continue
+    const colour = colourOf ? colourText(colourOf(agent.key)) : null
     for (const path of agent.focus ?? []) {
       touched = true
-      const dir = state.files.has(path) ? dirname(path) : path
+      const file = state.files.has(path)
+      const dir = file ? dirname(path) : path
       targeted.add(dir)
+      if (colour) {
+        if (!dirColors.has(dir)) dirColors.set(dir, colour)
+        if (file && !fileColors.has(path)) fileColors.set(path, colour)
+      }
       let at = dir
       lit.add(at)
       while (at !== '') {
@@ -40,14 +59,27 @@ function workingMask(state) {
       }
     }
   }
-  return { dimmed: touched, lit, targeted }
+  return { dimmed: touched, lit, targeted, dirColors, fileColors }
 }
 
-export function createWorkingMaskCache() {
-  let mask = { dimmed: false, lit: new Set(), targeted: new Set() }
+function emptyMask() {
+  return {
+    dimmed: false,
+    lit: new Set(),
+    targeted: new Set(),
+    dirColors: new Map(),
+    fileColors: new Map(),
+    targetVersion: 0,
+  }
+}
+
+export function createWorkingMaskCache(colourOf = null) {
+  let mask = emptyMask()
+  let spare = emptyMask()
   let latest = null
   let focus = []
   let statuses = []
+  let colours = []
   let builds = 0
 
   function changed(state) {
@@ -55,21 +87,36 @@ export function createWorkingMaskCache() {
     let index = 0
     for (const agent of state.agents.values()) {
       if (agent.focus !== focus[index] || agent.status !== statuses[index]) return true
+      if (colourOf && colourOf(agent.key) !== colours[index]) return true
       index += 1
     }
     return false
   }
 
+  function sameColors(a, b) {
+    if (a.size !== b.size) return false
+    for (const [path, colour] of a) {
+      if (b.get(path) !== colour) return false
+    }
+    return true
+  }
+
   function of(state) {
     if (!changed(state)) return mask
     latest = state.latest
-    focus = []
-    statuses = []
+    focus.length = 0
+    statuses.length = 0
+    colours.length = 0
     for (const agent of state.agents.values()) {
       focus.push(agent.focus)
       statuses.push(agent.status)
+      colours.push(colourOf ? colourOf(agent.key) : null)
     }
-    mask = workingMask(state)
+    const next = workingMask(state, colourOf, spare)
+    const same = sameColors(mask.dirColors, next.dirColors) && sameColors(mask.fileColors, next.fileColors)
+    next.targetVersion = same ? mask.targetVersion : mask.targetVersion + 1
+    spare = mask
+    mask = next
     builds += 1
     return mask
   }
@@ -267,7 +314,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const raycaster = new THREE.Raycaster()
   const pointer = new THREE.Vector2()
   const followFocus = createFollowFocus()
-  const masks = createWorkingMaskCache()
+  const colourOf = (key) => agentSet.views.get(key)?.color
+  const masks = createWorkingMaskCache(colourOf)
   const calloutInput = { focus: null, hover: null }
   const openCalls = new Map()
   const touchLog = new Map()
