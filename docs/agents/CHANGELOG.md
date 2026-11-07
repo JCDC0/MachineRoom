@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- U156: a failed call no longer turns white when its star lands, no star lands after its run ends or its agent leaves, the touch star follows the tunnel's route, the label rises from the tab where the star lands, no spawn star moves under reduced motion, a star stays on a moving card, and no web star flies while offline; the guide no longer speaks of yellow tunnels and packets.
 - U155: a review of the stars, the agent colours and the replay, in AUDIT-2026-11-STARS.md, with ten findings.
 - U154: the folder an agent works in shows corner brackets in that agent's colour, and the file it touches shows small camera brackets around its name in the same colour; the yellow diagonal stripes are gone.
 - U153: a star now flies between two agents when one orders, reports to, wakes or dispatches the other, or spawns a child, chosen by the pure agentStar; the scenario-i replay carries ten message frames and a Claude Task call, so each kind shows.
