@@ -1580,9 +1580,7 @@ Files: src/engine/room.js, src/engine/stars.js, src/engine/agents.js, src/engine
 
 The owner answered the four questions U155 and U156 left open. The camera brackets on a card and on a row mean that this agent is touching it, so they keep the agent's colour; the star carries the agent's colour along the line; the line itself goes grey.
 
-### U157: Grey tunnel, row-only flashes, replay-time labels and a clearer palette
-
-Lane: opencode. Do these four, each with a test.
+**U157. Grey tunnel, row-only flashes, replay-time labels and a clearer palette (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each part as you finish it, and stop starting new work at minute 45. Do these four, each with a test:
 
 1. Grey tunnel. While an agent works, its tunnel (`view.stripColor` in `src/engine/agents.js`, the colour picked where `working` sets `color = view.color`) is grey, `0x9a9a9a`, not the agent's colour. Add `TUNNEL_GREY` to `src/engine/sprites.js` beside the palette. Red on a failure and green for 5 seconds after a good run stay as they are. The star (`src/engine/stars.js`) and the camera brackets on the card and the row (`--mr-target`) keep the agent's colour. Update `tests/agent-view.test.js` and `tests/agent-strip.test.js`, which expect `AGENT_COLORS[0]` on the strip.
 2. Row-only flashes. A read or write flashes only the file's row white, never the folder card. In `src/engine/cards.js`, `flashFile` stops flashing `dir`, and a white flash never adds `is-flash-white` to a card; a folder touch (`flashCluster`) flashes that folder's row in its parent card and not its own card. A red failure keeps its row flash, its card flash and its `FAILED NAME` band as they are.
