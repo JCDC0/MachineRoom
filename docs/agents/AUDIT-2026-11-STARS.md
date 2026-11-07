@@ -16,7 +16,7 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 - File: `src/engine/room.js:766`, with `beforeFrame` at `src/engine/room.js:888` and `world.mask = mask` at `src/engine/room.js:914`.
 - When: `player.tick` calls `onActivity` from `beforeFrame`, before the frame rebuilds the working mask and the card links. `launchTouchStar` reads `world.mask`, which is the previous frame's mask. The first touch of a run often has no previous focus, so `litChain` returns no chain and the star goes straight from the agent centre to the card tab. A later touch in another folder follows the previous touch's chain. The tunnel, updated later in the same frame, follows the current chain, so the star and the tunnel take different paths. The same happens when a just-created card has no link in the previous frame's `world.links`.
 - How sure: high. The order is fixed in the frame loop, and `tests/agent-strip.test.js:298` already shows that a null mask gives no chain.
-- Smallest fix: rebuild the mask and links before `player.tick`, or compute a fresh mask from `getState()` inside `launchTouchStar` so the star and the tunnel read the same state. Queue a touch star the way `pendingSpawns` is queued when the card for the touch does not exist yet. Add a test that the first touch of an agent produces the same waypoints as the tunnel.
+- Smallest fix: queue a touch star until after `cards.update` and the mask rebuild in the same frame, the way `pendingSpawns` is queued, then build its route from the current mask, links and card plan. A quicker partial fix is a fresh mask from `getState()` plus a check that the card for the touch exists. Add a test that the first touch of an agent produces the same waypoints as the tunnel.
 
 ### 3. The star lands on the tab and the label appears above the card centre
 
@@ -35,7 +35,7 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 ### 5. Spawn stars move under reduced motion
 
 - File: `src/engine/room.js:836` and `src/engine/room.js:786`.
-- When: `prefers-reduced-motion` is on and an `agent.spawn` arrives. The `run.start`, `agent.message` and web stars are guarded by `still()`, and a touch shows its flash and label at once, but the spawn activity is pushed to `pendingSpawns` and `flushSpawnStars` launches it with no `still()` check. The star crosses the room even though the rest of the room holds still.
+- When: `prefers-reduced-motion` is on and an `agent.spawn` arrives. The `run.start`, `agent.message` and web stars are guarded by `still()`, and a touch shows its flash and label at once, but the spawn activity is pushed to `pendingSpawns` and `flushSpawnStars` launches it with no `still()` check. The star crosses the room even though the rest of the room holds still. A star already in flight also keeps moving if the preference turns on, because `stars.update` never reads `still()`.
 - How sure: high. The guard is missing on this one path.
 - Smallest fix: skip the spawn star when `still()` is true, or guard `flushSpawnStars`.
 
@@ -43,7 +43,7 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 
 - File: `src/engine/room.js:913`, with `src/engine/cards.js:1000` and `src/engine/labels.js:57`.
 - When: a replay is paused or runs at 4x. `stars.update` gets `delta * starSpeed`, so stars pause and speed up with the player, but `labels.update(delta)` and the flash expiry use the raw frame delta and `performance.now()`. Pausing a replay lets an existing label fade and a flash expire while the room is frozen, and at 4x a label stays for 2.6 seconds of wall time, which is 10.4 seconds of replay time, over later events.
-- How sure: high. The two clocks are separate.
+- How sure: high that the clocks are separate; medium that the owner wants labels and flashes tied to replay time rather than wall time.
 - Smallest fix: give the room one replay clock advanced by `delta * starSpeed`, and use it for label life and flash expiry.
 
 ### 7. A moving card pulls away from a star that is already in flight
@@ -72,11 +72,11 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 - File: `src/engine/room.js:748`, with `flashFile` at `src/engine/cards.js:1446`.
 - When: any file touch lands. `showTouch` calls `cards.flashFile(dir, path, 'white')`, and `flashFile` flashes both the file row and the folder card. The U152 addendum says the star ends on the card tab and "the row only flashes", so the white card flash is an extra signal that the folder itself was touched.
 - How sure: high for the code; medium for whether the owner wants the card flash to stay.
-- Smallest fix: flash the file row only in `flashFile`, and keep `flashCluster` for a folder touch.
+- Smallest fix: add a row-only flash for `showTouch` and keep `flashFile` for `focusPath`, so a click still flashes the card.
 
 ## Dead code and stale copy
 
-- `src/ui/guide.js:19` and `src/ui/guide.js:45` still say the working tunnel is yellow and that packets run along it. U152 removed the packets and made the tunnel the agent's colour. The guide is shown in the demo, so the owner reads the old behaviour. The fix is to rewrite the two lines; `tests/guide.test.js:98` asserts the old sentence and needs the same edit. These files are outside the U155 file list.
+- `src/ui/guide.js:19` and `src/ui/guide.js:45` still say the working tunnel is yellow and that packets run along it. U152 removed the packets and made the tunnel the agent's colour. The guide is shown in the demo, so the owner reads the old behaviour. The fix is to rewrite the two lines; `tests/guide.test.js:97` and `tests/guide.test.js:98` assert the old sentences and need the same edit. These files are outside the U155 file list.
 - `src/engine/stars.js:263` exposes `count: () => pool.filter(...)`, and nothing in `src` or `tests` calls it. It also allocates an array. Remove it, or make it a counter if a caller is planned.
 - `src/engine/room.js:765` has `if (!cardAnchorOf(dir, starEnd))`, and `src/engine/agents.js:1571` has `if (tab) ... else world.edge(...)`. `cards.anchor` always returns a vector, so both `else` branches are dead. When a card is missing the star and tunnel end at the nearest card's tab, which matches the U152 addendum, so remove the dead fallback or make `anchor` answer null when there is no card.
 - `src/engine/strings.js:156` defines `fillStrand`, and nothing calls it. The live path uses `fillStrandDirect` at `src/engine/strings.js:262`. It is left over from an earlier strand fill and can be removed.
@@ -98,6 +98,7 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 - The palette has two oranges (`0xffb347` and `0xff8a3d`), two pinks (`0xff5ad1` and `0xff8fb1`), and two cyan or teal tones (`0x3ee6e6` and `0x4fd1b5`). The last two sit near the web blue `0x2a9dff`, and `0x4fd1b5` sits near the green `0x2aff80`. Two agents on adjacent slots can look alike. The brief fixes the eight colours, so this is for the owner, not a code fix.
 - The core texture is 22 pixels on screen, but its bright radial core is 9 of 32 texture pixels across, about 6 pixels on screen. The rays are faint and 22 pixels long. At the overview the star may read as a small dot rather than the bright point the brief describes. Enlarging the core gradient would keep the requested sprite size and make the star easier to see.
 - `starSlot`, `starDuration`, `starAdvance` and `agentStar` are tested, but there is no test that a full pool lands the oldest star through `onLand`, and no test that `launchTouchStar` builds the same route as the tunnel. Both are pure enough to test with a star pool and a fake route.
+- No room test calls `room.setSpeed` or seeks while a star is in flight. `starAdvance` covers the clock, but the `Stage` call and the `room.reset` path are read, not run.
 - No test reads the new message frames or the Task spawn from `scenario-i-run.jsonl`. `tests/scenarios.test.js` only moved the tool call count from 23 to 25. If a later fixture edit removes the orders, reports or wakes, the suite stays green and the demo loses the stars again. A test can assert the 10 message kinds and the one spawn.
 - The `STAR_*` constants are exported but only `tests/stars.test.js` reads some of them. That is fine for a test seam, but the unused `count` is the only export with no reader at all.
 
