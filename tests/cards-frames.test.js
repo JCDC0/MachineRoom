@@ -457,6 +457,21 @@ describe('idle frames', () => {
     cards.dispose()
   })
 
+  it('runs a flash on replay time', () => {
+    const state = makeState()
+    const { cards } = makeCards()
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    cards.flashFile('src', 'src/a.js', 'white')
+    cards.update(state, 0.3, camera())
+    let entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(entry.row.className).toContain('is-flash-white')
+    cards.update(state, 0.3, camera(), null, 4)
+    entry = cards.cards.get('src').rows.find((row) => row.item.path === 'src/a.js')
+    expect(entry.row.className).not.toContain('is-flash-white')
+    cards.dispose()
+  })
+
   it('flashes only the file row white, never its folder card or folder row', () => {
     const state = makeState(['src/a.js'], ['src/a.js'])
     const { cards } = makeCards()

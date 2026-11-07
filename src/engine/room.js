@@ -331,7 +331,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const starPath = []
   const starEnd = new THREE.Vector3()
   const starLabelPoint = new THREE.Vector3()
-  let starSpeed = 1
+  let replaySpeed = 1
   let ladder = null
   let inspected = null
   let lastWorking = []
@@ -985,7 +985,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     internet.update(delta, agentSet.webActive() > 0)
     gitTree.setTop(cards.bottom(''))
     gitTree.update(delta)
-    if (cards.update(state, delta, camera, mask)) {
+    if (cards.update(state, delta, camera, mask, replaySpeed)) {
       const holdLost = releaseLostHold()
       relink()
       refit(holdLost)
@@ -996,14 +996,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       followPath(path)
     }
     strings.update(cardAnchorOf, mask, delta)
-    labels.update(delta)
+    labels.update(delta, replaySpeed)
     world.mask = mask
     calloutInput.focus = followFocus.focused()
     calloutInput.hover = hoveredKey
     agentSet.update(state, delta, now, world, terminals, calloutInput)
     flushTouchStars()
     flushSpawnStars()
-    stars.update(delta, starSpeed)
+    stars.update(delta, replaySpeed)
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'
       const color = status === 'error' ? RED : status === 'done' ? GREEN : WHITE
@@ -1212,7 +1212,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     },
     setSpeed(value) {
       const next = Number(value)
-      starSpeed = Number.isFinite(next) && next >= 0 ? next : 1
+      replaySpeed = Number.isFinite(next) && next >= 0 ? next : 1
     },
     setLabels(labels) {
       terminals.setLabels(labels)
