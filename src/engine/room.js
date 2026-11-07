@@ -11,7 +11,7 @@ import { HUB_CENTER, HUB_RADIUS, createHub, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
-import { agentStar, createStars, starRoute } from './stars.js'
+import { agentStar, createStars, starRoute, touchLabelPoint } from './stars.js'
 import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, chipSideFromScreen, createTerminals } from './terminals.js'
@@ -245,7 +245,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const space = createVoid(scene, texture)
   const roster = agents.map(roomAgent)
   const hub = createHub(scene, roster)
-  const agentSet = createAgents(scene, roster, cssScene)
+  const agentSet = createAgents(scene, roster, cssScene, {
+    onRemove: (key) => {
+      stars.cancel((star) => star.agent === key)
+      dropPendingTouches((item) => item.agent === key, false)
+    },
+  })
   agentSet.setViewport(width, height)
   const stars = createStars(scene)
   const internet = createInternet(scene, texture)
@@ -320,6 +325,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const openCalls = new Map()
   const touchLog = new Map()
   const pendingSpawns = []
+  const pendingTouches = []
   const starChain = []
   const starRoutePoints = []
   const starPath = []
@@ -450,6 +456,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     labels.clear()
     stars.reset()
     pendingSpawns.length = 0
+    pendingTouches.length = 0
     cards.sync(state)
     const holdLost = releaseLostHold()
     const follow = followAfterSeek(state, followFocus.following())
@@ -742,31 +749,98 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     }
   }
 
+  function touchLabel(dir, out) {
+    out.copy(cards.center(dir))
+    cards.anchor(dir, out)
+    return touchLabelPoint(out, out)
+  }
+
   function showTouch(touch) {
     if (touch.kind === 'file') {
       const dir = dirname(touch.path)
       cards.flashFile(dir, touch.path, 'white')
-      cards.topPoint(dir, starLabelPoint)
+      touchLabel(dir, starLabelPoint)
       labels.show(`${touch.mode === 'read' ? 'read' : 'write'} ${basename(touch.path)}`, starLabelPoint, '#ffffff')
       return
     }
     cards.flashCluster(touch.path, 'white')
   }
 
-  function launchStarPath(from, to, color) {
-    const points = starRoute(from, null, cardAnchorOf, to, starPath)
-    stars.launch({ points, color })
+  function callOf(activity) {
+    return typeof activity?.id === 'string' && activity.id !== '' ? activity.id : null
   }
 
-  function launchTouchStar(view, touch) {
+  function launchStarPath(from, to, color, agent = null, call = null) {
+    const points = starRoute(from, null, cardAnchorOf, to, starPath)
+    stars.launch({ points, color, agent, call })
+  }
+
+  function drawnCard(path) {
+    let at = path ?? ''
+    while (at !== '') {
+      const card = cards.cards.get(at)
+      if (card && !card.leaving) return card
+      at = dirname(at)
+    }
+    const root = cards.cards.get('')
+    return root && !root.leaving ? root : null
+  }
+
+  function followTouch(path, touch) {
+    return (end) => {
+      const card = cards.cards.get(path)
+      if (!card) return null
+      if (card.leaving) {
+        showTouch(touch)
+        return null
+      }
+      const anchor = cards.anchor(path, starEnd)
+      if (!anchor) return null
+      end.x = anchor.x
+      end.y = anchor.y
+      end.z = anchor.z
+      return end
+    }
+  }
+
+  function launchTouchStar(agent, touch, call = null) {
+    const view = agentSet.views.get(agent)
+    if (!view) return
     const isFile = touch.kind === 'file'
     const dir = isFile ? dirname(touch.path) : touch.path
     const file = isFile ? touch.path : null
+    const target = drawnCard(dir)
     if (!cardAnchorOf(dir, starEnd)) world.edge(dir, file, world.side(dir), starEnd)
     const chain = litChain(dir, world.links, world.mask, starChain)
     const route = tunnelRoute(chain, world.links, world.mask, starRoutePoints)
     const points = starRoute(view.group.position, route, cardAnchorOf, starEnd, starPath)
-    stars.launch({ points, color: view.color, onLand: () => showTouch(touch) })
+    stars.launch({
+      points,
+      color: view.color,
+      onLand: () => showTouch(touch),
+      agent,
+      call,
+      follow: target ? followTouch(target.path, touch) : null,
+    })
+  }
+
+  function queueTouchStar(activity, touch) {
+    pendingTouches.push({ agent: activity.agent, touch, call: callOf(activity) })
+  }
+
+  function dropPendingTouches(test, land = false) {
+    for (let index = pendingTouches.length - 1; index >= 0; index -= 1) {
+      const item = pendingTouches[index]
+      if (!test(item)) continue
+      pendingTouches.splice(index, 1)
+      if (land) showTouch(item.touch)
+    }
+  }
+
+  function flushTouchStars() {
+    if (pendingTouches.length === 0) return
+    for (const item of pendingTouches) launchTouchStar(item.agent, item.touch, item.call)
+    pendingTouches.length = 0
   }
 
   function launchAgentStar(activity) {
@@ -775,16 +849,21 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const from = agentSet.views.get(pair.from)
     const to = agentSet.views.get(pair.to)
     if (!from || !to) return
-    launchStarPath(from.group.position, to.group.position, from.color)
+    launchStarPath(from.group.position, to.group.position, from.color, activity.agent)
   }
 
-  function launchWebStar(view) {
+  function launchWebStar(view, activity) {
+    if (!internet.online()) return
     webTunnelEnd(view.group.position, internet.position, INTERNET_RADIUS, starEnd)
-    launchStarPath(view.group.position, starEnd, view.color)
+    launchStarPath(view.group.position, starEnd, view.color, activity.agent, callOf(activity))
   }
 
   function flushSpawnStars() {
     if (pendingSpawns.length === 0) return
+    if (still()) {
+      pendingSpawns.length = 0
+      return
+    }
     for (const activity of pendingSpawns) launchAgentStar(activity)
     pendingSpawns.length = 0
   }
@@ -812,15 +891,20 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
           agentSet.aimAt(activity.agent, touch.path, null, performance.now())
         }
         if (still()) showTouch(touch)
-        else launchTouchStar(view, touch)
+        else queueTouchStar(activity, touch)
       }
-      if (isOnlineCall(activity) && !still()) launchWebStar(view)
+      if (isOnlineCall(activity) && !still()) launchWebStar(view, activity)
     } else if (activity.type === 'tool.end' && !activity.ok) {
+      const call = callOf(activity)
+      if (call !== null) {
+        stars.cancel((star) => star.agent === activity.agent && star.call === call)
+        dropPendingTouches((item) => item.agent === activity.agent && item.call === call)
+      }
       const touches = getState().agents.get(activity.agent)?.calls.get(activity.id) ?? []
       touches.forEach((touch) => {
         if (touch.kind === 'file') {
           cards.flashFile(dirname(touch.path), touch.path, 'red')
-          cards.topPoint(dirname(touch.path), scratch)
+          touchLabel(dirname(touch.path), scratch)
           labels.show(`failed ${basename(touch.path)}`, scratch, '#ff2a2a')
         } else {
           cards.flashCluster(touch.path, 'red')
@@ -828,6 +912,8 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       })
       hub.pulse(RED, 0.5)
     } else if (activity.type === 'run.end') {
+      stars.land((star) => star.agent === activity.agent)
+      dropPendingTouches((item) => item.agent === activity.agent, true)
       const color = activity.ok ? GREEN : RED
       hub.pulse(color, 1)
       cards.markRows()
@@ -915,6 +1001,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     calloutInput.focus = followFocus.focused()
     calloutInput.hover = hoveredKey
     agentSet.update(state, delta, now, world, terminals, calloutInput)
+    flushTouchStars()
     flushSpawnStars()
     stars.update(delta, starSpeed)
     for (const view of agentSet.views.values()) {

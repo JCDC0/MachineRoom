@@ -697,7 +697,8 @@ function createSpinner(radius) {
   return { group, rings, arcs, ringMaterial, arcMaterial }
 }
 
-export function createAgents(scene, roster, cssScene = null) {
+export function createAgents(scene, roster, cssScene = null, options = {}) {
+  const onRemove = typeof options.onRemove === 'function' ? options.onRemove : null
   const views = new Map()
   const pickables = []
   const shapes = shapesFor(roster)
@@ -1063,6 +1064,7 @@ export function createAgents(scene, roster, cssScene = null) {
     const at = pickables.indexOf(view.picker)
     if (at !== -1) pickables.splice(at, 1)
     views.delete(view.key)
+    onRemove?.(view.key)
     if (!view.parentKey) return
     for (const other of views.values()) {
       if (other.shapeName === view.shapeName) return

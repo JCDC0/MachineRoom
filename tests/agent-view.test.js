@@ -167,6 +167,18 @@ describe('a child chip', () => {
   })
 })
 
+describe('the removal hook', () => {
+  it('names each view it takes out of the roster', () => {
+    const removed = []
+    const agents = createAgents(new THREE.Scene(), [{ key: 'a', name: 'Alpha', shape: 'claude' }], new THREE.Scene(), {
+      onRemove: (key) => removed.push(key),
+    })
+    agents.setRoster([])
+    expect(removed).toEqual(['a'])
+    agents.dispose()
+  })
+})
+
 describe('a child view shape', () => {
   it('goes back to the spare list when the view is removed', () => {
     const { agents, state, world } = harness()
