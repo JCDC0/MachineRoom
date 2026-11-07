@@ -74,6 +74,13 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 - How sure: high for the path; medium for whether the owner wants the attempt shown as a star anyway.
 - Smallest fix: guard `launchWebStar` with `internet.online()` or the agent set's online state, or draw the beam in the offline colour while the star flies.
 
+### 11. A file touch flashes the whole folder card, not only the row
+
+- File: `src/engine/room.js:748`, with `flashFile` at `src/engine/cards.js:1446`.
+- When: any file touch lands. `showTouch` calls `cards.flashFile(dir, path, 'white')`, and `flashFile` flashes both the file row and the folder card. The U152 addendum says the star ends on the card tab and "the row only flashes", so the white card flash is an extra signal that the folder itself was touched.
+- How sure: high for the code; medium for whether the owner wants the card flash to stay.
+- Smallest fix: flash the file row only in `flashFile`, and keep `flashCluster` for a folder touch.
+
 ## Dead code and stale copy
 
 - `src/ui/guide.js:19` and `src/ui/guide.js:45` still say the working tunnel is yellow and that packets run along it. U152 removed the packets and made the tunnel the agent's colour. The guide is shown in the demo, so the owner reads the old behaviour. The fix is to rewrite the two lines; `tests/guide.test.js:98` asserts the old sentence and needs the same edit. These files are outside the U155 file list.
@@ -89,6 +96,8 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 - A full pool lands the oldest star at once, as the brief asks (`starSlot` at `src/engine/stars.js:59` and `landAt` at `src/engine/stars.js:176`).
 - Two touches on one file in one frame produce two stars on the same path, and the later landing wins the label. `touchesForCommand` keeps the command order, so the final label is the last operation. The row flashes twice. This follows the per-touch rule in U152, but a merge by path would look cleaner.
 - The fixture is in time order with ids 1 to 75. It produces 10 `agent.message` activities and 1 `agent.spawn`: orders at 00:11 and 00:31.5, reports at 00:31 and 00:51, dispatches at 00:52 and 01:08, wakes at 01:07, 01:23, 01:39 and 01:57, and `claude` to `claude~1` at 01:12. This matches the U153 brief.
+- Cost: `stars.update` walks the fixed pool and writes only active slots, with no allocation per frame. `dispose` removes the two Points objects and disposes the shared geometry, both materials and both textures (`src/engine/stars.js:254`). The only per-frame cost is one upload of the 48 point position and colour buffers while any star is drawn, about 1.2 KB, which is small. The one allocation in the module is the unused `count()`.
+- The CSS3D cards render after the WebGL scene (`src/engine/room.js:931` and `src/engine/room.js:933`), so every star draws behind every card, even when the star is in front of the card in 3D. That is the room's existing card rule for the tunnel, not a new star bug, but a bright star can vanish behind a card sooner than a dim trail does.
 
 ## Design ideas
 
