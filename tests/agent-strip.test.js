@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { BEAM_OPACITY, ORCHESTRATOR_LINK_OPACITY, SUB_ORCHESTRATOR_LINK_OPACITY, TUNNEL_CORE_WIDTH, TUNNEL_IN_SECONDS, TUNNEL_OUT_SECONDS, TUNNEL_SHEATH_SHARE, TUNNEL_SHEATH_WIDTH, createAgents, litChain, orchestratorLineEnds, samplePolyline, speckPolyline, stripPoints, tunnelLevel, tunnelRoute, webTunnelEnd } from '../src/engine/agents.js'
 import { INTERNET_RADIUS } from '../src/engine/internet.js'
-import { AGENT_COLORS, WEB, WHITE } from '../src/engine/sprites.js'
+import { TUNNEL_GREY, WEB, WHITE } from '../src/engine/sprites.js'
 import { apply, createState } from '../src/model/state.js'
 import {
   AUTOCOMPACT_MAX,
@@ -217,7 +217,7 @@ describe('the beam for an online call', () => {
     const end = beam[1]
     expect(Math.hypot(end.x - world.internet.x, end.y - world.internet.y, end.z - world.internet.z)).toBeCloseTo(INTERNET_RADIUS, 2)
 
-    expect(view.strip.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(view.strip.material.color.getHex()).toBe(TUNNEL_GREY)
     const strip = trailPoints(view.strip)
     expect(strip.at(-1).x).toBeCloseTo(edge.x, 6)
     expect(strip.at(-1).y).toBeCloseTo(edge.y, 6)
@@ -539,8 +539,8 @@ describe('the tunnel rides the lit folder chain', () => {
     expect(view.strip.visible).toBe(true)
     expect(view.stripSheath.visible).toBe(true)
     expect(view.stripSheath.geometry).toBe(view.strip.geometry)
-    expect(view.strip.material.color.getHex()).toBe(AGENT_COLORS[0])
-    expect(view.stripSheath.material.color.getHex()).toBe(AGENT_COLORS[0])
+    expect(view.strip.material.color.getHex()).toBe(TUNNEL_GREY)
+    expect(view.stripSheath.material.color.getHex()).toBe(TUNNEL_GREY)
     expect(view.strip.material.linewidth).toBe(TUNNEL_CORE_WIDTH)
     expect(view.stripSheath.material.linewidth).toBe(TUNNEL_SHEATH_WIDTH)
     expect(view.stripSheath.material.opacity).toBeCloseTo(view.strip.material.opacity * TUNNEL_SHEATH_SHARE, 10)

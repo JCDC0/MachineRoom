@@ -9,7 +9,7 @@ import { CHILD_LIFE_MS } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_MAX_OPACITY, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
-import { GREEN, RED, WEB, WHITE, YELLOW, agentColor, easeRate, lineMaterial, still, textSprite } from './sprites.js'
+import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, YELLOW, agentColor, easeRate, lineMaterial, still, textSprite } from './sprites.js'
 import { linkOnPath } from './strings.js'
 
 const STYLE = {
@@ -943,7 +943,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     group.scale.setScalar(scale)
 
     const link = lineBetween(lineMaterial(WHITE, 0.4))
-    const trail = createTrail(YELLOW, TUNNEL_CORE_WIDTH, TUNNEL_SHEATH_WIDTH)
+    const trail = createTrail(TUNNEL_GREY, TUNNEL_CORE_WIDTH, TUNNEL_SHEATH_WIDTH)
     const strip = trail.core
     const stripSheath = trail.sheath
     const beamTrail = createTrail(WEB, BEAM_CORE_WIDTH, BEAM_SHEATH_WIDTH)
@@ -1005,7 +1005,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       chain: [],
       pathLengths: [],
       stripOpacity: 0,
-      stripColor: YELLOW,
+      stripColor: TUNNEL_GREY,
       color,
       tunnel: 0,
       web: false,
@@ -1558,7 +1558,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       let color = null
       if (pointer) {
         if (working && lastFailed) color = RED
-        else if (working) color = view.color
+        else if (working) color = TUNNEL_GREY
         else if (fresh) color = GREEN
         else if (status === 'error') color = RED
       }
