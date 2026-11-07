@@ -1556,4 +1556,6 @@ Files: src/styles.css, src/engine/cards.js, src/engine/room.js, tests/.
 - what the owner would see: a star drawn over or under a card in the wrong order, a star that lands far from the label, colours too close to each other or to the room's meaning colours (white, `#e5ff00`, `#ff2a2a`, `#2aff80`, `#2a9dff`), and a star too small or too large at the overview distance.
 Write each finding in `docs/agents/AUDIT-2026-11-STARS.md`: a number, the file and line, what goes wrong and when, how sure you are, and the smallest fix, ranked by what the owner would notice first, then a short list of design ideas kept apart from the findings. Prove a bug with a small test or a script when you can, and keep that test out of the commit when it fails on purpose. You may run the related tests and `npm run build`; do not run the full `npm test`.
 
+The first run read for 45 minutes and wrote nothing. Create the file within your first 10 minutes, write each finding into it and commit it as soon as you find it, read only the files named above, and stop starting new work at minute 30.
+
 Files: docs/agents/AUDIT-2026-11-STARS.md.
