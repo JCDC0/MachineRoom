@@ -1575,3 +1575,22 @@ Files: docs/agents/AUDIT-2026-11-STARS.md.
 Leave findings 6, 8 and 10 and the palette as they are; the owner decides those. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Check it on screen before you finish: `npm run build`, `npm run serve -- up --root <this worktree> --port 5181 --no-open` in the background, open `/?replay&fixture=scenario-i` at 1280 by 800, and confirm that the `read NAME` label rises from the tab where the star lands and that the first touch of a run follows the tunnel. Stop the server when you finish.
 
 Files: src/engine/room.js, src/engine/stars.js, src/engine/agents.js, src/engine/cards.js, src/engine/strings.js, src/ui/guide.js, tests/.
+
+## The owner's answers on the star review (2026-11-07, the owner's request)
+
+The owner answered the four questions U155 and U156 left open. The camera brackets on a card and on a row mean that this agent is touching it, so they keep the agent's colour; the star carries the agent's colour along the line; the line itself goes grey.
+
+### U157: Grey tunnel, row-only flashes, replay-time labels and a clearer palette
+
+Lane: opencode. Do these four, each with a test.
+
+1. Grey tunnel. While an agent works, its tunnel (`view.stripColor` in `src/engine/agents.js`, the colour picked where `working` sets `color = view.color`) is grey, `0x9a9a9a`, not the agent's colour. Add `TUNNEL_GREY` to `src/engine/sprites.js` beside the palette. Red on a failure and green for 5 seconds after a good run stay as they are. The star (`src/engine/stars.js`) and the camera brackets on the card and the row (`--mr-target`) keep the agent's colour. Update `tests/agent-view.test.js` and `tests/agent-strip.test.js`, which expect `AGENT_COLORS[0]` on the strip.
+2. Row-only flashes. A read or write flashes only the file's row white, never the folder card. In `src/engine/cards.js`, `flashFile` stops flashing `dir`, and a white flash never adds `is-flash-white` to a card; a folder touch (`flashCluster`) flashes that folder's row in its parent card and not its own card. A red failure keeps its row flash, its card flash and its `FAILED NAME` band as they are.
+3. Replay-time labels and flashes. The file labels (`src/engine/labels.js`) and the row and card flashes in `src/engine/cards.js` run on replay time, as the stars do: scale their delta by the speed `room.setSpeed` holds (today `starSpeed` in `src/engine/room.js`; rename it to `replaySpeed`), so at speed 4 a label lives a quarter as long in wall time and at speed 0 (paused) it holds. Replace the `performance.now()` deadline of a flash with a life that counts down by the scaled delta. A live room runs at speed 1, so nothing changes there. Reduced motion keeps its current rules.
+4. A clearer palette. Replace `AGENT_COLORS` in `src/engine/sprites.js` with these seven, in this order: `0xff8c1a` (orange), `0xff3ddb` (magenta), `0x8f6bff` (violet), `0x3ff0d8` (aqua), `0xff6f91` (rose), `0xc08a5a` (tan), `0xd9b3ff` (lilac). `agentColor` keeps cycling them. Update `tests/stars.test.js`.
+
+Then rewrite the tunnel sentences in `src/ui/guide.js` so they say the line is grey and a star in the agent's colour travels it to the file, and update `tests/guide.test.js`. Do not edit `docs/`.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Check it on screen before you finish: `npm run build`, `npm run serve -- up --root <this worktree> --port 5181 --no-open` in the background, open `/?replay&fixture=scenario-i` at 1280 by 800, and confirm the grey tunnel, a coloured star, the brackets in the agent's colour, and a white flash on the row only. Stop the server when you finish.
+
+Files: src/engine/sprites.js, src/engine/agents.js, src/engine/cards.js, src/engine/labels.js, src/engine/room.js, src/ui/guide.js, tests/.
