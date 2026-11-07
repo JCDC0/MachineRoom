@@ -54,17 +54,19 @@ export function createLabels(scene, count = 16) {
     item.life = LIFE
   }
 
-  function update(delta) {
+  function update(delta, speed = 1) {
     const isStill = still()
+    const rate = Number.isFinite(Number(speed)) ? Math.max(0, Number(speed)) : 1
+    const step = delta * rate
     for (const item of items) {
       if (item.life <= 0) continue
-      item.life -= delta
+      item.life -= step
       if (item.life <= 0) {
         item.sprite.visible = false
         continue
       }
       if (!isStill) {
-        item.sprite.position.y += delta * RISE
+        item.sprite.position.y += step * RISE
       }
       item.sprite.material.opacity = Math.min(1, item.life / FADE)
     }

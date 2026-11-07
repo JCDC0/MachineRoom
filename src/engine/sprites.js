@@ -5,7 +5,8 @@ export const YELLOW = 0xe5ff00
 export const RED = 0xff2a2a
 export const GREEN = 0x2aff80
 export const WEB = 0x2a9dff
-export const AGENT_COLORS = [0xffb347, 0xff5ad1, 0xa98bff, 0x3ee6e6, 0xff8a3d, 0xff8fb1, 0xc8d94a, 0x4fd1b5]
+export const TUNNEL_GREY = 0x9a9a9a
+export const AGENT_COLORS = [0xff8c1a, 0xff3ddb, 0x8f6bff, 0x3ff0d8, 0xff6f91, 0xc08a5a, 0xd9b3ff]
 
 export function agentColor(index) {
   const value = Number(index)

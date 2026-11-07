@@ -63,14 +63,14 @@ describe('the star label point', () => {
 })
 
 describe('agentColor', () => {
-  it('gives each roster place its own colour from the eight-colour palette', () => {
-    expect(AGENT_COLORS).toEqual([0xffb347, 0xff5ad1, 0xa98bff, 0x3ee6e6, 0xff8a3d, 0xff8fb1, 0xc8d94a, 0x4fd1b5])
+  it('gives each roster place its own colour from the seven-colour palette', () => {
+    expect(AGENT_COLORS).toEqual([0xff8c1a, 0xff3ddb, 0x8f6bff, 0x3ff0d8, 0xff6f91, 0xc08a5a, 0xd9b3ff])
     AGENT_COLORS.forEach((color, index) => expect(agentColor(index)).toBe(color))
   })
 
-  it('starts the palette again after eight and reads a bad index as the first', () => {
-    expect(agentColor(8)).toBe(AGENT_COLORS[0])
-    expect(agentColor(17)).toBe(AGENT_COLORS[1])
+  it('starts the palette again after seven and reads a bad index as the first', () => {
+    expect(agentColor(7)).toBe(AGENT_COLORS[0])
+    expect(agentColor(17)).toBe(AGENT_COLORS[3])
     expect(agentColor(-1)).toBe(AGENT_COLORS[0])
     expect(agentColor('x')).toBe(AGENT_COLORS[0])
   })
