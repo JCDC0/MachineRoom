@@ -60,21 +60,14 @@ A review of U152 and U153, read from the diff `67ebba80..896370aa` and from the 
 - How sure: high for the limits; low for how often the owner will hit it.
 - Smallest fix: keep the number of landings that fire a label in a frame under the label pool, or queue the landings and show their labels as sprites free up.
 
-### 9. The star is smaller than the brief says on a scaled screen
-
-- File: `src/engine/stars.js:132` and `src/engine/stars.js:141`, with the pixel ratio at `src/engine/room.js:236`.
-- When: the window has a device pixel ratio above 1, which is most laptops. `PointsMaterial.size` is in drawing buffer pixels, and the room sets the renderer to `Math.min(window.devicePixelRatio, 1.5)`. The 22 pixel core becomes about 14.7 CSS pixels and the 40 pixel halo about 26.7 CSS pixels. The owner asked for a 22 pixel core and a 40 pixel halo, and at the overview the star may read as a small dot.
-- How sure: high for the arithmetic; medium for how much it matters to the owner at a given screen.
-- Smallest fix: multiply both sizes by `renderer.getPixelRatio()` when the stars are built, or pass the ratio into `createStars` and update it on a resize.
-
-### 10. An offline web call still sends a star, with no beam
+### 9. An offline web call still sends a star, with no beam
 
 - File: `src/engine/room.js:817` and `src/engine/room.js:781`.
 - When: the bridge reports no network and `setOnline(false)` has run, then an `isOnlineCall` activity arrives. `agentSet` suppresses the blue beam while offline, but `launchWebStar` has no online check, so a star flies from the agent to the red `NO CONNECTION` shape along a beam that is not drawn.
 - How sure: high for the path; medium for whether the owner wants the attempt shown as a star anyway.
 - Smallest fix: guard `launchWebStar` with `internet.online()` or the agent set's online state, or draw the beam in the offline colour while the star flies.
 
-### 11. A file touch flashes the whole folder card, not only the row
+### 10. A file touch flashes the whole folder card, not only the row
 
 - File: `src/engine/room.js:748`, with `flashFile` at `src/engine/cards.js:1446`.
 - When: any file touch lands. `showTouch` calls `cards.flashFile(dir, path, 'white')`, and `flashFile` flashes both the file row and the folder card. The U152 addendum says the star ends on the card tab and "the row only flashes", so the white card flash is an extra signal that the folder itself was touched.
