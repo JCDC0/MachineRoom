@@ -9,6 +9,7 @@ export const STAR_MAX_SECONDS = 0.9
 export const STAR_CORE_PIXELS = 22
 export const STAR_HALO_PIXELS = 40
 export const STAR_HALO_OPACITY = 0.35
+export const STAR_LABEL_LIFT = 24
 
 const MESSAGE_STAR_KINDS = new Set(['order', 'report', 'wake'])
 
@@ -54,6 +55,16 @@ export function starAdvance(age, delta, speed) {
   const rate = Number(speed)
   if (!Number.isFinite(step) || step <= 0 || !Number.isFinite(rate) || rate <= 0) return current
   return current + step * rate
+}
+
+export function touchLabelPoint(anchor, out = {}) {
+  const x = Number(anchor?.x)
+  const y = Number(anchor?.y)
+  const z = Number(anchor?.z)
+  out.x = Number.isFinite(x) ? x : 0
+  out.y = Number.isFinite(y) ? y + STAR_LABEL_LIFT : STAR_LABEL_LIFT
+  out.z = Number.isFinite(z) ? z : 0
+  return out
 }
 
 export function starSlot(stars) {
@@ -168,20 +179,30 @@ export function createStars(scene) {
     g: 1,
     b: 1,
     onLand: null,
+    agent: null,
+    call: null,
+    follow: null,
     point: { x: 0, y: 0, z: 0 },
   }))
   const tint = new THREE.Color()
   let sequence = 0
 
-  function landAt(star) {
+  function dropAt(star) {
     star.active = false
     star.age = 0
-    const onLand = star.onLand
     star.onLand = null
+    star.agent = null
+    star.call = null
+    star.follow = null
+  }
+
+  function landAt(star) {
+    const onLand = star.onLand
+    dropAt(star)
     if (onLand) onLand()
   }
 
-  function launch({ points, color = WHITE, onLand = null } = {}) {
+  function launch({ points, color = WHITE, onLand = null, agent = null, call = null, follow = null } = {}) {
     const list = Array.isArray(points) ? points : []
     if (list.length === 0) return false
     const index = starSlot(pool)
@@ -206,14 +227,55 @@ export function createStars(scene) {
     star.g = tint.g
     star.b = tint.b
     star.onLand = typeof onLand === 'function' ? onLand : null
+    star.agent = typeof agent === 'string' ? agent : null
+    star.call = typeof call === 'string' ? call : null
+    star.follow = typeof follow === 'function' ? follow : null
     star.active = true
     return true
+  }
+
+  function cancel(test) {
+    if (typeof test !== 'function') return 0
+    let dropped = 0
+    for (const star of pool) {
+      if (!star.active || !test(star)) continue
+      dropAt(star)
+      dropped += 1
+    }
+    return dropped
+  }
+
+  function land(test) {
+    if (typeof test !== 'function') return 0
+    let landed = 0
+    for (const star of pool) {
+      if (!star.active || !test(star)) continue
+      landAt(star)
+      landed += 1
+    }
+    return landed
   }
 
   function update(delta, speed = 1) {
     let count = 0
     for (const star of pool) {
       if (!star.active) continue
+      if (star.follow) {
+        const end = star.points[star.points.length - 1]
+        const next = star.follow(end)
+        if (next === null || next === false) {
+          dropAt(star)
+          continue
+        }
+        if (next && next !== end) {
+          end.x = next.x
+          end.y = next.y
+          end.z = next.z
+        }
+        polylineLengths(star.points, star.lengths)
+        const total = star.lengths[star.lengths.length - 1] ?? 0
+        star.duration = starDuration(total)
+      }
       star.age = starAdvance(star.age, delta, speed)
       const share = star.duration > 0 ? star.age / star.duration : 1
       if (share >= 1) {
@@ -241,11 +303,7 @@ export function createStars(scene) {
   }
 
   function reset() {
-    for (const star of pool) {
-      star.active = false
-      star.age = 0
-      star.onLand = null
-    }
+    for (const star of pool) dropAt(star)
     geometry.setDrawRange(0, 0)
     core.visible = false
     halo.visible = false
@@ -260,5 +318,5 @@ export function createStars(scene) {
     haloTexture.dispose()
   }
 
-  return { launch, update, reset, dispose, count: () => pool.filter((star) => star.active).length }
+  return { launch, update, cancel, land, reset, dispose }
 }

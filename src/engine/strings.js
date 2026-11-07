@@ -153,25 +153,6 @@ function fillStrandDirect(strand, from, to) {
   strand.mesh.geometry = nextGeo
 }
 
-function fillStrand(strand, points) {
-  const geometry = strand.mesh.geometry
-  const attr = geometry.getAttribute('position')
-  if (attr && attr.count === points.length) {
-    const array = attr.array
-    for (let i = 0; i < points.length; i += 1) {
-      const pt = points[i]
-      const base = i * 3
-      array[base] = pt.x
-      array[base + 1] = pt.y
-      array[base + 2] = pt.z
-    }
-    attr.needsUpdate = true
-    return
-  }
-  geometry.dispose()
-  strand.mesh.geometry = new THREE.BufferGeometry().setFromPoints(points)
-}
-
 export function createStrings(scene) {
   const from = new THREE.Vector3()
   const to = new THREE.Vector3()

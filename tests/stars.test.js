@@ -1,17 +1,66 @@
-import { describe, expect, it } from 'vitest'
+import * as THREE from 'three'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { AGENT_COLORS, agentColor } from '../src/engine/sprites.js'
 import {
+  STAR_LABEL_LIFT,
   STAR_MAX_SECONDS,
   STAR_MIN_SECONDS,
+  STAR_POOL,
   STAR_SPEED,
   agentStar,
+  createStars,
   starAdvance,
   starDuration,
   starEase,
   starPoint,
   starRoute,
   starSlot,
+  touchLabelPoint,
 } from '../src/engine/stars.js'
+
+const context2d = {
+  globalCompositeOperation: 'source-over',
+  fillStyle: '',
+  beginPath: () => {},
+  moveTo: () => {},
+  lineTo: () => {},
+  closePath: () => {},
+  fill: () => {},
+  arc: () => {},
+  save: () => {},
+  restore: () => {},
+  translate: () => {},
+  rotate: () => {},
+  fillRect: () => {},
+  createRadialGradient: () => ({ addColorStop: () => {} }),
+  createLinearGradient: () => ({ addColorStop: () => {} }),
+}
+
+let savedDocument
+
+beforeAll(() => {
+  savedDocument = globalThis.document
+  globalThis.document = {
+    createElement: (tag) => {
+      if (tag === 'canvas') return { width: 0, height: 0, getContext: () => context2d }
+      return { style: {} }
+    },
+  }
+})
+
+afterAll(() => {
+  globalThis.document = savedDocument
+})
+
+describe('the star label point', () => {
+  it('sits above the tab anchor it is given', () => {
+    const anchor = { x: 10, y: 20, z: 30 }
+    expect(touchLabelPoint(anchor)).toEqual({ x: 10, y: 20 + STAR_LABEL_LIFT, z: 30 })
+    const out = { x: 0, y: 0, z: 0 }
+    expect(touchLabelPoint(anchor, out)).toBe(out)
+    expect(out).toEqual({ x: 10, y: 20 + STAR_LABEL_LIFT, z: 30 })
+  })
+})
 
 describe('agentColor', () => {
   it('gives each roster place its own colour from the eight-colour palette', () => {
@@ -163,5 +212,85 @@ describe('the star between agents', () => {
     expect(agentStar({ type: 'agent.message', to: 'opencode', kind: 'order' }, ladder)).toBeNull()
     expect(agentStar({ type: 'agent.spawn', agent: 'claude' }, ladder)).toBeNull()
     expect(agentStar({ type: 'agent.spawn', child: 'claude~1' }, ladder)).toBeNull()
+  })
+})
+
+describe('the stars in flight', () => {
+  const path = [
+    { x: 0, y: 0, z: 0 },
+    { x: 100, y: 0, z: 0 },
+  ]
+
+  it('cancels only the matching stars and never calls their landing', () => {
+    const stars = createStars(new THREE.Scene())
+    const landed = []
+    stars.launch({ points: path, agent: 'a', call: 't1', onLand: () => landed.push('a') })
+    stars.launch({ points: path, agent: 'b', call: 't2', onLand: () => landed.push('b') })
+    expect(stars.cancel((star) => star.agent === 'a' && star.call === 't1')).toBe(1)
+    expect(landed).toEqual([])
+    expect(stars.cancel((star) => star.agent === 'a')).toBe(0)
+    expect(stars.land((star) => star.agent === 'b')).toBe(1)
+    expect(landed).toEqual(['b'])
+    stars.dispose()
+  })
+
+  it('lands the matching stars at once', () => {
+    const stars = createStars(new THREE.Scene())
+    const landed = []
+    stars.launch({ points: path, agent: 'a', onLand: () => landed.push('a') })
+    stars.launch({ points: path, agent: 'b', onLand: () => landed.push('b') })
+    expect(stars.land((star) => star.agent === 'a')).toBe(1)
+    expect(landed).toEqual(['a'])
+    expect(stars.land(() => true)).toBe(1)
+    expect(landed).toEqual(['a', 'b'])
+    stars.dispose()
+  })
+
+  it('lands the oldest star through its landing when the pool is full', () => {
+    const stars = createStars(new THREE.Scene())
+    const landed = []
+    for (let index = 0; index < STAR_POOL; index += 1) {
+      stars.launch({ points: path, onLand: () => landed.push(index) })
+    }
+    stars.launch({ points: path, onLand: () => landed.push('new') })
+    expect(landed).toEqual([0])
+    stars.dispose()
+  })
+
+  it('moves its last point with the card and keeps its length', () => {
+    const stars = createStars(new THREE.Scene())
+    const landed = []
+    let seen = null
+    stars.launch({
+      points: path,
+      follow: (end) => {
+        seen = end
+        end.x = 1800
+        return end
+      },
+      onLand: () => landed.push('landed'),
+    })
+    stars.update(0.3, 1)
+    expect(seen.x).toBe(1800)
+    expect(landed).toEqual([])
+    stars.update(0.7, 1)
+    expect(landed).toEqual(['landed'])
+    stars.dispose()
+  })
+
+  it('drops a star whose card has gone and keeps its landing quiet', () => {
+    const stars = createStars(new THREE.Scene())
+    const landed = []
+    stars.launch({ points: path, follow: () => null, onLand: () => landed.push('landed') })
+    stars.update(0.1, 1)
+    expect(landed).toEqual([])
+    expect(stars.land(() => true)).toBe(0)
+    stars.dispose()
+  })
+
+  it('exposes no unused count method', () => {
+    const stars = createStars(new THREE.Scene())
+    expect(stars.count).toBeUndefined()
+    stars.dispose()
   })
 })

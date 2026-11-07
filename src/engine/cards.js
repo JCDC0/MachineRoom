@@ -935,7 +935,7 @@ export function createCards(cssScene, options = {}) {
 
   function anchor(path, out = new THREE.Vector3()) {
     const card = nearestCard(path)
-    if (!card) return out.copy(rootHome)
+    if (!card) return null
     const width = cardBaseWidth(card.path, card.rootName) + CARD_FACE_BORDER
     const height = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
     const offset = tabAnchorOffset(width, height, card.scale)
@@ -960,13 +960,6 @@ export function createCards(cssScene, options = {}) {
     const card = nearestCard(dir)
     const spot = card ? homes.get(card.path) : null
     return spot && spot.x < 0 ? 1 : -1
-  }
-
-  function topPoint(dir, out) {
-    const card = nearestCard(dir)
-    out.copy(center(dir))
-    if (card?.view) out.addScaledVector(up, (cardHeight(cardRows(card.view)) / 2) * card.scale + 40)
-    return out
   }
 
   function slotPosition(dir, file, out) {
@@ -1440,7 +1433,6 @@ export function createCards(cssScene, options = {}) {
     bottom,
     halfWidth,
     sideOf,
-    topPoint,
     slotPosition,
     edgePoint,
     flashFile: (dir, file, tone) => {
