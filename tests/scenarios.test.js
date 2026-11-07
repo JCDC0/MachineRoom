@@ -262,6 +262,17 @@ describe('scenario I: the sub orchestrators work', () => {
     ])
   })
 
+  it('holds the ten messages by kind and the one spawn', () => {
+    const messages = activities.filter((activity) => activity.type === 'agent.message')
+    const counts = {}
+    for (const message of messages) counts[message.kind] = (counts[message.kind] ?? 0) + 1
+    expect(messages).toHaveLength(10)
+    expect(counts).toEqual({ order: 2, report: 2, dispatch: 2, wake: 4 })
+    const spawns = activities.filter((activity) => activity.type === 'agent.spawn')
+    expect(spawns).toHaveLength(1)
+    expect(spawns[0]).toMatchObject({ agent: 'claude', child: 'claude~1' })
+  })
+
   it('produces the same replay digest on two loads', () => {
     const source = replaySources().find((entry) => entry.name === 'fixtures/scenario-i')
     expect(source).toBeTruthy()
