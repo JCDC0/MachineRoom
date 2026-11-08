@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- agy3 on Argon reviews each merged batch as a sub-orchestrator; its first review, AUDIT-2026-11-REVIEW-5.md, found nine faults in U156, U157 and T37 (task Q41).
 - A lane can be hidden in one project with /api/lanes/KEY/hide and shown again, leaving the room's lists there and staying in other projects, and up to 20 saved teams (/api/teams) hold a project's active lanes, labels and ladder to apply to another project or copy from one; a ladder the bridge refuses comes back as ladderError (task S45).
 - The music player lists its tracks, then a time bar that shows the elapsed and total time and seeks the track, then its buttons, then a Volume row with the slider, its percent and a mute button saved as sound.musicMuted (task U161).
 - A Claude Code orchestrator's context is its last top-level model call, not the result line's sum over the turn, so a 13-call turn reads 67,491 tokens instead of 725,456 and autocompact no longer fires early (task S44).

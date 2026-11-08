@@ -42,6 +42,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-REVIEW-3.md`: history. The review of the merges since the second review, with findings ranked by owner impact.
 - `AUDIT-2026-11-REVIEW-4.md`: history. The review of the merges since the third review, with findings ranked by owner impact.
 - `AUDIT-2026-11-STARS.md`: history. The November 2026 review of the stars, the agent colours and the replay from U152 and U153.
+- `AUDIT-2026-11-REVIEW-5.md`: history. The co-orchestrator's review of U156, U157 and T37, with nine findings and the briefs T38 and U163 that fix them.
 - `AUDIT-2026-11-RUNNER.md`: history. The November 2026 hunt of the runner, worktrees, reviews and merges.
 - `AUDIT-2026-11-SUMMARY.md`: plan. The five November 2026 audits ranked and checked, with the features, the design changes that need the owner and the proposed briefs.
 - `AUDIT-2026-11-UI.md`: history. The November 2026 audit of the page.

@@ -1718,3 +1718,30 @@ Review these merges: `git diff a8d88f79^1 a8d88f79` (U156, the fixes of `docs/ag
 Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-5.md`: a table of at most 15 findings, most severe first, with number, severity, `file:line`, the case and the smallest fix; then a line per merge saying sound or not; then at most three proposed briefs in the style of TASKS.md, each with its Files: list, for the findings worth fixing. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 35, and say what you did not reach.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-5.md.
+
+## The fixes from the fifth review (2026-11-08)
+
+agy3's Q41 review (`docs/agents/AUDIT-2026-11-REVIEW-5.md`) found nine faults in U156, U157 and T37. The orchestrator checked finding 1 against the code. These two briefs fix them.
+
+**T38. Keep the review lanes on another project when git fails at the bridge start (AGY).** Read no part of TASKS.md beyond this brief and findings 1 and 8 of `docs/agents/AUDIT-2026-11-REVIEW-5.md`. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` or `src/App.jsx`.
+
+1. `codeCheckout()` in `server/reviews.js` caches `mainCheckoutOf(REPO_ROOT)` even when it answers `''`, so one failed read breaks every later `createReviewsApi` in the process. Cache only a non-empty answer.
+2. `otherProject` needs both git reads. When either is empty, compare `roomCheckout || resolvedRoot` with `codeCheckoutHere || REPO_ROOT` by path (neither inside the other), so a project with no `docs/agents/lanes.json` of its own still reads the room's lanes and `GET /api/control/reviews` does not answer 404.
+3. `pathKey` resolves an existing path with `realpathSync.native` before falling back to `resolve`, so `inside` and `inGitWorkTree` agree across a symbolic link or a junction.
+4. A test in `tests/project-reviews.test.js` removes the room's `lanes.json` from the project, makes the git read fail at the start (inject it, do not depend on load), and expects the list with `opencode` against `trunk`; and one for the cache in step 1.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/reviews.js, tests/project-reviews.test.js, tests/.
+
+**U163. Stars, flashes and labels at the edges: leaving cards, folders, run ends, reduced motion and the replay's end (OpenCode).** Read no part of TASKS.md beyond this brief and findings 2 to 7 and 9 of `docs/agents/AUDIT-2026-11-REVIEW-5.md`, which name the lines. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Do not edit any file under `docs/`.
+
+1. A leaving card (finding 2): when a touch star's card is leaving, its row flash and its label land on that card, not on an ancestor that `nearestCard` finds by skipping it.
+2. Folder touches (finding 3): the owner wants a touch to flash only a row. A white touch on a folder flashes that folder's row in its parent card when the parent lists it, and flashes nothing when the folder is drawn as its own card (its label still shows). A red failure on a folder also flashes the nearest drawn card red with its `FAILED NAME` band, as a failed file does.
+3. Run ends and subagents (findings 4 and 7): on `run.end` and `agent.end`, find the agents that activity finishes, as `src/model/state.js` does, including working children a parent's end finishes and not a parent whose `runId` does not match; cancel their stars and drop their queued touches without a white flash or a `read`/`write` label, since the run's end colours speak for it. A star records both ends (`agent` and `to`), and removing an agent cancels the stars to or from it and drops its queued spawns. A `tool.start` from a child whose view is not built yet still queues its touch.
+4. Reduced motion (finding 6): queue touches under reduced motion too, and show them at once in `flushTouchStars` after `cards.update`, so the label lands on the card that frame draws.
+5. The replay's end (findings 5 and 9): raise `tailMs` in `src/model/player.js` to 3000 so the last flash and label finish before the replay stops; and `room.setSpeed`, `cards.update` and `labels.update` take a speed only when it is a finite number at or above 0, else 1.
+
+Add a test for each step. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/engine/room.js, src/engine/cards.js, src/engine/stars.js, src/engine/labels.js, src/model/player.js, tests/.
