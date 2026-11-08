@@ -53,6 +53,7 @@ export const PACK_SCRIPTS = new Set([
   'scripts/lane-lock.mjs',
   'scripts/mcp-bridge.mjs',
   'scripts/mr-agent.mjs',
+  'scripts/mr-approve.mjs',
   'scripts/recording-files.mjs',
   'scripts/review-lane.mjs',
   'scripts/run-lane.mjs',
