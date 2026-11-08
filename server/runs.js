@@ -10,7 +10,7 @@ import { outcomeTable } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
 import { readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
-import { activeLanesFileFor, readActiveLanesChoice } from './active-lanes.js'
+import { activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 
 export const RECENT_LIMIT = 20
 export const LAST_LINE_LIMIT = 5
@@ -576,6 +576,17 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     }
 
     const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+    const isHidden = typeof isLaneHidden === 'function'
+      ? isLaneHidden(lane)
+      : activeHelper && typeof activeHelper.isLaneHidden === 'function'
+        ? activeHelper.isLaneHidden(lane)
+        : runsFolder && projectRoot
+          ? readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)).includes(lane)
+          : false
+    if (isHidden) {
+      sendJson(req, res, 400, { error: hiddenLaneProblem(lane) })
+      return true
+    }
     const chosen = activeHelper && typeof activeHelper.isChosen === 'function'
       ? activeHelper.isChosen()
       : runsFolder

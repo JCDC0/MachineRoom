@@ -14,7 +14,7 @@ import {
   readAllLanes,
   saveAgentsConfig,
 } from './agents-config.js'
-import { activeLanesFileFor, eligibleLanes, projectHash, readActiveLanesChoice } from './active-lanes.js'
+import { activeLanesFileFor, eligibleLanes, projectHash, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 import { readEndpoints } from './endpoints.js'
 import { MODELS } from './models.js'
 import { ORCHESTRATOR_KEY } from './orchestrator.js'
@@ -229,6 +229,22 @@ export function buildFamilyNodes({
   const subNodes = []
   const subByLane = new Map()
 
+  let isHiddenLane = null
+  if (activeLanes) {
+    const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+    if (activeHelper && typeof activeHelper.isLaneHidden === 'function') {
+      isHiddenLane = (key) => activeHelper.isLaneHidden(key)
+    }
+  }
+  if (!isHiddenLane && projectRoot && runsFolder) {
+    const hiddenFile = projectLanesFileFor(projectRoot, runsFolder)
+    const hiddenSet = new Set(readHiddenLanes(hiddenFile))
+    isHiddenLane = (key) => hiddenSet.has(key)
+  }
+  if (!isHiddenLane) {
+    isHiddenLane = () => false
+  }
+
   for (const sub of ladder?.subs ?? []) {
     const subInst = orchestrators?.find?.(sub.id) ?? null
     const subAnswer = subInst?.answer?.() ?? null
@@ -250,7 +266,9 @@ export function buildFamilyNodes({
     subNodes.push(subNode)
     mainNode.children.push(sub.id)
     for (const laneKey of sub.lanes ?? []) {
-      subByLane.set(laneKey, subNode)
+      if (!isHiddenLane(laneKey)) {
+        subByLane.set(laneKey, subNode)
+      }
     }
   }
 
@@ -272,6 +290,7 @@ export function buildFamilyNodes({
 
   const laneNodes = []
   for (const lane of eligible) {
+    if (isHiddenLane(lane.key)) continue
     const active = Boolean(activeChecker(lane.key))
     const parentSub = subByLane.get(lane.key)
     const parentId = parentSub ? parentSub.id : ORCHESTRATOR_KEY
