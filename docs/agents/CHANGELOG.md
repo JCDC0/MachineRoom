@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The main orchestrator is yellow and every other agent keeps one colour counted without it, and a working agent shows that colour on its status ring, hub slot, chip, callout, stars and camera brackets (task U159).
 - At 900 pixels and wider the menu, lens and transport fill the first screen and the page scrolls to the lower half, one window high less the menu, so the conversation has its own area again; the Height rail runs from 30 percent to the full first screen (task U158).
 - The review list on another project keeps its own lanes when a git read at the bridge start fails, so it no longer falls back to the room's lanes (task T37).
 - The README shows the idle view, the lens in the full window, in docs/images/full-lens.png.

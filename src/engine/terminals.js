@@ -214,8 +214,10 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
   }
 
   function setAgentColor(term, color) {
+    if (color === term.agentColorNumber) return false
     const value = cssColor(color)
     if (!value || term.agentColor === value) return false
+    term.agentColorNumber = color
     term.agentColor = value
     return paintAgentColor(term.element, value)
   }
