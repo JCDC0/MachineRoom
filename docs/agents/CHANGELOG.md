@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Applying or copying a team replaces the ladder whole, keeping none of the old sub's hidden lanes, and the music clock shows a playing track's time before its length is known (task U166).
 - agy3 reviewed S46, U164 and U165 in AUDIT-2026-11-REVIEW-7.md; two of its five findings held and became U166 (task Q43).
 - A ladder save keeps each sub's lanes that are hidden in this project, a sub's prompt leaves hidden lanes out, applying a team or copying a project with no lane in this project answers 409 and writes nothing, and a later result line with no iterations keeps the orchestrator's last context count (task S46).
 - A failed call from a child whose view is not built yet drops its queued touch with no white star, a run end or child end also drops its queued spawns, open calls and web calls, a touch inside a leaving ancestor card labels and marks that card, and the Teams panel and the first-run card show a ladder the bridge refused after Applied NAME. and read the teams again on a family notice (task U164).
