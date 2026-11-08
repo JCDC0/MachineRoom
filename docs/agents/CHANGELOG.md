@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Each orchestrator has a permission mode, saved in its chat file and set with POST /api/orchestrator/mode: Plan, Edits, Auto and Bypass for Claude Code, Plan, Edits and Auto for OpenCode, Plan, Edits, Auto and Bypass for AGY, and all of them for the native harness, which narrows its tools or refuses risky commands; a new chat starts in Auto, an existing one keeps today's flags, and lane runs are unchanged (task S47).
 - The orchestrator chat has a Mode picker beside Model and Effort with a confirm card for Bypass, the conversation takes a frame by mode (dashed white Plan, white Ask, yellow Edits, glowing yellow Auto, glowing red Bypass with faint bands) with the mode in the breadcrumb, and a waiting approval shows as a card with Allow and Deny while the transport reads waiting for you (task U167).
 - Applying or copying a team replaces the ladder whole, keeping none of the old sub's hidden lanes, and the music clock shows a playing track's time before its length is known (task U166).
 - agy3 reviewed S46, U164 and U165 in AUDIT-2026-11-REVIEW-7.md; two of its five findings held and became U166 (task Q43).
