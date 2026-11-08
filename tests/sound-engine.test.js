@@ -165,6 +165,7 @@ describe('the sound engine with a fake analyser', () => {
     const results = drive(loFi)
     expect(results.every((result) => result.bands && result.bands.length === BAND_COUNT)).toBe(true)
     expect(results.some((result) => Math.max(...result.bands) > 0.1)).toBe(true)
+    expect(results.filter((result) => result.beat > 0).length).toBeGreaterThan(2)
   })
 })
 

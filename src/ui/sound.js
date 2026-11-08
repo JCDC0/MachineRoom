@@ -134,7 +134,10 @@ export function createBandBeatDetector({ rest = GROUP_REST_MS, window = BEAT_WIN
       if (!sharpOnset(history, { steps, share })) continue
       lastAt[name] = at
       fired[name] = true
-      const value = Math.min(1, Math.max(0.35, groups[name] * 2))
+      const before = history.slice(0, -1)
+      const average = before.reduce((sum, level) => sum + level, 0) / Math.max(1, before.length)
+      const rise = Math.max(0, groups[name] - average)
+      const value = Math.min(1, Math.max(0.35, rise * 2))
       if (value > strength) {
         strength = value
         group = name
@@ -305,7 +308,8 @@ export function createDanceTracker({ window = LOCK_WINDOW_MS, swaySpan = SWAY_MS
     onsets = recentOnsets(onsets, stamp, window)
     lock = beatLock(onsets, { at: stamp, window })
     sway = swayStep(sway, lock.locked ? 0 : swayTarget(bands), delta, swaySpan)
-    const beat = result.strength > 0 && lock.locked && onBeatGrid(stamp, lock) ? result.strength : 0
+    const onGrid = onBeatGrid(stamp, lock)
+    const beat = result.strength > 0 && (!lock.locked || onGrid) ? result.strength : 0
     return { beat, sway, locked: lock.locked, lock: { ...lock } }
   }
   return { push, reset, onsets: () => [...onsets], lock: () => ({ ...lock }), sway: () => sway }
@@ -418,6 +422,7 @@ const engine = {
   bandSums: new Float32Array(BAND_COUNT),
   bandCounts: new Uint16Array(BAND_COUNT),
   lastBandsAt: -Infinity,
+  lastLevelAt: 0,
   audio: null,
   mediaSource: null,
   limiter: createRateLimit(),
