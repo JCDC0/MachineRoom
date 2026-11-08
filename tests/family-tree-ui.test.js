@@ -622,10 +622,14 @@ describe('FamilyTree rows', () => {
 
 describe('FamilyTeams', () => {
   function makeTeamClient(overrides = {}) {
-    const calls = { applyTeam: [], saveTeam: [], deleteTeam: [], copyProjectTeam: [] }
+    const calls = { applyTeam: [], saveTeam: [], deleteTeam: [], copyProjectTeam: [], subscribe: [] }
     const client = {
       teams: async () => ({ teams: [{ name: 'Weekend', lanes: ['opencode'] }] }),
       projects: async () => ({ current: null, recent: [{ path: '/work/other', name: 'other' }] }),
+      subscribe: (listener) => {
+        calls.subscribe.push(listener)
+        return () => {}
+      },
       applyTeam: async (payload) => {
         calls.applyTeam.push(payload)
         return { ok: true, dropped: { lanes: ['gone', 'old'] }, ladderError: 'Two sub orchestrators cannot lead a lane.' }
@@ -669,6 +673,7 @@ describe('FamilyTeams', () => {
       await click(root, buttonWithText(card, 'Apply'))
 
       expect(calls.applyTeam).toEqual([{ name: 'Weekend', confirmed: true }])
+      expect(container.textContent).toContain('Applied Weekend.')
       expect(container.textContent).toContain('Dropped gone, old.')
       expect(container.textContent).toContain('Two sub orchestrators cannot lead a lane.')
     })
@@ -714,6 +719,34 @@ describe('FamilyTeams', () => {
       expect(card.textContent).toContain('Copy the team of other into machine-room?')
       await click(root, buttonWithText(card, 'Copy'))
       expect(calls.copyProjectTeam).toEqual([{ path: '/work/other', confirmed: true }])
+      expect(container.textContent).toContain('Applied other.')
+    })
+  })
+
+  it('reads the teams again on a family notice', async () => {
+    let rows = [{ name: 'Weekend', lanes: ['opencode'] }]
+    let listener = null
+    const client = {
+      teams: async () => ({ teams: rows }),
+      projects: async () => ({ current: null, recent: [] }),
+      subscribe: (next) => {
+        listener = next
+        return () => {}
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await mountTeams(root, client)
+      const select = container.querySelector('select[aria-label="Saved team"]')
+      expect(select.querySelectorAll('option')).toHaveLength(1)
+      rows = [{ name: 'Weekend', lanes: ['opencode'] }, { name: 'Night', lanes: ['opencode'] }]
+      await act(async () => {
+        listener({ topic: 'family' })
+        await Promise.resolve()
+      })
+      await act(async () => {})
+      const options = container.querySelector('select[aria-label="Saved team"]').querySelectorAll('option')
+      expect(options).toHaveLength(2)
+      expect(options[1].textContent).toBe('Night')
     })
   })
 

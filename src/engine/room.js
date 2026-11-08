@@ -781,7 +781,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function touchLabel(dir, out) {
     out.copy(cards.center(dir))
-    cards.anchor(dir, out, cards.cards.get(dir)?.leaving === true)
+    cards.anchor(dir, out, true)
     return touchLabelPoint(out, out)
   }
 
@@ -917,6 +917,18 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       if (finished.size > 0) {
         stars.cancel((star) => finished.has(star.agent) || finished.has(star.to))
         dropPendingTouches((item) => finished.has(item.agent), false)
+        for (let index = pendingSpawns.length - 1; index >= 0; index -= 1) {
+          const spawn = pendingSpawns[index]
+          if (finished.has(spawn.agent) || finished.has(spawn.child)) pendingSpawns.splice(index, 1)
+        }
+        for (const key of finished) {
+          openCalls.delete(key)
+          agentSet.webEnd(key)
+          for (const [storedKey, agentKey] of webCalls) {
+            if (agentKey !== key) continue
+            webCalls.delete(storedKey)
+          }
+        }
       }
       if (activity.type === 'run.end') {
         hub.pulse(activity.ok ? GREEN : RED, 1)
@@ -939,12 +951,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       return
     }
 
-    if (!view) return
-
-    if (activity.type === 'run.start') {
-      hub.pulse(WHITE, 1)
-      if (!still()) launchAgentStar(activity)
-    } else if (activity.type === 'tool.end' && !activity.ok) {
+    if (activity.type === 'tool.end' && !activity.ok) {
       const call = callOf(activity)
       if (call !== null) {
         stars.cancel((star) => star.agent === activity.agent && star.call === call)
@@ -961,6 +968,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         }
       })
       hub.pulse(RED, 0.5)
+      return
+    }
+
+    if (!view) return
+
+    if (activity.type === 'run.start') {
+      hub.pulse(WHITE, 1)
+      if (!still()) launchAgentStar(activity)
     } else if (activity.type === 'error') {
       hub.pulse(RED, 0.6)
     } else if (activity.type === 'agent.spawn' && typeof activity.child === 'string') {

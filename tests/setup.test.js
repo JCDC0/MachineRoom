@@ -265,6 +265,49 @@ describe('SetupCard', () => {
     })
   })
 
+  it('shows the ladder sentence after Applied when a team apply is partly refused', async () => {
+    let closed = 0
+    const client = {
+      lanes: async () => ANSWER,
+      teams: async () => ({ teams: [{ name: 'Weekend' }] }),
+      applyTeam: async () => ({ ok: true, ladderError: 'The sub orchestrators could not be saved.' }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(SetupCard, { client, onClose: () => { closed += 1 } }))
+      })
+      await act(async () => {})
+      await act(async () => {
+        buttonWithText(container, 'Weekend').click()
+      })
+      expect(container.textContent).toContain('Applied Weekend. The sub orchestrators could not be saved.')
+      expect(container.textContent).toContain(SETUP_QUESTION)
+      expect(closed).toBe(0)
+    })
+  })
+
+  it('shows the ladder sentence after Applied when a copied team is partly refused', async () => {
+    let closed = 0
+    const client = {
+      lanes: async () => ANSWER,
+      projects: async () => ({ recent: [{ path: '/work/other', name: 'other' }] }),
+      copyProjectTeam: async () => ({ ok: true, ladderError: 'Two sub orchestrators cannot lead a lane.' }),
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(SetupCard, { client, onClose: () => { closed += 1 } }))
+      })
+      await act(async () => {})
+      await act(async () => {
+        buttonWithText(container, 'Copy from other').click()
+      })
+      expect(container.textContent).toContain('Applied other. Two sub orchestrators cannot lead a lane.')
+      expect(container.textContent).toContain(SETUP_QUESTION)
+      expect(closed).toBe(0)
+    })
+  })
+
+
   it('copies another project team from the first-run card', async () => {
     const calls = []
     const client = {
