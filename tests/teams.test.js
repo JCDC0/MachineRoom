@@ -67,6 +67,7 @@ async function startTestBridge({
   projectRoot = tempDir('mr-proj-'),
   runsFolder = tempDir('mr-runs-'),
   lanes = SAMPLE_LANES,
+  ladder = null,
 } = {}) {
   mkdirSync(runsFolder, { recursive: true })
   mkdirSync(join(projectRoot, 'docs', 'agents'), { recursive: true })
@@ -76,6 +77,12 @@ async function startTestBridge({
     join(projectRoot, 'docs', 'agents', 'TASKS.md'),
     '## Open work\n\n**T1. First task (OpenCode).** Test.\n'
   )
+  if (ladder) {
+    writeFileSync(
+      chatFileFor(projectRoot, runsFolder, ORCHESTRATOR_KEY),
+      `${JSON.stringify({ project: projectRoot, sessionId: null, state: 'idle', messages: [], pending: [], ladder })}\n`
+    )
+  }
 
   const bridge = createBridge({
     port: 0,
@@ -314,6 +321,56 @@ describe('teams routes and validation', () => {
     expect(deleteRes.status).toBe(200)
     expect(deleteRes.body).toEqual({ ok: true, deleted: 'Pair' })
     expect(readTeams(file)).toEqual([])
+  })
+
+  it('applies a team over a saved sub with the same id and keeps only the team lanes', async () => {
+    const ladder = {
+      subs: [
+        {
+          id: 'frontend',
+          name: 'Frontend',
+          harness: 'claude',
+          model: 'sonnet',
+          lanes: ['opencode', 'opencode2'],
+          scope: ['src/**'],
+          restricted: true,
+          setBy: 'owner',
+        },
+      ],
+    }
+    const { url, projectRoot, runsFolder, bridge } = await startTestBridge({ ladder })
+    writeHiddenLanes(projectLanesFileFor(projectRoot, runsFolder), ['opencode2'])
+
+    saveTeams(teamsFileFor(runsFolder), [
+      {
+        name: 'Solo',
+        lanes: ['opencode'],
+        labels: {},
+        ladder: {
+          subs: [
+            {
+              id: 'frontend',
+              name: 'Frontend',
+              harness: 'claude',
+              model: 'sonnet',
+              lanes: ['opencode'],
+              scope: ['src/**'],
+              restricted: true,
+            },
+          ],
+        },
+        savedAt: new Date().toISOString(),
+      },
+    ])
+
+    const applyRes = await getJson(`${url}/api/teams/Solo/apply`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(applyRes.status).toBe(200)
+    expect(applyRes.body.applied.ladder.subs[0].lanes).toEqual(['opencode'])
+    expect(bridge.orchestrators().getLadder().subs[0].lanes).toEqual(['opencode'])
   })
 
   it('copies team from another known project in projects.json', async () => {
