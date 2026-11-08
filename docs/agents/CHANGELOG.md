@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- agy3 reviewed U158 to U163, S44, S45 and T38 in AUDIT-2026-11-REVIEW-6.md; the orchestrator confirmed eight of its twelve findings and briefed S46, U164 and U165 (task Q42).
 - The review list on another project reads the room's lanes when git fails at the bridge start and the project has no lanes file, a failed checkout read is not cached for the rest of the process, and paths compare through realpath (task T38).
 - At 900 pixels and wider the menu row is black, so the transport scrolls under it instead of showing through its buttons.
 - The Agents tab shows this project's lanes with an N more lanes row, its trash hides a lane in this project only, a Teams panel applies, saves and copies a team, Settings has a Lanes section that shows a hidden lane again or deletes one everywhere, and the first visit offers the saved teams beside Start fresh (task U162).

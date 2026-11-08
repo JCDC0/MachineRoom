@@ -1758,3 +1758,39 @@ Review these merges in this order, most risk first, and stop where the time runs
 Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-6.md`: a table of at most 15 findings, most severe first, with number, severity, `file:line`, the case and the smallest fix; then a line per merge saying sound, not sound or not reached; then at most three proposed briefs in the style of TASKS.md, each with its Files: list, for the findings worth fixing. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 40, and say what you did not reach.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-6.md.
+
+## The fixes from the sixth review (2026-11-08)
+
+agy3's Q42 review (`docs/agents/AUDIT-2026-11-REVIEW-6.md`) found twelve faults; the orchestrator confirmed eight, listed in its corrections. These three briefs fix them.
+
+**S46. Keep hidden lanes in the ladder, out of a sub's prompt, and refuse an empty team (AGY).** Read no part of TASKS.md beyond this brief and findings 2, 3, 4 and 12 and the orchestrator's corrections in `docs/agents/AUDIT-2026-11-REVIEW-6.md`. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` or `src/App.jsx`.
+
+1. `ladderChange` in `server/orchestrators.js`: for each sub in the new ladder whose id is in the saved ladder, add back the saved lanes that are hidden in this project and that no other sub in the new ladder claims, before `readLadder` checks it. A sub the page sends with no lanes keeps its hidden saved lanes and saves. A sub the new ladder removes drops its hidden lanes with it.
+2. The sub prompt (`createSub` and `subPrompt` in `server/orchestrators.js`) leaves hidden lanes out of the sub's lanes and the siblings' lanes.
+3. `POST /api/teams/NAME/apply` and `POST /api/teams/copy` in `server/teams.js`: when no lane of the team or of the source project is a lane of this project, answer 409 with one sentence, `None of the lanes in NAME are in this project.` or `NAME has no active lanes to copy.`, and write no file.
+4. `contextTokensFromLog` in `server/orchestrator.js`: a later `result` line with no `iterations` keeps the last iterations count it had, and the count reads the last entry of `usage.iterations` that carries tokens.
+
+Add a test for each step: a hidden lane that survives a ladder save from the filtered list and is back in its sub once shown; a sub whose lanes are all hidden that still saves; a prompt with no hidden lane; an empty apply and an empty copy that answer 409 and leave the files as they were; and a log whose last `result` line has no `iterations`. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/orchestrators.js, server/teams.js, server/orchestrator.js, tests/.
+
+**U164. Finish a child's failed call, a run end's queued spawns, labels on a leaving ancestor, and show a refused team ladder (OpenCode).** Read no part of TASKS.md beyond this brief and findings 6, 7, 8 and 10 and the orchestrator's corrections in `docs/agents/AUDIT-2026-11-REVIEW-6.md`, which name the lines. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 50. Do not edit any file under `docs/`.
+
+1. `src/engine/room.js` (finding 6): a failed `tool.end` from an agent whose view is not built yet drops its queued touch and gets no white star, flash or `read`/`write` label, as it does for an agent with a view.
+2. `src/engine/room.js` (finding 7): `run.end` and `agent.end` also drop the queued spawns whose parent or child that activity finishes.
+3. `touchLabel` in `src/engine/room.js` and `markRowPath` in `src/engine/cards.js` (finding 8): a touch inside a leaving ancestor card anchors its label on that card and marks its row, using the same leaving-card lookup `nearestCard(path, true)` U163 added.
+4. `FamilyTeams` in `src/ui/FamilyTree.jsx` and `src/ui/SetupCard.jsx` (finding 10): an apply or copy answer with `ladderError` shows that sentence after `Applied NAME.`, and `FamilyTeams` reads the teams again on a `family` notice.
+
+Add a test for each step. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/engine/room.js, src/engine/cards.js, src/ui/FamilyTree.jsx, src/ui/SetupCard.jsx, tests/.
+
+**U165. Keep the music time bar on the track it names (OpenCode).** Read no part of TASKS.md beyond this brief and finding 9 and the orchestrator's corrections in `docs/agents/AUDIT-2026-11-REVIEW-6.md`. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 35. Do not edit any file under `docs/`.
+
+1. The elapsed time in `src/ui/MusicPlayer.jsx` shows the same clamped position as the slider (`shownPosition`).
+2. Choosing another playlist while the music is paused resets the time bar to the new current track: 0 elapsed and its length once known, never the old track's time; `musicPosition()` and `musicDuration()` answer 0 while the loaded audio is not the current track (`src/ui/musicQueue.js`, `src/ui/sound.js`).
+3. `seekMusic` does nothing and answers 0 while the length is not known.
+
+Add a test for each step. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/ui/MusicPlayer.jsx, src/ui/musicQueue.js, src/ui/sound.js, tests/.

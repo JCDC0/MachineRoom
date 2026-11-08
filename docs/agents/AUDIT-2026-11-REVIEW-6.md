@@ -57,3 +57,20 @@ Three small fixes in the music player:
 2. In `src/ui/MusicPlayer.jsx:187`, render `formatTrackTime(shownPosition)` for the elapsed time readout so it matches the clamped slider position.
 3. In `src/ui/musicQueue.js:376-386`, return `0` from `musicPosition()` and `musicDuration()` (and ignore `seekMusic`) when `sound.musicTrack()` does not match the current track URL, so switching playlists while paused does not display or seek the previous track.
 Files: `src/ui/sound.js`, `src/ui/musicQueue.js`, `src/ui/MusicPlayer.jsx`, `tests/sound.test.js`, `tests/music-player-ui.test.js`.
+
+## The orchestrator's corrections
+
+The orchestrator read each finding back against the code on 2026-11-08.
+
+- Finding 1 is mostly wrong. `LanesSettings.jsx` has no active lane list or switch: it lists every lane on purpose and tags a hidden one `hidden here`. `GET /api/lanes` marks each hidden row with `hidden: true`, and both `teamLanePool` and `setupLanes` leave those rows out. Only `max` still counts hidden lanes, which nothing harmful reads. No brief.
+- Finding 2 holds. `ladderChange` saves only the lanes the page sends, and the page reads them from the filtered `GET /api/orchestrators`, so any ladder edit drops a sub's hidden lanes, and a sub whose lanes are all hidden fails to save. Brief S46.
+- Finding 3 holds for a team or a copy with no lane in this project: it saves zero active lanes and hides every lane. The proposed `hasActiveLanes` on recent projects is not needed; the bridge refusing an empty apply or copy is enough. Brief S46.
+- Finding 4 holds. Brief S46.
+- Finding 5 is older than S45. `/api/control/agents` has listed every lane, inactive ones included, since the lane source began, and a hidden lane cannot start a run (`server/runs.js` refuses it). No brief.
+- Findings 6, 7 and 8 hold, each for activities that land in the same frame. Brief U164.
+- Finding 9: the seek with no duration cannot happen from the page, because the time bar is disabled while the duration is 0. The elapsed label reading `position` and a paused playlist switch keeping the old track's time hold. Brief U165.
+- Finding 10: the bridge already sends `family` on team save and delete; the page not showing `ladderError` and `FamilyTeams` not reading again on `family` hold. Brief U164.
+- Finding 11 is wrong. `handleRequest` is async and its rejection is caught in `server/index.js`, so a malformed `%` answers 500, not a hanging request. No brief.
+- Finding 12 holds but only matters when a turn has no top-level assistant line. Brief S46.
+
+S44, T38, U159 and U160 are sound. S45, U162, U163 and U161 need the three briefs below, which take the ids S46, U164 and U165 in place of the ones proposed above.
