@@ -146,7 +146,7 @@ describe('the music player', () => {
     globalThis.fetch = listAnswer(['alpha.mp3'])
     await withDom(async ({ container, dom, root }) => {
       const player = installAudio(dom)
-      player.duration = 125
+      player.duration = NaN
       await act(async () => {
         root.render(createElement(MusicPlayer))
       })
@@ -158,6 +158,7 @@ describe('the music player', () => {
       expect(seek.getAttribute('disabled')).not.toBeNull()
       expect(times()[0]).toBe('0:00')
 
+      player.duration = 125
       await act(async () => {
         control(container, 'Play').click()
       })

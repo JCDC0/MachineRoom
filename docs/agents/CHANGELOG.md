@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The music player lists its tracks, then a time bar that shows the elapsed and total time and seeks the track, then its buttons, then a Volume row with the slider, its percent and a mute button saved as sound.musicMuted (task U161).
 - A Claude Code orchestrator's context is its last top-level model call, not the result line's sum over the turn, so a 13-call turn reads 67,491 tokens instead of 725,456 and autocompact no longer fires early (task S44).
 - The room moves to any music: while the beat is not locked every clear onset sends a beat scaled by its rise, and the sway lifts up to 16 units and grows 5 percent (task U160).
 - The main orchestrator is yellow and every other agent keeps one colour counted without it, and a working agent shows that colour on its status ring, hub slot, chip, callout, stars and camera brackets (task U159).

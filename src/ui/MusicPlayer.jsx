@@ -232,7 +232,7 @@ export default function MusicPlayer() {
           step="0.1"
           value={shownPosition}
           aria-label="Track position"
-          disabled={!current || !media.playing}
+          disabled={!current || duration <= 0}
           onChange={(event) => changePosition(event.target.value)}
         />
         <span className="hud-sound-time-value mono">{formatTrackTime(duration)}</span>
