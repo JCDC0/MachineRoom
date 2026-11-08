@@ -323,6 +323,24 @@ export function createClient({
       return request('POST', '/api/orchestrator/effort', body)
     },
 
+    setOrchestratorMode: (idOrOptions, modeArg, options = {}) => {
+      let id
+      let mode
+      let confirmed = true
+      if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+        id = idOrOptions.id
+        mode = idOrOptions.mode
+        if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+      } else {
+        id = idOrOptions
+        mode = modeArg
+        if (options.confirmed !== undefined) confirmed = options.confirmed
+      }
+      const body = { mode, confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      return request('POST', '/api/orchestrator/mode', body)
+    },
+
     orchestratorSessions: ({ id } = {}) => {
       const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''
       return request('GET', `/api/orchestrator/sessions${query}`)

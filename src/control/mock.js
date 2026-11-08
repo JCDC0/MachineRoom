@@ -3,6 +3,7 @@ import { outcomeTable } from '../../server/outcomes.js'
 import { branchFor, buildPrompt, modelFor, parseBriefs } from '../briefs/briefs.js'
 import { briefMarkdown, planPrompt } from '../briefs/plan.js'
 import { SINCE_PROBLEM, dayStart, laneStats } from '../briefs/run.js'
+import { defaultMode, legacyMode, modesFor } from './modes.js'
 import { readLadder } from '../model/hierarchy.js'
 import { chooseRoute } from '../policy/route.js'
 
@@ -42,6 +43,7 @@ export const CLIENT_METHODS = [
   'setOrchestratorModel',
   'setOrchestratorEffort',
   'setOrchestratorHarness',
+  'setOrchestratorMode',
   'orchestratorSessions',
   'orchestratorSession',
   'newOrchestratorSession',
@@ -675,6 +677,24 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
     return chat
   }
 
+  function chatHarness(id) {
+    if (id === undefined || id === null || id === '' || id === 'orchestrator') {
+      return state.orchestratorChat.harness ?? 'claude'
+    }
+    return ladder.subs.find((entry) => entry.id === id)?.harness ?? 'claude'
+  }
+
+  function orchestratorAnswer(id) {
+    const chat = chatStore(id)
+    const harness = chatHarness(id)
+    return {
+      ...chat,
+      id: id === undefined || id === null || id === '' ? 'orchestrator' : id,
+      mode: chat.mode ?? legacyMode(harness),
+      modes: modesFor(harness),
+    }
+  }
+
   function orchestratorList() {
     const claimed = new Set()
     for (const sub of ladder.subs) {
@@ -704,6 +724,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         compactRules: state.orchestratorChat.compactRules ?? '',
         autocompactPercent: state.orchestratorChat.autocompactPercent ?? 80,
         effort: state.orchestratorChat.effort ?? null,
+        mode: state.orchestratorChat.mode ?? legacyMode(state.orchestratorChat.harness ?? 'claude'),
+        modes: modesFor(state.orchestratorChat.harness ?? 'claude'),
         lanes: MOCK_LANE_KEYS.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -724,6 +746,8 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         compactRules: ensureSubChat(sub).compactRules ?? '',
         autocompactPercent: ensureSubChat(sub).autocompactPercent ?? 80,
         effort: ensureSubChat(sub).effort ?? null,
+        mode: ensureSubChat(sub).mode ?? legacyMode(sub.harness),
+        modes: modesFor(sub.harness),
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted !== false,
@@ -966,7 +990,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
 
     orchestrators: () => call('orchestrators', () => orchestratorList()),
 
-    orchestrator: (id) => call('orchestrator', () => chatStore(id)),
+    orchestrator: (id) => call('orchestrator', () => orchestratorAnswer(id)),
 
     sendOrchestrator: (text, { id } = {}) => call('sendOrchestrator', () => sendMessage(id, text, true)),
 
@@ -1159,12 +1183,15 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const allowed = state.models.some((m) => m.id === model && m.harness === harness)
         if (!allowed) throw new Error(modelUnavailableProblem(model, harness))
         const chat = chatStore(id)
+        const previousHarness = chatHarness(id)
         chat.harness = harness
         chat.model = model
         chat.sessionId = null
         chat.opencodeSessionId = null
         const window = resolveContextWindow(model, harness, chat.contextWindow)
         chat.contextWindow = window
+        const keptMode = chat.mode ?? legacyMode(previousHarness)
+        chat.mode = modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : defaultMode(harness)
         if (id && id !== 'orchestrator') {
           const sub = ladder.subs.find((s) => s.id === id)
           if (sub) {
@@ -1180,8 +1207,36 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
           model,
           contextWindow: window,
           state: chat.state ?? 'idle',
+          mode: chat.mode,
+          modes: modesFor(harness),
           messages: chat.messages ? [...chat.messages] : [],
         }
+      }),
+
+    setOrchestratorMode: (idOrOptions, modeArg, options = {}) =>
+      call('setOrchestratorMode', () => {
+        let id
+        let mode
+        let confirmed = true
+        if (typeof idOrOptions === 'object' && idOrOptions !== null) {
+          id = idOrOptions.id
+          mode = idOrOptions.mode
+          if (idOrOptions.confirmed !== undefined) confirmed = idOrOptions.confirmed
+        } else {
+          id = idOrOptions
+          mode = modeArg
+          if (options.confirmed !== undefined) confirmed = options.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the mode change first.')
+        const chat = chatStore(id)
+        const harness = chatHarness(id)
+        if (chat.state === 'working') throw new Error('A turn is already running.')
+        if (!modesFor(harness).some((entry) => entry.id === mode)) {
+          throw new Error('Choose a permission mode listed for this harness.')
+        }
+        chat.mode = mode
+        emit({ topic: 'orchestrator' })
+        return orchestratorAnswer(id)
       }),
 
     setOrchestratorEffort: (idOrOptions, effortArg, options = {}) =>
