@@ -131,7 +131,8 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         </div>
       )
     }
-    const state = orchestratorStateWord(main.state)
+    const waiting = Array.isArray(main.approvals) && main.approvals.length > 0
+    const state = waiting ? 'waiting for you' : orchestratorStateWord(main.state)
     const { chips, more } = orchestratorChips(orchestrators)
     const lanes =
       laneFeed && typeof laneFeed === 'object'

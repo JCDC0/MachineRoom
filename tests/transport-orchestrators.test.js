@@ -107,6 +107,19 @@ describe('the transport chips', () => {
     expect(html).not.toContain(`>${names[names.length - 1]}<`)
   })
 
+  it('reads waiting for you while an approval waits', () => {
+    const html = renderToString(
+      createElement(Transport, {
+        snapshot: LIVE,
+        speeds: [1],
+        orchestrator: { ...MAIN, approvals: [{ approvalId: 'a1', tool: 'shell' }] },
+      })
+    )
+    expect(html).toContain('class="transport-orchestrator-state mono">waiting for you<')
+    const clear = renderTransport([MAIN])
+    expect(clear).toContain('class="transport-orchestrator-state mono">working<')
+  })
+
   it('shows no chips for a replay or with no sub', () => {
     expect(renderTransport([MAIN])).not.toContain('transport-chip')
     const replay = renderToString(

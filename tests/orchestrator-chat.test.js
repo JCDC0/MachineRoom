@@ -1,6 +1,6 @@
 import { act, createElement } from 'react'
 import { renderToString } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import Hud from '../src/ui/Hud.jsx'
 import OrchestratorChat, { pruneOrchestratorRecord } from '../src/ui/OrchestratorChat.jsx'
 import Waiting from '../src/ui/Waiting.jsx'
@@ -9,6 +9,8 @@ import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
   TEAM_TAB,
+  approvalInputText,
+  approvalTitle,
   canSend,
   charCount,
   chatBlocks,
@@ -16,8 +18,12 @@ import {
   clampDraft,
   isSendKey,
   listsOrchestrator,
+  modeClass,
+  modeLabel,
   needsStartConfirm,
+  normalizeApprovals,
   normalizeChat,
+  normalizeModes,
   orchestratorDoing,
   projectBaseName,
   sendChatMessage,
@@ -189,12 +195,23 @@ describe('orchestratorChat helpers', () => {
   })
 
   it('normalises the read and fills the default state', () => {
-    expect(normalizeChat(null)).toEqual({ state: 'idle', model: '', project: '', messages: [] })
+    expect(normalizeChat(null)).toEqual({
+      state: 'idle',
+      model: '',
+      project: '',
+      messages: [],
+      mode: '',
+      modes: [],
+      approvals: [],
+    })
     expect(normalizeChat({ state: 'nope', messages: 'no' })).toEqual({
       state: 'idle',
       model: '',
       project: '',
       messages: [],
+      mode: '',
+      modes: [],
+      approvals: [],
     })
     const chat = normalizeChat({
       state: 'paused',
@@ -234,6 +251,301 @@ describe('orchestratorChat helpers', () => {
     expect(orchestratorDoing([{ key: 'opencode', status: 'working', label: 'npm test' }])).toBe('')
     expect(orchestratorDoing([])).toBe('')
     expect(orchestratorDoing(null)).toBe('')
+  })
+})
+
+const MODES = [
+  { id: 'plan', label: 'Plan', line: 'Read and plan only.' },
+  { id: 'ask', label: 'Ask', line: 'Every write or command waits for you.' },
+  { id: 'edits', label: 'Edits', line: 'Edits files, runs no commands.' },
+  { id: 'auto', label: 'Auto', line: 'Edits and commands, with a guard.' },
+  { id: 'bypass', label: 'Bypass', line: 'Everything is allowed.' },
+]
+
+describe('the permission modes', () => {
+  it('keeps the known modes in order and drops a bad or repeated one', () => {
+    expect(normalizeModes(MODES).map((entry) => entry.id)).toEqual([
+      'plan',
+      'ask',
+      'edits',
+      'auto',
+      'bypass',
+    ])
+    expect(
+      normalizeModes([
+        { id: 'bypass', label: ' Bypass ', line: ' Allowed. ' },
+        { id: 'nope', label: 'No' },
+        { id: 'bypass', label: 'Again' },
+        null,
+        'auto',
+      ])
+    ).toEqual([{ id: 'bypass', label: 'Bypass', line: 'Allowed.' }])
+    expect(normalizeModes(null)).toEqual([])
+  })
+
+  it('reads the saved mode and the mode classes', () => {
+    const chat = normalizeChat({ mode: 'auto', modes: MODES })
+    expect(chat.mode).toBe('auto')
+    expect(chat.modes).toHaveLength(5)
+    expect(normalizeChat({ mode: 'unknown' }).mode).toBe('')
+    expect(modeClass('plan')).toBe('is-mode-plan')
+    expect(modeClass('bypass')).toBe('is-mode-bypass')
+    expect(modeClass('')).toBe('')
+    expect(modeLabel(MODES, 'edits')).toBe('Edits')
+    expect(modeLabel(MODES, 'unknown')).toBe('')
+  })
+
+  it('reads an approval and shows its input as text', () => {
+    expect(
+      normalizeApprovals([
+        { approvalId: 'a1', tool: 'shell', input: { command: 'npm test' }, at: '2026-11-09T10:00:00.000Z' },
+        { approvalId: '', tool: 'shell' },
+        null,
+      ])
+    ).toEqual([
+      {
+        approvalId: 'a1',
+        tool: 'shell',
+        input: { command: 'npm test' },
+        at: '2026-11-09T10:00:00.000Z',
+      },
+    ])
+    expect(approvalTitle('Orchestrator', 'shell')).toBe('ORCHESTRATOR wants to use shell')
+    expect(approvalTitle('', '')).toBe('ORCHESTRATOR wants to use a tool')
+    expect(approvalInputText({ command: 'npm test' })).toBe(
+      '{\n  "command": "npm test"\n}'
+    )
+    expect(approvalInputText('plain')).toBe('plain')
+  })
+
+  it('leaves the Mode row out with fewer than two modes or no setter', () => {
+    const chat = { state: 'idle', mode: 'plan', modes: MODES.slice(0, 1), messages: [] }
+    const one = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        inline: true,
+        client: { ...fakeClient(chat), setOrchestratorMode: async () => ({}) },
+        initialChat: chat,
+      })
+    )
+    expect(one).not.toContain('class="hud-strip-mode"')
+
+    const full = { state: 'idle', mode: 'plan', modes: MODES, messages: [] }
+    const readOnly = renderToString(
+      createElement(OrchestratorChat, { open: true, inline: true, client: fakeClient(full), initialChat: full })
+    )
+    expect(readOnly).not.toContain('class="hud-strip-mode"')
+
+    const ready = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        inline: true,
+        client: { ...fakeClient(full), setOrchestratorMode: async () => ({}) },
+        initialChat: full,
+      })
+    )
+    expect(ready).toContain('class="hud-strip-mode"')
+    expect(ready).toContain('Mode:')
+    expect(ready).toContain('Plan')
+  })
+
+  it('marks the chat with the mode frame class and draws none without a mode', () => {
+    const chat = { state: 'idle', mode: 'bypass', modes: MODES, messages: [] }
+    const html = renderToString(
+      createElement(OrchestratorChat, { open: true, client: fakeClient(chat), initialChat: chat })
+    )
+    expect(html).toContain('class="mr-orch is-mode-bypass"')
+    const none = renderToString(
+      createElement(OrchestratorChat, {
+        open: true,
+        client: fakeClient({ state: 'idle', messages: [] }),
+        initialChat: { state: 'idle', messages: [] },
+      })
+    )
+    expect(none).toContain('class="mr-orch"')
+    expect(none).not.toContain('is-mode-')
+  })
+
+  it('sets a plain mode at once and says it applies from the next turn', async () => {
+    vi.useFakeTimers()
+    const calls = []
+    const chat = { state: 'idle', mode: 'plan', modes: MODES, messages: [] }
+    const client = {
+      ...fakeClient(chat),
+      setOrchestratorMode: async (options) => {
+        calls.push(options)
+        return { mode: options.mode }
+      },
+    }
+    try {
+      await withDom(async ({ container, root }) => {
+        await act(async () => {
+          root.render(
+            createElement(OrchestratorChat, {
+              client,
+              inline: true,
+              initialChat: chat,
+              onClose: () => {},
+            })
+          )
+        })
+        await act(async () => {})
+        await click(root, container.querySelector('.hud-strip-mode'))
+        const choices = [...container.querySelectorAll('.mr-mode-choice')]
+        expect(choices.map((button) => button.querySelector('.mr-mode-choice-label').textContent)).toEqual([
+          'Plan',
+          'Ask',
+          'Edits',
+          'Auto',
+          'Bypass',
+        ])
+        expect(choices[0].querySelector('.mr-mode-choice-line').textContent).toBe('Read and plan only.')
+        const edits = choices.find((button) => button.textContent.includes('Edits'))
+        await click(root, edits)
+        expect(calls).toEqual([{ id: 'orchestrator', mode: 'edits', confirmed: true }])
+        expect(container.querySelector('.mr-orch').className).toContain('is-mode-edits')
+        expect(container.querySelector('.mr-mode-note').textContent).toBe(
+          'Applies from the next turn.'
+        )
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(4000)
+        })
+        expect(container.querySelector('.mr-mode-note')).toBeNull()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('asks before Bypass with Cancel first and closes only the card on Escape', async () => {
+    const calls = []
+    const closed = []
+    const chat = { state: 'idle', mode: 'auto', modes: MODES, messages: [] }
+    const client = {
+      ...fakeClient(chat),
+      setOrchestratorMode: async (options) => {
+        calls.push(options)
+        return { mode: options.mode }
+      },
+    }
+    await withDom(async ({ container, root, dom }) => {
+      await act(async () => {
+        root.render(
+          createElement(OrchestratorChat, {
+            client,
+            inline: true,
+            initialChat: chat,
+            initialOrchestrators: [{ id: 'orchestrator', name: 'Orchestrator', harness: 'claude' }],
+            onClose: () => closed.push(true),
+          })
+        )
+      })
+      await act(async () => {})
+      await click(root, container.querySelector('.hud-strip-mode'))
+      const bypass = container
+        .querySelectorAll('.mr-mode-choice')
+        .find((button) => button.textContent.includes('Bypass'))
+      await click(root, bypass)
+      const card = container.querySelector('.mr-orch-confirm[aria-label="Set the mode"]')
+      expect(card).not.toBeNull()
+      expect(card.textContent).toContain(
+        'Let ORCHESTRATOR run any command and edit any file without asking?'
+      )
+      expect(buttonWithText(card, 'Cancel')).not.toBeNull()
+      expect(buttonWithText(card, 'Use Bypass')).not.toBeNull()
+      expect(card.querySelector('button').textContent.trim()).toBe('Cancel')
+      expect(dom.document.activeElement.textContent.trim()).toBe('Cancel')
+      expect(calls).toEqual([])
+      const escape = { type: 'keydown', key: 'Escape', bubbles: true, cancelable: true }
+      await act(async () => {
+        dom.window.dispatchEvent(escape)
+      })
+      expect(container.querySelector('.mr-orch-confirm[aria-label="Set the mode"]')).toBeNull()
+      expect(container.querySelector('.mr-orch')).not.toBeNull()
+      expect(closed).toEqual([])
+      expect(calls).toEqual([])
+    })
+  })
+
+  it('shows the sentence a refused mode answers with', async () => {
+    const chat = { state: 'idle', mode: 'auto', modes: MODES, messages: [] }
+    const client = {
+      ...fakeClient(chat),
+      setOrchestratorMode: async () => {
+        throw new Error('A turn is running. Try again when it ends.')
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+      await click(root, container.querySelector('.hud-strip-mode'))
+      const plan = container
+        .querySelectorAll('.mr-mode-choice')
+        .find((button) => button.textContent.includes('Plan'))
+      await click(root, plan)
+      expect(container.querySelector('.mr-mode-error').textContent).toBe(
+        'A turn is running. Try again when it ends.'
+      )
+      expect(container.querySelector('.mr-orch').className).toContain('is-mode-auto')
+    })
+  })
+
+  it('answers an approval, leaves the card and reads Deny as false', async () => {
+    const calls = []
+    const chat = {
+      state: 'working',
+      mode: 'ask',
+      modes: MODES,
+      messages: [{ id: 'm1', from: 'owner', text: 'Build it.' }],
+      approvals: [
+        {
+          approvalId: 'a1',
+          tool: 'shell',
+          input: { command: 'npm test' },
+          at: '2026-11-09T10:00:00.000Z',
+        },
+        {
+          approvalId: 'a2',
+          tool: 'write_file',
+          input: { path: 'src/a.js' },
+          at: '2026-11-09T10:00:01.000Z',
+        },
+      ],
+    }
+    const client = {
+      ...fakeClient(chat),
+      answerApproval: async (options) => {
+        calls.push(options)
+        return { ok: true }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(OrchestratorChat, { client, inline: true, initialChat: chat }))
+      })
+      await act(async () => {})
+      const cards = container.querySelectorAll('.mr-orch-approval')
+      expect(cards).toHaveLength(2)
+      expect(cards[0].textContent).toContain('ORCHESTRATOR wants to use shell')
+      expect(cards[0].querySelector('.mr-orch-approval-input').textContent).toBe(
+        '{\n  "command": "npm test"\n}'
+      )
+      await click(root, buttonWithText(cards[0], 'Allow'))
+      expect(calls).toEqual([
+        { id: 'orchestrator', approvalId: 'a1', allow: true, confirmed: true },
+      ])
+      expect(container.querySelectorAll('.mr-orch-approval')).toHaveLength(1)
+      await click(root, buttonWithText(container.querySelector('.mr-orch-approval'), 'Deny'))
+      expect(calls[1]).toEqual({
+        id: 'orchestrator',
+        approvalId: 'a2',
+        allow: false,
+        confirmed: true,
+      })
+      expect(container.querySelector('.mr-orch-approval')).toBeNull()
+    })
   })
 })
 

@@ -18,6 +18,8 @@ import {
   ORCH_STOP_CONFIRM,
   OrchestratorActivity,
   TEAM_TAB,
+  approvalInputText,
+  approvalTitle,
   canSend,
   charCount,
   chatBlocks,
@@ -25,8 +27,12 @@ import {
   clampDraft,
   errorText,
   isSendKey,
+  modeClass,
+  modeLabel,
   needsStartConfirm,
+  normalizeApprovals,
   normalizeChat,
+  normalizeModes,
   projectBaseName,
   sendChatMessage,
   startConfirmText,
@@ -173,6 +179,13 @@ export default function OrchestratorChat({
   const [effortSaving, setEffortSaving] = useState(false)
   const [effortError, setEffortError] = useState('')
   const [effortSaved, setEffortSaved] = useState('')
+  const [modeOpen, setModeOpen] = useState(false)
+  const [modeConfirm, setModeConfirm] = useState(null)
+  const [modeSaving, setModeSaving] = useState(false)
+  const [modeError, setModeError] = useState('')
+  const [modeSaved, setModeSaved] = useState('')
+  const [answering, setAnswering] = useState({})
+  const [approvalError, setApprovalError] = useState({})
   const [compactOpen, setCompactOpen] = useState(false)
   const [compactKeep, setCompactKeep] = useState('')
   const [compacting, setCompacting] = useState(false)
@@ -193,12 +206,15 @@ export default function OrchestratorChat({
   const confirmRef = useRef(null)
   const modelConfirmRef = useRef(null)
   const effortConfirmRef = useRef(null)
+  const modeConfirmRef = useRef(null)
+  const modeSavedTimer = useRef(null)
   const compactRef = useRef(null)
   const roomActivity = useContext(OrchestratorActivity)
 
   useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
   useDialogFocus(Boolean(modelConfirm), { containerRef: modelConfirmRef })
   useDialogFocus(Boolean(effortConfirm), { containerRef: effortConfirmRef })
+  useDialogFocus(Boolean(modeConfirm), { containerRef: modeConfirmRef })
   useDialogFocus(compactOpen, { containerRef: compactRef })
 
   const subs = list.filter((entry) => entry.id !== 'orchestrator')
@@ -226,6 +242,22 @@ export default function OrchestratorChat({
   const harness = typeof current?.harness === 'string' ? current.harness : ''
   const shownModel = modelSaved || model || 'not reported'
   const shownEffort = effortSaved || effortLabel(orchestratorEffort(list, selected), harness)
+  const mode = teamSelected ? '' : chat.mode || (typeof current?.mode === 'string' ? current.mode : '')
+  const modeList = teamSelected
+    ? []
+    : chat.modes.length > 0
+      ? chat.modes
+      : normalizeModes(current?.modes)
+  const shownMode = modeLabel(modeList, mode) || 'not reported'
+  const canSetMode =
+    inline && modeList.length >= 2 && typeof client?.setOrchestratorMode === 'function'
+  const frameClass = modeClass(mode)
+  const approvals = teamSelected
+    ? []
+    : loaded
+      ? chat.approvals
+      : normalizeApprovals(current?.approvals)
+  const canAnswerApprovals = typeof client?.answerApproval === 'function'
   const staticModels = modelChoices(models, harness)
   const modelRefresh = useHarnessModels({
     client,
@@ -513,6 +545,12 @@ export default function OrchestratorChat({
     setModelSaved('')
     setEffortSaved('')
     setModelQuery('')
+    setModeOpen(false)
+    setModeConfirm(null)
+    setModeError('')
+    setModeSaved('')
+    setAnswering({})
+    setApprovalError({})
   }, [selected])
 
   useEffect(() => {
@@ -523,6 +561,14 @@ export default function OrchestratorChat({
     setEffortSaved('')
   }, [current?.effort])
 
+  useEffect(
+    () => () => {
+      if (modeSavedTimer.current) clearTimeout(modeSavedTimer.current)
+      modeSavedTimer.current = null
+    },
+    []
+  )
+
   useEffect(() => {
     if (open && logRef.current) {
       logRef.current.scrollTop = logRef.current.scrollHeight
@@ -530,12 +576,12 @@ export default function OrchestratorChat({
   }, [open, selected, lines.length, teamRows.length])
 
   useEffect(() => {
-    if (!modelConfirm && !effortConfirm && !compactOpen) return undefined
+    if (!modelConfirm && !effortConfirm && !modeConfirm && !compactOpen) return undefined
     function onKey(event) {
       if (event.key !== 'Escape') return
       event.preventDefault()
       event.stopPropagation()
-      if (modelSaving || effortSaving) return
+      if (modelSaving || effortSaving || modeSaving) return
       if (modelConfirm) {
         setModelConfirm(null)
         setModelError('')
@@ -546,11 +592,16 @@ export default function OrchestratorChat({
         setEffortError('')
         return
       }
+      if (modeConfirm) {
+        setModeConfirm(null)
+        setModeError('')
+        return
+      }
       setCompactOpen(false)
     }
     window.addEventListener('keydown', onKey, true)
     return () => window.removeEventListener('keydown', onKey, true)
-  }, [modelConfirm, effortConfirm, compactOpen, modelSaving, effortSaving])
+  }, [modelConfirm, effortConfirm, modeConfirm, compactOpen, modelSaving, effortSaving, modeSaving])
 
   useEffect(() => {
     if (!open) return undefined
@@ -564,6 +615,10 @@ export default function OrchestratorChat({
         setEffortOpen(false)
         return
       }
+      if (modeOpen) {
+        setModeOpen(false)
+        return
+      }
       if (modelConfirm) {
         setModelConfirm(null)
         setModelError('')
@@ -572,6 +627,11 @@ export default function OrchestratorChat({
       if (effortConfirm) {
         setEffortConfirm('')
         setEffortError('')
+        return
+      }
+      if (modeConfirm) {
+        setModeConfirm(null)
+        setModeError('')
         return
       }
       if (compactOpen) {
@@ -590,7 +650,19 @@ export default function OrchestratorChat({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, confirm, onClose, modelsOpen, effortOpen, modelConfirm, effortConfirm, compactOpen, slashOpen])
+  }, [
+    open,
+    confirm,
+    onClose,
+    modelsOpen,
+    effortOpen,
+    modeOpen,
+    modelConfirm,
+    effortConfirm,
+    modeConfirm,
+    compactOpen,
+    slashOpen,
+  ])
 
   useEffect(() => {
     function onOpenChat(event) {
@@ -814,11 +886,14 @@ export default function OrchestratorChat({
   function closePickers() {
     setModelsOpen(false)
     setEffortOpen(false)
+    setModeOpen(false)
     setCompactOpen(false)
     setModelConfirm(null)
     setEffortConfirm('')
+    setModeConfirm(null)
     setModelError('')
     setEffortError('')
+    setModeError('')
     setModelQuery('')
   }
 
@@ -927,6 +1002,112 @@ export default function OrchestratorChat({
     }
   }
 
+  function toggleMode() {
+    if (modeOpen) {
+      setModeOpen(false)
+      return
+    }
+    closePickers()
+    setModeOpen(true)
+  }
+
+  function noteModeSaved() {
+    if (modeSavedTimer.current) clearTimeout(modeSavedTimer.current)
+    setModeSaved('Applies from the next turn.')
+    modeSavedTimer.current = setTimeout(() => {
+      modeSavedTimer.current = null
+      setModeSaved('')
+    }, 4000)
+  }
+
+  async function saveMode(next) {
+    if (!next || modeSaving) return
+    if (typeof client?.setOrchestratorMode !== 'function') {
+      setModeError('The bridge cannot set a mode.')
+      return
+    }
+    setModeSaving(true)
+    setModeError('')
+    try {
+      await client.setOrchestratorMode({
+        id: selected,
+        mode: next.id,
+        confirmed: true,
+      })
+      setChats((currentChats) => {
+        const prior = currentChats[selected] ?? normalizeChat(null)
+        return {
+          ...currentChats,
+          [selected]: {
+            ...prior,
+            mode: next.id,
+            modes: prior.modes.length > 0 ? prior.modes : modeList,
+          },
+        }
+      })
+      setList((currentList) =>
+        currentList.map((entry) => (entry.id === selected ? { ...entry, mode: next.id } : entry))
+      )
+      setModeConfirm(null)
+      noteModeSaved()
+      onOrchestratorChange()
+    } catch (failure) {
+      setModeError(messageOf(failure, 'The bridge refused the mode.'))
+    } finally {
+      setModeSaving(false)
+    }
+  }
+
+  function pickMode(entry) {
+    if (!entry || modeSaving) return
+    setModeOpen(false)
+    setModeError('')
+    if (entry.id === 'bypass') {
+      setModeConfirm(entry)
+      return
+    }
+    saveMode(entry)
+  }
+
+  async function answerApprovalCard(approval, allow) {
+    const approvalId = approval.approvalId
+    if (!approvalId || answering[approvalId]) return
+    if (typeof client?.answerApproval !== 'function') {
+      setApprovalError((current) => ({
+        ...current,
+        [approvalId]: 'The bridge cannot answer approvals.',
+      }))
+      return
+    }
+    setAnswering((current) => ({ ...current, [approvalId]: true }))
+    setApprovalError((current) => ({ ...current, [approvalId]: '' }))
+    try {
+      await client.answerApproval({ id: selected, approvalId, allow, confirmed: true })
+      setChats((currentChats) => {
+        const prior = currentChats[selected]
+        if (!prior) return currentChats
+        return {
+          ...currentChats,
+          [selected]: {
+            ...prior,
+            approvals: prior.approvals.filter((entry) => entry.approvalId !== approvalId),
+          },
+        }
+      })
+    } catch (failure) {
+      setApprovalError((current) => ({
+        ...current,
+        [approvalId]: messageOf(failure, 'Could not answer the approval.'),
+      }))
+    } finally {
+      setAnswering((current) => {
+        const next = { ...current }
+        delete next[approvalId]
+        return next
+      })
+    }
+  }
+
   function toggleCompact() {
     if (compactOpen) {
       setCompactOpen(false)
@@ -986,7 +1167,7 @@ export default function OrchestratorChat({
   return (
     <aside
       id={inline ? undefined : 'hud-orchestrator-chat'}
-      className={`mr-orch${inline ? ' is-inline' : ''}`}
+      className={`mr-orch${inline ? ' is-inline' : ''}${frameClass ? ` ${frameClass}` : ''}`}
       aria-label="Orchestrator chat"
     >
       {!inline ? (
@@ -1177,6 +1358,47 @@ export default function OrchestratorChat({
             </section>
           ) : null}
 
+          {approvals.length > 0 ? (
+            <div className="mr-orch-approvals">
+              {approvals.map((approval) => {
+                const approvalId = approval.approvalId
+                const busy = Boolean(answering[approvalId])
+                const note = approvalError[approvalId]
+                return (
+                  <section
+                    key={approvalId}
+                    className="mr-orch-approval"
+                    aria-label={`Approval for ${approval.tool}`}
+                  >
+                    <p className="mr-orch-approval-title mono">
+                      {approvalTitle(current?.name || 'Orchestrator', approval.tool)}
+                    </p>
+                    <pre className="mr-orch-approval-input mono">{approvalInputText(approval.input)}</pre>
+                    {note ? <p className="strip-note is-error">{note}</p> : null}
+                    <div className="mr-orch-approval-actions">
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-start"
+                        onClick={() => answerApprovalCard(approval, true)}
+                        disabled={busy || !canAnswerApprovals}
+                      >
+                        Allow
+                      </button>
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-stop"
+                        onClick={() => answerApprovalCard(approval, false)}
+                        disabled={busy || !canAnswerApprovals}
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
+          ) : null}
+
           {inline ? (
             <form className="mr-orch-form hud-lower-input" onSubmit={handleSubmit}>
               <textarea
@@ -1225,6 +1447,21 @@ export default function OrchestratorChat({
                     <MenuIcon />
                   </span>
                 </button>
+                {canSetMode ? (
+                  <button
+                    type="button"
+                    className="hud-strip-mode"
+                    aria-expanded={modeOpen}
+                    aria-label={`Mode for ${current?.name || 'the orchestrator'}`}
+                    onClick={toggleMode}
+                  >
+                    <span>Mode:</span>
+                    <span className="hud-lower-picker-value mono">{shownMode}</span>
+                    <span className="hud-lower-picker-v" aria-hidden="true">
+                      <MenuIcon />
+                    </span>
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="hud-strip-compact"
@@ -1262,6 +1499,16 @@ export default function OrchestratorChat({
                   </svg>
                 </button>
               </div>
+              {canSetMode && modeError ? (
+                <p className="mr-mode-error mono" role="alert">
+                  {modeError}
+                </p>
+              ) : null}
+              {canSetMode && modeSaved ? (
+                <p className="mr-mode-note mono" role="status">
+                  {modeSaved}
+                </p>
+              ) : null}
               {modelRefresh.error ? (
                 <p className="mr-model-error mono" role="alert">
                   {modelRefresh.error}
@@ -1310,6 +1557,55 @@ export default function OrchestratorChat({
                     </>
                   ) : null}
                   {!canSetModel && <p className="strip-note">Read only here.</p>}
+                </div>
+              ) : null}
+
+              {modeOpen ? (
+                <div className="strip-pop is-modes" aria-label="Modes">
+                  {modeList.map((entry) => (
+                    <button
+                      type="button"
+                      className={`strip-model-choice mr-mode-choice${entry.id === mode ? ' is-current' : ''}`}
+                      key={entry.id}
+                      onClick={() => pickMode(entry)}
+                      disabled={modeSaving}
+                    >
+                      <span className="mr-mode-choice-label">{entry.label || entry.id}</span>
+                      {entry.line ? <span className="mr-mode-choice-line">{entry.line}</span> : null}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              {modeConfirm ? (
+                <div className="strip-pop is-confirm">
+                  <section ref={modeConfirmRef} className="mr-orch-confirm is-stop" aria-label="Set the mode">
+                    <p className="mr-orch-confirm-text">
+                      {`Let ${(current?.name || 'the orchestrator').toUpperCase()} run any command and edit any file without asking?`}
+                    </p>
+                    {modeError ? <p className="strip-note is-error">{modeError}</p> : null}
+                    <div className="mr-orch-confirm-actions">
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-cancel"
+                        onClick={() => {
+                          setModeConfirm(null)
+                          setModeError('')
+                        }}
+                        disabled={modeSaving}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="mr-orch-confirm-btn is-stop"
+                        onClick={() => saveMode(modeConfirm)}
+                        disabled={modeSaving}
+                      >
+                        Use Bypass
+                      </button>
+                    </div>
+                  </section>
                 </div>
               ) : null}
 

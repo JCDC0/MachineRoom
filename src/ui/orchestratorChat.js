@@ -80,6 +80,75 @@ function isOrchestratorAgent(agent) {
   return /orchestrat/i.test(`${agent.key ?? ''} ${agent.name ?? ''}`)
 }
 
+const MODE_IDS = new Set(['plan', 'ask', 'edits', 'auto', 'bypass'])
+
+function cleanMode(entry) {
+  if (!entry || typeof entry !== 'object') return null
+  const id = typeof entry.id === 'string' ? entry.id.trim() : ''
+  if (!MODE_IDS.has(id)) return null
+  return {
+    id,
+    label: typeof entry.label === 'string' ? visibleChatText(entry.label.trim()) : '',
+    line: typeof entry.line === 'string' ? visibleChatText(entry.line.trim()) : '',
+  }
+}
+
+export function normalizeModes(value) {
+  if (!Array.isArray(value)) return []
+  const seen = new Set()
+  const list = []
+  for (const entry of value) {
+    const mode = cleanMode(entry)
+    if (!mode || seen.has(mode.id)) continue
+    seen.add(mode.id)
+    list.push(mode)
+  }
+  return list
+}
+
+export function normalizeApprovals(value) {
+  if (!Array.isArray(value)) return []
+  const list = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const approvalId = typeof entry.approvalId === 'string' ? entry.approvalId.trim() : ''
+    if (!approvalId) continue
+    list.push({
+      approvalId,
+      tool: cleanLabel(entry.tool) || 'a tool',
+      input: entry.input,
+      at: typeof entry.at === 'string' ? entry.at : null,
+    })
+  }
+  return list
+}
+
+export function modeClass(mode) {
+  return MODE_IDS.has(mode) ? `is-mode-${mode}` : ''
+}
+
+export function modeLabel(modes, mode) {
+  const list = Array.isArray(modes) ? modes : []
+  const found = list.find((entry) => entry && entry.id === mode)
+  if (found && found.label) return found.label
+  return MODE_IDS.has(mode) ? mode : ''
+}
+
+export function approvalTitle(name, tool) {
+  const who = cleanLabel(name) || 'Orchestrator'
+  return `${who.toUpperCase()} wants to use ${cleanLabel(tool) || 'a tool'}`
+}
+
+export function approvalInputText(input) {
+  if (typeof input === 'string') return visibleChatText(input)
+  if (input == null) return ''
+  try {
+    return visibleChatText(JSON.stringify(input, null, 2))
+  } catch {
+    return visibleChatText(String(input))
+  }
+}
+
 export function normalizeChat(payload) {
   const source = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {}
   const state = source.state === 'working' || source.state === 'paused' ? source.state : 'idle'
@@ -88,6 +157,9 @@ export function normalizeChat(payload) {
     model: typeof source.model === 'string' ? visibleChatText(source.model.trim()) : '',
     project: typeof source.project === 'string' ? visibleChatText(source.project.trim()) : '',
     messages: Array.isArray(source.messages) ? source.messages : [],
+    mode: MODE_IDS.has(source.mode) ? source.mode : '',
+    modes: normalizeModes(source.modes),
+    approvals: normalizeApprovals(source.approvals),
   }
 }
 
