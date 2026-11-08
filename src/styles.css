@@ -8423,15 +8423,45 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   outline-offset: 1px;
 }
 
-.hud-sound-control {
+.hud-sound-time {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.hud-sound-control input[type='range'] {
+.hud-sound-time input[type='range'] {
   flex: 1 1 auto;
+  width: auto;
   min-width: 0;
+}
+
+.hud-sound-time-value {
+  flex: 0 0 auto;
+  min-width: 30px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.hud-sound-time-value:last-child {
+  text-align: right;
+}
+
+.hud-sound-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hud-sound-volume input[type='range'] {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+}
+
+.hud-sound-volume .hud-settings-value {
+  flex: 0 0 auto;
+  min-width: 32px;
+  text-align: right;
 }
 
 .hud-sound-empty {

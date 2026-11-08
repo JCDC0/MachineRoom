@@ -7,10 +7,14 @@ import {
   changeMusicTrack,
   chooseMusicPlaylist,
   cycleMusicLoop,
+  formatTrackTime,
+  musicDuration,
+  musicPosition,
   musicQueueSnapshot,
   openMusicFolder,
   playMusicAt,
   refreshMusicList,
+  seekMusic,
   startMusicQueue,
   subscribeMusicQueue,
   toggleMusicPlay,
@@ -98,9 +102,32 @@ function RefreshIcon() {
   )
 }
 
+function SpeakerIcon() {
+  return (
+    <Icon>
+      <path d="M3 6h2l3-2.5v9L5 10H3Z" />
+      <path d="M10.5 5.5a4 4 0 0 1 0 5" />
+      <path d="M12.5 3.5a7 7 0 0 1 0 9" />
+    </Icon>
+  )
+}
+
+function MutedSpeakerIcon() {
+  return (
+    <Icon>
+      <path d="M3 6h2l3-2.5v9L5 10H3Z" />
+      <path d="M10.5 6l4 4" />
+      <path d="M14.5 6l-4 4" />
+    </Icon>
+  )
+}
+
 export default function MusicPlayer() {
   const media = useSyncExternalStore(subscribeMusicQueue, musicQueueSnapshot, musicQueueSnapshot)
   const [volume, setVolume] = useState(() => loadSoundSettings(store()).musicVolume)
+  const [muted, setMuted] = useState(() => loadSoundSettings(store()).musicMuted)
+  const [position, setPosition] = useState(0)
+  const [duration, setDuration] = useState(0)
   const queue = media.queue
   const index = media.index
   const current = queue[index] ?? null
@@ -111,17 +138,52 @@ export default function MusicPlayer() {
 
   useEffect(() => {
     sound.setMusicVolume(volume)
-  }, [volume])
+    sound.setMusicMuted(muted)
+  }, [volume, muted])
+
+  useEffect(() => {
+    if (!current) {
+      setPosition(0)
+      setDuration(0)
+      return undefined
+    }
+    function readTime() {
+      setPosition(musicPosition())
+      setDuration(musicDuration())
+    }
+    readTime()
+    const timer = setInterval(readTime, 250)
+    return () => clearInterval(timer)
+  }, [current, media.playing])
 
   function changeVolume(value) {
     const next = Math.min(1, Math.max(0, Number(value)))
     if (!Number.isFinite(next)) return
     setVolume(next)
-    sound.setMusicVolume(next)
+    if (muted) {
+      setMuted(false)
+      saveSoundSettings(store(), { musicVolume: next, musicMuted: false })
+      return
+    }
     saveSoundSettings(store(), { musicVolume: next })
   }
 
+  function toggleMute() {
+    const next = !muted
+    setMuted(next)
+    saveSoundSettings(store(), { musicMuted: next })
+  }
+
+  function changePosition(value) {
+    const next = Math.max(0, Math.min(duration > 0 ? duration : Number.MAX_SAFE_INTEGER, Number(value)))
+    if (!Number.isFinite(next)) return
+    setPosition(next)
+    seekMusic(next)
+  }
+
   const loopLabel = `Loop ${media.loop}`
+  const shownPosition = duration > 0 ? Math.min(position, duration) : 0
+  const muteLabel = muted ? 'Unmute music' : 'Mute music'
 
   return (
     <div className="hud-sound-player">
@@ -143,6 +205,37 @@ export default function MusicPlayer() {
           ))}
           {media.list.tracks.length > 0 && <option value={LOOSE_CHOICE}>Loose tracks</option>}
         </select>
+      </div>
+      {queue.length > 0 && (
+        <ul className="hud-sound-tracks">
+          {queue.map((track, at) => (
+            <li key={`${track.playlist}\u0000${track.name}\u0000${at}`}>
+              <button
+                type="button"
+                className={`hud-sound-track ${at === index ? 'is-current' : ''}`}
+                onClick={() => playMusicAt(at)}
+                aria-label={`Play ${track.name}`}
+                title={`Play ${track.name}`}
+              >
+                {track.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="hud-sound-time">
+        <span className="hud-sound-time-value mono">{formatTrackTime(position)}</span>
+        <input
+          type="range"
+          min="0"
+          max={duration > 0 ? duration : 0}
+          step="0.1"
+          value={shownPosition}
+          aria-label="Track position"
+          disabled={!current || !media.playing}
+          onChange={(event) => changePosition(event.target.value)}
+        />
+        <span className="hud-sound-time-value mono">{formatTrackTime(duration)}</span>
       </div>
       <div className="hud-sound-controls">
         <button
@@ -215,29 +308,8 @@ export default function MusicPlayer() {
           <RefreshIcon />
         </button>
       </div>
-      <p className="hud-sound-hint">Put songs or folders of songs in the music folder, then press Refresh.</p>
-      {media.status && <p className="hud-sound-status mono" role="status">{media.status}</p>}
-      {!media.loading && !media.failed && queue.length === 0 && media.list.folder && (
-        <p className="hud-sound-empty mono">{media.list.folder}</p>
-      )}
-      {queue.length > 0 && (
-        <ul className="hud-sound-tracks">
-          {queue.map((track, at) => (
-            <li key={`${track.playlist}\u0000${track.name}\u0000${at}`}>
-              <button
-                type="button"
-                className={`hud-sound-track ${at === index ? 'is-current' : ''}`}
-                onClick={() => playMusicAt(at)}
-                aria-label={`Play ${track.name}`}
-                title={`Play ${track.name}`}
-              >
-                {track.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="hud-sound-control">
+      <div className="hud-sound-volume">
+        <span className="hud-settings-label">Volume</span>
         <input
           type="range"
           min="0"
@@ -248,7 +320,22 @@ export default function MusicPlayer() {
           onChange={(event) => changeVolume(event.target.value)}
         />
         <span className="hud-settings-value mono">{Math.round(volume * 100)}%</span>
+        <button
+          type="button"
+          className="hud-sound-button"
+          onClick={toggleMute}
+          aria-label={muteLabel}
+          aria-pressed={muted}
+          title={muteLabel}
+        >
+          {muted ? <MutedSpeakerIcon /> : <SpeakerIcon />}
+        </button>
       </div>
+      <p className="hud-sound-hint">Put songs or folders of songs in the music folder, then press Refresh.</p>
+      {media.status && <p className="hud-sound-status mono" role="status">{media.status}</p>}
+      {!media.loading && !media.failed && queue.length === 0 && media.list.folder && (
+        <p className="hud-sound-empty mono">{media.list.folder}</p>
+      )}
       {media.failed && <p className="hud-sound-empty">Could not read the music folder.</p>}
       {media.playError && <p className="hud-sound-empty">{media.playError}</p>}
       {media.openError && <p className="hud-sound-empty">{media.openError}</p>}
