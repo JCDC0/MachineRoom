@@ -1592,3 +1592,17 @@ Then rewrite the tunnel sentences in `src/ui/guide.js` so they say the line is g
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Check it on screen before you finish: `npm run build`, `npm run serve -- up --root <this worktree> --port 5181 --no-open` in the background, open `/?replay&fixture=scenario-i` at 1280 by 800, and confirm the grey tunnel, a coloured star, the brackets in the agent's colour, and a white flash on the row only. Stop the server when you finish.
 
 Files: src/engine/sprites.js, src/engine/agents.js, src/engine/cards.js, src/engine/labels.js, src/engine/room.js, src/ui/guide.js, tests/.
+
+## A flaky review test on Windows CI (2026-11-08, the owner's request)
+
+**T37. Find why the project review list can start with hermes (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`.
+
+Windows CI run 42485705382 failed once in `tests/project-reviews.test.js`, in `fast-forwards a detached lane worktree, as a run-lane task makes it`: `expect(list.lanes[0]).toMatchObject({ lane: 'opencode', ... })` got `{ lane: 'hermes', ... }`. The rerun passed, Ubuntu passed, and that commit changed only docs and an image. `makeProject` writes `lanes.json` with `opencode`, `hermes` and `quiet` in that order, and `server/reviews.js` says it keeps the lane order while it reviews lanes concurrently.
+
+1. Find the cause. Read `server/reviews.js` and the code that lists the lanes for `GET /api/control/reviews` on another project. Look for anything that can reorder the answer or drop `opencode` from it: the concurrent reviews, a sort, a cache shared between bridges or tests, a lane read from the repository's own `lanes.json` instead of the test room's, or a time out that leaves a lane out. Run the file alone several times (`npx vitest run tests/project-reviews.test.js`, at least 15 runs) and note any failure.
+2. Fix the cause in the code if it is a real fault, with a test that fails before the fix. If the code is right and the test is fragile, make the test find the lane by name (`list.lanes.find((entry) => entry.lane === 'opencode')`) and check the order in a separate test only where the order is the point.
+3. In your report, name the cause in one or two sentences and say whether a page could ever see the wrong order.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/reviews.js, server/index.js, tests/project-reviews.test.js, tests/.
