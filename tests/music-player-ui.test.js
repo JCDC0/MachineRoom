@@ -1,9 +1,9 @@
 import { act, createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import MusicPlayer from '../src/ui/MusicPlayer.jsx'
-import { nextLoop, resetMusicQueue, shuffleOrder, shuffleOrderFrom } from '../src/ui/musicQueue.js'
+import { formatTrackTime, nextLoop, resetMusicQueue, shuffleOrder, shuffleOrderFrom } from '../src/ui/musicQueue.js'
 import { sound } from '../src/ui/sound.js'
-import { buttonWithText, classesOf, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, classesOf, settle, type, withDom } from './helpers/uiDom.js'
 
 const originalFetch = globalThis.fetch
 const originalRandom = Math.random
@@ -12,6 +12,8 @@ const audio = {
   paused: true,
   ended: false,
   volume: 1,
+  currentTime: 0,
+  duration: 0,
   src: '',
   dataset: {},
   listeners: {},
@@ -42,6 +44,8 @@ beforeEach(() => {
 function installAudio(dom) {
   audio.paused = true
   audio.ended = false
+  audio.currentTime = 0
+  audio.duration = 0
   audio.play = () => {
     audio.paused = false
     return Promise.resolve()
@@ -87,6 +91,18 @@ async function endTrack(player) {
   })
 }
 
+describe('the music time', () => {
+  it('reads a track position as minutes and seconds', () => {
+    expect(formatTrackTime(0)).toBe('0:00')
+    expect(formatTrackTime(5.9)).toBe('0:05')
+    expect(formatTrackTime(65)).toBe('1:05')
+    expect(formatTrackTime(125)).toBe('2:05')
+    expect(formatTrackTime(-1)).toBe('0:00')
+    expect(formatTrackTime(Number.NaN)).toBe('0:00')
+    expect(formatTrackTime(Infinity)).toBe('0:00')
+  })
+})
+
 describe('the music player', () => {
   it('shows the track that is still playing after the panel reopens', async () => {
     globalThis.fetch = listAnswer(['alpha.mp3', 'beta.mp3'])
@@ -123,6 +139,87 @@ describe('the music player', () => {
       expect(control(container, 'Loop all')).not.toBeNull()
       expect(buttonWithText(container, 'alpha.mp3')).not.toBeNull()
       expect(buttonWithText(container, 'beta.mp3')).not.toBeNull()
+    })
+  })
+
+  it('shows the track time and seeks the playing track', async () => {
+    globalThis.fetch = listAnswer(['alpha.mp3'])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      player.duration = 125
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+
+      const seek = container.querySelector('input[aria-label="Track position"]')
+      const times = () => container.querySelectorAll('.hud-sound-time-value').map((node) => node.textContent)
+      expect(seek).not.toBeNull()
+      expect(seek.getAttribute('disabled')).not.toBeNull()
+      expect(times()[0]).toBe('0:00')
+
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+      expect(seek.getAttribute('disabled')).toBeNull()
+      expect(times()).toEqual(['0:00', '2:05'])
+
+      player.currentTime = 65
+      await settle(300)
+      expect(times()).toEqual(['1:05', '2:05'])
+      expect(Number(seek.value)).toBeCloseTo(65, 0)
+
+      await type(root, seek, '30')
+      expect(player.currentTime).toBe(30)
+      expect(times()).toEqual(['0:30', '2:05'])
+    })
+  })
+
+  it('mutes the music, keeps the volume and unmutes from the slider', async () => {
+    globalThis.fetch = listAnswer(['alpha.mp3'])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      player.duration = 60
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+
+      const volume = container.querySelector('input[aria-label="Music volume"]')
+      expect(player.volume).toBeCloseTo(0.5)
+      expect(control(container, 'Mute music').getAttribute('title')).toBe('Mute music')
+      expect(control(container, 'Mute music').querySelector('svg')).not.toBeNull()
+
+      await act(async () => {
+        control(container, 'Mute music').click()
+      })
+      expect(player.volume).toBe(0)
+      expect(JSON.parse(dom.window.localStorage.getItem('machineroom.settings')).sound.musicMuted).toBe(true)
+      expect(control(container, 'Unmute music').getAttribute('title')).toBe('Unmute music')
+      expect(container.textContent).toContain('50%')
+      expect(Number(volume.value)).toBeCloseTo(0.5)
+
+      await act(async () => {
+        control(container, 'Unmute music').click()
+      })
+      expect(player.volume).toBeCloseTo(0.5)
+      expect(control(container, 'Mute music')).not.toBeNull()
+
+      await act(async () => {
+        control(container, 'Mute music').click()
+      })
+      await type(root, volume, '0.8')
+      const saved = JSON.parse(dom.window.localStorage.getItem('machineroom.settings')).sound
+      expect(player.volume).toBeCloseTo(0.8)
+      expect(saved.musicVolume).toBeCloseTo(0.8)
+      expect(saved.musicMuted).toBe(false)
+      expect(control(container, 'Mute music')).not.toBeNull()
+      expect(container.textContent).toContain('80%')
     })
   })
 
@@ -480,7 +577,7 @@ describe('the music player', () => {
       })
       await settle(5)
 
-      const labels = ['Previous track', 'Play', 'Next track', 'Shuffle', 'Loop off', 'Open folder', 'Refresh']
+      const labels = ['Previous track', 'Play', 'Next track', 'Shuffle', 'Loop off', 'Open folder', 'Refresh', 'Mute music']
       for (const label of labels) {
         const button = control(container, label)
         expect(button).not.toBeNull()

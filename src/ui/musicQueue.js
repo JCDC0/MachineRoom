@@ -103,6 +103,13 @@ export function musicTrackUrl(base, track) {
     : `${base}/music/${encodeURIComponent(name)}`
 }
 
+export function formatTrackTime(value) {
+  const seconds = Number(value)
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00'
+  const whole = Math.floor(seconds)
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`
+}
+
 export function readMusicSettings(storage = store()) {
   try {
     const raw = readStorage(SETTINGS_KEY, storage)
@@ -364,6 +371,18 @@ export function changeMusicTrack(step) {
 export function playMusicAt(at) {
   if (!state.queue[at]) return
   playTrack(at)
+}
+
+export function musicPosition() {
+  return sound.musicPosition()
+}
+
+export function musicDuration() {
+  return sound.musicDuration()
+}
+
+export function seekMusic(value) {
+  return sound.seekMusic(value)
 }
 
 export function chooseMusicPlaylist(raw) {
