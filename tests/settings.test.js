@@ -537,16 +537,17 @@ describe('storage helpers', () => {
 
 describe('soundSettings', () => {
   it('starts beeps on at a low volume and dance on', () => {
-    expect(soundSettings()).toEqual({ on: true, volume: 0.3, musicVolume: 0.5, dance: true, pulse: true })
+    expect(soundSettings()).toEqual({ on: true, volume: 0.3, musicVolume: 0.5, musicMuted: false, dance: true, pulse: true })
     expect(soundSettings(null)).toEqual(soundSettings())
     expect(soundSettings('invalid')).toEqual(soundSettings())
   })
 
   it('clamps both volumes and keeps booleans', () => {
-    expect(soundSettings({ on: false, volume: 2, music: true, musicVolume: -1, dance: false, pulse: false })).toEqual({
+    expect(soundSettings({ on: false, volume: 2, music: true, musicVolume: -1, musicMuted: true, dance: false, pulse: false })).toEqual({
       on: false,
       volume: 1,
       musicVolume: 0,
+      musicMuted: true,
       dance: false,
       pulse: false,
     })
@@ -560,8 +561,8 @@ describe('soundSettings', () => {
   it('saves the sound block under machineroom.settings and keeps the rest', () => {
     const storage = makeStorage()
     saveSettings(storage, { speed: 2 })
-    const updated = saveSoundSettings(storage, { on: false, volume: 0.8, dance: false })
-    expect(updated).toEqual({ on: false, volume: 0.8, musicVolume: 0.5, dance: false, pulse: true })
+    const updated = saveSoundSettings(storage, { on: false, volume: 0.8, musicMuted: true, dance: false })
+    expect(updated).toEqual({ on: false, volume: 0.8, musicVolume: 0.5, musicMuted: true, dance: false, pulse: true })
     expect(loadSoundSettings(storage)).toEqual(updated)
     const loaded = loadSettings(storage)
     expect(loaded.speed).toBe(2)

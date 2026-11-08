@@ -426,6 +426,7 @@ const engine = {
   lastDanceAt: 0,
   lastDance: { beat: 0, sway: 0 },
   musicTrack: '',
+  musicMuted: false,
   endedListeners: new Set(),
 }
 
@@ -477,6 +478,12 @@ function attachAudio() {
   }
 }
 
+function applyMusicVolume() {
+  const volume = Math.min(1, Math.max(0, Number(engine.settings.musicVolume) || 0))
+  if (engine.audio) engine.audio.volume = engine.musicMuted ? 0 : volume
+  if (engine.musicGain) engine.musicGain.gain.value = engine.musicMuted ? 0 : 1
+}
+
 function sampleBins(now) {
   if (!engine.analyser || !engine.bins) return false
   if (now - engine.lastBandsAt < BAND_WINDOW_MS) return true
@@ -504,7 +511,8 @@ export const sound = {
   setSettings(next) {
     if (!next || typeof next !== 'object') return engine.settings
     engine.settings = { ...engine.settings, ...next }
-    if (engine.audio) engine.audio.volume = Math.min(1, Math.max(0, Number(engine.settings.musicVolume) || 0))
+    if (typeof next.musicMuted === 'boolean') engine.musicMuted = next.musicMuted
+    applyMusicVolume()
     return engine.settings
   },
   settings: () => ({ ...engine.settings }),
@@ -603,7 +611,7 @@ export const sound = {
       if (audio.dataset) audio.dataset.mrSrc = url
     }
     if (typeof url === 'string' && url) engine.musicTrack = url
-    audio.volume = Math.min(1, Math.max(0, Number(engine.settings.musicVolume) || 0))
+    applyMusicVolume()
     try {
       return Promise.resolve(audio.play()).then(() => true).catch(() => false)
     } catch {
@@ -622,8 +630,36 @@ export const sound = {
   setMusicVolume(value) {
     const volume = Math.min(1, Math.max(0, Number(value) || 0))
     engine.settings = { ...engine.settings, musicVolume: volume }
-    if (engine.audio) engine.audio.volume = volume
+    applyMusicVolume()
     return volume
+  },
+  setMusicMuted(value) {
+    engine.musicMuted = value === true
+    applyMusicVolume()
+    return engine.musicMuted
+  },
+  musicMuted() {
+    return engine.musicMuted
+  },
+  musicPosition() {
+    const at = Number(engine.audio?.currentTime)
+    return Number.isFinite(at) && at > 0 ? at : 0
+  },
+  musicDuration() {
+    const length = Number(engine.audio?.duration)
+    return Number.isFinite(length) && length > 0 ? length : 0
+  },
+  seekMusic(value) {
+    const audio = engine.audio
+    if (!audio) return 0
+    const length = sound.musicDuration()
+    const at = Math.min(length > 0 ? length : Infinity, Math.max(0, Number(value) || 0))
+    try {
+      audio.currentTime = at
+    } catch {
+      return sound.musicPosition()
+    }
+    return sound.musicPosition()
   },
   onMusicEnded(listener) {
     if (typeof listener !== 'function') return () => {}
