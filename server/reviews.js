@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
@@ -44,8 +44,15 @@ export function codeCheckout() {
 }
 
 function pathKey(path) {
+  if (!path) return ''
   try {
-    const resolved = resolve(String(path ?? ''))
+    const raw = String(path)
+    let resolved
+    try {
+      resolved = realpathSync.native(raw)
+    } catch {
+      resolved = resolve(raw)
+    }
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved
   } catch {
     return ''
