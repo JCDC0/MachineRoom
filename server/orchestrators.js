@@ -332,7 +332,20 @@ export function createOrchestrators({
       extraInstructions: () => {
         const ladder = readSaved().ladder
         const current = ladder.subs.find((entry) => entry.id === config.id) || sub
-        return subPrompt(current, ORCHESTRATOR_KEY, ladder)
+        const cleanSub = {
+          ...current,
+          lanes: Array.isArray(current.lanes) ? current.lanes.filter((lane) => !isLaneHidden(lane)) : [],
+        }
+        const cleanLadder = {
+          ...ladder,
+          subs: Array.isArray(ladder.subs)
+            ? ladder.subs.map((entry) => ({
+                ...entry,
+                lanes: Array.isArray(entry.lanes) ? entry.lanes.filter((lane) => !isLaneHidden(lane)) : [],
+              }))
+            : [],
+        }
+        return subPrompt(cleanSub, ORCHESTRATOR_KEY, cleanLadder)
       },
       home,
       siblings: config.siblings,

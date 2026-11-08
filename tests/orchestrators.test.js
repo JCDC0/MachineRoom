@@ -1284,6 +1284,28 @@ describe('the orchestrator registry', () => {
     expect(rig.chat('orchestrator').ladder.subs[0].lanes).toEqual(['opencode2'])
   })
 
+  it('leaves hidden lanes out of a sub prompt and sibling lines', async () => {
+    const files = makeBase({
+      ladder: {
+        subs: [
+          { ...FRONTEND, lanes: ['opencode', 'opencode2'] },
+          { id: 'backend', name: 'Backend', harness: 'claude', model: 'sonnet', lanes: ['claude'], scope: ['src/**'], restricted: true, setBy: 'owner' },
+        ],
+      },
+    })
+    const hiddenFile = projectLanesFileFor(files.projectRoot, files.runs)
+    writeHiddenLanes(hiddenFile, ['opencode2'])
+    const rig = makeRig(files)
+
+    rig.registry.find('frontend').send({ text: 'Check your lanes', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+
+    const call = files.calls().find((item) => item.args.some((arg) => typeof arg === 'string' && arg.includes('Your id is `frontend`')))
+    const instruction = call.args[call.args.indexOf('--append-system-prompt') + 1]
+    expect(instruction).toContain('Your lanes: `opencode`.')
+    expect(instruction).not.toContain('opencode2')
+  })
+
   it('lets only the owner change a scope the owner set', async () => {
     const rig = await makeBridge(makeBase())
     const mainToken = rig.bridge.orchestrators().token('orchestrator')
