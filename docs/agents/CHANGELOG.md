@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A ladder save keeps each sub's lanes that are hidden in this project, a sub's prompt leaves hidden lanes out, applying a team or copying a project with no lane in this project answers 409 and writes nothing, and a later result line with no iterations keeps the orchestrator's last context count (task S46).
 - A failed call from a child whose view is not built yet drops its queued touch with no white star, a run end or child end also drops its queued spawns, open calls and web calls, a touch inside a leaving ancestor card labels and marks that card, and the Teams panel and the first-run card show a ladder the bridge refused after Applied NAME. and read the teams again on a family notice (task U164).
 - The music time bar shows the elapsed time at the slider's position, reads the time only from the track the queue has loaded, so a playlist switch while paused no longer shows the old track, and a seek waits until the track length is known (task U165).
 - agy3 reviewed U158 to U163, S44, S45 and T38 in AUDIT-2026-11-REVIEW-6.md; the orchestrator confirmed eight of its twelve findings and briefed S46, U164 and U165 (task Q42).
