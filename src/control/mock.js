@@ -62,7 +62,14 @@ export const CLIENT_METHODS = [
   'createLane',
   'updateLane',
   'deleteLane',
+  'hideLane',
+  'showLane',
   'setActiveLanes',
+  'teams',
+  'saveTeam',
+  'applyTeam',
+  'deleteTeam',
+  'copyProjectTeam',
   'reviews',
   'reviewDiff',
   'mergeReview',
@@ -1373,6 +1380,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         const info = typeof lane === 'string' && Object.hasOwn(SAMPLE_LANES, lane) ? SAMPLE_LANES[lane] : null
         if (!info || typeof info !== 'object') throw new Error('Choose a lane from the list.')
         if (!Object.hasOwn(info, 'cli') || !info.cli || typeof info.cli !== 'object') throw new Error('That lane has no command line.')
+        if (state.lanes.some((l) => l.key === lane && l.hidden === true)) {
+          throw new Error(`${lane} is hidden in this project. Show it in Settings first.`)
+        }
         if (state.chosenLanes && !state.lanes.some((l) => l.key === lane && l.active)) {
           throw new Error(`The lane ${lane} is not active. Add it in Agents first.`)
         }
@@ -1692,6 +1702,191 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         return { ok: true, deleted: key }
       }),
 
+    hideLane: (optionsOrKey, maybeConfirmed) =>
+      call('hideLane', () => {
+        let key
+        let confirmed = true
+        if (typeof optionsOrKey === 'string') {
+          key = optionsOrKey
+          if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+          else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+            confirmed = maybeConfirmed.confirmed
+          }
+        } else if (optionsOrKey && typeof optionsOrKey === 'object') {
+          key = optionsOrKey.key
+          if (optionsOrKey.confirmed !== undefined) confirmed = optionsOrKey.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm hiding the lane first.')
+        if (key === 'orchestrator') throw new Error('The orchestrator cannot be hidden.')
+        const lane = state.lanes.find((l) => l.key === key)
+        if (!lane) throw new Error(`The lane ${key} is not known.`)
+        if (lane.working === true) throw new Error(`The lane ${key} is running.`)
+        lane.hidden = true
+        lane.active = false
+        emit({ topic: 'agents' })
+        emit({ topic: 'family' })
+        return { ok: true, hidden: key }
+      }),
+
+    showLane: (optionsOrKey, maybeConfirmed) =>
+      call('showLane', () => {
+        let key
+        let confirmed = true
+        if (typeof optionsOrKey === 'string') {
+          key = optionsOrKey
+          if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+          else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+            confirmed = maybeConfirmed.confirmed
+          }
+        } else if (optionsOrKey && typeof optionsOrKey === 'object') {
+          key = optionsOrKey.key
+          if (optionsOrKey.confirmed !== undefined) confirmed = optionsOrKey.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm showing the lane first.')
+        if (key === 'orchestrator') throw new Error('The orchestrator cannot be hidden.')
+        const lane = state.lanes.find((l) => l.key === key)
+        if (!lane) throw new Error(`The lane ${key} is not known.`)
+        if (lane.working === true) throw new Error(`The lane ${key} is running.`)
+        lane.hidden = false
+        emit({ topic: 'agents' })
+        emit({ topic: 'family' })
+        return { ok: true, shown: key }
+      }),
+
+    teams: () =>
+      call('teams', () => ({
+        teams: clone(state.teams ?? []),
+      })),
+
+    saveTeam: (optionsOrName, maybeConfirmed) =>
+      call('saveTeam', () => {
+        let name
+        let confirmed = true
+        if (typeof optionsOrName === 'string') {
+          name = optionsOrName
+          if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+          else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+            confirmed = maybeConfirmed.confirmed
+          }
+        } else if (optionsOrName && typeof optionsOrName === 'object') {
+          name = optionsOrName.name
+          if (optionsOrName.confirmed !== undefined) confirmed = optionsOrName.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the team action first.')
+        const trimmed = typeof name === 'string' ? name.trim() : ''
+        if (!trimmed || trimmed.length > 40) throw new Error('The team name must be 1 to 40 characters.')
+        if (!state.teams) state.teams = []
+        const activeList = state.lanes.filter((l) => l.active && !l.hidden).map((l) => l.key)
+        const team = {
+          name: trimmed,
+          lanes: activeList,
+          labels: clone(state.labels ?? {}),
+          ladder: clone(ladder),
+          savedAt: new Date().toISOString(),
+        }
+        const idx = state.teams.findIndex((t) => t.name === trimmed)
+        if (idx !== -1) {
+          state.teams[idx] = team
+        } else {
+          state.teams.push(team)
+        }
+        emit({ topic: 'agents' })
+        emit({ topic: 'family' })
+        return { ok: true, team }
+      }),
+
+    applyTeam: (optionsOrName, maybeConfirmed) =>
+      call('applyTeam', () => {
+        let name
+        let confirmed = true
+        if (typeof optionsOrName === 'string') {
+          name = optionsOrName
+          if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+          else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+            confirmed = maybeConfirmed.confirmed
+          }
+        } else if (optionsOrName && typeof optionsOrName === 'object') {
+          name = optionsOrName.name
+          if (optionsOrName.confirmed !== undefined) confirmed = optionsOrName.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the team action first.')
+        if (!state.teams) state.teams = []
+        const team = state.teams.find((t) => t.name === name)
+        if (!team) throw new Error(`The team ${name} was not found.`)
+        const existingKeys = new Set(state.lanes.map((l) => l.key))
+        const appliedLanes = (team.lanes ?? []).filter((k) => existingKeys.has(k))
+        const droppedLanes = (team.lanes ?? []).filter((k) => !existingKeys.has(k))
+        state.chosenLanes = true
+        for (const lane of state.lanes) {
+          if (appliedLanes.includes(lane.key)) {
+            lane.active = true
+            lane.hidden = false
+          } else {
+            lane.active = false
+            lane.hidden = true
+          }
+        }
+        if (team.labels) state.labels = clone(team.labels)
+        if (team.ladder) replaceLadder(team.ladder)
+        emit({ topic: 'agents' })
+        emit({ topic: 'family' })
+        return {
+          ok: true,
+          applied: {
+            lanes: appliedLanes,
+            labels: clone(team.labels ?? {}),
+            ladder: clone(team.ladder ?? { subs: [] }),
+          },
+          dropped: {
+            lanes: droppedLanes,
+          },
+        }
+      }),
+
+    deleteTeam: (optionsOrName, maybeConfirmed) =>
+      call('deleteTeam', () => {
+        let name
+        let confirmed = true
+        if (typeof optionsOrName === 'string') {
+          name = optionsOrName
+          if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+          else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+            confirmed = maybeConfirmed.confirmed
+          }
+        } else if (optionsOrName && typeof optionsOrName === 'object') {
+          name = optionsOrName.name
+          if (optionsOrName.confirmed !== undefined) confirmed = optionsOrName.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the team action first.')
+        if (!state.teams) state.teams = []
+        const idx = state.teams.findIndex((t) => t.name === name)
+        if (idx === -1) throw new Error(`The team ${name} was not found.`)
+        state.teams.splice(idx, 1)
+        emit({ topic: 'agents' })
+        emit({ topic: 'family' })
+        return { ok: true, deleted: name }
+      }),
+
+    copyProjectTeam: (optionsOrPath, maybeConfirmed) =>
+      call('copyProjectTeam', () => {
+        let path
+        let confirmed = true
+        if (typeof optionsOrPath === 'string') {
+          path = optionsOrPath
+          if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+          else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+            confirmed = maybeConfirmed.confirmed
+          }
+        } else if (optionsOrPath && typeof optionsOrPath === 'object') {
+          path = optionsOrPath.path
+          if (optionsOrPath.confirmed !== undefined) confirmed = optionsOrPath.confirmed
+        }
+        if (confirmed !== true) throw new Error('Confirm the team action first.')
+        emit({ topic: 'agents' })
+        emit({ topic: 'family' })
+        return { ok: true, copied: { path } }
+      }),
+
     setActiveLanes: (optionsOrLanes, maybeConfirmed) =>
       call('setActiveLanes', () => {
         let lanes
@@ -1712,6 +1907,9 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         for (const key of lanes) {
           if (typeof key !== 'string' || !state.lanes.some((l) => l.key === key)) {
             throw new Error(`The lane ${key} is not known.`)
+          }
+          if (state.lanes.some((l) => l.key === key && l.hidden === true)) {
+            throw new Error(`${key} is hidden in this project. Show it in Settings first.`)
           }
           if (seen.has(key)) throw new Error('A lane cannot be listed more than once.')
           seen.add(key)

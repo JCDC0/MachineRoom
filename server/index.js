@@ -29,6 +29,7 @@ import { createPolicyApi } from './policy.js'
 import { createProjectsApi } from './projects.js'
 import { createReviewsApi } from './reviews.js'
 import { createRunsApi } from './runs.js'
+import { createTeamsApi } from './teams.js'
 import { createSearchApi } from './search.js'
 import { createSessionsSource } from './sessions-source.js'
 import { gitPath } from './programPath.js'
@@ -525,6 +526,20 @@ export function createBridge(options = {}) {
     readJsonBody,
     env,
   })
+  const teamsApi = createTeamsApi({
+    projectRoot,
+    runsFolder: bridgeRunsFolder,
+    lanes: () => (lanesSourceOn ? lanesConfig : readLanes()),
+    activeLanes: () => activeLanes,
+    orchestrators: () => orchestrators,
+    lanesSource: () => lanesSource,
+    runs: () => runs,
+    sendJson,
+    readJsonBody,
+    notify: (event) => {
+      for (const client of clients) writeSseChange(client, event)
+    },
+  })
   const agentDepthApi = createAgentDepthApi({
     runsFolder: bridgeRunsFolder,
     sendJson,
@@ -929,6 +944,7 @@ export function createBridge(options = {}) {
     if (await projects.handle(req, res, url)) return
     if (await agentDepthApi.handle(req, res, url)) return
     if (await familyApi.handle(req, res, url)) return
+    if (await teamsApi.handle(req, res, url)) return
     if (await gitApi.handle(req, res, url)) return
     if (await filesApi.handle(req, res, url)) return
     if (await networkApi.handle(req, res, url)) return
@@ -973,11 +989,17 @@ export function createBridge(options = {}) {
       rememberLaneParsers()
       rememberSessionsParsers()
       const allLaneAgents = lanesSource ? [...lanesSource.agents] : []
+      const visibleLaneAgents = allLaneAgents.filter(
+        (agent) =>
+          agent.key === 'orchestrator' ||
+          String(agent.key ?? '').startsWith('sub-') ||
+          !activeLanes.isLaneHidden(agent.key)
+      )
       const laneAgents = activeLanes.isChosen()
-        ? allLaneAgents.filter(
+        ? visibleLaneAgents.filter(
             (agent) => agent.key === 'orchestrator' || String(agent.key ?? '').startsWith('sub-') || activeLanes.isLaneActive(agent.key)
           )
-        : allLaneAgents
+        : visibleLaneAgents
       const sessionAgents = sessionsSource ? [...sessionsSource.agents] : []
       sendJson(req, res, 200, [...laneAgents, ...sessionAgents])
       return

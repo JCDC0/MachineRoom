@@ -431,6 +431,104 @@ export function createClient({
     deleteLane: ({ key, confirmed = true } = {}) =>
       request('POST', `/api/lanes/${encodeURIComponent(key ?? '')}/delete`, { confirmed }),
 
+    hideLane: (optionsOrKey, maybeConfirmed) => {
+      let key
+      let confirmed = true
+      if (typeof optionsOrKey === 'string') {
+        key = optionsOrKey
+        if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+        else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+          confirmed = maybeConfirmed.confirmed
+        }
+      } else if (optionsOrKey && typeof optionsOrKey === 'object') {
+        key = optionsOrKey.key
+        if (optionsOrKey.confirmed !== undefined) confirmed = optionsOrKey.confirmed
+      }
+      return request('POST', `/api/lanes/${encodeURIComponent(key ?? '')}/hide`, { confirmed })
+    },
+
+    showLane: (optionsOrKey, maybeConfirmed) => {
+      let key
+      let confirmed = true
+      if (typeof optionsOrKey === 'string') {
+        key = optionsOrKey
+        if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+        else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+          confirmed = maybeConfirmed.confirmed
+        }
+      } else if (optionsOrKey && typeof optionsOrKey === 'object') {
+        key = optionsOrKey.key
+        if (optionsOrKey.confirmed !== undefined) confirmed = optionsOrKey.confirmed
+      }
+      return request('POST', `/api/lanes/${encodeURIComponent(key ?? '')}/show`, { confirmed })
+    },
+
+    teams: () => request('GET', '/api/teams'),
+
+    saveTeam: (optionsOrName, maybeConfirmed) => {
+      let name
+      let confirmed = true
+      if (typeof optionsOrName === 'string') {
+        name = optionsOrName
+        if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+        else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+          confirmed = maybeConfirmed.confirmed
+        }
+      } else if (optionsOrName && typeof optionsOrName === 'object') {
+        name = optionsOrName.name
+        if (optionsOrName.confirmed !== undefined) confirmed = optionsOrName.confirmed
+      }
+      return request('POST', '/api/teams', { name, confirmed })
+    },
+
+    applyTeam: (optionsOrName, maybeConfirmed) => {
+      let name
+      let confirmed = true
+      if (typeof optionsOrName === 'string') {
+        name = optionsOrName
+        if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+        else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+          confirmed = maybeConfirmed.confirmed
+        }
+      } else if (optionsOrName && typeof optionsOrName === 'object') {
+        name = optionsOrName.name
+        if (optionsOrName.confirmed !== undefined) confirmed = optionsOrName.confirmed
+      }
+      return request('POST', `/api/teams/${encodeURIComponent(name ?? '')}/apply`, { confirmed })
+    },
+
+    deleteTeam: (optionsOrName, maybeConfirmed) => {
+      let name
+      let confirmed = true
+      if (typeof optionsOrName === 'string') {
+        name = optionsOrName
+        if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+        else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+          confirmed = maybeConfirmed.confirmed
+        }
+      } else if (optionsOrName && typeof optionsOrName === 'object') {
+        name = optionsOrName.name
+        if (optionsOrName.confirmed !== undefined) confirmed = optionsOrName.confirmed
+      }
+      return request('POST', `/api/teams/${encodeURIComponent(name ?? '')}/delete`, { confirmed })
+    },
+
+    copyProjectTeam: (optionsOrPath, maybeConfirmed) => {
+      let path
+      let confirmed = true
+      if (typeof optionsOrPath === 'string') {
+        path = optionsOrPath
+        if (typeof maybeConfirmed === 'boolean') confirmed = maybeConfirmed
+        else if (maybeConfirmed && typeof maybeConfirmed === 'object' && maybeConfirmed.confirmed !== undefined) {
+          confirmed = maybeConfirmed.confirmed
+        }
+      } else if (optionsOrPath && typeof optionsOrPath === 'object') {
+        path = optionsOrPath.path
+        if (optionsOrPath.confirmed !== undefined) confirmed = optionsOrPath.confirmed
+      }
+      return request('POST', '/api/teams/copy', { path, confirmed })
+    },
+
     setActiveLanes: (optionsOrLanes, maybeConfirmed) => {
       let lanes
       let confirmed = true
