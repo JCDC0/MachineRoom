@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The review list on another project reads the room's lanes when git fails at the bridge start and the project has no lanes file, a failed checkout read is not cached for the rest of the process, and paths compare through realpath (task T38).
 - At 900 pixels and wider the menu row is black, so the transport scrolls under it instead of showing through its buttons.
 - The Agents tab shows this project's lanes with an N more lanes row, its trash hides a lane in this project only, a Teams panel applies, saves and copies a team, Settings has a Lanes section that shows a hidden lane again or deletes one everywhere, and the first visit offers the saved teams beside Start fresh (task U162).
 - A touch on a leaving card flashes and labels that card, a failed folder also marks its nearest card red, a run end or a child end cancels its stars with no white flash, removing an agent cancels the stars to or from it, reduced-motion touches land after the frame's cards, the replay tail is 3 seconds and a speed that is not a number at or above 0 counts as 1 (task U163).
