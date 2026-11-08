@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
 import { mainCheckoutOf } from './lanes-source.js'
@@ -41,6 +41,27 @@ function pathKey(path) {
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved
   } catch {
     return ''
+  }
+}
+
+function inside(folder, root) {
+  if (!folder || !root) return false
+  const key = pathKey(folder)
+  const base = pathKey(root)
+  if (!key || !base) return false
+  const sep = process.platform === 'win32' ? '\\' : '/'
+  return key === base || key.startsWith(base.endsWith(sep) ? base : `${base}${sep}`)
+}
+
+function inGitWorkTree(folder) {
+  if (!folder) return false
+  let current = pathKey(folder)
+  if (!current) return false
+  while (true) {
+    if (existsSync(join(current, '.git'))) return true
+    const parent = dirname(current)
+    if (parent === current) return false
+    current = parent
   }
 }
 
@@ -228,7 +249,13 @@ export function createReviewsApi({
         ? ROOM_BRIEFS
         : resolvedBriefs
   const lanesCheckout = lanesFolder ? mainCheckoutOf(lanesFolder) : ''
-  const onProject = Boolean(roomCheckout && lanesCheckout && pathKey(roomCheckout) !== pathKey(lanesCheckout))
+  const projectCheckout = roomCheckout || resolvedRoot
+  const lanesPlain = Boolean(lanesFolder) && !inGitWorkTree(lanesFolder)
+  const sameCheckout =
+    roomCheckout && lanesCheckout
+      ? pathKey(roomCheckout) === pathKey(lanesCheckout)
+      : inside(lanesFolder, projectCheckout) || lanesPlain
+  const onProject = Boolean(resolvedRoot && !sameCheckout)
   const runGit = (cwd, args, options = {}) => gitRunner(cwd, args, { timeout: GIT_TIMEOUT_MS, ...options })
   let merging = false
 

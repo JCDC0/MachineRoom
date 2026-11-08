@@ -119,18 +119,26 @@ function makeProject({ detach = false } = {}) {
   return { base, room, project, worktree, briefsDir: join(room, 'docs', 'agents') }
 }
 
-async function startBridge({ projectRoot, briefsDir }) {
-  const bridge = createBridge({
-    projectRoot,
-    briefsDir,
-    runsFolder: join(projectRoot, '..', 'runs'),
-    port: 0,
-    paperclipUrl: 'http://127.0.0.1:1',
-    companyId: 'company-1',
-    reconnectMinMs: 60000,
-    reconnectMaxMs: 60000,
-    readTree: () => Promise.resolve({ root: 'project', files: [], created: [] }),
-  })
+async function startBridge({ projectRoot, briefsDir, hideGitAtStart = false }) {
+  const previousPath = process.env.PATH
+  if (hideGitAtStart) process.env.PATH = ''
+  let bridge
+  try {
+    bridge = createBridge({
+      projectRoot,
+      briefsDir,
+      runsFolder: join(projectRoot, '..', 'runs'),
+      port: 0,
+      paperclipUrl: 'http://127.0.0.1:1',
+      companyId: 'company-1',
+      reconnectMinMs: 60000,
+      reconnectMaxMs: 60000,
+      readTree: () => Promise.resolve({ root: 'project', files: [], created: [] }),
+    })
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH
+    else process.env.PATH = previousPath
+  }
   cleanups.push(() => bridge.stop())
   const { url } = await bridge.start()
   return { url }
@@ -260,6 +268,17 @@ describe('review routes on another project', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ ok: true, lane: 'opencode', branch: '', head, commit: head })
     expect(git(project, ['rev-parse', 'HEAD']).trim()).toBe(head)
+  }, 40000)
+
+  it('keeps the project lanes when the checkout lookup cannot start git', async () => {
+    const { project, worktree, briefsDir } = makeProject({ detach: true })
+    const head = git(worktree, ['rev-parse', 'HEAD']).trim()
+    const { url } = await startBridge({ projectRoot: project, briefsDir, hideGitAtStart: true })
+
+    const list = await fetch(`${url}/api/control/reviews`).then((r) => r.json())
+    expect(list.lanes.map((entry) => entry.lane)).toEqual(['opencode'])
+    expect(list.lanes[0]).toMatchObject({ lane: 'opencode', branch: '', base: 'trunk', ahead: 1 })
+    expect(list.lanes[0].head).toBe(head)
   }, 40000)
 
   it('still reads every configured lane against main on MachineRoom itself', async () => {
