@@ -8981,6 +8981,78 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   gap: 4px;
 }
 
+.mr-lanes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mr-lanes-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px var(--space);
+  border: 1px solid var(--line);
+}
+
+.mr-lanes-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-lanes-tag {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  font-size: 8px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.mr-lanes-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.mr-lanes-show,
+.mr-lanes-delete {
+  padding: 2px var(--space);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.mr-lanes-show:hover:not(:disabled) {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
+.mr-lanes-delete:hover:not(:disabled) {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+.mr-lanes-state {
+  margin: 0;
+  font-size: 10px;
+  color: rgb(255 255 255 / 0.6);
+}
+
+.mr-lanes-state.is-error {
+  color: var(--red);
+}
+
 .mr-family-node {
   display: flex;
   flex-direction: column;
