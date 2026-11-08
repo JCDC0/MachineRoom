@@ -4,7 +4,7 @@ import { basename, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
-import { activeLanesFileFor, writeActiveLanes } from '../server/active-lanes.js'
+import { activeLanesFileFor, projectLanesFileFor, writeActiveLanes, writeHiddenLanes } from '../server/active-lanes.js'
 import { createLanesSource, createRecordsCache, subOrchestratorAgent } from '../server/lanes-source.js'
 import { chatFileFor, COMPACT_RUNNING_PROBLEM, COMPACTED_MESSAGE, CONFIRM_AUTOCOMPACT_PROBLEM, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import {
@@ -1247,6 +1247,63 @@ describe('the orchestrator registry', () => {
     expect(wrongLane.status).toBe(400)
     expect(wrongLane.body.problems).toContain('Sub "frontend" names the lane "nope", which is not a lane key.')
     expect((await getJson(`${rig.url}/api/orchestrators`)).body).toHaveLength(1)
+  })
+
+  it('keeps a hidden lane across a ladder save from the filtered list and restores it when unhidden', () => {
+    const files = makeBase({ ladder: { subs: [{ ...FRONTEND, lanes: ['opencode', 'opencode2'] }] } })
+    const hiddenFile = projectLanesFileFor(files.projectRoot, files.runs)
+    writeHiddenLanes(hiddenFile, ['opencode2'])
+    const rig = makeRig(files)
+
+    const initial = rig.registry.list().find((entry) => entry.id === 'frontend')
+    expect(initial.lanes).toEqual(['opencode'])
+
+    const filteredSubs = [{ ...FRONTEND, lanes: ['opencode'] }]
+    const saveRes = rig.registry.ladderChange({ ladder: { subs: filteredSubs }, by: 'owner', confirmed: true }, true)
+    expect(saveRes.status).toBe(200)
+
+    const savedSubs = rig.chat('orchestrator').ladder.subs
+    expect(savedSubs[0].lanes).toEqual(['opencode', 'opencode2'])
+
+    writeHiddenLanes(hiddenFile, [])
+    const restored = rig.registry.list().find((entry) => entry.id === 'frontend')
+    expect(restored.lanes).toEqual(['opencode', 'opencode2'])
+  })
+
+  it('saves a sub whose lanes are all hidden when sent with no lanes', () => {
+    const files = makeBase({ ladder: { subs: [{ ...FRONTEND, lanes: ['opencode2'] }] } })
+    const hiddenFile = projectLanesFileFor(files.projectRoot, files.runs)
+    writeHiddenLanes(hiddenFile, ['opencode2'])
+    const rig = makeRig(files)
+
+    const saveRes = rig.registry.ladderChange(
+      { ladder: { subs: [{ ...FRONTEND, lanes: [] }] }, by: 'owner', confirmed: true },
+      true
+    )
+    expect(saveRes.status).toBe(200)
+    expect(rig.chat('orchestrator').ladder.subs[0].lanes).toEqual(['opencode2'])
+  })
+
+  it('leaves hidden lanes out of a sub prompt and sibling lines', async () => {
+    const files = makeBase({
+      ladder: {
+        subs: [
+          { ...FRONTEND, lanes: ['opencode', 'opencode2'] },
+          { id: 'backend', name: 'Backend', harness: 'claude', model: 'sonnet', lanes: ['claude'], scope: ['src/**'], restricted: true, setBy: 'owner' },
+        ],
+      },
+    })
+    const hiddenFile = projectLanesFileFor(files.projectRoot, files.runs)
+    writeHiddenLanes(hiddenFile, ['opencode2'])
+    const rig = makeRig(files)
+
+    rig.registry.find('frontend').send({ text: 'Check your lanes', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+
+    const call = files.calls().find((item) => item.args.some((arg) => typeof arg === 'string' && arg.includes('Your id is `frontend`')))
+    const instruction = call.args[call.args.indexOf('--append-system-prompt') + 1]
+    expect(instruction).toContain('Your lanes: `opencode`.')
+    expect(instruction).not.toContain('opencode2')
   })
 
   it('lets only the owner change a scope the owner set', async () => {

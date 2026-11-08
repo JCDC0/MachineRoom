@@ -332,7 +332,20 @@ export function createOrchestrators({
       extraInstructions: () => {
         const ladder = readSaved().ladder
         const current = ladder.subs.find((entry) => entry.id === config.id) || sub
-        return subPrompt(current, ORCHESTRATOR_KEY, ladder)
+        const cleanSub = {
+          ...current,
+          lanes: Array.isArray(current.lanes) ? current.lanes.filter((lane) => !isLaneHidden(lane)) : [],
+        }
+        const cleanLadder = {
+          ...ladder,
+          subs: Array.isArray(ladder.subs)
+            ? ladder.subs.map((entry) => ({
+                ...entry,
+                lanes: Array.isArray(entry.lanes) ? entry.lanes.filter((lane) => !isLaneHidden(lane)) : [],
+              }))
+            : [],
+        }
+        return subPrompt(cleanSub, ORCHESTRATOR_KEY, cleanLadder)
       },
       home,
       siblings: config.siblings,
@@ -564,7 +577,40 @@ export function createOrchestrators({
     if (by !== 'owner' && by !== 'orchestrator') return { status: 400, body: { error: LADDER_BY_PROBLEM } }
     if (by === 'owner' && !page) return { status: 403, body: { error: OWNER_LADDER_PROBLEM } }
     if (by === 'orchestrator' && page) return { status: 403, body: { error: PAGE_LADDER_PROBLEM } }
-    const next = readLadder(body.ladder, { lanes: eligibleLaneKeys() })
+    let ladderInput = body.ladder
+    if (ladderInput && typeof ladderInput === 'object' && Array.isArray(ladderInput.subs)) {
+      const savedLadder = readSaved().ladder
+      const savedSubs = new Map((savedLadder?.subs ?? []).map((sub) => [sub.id, sub]))
+      const claimedByNew = new Map()
+      for (const sub of ladderInput.subs) {
+        if (!sub || typeof sub !== 'object') continue
+        if (Array.isArray(sub.lanes)) {
+          for (const lane of sub.lanes) {
+            if (typeof lane === 'string' && lane) {
+              claimedByNew.set(lane, sub.id)
+            }
+          }
+        }
+      }
+      const subs = ladderInput.subs.map((sub) => {
+        if (!sub || typeof sub !== 'object' || typeof sub.id !== 'string') return sub
+        const saved = savedSubs.get(sub.id)
+        if (!saved || !Array.isArray(saved.lanes)) return sub
+        const lanes = Array.isArray(sub.lanes) ? [...sub.lanes] : []
+        for (const lane of saved.lanes) {
+          if (typeof lane !== 'string' || !lane) continue
+          if (isLaneHidden(lane)) {
+            const claimingSub = claimedByNew.get(lane)
+            if ((claimingSub === undefined || claimingSub === sub.id) && !lanes.includes(lane)) {
+              lanes.push(lane)
+            }
+          }
+        }
+        return { ...sub, lanes }
+      })
+      ladderInput = { ...ladderInput, subs }
+    }
+    const next = readLadder(ladderInput, { lanes: eligibleLaneKeys() })
     if (next.problems.length > 0) {
       return { status: 400, body: { error: next.problems.join(' '), problems: next.problems } }
     }

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   CONFIRM_TEAM_PROBLEM,
@@ -359,6 +359,50 @@ describe('teams routes and validation', () => {
 
     const targetLabels = readLabels(labelsFileFor(projTarget, runsFolder))
     expect(targetLabels.claude).toBe('Claude Specialist')
+  })
+
+  it('refuses apply and copy with 409 when no lanes belong to this project and leaves files untouched', async () => {
+    const runsFolder = tempDir('mr-runs-empty-')
+    const projSource = tempDir('mr-source-empty-')
+    const projTarget = tempDir('mr-target-empty-')
+
+    const projectsFile = join(runsFolder, 'projects.json')
+    writeFileSync(
+      projectsFile,
+      JSON.stringify({ recent: [{ path: projSource, openedAt: new Date().toISOString() }] })
+    )
+
+    writeActiveLanes(activeLanesFileFor(projSource, runsFolder), ['nonexistent'])
+    writeActiveLanes(activeLanesFileFor(projTarget, runsFolder), ['claude'])
+    writeHiddenLanes(projectLanesFileFor(projTarget, runsFolder), ['opencode'])
+
+    saveTeams(teamsFileFor(runsFolder), [
+      { name: 'Foreign', lanes: ['nonexistent'], labels: {}, savedAt: new Date().toISOString() },
+    ])
+
+    const bridge = await startTestBridge({ projectRoot: projTarget, runsFolder })
+
+    const applyRes = await getJson(`${bridge.url}/api/teams/Foreign/apply`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: bridge.url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(applyRes.status).toBe(409)
+    expect(applyRes.body.error).toBe('None of the lanes in Foreign are in this project.')
+
+    expect(readActiveLanesChoice(activeLanesFileFor(projTarget, runsFolder))).toEqual(['claude'])
+    expect(readHiddenLanes(projectLanesFileFor(projTarget, runsFolder))).toEqual(['opencode'])
+
+    const copyRes = await getJson(`${bridge.url}/api/teams/copy`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: bridge.url },
+      body: JSON.stringify({ path: projSource, confirmed: true }),
+    })
+    expect(copyRes.status).toBe(409)
+    expect(copyRes.body.error).toBe(`${basename(projSource)} has no active lanes to copy.`)
+
+    expect(readActiveLanesChoice(activeLanesFileFor(projTarget, runsFolder))).toEqual(['claude'])
+    expect(readHiddenLanes(projectLanesFileFor(projTarget, runsFolder))).toEqual(['opencode'])
   })
 
   it('reports a ladder the bridge refuses instead of saying it applied', async () => {

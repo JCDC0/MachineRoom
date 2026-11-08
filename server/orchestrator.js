@@ -603,11 +603,17 @@ export function contextTokensFromLog(harness, log) {
       if (usage) {
         let iterSum = null
         if (Array.isArray(usage.iterations) && usage.iterations.length > 0) {
-          const lastIteration = usage.iterations.at(-1)
-          const iterUsage = lastIteration?.usage && typeof lastIteration.usage === 'object' ? lastIteration.usage : lastIteration
-          iterSum = claudeTokens(iterUsage)
+          for (let index = usage.iterations.length - 1; index >= 0; index -= 1) {
+            const entry = usage.iterations[index]
+            const iterUsage = entry?.usage && typeof entry.usage === 'object' ? entry.usage : entry
+            const count = claudeTokens(iterUsage)
+            if (count !== null) {
+              iterSum = count
+              break
+            }
+          }
         }
-        lastResultIterations = iterSum
+        if (iterSum !== null) lastResultIterations = iterSum
         const total = claudeTokens(usage)
         if (total !== null) lastResultTotal = total
       }
