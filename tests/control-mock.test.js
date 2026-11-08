@@ -266,14 +266,16 @@ describe('mock orchestrators and the ladder', () => {
     const client = fast()
     const main = await client.orchestrator()
     expect(main.mode).toBe('bypass')
-    expect(main.modes.map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
+    expect(main.modes.map((mode) => mode.id)).toEqual(['plan', 'ask', 'edits', 'auto', 'bypass'])
     expect((await client.orchestrator('frontend')).mode).toBe('auto')
     expect((await client.orchestrator('frontend')).modes.map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto'])
 
     await expect(client.setOrchestratorMode({ mode: 'plan', confirmed: false })).rejects.toThrow('Confirm the mode change first.')
-    await expect(client.setOrchestratorMode({ mode: 'ask', confirmed: true })).rejects.toThrow(
+    await expect(client.setOrchestratorMode({ mode: 'bogus', confirmed: true })).rejects.toThrow(
       'Choose a permission mode listed for this harness.'
     )
+    const asked = await client.setOrchestratorMode({ mode: 'ask', confirmed: true })
+    expect(asked).toMatchObject({ id: 'orchestrator', mode: 'ask' })
     const saved = await client.setOrchestratorMode({ mode: 'plan', confirmed: true })
     expect(saved).toMatchObject({ id: 'orchestrator', mode: 'plan' })
     expect((await client.orchestrator()).mode).toBe('plan')

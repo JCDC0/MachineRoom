@@ -931,7 +931,7 @@ describe('the orchestrator registry', () => {
 
     const initial = await getJson(`${rig.url}/api/orchestrator`)
     expect(initial.body.mode).toBe('auto')
-    expect(initial.body.modes.map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
+    expect(initial.body.modes.map((mode) => mode.id)).toEqual(['plan', 'ask', 'edits', 'auto', 'bypass'])
     expect((await getJson(`${rig.url}/api/orchestrators`)).body[0]).toMatchObject({
       mode: 'auto',
       modes: initial.body.modes,
@@ -942,7 +942,7 @@ describe('the orchestrator registry', () => {
     expect(noOrigin.body).toEqual({ error: OWNER_MODE_PROBLEM })
 
     expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'plan' })).body).toEqual({ error: CONFIRM_MODE_PROBLEM })
-    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'ask', confirmed: true })).body).toEqual({ error: MODE_PROBLEM })
+    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'manual', confirmed: true })).body).toEqual({ error: MODE_PROBLEM })
     expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'bogus', confirmed: true })).body).toEqual({ error: MODE_PROBLEM })
     expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { id: 'missing', mode: 'plan', confirmed: true })).status).toBe(404)
 

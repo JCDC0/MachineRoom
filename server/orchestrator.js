@@ -69,6 +69,8 @@ export const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000
 export const APPROVAL_LIMIT = 20
 export const APPROVAL_NO_ANSWER = 'The owner did not answer.'
 export const APPROVAL_DENIED = 'The owner denied it.'
+export const APPROVAL_SERVER = 'machineroom-approve'
+export const APPROVAL_PROMPT_TOOL = 'mcp__machineroom-approve__approve'
 export const NO_SESSION_PROBLEM = 'The orchestrator has no session yet.'
 export const COMPACT_KEEP_LIMIT = 2000
 export const COMPACT_KEEP_PROBLEM = 'Write at most 2000 characters to keep.'
@@ -1254,7 +1256,9 @@ export function createOrchestrator({
     const metaPath = join(folder, `${logName}.meta.json`)
     const enabledServers = enabledMcpServersFor(folder)
     const turnMode = mode ?? legacyMode(harness)
-    const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
+    const bridgeAddress = String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? '')
+    const ask = turnMode === 'ask' && harness === 'claude'
+    const needsMcp = (enabledServers.length > 0 || ask) && (harness === 'claude' || harness === 'opencode')
     const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits' || turnMode === 'plan')
     const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
@@ -1267,7 +1271,19 @@ export function createOrchestrator({
       writeFileSync(metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
       if (mcpConfigPath) {
         if (harness === 'claude') {
-          writeFileSync(mcpConfigPath, `${JSON.stringify(mcpConfigForClaude(enabledServers), null, 2)}\n`, { mode: 0o600 })
+          const config = mcpConfigForClaude(enabledServers)
+          if (ask) {
+            config.mcpServers[APPROVAL_SERVER] = {
+              command: process.execPath,
+              args: [join(REPO_ROOT, 'scripts', 'mr-approve.mjs')],
+              env: {
+                MACHINEROOM_BRIDGE: bridgeAddress,
+                MACHINEROOM_ORCHESTRATOR_ID: key,
+                MACHINEROOM_ORCHESTRATOR_TOKEN: token,
+              },
+            }
+          }
+          writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
         } else if (harness === 'opencode') {
           const config = needsMcp ? mcpConfigForOpencode(enabledServers) : {}
           if (turnMode === 'edits') config.permission = { bash: 'deny' }
@@ -1292,7 +1308,7 @@ export function createOrchestrator({
       promptFile,
       root,
       folder,
-      String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''),
+      bridgeAddress,
       token,
       scratchFolder
     )
@@ -1325,6 +1341,7 @@ export function createOrchestrator({
       if (turnMode === 'plan') args.push('--permission-mode', 'plan')
       else if (turnMode === 'edits') args.push('--permission-mode', 'acceptEdits')
       else if (turnMode === 'auto') args.push('--permission-mode', 'auto')
+      else if (turnMode === 'ask') args.push('--permission-mode', 'manual', '--permission-prompt-tool', APPROVAL_PROMPT_TOOL)
       else args.push('--dangerously-skip-permissions')
       args.push(first ? '--session-id' : '--resume', sessionId, '--append-system-prompt', instruction)
       if (mcpConfigPath) args.push('--mcp-config', mcpConfigPath)
@@ -1367,6 +1384,9 @@ export function createOrchestrator({
         title: logName,
         mcpConfig: mcpConfigPath,
         mode: turnMode,
+        bridgeUrl: bridgeAddress,
+        orchestratorId: key,
+        token,
       })
       program = cmd.file
       args = cmd.args
