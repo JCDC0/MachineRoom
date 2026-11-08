@@ -224,7 +224,7 @@ export default function MusicPlayer() {
         </ul>
       )}
       <div className="hud-sound-time">
-        <span className="hud-sound-time-value mono">{formatTrackTime(position)}</span>
+        <span className="hud-sound-time-value mono">{formatTrackTime(shownPosition)}</span>
         <input
           type="range"
           min="0"

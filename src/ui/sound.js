@@ -659,7 +659,8 @@ export const sound = {
     const audio = engine.audio
     if (!audio) return 0
     const length = sound.musicDuration()
-    const at = Math.min(length > 0 ? length : Infinity, Math.max(0, Number(value) || 0))
+    if (!(length > 0)) return 0
+    const at = Math.min(length, Math.max(0, Number(value) || 0))
     try {
       audio.currentTime = at
     } catch {
