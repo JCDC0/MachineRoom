@@ -177,6 +177,29 @@ describe('the music player', () => {
     })
   })
 
+  it('shows the elapsed time at the end the time bar can reach', async () => {
+    globalThis.fetch = listAnswer(['alpha.mp3'])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      player.duration = 60
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+
+      player.currentTime = 90
+      await settle(300)
+      const seek = container.querySelector('input[aria-label="Track position"]')
+      const times = () => container.querySelectorAll('.hud-sound-time-value').map((node) => node.textContent)
+      expect(Number(seek.value)).toBe(60)
+      expect(times()).toEqual(['1:00', '1:00'])
+    })
+  })
+
   it('mutes the music, keeps the volume and unmutes from the slider', async () => {
     globalThis.fetch = listAnswer(['alpha.mp3'])
     await withDom(async ({ container, dom, root }) => {
