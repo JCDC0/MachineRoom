@@ -1606,3 +1606,71 @@ Windows CI run 42485705382 failed once in `tests/project-reviews.test.js`, in `f
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: server/reviews.js, server/index.js, tests/project-reviews.test.js, tests/.
+
+## The owner's fixes after the star work (2026-11-08, the owner's request)
+
+The owner found that the conversation can no longer be reached, that the agent colours do not match what the room shows as the orchestrator's colour, that the room no longer moves to their music, and that the music player needs a time bar and a clear volume row. The orchestrator also found that the orchestrator's context count is a sum over the turn's calls. The owner chose each design below on 2026-11-08.
+
+**U158. The room fills the first screen and the conversation sits beneath it (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`.
+
+Since U146 the page at 900 pixels and wider is one window-high frame with no page scroll, so at 1280 by 800 the lower half (`.hud-lower`) gets only 244 pixels. The owner wants the page to scroll again:
+
+1. At 900 pixels and wider, the menu row, the lens and the transport fill the first screen: by default the lens is the window height minus the menu and the transport. The Height rail (`LensRail.jsx`, `src/ui/lensResize.js`) still sets the lens height, from 30 percent up to that full height, and its saved `lensSplit` keeps working; a saved value from before is clamped into the new range.
+2. The lower half follows directly beneath the transport as its own area, one window high (`100vh`), with its three columns scrolling inside as now. The page scrolls to reach it, and the menu row stays fixed at the top.
+3. The idle view keeps its rule that it only starts with the page at its top (`idleAllowed` checks `scrollY`), and the wheel over the lens still zooms the camera instead of scrolling the page; the wheel anywhere else scrolls the page.
+4. Below 900 pixels nothing changes.
+
+Test the lens height clamp and the new default in `tests/`, and update any test that expects the one-frame layout. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Check it on screen before you finish: `npm run build`, `npm run serve -- up --root <this worktree> --port 5182 --no-open` in the background, open `/?replay&fixture=scenario-i` at 1280 by 800, and confirm the room fills the first screen and a scroll shows the full conversation area. Stop the server when you finish.
+
+Files: src/styles.css, src/Stage.jsx, src/ui/Hud.jsx, src/ui/LensRail.jsx, src/ui/lensResize.js, src/ui/settings.js, src/ui/idleView.js, tests/.
+
+**U159. Each agent shows its own colour everywhere, and the orchestrator is yellow (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`.
+
+Today each agent's colour comes from `agentColor(rosterIndex)` in `src/engine/agents.js`, so the orchestrator can come out pink while its ring, chip and callout are yellow like every working agent. The owner wants one colour per agent that shows on everything of that agent:
+
+1. The main orchestrator's colour is `YELLOW` (`#e5ff00`). Every other agent takes `agentColor(n)` where `n` counts the agents other than the main orchestrator in roster order, so a lane's colour does not change when the orchestrator moves in the roster. A child keeps its parent's colour. Put the rule in one pure exported function in `src/engine/sprites.js` or `agents.js` and test it.
+2. While an agent works, its own colour is used for: its status ring, its hub slot marker, its terminal chip's state dot, state word and border (the `.mr-term.is-working` rules in `src/styles.css`), its callout's border (`.mr-callout.is-working`), its stars, the card corner brackets and the active row's camera brackets and name (`--mr-target`, as now). Pass the colour to the chip and the callout as a CSS custom property, `--agent-color`, set on the element only when it changes, with `var(--yellow)` as the fallback in every rule. Red for a failure and green for a finished run stay as they are, and the tunnel stays grey.
+3. Nothing else changes colour: the selected folder stays yellow, and the HUD outside the room is unchanged.
+
+Test the colour rule, that a chip and a callout get `--agent-color`, and that the orchestrator's stars and brackets are `#e5ff00`. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Check it on screen before you finish: `npm run build`, `npm run serve -- up --root <this worktree> --port 5183 --no-open` in the background, open `/?replay&fixture=scenario-i` at 1280 by 800 and confirm the orchestrator's ring, chip, callout, stars and brackets are yellow and a lane's are its own colour. Stop the server when you finish.
+
+Files: src/engine/sprites.js, src/engine/agents.js, src/engine/terminals.js, src/engine/hub.js, src/engine/room.js, src/styles.css, tests/.
+
+**U160. The room moves to any music (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`, `src/engine/agents.js` or `src/styles.css`.
+
+The owner plays gentle music (lo-fi, calm). Today `src/ui/sound.js` sends a beat to the room (`room.setBeat`, called from `beforeFrame` in `src/Stage.jsx`) only while the music is beat-locked, and otherwise the room only sways by `SWAY_LIFT` 6 units and `SWAY_SCALE` 2 percent (`src/engine/hub.js`), which the owner cannot see. The owner wants the agents and the folder cards to move with any music:
+
+1. First check for a real fault: write a test that drives the sound engine's dance and bands with a fake analyser (a steady kick, and a soft lo-fi pattern with no steady grid) and checks that `dance().beat` and `bands()` give values, and that `Stage.jsx`'s frame callback passes them to the room. Fix whatever stops them.
+2. When the music is not beat-locked, send a beat on each clear onset that `sharpOnset` accepts (low or high group), with its strength scaled by how far the rise is above the average, keeping the 160 ms rest; a locked beat keeps its grid rule.
+3. Raise the sway so it is visible: `SWAY_LIFT` to 16 and `SWAY_SCALE` to 0.05, and keep the 1.5 second ease.
+4. Reduced motion still stops all of it, and the Dance and Pulse switches still turn their part off.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/ui/sound.js, src/engine/hub.js, src/Stage.jsx, tests/.
+
+**U161. The music player gets a time bar and a clear volume row (OpenCode).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`.
+
+The music player in Settings (`src/ui/MusicPlayer.jsx`, queue in `src/ui/musicQueue.js`, audio in `src/ui/sound.js`) shows its buttons above the track list and a bare `100%` slider under it, which the owner could not read as a volume. Lay it out top to bottom as:
+
+1. The `Music` line with the playing track's name, and the playlist select, as now.
+2. The track list, as now.
+3. A time bar under the track list: the elapsed time on the left (`m:ss`), an `input type="range"` the owner can drag or click to seek in the playing track, and the track's length on the right. It follows the playing track about four times a second while Settings is open, shows `0:00` and is disabled with nothing playing, and has `aria-label="Track position"`.
+4. The buttons row under the time bar: previous, play or pause, next, shuffle, loop, open folder and refresh, as now.
+5. The volume row: the word `Volume` on the left, the slider, its percent, and on the right one button that mutes and unmutes the music, with a line speaker icon, a crossed speaker when muted, `aria-label` and `title` `Mute music` or `Unmute music`. Muting keeps the slider's value and sets the music gain to 0; moving the slider while muted unmutes. Save the mute as `sound.musicMuted` in `machineroom.settings` beside `musicVolume`.
+
+Add what the queue needs to read and set the playing track's position, and test the time text, the seek and the mute. Keep the dim help line and the Refresh message. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/ui/MusicPlayer.jsx, src/ui/musicQueue.js, src/ui/sound.js, src/ui/settings.js, src/styles.css, tests/.
+
+**S44. The orchestrator's context is its last call, not the sum of the turn (AGY).** Read no part of TASKS.md beyond this brief. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 45. Do not edit any file under `docs/`, `src/styles.css`, `src/engine/**`, `src/Stage.jsx` or `src/App.jsx`.
+
+On 2026-11-08 a Claude Code orchestrator turn in the owner's room made 13 model calls and the room showed 725,456 tokens of context, while its last call held 67,491. `contextTokensFromLog` in `server/orchestrator.js` reads the top-level `result` line, whose `usage` sums every call of the turn. The true context is the last top-level call:
+
+1. For Claude Code, take the usage of the last top-level `assistant` line (no `parent_tool_use_id`), as `input_tokens` plus both cache counts; when the log has none, use the last entry of the `result` line's `usage.iterations`; only then the `result` total. OpenCode's last `step_finish` stays as it is.
+2. The run record's cost and tokens stay the turn's totals; only the context use changes. Sub orchestrators use the same function, so check them too.
+3. A test with a log shaped like the real one (several assistant lines, then a `result` whose usage is their sum) expects the last call's context, and one that checks that autocompact starts only from that number.
+
+Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/orchestrator.js, server/orchestrators.js, tests/.
