@@ -566,6 +566,36 @@ describe('the stars of a call and a run', () => {
     }
   })
 
+  it('drops a failed touch from a child whose view is not built yet', async () => {
+    const { room, state } = await makeRoom(['src/a.js'], ['claude'])
+    try {
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 3000, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      const touch = {
+        type: 'tool.start',
+        agent: 'claude~1',
+        id: 'c1',
+        time: 3100,
+        tool: 'edit',
+        label: 'write src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+      }
+      apply(state, touch)
+      room.onActivity(touch)
+      const end = { type: 'tool.end', agent: 'claude~1', id: 'c1', ok: false, time: 3200 }
+      apply(state, end)
+      room.onActivity(end)
+      expect(fakeLabels.shows.map((show) => show.text)).toContain('failed a.js')
+      tickRoom(2)
+      expect(fakeStars.launches.filter((launch) => launch.agent === 'claude~1')).toHaveLength(0)
+      const card = createdNodes.find((node) => node.dataset?.path === 'src')
+      expect(card.className).toContain('is-flash-red')
+    } finally {
+      room.dispose()
+    }
+  })
+
   it('cancels the stars of a view removed from the roster', async () => {
     const { room, state } = await makeRoom(['src/a.js'], ['claude', 'hermes'])
     try {

@@ -939,12 +939,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       return
     }
 
-    if (!view) return
-
-    if (activity.type === 'run.start') {
-      hub.pulse(WHITE, 1)
-      if (!still()) launchAgentStar(activity)
-    } else if (activity.type === 'tool.end' && !activity.ok) {
+    if (activity.type === 'tool.end' && !activity.ok) {
       const call = callOf(activity)
       if (call !== null) {
         stars.cancel((star) => star.agent === activity.agent && star.call === call)
@@ -961,6 +956,14 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         }
       })
       hub.pulse(RED, 0.5)
+      return
+    }
+
+    if (!view) return
+
+    if (activity.type === 'run.start') {
+      hub.pulse(WHITE, 1)
+      if (!still()) launchAgentStar(activity)
     } else if (activity.type === 'error') {
       hub.pulse(RED, 0.6)
     } else if (activity.type === 'agent.spawn' && typeof activity.child === 'string') {
