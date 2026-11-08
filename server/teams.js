@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import {
   activeLanesFileFor,
   eligibleLanes,
@@ -241,6 +241,11 @@ export function createTeamsApi(options = {}) {
       const appliedLanes = teamLanes.filter((key) => eligibleKeys.has(key))
       const droppedLanes = teamLanes.filter((key) => !eligibleKeys.has(key))
 
+      if (appliedLanes.length === 0) {
+        sendJson(req, res, 409, { error: `None of the lanes in ${name} are in this project.` })
+        return true
+      }
+
       writeActiveLanes(activeLanesFileFor(projectRoot, runsDir), appliedLanes)
 
       const hiddenLanes = eligible.map((l) => l.key).filter((key) => !appliedLanes.includes(key))
@@ -381,6 +386,12 @@ export function createTeamsApi(options = {}) {
       const activeList = Array.isArray(sourceActive) ? sourceActive : []
       const appliedLanes = activeList.filter((key) => eligibleKeys.has(key))
       const droppedLanes = activeList.filter((key) => !eligibleKeys.has(key))
+
+      if (appliedLanes.length === 0) {
+        const sourceName = basename(resolve(targetPath))
+        sendJson(req, res, 409, { error: `${sourceName} has no active lanes to copy.` })
+        return true
+      }
 
       writeActiveLanes(activeLanesFileFor(projectRoot, runsDir), appliedLanes)
 
