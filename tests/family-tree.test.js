@@ -29,6 +29,7 @@ import {
   splitMoreLanes,
   stateWord,
   subsLosingLanes,
+  teamLanePool,
   teamRows,
 } from '../src/ui/family.js'
 
@@ -513,6 +514,20 @@ describe('the saved teams and the lane cards', () => {
     expect(droppedLaneLine({ dropped: { lanes: ['a', 'b'] } })).toBe('Dropped a, b.')
     expect(droppedLaneLine({ dropped: { lanes: [] } })).toBe('')
     expect(droppedLaneLine({})).toBe('')
+  })
+
+  it('keeps a hidden lane out of the Build a team pool', () => {
+    const pool = teamLanePool(
+      {
+        lanes: [
+          { key: 'a', name: 'A', active: true },
+          { key: 'hidden', name: 'Hidden', active: true, hidden: true },
+          { key: 'b', name: 'B', active: false },
+        ],
+      },
+      { subs: [] }
+    )
+    expect(pool.map((row) => row.key)).toEqual(['a', 'b'])
   })
 
   it('gives the hide and delete cards their sentence', () => {

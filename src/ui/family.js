@@ -508,7 +508,9 @@ export function teamLanePool(lanes, ladder) {
       if (key) claimed.add(key)
     }
   }
-  const rows = teamLaneRows(lanes).filter((row) => !claimed.has(row.key))
+  const list = Array.isArray(lanes) ? lanes : Array.isArray(lanes?.lanes) ? lanes.lanes : []
+  const visible = list.filter((entry) => !(entry && typeof entry === 'object' && entry.hidden === true))
+  const rows = teamLaneRows(visible).filter((row) => !claimed.has(row.key))
   return [...rows.filter((row) => row.active), ...rows.filter((row) => !row.active)]
 }
 
