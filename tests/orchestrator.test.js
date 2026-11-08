@@ -77,6 +77,10 @@ const FAKE_CLAUDE = [
   "const calls = String(process.env.MR_CALLS ?? '')",
   "if (calls) appendFileSync(calls, JSON.stringify({ pid: process.pid, args, cwd: process.cwd() }) + '\\n')",
   "console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }))",
+  "const extraAssistant = String(process.env.MR_ASSISTANT_LINES ?? '')",
+  "if (extraAssistant) {",
+  "  for (const line of JSON.parse(extraAssistant)) console.log(JSON.stringify(line))",
+  "}",
   "console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Working.' }] } }))",
   "const mode = String(process.env.MR_MODE ?? 'reply')",
   "if (mode === 'quota') {",
@@ -213,6 +217,7 @@ function makeRig({ prompt = PROMPT, mode = 'reply', lanes = LANES, harness = 'cl
       MR_STDERR: String(behaviour.stderr ?? ''),
       MR_EXIT: String(behaviour.exit ?? 0),
       MR_SESSION_ID: String(behaviour.sessionId ?? ''),
+      MR_ASSISTANT_LINES: behaviour.assistantLines ? JSON.stringify(behaviour.assistantLines) : '',
     }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
@@ -604,6 +609,43 @@ describe('one orchestrator turn', () => {
 })
 
 describe('the context use', () => {
+  it('reads the last top-level assistant call rather than the result sum', () => {
+    const log = [
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 5000, cache_read_input_tokens: 1000, cache_creation_input_tokens: 500 } } }),
+      JSON.stringify({ type: 'assistant', parent_tool_use_id: 'tool-sub', message: { role: 'assistant', content: [], usage: { input_tokens: 999999 } } }),
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 60000, cache_read_input_tokens: 7000, cache_creation_input_tokens: 491 } } }),
+      JSON.stringify({ type: 'result', usage: { input_tokens: 700000, cache_read_input_tokens: 25000, cache_creation_input_tokens: 456 } }),
+    ].join('\n')
+    expect(contextTokensFromLog('claude', log)).toBe(67491)
+  })
+
+  it('falls back to the last entry of result usage iterations when assistant has no usage', () => {
+    const log = [
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Hello' }] } }),
+      JSON.stringify({
+        type: 'result',
+        usage: {
+          input_tokens: 500,
+          iterations: [
+            { input_tokens: 100, cache_creation_input_tokens: 10, cache_read_input_tokens: 10 },
+            { input_tokens: 200, cache_creation_input_tokens: 20, cache_read_input_tokens: 30 },
+          ],
+        },
+      }),
+    ].join('\n')
+    expect(contextTokensFromLog('claude', log)).toBe(250)
+  })
+
+  it('ignores subagent assistant lines with parent_tool_use_id', () => {
+    const log = [
+      JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 120 } } }),
+      JSON.stringify({ type: 'assistant', parent_tool_use_id: 'sub-call-1', message: { role: 'assistant', content: [], usage: { input_tokens: 900 } } }),
+      JSON.stringify({ type: 'result', parent_tool_use_id: 'sub-call-1', usage: { input_tokens: 900 } }),
+      JSON.stringify({ type: 'result', usage: { input_tokens: 1200 } }),
+    ].join('\n')
+    expect(contextTokensFromLog('claude', log)).toBe(120)
+  })
+
   it('reads the last top-level Claude result usage with both cache counts', () => {
     const log = [
       JSON.stringify({ type: 'result', usage: { input_tokens: 1, cache_creation_input_tokens: 2, cache_read_input_tokens: 3 } }),
@@ -770,6 +812,47 @@ describe('autocompact', () => {
     expect(nextSessionId).not.toBe(firstSessionId)
     expect(nextArgs[1].startsWith('Reply: Write a summary')).toBe(true)
     expect(nextArgs[1]).toContain('Turn after Claude compaction.')
+  })
+
+  it('starts autocompact from the last call context and keeps the turn total in the run record', async () => {
+    const rig = makeRig()
+    rig.orchestrator.setAutocompact({ on: true, mode: 'tokens', value: 100000, confirmed: true })
+
+    rig.behaviour.assistantLines = [
+      { type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 20000 } } },
+      { type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 67491 } } },
+    ]
+    rig.behaviour.input = 725456
+
+    rig.send('First turn with multiple calls summing past 100,000 tokens.')
+    await waitFor(() => rig.calls().length === 1 && rig.answer().state === 'idle', 15000, 'the first turn to finish')
+
+    expect(rig.calls()).toHaveLength(1)
+    expect(rig.answer()).toMatchObject({
+      contextTokens: 67491,
+      autocompact: true,
+      autocompactMode: 'tokens',
+      autocompactValue: 100000,
+    })
+    expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(false)
+
+    const runsLines = readFileSync(join(rig.runs, 'runs.jsonl'), 'utf8')
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    expect(runsLines.at(-1)?.inputTokens).toBe(725456)
+
+    rig.behaviour.assistantLines = [
+      { type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 120000 } } },
+    ]
+    rig.behaviour.input = 800000
+
+    rig.send('Second turn whose last call passes the threshold.')
+    await waitFor(() => rig.calls().length === 3 && rig.answer().state === 'idle', 15000, 'the compacted turn')
+
+    expect(rig.calls()).toHaveLength(3)
+    expect(rig.calls()[1].args).toContain('--resume')
+    expect(rig.answer().messages.some((message) => message.text === COMPACTED_MESSAGE)).toBe(true)
   })
 
   it('compacts the main orchestrator on opencode at 500,000 tokens and not at 499,999, where the session id is OpenCodes sessionID', async () => {

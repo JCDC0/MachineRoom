@@ -68,6 +68,10 @@ const FAKE_AGENT = [
   '}',
   'if (claude) {',
   "  console.log(JSON.stringify({ type: 'system', subtype: 'init', session_id: 'fake' }))",
+  "  const extraAssistant = String(process.env.MR_ASSISTANT_LINES ?? '')",
+  "  if (extraAssistant) {",
+  "    for (const line of JSON.parse(extraAssistant)) console.log(JSON.stringify(line))",
+  "  }",
   "  console.log(JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'Working.' }] } }))",
   "  if (mode === 'hold') await hold()",
   "  const keyReply = 'I read OPENROUTER_API_KEY=' + 'sk-or-v1-' + 'q'.repeat(24) + ' in the file.'",
@@ -182,6 +186,7 @@ function makeBase({ ladder = null, branch = '' } = {}) {
       MR_RELEASE: releaseFile,
       MR_INPUT: String(behaviour.input ?? 12),
       MR_SESSION_ID: String(behaviour.sessionId ?? ''),
+      MR_ASSISTANT_LINES: behaviour.assistantLines ? JSON.stringify(behaviour.assistantLines) : '',
     }
     return spawn(process.execPath, [script, ...args], { ...options, env })
   }
@@ -747,6 +752,31 @@ describe('the orchestrator registry', () => {
 
     expect(messagesOf(rig.registry, 'orchestrator')).toHaveLength(mainMessagesBefore)
     expect(messagesOf(rig.registry, 'orchestrator').some((m) => m.from === 'sub:backend')).toBe(false)
+  })
+
+  it('reports a sub orchestrator context from its last model call rather than the turn total', async () => {
+    const files = makeBase({ ladder: { subs: [FRONTEND] } })
+    const rig = makeRig(files)
+    const frontend = rig.registry.find('frontend')
+    files.behaviour.assistantLines = [
+      { type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 5000 } } },
+      { type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 67491 } } },
+    ]
+    files.behaviour.input = 725456
+    files.behaviour.mode = 'no_report'
+
+    frontend.send({ text: 'Sub turn with multiple calls.', confirmed: true })
+    await waitIdle(rig.registry, 'frontend', 1)
+
+    expect(frontend.answer().contextTokens).toBe(67491)
+    const listEntry = rig.registry.list().find((entry) => entry.id === 'frontend')
+    expect(listEntry.contextTokens).toBe(67491)
+
+    const runsLines = readFileSync(join(files.runs, 'runs.jsonl'), 'utf8')
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => JSON.parse(line))
+    expect(runsLines.at(-1)?.inputTokens).toBe(725456)
   })
 
   it('never starts a compact turn for a lane run from run-lane', async () => {
