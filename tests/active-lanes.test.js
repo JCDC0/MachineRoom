@@ -3,14 +3,25 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   CONFIRM_ACTIVE_LANES_PROBLEM,
+  CONFIRM_HIDE_PROBLEM,
+  CONFIRM_SHOW_PROBLEM,
   EMPTY_ACTIVE_LANES_PROBLEM,
+  HIDE_ORCHESTRATOR_PROBLEM,
+  ORIGIN_ACTIVE_LANES_PROBLEM,
+  ORIGIN_HIDE_PROBLEM,
+  ORIGIN_SHOW_PROBLEM,
   OWNER_ACTIVE_LANES_PROBLEM,
   REPEATED_ACTIVE_LANE_PROBLEM,
   activeLanesFileFor,
+  createActiveLanesApi,
   eligibleLanes,
+  hiddenLaneProblem,
   projectHash,
+  projectLanesFileFor,
   readActiveLanesChoice,
+  readHiddenLanes,
   writeActiveLanes,
+  writeHiddenLanes,
 } from '../server/active-lanes.js'
 import { createBridge } from '../server/index.js'
 import { createClient } from '../src/control/client.js'
@@ -181,9 +192,9 @@ describe('active lanes route', () => {
     expect(body.chosen).toBe(false)
     expect(body.max).toBe(3)
     expect(body.lanes).toEqual([
-      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: false, working: false },
-      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: false, working: false },
-      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: false, working: false },
+      { key: 'opencode', name: 'OpenCode', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: false, working: false, hidden: false },
+      { key: 'opencode2', name: 'OpenCode 2', harness: 'opencode', model: 'opencode-go/deepseek-v4.1-flash', custom: false, effort: null, active: false, working: false, hidden: false },
+      { key: 'claude', name: 'Claude Code', harness: 'claude', model: 'sonnet', custom: false, effort: null, active: false, working: false, hidden: false },
     ])
     expect(body.lanes.map((lane) => lane.key)).not.toContain('agy')
   })
@@ -398,6 +409,276 @@ describe('agents list filtering and run refusal', () => {
   })
 })
 
+describe('hidden lanes per project', () => {
+  it('refuses hide and show without a page Origin with 403', async () => {
+    const { url } = await startTestBridge()
+
+    const hideNoOrigin = await getJson(`${url}/api/lanes/opencode/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(hideNoOrigin.status).toBe(403)
+    expect(hideNoOrigin.body.error).toBe(ORIGIN_HIDE_PROBLEM)
+
+    const showNoOrigin = await getJson(`${url}/api/lanes/opencode/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(showNoOrigin.status).toBe(403)
+    expect(showNoOrigin.body.error).toBe(ORIGIN_SHOW_PROBLEM)
+  })
+
+  it('refuses hide and show when confirmed is not true with 400', async () => {
+    const { url } = await startTestBridge()
+
+    const hideNotConfirmed = await getJson(`${url}/api/lanes/opencode/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: false }),
+    })
+    expect(hideNotConfirmed.status).toBe(400)
+    expect(hideNotConfirmed.body.error).toBe(CONFIRM_HIDE_PROBLEM)
+
+    const showNotConfirmed = await getJson(`${url}/api/lanes/opencode/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({}),
+    })
+    expect(showNotConfirmed.status).toBe(400)
+    expect(showNotConfirmed.body.error).toBe(CONFIRM_SHOW_PROBLEM)
+  })
+
+  it('refuses hiding and showing the orchestrator with 400', async () => {
+    const { url } = await startTestBridge()
+
+    const hideOrch = await getJson(`${url}/api/lanes/orchestrator/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(hideOrch.status).toBe(400)
+    expect(hideOrch.body.error).toBe(HIDE_ORCHESTRATOR_PROBLEM)
+
+    const showOrch = await getJson(`${url}/api/lanes/orchestrator/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(showOrch.status).toBe(400)
+  })
+
+  it('refuses hiding and showing an unknown lane with 400', async () => {
+    const { url } = await startTestBridge()
+
+    const hideUnknown = await getJson(`${url}/api/lanes/ghost/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(hideUnknown.status).toBe(400)
+    expect(hideUnknown.body.error).toBe('The lane ghost is not known.')
+
+    const showUnknown = await getJson(`${url}/api/lanes/ghost/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(showUnknown.status).toBe(400)
+    expect(showUnknown.body.error).toBe('The lane ghost is not known.')
+  })
+
+  it('refuses hiding and showing a running lane with 409', async () => {
+    const root = tempDir('mr-running-proj-')
+    const runs = tempDir('mr-running-runs-')
+    const answers = []
+    const api = createActiveLanesApi({
+      projectRoot: root,
+      runsFolder: runs,
+      lanes: SAMPLE_LANES,
+      isWorking: (key) => key === 'opencode',
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ confirmed: true }),
+    })
+
+    const hideHandled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/lanes/opencode/hide')
+    )
+    expect(hideHandled).toBe(true)
+    expect(answers[0].status).toBe(409)
+    expect(answers[0].body.error).toBe('The lane opencode is running.')
+
+    const showHandled = await api.handle(
+      { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/lanes/opencode/show')
+    )
+    expect(showHandled).toBe(true)
+    expect(answers[1].status).toBe(409)
+    expect(answers[1].body.error).toBe('The lane opencode is running.')
+  })
+
+  it('hides a lane, removes it from active lanes, and persists file', async () => {
+    const { url, projectRoot, runsFolder } = await startTestBridge()
+
+    await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lanes: ['opencode', 'claude'], confirmed: true }),
+    })
+
+    const hideRes = await getJson(`${url}/api/lanes/opencode/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(hideRes.status).toBe(200)
+    expect(hideRes.body).toEqual({ ok: true, hidden: 'opencode' })
+
+    const hiddenFile = projectLanesFileFor(projectRoot, runsFolder)
+    expect(readHiddenLanes(hiddenFile)).toEqual(['opencode'])
+
+    const activeFile = activeLanesFileFor(projectRoot, runsFolder)
+    expect(readActiveLanesChoice(activeFile)).toEqual(['claude'])
+
+    const lanesRes = await getJson(`${url}/api/lanes`)
+    expect(lanesRes.status).toBe(200)
+    const opencodeLane = lanesRes.body.lanes.find((l) => l.key === 'opencode')
+    expect(opencodeLane.hidden).toBe(true)
+    expect(opencodeLane.active).toBe(false)
+
+    const claudeLane = lanesRes.body.lanes.find((l) => l.key === 'claude')
+    expect(claudeLane.hidden).toBe(false)
+    expect(claudeLane.active).toBe(true)
+
+    const showRes = await getJson(`${url}/api/lanes/opencode/show`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+    expect(showRes.status).toBe(200)
+    expect(showRes.body).toEqual({ ok: true, shown: 'opencode' })
+    expect(readHiddenLanes(hiddenFile)).toEqual([])
+
+    const afterShow = await getJson(`${url}/api/lanes`)
+    expect(afterShow.body.lanes.find((l) => l.key === 'opencode').hidden).toBe(false)
+  })
+
+  it('excludes hidden lane from GET /api/agents and GET /api/family', async () => {
+    const { url } = await startTestBridge()
+
+    await getJson(`${url}/api/lanes/opencode/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+
+    const agentsRes = await getJson(`${url}/api/agents`)
+    expect(agentsRes.status).toBe(200)
+    const agentKeys = agentsRes.body.map((a) => a.key)
+    expect(agentKeys).not.toContain('opencode')
+
+    const familyRes = await getJson(`${url}/api/family`)
+    expect(familyRes.status).toBe(200)
+    const nodeIds = familyRes.body.nodes.map((n) => n.id)
+    expect(nodeIds).not.toContain('opencode')
+    expect(familyRes.body.nodes.find((n) => n.id === 'orchestrator').children).not.toContain('opencode')
+  })
+
+  it('refuses active lanes and control runs for a hidden lane with 400', async () => {
+    const { url } = await startTestBridge()
+
+    await getJson(`${url}/api/lanes/opencode/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+
+    const activeRes = await getJson(`${url}/api/lanes/active`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lanes: ['opencode'], confirmed: true }),
+    })
+    expect(activeRes.status).toBe(400)
+    expect(activeRes.body.error).toBe(hiddenLaneProblem('opencode'))
+
+    const runRes = await getJson(`${url}/api/control/runs`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ lane: 'opencode', task: 'Do work', allowDirty: true, confirmed: true }),
+    })
+    expect(runRes.status).toBe(400)
+    expect(runRes.body.error).toBe(hiddenLaneProblem('opencode'))
+  })
+
+  it('leaves a lane hidden in one project while active in another', async () => {
+    const runsFolder = tempDir('mr-runs-shared-')
+    const projA = tempDir('mr-proj-a-')
+    const projB = tempDir('mr-proj-b-')
+
+    const bridgeA = await startTestBridge({ projectRoot: projA, runsFolder })
+    const bridgeB = await startTestBridge({ projectRoot: projB, runsFolder })
+
+    await getJson(`${bridgeA.url}/api/lanes/opencode/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: bridgeA.url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+
+    const lanesA = await getJson(`${bridgeA.url}/api/lanes`)
+    expect(lanesA.body.lanes.find((l) => l.key === 'opencode').hidden).toBe(true)
+
+    const lanesB = await getJson(`${bridgeB.url}/api/lanes`)
+    expect(lanesB.body.lanes.find((l) => l.key === 'opencode').hidden).toBe(false)
+  })
+
+  it('keeps a sub in the ladder working when one of its lanes is hidden', async () => {
+    const { url } = await startTestBridge()
+
+    const ladderRes = await getJson(`${url}/api/orchestrator/ladder`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({
+        confirmed: true,
+        by: 'owner',
+        ladder: {
+          subs: [
+            {
+              id: 'frontend',
+              name: 'Frontend',
+              harness: 'claude',
+              model: 'sonnet',
+              lanes: ['opencode', 'claude'],
+              scope: ['src/ui/**'],
+              restricted: true,
+              setBy: 'owner',
+            },
+          ],
+        },
+      }),
+    })
+    expect(ladderRes.status).toBe(200)
+
+    await getJson(`${url}/api/lanes/claude/hide`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: url },
+      body: JSON.stringify({ confirmed: true }),
+    })
+
+    const orchs = await getJson(`${url}/api/orchestrators`)
+    expect(orchs.status).toBe(200)
+    const subEntry = orchs.body.find((o) => o.id === 'frontend')
+    expect(subEntry).toBeDefined()
+    expect(subEntry.lanes).toEqual(['opencode'])
+
+    const mainEntry = orchs.body.find((o) => o.id === 'orchestrator')
+    expect(mainEntry.lanes).not.toContain('claude')
+  })
+})
+
 describe('client and mock integration', () => {
   it('manages active lanes through createClient', async () => {
     const { url } = await startTestBridge()
@@ -448,5 +729,45 @@ describe('client and mock integration', () => {
     expect(saved.ladder.subs.map((sub) => sub.lanes)).toEqual([[created.key]])
     expect(topics).toContain('orchestrator')
     expect(topics).toContain('family')
+  })
+
+  it('hides and shows lanes through client and mock', async () => {
+    const { url } = await startTestBridge()
+    const client = createClient({
+      baseUrl: url,
+      fetchImpl: (input, init) =>
+        fetch(input, { ...init, headers: { ...init?.headers, origin: 'http://localhost:5173' } }),
+    })
+
+    const hideRes = await client.hideLane({ key: 'opencode', confirmed: true })
+    expect(hideRes.ok).toBe(true)
+    expect(hideRes.hidden).toBe('opencode')
+
+    const lanesAfterHide = await client.lanes()
+    expect(lanesAfterHide.lanes.find((l) => l.key === 'opencode').hidden).toBe(true)
+
+    const showRes = await client.showLane({ key: 'opencode', confirmed: true })
+    expect(showRes.ok).toBe(true)
+    expect(showRes.shown).toBe('opencode')
+
+    const mock = createMockClient({ latencyMs: 0 })
+    const mockHide = await mock.hideLane({ key: 'opencode2', confirmed: true })
+    expect(mockHide.ok).toBe(true)
+    const mockLanes = await mock.lanes()
+    expect(mockLanes.lanes.find((l) => l.key === 'opencode2').hidden).toBe(true)
+    expect(mockLanes.lanes.find((l) => l.key === 'opencode2').active).toBe(false)
+
+    await expect(mock.setActiveLanes({ lanes: ['opencode2'], confirmed: true })).rejects.toThrow(
+      'opencode2 is hidden in this project. Show it in Settings first.'
+    )
+
+    await expect(mock.startRun('opencode2', { task: 'do' })).rejects.toThrow(
+      'opencode2 is hidden in this project. Show it in Settings first.'
+    )
+
+    const mockShow = await mock.showLane({ key: 'opencode2', confirmed: true })
+    expect(mockShow.ok).toBe(true)
+    const mockLanesAfterShow = await mock.lanes()
+    expect(mockLanesAfterShow.lanes.find((l) => l.key === 'opencode2').hidden).toBe(false)
   })
 })

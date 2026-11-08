@@ -22,7 +22,7 @@ import {
 } from './orchestrator.js'
 import { gitPath } from './programPath.js'
 import { readAllLanes } from './agents-config.js'
-import { activeEligibleLaneKeys, eligibleLanes } from './active-lanes.js'
+import { activeEligibleLaneKeys, eligibleLanes, projectLanesFileFor, readHiddenLanes } from './active-lanes.js'
 import { createRecordsCache } from './lanes-source.js'
 
 function pathKey(path) {
@@ -440,7 +440,7 @@ export function createOrchestrators({
         defaultCompactRules: DEFAULT_COMPACT_RULES,
         autocompactPercent: state?.autocompactPercent ?? DEFAULT_AUTOCOMPACT_PERCENT,
         effort: state?.effort ?? null,
-        lanes: [...sub.lanes],
+        lanes: sub.lanes.filter((lane) => !isLaneHidden(lane)),
         scope: [...sub.scope],
         restricted: sub.restricted,
         setBy: sub.setBy,
@@ -448,6 +448,17 @@ export function createOrchestrators({
       })
     }
     return entries
+  }
+
+  function isLaneHidden(key) {
+    if (activeLanes) {
+      const helper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+      if (helper && typeof helper.isLaneHidden === 'function') {
+        return helper.isLaneHidden(key)
+      }
+    }
+    const file = projectLanesFileFor(root, folder)
+    return readHiddenLanes(file).includes(key)
   }
 
   function subs() {
@@ -469,21 +480,21 @@ export function createOrchestrators({
     if (!key) return null
     const { ladder } = readSaved()
     if (key === ORCHESTRATOR_KEY) {
-      const claimed = new Set(ladder.subs.flatMap((sub) => sub.lanes))
+      const claimed = new Set(ladder.subs.flatMap((sub) => sub.lanes.filter((lane) => !isLaneHidden(lane))))
       return { id: ORCHESTRATOR_KEY, name: mainName, lanes: currentLaneKeys().filter((lane) => !claimed.has(lane)) }
     }
     const sub = ladder.subs.find((entry) => entry.id === key)
     if (!sub) return null
-    return { id: sub.id, name: sub.name, lanes: [...sub.lanes] }
+    return { id: sub.id, name: sub.name, lanes: sub.lanes.filter((lane) => !isLaneHidden(lane)) }
   }
 
   function sectorForLane(lane) {
     const key = typeof lane === 'string' ? lane.trim() : ''
-    if (!key) return null
+    if (!key || isLaneHidden(key)) return null
     const { ladder } = readSaved()
     const sub = ladder.subs.find((entry) => Array.isArray(entry.lanes) && entry.lanes.includes(key))
     if (!sub) return null
-    return { id: sub.id, name: sub.name, lanes: [...sub.lanes] }
+    return { id: sub.id, name: sub.name, lanes: sub.lanes.filter((l) => !isLaneHidden(l)) }
   }
 
   function find(id) {
