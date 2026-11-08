@@ -1,6 +1,6 @@
 export const LENS_SHARE_MIN = 0.3
-export const LENS_SHARE_MAX = 0.85
-export const LENS_SHARE_DEFAULT = 0.56
+export const LENS_SHARE_MAX = 1
+export const LENS_SHARE_DEFAULT = 1
 
 export function clampLensShare(value) {
   const num = Number(value)

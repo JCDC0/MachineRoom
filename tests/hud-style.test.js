@@ -369,15 +369,20 @@ describe('HUD concept style structure', () => {
     expect(css).toContain('.hud-lower-right .mr-inspector')
     expect(css).not.toContain('.hud-overview')
     expect(css).not.toContain('.hud-drawer')
-    expect(css).toContain('--lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 56vh)))')
+    expect(css).toContain('--lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 100vh)))')
     expect(css).toContain('.hud-dock[hidden]')
   })
 
-  it('keeps the one-screen frame and the idle lens in styles.css', () => {
+  it('fills the first screen and scrolls to the one-window lower half', () => {
     const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
     expect(css).not.toContain('is-scrolled')
     expect(css).not.toContain('max(520px, calc(100vh - var(--menu-h)))')
-    expect(css).toMatch(/\.hud-lower \{[^}]*flex: 1 1 auto;[^}]*min-height: 0;/)
+    expect(css).toMatch(
+      /@media \(min-width: 900px\) \{\s+html,\s+body \{\s+height: auto;\s+min-height: 100%;\s+overflow-x: hidden;\s+overflow-y: auto;/
+    )
+    expect(css).toMatch(/#root \{\s+height: auto;\s+min-height: 100%;\s+overflow: visible;/)
+    expect(css).toMatch(/\.stage \{\s+position: relative;\s+inset: auto;\s+min-height: 100vh;\s+overflow: visible;/)
+    expect(css).toMatch(/\.hud-lower \{[^}]*flex: 0 0 auto;[^}]*height: 100vh;[^}]*min-height: 100vh;/)
     expect(css).toContain('.stage.is-idle .lens {')
     expect(css).toMatch(/\.stage\.is-idle \.lens \{\s+height: 100vh;/)
     expect(css).toMatch(/\.stage\.is-idle \{[\s\S]*transition: padding-top 800ms ease-out;/)

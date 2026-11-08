@@ -7376,8 +7376,26 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 }
 /* Task U34: the lower half, with the conversation in the middle and Overview on the right. */
 @media (min-width: 900px) {
+  html,
+  body {
+    height: auto;
+    min-height: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  #root {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
   .stage {
-    --lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 56vh)));
+    position: relative;
+    inset: auto;
+    min-height: 100vh;
+    overflow: visible;
+    --lens-h: var(--lens-h-user, min(calc(100vh - var(--menu-h) - var(--transport-h)), max(240px, 100vh)));
   }
 
   .transport {
@@ -7393,8 +7411,9 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   }
 
   .hud-lower {
-    flex: 1 1 auto;
-    min-height: 0;
+    flex: 0 0 auto;
+    height: 100vh;
+    min-height: 100vh;
     padding-top: var(--lens-bow, 28px);
     display: grid;
     grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px;
