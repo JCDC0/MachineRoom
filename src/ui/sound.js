@@ -635,6 +635,7 @@ export const sound = {
   },
   setMusicMuted(value) {
     engine.musicMuted = value === true
+    engine.settings = { ...engine.settings, musicMuted: engine.musicMuted }
     applyMusicVolume()
     return engine.musicMuted
   },
