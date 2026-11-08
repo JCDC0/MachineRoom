@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The review list on another project keeps its own lanes when a git read at the bridge start fails, so it no longer falls back to the room's lanes (task T37).
 - The README shows the idle view, the lens in the full window, in docs/images/full-lens.png.
 - The guide, the user guide and the README describe the grey tunnels, the stars, the agent colours, the camera brackets and the replay-time labels instead of the yellow stripes and packets, and the plan drops the version 7 findings S41 fixed.
 - U157: A working tunnel is grey and its star carries the agent colour, a touch flashes only the file row, labels and flashes run on replay time, and the agents take seven clearer colours.
