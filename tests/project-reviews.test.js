@@ -7,6 +7,7 @@ import { createElement } from 'react'
 import { renderToString } from 'react-dom/server'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
+import { codeCheckout, resetCodeCheckout } from '../server/reviews.js'
 import ReviewsPanel from '../src/ui/panels/ReviewsPanel.jsx'
 import { defaultMergeMessage, reviewRow } from '../src/ui/panels/reviews.js'
 import { makeTempDir as makeTempRoot } from './helpers/tempRoot.js'
@@ -280,6 +281,40 @@ describe('review routes on another project', () => {
     expect(list.lanes[0]).toMatchObject({ lane: 'opencode', branch: '', base: 'trunk', ahead: 1 })
     expect(list.lanes[0].head).toBe(head)
   }, 40000)
+
+  it('reads the room lanes when the project has no lane file and git cannot start', async () => {
+    const { room, project, briefsDir } = makeProject()
+    rmSync(join(room, 'docs', 'agents', 'lanes.json'))
+    const { url } = await startBridge({ projectRoot: project, briefsDir, hideGitAtStart: true })
+    const res = await fetch(`${url}/api/control/reviews`)
+    expect(res.status).toBe(200)
+    const { lanes } = await res.json()
+    expect(lanes.map((entry) => entry.lane)).toContain('opencode')
+    expect(lanes.find((entry) => entry.lane === 'opencode')?.base).toBe('trunk')
+  }, 40000)
+
+  it('caches the code checkout only when the git read answers a path', () => {
+    resetCodeCheckout()
+    const previousPath = process.env.PATH
+    try {
+      process.env.PATH = ''
+      const fallback = codeCheckout()
+      expect(fallback).toBe(REPO_ROOT)
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH
+      else process.env.PATH = previousPath
+    }
+    const realCheckout = codeCheckout()
+    expect(realCheckout).toBeTruthy()
+    expect(realCheckout).not.toBe('')
+    try {
+      process.env.PATH = ''
+      expect(codeCheckout()).toBe(realCheckout)
+    } finally {
+      if (previousPath === undefined) delete process.env.PATH
+      else process.env.PATH = previousPath
+    }
+  })
 
   it('still reads every configured lane against main on MachineRoom itself', async () => {
     const briefsDir = join(REPO_ROOT, 'docs', 'agents')

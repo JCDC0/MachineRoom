@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { worktreeFor } from '../src/briefs/run.js'
@@ -28,16 +28,31 @@ export const DEFAULT_PATCH_LIMIT = 400 * 1024
 export const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
 export const MERGE_TIMEOUT_PROBLEM = 'The merge took too long, so it was stopped.'
-let codeCheckoutPath = null
+let codeCheckoutPath = ''
 
-function codeCheckout() {
-  if (codeCheckoutPath === null) codeCheckoutPath = mainCheckoutOf(REPO_ROOT)
+export function resetCodeCheckout() {
+  codeCheckoutPath = ''
+}
+
+export function codeCheckout() {
+  if (!codeCheckoutPath) {
+    const found = mainCheckoutOf(REPO_ROOT)
+    if (found) codeCheckoutPath = found
+    else return REPO_ROOT
+  }
   return codeCheckoutPath
 }
 
 function pathKey(path) {
+  if (!path) return ''
   try {
-    const resolved = resolve(String(path ?? ''))
+    const raw = String(path)
+    let resolved
+    try {
+      resolved = realpathSync.native(raw)
+    } catch {
+      resolved = resolve(raw)
+    }
     return process.platform === 'win32' ? resolved.toLowerCase() : resolved
   } catch {
     return ''
@@ -241,7 +256,15 @@ export function createReviewsApi({
   const limit = Number.isInteger(patchLimit) && patchLimit > 0 ? patchLimit : DEFAULT_PATCH_LIMIT
   const roomCheckout = resolvedRoot ? mainCheckoutOf(resolvedRoot) : ''
   const codeCheckoutHere = roomCheckout ? codeCheckout() : ''
-  const otherProject = Boolean(roomCheckout && codeCheckoutHere && pathKey(roomCheckout) !== pathKey(codeCheckoutHere))
+  const projectCheckout = roomCheckout || resolvedRoot
+  const codeBase = codeCheckoutHere || REPO_ROOT
+  const otherProject = Boolean(
+    projectCheckout &&
+      inGitWorkTree(projectCheckout) &&
+      (roomCheckout && codeCheckoutHere
+        ? pathKey(roomCheckout) !== pathKey(codeCheckoutHere)
+        : !inside(projectCheckout, codeBase) && !inside(codeBase, projectCheckout))
+  )
   const lanesFolder =
     resolvedBriefs && existsSync(join(resolvedBriefs, 'lanes.json'))
       ? resolvedBriefs
@@ -249,7 +272,6 @@ export function createReviewsApi({
         ? ROOM_BRIEFS
         : resolvedBriefs
   const lanesCheckout = lanesFolder ? mainCheckoutOf(lanesFolder) : ''
-  const projectCheckout = roomCheckout || resolvedRoot
   const lanesPlain = Boolean(lanesFolder) && !inGitWorkTree(lanesFolder)
   const sameCheckout =
     roomCheckout && lanesCheckout
