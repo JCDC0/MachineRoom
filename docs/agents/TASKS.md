@@ -1745,3 +1745,16 @@ Files: server/reviews.js, tests/project-reviews.test.js, tests/.
 Add a test for each step. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/engine/room.js, src/engine/cards.js, src/engine/stars.js, src/engine/labels.js, src/model/player.js, tests/.
+
+**Q42. The co-orchestrator's review of U158 to U163, S44, S45 and T38 (AGY 3).** This run is on Argon, not Flash, whatever `lanes.json` says. Read no part of TASKS.md beyond this brief and the briefs it reviews. Read narrowly: the diffs, then only the functions they touch, and no subagents, because the quota is small. Change no code.
+
+Review these merges in this order, most risk first, and stop where the time runs out: `git diff 3ea71bd4^1 3ea71bd4` (S45, lanes hidden per project and saved teams, server side), `git diff 05434bef^1 05434bef` (U162, the Agents tab, the Teams panel, the Lanes section and the saved teams on the first visit), `git diff 76763934^1 76763934` (S44, the orchestrator's context from its last top-level call), `git diff 254fe74e^1 254fe74e` (U163, stars, flashes and labels at the edges), `git diff 5de3288d^1 5de3288d` (T38, the review list when git fails at the start), then `e0249946` (U161, the music time bar and volume row), `17bafc9a` (U160, the room moves to any music), `e559112a` (U159, agent colours) and `1d48ab9d` (U158, the room fills the first screen) the same way. The orchestrator fixed a few things after some merges in its own commits, so judge the code as it stands on `refs/heads/main`, not the merge alone. For each, say whether it does what its brief asked, and name any new fault with `file:line` and a concrete failing case. Look hard at these:
+
+- S45 and U162: a write route without the page Origin check or `confirmed: true`, a team file or hidden lanes file that a bad name or a path can escape, a team applied to a project that lacks one of its lanes, a hidden lane that still starts a run, still wakes an orchestrator or still shows in a list it should leave, and a ladder the bridge refuses.
+- S44: a turn with no top-level assistant line, a subagent's usage counted as the parent's, and the autocompact rule reading the new number.
+- U163: a star, label or flash that outlives a run end, a removed agent, a seek or a leaving card, and a child whose view is not built yet.
+- U160 and U161: a beat or sway that never settles when the music stops, a seek on a track with no duration, and a saved mute that the volume slider forgets.
+
+Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-6.md`: a table of at most 15 findings, most severe first, with number, severity, `file:line`, the case and the smallest fix; then a line per merge saying sound, not sound or not reached; then at most three proposed briefs in the style of TASKS.md, each with its Files: list, for the findings worth fixing. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 40, and say what you did not reach.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-6.md.
