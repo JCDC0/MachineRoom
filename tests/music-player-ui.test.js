@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import MusicPlayer from '../src/ui/MusicPlayer.jsx'
-import { nextLoop, resetMusicQueue, shuffleOrder, shuffleOrderFrom } from '../src/ui/musicQueue.js'
+import { formatTrackTime, nextLoop, resetMusicQueue, shuffleOrder, shuffleOrderFrom } from '../src/ui/musicQueue.js'
 import { sound } from '../src/ui/sound.js'
 import { buttonWithText, classesOf, settle, withDom } from './helpers/uiDom.js'
 
@@ -86,6 +86,18 @@ async function endTrack(player) {
     for (const listener of player.listeners.ended ?? []) listener()
   })
 }
+
+describe('the music time', () => {
+  it('reads a track position as minutes and seconds', () => {
+    expect(formatTrackTime(0)).toBe('0:00')
+    expect(formatTrackTime(5.9)).toBe('0:05')
+    expect(formatTrackTime(65)).toBe('1:05')
+    expect(formatTrackTime(125)).toBe('2:05')
+    expect(formatTrackTime(-1)).toBe('0:00')
+    expect(formatTrackTime(Number.NaN)).toBe('0:00')
+    expect(formatTrackTime(Infinity)).toBe('0:00')
+  })
+})
 
 describe('the music player', () => {
   it('shows the track that is still playing after the panel reopens', async () => {
