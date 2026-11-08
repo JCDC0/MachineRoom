@@ -373,12 +373,18 @@ export function playMusicAt(at) {
   playTrack(at)
 }
 
+function onLoadedTrack() {
+  const track = state.queue[state.index]
+  const url = track ? musicTrackUrl(state.list.base, track) : ''
+  return url !== '' && sound.musicTrack() === url
+}
+
 export function musicPosition() {
-  return sound.musicPosition()
+  return onLoadedTrack() ? sound.musicPosition() : 0
 }
 
 export function musicDuration() {
-  return sound.musicDuration()
+  return onLoadedTrack() ? sound.musicDuration() : 0
 }
 
 export function seekMusic(value) {

@@ -1,7 +1,7 @@
 import { act, createElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import MusicPlayer from '../src/ui/MusicPlayer.jsx'
-import { formatTrackTime, nextLoop, resetMusicQueue, shuffleOrder, shuffleOrderFrom } from '../src/ui/musicQueue.js'
+import { formatTrackTime, musicDuration, musicPosition, nextLoop, resetMusicQueue, shuffleOrder, shuffleOrderFrom } from '../src/ui/musicQueue.js'
 import { sound } from '../src/ui/sound.js'
 import { buttonWithText, classesOf, settle, type, withDom } from './helpers/uiDom.js'
 
@@ -197,6 +197,56 @@ describe('the music player', () => {
       const times = () => container.querySelectorAll('.hud-sound-time-value').map((node) => node.textContent)
       expect(Number(seek.value)).toBe(60)
       expect(times()).toEqual(['1:00', '1:00'])
+    })
+  })
+
+  it('resets the time bar to the new playlist while the music is paused', async () => {
+    globalThis.fetch = libraryAnswer([], [
+      { name: 'Lofi', tracks: ['one.mp3', 'two.mp3'] },
+      { name: 'Calm', tracks: ['slow.mp3'] },
+    ])
+    await withDom(async ({ container, dom, root }) => {
+      const player = installAudio(dom)
+      player.duration = 125
+      await act(async () => {
+        root.render(createElement(MusicPlayer))
+      })
+      await settle(5)
+      await choosePlaylist(container, 'playlist:Lofi')
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+
+      player.currentTime = 65
+      await settle(300)
+      const times = () => container.querySelectorAll('.hud-sound-time-value').map((node) => node.textContent)
+      expect(times()).toEqual(['1:05', '2:05'])
+      expect(musicPosition()).toBe(65)
+      expect(musicDuration()).toBe(125)
+
+      await act(async () => {
+        control(container, 'Pause').click()
+      })
+      expect(player.paused).toBe(true)
+      await choosePlaylist(container, 'playlist:Calm')
+      await settle(300)
+
+      expect(player.src.endsWith('/music/Lofi/one.mp3')).toBe(true)
+      expect(musicPosition()).toBe(0)
+      expect(musicDuration()).toBe(0)
+      expect(times()).toEqual(['0:00', '0:00'])
+
+      await act(async () => {
+        control(container, 'Play').click()
+      })
+      await settle(5)
+      expect(player.src.endsWith('/music/Calm/slow.mp3')).toBe(true)
+      player.currentTime = 0
+      player.duration = 42
+      await settle(300)
+      expect(times()).toEqual(['0:00', '0:42'])
     })
   })
 
