@@ -6234,6 +6234,39 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   margin-top: calc(var(--space) * 2);
 }
 
+.mr-setup-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: calc(var(--space) * 2);
+  padding-top: var(--space);
+  border-top: 1px solid var(--line);
+}
+
+.mr-setup-options-title {
+  margin: 0 0 2px;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 0.5);
+}
+
+.mr-setup .mr-setup-team {
+  width: 100%;
+  padding: 6px var(--space);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--white);
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.mr-setup .mr-setup-team:hover:not(:disabled) {
+  border-color: var(--yellow);
+  color: var(--yellow);
+}
+
 .mr-setup-step {
   width: 36px;
   height: 36px;

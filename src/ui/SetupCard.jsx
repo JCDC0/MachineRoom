@@ -3,7 +3,6 @@ import { useDialogFocus } from './dialogFocus.js'
 import {
   SETUP_LATER,
   SETUP_QUESTION,
-  SETUP_START,
   clampAgentCount,
   initialAgentCount,
   pickedLanes,
@@ -12,7 +11,10 @@ import {
   setupFromAnswer,
   setupNeeded,
   setupPostponed,
+  setupProjects,
   setupSavePayload,
+  setupStartLabel,
+  setupTeams,
 } from './setup.js'
 
 const NOOP = () => {}
@@ -29,6 +31,8 @@ export default function SetupCard({
 }) {
   const [state, setState] = useState(answer)
   const [count, setCount] = useState(() => initialAgentCount(setupFromAnswer(answer)?.max))
+  const [teams, setTeams] = useState([])
+  const [projects, setProjects] = useState([])
   const [closed, setClosed] = useState(() => setupPostponed())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -64,6 +68,26 @@ export default function SetupCard({
       alive = false
     }
   }, [answer, client, closed])
+
+  useEffect(() => {
+    if (closed || !client) return undefined
+    let alive = true
+    Promise.resolve()
+      .then(() => client.teams?.())
+      .then((value) => {
+        if (alive && value) setTeams(setupTeams(value))
+      })
+      .catch(() => {})
+    Promise.resolve()
+      .then(() => client.projects?.())
+      .then((value) => {
+        if (alive && value) setProjects(setupProjects(value))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [client, closed])
 
   const info = setupFromAnswer(state)
   const needed = setupNeeded(state)
@@ -105,6 +129,46 @@ export default function SetupCard({
     }
   }
 
+  async function applyTeam(name) {
+    if (saving) return
+    if (typeof client?.applyTeam !== 'function') {
+      setError('This bridge cannot apply a team.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await client.applyTeam({ name, confirmed: true })
+      setClosed(true)
+      onCheckRef.current()
+      onClose()
+    } catch (err) {
+      setError(messageOf(err, 'The bridge refused the team.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function copyTeam(path) {
+    if (saving) return
+    if (typeof client?.copyProjectTeam !== 'function') {
+      setError('This bridge cannot copy a team.')
+      return
+    }
+    setSaving(true)
+    setError('')
+    try {
+      await client.copyProjectTeam({ path, confirmed: true })
+      setClosed(true)
+      onCheckRef.current()
+      onClose()
+    } catch (err) {
+      setError(messageOf(err, 'The bridge refused the copy.'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   if (closed || !needed || !info) return null
   const lanes = pickedLanes(info.lanes, count)
 
@@ -121,6 +185,38 @@ export default function SetupCard({
         <h2 className="mr-setup-title" id="mr-setup-title">
           {SETUP_QUESTION}
         </h2>
+        {teams.length > 0 ? (
+          <div className="mr-setup-options" role="group" aria-label="Saved teams">
+            <p className="mr-setup-options-title mono">Saved teams</p>
+            {teams.map((team) => (
+              <button
+                type="button"
+                className="mr-setup-team mono"
+                key={team.name}
+                disabled={saving || typeof client?.applyTeam !== 'function'}
+                onClick={() => applyTeam(team.name)}
+              >
+                {team.name}
+              </button>
+            ))}
+          </div>
+        ) : null}
+        {projects.length > 0 && typeof client?.copyProjectTeam === 'function' ? (
+          <div className="mr-setup-options" role="group" aria-label="Copy a team">
+            <p className="mr-setup-options-title mono">Copy from</p>
+            {projects.map((row) => (
+              <button
+                type="button"
+                className="mr-setup-team mono"
+                key={row.path}
+                disabled={saving}
+                onClick={() => copyTeam(row.path)}
+              >
+                {`Copy from ${row.name}`}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="mr-setup-stepper" role="group" aria-label="Agent count">
           <button
             type="button"
@@ -172,7 +268,7 @@ export default function SetupCard({
             onClick={start}
             disabled={saving || !canSave}
           >
-            {saving ? 'Saving' : SETUP_START}
+            {saving ? 'Saving' : setupStartLabel(count)}
           </button>
         </div>
       </section>
