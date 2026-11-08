@@ -254,11 +254,30 @@ describe('mock orchestrators and the ladder', () => {
       harness: 'opencode',
       model: 'opencode-go/qwen3.8-flash',
       contextWindow: 200000,
+      mode: 'auto',
     })
 
     const updatedList = await client.orchestrators()
     expect(updatedList[0].harness).toBe('opencode')
     expect(updatedList[0].model).toBe('opencode-go/qwen3.8-flash')
+  })
+
+  it('sets an orchestrator mode and lists the modes its harness offers', async () => {
+    const client = fast()
+    const main = await client.orchestrator()
+    expect(main.mode).toBe('bypass')
+    expect(main.modes.map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
+    expect((await client.orchestrator('frontend')).mode).toBe('auto')
+    expect((await client.orchestrator('frontend')).modes.map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto'])
+
+    await expect(client.setOrchestratorMode({ mode: 'plan', confirmed: false })).rejects.toThrow('Confirm the mode change first.')
+    await expect(client.setOrchestratorMode({ mode: 'ask', confirmed: true })).rejects.toThrow(
+      'Choose a permission mode listed for this harness.'
+    )
+    const saved = await client.setOrchestratorMode({ mode: 'plan', confirmed: true })
+    expect(saved).toMatchObject({ id: 'orchestrator', mode: 'plan' })
+    expect((await client.orchestrator()).mode).toBe('plan')
+    expect((await client.orchestrators())[0].mode).toBe('plan')
   })
 
   it('answers gitState with changes and changeCount', async () => {

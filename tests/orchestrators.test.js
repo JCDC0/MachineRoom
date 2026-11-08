@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { createBridge } from '../server/index.js'
 import { activeLanesFileFor, projectLanesFileFor, writeActiveLanes, writeHiddenLanes } from '../server/active-lanes.js'
 import { createLanesSource, createRecordsCache, subOrchestratorAgent } from '../server/lanes-source.js'
-import { chatFileFor, COMPACT_RUNNING_PROBLEM, COMPACTED_MESSAGE, CONFIRM_AUTOCOMPACT_PROBLEM, CONFIRM_HARNESS_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
+import { chatFileFor, COMPACT_RUNNING_PROBLEM, COMPACTED_MESSAGE, CONFIRM_AUTOCOMPACT_PROBLEM, CONFIRM_HARNESS_PROBLEM, CONFIRM_MODE_PROBLEM, MODE_PROBLEM, NO_NEW_REPORT, NO_REPORT, RESTART_MESSAGE } from '../server/orchestrator.js'
 import {
   availableHarnesses,
   branchChanges,
@@ -22,6 +22,7 @@ import {
   OWNER_HARNESS_PROBLEM,
   OWNER_LADDER_PROBLEM,
   OWNER_MESSAGE_PROBLEM,
+  OWNER_MODE_PROBLEM,
   OWNER_MODEL_PROBLEM,
   OWNER_SESSION_PROBLEM,
   PAGE_LADDER_PROBLEM,
@@ -922,6 +923,84 @@ describe('the orchestrator registry', () => {
     expect(runningConflict.body).toEqual({ error: COMPACT_RUNNING_PROBLEM })
     writeFileSync(files.releaseFile, 'go')
     await waitFor(() => rig.chat('orchestrator')?.state === 'idle')
+  })
+
+  it('sets a permission mode over the bridge route', async () => {
+    const files = makeBase()
+    const rig = await makeBridge(files)
+
+    const initial = await getJson(`${rig.url}/api/orchestrator`)
+    expect(initial.body.mode).toBe('auto')
+    expect(initial.body.modes.map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body[0]).toMatchObject({
+      mode: 'auto',
+      modes: initial.body.modes,
+    })
+
+    const noOrigin = await postJson(`${rig.url}/api/orchestrator/mode`, { mode: 'plan', confirmed: true })
+    expect(noOrigin.status).toBe(403)
+    expect(noOrigin.body).toEqual({ error: OWNER_MODE_PROBLEM })
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'plan' })).body).toEqual({ error: CONFIRM_MODE_PROBLEM })
+    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'ask', confirmed: true })).body).toEqual({ error: MODE_PROBLEM })
+    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'bogus', confirmed: true })).body).toEqual({ error: MODE_PROBLEM })
+    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { id: 'missing', mode: 'plan', confirmed: true })).status).toBe(404)
+
+    const saved = await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'plan', confirmed: true })
+    expect(saved.status).toBe(200)
+    expect(saved.body).toMatchObject({ id: 'orchestrator', mode: 'plan' })
+    expect((await getJson(`${rig.url}/api/orchestrator`)).body.mode).toBe('plan')
+    expect((await getJson(`${rig.url}/api/orchestrators`)).body[0].mode).toBe('plan')
+    expect(files.chat('orchestrator').mode).toBe('plan')
+
+    files.behaviour.mode = 'hold'
+    await pagePost(`${rig.url}/api/orchestrator/messages`, { text: 'Work on something', confirmed: true })
+    await waitFor(() => rig.chat('orchestrator')?.state === 'working')
+    const conflict = await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'edits', confirmed: true })
+    expect(conflict.status).toBe(409)
+    expect(conflict.body).toEqual({ error: COMPACT_RUNNING_PROBLEM })
+    writeFileSync(files.releaseFile, 'go')
+    await waitFor(() => rig.chat('orchestrator')?.state === 'idle')
+  })
+
+  it('starts a new chat at the default mode and keeps an old chat on the legacy mode', async () => {
+    const fresh = await makeBridge(makeBase())
+    expect((await getJson(`${fresh.url}/api/orchestrator`)).body.mode).toBe('auto')
+
+    const older = makeBase({ ladder: { subs: [] } })
+    const oldRig = await makeBridge(older)
+    expect((await getJson(`${oldRig.url}/api/orchestrator`)).body.mode).toBe('bypass')
+    expect(older.chat('orchestrator').mode).toBeUndefined()
+  })
+
+  it('keeps a mode the new harness lists and otherwise sets its default', async () => {
+    const files = makeBase()
+    const lanes = {
+      ...LANES,
+      orchestrator: { ...LANES.orchestrator, cli: { ...LANES.orchestrator.cli, bin: process.execPath } },
+      claude: { ...LANES.claude, cli: { ...LANES.claude.cli, bin: process.execPath } },
+      opencode: { ...LANES.opencode, cli: { ...LANES.opencode.cli, bin: process.execPath } },
+    }
+    const rig = await makeBridge(files, { lanesSource: { folder: files.runs, lanes, pollMs: 20, quietMs: 60000 } })
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'bypass', confirmed: true })).status).toBe(200)
+    const toOpencode = await pagePost(`${rig.url}/api/orchestrator/harness`, {
+      harness: 'opencode',
+      model: 'opencode-go/deepseek-v4.1-flash',
+      confirmed: true,
+    })
+    expect(toOpencode.status).toBe(200)
+    expect(toOpencode.body.mode).toBe('auto')
+
+    expect((await pagePost(`${rig.url}/api/orchestrator/mode`, { mode: 'plan', confirmed: true })).status).toBe(200)
+    const toClaude = await pagePost(`${rig.url}/api/orchestrator/harness`, {
+      harness: 'claude',
+      model: 'claude-haiku-5-5',
+      confirmed: true,
+    })
+    expect(toClaude.status).toBe(200)
+    expect(toClaude.body.mode).toBe('plan')
+    expect(files.chat('orchestrator').mode).toBe('plan')
   })
 
   it('offers and sets the machineroom harness when an endpoint is saved', async () => {

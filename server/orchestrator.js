@@ -20,6 +20,7 @@ import { basename, isAbsolute, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { maskKeys } from '../src/briefs/audit.js'
 import { childEnvironment, mcpConfigForClaude, mcpConfigForOpencode, normalizeMcpServers, replyText, runRecord, summarizeRun } from '../src/briefs/run.js'
+import { defaultMode, legacyMode, modesFor } from '../src/control/modes.js'
 import { harnessByKey } from '../src/harnesses/index.js'
 import { agentDepthLine } from '../src/model/hierarchy.js'
 import { readAgentDepth } from './agent-depth.js'
@@ -56,6 +57,8 @@ export const CONFIRM_STOP_PROBLEM = 'Confirm the stop first.'
 export const CONFIRM_AUTOCOMPACT_PROBLEM = 'Confirm the autocompact change first.'
 export const CONFIRM_COMPACT_PROBLEM = 'Confirm the compact first.'
 export const CONFIRM_MODEL_PROBLEM = 'Confirm the model change first.'
+export const CONFIRM_MODE_PROBLEM = 'Confirm the mode change first.'
+export const MODE_PROBLEM = 'Choose a permission mode listed for this harness.'
 export const AUTOCOMPACT_PROBLEM = 'Say whether autocompact is on or off.'
 export const AUTOCOMPACT_MODE_PROBLEM = 'Mode must be percent or tokens.'
 export const AUTOCOMPACT_PERCENT_PROBLEM = 'Percent must be a number above 0 and at most 100.'
@@ -781,6 +784,7 @@ export function createOrchestrator({
   let autocompactValue = DEFAULT_AUTOCOMPACT_VALUE
   let compactRules = ''
   let effort = null
+  let mode = null
   let currentSessionId = null
   let currentTitle = null
   const sessions = []
@@ -839,6 +843,7 @@ export function createOrchestrator({
         compactRules,
         autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
         effort,
+        ...(mode ? { mode } : {}),
         currentSessionId,
         currentTitle,
         summary,
@@ -927,18 +932,18 @@ export function createOrchestrator({
     try {
       text = readFileSync(conversationFile, 'utf8')
     } catch {
-      return
+      return false
     }
     let saved
     try {
       saved = JSON.parse(text)
     } catch {
       quarantine()
-      return
+      return false
     }
     if (!saved || typeof saved !== 'object' || Array.isArray(saved)) {
       quarantine()
-      return
+      return false
     }
     if (typeof saved.sessionId === 'string' && saved.sessionId.trim() !== '') sessionId = saved.sessionId
     if (typeof saved.harness === 'string' && saved.harness.trim() !== '') harness = saved.harness.trim()
@@ -986,6 +991,9 @@ export function createOrchestrator({
       if (saved.effort === null || allowed.includes(saved.effort.trim())) {
         effort = saved.effort ? saved.effort.trim() : null
       }
+    }
+    if (typeof saved.mode === 'string' && modesFor(harness).some((entry) => entry.id === saved.mode.trim())) {
+      mode = saved.mode.trim()
     }
     if (typeof saved.currentSessionId === 'string' && saved.currentSessionId.trim() !== '') {
       currentSessionId = saved.currentSessionId.trim()
@@ -1071,6 +1079,7 @@ export function createOrchestrator({
       })
     }
     while (completedRuns.size > 200) completedRuns.delete(completedRuns.keys().next().value)
+    return true
   }
 
   function setState(next) {
@@ -1188,8 +1197,10 @@ export function createOrchestrator({
     const logPath = join(folder, `${logName}.log`)
     const metaPath = join(folder, `${logName}.meta.json`)
     const enabledServers = enabledMcpServersFor(folder)
+    const turnMode = mode ?? legacyMode(harness)
     const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
-    const mcpConfigPath = needsMcp ? join(folder, `${logName}.mcp.json`) : ''
+    const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits')
+    const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
     const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction, stderr: '' }
     running = turn
@@ -1198,11 +1209,13 @@ export function createOrchestrator({
       mkdirSync(folder, { recursive: true })
       mkdirSync(scratchFolder, { recursive: true })
       writeFileSync(metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
-      if (needsMcp) {
+      if (mcpConfigPath) {
         if (harness === 'claude') {
           writeFileSync(mcpConfigPath, `${JSON.stringify(mcpConfigForClaude(enabledServers), null, 2)}\n`, { mode: 0o600 })
         } else if (harness === 'opencode') {
-          writeFileSync(mcpConfigPath, `${JSON.stringify(mcpConfigForOpencode(enabledServers), null, 2)}\n`, { mode: 0o600 })
+          const config = needsMcp ? mcpConfigForOpencode(enabledServers) : {}
+          if (turnMode === 'edits') config.permission = { bash: 'deny' }
+          writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
           mcpEnv = { OPENCODE_CONFIG: mcpConfigPath }
         }
       }
@@ -1234,7 +1247,9 @@ export function createOrchestrator({
     let args
     if (harness === 'opencode') {
       const modelArg = effort ? `${model}#${effort}` : model
-      args = ['run', '--standalone', '--format', 'json', '--model', modelArg, '--auto', '--title', logName]
+      args = ['run', '--standalone', '--format', 'json', '--model', modelArg, '--auto']
+      if (turnMode === 'plan') args.push('--agent', 'plan')
+      args.push('--title', logName)
       if (!first) args.push('--session', sessionId)
       const restarted = `The room restarted, so your bridge token is new. Send the header X-MachineRoom-Orchestrator: ${token} on every bridge request from now on.`
       const body = first ? `${instruction}\n\n${message}` : tokenSent ? message : `${restarted}\n\n${message}`
@@ -1249,12 +1264,12 @@ export function createOrchestrator({
         '--verbose',
         '--model',
         model,
-        '--dangerously-skip-permissions',
-        first ? '--session-id' : '--resume',
-        sessionId,
-        '--append-system-prompt',
-        instruction,
       ]
+      if (turnMode === 'plan') args.push('--permission-mode', 'plan')
+      else if (turnMode === 'edits') args.push('--permission-mode', 'acceptEdits')
+      else if (turnMode === 'auto') args.push('--permission-mode', 'auto')
+      else args.push('--dangerously-skip-permissions')
+      args.push(first ? '--session-id' : '--resume', sessionId, '--append-system-prompt', instruction)
       if (mcpConfigPath) args.push('--mcp-config', mcpConfigPath)
       if (effort) args.push('--effort', effort)
     } else {
@@ -1294,6 +1309,7 @@ export function createOrchestrator({
         cwd: root,
         title: logName,
         mcpConfig: mcpConfigPath,
+        mode: turnMode,
       })
       program = cmd.file
       args = cmd.args
@@ -1480,6 +1496,8 @@ export function createOrchestrator({
       defaultCompactRules: DEFAULT_COMPACT_RULES,
       autocompactPercent: autocompactMode === 'percent' ? autocompactValue : Math.round((autocompactValue / contextWindow) * 100),
       effort: effort ?? null,
+      mode: mode ?? legacyMode(harness),
+      modes: modesFor(harness),
       saveError: persistError,
       messages: messages.map((message) => ({ ...message })),
     }
@@ -1635,6 +1653,19 @@ export function createOrchestrator({
     return { status: 200, body: { id: key, model } }
   }
 
+  function setMode(body) {
+    if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_MODE_PROBLEM } }
+    if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    const nextMode = typeof body?.mode === 'string' ? body.mode.trim() : ''
+    if (!modesFor(harness).some((entry) => entry.id === nextMode)) {
+      return { status: 400, body: { error: MODE_PROBLEM } }
+    }
+    mode = nextMode
+    persist()
+    notify()
+    return { status: 200, body: answer() }
+  }
+
   function setHarness(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_HARNESS_PROBLEM } }
     const nextHarness = typeof body?.harness === 'string' ? body.harness.trim() : ''
@@ -1647,6 +1678,7 @@ export function createOrchestrator({
       return { status: 400, body: { error: modelUnavailableProblem(nextModel, nextHarness) } }
     }
     if (running && !running.done) return { status: 409, body: { error: COMPACT_RUNNING_PROBLEM } }
+    const keptMode = mode ?? legacyMode(harness)
     harness = nextHarness
     model = nextModel
     sessionId = null
@@ -1655,6 +1687,7 @@ export function createOrchestrator({
       s.opencodeSessionId = null
     }
     contextWindow = resolveContextWindow(model, harness, windowOption)
+    mode = modesFor(harness).some((entry) => entry.id === keptMode) ? keptMode : defaultMode(harness)
     persist()
     notify()
     return { status: 200, body: answer() }
@@ -1967,7 +2000,7 @@ export function createOrchestrator({
     mkdirSync(folder, { recursive: true })
   } catch {}
   if (lockFile) takeRoomLock(lockFile)
-  restore()
+  if (!restore()) mode = defaultMode(harness)
   persist()
   maybeStartTurn()
 
@@ -1982,6 +2015,7 @@ export function createOrchestrator({
     setModel,
     setEffort,
     setHarness,
+    setMode,
     listSessions,
     currentSessionInfo,
     getSession,

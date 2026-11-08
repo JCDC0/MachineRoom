@@ -37,12 +37,13 @@ export const machineroomHarness = {
   name: 'MachineRoom',
   adapterType: 'machineroom_local',
   createParser: createClaudeParser,
-  command({ cli, prompt = '', folder } = {}) {
+  command({ cli, prompt = '', folder, mode } = {}) {
     const cwd = typeof folder === 'string' && folder !== '' ? folder : '.'
     return {
       file: nodeFile(),
       args: [scriptFile(), '--model', String(cli?.model ?? ''), '--cwd', cwd, String(prompt)],
       cwd,
+      ...(typeof mode === 'string' && mode !== '' ? { env: { MACHINEROOM_PERMISSION_MODE: mode } } : {}),
     }
   },
   readLine() {

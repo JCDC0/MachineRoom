@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { legacyMode, modesFor } from '../src/control/modes.js'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
 import { isHarnessAvailable } from './agents-config.js'
@@ -52,6 +53,7 @@ export const OWNER_MODEL_PROBLEM = 'A request with no Origin cannot set the mode
 export const OWNER_EFFORT_PROBLEM = 'A request with no Origin cannot set effort.'
 export const OWNER_SESSION_PROBLEM = 'A request with no Origin cannot change sessions.'
 export const OWNER_HARNESS_PROBLEM = 'A request with no Origin cannot set the harness.'
+export const OWNER_MODE_PROBLEM = 'A request with no Origin cannot set the mode.'
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -428,6 +430,8 @@ export function createOrchestrators({
         defaultCompactRules: DEFAULT_COMPACT_RULES,
         autocompactPercent: answer.autocompactPercent,
         effort: answer.effort ?? null,
+        mode: answer.mode,
+        modes: answer.modes,
         lanes: currentLaneKeys().filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -438,10 +442,11 @@ export function createOrchestrators({
     for (const sub of ladder.subs) {
       const instance = instances.get(sub.id)
       const state = instance ? instance.answer() : null
+      const harness = state?.harness ?? harnessFor(sub)
       entries.push({
         id: sub.id,
         name: sub.name,
-        harness: state?.harness ?? harnessFor(sub),
+        harness,
         model: state?.model ?? subConfig(sub).model,
         state: state?.state ?? 'idle',
         contextTokens: state?.contextTokens ?? null,
@@ -453,6 +458,8 @@ export function createOrchestrators({
         defaultCompactRules: DEFAULT_COMPACT_RULES,
         autocompactPercent: state?.autocompactPercent ?? DEFAULT_AUTOCOMPACT_PERCENT,
         effort: state?.effort ?? null,
+        mode: state?.mode ?? legacyMode(harness),
+        modes: modesFor(harness),
         lanes: sub.lanes.filter((lane) => !isLaneHidden(lane)),
         scope: [...sub.scope],
         restricted: sub.restricted,
@@ -774,6 +781,23 @@ export function createOrchestrators({
           main.setLadder(ladder)
         }
       }
+      sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/mode') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_MODE_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      const instance = find(body.id)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const out = instance.setMode(body)
       sendJson(req, res, out.status, out.body)
       return true
     }
