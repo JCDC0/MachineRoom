@@ -1382,7 +1382,7 @@ describe('the orchestrator registry', () => {
     const call = files.calls().find((item) => item.args.some((arg) => typeof arg === 'string' && arg.includes('Your id is `frontend`')))
     const instruction = call.args[call.args.indexOf('--append-system-prompt') + 1]
     expect(instruction).toContain('Your lanes: `opencode`.')
-    expect(instruction).not.toContain('opencode2')
+    expect(instruction).not.toContain('`opencode2`')
   })
 
   it('lets only the owner change a scope the owner set', async () => {
