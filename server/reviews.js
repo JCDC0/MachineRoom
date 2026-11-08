@@ -28,10 +28,18 @@ export const DEFAULT_PATCH_LIMIT = 400 * 1024
 export const DEFAULT_REVIEW_CONCURRENCY = 4
 export const NOT_OWNER_PROBLEM = 'The caller is not the owner, so the lane was not merged.'
 export const MERGE_TIMEOUT_PROBLEM = 'The merge took too long, so it was stopped.'
-let codeCheckoutPath = null
+let codeCheckoutPath = ''
 
-function codeCheckout() {
-  if (codeCheckoutPath === null) codeCheckoutPath = mainCheckoutOf(REPO_ROOT)
+export function resetCodeCheckout() {
+  codeCheckoutPath = ''
+}
+
+export function codeCheckout() {
+  if (!codeCheckoutPath) {
+    const found = mainCheckoutOf(REPO_ROOT)
+    if (found) codeCheckoutPath = found
+    else return REPO_ROOT
+  }
   return codeCheckoutPath
 }
 
