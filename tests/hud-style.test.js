@@ -382,7 +382,7 @@ describe('HUD concept style structure', () => {
     )
     expect(css).toMatch(/#root \{\s+height: auto;\s+min-height: 100%;\s+overflow: visible;/)
     expect(css).toMatch(/\.stage \{\s+position: relative;\s+inset: auto;\s+min-height: 100vh;\s+overflow: visible;/)
-    expect(css).toMatch(/\.hud-lower \{[^}]*flex: 0 0 auto;[^}]*height: 100vh;[^}]*min-height: 100vh;/)
+    expect(css).toMatch(/\.hud-lower \{[^}]*flex: 0 0 auto;[^}]*height: calc\(100vh - var\(--menu-h\)\);[^}]*min-height: calc\(100vh - var\(--menu-h\)\);/)
     expect(css).toContain('.stage.is-idle .lens {')
     expect(css).toMatch(/\.stage\.is-idle \.lens \{\s+height: 100vh;/)
     expect(css).toMatch(/\.stage\.is-idle \{[\s\S]*transition: padding-top 800ms ease-out;/)

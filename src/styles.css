@@ -7412,8 +7412,8 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
   .hud-lower {
     flex: 0 0 auto;
-    height: 100vh;
-    min-height: 100vh;
+    height: calc(100vh - var(--menu-h));
+    min-height: calc(100vh - var(--menu-h));
     padding-top: var(--lens-bow, 28px);
     display: grid;
     grid-template-columns: clamp(280px, 22vw, 340px) minmax(0, 1fr) 280px;

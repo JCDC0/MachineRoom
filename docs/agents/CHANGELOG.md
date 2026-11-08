@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- At 900 pixels and wider the menu, lens and transport fill the first screen and the page scrolls to the lower half, one window high less the menu, so the conversation has its own area again; the Height rail runs from 30 percent to the full first screen (task U158).
 - The review list on another project keeps its own lanes when a git read at the bridge start fails, so it no longer falls back to the room's lanes (task T37).
 - The README shows the idle view, the lens in the full window, in docs/images/full-lens.png.
 - The guide, the user guide and the README describe the grey tunnels, the stars, the agent colours, the camera brackets and the replay-time labels instead of the yellow stripes and packets, and the plan drops the version 7 findings S41 fixed.
