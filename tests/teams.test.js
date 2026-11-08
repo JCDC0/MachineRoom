@@ -361,6 +361,34 @@ describe('teams routes and validation', () => {
     expect(targetLabels.claude).toBe('Claude Specialist')
   })
 
+  it('reports a ladder the bridge refuses instead of saying it applied', async () => {
+    const root = tempDir('mr-ladder-proj-')
+    const runs = tempDir('mr-ladder-runs-')
+    saveTeams(teamsFileFor(runs), [
+      { name: 'Subs', lanes: ['opencode'], labels: {}, ladder: { subs: [{ id: 'one', lanes: ['opencode'] }] }, savedAt: new Date().toISOString() },
+    ])
+    const answers = []
+    const api = createTeamsApi({
+      projectRoot: root,
+      runsFolder: runs,
+      lanes: SAMPLE_LANES,
+      orchestrators: {
+        list: () => [],
+        ladderChange: () => ({ status: 400, body: { error: 'Sub "one" needs a name.' } }),
+      },
+      sendJson: (_req, _res, status, body) => answers.push({ status, body }),
+      readJsonBody: async () => ({ confirmed: true }),
+    })
+    await api.handle(
+      { method: 'POST', headers: { origin: 'http://127.0.0.1:5173' } },
+      {},
+      new URL('http://127.0.0.1/api/teams/Subs/apply')
+    )
+    expect(answers[0].status).toBe(200)
+    expect(answers[0].body.ladderError).toBe('Sub "one" needs a name.')
+    expect(answers[0].body.applied.ladder).toBeNull()
+  })
+
   it('refuses apply and copy with 409 while turn or lane runs', async () => {
     const root = tempDir('mr-409-proj-')
     const runs = tempDir('mr-409-runs-')

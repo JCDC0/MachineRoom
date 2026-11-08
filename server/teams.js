@@ -258,8 +258,13 @@ export function createTeamsApi(options = {}) {
           })),
         }
       }
+      let ladderError = null
       if (orchs && typeof orchs.ladderChange === 'function') {
-        orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner' }, true)
+        const saved = orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner' }, true)
+        if (saved && saved.status !== 200) {
+          ladderError = saved.body?.error ?? 'The sub orchestrators could not be saved.'
+          appliedLadder = null
+        }
       }
 
       if (typeof notify === 'function') {
@@ -278,6 +283,7 @@ export function createTeamsApi(options = {}) {
         dropped: {
           lanes: droppedLanes,
         },
+        ...(ladderError ? { ladderError } : {}),
       })
       return true
     }
@@ -393,8 +399,13 @@ export function createTeamsApi(options = {}) {
           })),
         }
       }
+      let ladderError = null
       if (orchs && typeof orchs.ladderChange === 'function') {
-        orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner' }, true)
+        const saved = orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner' }, true)
+        if (saved && saved.status !== 200) {
+          ladderError = saved.body?.error ?? 'The sub orchestrators could not be saved.'
+          appliedLadder = null
+        }
       }
 
       if (typeof notify === 'function') {
@@ -413,6 +424,7 @@ export function createTeamsApi(options = {}) {
         dropped: {
           lanes: droppedLanes,
         },
+        ...(ladderError ? { ladderError } : {}),
       })
       return true
     }
