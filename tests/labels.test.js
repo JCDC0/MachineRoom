@@ -55,4 +55,15 @@ describe('a label on replay time', () => {
     expect(item.visible).toBe(true)
     labels.dispose()
   })
+
+  it('treats a speed that is not a finite number at or above zero as one', () => {
+    for (const speed of [null, '', false, -2, Number.NaN]) {
+      const scene = new THREE.Scene()
+      const labels = createLabels(scene, 1)
+      labels.show('test.js', new THREE.Vector3(0, 0, 0))
+      labels.update(10, speed)
+      expect(scene.children[0].visible).toBe(false)
+      labels.dispose()
+    }
+  })
 })

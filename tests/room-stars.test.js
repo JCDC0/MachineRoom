@@ -3,6 +3,7 @@ import { makeTree } from '../src/model/paths.js'
 import { apply, createState } from '../src/model/state.js'
 
 const fakeStars = vi.hoisted(() => ({ launches: [], cancels: [], lands: [], resets: 0 }))
+const fakeLabels = vi.hoisted(() => ({ shows: [] }))
 
 vi.mock('../src/engine/stars.js', async (importOriginal) => {
   const actual = await importOriginal()
@@ -29,6 +30,17 @@ vi.mock('../src/engine/stars.js', async (importOriginal) => {
     }),
   }
 })
+
+vi.mock('../src/engine/labels.js', () => ({
+  createLabels: () => ({
+    show(text, point, color = '#ffffff') {
+      fakeLabels.shows.push({ text, point: { x: point.x, y: point.y, z: point.z }, color })
+    },
+    update() {},
+    clear() {},
+    dispose() {},
+  }),
+}))
 
 const context2d = {
   font: '',
@@ -69,6 +81,8 @@ function fakeStyle() {
   }
   return style
 }
+
+const createdNodes = []
 
 function fakeElement(tag = 'div') {
   const listeners = new Map()
@@ -132,6 +146,7 @@ function fakeElement(tag = 'div') {
     getBoundingClientRect: () => ({ left: 0, top: 0, width: node.clientWidth || 1200, height: node.clientHeight || 800 }),
     classList: { add() {}, remove() {}, contains: () => false },
   }
+  createdNodes.push(node)
   return node
 }
 
@@ -241,6 +256,8 @@ beforeEach(() => {
   fakeStars.cancels.length = 0
   fakeStars.lands.length = 0
   fakeStars.resets = 0
+  fakeLabels.shows.length = 0
+  createdNodes.length = 0
   motionMatches = false
   clock = performance.now()
 })
@@ -383,20 +400,27 @@ describe('the stars of a call and a run', () => {
     }
   })
 
-  it('lands an agent star when its run ends', async () => {
+  it('cancels the stars of an agent when its run ends and shows no touch', async () => {
     const { room, state } = await makeRoom()
     try {
       startRun(state, room)
       touchCall(state, room)
       tickRoom(1)
-      const launch = fakeStars.launches[0]
+      fakeStars.cancels.length = 0
       fakeStars.lands.length = 0
+      fakeStars.launches.length = 0
+      fakeLabels.shows.length = 0
       const end = { type: 'run.end', agent: 'claude', ok: true, time: 2200, runId: 'r-claude' }
       apply(state, end)
       room.onActivity(end)
-      expect(fakeStars.lands).toHaveLength(1)
-      expect(fakeStars.lands[0]({ agent: launch.agent, call: launch.call })).toBe(true)
-      expect(fakeStars.lands[0]({ agent: 'hermes', call: launch.call })).toBe(false)
+      expect(fakeStars.lands).toHaveLength(0)
+      expect(fakeStars.cancels).toHaveLength(1)
+      expect(fakeStars.cancels[0]({ agent: 'claude', to: null })).toBe(true)
+      expect(fakeStars.cancels[0]({ agent: 'hermes', to: null })).toBe(false)
+      expect(fakeLabels.shows).toHaveLength(0)
+      tickRoom(2)
+      expect(fakeStars.launches).toHaveLength(0)
+      expect(fakeLabels.shows).toHaveLength(0)
     } finally {
       room.dispose()
     }
@@ -418,6 +442,130 @@ describe('the stars of a call and a run', () => {
     }
   })
 
+  it('finishes only the child run when the run id belongs to the child', async () => {
+    const { room, state } = await makeRoom(['src/a.js'], ['orchestrator', 'claude'])
+    try {
+      startRun(state, room)
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 1500, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      tickRoom(2)
+      const childRun = { type: 'run.start', agent: 'claude~1', time: 1600, runId: 'r-child' }
+      apply(state, childRun)
+      room.onActivity(childRun)
+      const childTouch = {
+        type: 'tool.start',
+        agent: 'claude~1',
+        id: 'c1',
+        time: 1700,
+        tool: 'edit',
+        label: 'write src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+      }
+      apply(state, childTouch)
+      room.onActivity(childTouch)
+      tickRoom(1)
+      const parentTouch = {
+        type: 'tool.start',
+        agent: 'claude',
+        id: 'p1',
+        time: 1750,
+        tool: 'edit',
+        label: 'write src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+      }
+      apply(state, parentTouch)
+      room.onActivity(parentTouch)
+      fakeStars.cancels.length = 0
+      fakeStars.launches.length = 0
+      const end = { type: 'run.end', agent: 'claude', ok: true, time: 1800, runId: 'r-child' }
+      apply(state, end)
+      room.onActivity(end)
+      expect(state.agents.get('claude').status).toBe('working')
+      expect(state.agents.get('claude~1').status).toBe('done')
+      expect(fakeStars.cancels).toHaveLength(1)
+      expect(fakeStars.cancels[0]({ agent: 'claude', to: null })).toBe(false)
+      expect(fakeStars.cancels[0]({ agent: 'claude~1', to: null })).toBe(true)
+      tickRoom(1)
+      expect(fakeStars.launches).toHaveLength(1)
+      expect(fakeStars.launches[0].agent).toBe('claude')
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('finishes the working children a parent run end finishes', async () => {
+    const { room, state } = await makeRoom(['src/a.js'], ['orchestrator', 'claude'])
+    try {
+      startRun(state, room)
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 1500, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      tickRoom(2)
+      const childRun = { type: 'run.start', agent: 'claude~1', time: 1600, runId: 'r-child' }
+      apply(state, childRun)
+      room.onActivity(childRun)
+      fakeStars.cancels.length = 0
+      const end = { type: 'run.end', agent: 'claude', ok: true, time: 1800, runId: 'r-claude' }
+      apply(state, end)
+      room.onActivity(end)
+      expect(state.agents.get('claude').status).toBe('done')
+      expect(state.agents.get('claude~1').status).toBe('done')
+      expect(fakeStars.cancels).toHaveLength(1)
+      expect(fakeStars.cancels[0]({ agent: 'claude', to: null })).toBe(true)
+      expect(fakeStars.cancels[0]({ agent: 'claude~1', to: null })).toBe(true)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('cancels the stars and queued touches of an agent that ends', async () => {
+    const { room, state } = await makeRoom()
+    try {
+      startRun(state, room)
+      touchCall(state, room)
+      tickRoom(1)
+      fakeStars.cancels.length = 0
+      fakeStars.lands.length = 0
+      fakeLabels.shows.length = 0
+      const end = { type: 'agent.end', agent: 'claude', ok: false, time: 2300 }
+      apply(state, end)
+      room.onActivity(end)
+      expect(fakeStars.lands).toHaveLength(0)
+      expect(fakeStars.cancels).toHaveLength(1)
+      expect(fakeStars.cancels[0]({ agent: 'claude', to: null })).toBe(true)
+      expect(fakeLabels.shows).toHaveLength(0)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('queues a touch from a child whose view is not built yet', async () => {
+    const { room, state } = await makeRoom(['src/a.js'], ['claude'])
+    try {
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 3000, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      const touch = {
+        type: 'tool.start',
+        agent: 'claude~1',
+        id: 'c1',
+        time: 3100,
+        tool: 'edit',
+        label: 'write src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+      }
+      apply(state, touch)
+      room.onActivity(touch)
+      expect(fakeStars.launches).toHaveLength(0)
+      tickRoom(1)
+      const launched = fakeStars.launches.find((launch) => launch.agent === 'claude~1')
+      expect(launched).toBeTruthy()
+    } finally {
+      room.dispose()
+    }
+  })
+
   it('cancels the stars of a view removed from the roster', async () => {
     const { room, state } = await makeRoom(['src/a.js'], ['claude', 'hermes'])
     try {
@@ -429,6 +577,27 @@ describe('the stars of a call and a run', () => {
       room.setRoster([{ key: 'hermes', name: 'hermes' }])
       expect(fakeStars.cancels).toHaveLength(1)
       expect(fakeStars.cancels[0]({ agent: launch.agent, call: launch.call })).toBe(true)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('cancels a star flowing to a removed agent and drops its queued spawn', async () => {
+    const { room, state } = await makeRoom(['src/a.js'], ['orchestrator', 'claude'])
+    try {
+      startRun(state, room)
+      expect(fakeStars.launches).toHaveLength(1)
+      fakeStars.launches.length = 0
+      fakeStars.cancels.length = 0
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 3000, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      room.setRoster([{ key: 'orchestrator', name: 'orchestrator' }])
+      expect(fakeStars.cancels).toHaveLength(1)
+      expect(fakeStars.cancels[0]({ agent: 'orchestrator', to: 'claude' })).toBe(true)
+      expect(fakeStars.cancels[0]({ agent: 'orchestrator', to: 'hermes' })).toBe(false)
+      tickRoom(2)
+      expect(fakeStars.launches).toHaveLength(0)
     } finally {
       room.dispose()
     }
@@ -503,6 +672,37 @@ describe('the stars of a spawn and a web call', () => {
       expect(fakeStars.launches).toHaveLength(1)
       expect(fakeStars.launches[0].agent).toBe('claude')
       expect(fakeStars.launches[0].call).toBe('w2')
+    } finally {
+      room.dispose()
+    }
+  })
+})
+
+describe('a touch under reduced motion', () => {
+  it('shows its label after the frame draws the card', async () => {
+    motionMatches = true
+    const { room, state } = await makeRoom(['src/model/deep/a.js'], ['claude'])
+    try {
+      tickRoom(1)
+      fakeLabels.shows.length = 0
+      fakeStars.launches.length = 0
+      const touch = {
+        type: 'tool.start',
+        agent: 'claude',
+        id: 'm1',
+        time: 2000,
+        tool: 'edit',
+        label: 'write src/model/deep/a.js',
+        touches: [{ path: 'src/model/deep/a.js', mode: 'write', kind: 'file' }],
+      }
+      apply(state, touch)
+      room.onActivity(touch)
+      expect(fakeLabels.shows).toHaveLength(0)
+      tickRoom(1)
+      expect(fakeLabels.shows).toHaveLength(1)
+      expect(fakeLabels.shows[0].text).toBe('write a.js')
+      expect(fakeStars.launches).toHaveLength(0)
+      expect(createdNodes.some((node) => node.dataset?.path === 'src/model/deep')).toBe(true)
     } finally {
       room.dispose()
     }

@@ -6,6 +6,7 @@ import { freshRecent } from '../model/state.js'
 import { SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, startDanceEnvelope } from './hub.js'
 import { ROOT_PLACE, layoutRing, ringOf } from './ring.js'
 import { easeRate, still } from './sprites.js'
+import { speedRate } from './stars.js'
 
 export const CARD_W = 248
 export const HEAD_H = 56
@@ -464,15 +465,17 @@ export function createCards(cssScene, options = {}) {
     planKey = ''
   }
 
-  function nearestCard(path) {
+  function nearestCard(path, includeLeaving = false) {
     let at = path
-    while (at !== '' && (!cards.has(at) || cards.get(at).leaving)) at = dirname(at)
+    while (at !== '' && (!cards.has(at) || (!includeLeaving && cards.get(at).leaving))) at = dirname(at)
     return cards.get(at) ?? null
   }
 
   function markRowPath(path) {
     const card = nearestCard(dirname(path))
     if (card) rowDirty.add(card.path)
+    const own = cards.get(dirname(path))
+    if (own?.leaving) rowDirty.add(own.path)
   }
 
   function markRows() {
@@ -933,8 +936,8 @@ export function createCards(cssScene, options = {}) {
     return (nearestCard(path) ?? cards.get(''))?.base ?? rootHome
   }
 
-  function anchor(path, out = new THREE.Vector3()) {
-    const card = nearestCard(path)
+  function anchor(path, out = new THREE.Vector3(), includeLeaving = false) {
+    const card = nearestCard(path, includeLeaving)
     if (!card) return null
     const width = cardBaseWidth(card.path, card.rootName) + CARD_FACE_BORDER
     const height = (card.height || cardHeight(card.view ? cardRows(card.view) : 0)) + CARD_FACE_BORDER
@@ -1142,7 +1145,7 @@ export function createCards(cssScene, options = {}) {
     const dimLit = mask?.lit ?? null
     const targeted = mask?.targeted ?? null
     const dimStep = delta / (DIM_FADE_MS / 1000)
-    const flashStep = delta * (Number.isFinite(Number(speed)) ? Number(speed) : 1)
+    const flashStep = delta * speedRate(speed)
     for (const [path, hit] of flashes) {
       hit.life -= flashStep
       if (hit.life <= 0) {
@@ -1446,7 +1449,16 @@ export function createCards(cssScene, options = {}) {
         flash(file, 'white', name)
       }
     },
-    flashCluster: (path, tone) => flash(path, tone === 'red' ? 'red' : 'white', basename(path)),
+    flashCluster: (path, tone) => {
+      const red = tone === 'red'
+      const name = basename(path)
+      const own = cards.get(path)
+      if (!red && own && !own.leaving) return
+      flash(path, red ? 'red' : 'white', name)
+      if (!red) return
+      const card = nearestCard(path)
+      if (card && card.path !== path) flash(card.path, 'red', name)
+    },
     sync,
     setOptions,
     update,

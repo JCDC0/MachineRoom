@@ -9,6 +9,7 @@ import {
   STAR_SPEED,
   agentStar,
   createStars,
+  speedRate,
   starAdvance,
   starDuration,
   starEase,
@@ -147,6 +148,18 @@ describe('the star clock', () => {
     expect(starAdvance(0.2, 0.1, 'x')).toBeCloseTo(0.2, 10)
     expect(starAdvance('x', 0.1, 1)).toBeCloseTo(0.1, 10)
   })
+
+  it('takes a speed only when it is a finite number at or above zero', () => {
+    expect(speedRate(0)).toBe(0)
+    expect(speedRate(3)).toBe(3)
+    expect(speedRate(null)).toBe(1)
+    expect(speedRate('')).toBe(1)
+    expect(speedRate(false)).toBe(1)
+    expect(speedRate(-2)).toBe(1)
+    expect(speedRate('4')).toBe(1)
+    expect(speedRate(Number.NaN)).toBe(1)
+    expect(speedRate(undefined)).toBe(1)
+  })
 })
 
 describe('the star pool', () => {
@@ -231,6 +244,13 @@ describe('the stars in flight', () => {
     expect(stars.cancel((star) => star.agent === 'a')).toBe(0)
     expect(stars.land((star) => star.agent === 'b')).toBe(1)
     expect(landed).toEqual(['b'])
+    stars.dispose()
+  })
+
+  it('records both ends of an agent star', () => {
+    const stars = createStars(new THREE.Scene())
+    stars.launch({ points: path, agent: 'a', to: 'b' })
+    expect(stars.cancel((star) => star.agent === 'a' && star.to === 'b')).toBe(1)
     stars.dispose()
   })
 
