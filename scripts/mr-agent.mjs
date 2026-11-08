@@ -151,7 +151,7 @@ const AUTO_FORBIDDEN = [
 
 function permissionModeFrom(env) {
   const value = String(env?.MACHINEROOM_PERMISSION_MODE ?? '').trim().toLowerCase()
-  return ['plan', 'edits', 'auto', 'bypass'].includes(value) ? value : ''
+  return ['plan', 'edits', 'ask', 'auto', 'bypass'].includes(value) ? value : ''
 }
 
 const PERMISSION_MODE = permissionModeFrom(process.env)
@@ -165,6 +165,50 @@ function toolsForMode(mode) {
 function autoShellProblem(command) {
   if (PERMISSION_MODE !== 'auto') return ''
   return AUTO_FORBIDDEN.some((pattern) => pattern.test(command)) ? AUTO_SHELL_PROBLEM : ''
+}
+
+const APPROVAL_TOOLS = new Set(['write_file', 'edit_file', 'run_shell', 'mcp_call_tool'])
+const APPROVAL_WAIT_MS = 11 * 60 * 1000
+const APPROVAL_DENIED = 'The owner did not allow it.'
+
+function approvalSettings() {
+  const bridge = String(process.env.MACHINEROOM_BRIDGE ?? '').trim().replace(/\/+$/, '')
+  const id = String(process.env.MACHINEROOM_ORCHESTRATOR_ID ?? '').trim() || 'orchestrator'
+  const token = String(process.env.MACHINEROOM_ORCHESTRATOR_TOKEN ?? '').trim()
+  return { bridge, id, token }
+}
+
+async function askApproval(tool, input) {
+  if (PERMISSION_MODE !== 'ask') return null
+  const { bridge, id, token } = approvalSettings()
+  if (!bridge || !token) return { text: 'The approval bridge is not configured.', isError: true }
+  let response
+  try {
+    response = await fetch(`${bridge}/api/orchestrator/approvals`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'X-MachineRoom-Orchestrator': token,
+      },
+      body: JSON.stringify({ id, tool, input }),
+      signal: AbortSignal.timeout(APPROVAL_WAIT_MS),
+    })
+  } catch (error) {
+    return { text: `The approval request failed: ${String(error?.message ?? error)}`, isError: true }
+  }
+  let answer = null
+  try {
+    answer = await response.json()
+  } catch {
+    answer = null
+  }
+  if (!response.ok) {
+    const problem = typeof answer?.error === 'string' && answer.error.trim() ? answer.error : 'The approval request failed.'
+    return { text: problem, isError: true }
+  }
+  if (answer?.allow === true) return null
+  const message = typeof answer?.message === 'string' && answer.message.trim() ? answer.message : APPROVAL_DENIED
+  return { text: message, isError: true }
 }
 
 function writeJson(value) {
@@ -615,6 +659,10 @@ async function mcpCallTool(args) {
 
 async function runTool(name, args, cwd, web) {
   try {
+    if (APPROVAL_TOOLS.has(name)) {
+      const denied = await askApproval(name, args)
+      if (denied) return denied
+    }
     if (name === 'read_file') return readTool(args, cwd)
     if (name === 'write_file') return writeTool(args, cwd)
     if (name === 'edit_file') return editTool(args, cwd)

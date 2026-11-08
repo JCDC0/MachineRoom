@@ -756,6 +756,20 @@ describe('the orchestrator permission modes', () => {
     expect(typeof server.env.MACHINEROOM_ORCHESTRATOR_TOKEN).toBe('string')
     expect(server.env.MACHINEROOM_ORCHESTRATOR_TOKEN.length).toBeGreaterThan(20)
   })
+
+  it('passes the approval bridge env to the MachineRoom harness in ask mode', async () => {
+    const rig = makeRig({ harness: 'machineroom', lanes: MACHINEROOM_LANES })
+    expect(rig.orchestrator.setMode({ mode: 'ask', confirmed: true }).status).toBe(200)
+
+    rig.send('Ask turn')
+    await waitIdle(rig, 1)
+
+    const env = rig.spawned[0].env
+    expect(env.MACHINEROOM_PERMISSION_MODE).toBe('ask')
+    expect(env.MACHINEROOM_BRIDGE).toBe('http://127.0.0.1:5999')
+    expect(env.MACHINEROOM_ORCHESTRATOR_ID).toBe('orchestrator')
+    expect(env.MACHINEROOM_ORCHESTRATOR_TOKEN.length).toBeGreaterThan(20)
+  })
 })
 
 describe('the context use', () => {
