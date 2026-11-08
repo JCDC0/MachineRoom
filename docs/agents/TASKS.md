@@ -1802,3 +1802,12 @@ Review `git diff d9b7b6b1^1 d9b7b6b1` (S46), `git diff d810250b^1 d810250b` (U16
 Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-7.md`: a table of at most 8 findings, most severe first, then a line per merge saying sound or not, then at most one proposed brief. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 25.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-7.md.
+
+**U166. A team replaces the ladder whole, and the elapsed music time runs before the length is known (OpenCode).** Read no part of TASKS.md beyond this brief and findings 2 and 4 and the orchestrator's corrections in `docs/agents/AUDIT-2026-11-REVIEW-7.md`. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 25. Do not edit any file under `docs/`.
+
+1. `POST /api/teams/NAME/apply` and `POST /api/teams/copy` in `server/teams.js` pass `keepHidden: false` to `orchs.ladderChange`, and `ladderChange` in `server/orchestrators.js` adds back no hidden saved lanes when the body says `keepHidden: false`. A page or orchestrator ladder save keeps doing it as now.
+2. The elapsed time in `src/ui/MusicPlayer.jsx` shows the position clamped to the length when the length is known, and the plain position when it is not, while the slider keeps `shownPosition`.
+
+Add a test for each step: a team whose sub id matches an existing sub that had a lane the apply hides, which ends with that sub holding only the team's lanes; and a playing track with no length whose elapsed time reads its position. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: server/teams.js, server/orchestrators.js, src/ui/MusicPlayer.jsx, tests/.

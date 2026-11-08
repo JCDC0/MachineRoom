@@ -29,3 +29,15 @@ Five small fixes across `server/teams.js`, `server/orchestrators.js`, `src/engin
 4. In `src/ui/MusicPlayer.jsx:185, 227`, render `formatTrackTime(duration > 0 ? Math.min(position, duration) : Math.max(0, position))` for the elapsed time readout so a playing track whose `loadedmetadata` never fires still shows its advancing `currentTime` while the slider stays at `0` until `duration > 0`.
 5. In `src/ui/musicQueue.js:390, 407`, return `0` from `seekMusic` when `!onLoadedTrack()` and reset `sound.seekMusic(0)` when switching playlists while paused.
 Files: `server/teams.js`, `server/orchestrators.js`, `src/engine/room.js`, `src/ui/MusicPlayer.jsx`, `src/ui/musicQueue.js`, `tests/teams.test.js`, `tests/room-stars.test.js`, `tests/music-player-ui.test.js`.
+
+## The orchestrator's corrections
+
+The orchestrator read each finding back against the code on 2026-11-09.
+
+- Finding 1 cannot happen through the app. `hideLane` in `server/active-lanes.js` removes the lane from the active list, `POST /api/lanes/active` refuses a hidden lane, and a team apply writes the active and hidden lists apart, so no project's active list holds a hidden lane unless its files are edited by hand. No brief.
+- Finding 2 holds when a team's sub has the same id as a sub already in this project: the old sub's lanes that the apply just hid join the team's sub. A team replaces the ladder, so it should keep none of them. Brief U166.
+- Finding 3 only reaches an agent the room never draws, a child past the depth limit or a lane the roster just dropped, and the worst it shows is a red hub pulse for a call that did fail, or a reduced-motion touch on a file that was touched. No brief.
+- Finding 4 holds: the elapsed time reads 0:00 until the track's length is known. Brief U166.
+- Finding 5 is not a fault. The page never calls `seekMusic` while the length is unknown, since the time bar is disabled, and a paused track that is still the loaded track shows its real position when its playlist is chosen again.
+
+S46, U164 and U165 fix their findings; U166 finishes the two edges above.
