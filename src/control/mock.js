@@ -44,6 +44,7 @@ export const CLIENT_METHODS = [
   'setOrchestratorEffort',
   'setOrchestratorHarness',
   'setOrchestratorMode',
+  'answerApproval',
   'orchestratorSessions',
   'orchestratorSession',
   'newOrchestratorSession',
@@ -657,6 +658,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       compactRules: '',
       autocompactPercent: 80,
       effort: null,
+      approvals: [],
       sessions: [],
       messages: [],
     }
@@ -692,6 +694,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
       id: id === undefined || id === null || id === '' ? 'orchestrator' : id,
       mode: chat.mode ?? legacyMode(harness),
       modes: modesFor(harness),
+      approvals: Array.isArray(chat.approvals) ? chat.approvals.map((entry) => ({ ...entry })) : [],
     }
   }
 
@@ -726,6 +729,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         effort: state.orchestratorChat.effort ?? null,
         mode: state.orchestratorChat.mode ?? legacyMode(state.orchestratorChat.harness ?? 'claude'),
         modes: modesFor(state.orchestratorChat.harness ?? 'claude'),
+        approvals: Array.isArray(state.orchestratorChat.approvals) ? state.orchestratorChat.approvals.map((entry) => ({ ...entry })) : [],
         lanes: MOCK_LANE_KEYS.filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -748,6 +752,7 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         effort: ensureSubChat(sub).effort ?? null,
         mode: ensureSubChat(sub).mode ?? legacyMode(sub.harness),
         modes: modesFor(sub.harness),
+        approvals: Array.isArray(ensureSubChat(sub).approvals) ? ensureSubChat(sub).approvals.map((entry) => ({ ...entry })) : [],
         lanes: [...sub.lanes],
         scope: [...sub.scope],
         restricted: sub.restricted !== false,
@@ -1237,6 +1242,20 @@ export function createMockClient({ latencyMs = 120, runMs = latencyMs * 50, now 
         chat.mode = mode
         emit({ topic: 'orchestrator' })
         return orchestratorAnswer(id)
+      }),
+
+    answerApproval: ({ id, approvalId, allow, confirmed = true } = {}) =>
+      call('answerApproval', () => {
+        if (confirmed !== true) throw new Error('Confirm the approval answer first.')
+        if (typeof allow !== 'boolean') throw new Error('Say whether to allow the request.')
+        const chat = chatStore(id)
+        const list = Array.isArray(chat.approvals) ? chat.approvals : []
+        const index = list.findIndex((entry) => entry?.approvalId === approvalId)
+        if (index === -1) throw new Error('There is no approval with that id.')
+        list.splice(index, 1)
+        chat.approvals = list
+        emit({ topic: 'orchestrator' })
+        return { ok: true, approvalId, allow, ...(allow ? {} : { message: 'The owner denied it.' }) }
       }),
 
     setOrchestratorEffort: (idOrOptions, effortArg, options = {}) =>

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
+import { maskKeys } from '../src/briefs/audit.js'
 import { legacyMode, modesFor } from '../src/control/modes.js'
 import { HARNESSES } from '../src/harnesses/index.js'
 import { canChange, outsideScope, readLadder, subPrompt } from '../src/model/hierarchy.js'
@@ -10,6 +11,7 @@ import { MODELS } from './models.js'
 import {
   CONFIRM_MESSAGE_PROBLEM,
   createOrchestrator,
+  APPROVAL_TIMEOUT_MS,
   DEFAULT_AUTOCOMPACT_MODE,
   DEFAULT_COMPACT_RULES,
   DEFAULT_AUTOCOMPACT_PERCENT,
@@ -54,6 +56,14 @@ export const OWNER_EFFORT_PROBLEM = 'A request with no Origin cannot set effort.
 export const OWNER_SESSION_PROBLEM = 'A request with no Origin cannot change sessions.'
 export const OWNER_HARNESS_PROBLEM = 'A request with no Origin cannot set the harness.'
 export const OWNER_MODE_PROBLEM = 'A request with no Origin cannot set the mode.'
+export const PAGE_APPROVAL_PROBLEM = 'A page cannot ask for an approval.'
+export const OWNER_ANSWER_PROBLEM = 'A request with no Origin cannot answer an approval.'
+export const APPROVAL_TOOL_PROBLEM = 'Name the tool the approval is for.'
+export const CONFIRM_APPROVAL_PROBLEM = 'Confirm the approval answer first.'
+export const APPROVAL_ALLOW_PROBLEM = 'Say whether to allow the request.'
+export const NO_APPROVAL_PROBLEM = 'There is no approval with that id.'
+export const APPROVAL_LIMIT_PROBLEM = '20 approvals are already waiting for the owner.'
+export const APPROVAL_INPUT_LIMIT = 2000
 
 function runsFolderDefault() {
   return join(process.env.TEMP || tmpdir(), 'machineroom-runs')
@@ -195,6 +205,7 @@ export function createOrchestrators({
   activeLanes,
   home = '',
   recordsCache,
+  approvalTimeoutMs = APPROVAL_TIMEOUT_MS,
 } = {}) {
   const root = projectRoot ? resolve(projectRoot) : ''
   const folder = resolve(runsFolder)
@@ -251,6 +262,7 @@ export function createOrchestrators({
     hasSub: (id) => instances.has(id),
     home,
     recordsCache: sharedCache,
+    approvalTimeoutMs,
   })
   instances.set(ORCHESTRATOR_KEY, main)
 
@@ -330,6 +342,7 @@ export function createOrchestrators({
       onNotice,
       onMasked,
       recordsCache: sharedCache,
+      approvalTimeoutMs,
       onMessage: (message) => announce(message?.from, agentKey(message?.to), message?.kind),
       extraInstructions: () => {
         const ladder = readSaved().ladder
@@ -432,6 +445,7 @@ export function createOrchestrators({
         effort: answer.effort ?? null,
         mode: answer.mode,
         modes: answer.modes,
+        approvals: answer.approvals,
         lanes: currentLaneKeys().filter((lane) => !claimed.has(lane)),
         scope: [],
         restricted: false,
@@ -460,6 +474,7 @@ export function createOrchestrators({
         effort: state?.effort ?? null,
         mode: state?.mode ?? legacyMode(harness),
         modes: modesFor(harness),
+        approvals: state?.approvals ?? [],
         lanes: sub.lanes.filter((lane) => !isLaneHidden(lane)),
         scope: [...sub.scope],
         restricted: sub.restricted,
@@ -799,6 +814,79 @@ export function createOrchestrators({
       }
       const out = instance.setMode(body)
       sendJson(req, res, out.status, out.body)
+      return true
+    }
+    if (path === '/api/orchestrator/approvals') {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (page) {
+        sendJson(req, res, 403, { error: PAGE_APPROVAL_PROBLEM })
+        return true
+      }
+      const actor = idForToken(token)
+      if (!actor) {
+        sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      if (body.id !== undefined && body.id !== null && body.id !== '' && body.id !== actor) {
+        sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
+        return true
+      }
+      const instance = instances.get(actor)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const tool = typeof body.tool === 'string' ? body.tool.trim() : ''
+      if (!tool) {
+        sendJson(req, res, 400, { error: APPROVAL_TOOL_PROBLEM })
+        return true
+      }
+      const raw = typeof body.input === 'string' ? body.input : JSON.stringify(body.input ?? {})
+      const masked = maskKeys(raw)
+      if (masked.count > 0 && typeof onMasked === 'function') {
+        try {
+          onMasked(masked.count)
+        } catch {}
+      }
+      const waiting = instance.requestApproval({ tool, input: masked.text.slice(0, APPROVAL_INPUT_LIMIT) })
+      if (waiting === null) {
+        sendJson(req, res, 429, { error: APPROVAL_LIMIT_PROBLEM })
+        return true
+      }
+      sendJson(req, res, 200, await waiting)
+      return true
+    }
+    const approvalMatch = /^\/api\/orchestrator\/approvals\/([^/?#]+)$/.exec(path)
+    if (approvalMatch) {
+      if (method !== 'POST') return methodNotAllowed(req, res)
+      if (!page) {
+        sendJson(req, res, 403, { error: OWNER_ANSWER_PROBLEM })
+        return true
+      }
+      const body = await readJsonBody(req, res)
+      if (body === null) return true
+      if (body.confirmed !== true) {
+        sendJson(req, res, 400, { error: CONFIRM_APPROVAL_PROBLEM })
+        return true
+      }
+      if (typeof body.allow !== 'boolean') {
+        sendJson(req, res, 400, { error: APPROVAL_ALLOW_PROBLEM })
+        return true
+      }
+      const instance = find(body.id)
+      if (!instance) {
+        sendJson(req, res, 404, { error: NO_ORCHESTRATOR_PROBLEM })
+        return true
+      }
+      const approvalId = decodeURIComponent(approvalMatch[1])
+      const out = instance.answerApproval({ approvalId, allow: body.allow })
+      if (!out) {
+        sendJson(req, res, 404, { error: NO_APPROVAL_PROBLEM })
+        return true
+      }
+      sendJson(req, res, 200, out)
       return true
     }
     if (path === '/api/orchestrator/effort') {
