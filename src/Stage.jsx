@@ -408,6 +408,14 @@ export function sameSnapshot(left, right) {
   return true
 }
 
+export function passSound(room, bands, dance) {
+  if (!room) return
+  if (typeof room.setBands === 'function') room.setBands(bands)
+  if (!dance) return
+  if (dance.beat > 0 && typeof room.setBeat === 'function') room.setBeat(dance.beat)
+  if (typeof room.setSway === 'function') room.setSway(dance.sway)
+}
+
 export function snapshotSink(player, setSnapshot, initial) {
   let last = initial
   return function publish() {
@@ -772,10 +780,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
         compassRef.current?.(yaw, pitch)
         roomRef.current?.setSpeed(live ? 1 : player.playing ? player.speed : 0)
         player.tick(ms)
-        roomRef.current?.setBands(sound.bands())
-        const dance = sound.dance()
-        if (dance.beat > 0) roomRef.current?.setBeat(dance.beat)
-        roomRef.current?.setSway(dance.sway)
+        passSound(roomRef.current, sound.bands(), sound.dance())
       },
       onPick: (key) => {
         if (key === null || key === undefined) {

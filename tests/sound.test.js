@@ -285,8 +285,8 @@ describe('the beat a dancer hears', () => {
     const tracker = createDanceTracker()
     let time = warm(tracker)
     let beats = 0
-    for (let index = 0; index < 24; index += 1) {
-      const level = 0.1 + 0.6 * Math.min(1, index / 12)
+    for (let index = 0; index < 400; index += 1) {
+      const level = 0.08 + 0.62 * Math.min(1, index / 400)
       const result = tracker.push([level, level * 0.8, 0, 0, 0], time)
       if (result.beat > 0) beats += 1
       time += 45
@@ -301,7 +301,7 @@ describe('the beat a dancer hears', () => {
     expect(tracker.sway()).toBeGreaterThan(0.05)
   })
 
-  it('never locks on onsets at random and sways instead', () => {
+  it('beats on each clear onset at random and sways while it is not locked', () => {
     const random = [0, 410, 1130, 1650, 2630, 2990, 4230, 4850, 5300, 6660, 7180, 7900]
     expect(beatLock(random, { at: 8000 }).locked).toBe(false)
 
@@ -317,9 +317,27 @@ describe('the beat a dancer hears', () => {
       if (result.beat > 0) beats += 1
       time += 45
     }
-    expect(beats).toBe(0)
+    expect(beats).toBeGreaterThan(0)
+    expect(beats).toBe(tracker.onsets().length)
     expect(tracker.lock().locked).toBe(false)
     expect(tracker.sway()).toBeGreaterThan(0.2)
+  })
+
+  it('scales the beat by how far the rise is above the average', () => {
+    function strengthOf(level) {
+      const detector = createBandBeatDetector()
+      let at = 0
+      for (let index = 0; index < 10; index += 1) {
+        detector.push([0.2, 0.2, 0, 0, 0], at)
+        at += 45
+      }
+      return detector.push([level, level, 0, 0, 0], at).strength
+    }
+    const soft = strengthOf(0.32)
+    const hard = strengthOf(0.9)
+    expect(soft).toBeGreaterThan(0)
+    expect(hard).toBeGreaterThan(soft)
+    expect(hard).toBe(1)
   })
 
   it('goes from beat-locked to sway when the drums stop', () => {
@@ -350,6 +368,7 @@ describe('the beat a dancer hears', () => {
   })
 
   it('eases the sway over SWAY_MS', () => {
+    expect(SWAY_MS).toBe(1500)
     expect(swayStep(0, 1, 0)).toBe(0)
     expect(swayStep(0, 1, SWAY_MS / 2)).toBeCloseTo(0.5, 6)
     expect(swayStep(0, 1, SWAY_MS)).toBe(1)
