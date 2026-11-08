@@ -540,8 +540,50 @@ function tokenSum(values) {
   return known.length === 0 ? null : Math.round(known.reduce((sum, value) => sum + value, 0))
 }
 
+function claudeTokens(usage) {
+  if (!usage || typeof usage !== 'object' || Array.isArray(usage)) return null
+  return tokenSum([
+    usage.input_tokens ?? usage.inputTokens,
+    usage.cache_creation_input_tokens ?? usage.cacheCreationInputTokens,
+    usage.cache_read_input_tokens ?? usage.cacheReadInputTokens,
+  ])
+}
+
+function assistantUsage(item) {
+  if (item?.usage && typeof item.usage === 'object' && !Array.isArray(item.usage)) {
+    return item.usage
+  }
+  if (item?.message?.usage && typeof item.message.usage === 'object' && !Array.isArray(item.message.usage)) {
+    return item.message.usage
+  }
+  return null
+}
+
 export function contextTokensFromLog(harness, log) {
-  let found = null
+  if (harness === 'opencode') {
+    let found = null
+    for (const line of String(log ?? '').split(/\r?\n/)) {
+      if (!line.trim()) continue
+      let item
+      try {
+        item = JSON.parse(line)
+      } catch {
+        continue
+      }
+      if (item?.type !== 'step_finish') continue
+      const tokens = item?.part?.tokens
+      if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) continue
+      const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {}
+      const sum = tokenSum([tokens.input, cache.read, cache.write])
+      if (sum !== null) found = sum
+    }
+    return found
+  }
+
+  let lastAssistant = null
+  let lastResultIterations = null
+  let lastResultTotal = null
+
   for (const line of String(log ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue
     let item
@@ -550,21 +592,29 @@ export function contextTokensFromLog(harness, log) {
     } catch {
       continue
     }
-    if (harness === 'opencode') {
-      if (item?.type !== 'step_finish') continue
-      const tokens = item?.part?.tokens
-      if (!tokens || typeof tokens !== 'object' || Array.isArray(tokens)) continue
-      const cache = tokens.cache && typeof tokens.cache === 'object' ? tokens.cache : {}
-      const sum = tokenSum([tokens.input, cache.read, cache.write])
-      if (sum !== null) found = sum
+    if (item?.parent_tool_use_id) continue
+    if (item?.type === 'assistant') {
+      const sum = claudeTokens(assistantUsage(item))
+      if (sum !== null) lastAssistant = sum
       continue
     }
-    if (item?.type !== 'result' || item.parent_tool_use_id) continue
-    const usage = item?.usage && typeof item.usage === 'object' ? item.usage : {}
-    const sum = tokenSum([usage.input_tokens, usage.cache_creation_input_tokens, usage.cache_read_input_tokens])
-    if (sum !== null) found = sum
+    if (item?.type === 'result') {
+      const usage = item.usage && typeof item.usage === 'object' && !Array.isArray(item.usage) ? item.usage : null
+      if (usage) {
+        let iterSum = null
+        if (Array.isArray(usage.iterations) && usage.iterations.length > 0) {
+          const lastIteration = usage.iterations.at(-1)
+          const iterUsage = lastIteration?.usage && typeof lastIteration.usage === 'object' ? lastIteration.usage : lastIteration
+          iterSum = claudeTokens(iterUsage)
+        }
+        lastResultIterations = iterSum
+        const total = claudeTokens(usage)
+        if (total !== null) lastResultTotal = total
+      }
+    }
   }
-  return found
+
+  return lastAssistant ?? lastResultIterations ?? lastResultTotal ?? null
 }
 
 export function compactPrompt(keep = '', rules = '') {
