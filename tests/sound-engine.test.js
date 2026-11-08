@@ -92,10 +92,13 @@ class FakeContext {
 
 class FakeAudio {
   constructor() {
+    FakeAudio.last = this
     this.paused = false
     this.ended = false
     this.volume = 1
     this.dataset = {}
+    this.currentTime = 0
+    this.duration = 0
   }
   addEventListener() {}
   removeEventListener() {}
@@ -187,6 +190,21 @@ describe('the sound engine with a fake analyser', () => {
     sound.setSettings({ pulse: true })
     clock += STEP_MS
     expect(sound.bands(clock)).not.toBe(null)
+  })
+})
+
+describe('the music seek', () => {
+  it('does nothing and answers 0 while the track length is not known', () => {
+    const audio = FakeAudio.last
+    expect(audio).not.toBeNull()
+    audio.currentTime = 7
+    audio.duration = 0
+    expect(sound.seekMusic(30)).toBe(0)
+    expect(audio.currentTime).toBe(7)
+
+    audio.duration = 120
+    expect(sound.seekMusic(30)).toBe(30)
+    expect(audio.currentTime).toBe(30)
   })
 })
 
