@@ -636,6 +636,29 @@ describe('the context use', () => {
     expect(contextTokensFromLog('claude', log)).toBe(250)
   })
 
+  it('keeps the iterations count when a later result line has no iterations and skips trailing empty iterations', () => {
+    const log = [
+      JSON.stringify({
+        type: 'result',
+        usage: {
+          input_tokens: 500,
+          iterations: [
+            { input_tokens: 100, cache_creation_input_tokens: 10, cache_read_input_tokens: 10 },
+            { input_tokens: 200, cache_creation_input_tokens: 20, cache_read_input_tokens: 30 },
+            { output_tokens: 50 },
+          ],
+        },
+      }),
+      JSON.stringify({
+        type: 'result',
+        usage: {
+          input_tokens: 800,
+        },
+      }),
+    ].join('\n')
+    expect(contextTokensFromLog('claude', log)).toBe(250)
+  })
+
   it('ignores subagent assistant lines with parent_tool_use_id', () => {
     const log = [
       JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [], usage: { input_tokens: 120 } } }),
