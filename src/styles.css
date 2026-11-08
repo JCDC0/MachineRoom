@@ -6256,6 +6256,9 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   padding: 6px var(--space);
   font-family: var(--mono);
   font-size: 12px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--white);
   text-align: left;
   background: transparent;
@@ -8982,6 +8985,11 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   gap: 8px;
   width: 100%;
   padding: 4px 2px 4px 28px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  background: transparent;
+  border: 0;
   border-radius: 2px;
 }
 
