@@ -249,7 +249,15 @@ export function createReviewsApi({
   const limit = Number.isInteger(patchLimit) && patchLimit > 0 ? patchLimit : DEFAULT_PATCH_LIMIT
   const roomCheckout = resolvedRoot ? mainCheckoutOf(resolvedRoot) : ''
   const codeCheckoutHere = roomCheckout ? codeCheckout() : ''
-  const otherProject = Boolean(roomCheckout && codeCheckoutHere && pathKey(roomCheckout) !== pathKey(codeCheckoutHere))
+  const projectCheckout = roomCheckout || resolvedRoot
+  const codeBase = codeCheckoutHere || REPO_ROOT
+  const otherProject = Boolean(
+    projectCheckout &&
+      inGitWorkTree(projectCheckout) &&
+      (roomCheckout && codeCheckoutHere
+        ? pathKey(roomCheckout) !== pathKey(codeCheckoutHere)
+        : !inside(projectCheckout, codeBase) && !inside(codeBase, projectCheckout))
+  )
   const lanesFolder =
     resolvedBriefs && existsSync(join(resolvedBriefs, 'lanes.json'))
       ? resolvedBriefs
@@ -257,7 +265,6 @@ export function createReviewsApi({
         ? ROOM_BRIEFS
         : resolvedBriefs
   const lanesCheckout = lanesFolder ? mainCheckoutOf(lanesFolder) : ''
-  const projectCheckout = roomCheckout || resolvedRoot
   const lanesPlain = Boolean(lanesFolder) && !inGitWorkTree(lanesFolder)
   const sameCheckout =
     roomCheckout && lanesCheckout
