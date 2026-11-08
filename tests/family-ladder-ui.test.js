@@ -130,6 +130,9 @@ describe('FamilyTree ladder changes', () => {
         root.render(createElement(FamilyTree, { client }))
       })
       await settle()
+      await act(async () => {
+        container.querySelector('.mr-family-more-head').click()
+      })
 
       for (const label of ['OpenCode 2', 'OpenCode']) {
         const check = rowByLabel(container, label).querySelector('.mr-family-check')

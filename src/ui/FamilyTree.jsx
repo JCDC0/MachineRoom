@@ -15,21 +15,27 @@ import {
   childFormProblem,
   childHarnesses,
   convertPlan,
+  droppedLaneLine,
   familyMeta,
   familyTree,
   findHarness,
   harnessEfforts,
   harnessLabel,
   harnessModels,
+  hideLaneText,
   labelProblem,
+  laneCountLine,
+  moreLanesLabel,
   rowText,
+  splitMoreLanes,
   stateWord,
   subsLosingLanes,
+  teamRows,
 } from './family.js'
 import { changeSub, idFromName, ladderFromOrchestrators, ladderSubs } from './ladderForm.js'
 import { ModelSelect, useHarnessModels } from './ModelRefresh.jsx'
 import { withHarnessModels, withModelRows } from './modelRefresh.js'
-import { AGENT_NAME_MAX, agentCountLine, cleanText, laneChoice, laneSummary } from './sidebar.js'
+import { AGENT_NAME_MAX, cleanText, laneChoice, laneSummary, projectName } from './sidebar.js'
 
 function messageOf(error) {
   return error instanceof Error && error.message ? error.message : 'The bridge refused the change.'
@@ -156,7 +162,354 @@ function agentCount(count) {
   return `${count} ${count === 1 ? 'agent' : 'agents'}`
 }
 
-export function FamilyTree({ client = null, tasks = null }) {
+export function FamilyTeams({ client = null, project = '' }) {
+  const canList = typeof client?.teams === 'function'
+  const canSave = typeof client?.saveTeam === 'function'
+  const canApply = typeof client?.applyTeam === 'function'
+  const canDelete = typeof client?.deleteTeam === 'function'
+  const canCopy = typeof client?.copyProjectTeam === 'function'
+  const [teams, setTeams] = useState(null)
+  const [choice, setChoice] = useState('')
+  const [name, setName] = useState('')
+  const [source, setSource] = useState('')
+  const [projects, setProjects] = useState([])
+  const [notice, setNotice] = useState('')
+  const [error, setError] = useState('')
+  const [confirm, setConfirm] = useState(null)
+  const [busy, setBusy] = useState(false)
+  const confirmRef = useRef(null)
+  const where = projectName({ path: project })
+
+  useDialogFocus(Boolean(confirm), { containerRef: confirmRef })
+
+  useEffect(() => {
+    if (!canList) return undefined
+    let alive = true
+    Promise.resolve()
+      .then(() => client.teams())
+      .then((answer) => {
+        if (alive) setTeams(teamRows(answer))
+      })
+      .catch((failure) => {
+        if (!alive) return
+        setTeams([])
+        setError(messageOf(failure))
+      })
+    return () => {
+      alive = false
+    }
+  }, [client, canList])
+
+  useEffect(() => {
+    if (typeof client?.projects !== 'function') return undefined
+    let alive = true
+    Promise.resolve()
+      .then(() => client.projects())
+      .then((answer) => {
+        if (!alive) return
+        const rows = []
+        const seen = new Set()
+        for (const entry of Array.isArray(answer?.recent) ? answer.recent : []) {
+          const path = cleanText(entry?.path)
+          if (!path || seen.has(path)) continue
+          seen.add(path)
+          rows.push({ path, name: projectName(entry) })
+        }
+        setProjects(rows)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [client])
+
+  useEffect(() => {
+    if (!teams) return
+    setChoice((current) => (teams.some((row) => row.name === current) ? current : teams[0]?.name ?? ''))
+  }, [teams])
+
+  useEffect(() => {
+    if (!confirm) return undefined
+    function onKey(event) {
+      if (event.key !== 'Escape' || busy) return
+      event.preventDefault()
+      event.stopPropagation()
+      setConfirm(null)
+    }
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [confirm, busy])
+
+  if (!canList) return null
+
+  async function readTeams() {
+    try {
+      const answer = await client.teams()
+      setTeams(teamRows(answer))
+    } catch (failure) {
+      setError(messageOf(failure))
+    }
+  }
+
+  function ask(config) {
+    setError('')
+    setNotice('')
+    setConfirm(config)
+  }
+
+  function applied(answer) {
+    const parts = []
+    const dropped = droppedLaneLine(answer)
+    if (dropped) parts.push(dropped)
+    if (typeof answer?.ladderError === 'string' && answer.ladderError.trim()) {
+      parts.push(answer.ladderError.trim())
+    }
+    setNotice(parts.join(' '))
+  }
+
+  async function runConfirm() {
+    if (!confirm || busy) return
+    const current = confirm
+    setBusy(true)
+    setError('')
+    try {
+      await current.run()
+      setConfirm(null)
+    } catch (failure) {
+      setError(messageOf(failure))
+      setConfirm(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  function askApply() {
+    if (!choice || busy) return
+    if (!canApply) {
+      setError('This bridge cannot apply a team.')
+      return
+    }
+    const team = choice
+    ask({
+      text: `Apply ${team} to ${where}? Its lanes, labels and sub orchestrators replace this project's.`,
+      label: 'Apply',
+      busyText: 'Applying the team...',
+      run: async () => {
+        applied(await client.applyTeam({ name: team, confirmed: true }))
+        await readTeams()
+      },
+    })
+  }
+
+  function askSave() {
+    if (busy) return
+    const team = cleanText(name, 40)
+    if (!team) {
+      setError('Write a name for the team.')
+      return
+    }
+    if (!canSave) {
+      setError('This bridge cannot save a team.')
+      return
+    }
+    ask({
+      text: `Save "${team}" as a team? It takes this project's lanes, labels and sub orchestrators.`,
+      label: 'Save team',
+      busyText: 'Saving the team...',
+      run: async () => {
+        await client.saveTeam({ name: team, confirmed: true })
+        setName('')
+        await readTeams()
+      },
+    })
+  }
+
+  function askDelete() {
+    if (!choice || busy) return
+    if (!canDelete) {
+      setError('This bridge cannot delete a team.')
+      return
+    }
+    const team = choice
+    ask({
+      text: `Delete "${team}"? This cannot be undone.`,
+      label: 'Delete',
+      tone: 'danger',
+      busyText: 'Deleting the team...',
+      run: async () => {
+        await client.deleteTeam({ name: team, confirmed: true })
+        await readTeams()
+      },
+    })
+  }
+
+  function askCopy() {
+    if (!source || busy) return
+    if (!canCopy) {
+      setError('This bridge cannot copy a team.')
+      return
+    }
+    const path = source
+    const other = projects.find((row) => row.path === path)?.name ?? 'the project'
+    ask({
+      text: `Copy the team of ${other} into ${where}?`,
+      label: 'Copy',
+      busyText: 'Copying the team...',
+      run: async () => {
+        applied(await client.copyProjectTeam({ path, confirmed: true }))
+        await readTeams()
+      },
+    })
+  }
+
+  const rows = teams ?? []
+
+  return (
+    <section className="mr-teams" aria-label="Saved teams">
+      <p className="mr-side-head">
+        <span className="mr-side-head-title mono">Teams</span>
+      </p>
+      {teams === null ? <p className="mr-side-note">Loading teams...</p> : null}
+      {teams !== null && rows.length === 0 ? (
+        <p className="mr-side-note is-dim">No saved teams yet.</p>
+      ) : null}
+      {rows.length > 0 ? (
+        <>
+          <label className="mr-side-field">
+            <span className="mr-side-field-label mono">Saved team</span>
+            <select
+              className="mr-side-select mono"
+              aria-label="Saved team"
+              value={choice}
+              onChange={(event) => {
+                setChoice(event.target.value)
+                setNotice('')
+                setError('')
+              }}
+            >
+              {rows.map((row) => (
+                <option value={row.name} key={row.name}>
+                  {row.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="mr-side-form-actions">
+            <button
+              type="button"
+              className="mr-side-primary"
+              disabled={busy || !canApply || !choice}
+              onClick={askApply}
+            >
+              Apply
+            </button>
+            <button
+              type="button"
+              className="mr-side-action"
+              disabled={busy || !canDelete || !choice}
+              onClick={askDelete}
+            >
+              Delete
+            </button>
+          </div>
+        </>
+      ) : null}
+      {canSave ? (
+        <form
+          className="mr-teams-form"
+          aria-label="Save as team"
+          onSubmit={(event) => {
+            event.preventDefault()
+            askSave()
+          }}
+        >
+          <label className="mr-side-field">
+            <span className="mr-side-field-label mono">Save as team</span>
+            <input
+              className="mr-side-input mono"
+              aria-label="Team name"
+              maxLength={40}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <div className="mr-side-form-actions">
+            <button type="submit" className="mr-side-action" disabled={busy}>
+              Save
+            </button>
+          </div>
+        </form>
+      ) : null}
+      {canCopy && projects.length > 0 ? (
+        <>
+          <label className="mr-side-field">
+            <span className="mr-side-field-label mono">Copy from</span>
+            <select
+              className="mr-side-select mono"
+              aria-label="Copy from project"
+              value={source}
+              onChange={(event) => {
+                setSource(event.target.value)
+                setNotice('')
+                setError('')
+              }}
+            >
+              <option value="">Choose a project</option>
+              {projects.map((row) => (
+                <option value={row.path} key={row.path}>
+                  {row.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="mr-side-form-actions">
+            <button
+              type="button"
+              className="mr-side-action"
+              disabled={busy || !source}
+              onClick={askCopy}
+            >
+              Copy
+            </button>
+          </div>
+        </>
+      ) : null}
+      {notice ? <p className="mr-side-note">{notice}</p> : null}
+      {error ? (
+        <p className="mr-side-error mono" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {confirm ? (
+        <div ref={confirmRef} className="mr-side-confirm" role="dialog" aria-modal="true" aria-label={confirm.label}>
+          <section className="mr-side-confirm-card">
+            <p className="mr-side-confirm-text">{busy && confirm.busyText ? confirm.busyText : confirm.text}</p>
+            <div className="mr-side-confirm-actions">
+              <button
+                type="button"
+                className={`mr-side-confirm-btn${confirm.tone === 'danger' ? ' is-danger' : ' is-primary'}`}
+                disabled={busy}
+                onClick={runConfirm}
+              >
+                {confirm.label}
+              </button>
+              <button
+                type="button"
+                className="mr-side-confirm-btn"
+                disabled={busy}
+                onClick={() => setConfirm(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+export function FamilyTree({ client = null, tasks = null, project = '' }) {
   const canFamily = typeof client?.family === 'function'
   const [family, setFamily] = useState(null)
   const [lanes, setLanes] = useState(null)
@@ -165,6 +518,7 @@ export function FamilyTree({ client = null, tasks = null }) {
   const [readError, setReadError] = useState('')
   const [actionError, setActionError] = useState('')
   const [open, setOpen] = useState(true)
+  const [moreOpen, setMoreOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [nodeDraft, setNodeDraft] = useState(null)
   const [orchestrator, setOrchestrator] = useState(null)
@@ -345,12 +699,12 @@ export function FamilyTree({ client = null, tasks = null }) {
     return map
   }, [orchestrators])
   const taskMap = tasks instanceof Map ? tasks : liveTaskMap
-  const summary = laneSummary(lanes)
-  const countLine = lanes
-    ? agentCountLine(summary.active.length, summary.max)
+  const laneRows = useMemo(() => splitMoreLanes(tree.rows), [tree])
+  const countLine = family
+    ? laneCountLine(tree.nodes)
     : readError
-      ? 'Agents failed to load.'
-      : 'Loading agents...'
+      ? 'Lanes failed to load.'
+      : 'Loading lanes...'
   const editingNode = editing ? tree.nodes.find((node) => node.id === editing) ?? null : null
 
   const editorHarness = useMemo(() => {
@@ -719,20 +1073,19 @@ export function FamilyTree({ client = null, tasks = null }) {
     })
   }
 
-  function askRemove(node) {
+  function askHide(node) {
     if (node.kind !== 'lane') return
-    if (typeof client?.deleteLane !== 'function') {
-      setActionError('This bridge cannot remove an agent.')
+    if (typeof client?.hideLane !== 'function') {
+      setActionError('This bridge cannot hide an agent.')
       return
     }
     ask({
-      text: `Remove "${node.label}"? This cannot be undone.`,
-      label: 'Remove',
-      tone: 'danger',
-      busyText: 'Removing the agent...',
+      text: hideLaneText(node.label, projectName({ path: project })),
+      label: 'Hide',
+      busyText: 'Hiding the agent...',
       run: async () => {
-        await client.deleteLane({ key: node.id, confirmed: true })
-        closeEditor()
+        await client.hideLane({ key: node.id, confirmed: true })
+        if (editing === node.id) closeEditor()
         await refresh()
       },
     })
@@ -1256,11 +1609,11 @@ export function FamilyTree({ client = null, tasks = null }) {
               </button>
               <button
                 type="button"
-                className="mr-side-action is-danger"
-                disabled={busy || typeof client?.deleteLane !== 'function'}
-                onClick={() => askRemove(node)}
+                className="mr-side-action"
+                disabled={busy || typeof client?.hideLane !== 'function'}
+                onClick={() => askHide(node)}
               >
-                Remove
+                Hide
               </button>
             </div>
             {node.custom !== true ? (
@@ -1628,6 +1981,26 @@ export function FamilyTree({ client = null, tasks = null }) {
     )
   }
 
+  function renderMoreLanes() {
+    if (laneRows.more.length === 0) return null
+    return (
+      <div className="mr-family-more">
+        <button
+          type="button"
+          className="mr-family-more-head"
+          aria-expanded={moreOpen}
+          onClick={() => setMoreOpen((value) => !value)}
+        >
+          <span className="mr-family-more-label mono">{moreLanesLabel(laneRows.more.length)}</span>
+          <span className="mr-side-twist" aria-hidden="true">
+            {moreOpen ? '-' : '+'}
+          </span>
+        </button>
+        {moreOpen ? laneRows.more.map((row) => renderRow({ ...row, depth: 1 })) : null}
+      </div>
+    )
+  }
+
   function renderRow(row) {
     const node = row
     const state = stateWord(node)
@@ -1697,15 +2070,15 @@ export function FamilyTree({ client = null, tasks = null }) {
                   <button
                     type="button"
                     className="mr-family-trash"
-                    aria-label={`Delete ${node.label}`}
-                    title={`Delete ${node.label}`}
+                    aria-label={sub ? `Delete ${node.label}` : `Hide ${node.label}`}
+                    title={sub ? `Delete ${node.label}` : `Hide ${node.label}`}
                     disabled={
                       busy ||
                       (sub
                         ? typeof client?.setLadder !== 'function' || typeof client?.orchestrators !== 'function'
-                        : typeof client?.deleteLane !== 'function')
+                        : typeof client?.hideLane !== 'function')
                     }
-                    onClick={() => (sub ? askRemoveSub(node) : askRemove(node))}
+                    onClick={() => (sub ? askRemoveSub(node) : askHide(node))}
                   >
                     <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" focusable="false">
                       <path
@@ -1793,7 +2166,8 @@ export function FamilyTree({ client = null, tasks = null }) {
               {renderRequests()}
               {renderSelection()}
               {tree.rows.length === 0 ? <p className="mr-side-note">No agents are listed.</p> : null}
-              {tree.rows.map(renderRow)}
+              {laneRows.main.map(renderRow)}
+              {renderMoreLanes()}
             </>
           )}
         </div>

@@ -8938,6 +8938,49 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   flex-direction: column;
 }
 
+.mr-family-more {
+  display: flex;
+  flex-direction: column;
+}
+
+.mr-family-more-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 2px 4px 28px;
+  border-radius: 2px;
+}
+
+.mr-family-more-head:hover {
+  background: rgb(255 255 255 / 0.05);
+}
+
+.mr-family-more-label {
+  flex: 1 1 auto;
+  font-size: 9px;
+  color: rgb(255 255 255 / 0.45);
+}
+
+.mr-teams {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgb(255 255 255 / 0.08);
+}
+
+.mr-teams .mr-side-head {
+  margin-top: 0;
+}
+
+.mr-teams-form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .mr-family-node {
   display: flex;
   flex-direction: column;

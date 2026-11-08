@@ -129,6 +129,63 @@ export function stateWord(node) {
   return 'idle'
 }
 
+export function laneCountLine(nodes) {
+  const lanes = (Array.isArray(nodes) ? nodes : []).filter((node) => node && node.kind === 'lane')
+  const active = lanes.filter((node) => node.active !== false).length
+  return `${active} of ${lanes.length} lanes in this project`
+}
+
+export function splitMoreLanes(rows) {
+  const main = []
+  const more = []
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (row && row.kind === 'lane' && row.active === false) more.push(row)
+    else main.push(row)
+  }
+  return { main, more }
+}
+
+export function moreLanesLabel(count) {
+  const value = Math.max(0, Math.floor(Number(count) || 0))
+  return `${value} more ${value === 1 ? 'lane' : 'lanes'}`
+}
+
+export function teamRows(answer) {
+  const list = Array.isArray(answer) ? answer : Array.isArray(answer?.teams) ? answer.teams : []
+  const seen = new Set()
+  const rows = []
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const name = cleanText(entry.name, 40)
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    rows.push({
+      name,
+      lanes: Array.isArray(entry.lanes) ? entry.lanes.filter((key) => typeof key === 'string') : [],
+      savedAt: cleanText(entry.savedAt, 40),
+    })
+  }
+  return rows
+}
+
+export function droppedLaneLine(answer) {
+  const list = Array.isArray(answer?.dropped?.lanes) ? answer.dropped.lanes : []
+  const keys = list.filter((key) => typeof key === 'string' && key.trim())
+  if (keys.length === 0) return ''
+  return `Dropped ${keys.join(', ')}.`
+}
+
+export function hideLaneText(label, project = '') {
+  const name = cleanText(label, AGENT_NAME_MAX) || 'this agent'
+  const where = cleanText(project, 80) || 'this project'
+  return `Hide ${name} in ${where}? It stays in your other projects.`
+}
+
+export function deleteLaneText(label) {
+  const name = cleanText(label, AGENT_NAME_MAX) || 'this agent'
+  return `Delete ${name} in every project? Its runs stay in the records.`
+}
+
 export function rowStateWord(node, state = '') {
   const word = typeof state === 'string' ? state.trim().toLowerCase() : ''
   if (word === 'working' || node?.working === true) return 'working'
