@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { passSound } from '../src/Stage.jsx'
-import { bandIndexForBin, sound } from '../src/ui/sound.js'
+import { bandIndexForBin, createDanceTracker, sound } from '../src/ui/sound.js'
 
 const BINS = 64
 const BAND_COUNT = 5
@@ -143,7 +143,7 @@ describe('the sound engine with a fake analyser', () => {
     expect(results.some((result) => result.sway > 0)).toBe(true)
   })
 
-  it('gives bands on soft music that never locks', () => {
+  it('gives bands and beats on soft music that never locks', () => {
     let seed = 1
     const nextSeed = () => {
       seed = (seed * 1664525 + 1013904223) % 4294967296
@@ -166,6 +166,10 @@ describe('the sound engine with a fake analyser', () => {
     expect(results.every((result) => result.bands && result.bands.length === BAND_COUNT)).toBe(true)
     expect(results.some((result) => Math.max(...result.bands) > 0.1)).toBe(true)
     expect(results.filter((result) => result.beat > 0).length).toBeGreaterThan(2)
+
+    const tracker = createDanceTracker()
+    loFi.forEach((row, index) => tracker.push(row, (index + 1) * STEP_MS))
+    expect(tracker.lock().locked).toBe(false)
   })
 
   it('turns the beat and the sway off when the Dance switch is off', () => {
