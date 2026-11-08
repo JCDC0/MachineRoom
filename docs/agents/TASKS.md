@@ -1701,3 +1701,20 @@ Files: server/active-lanes.js, server/agents-config.js, server/family.js, server
 Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass. Check it on screen before you finish: `npm run build`, `npm run serve -- up --lanes --root <a scratch git folder> --port 5184 --no-open` in the background with `MACHINEROOM_RUNS` set to a scratch runs folder, open it at 1280 by 800, save a team of one lane, hide a lane, and apply the team. Stop the server when you finish.
 
 Files: src/ui/FamilyTree.jsx, src/ui/family.js, src/ui/Settings.jsx, src/ui/LanesSettings.jsx, src/ui/SetupCard.jsx, src/ui/setup.js, src/ui/Sidebar.jsx, src/styles.css, tests/.
+
+## The co-orchestrator reviews every merge (2026-11-08, the owner's request)
+
+The owner set agy3, on Gemini Argon, as a sub-orchestrator to the orchestrator: it reviews everything the lanes make, after Claude merges a batch and before Claude asks for the push. Each review is its own brief, numbered on from Q41, and names the merges it covers. Claude still merges, fixes and pushes; the review proposes, it does not change code.
+
+**Q41. The co-orchestrator's review of U156, U157 and T37 (AGY 3).** This run is on Argon, not Flash, whatever `lanes.json` says. Read no part of TASKS.md beyond this brief and the U156, U157 and T37 briefs it reviews. Read narrowly: the diffs, then only the functions they touch, and no subagents, because the quota is small. Change no code.
+
+Review these merges: `git diff a8d88f79^1 a8d88f79` (U156, the fixes of `docs/agents/AUDIT-2026-11-STARS.md`), `git diff bf9f8240^1 bf9f8240` (U157, the grey tunnel, the row-only flash, labels and flashes on replay time, and the seven agent colours) and `git diff 6a077ccb^1 6a077ccb` (T37, the project review list when a checkout read fails). For each, say whether it does what its brief asked, and name any new fault with `file:line` and a concrete failing case. Look hard at these:
+
+- A star, a label or a flash that can outlive what it names: a seek, a run end, a removed agent, a card that leaves the plan, a paused replay that is then seeked.
+- Replay time: `replaySpeed` at 0 while live, a flash whose life never counts down, a label that never leaves.
+- The row-only white flash: a folder touch (`flashCluster`) and a row drawn later by the card's scroll window.
+- T37's `inGitWorkTree` walk and `inside` check on Windows paths, a drive root, a symbolic link and a lanes folder inside the project.
+
+Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-5.md`: a table of at most 15 findings, most severe first, with number, severity, `file:line`, the case and the smallest fix; then a line per merge saying sound or not; then at most three proposed briefs in the style of TASKS.md, each with its Files: list, for the findings worth fixing. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 35, and say what you did not reach.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-5.md.
