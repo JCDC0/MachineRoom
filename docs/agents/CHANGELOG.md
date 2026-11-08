@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The music time bar shows the elapsed time at the slider's position, reads the time only from the track the queue has loaded, so a playlist switch while paused no longer shows the old track, and a seek waits until the track length is known (task U165).
 - agy3 reviewed U158 to U163, S44, S45 and T38 in AUDIT-2026-11-REVIEW-6.md; the orchestrator confirmed eight of its twelve findings and briefed S46, U164 and U165 (task Q42).
 - The review list on another project reads the room's lanes when git fails at the bridge start and the project has no lanes file, a failed checkout read is not cached for the rest of the process, and paths compare through realpath (task T38).
 - At 900 pixels and wider the menu row is black, so the transport scrolls under it instead of showing through its buttons.
