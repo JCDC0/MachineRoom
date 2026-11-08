@@ -24,6 +24,7 @@ What works:
 - A project starts with no lanes on, and the recent projects list holds only real projects (O19, O20). Tests never write the owner's runs folder (T25).
 - Claude Code and OpenCode lanes and the orchestrator turns get the MCP servers the owner turns on in Settings (H16), and the console's address opens in a new tab (U83).
 - The Direct API in Settings, Direct API: one key form behind a confirm card, a row per endpoint with Refresh models, Replace key and Delete, and the Agents tab picks only from those endpoint models (U85, H17).
+- Stars and camera brackets (U152 to U157, 2026-11-05 to 2026-11-08): each agent has its own colour, a grey tunnel runs to the card it touches, a star in its colour flies the lines for each touch, lane start, spawn, message and web call, camera brackets in its colour mark the folder and file it touches, and stars, labels and flashes follow the replay speed. The owner settled the four design questions of the star review on 2026-11-07.
 - Replays and recordings, and a test suite that is about 40 percent faster than before T1.
 
 What was checked live:
@@ -55,11 +56,10 @@ Phones are out of scope: the bridge accepts pages only from localhost, so a phon
 
 Open now:
 
-1. The owner's P4: the public release. The licence is MIT (2026-11-04) and `src/engine/sprites.js` is being rewritten (U151); the names are still to decide in G2, and the push is G6. The six design changes of `AUDIT-2026-11-SUMMARY.md` were approved on 2026-11-04 and run as U146 to U150.
+1. The owner's P4: the public release. The licence is MIT (2026-11-04) and `src/engine/sprites.js` was rewritten (U151); the names are still to decide in G2, and the push is G6. The six design changes of `AUDIT-2026-11-SUMMARY.md` were approved on 2026-11-04 and run as U146 to U150.
 2. The room by eye in a live room, at 1280 by 800, 900 by 700 and 768 by 1024, including the U86 conversation column and the U87 and U88 placements. The replay was checked on 2026-10-30; the live room has not been. A lane cannot see the screen, so the orchestrator checks it in a browser.
 3. The open audit findings:
    - The October audit (`AUDIT-2026-10.md`): N5 (a lane worktree's git config and hooks reach the merge), N6 (the merge stops after 10 seconds), N12 (the runs route starts the runner from the folder the room watches) and N16 (an all-zero cost reads as not reported, a design question).
-   - The version 7 audit (`AUDIT-2026-10-V7.md`): X2 still has no base commit in a run record, so a lane whose worktree is not based on the current branch reads as unread, and X8 still leaves a sub's own model out of the lane list.
    - The version 9 audit's Y4 and Y7 stay as they are: Y4 is the rule O24 chose and Y7 is H17's design.
 4. No brief is open. S20, U92 and U93, the project's branches and the git tree above the INTERNET sphere, were checked in a browser on 2026-10-30: the section, Switch, New branch, Show the tree and `0`, at 1280 by 800 only.
 

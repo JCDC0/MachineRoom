@@ -98,13 +98,16 @@ The 3D room shows these objects:
 - Folder cards: flat cards on a ring around the hub, facing you. The root card sits directly under the hub and shows the project name. Lines join top-level folders to the root card, and child folders to their parent. Top-level folders arrange on clock hours up to 12. Deeper child folders branch outward in grid rows.
 - Folder card depth: folders down to depth 2 are always drawn by default, up to 300 cards. Clicking a folder card head pops it up 140 units and draws its child folders as cards. Clicking it again folds them back. A folder with unexpanded child folders shows up to three folder blocks behind its face. Bulk folders like `node_modules`, `dist` and `build` stay closed until touched.
 - Cards list their files as rows, up to 6 by default. Longer lists scroll inside the card.
-- Light trails and tunnels: while an agent works, a light trail runs from the agent to the file row it touches. Yellow core and sheath, with small payload packets flying along the path. Four yellow corner brackets frame the touched card. When an agent touches the web, a blue light trail runs from the agent to the wireframe INTERNET sphere above the hub.
+- Agent colours: each agent has its own colour, and a subagent takes its parent's.
+- Tunnels and stars: while an agent works, a grey tunnel runs from the agent to the card that holds the file it touches. Each read or write sends a star in the agent's colour along the tunnel. When it lands, the file row flashes white and a `read NAME` or `write NAME` label rises from the card. Stars also fly from an orchestrator to a lane it starts, from a parent to a subagent, and between agents when they give orders or report. When an agent touches the web, a blue tunnel runs from the agent to the wireframe INTERNET sphere above the hub, and a star flies along it.
+- Camera brackets: the card an agent works in shows four corner brackets in that agent's colour, and the file it touches shows small brackets around its name in the same colour.
+- Replay speed: stars, labels and flashes follow the replay speed and hold while the replay is paused.
 - Colours:
-  - White is activity. A read or write flashes the file row and its card white.
-  - Yellow is active. The folder, file and light trail carry yellow stripes.
+  - White is activity. A read or write flashes the file row white.
+  - Yellow is active: the selected folder, the context ring past autocompact and the outlines of the tour.
   - Green is finished work. A run that ends well turns the agent, its chip and its written files green.
-  - Red is failure. A failed tool call, test or run flashes red. A failed run turns the agent, its chip and the light trail red.
-  - Blue is the web. A tool call that touches the network lights a blue trail to the INTERNET sphere.
+  - Red is failure. A failed tool call, test or run flashes red. A failed run turns the agent, its chip and its tunnel red.
+  - Blue is the web. A tool call that touches the network lights a blue tunnel to the INTERNET sphere.
 - Terminal chips: a chip beside each agent shows its name and status word. Click it or press T to show the log. An agent running shell commands also shows a cyan CONSOLE above its head with its last five log lines. Clicking an address inside it opens the URL in a new tab.
 - Camera and follow mode: the overview fits the hub and top-level cards. Follow mode (F) cycles wide, close up, and off. It follows the card an agent touches. Clicking an agent focuses it. Clicking a card body holds the camera 700 units away. Press 0, Escape with no panel open, or double click empty space to return to the park view.
 - Failure tray: in a live room, a red failure tray sits at the bottom right of the lens, showing recent failed runs and tool calls. Click a row to inspect that agent. Click Clear to dismiss the tray.
