@@ -65,8 +65,20 @@ const OPENCODE_LANE = {
   harness: 'OpenCode',
   cli: { harness: 'opencode', bin: 'opencode', model: 'opencode-go/deepseek-v4.1-flash' },
 }
+const AGY_LANE = {
+  name: 'Orchestrator',
+  harness: 'AGY',
+  cli: { harness: 'agy', bin: 'agy', model: 'gemini-3.8-flash-high' },
+}
+const MACHINEROOM_LANE = {
+  name: 'Orchestrator',
+  harness: 'MachineRoom',
+  cli: { harness: 'machineroom', bin: 'node', model: 'work/alpha' },
+}
 const LANES = { orchestrator: ORCHESTRATOR_LANE }
 const OPENCODE_LANES = { orchestrator: OPENCODE_LANE }
+const AGY_LANES = { orchestrator: AGY_LANE }
+const MACHINEROOM_LANES = { orchestrator: MACHINEROOM_LANE }
 const PROMPT = 'project={{PROJECT}}\nmachineroom={{MACHINEROOM}}\nruns={{RUNS}}\nbridge={{BRIDGE}}'
 
 const FAKE_CLAUDE = [
@@ -606,6 +618,113 @@ describe('one orchestrator turn', () => {
     const spawnedEnv = rig.spawned[0].env
     expect(spawnedEnv?.OPENCODE_CONFIG).toBeUndefined()
     expect(rig.spawned[0].mcpExistedDuringTurn).toBe(false)
+  })
+})
+
+describe('the orchestrator permission modes', () => {
+  it('passes the Claude permission mode on every turn', async () => {
+    const rig = makeRig()
+    expect(rig.answer().mode).toBe('auto')
+    let turns = 0
+
+    rig.send('Auto turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(valueAfter(rig.calls()[turns - 1].args, '--permission-mode')).toBe('auto')
+    expect(rig.calls()[turns - 1].args).not.toContain('--dangerously-skip-permissions')
+
+    for (const [mode, flag] of [['plan', 'plan'], ['edits', 'acceptEdits']]) {
+      expect(rig.orchestrator.setMode({ mode, confirmed: true }).status).toBe(200)
+      rig.send(`${mode} turn`)
+      turns += 1
+      await waitIdle(rig, turns)
+      expect(valueAfter(rig.calls()[turns - 1].args, '--permission-mode')).toBe(flag)
+      expect(rig.calls()[turns - 1].args).not.toContain('--dangerously-skip-permissions')
+    }
+
+    expect(rig.orchestrator.setMode({ mode: 'bypass', confirmed: true }).status).toBe(200)
+    rig.send('Bypass turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(rig.calls()[turns - 1].args).toContain('--dangerously-skip-permissions')
+    expect(rig.calls()[turns - 1].args).not.toContain('--permission-mode')
+  })
+
+  it('passes the OpenCode plan agent and the edits bash guard with the MCP config', async () => {
+    const rig = makeRig({ harness: 'opencode', lanes: OPENCODE_LANES })
+    writeFileSync(join(rig.runs, 'mcp.json'), JSON.stringify({
+      servers: [{ name: 'browser', transport: 'http', url: 'https://example.com/mcp', enabled: true }],
+    }))
+    const mcp = { browser: { type: 'remote', url: 'https://example.com/mcp', enabled: true } }
+    let turns = 0
+
+    rig.send('Auto turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(rig.calls()[turns - 1].args).not.toContain('--agent')
+    expect(JSON.parse(rig.spawned[turns - 1].mcpContentDuringTurn)).toEqual({ mcp })
+
+    expect(rig.orchestrator.setMode({ mode: 'plan', confirmed: true }).status).toBe(200)
+    rig.send('Plan turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(valueAfter(rig.calls()[turns - 1].args, '--agent')).toBe('plan')
+    expect(JSON.parse(rig.spawned[turns - 1].mcpContentDuringTurn)).toEqual({ mcp })
+
+    expect(rig.orchestrator.setMode({ mode: 'edits', confirmed: true }).status).toBe(200)
+    rig.send('Edits turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(rig.calls()[turns - 1].args).toContain('--auto')
+    expect(rig.calls()[turns - 1].args).not.toContain('--agent')
+    expect(JSON.parse(rig.spawned[turns - 1].mcpContentDuringTurn)).toEqual({
+      mcp,
+      permission: { bash: 'deny' },
+    })
+
+    expect(rig.orchestrator.setMode({ mode: 'auto', confirmed: true }).status).toBe(200)
+    rig.send('Auto again')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(JSON.parse(rig.spawned[turns - 1].mcpContentDuringTurn)).toEqual({ mcp })
+  })
+
+  it('passes the AGY mode on each turn', async () => {
+    const rig = makeRig({ harness: 'agy', lanes: AGY_LANES })
+    expect(rig.answer().mode).toBe('auto')
+    let turns = 0
+
+    for (const [mode, flag] of [['auto', 'auto'], ['plan', 'plan'], ['edits', 'accept-edits']]) {
+      expect(rig.orchestrator.setMode({ mode, confirmed: true }).status).toBe(200)
+      rig.send(`${mode} turn`)
+      turns += 1
+      await waitIdle(rig, turns)
+      expect(valueAfter(rig.calls()[turns - 1].args, '--mode')).toBe(flag)
+      expect(rig.calls()[turns - 1].args).not.toContain('--dangerously-skip-permissions')
+    }
+
+    expect(rig.orchestrator.setMode({ mode: 'bypass', confirmed: true }).status).toBe(200)
+    rig.send('Bypass turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(rig.calls()[turns - 1].args).toContain('--dangerously-skip-permissions')
+    expect(rig.calls()[turns - 1].args).not.toContain('--mode')
+  })
+
+  it('sets the MachineRoom permission mode in the spawn env', async () => {
+    const rig = makeRig({ harness: 'machineroom', lanes: MACHINEROOM_LANES })
+    let turns = 0
+
+    rig.send('Auto turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(rig.spawned[turns - 1].env.MACHINEROOM_PERMISSION_MODE).toBe('auto')
+
+    expect(rig.orchestrator.setMode({ mode: 'plan', confirmed: true }).status).toBe(200)
+    rig.send('Plan turn')
+    turns += 1
+    await waitIdle(rig, turns)
+    expect(rig.spawned[turns - 1].env.MACHINEROOM_PERMISSION_MODE).toBe('plan')
   })
 })
 

@@ -131,6 +131,42 @@ const MCP_TOOLS = [
 
 const TOOLS = [...CORE_TOOLS, ...MCP_TOOLS]
 
+const PLAN_TOOL_NAMES = new Set(['read_file', 'list_dir', 'search', 'web_search', 'web_fetch', 'mcp_list_tools'])
+const EDIT_TOOL_NAMES = new Set([...PLAN_TOOL_NAMES, 'write_file', 'edit_file'])
+const AUTO_SHELL_PROBLEM = 'Auto mode does not run this command.'
+const AUTO_FORBIDDEN = [
+  /\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b/i,
+  /\bRemove-Item\b[^\n;&|]*-Recurse\b/i,
+  /\bdel(?:ete)?\s+[^\n;&|]*\/s\b/i,
+  /\brmdir\s+[^\n;&|]*\/s\b/i,
+  /\bgit\s+push\b/i,
+  /\bgit\s+reset\s+--hard\b/i,
+  /\bgit\s+clean\b/i,
+  /\bgit\s+checkout\s+--/i,
+  /\bgit\s+branch\s+-[dD]\b/,
+  /(?:^|[;&|]\s*)(?:\S*[\\/])?format(?:\.com)?\b/i,
+  /(?:^|[;&|]\s*)shutdown(?:\.exe)?\b/i,
+  /(?:^|[;&|]\s*)mkfs(?:\.\w+)?\b/i,
+]
+
+function permissionModeFrom(env) {
+  const value = String(env?.MACHINEROOM_PERMISSION_MODE ?? '').trim().toLowerCase()
+  return ['plan', 'edits', 'auto', 'bypass'].includes(value) ? value : ''
+}
+
+const PERMISSION_MODE = permissionModeFrom(process.env)
+
+function toolsForMode(mode) {
+  if (mode === 'plan') return TOOLS.filter((tool) => PLAN_TOOL_NAMES.has(tool.function.name))
+  if (mode === 'edits') return TOOLS.filter((tool) => EDIT_TOOL_NAMES.has(tool.function.name))
+  return TOOLS
+}
+
+function autoShellProblem(command) {
+  if (PERMISSION_MODE !== 'auto') return ''
+  return AUTO_FORBIDDEN.some((pattern) => pattern.test(command)) ? AUTO_SHELL_PROBLEM : ''
+}
+
 function writeJson(value) {
   process.stdout.write(`${JSON.stringify(value)}\n`)
 }
@@ -466,6 +502,7 @@ function shellTool(args, cwd) {
   const timeoutMs = Number(process.env.MR_AGENT_SHELL_TIMEOUT_MS) || SHELL_TIMEOUT_MS
   const command = typeof args.command === 'string' ? args.command : ''
   if (command.trim() === '') return Promise.resolve({ text: 'run_shell needs a command.', isError: true })
+  if (autoShellProblem(command)) return Promise.resolve({ text: AUTO_SHELL_PROBLEM, isError: true })
   const env = childEnvironment(process.env, cwd)
   return new Promise((done) => {
     let timedOut = false
@@ -684,7 +721,7 @@ async function main() {
 
   try {
     for (step = 0; step < MAX_STEPS; step += 1) {
-      const data = await post(url, key, { model: options.model, messages, tools: TOOLS, tool_choice: 'auto' })
+      const data = await post(url, key, { model: options.model, messages, tools: toolsForMode(PERMISSION_MODE), tool_choice: 'auto' })
       const message = replyOf(data)
       const usage = usageOf(data)
       inputTokens += usage.input

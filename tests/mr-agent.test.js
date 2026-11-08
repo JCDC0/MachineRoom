@@ -220,6 +220,58 @@ describe('mr-agent', () => {
     expect(api.calls[1].body.messages.some((message) => message.role === 'tool' && message.tool_call_id === 'call_read')).toBe(true)
   })
 
+  it('offers only the tools each permission mode allows', async () => {
+    const folder = tempDir()
+    const cases = [
+      ['plan', ['read_file', 'list_dir', 'search', 'web_search', 'web_fetch', 'mcp_list_tools']],
+      ['edits', ['read_file', 'write_file', 'edit_file', 'list_dir', 'search', 'web_search', 'web_fetch', 'mcp_list_tools']],
+      ['auto', null],
+      ['bypass', null],
+    ]
+    for (const [mode, names] of cases) {
+      const api = await startFakeApi(() => chatAnswer({ text: 'Done.' }))
+      const result = await runAgent({ folder, api, env: { MACHINEROOM_PERMISSION_MODE: mode } })
+      expect(result.code, mode).toBe(0)
+      const offered = api.calls[0].body.tools.map((tool) => tool.function.name)
+      if (names) expect(offered, mode).toEqual(names)
+      else expect(offered, mode).toHaveLength(10)
+    }
+  })
+
+  it('refuses risky shell commands in auto mode and runs the rest', async () => {
+    const folder = tempDir()
+    const commands = [
+      'rm -rf build',
+      'Remove-Item -Recurse -Force build',
+      'del /s /q build',
+      'rmdir /s /q build',
+      'git push origin main',
+      'git reset --hard HEAD',
+      'git clean -fd',
+      'git checkout -- .',
+      'git branch -D old',
+      'format C:',
+      'shutdown /s',
+      'mkfs.ext4 /dev/sda',
+      'echo auto-ok',
+    ]
+    const api = await startFakeApi((_body, index) =>
+      index < commands.length
+        ? chatAnswer({ calls: [{ name: 'run_shell', arguments: { command: commands[index] } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MACHINEROOM_PERMISSION_MODE: 'auto' } })
+    expect(result.code).toBe(0)
+    const users = jsonLines(result.stdout).filter((line) => line.type === 'user')
+    expect(users).toHaveLength(commands.length)
+    for (const user of users.slice(0, -1)) {
+      expect(user.message.content[0].is_error).toBe(true)
+      expect(user.message.content[0].content).toBe('Auto mode does not run this command.')
+    }
+    expect(users.at(-1).message.content[0].is_error).toBe(false)
+    expect(users.at(-1).message.content[0].content).toContain('auto-ok')
+  })
+
   it('uses a saved endpoint and its key slot', async () => {
     const folder = tempDir()
     const runs = tempDir('mr-agent-runs-')

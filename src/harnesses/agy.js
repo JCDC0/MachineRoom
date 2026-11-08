@@ -35,10 +35,13 @@ export const agyHarness = {
   adapterType: 'process',
   parserByAdapter: false,
   createParser: createAgyParser,
-  command({ cli, prompt, env = {}, folder } = {}) {
+  command({ cli, prompt, env = {}, folder, mode } = {}) {
     const args = ['--print', prompt, '--output-format', 'stream-json']
     if (cli.model) args.push('--model', String(cli.model))
-    args.push('--dangerously-skip-permissions')
+    if (mode === 'plan') args.push('--mode', 'plan')
+    else if (mode === 'edits') args.push('--mode', 'accept-edits')
+    else if (mode === 'auto') args.push('--mode', 'auto')
+    else args.push('--dangerously-skip-permissions')
     return { file: expandBin(cli.bin, env), args, cwd: folder }
   },
   readLine() {
