@@ -9,7 +9,7 @@ import { CHILD_LIFE_MS } from '../model/state.js'
 import { AGENT_RING_BASE, AGENT_RING_GROW, AGENT_RING_MS, AGENT_RING_POOL, HUB_RADIUS, HUB_Y, ORCHESTRATOR_HOME, ORCHESTRATOR_LIFT, PARK_LIFT, RING_MAX_OPACITY, SWAY_LIFT, SWAY_RATE, SWAY_SCALE, danceEnvelope, hasSubs, isSessionReader, parkedKeysFor, readerPoint, ringPulse, sectorSlotAngles, slotAngle, startDanceEnvelope, subRingPlace, writeColor, writeOpacity } from './hub.js'
 import { INTERNET_RADIUS } from './internet.js'
 import { ORCHESTRATOR_PULSE_SCALE, ORCHESTRATOR_SHAPE, PREFERRED, PULSE_BANDS, PULSE_SCALE, SUB_PULSE_SCALE, bandForPoint, isOrchestrator, isSubOrchestrator, nextSpareShape, shapeGeometry, shapesFor, vertexOffset } from './shapes.js'
-import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, YELLOW, agentColor, easeRate, lineMaterial, still, textSprite } from './sprites.js'
+import { GREEN, RED, TUNNEL_GREY, WEB, WHITE, agentColor, agentColors, cssColor, easeRate, lineMaterial, paintAgentColor, still, textSprite } from './sprites.js'
 import { linkOnPath } from './strings.js'
 
 const STYLE = {
@@ -959,6 +959,8 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     if (orchestratorLink) orchestratorLink.renderOrder = -1
 
     const callout = makeCallout(currentLabels && parentKey === null ? labelFor(agent.key, currentLabels) ?? agent.key : agent.name)
+    const calloutColor = cssColor(color)
+    if (calloutColor) paintAgentColor(callout.element, calloutColor)
     const calloutLine = lineBetween(lineMaterial(WHITE, 0.3))
     calloutLine.visible = false
 
@@ -1023,6 +1025,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       doneAt: 0,
       busySince: 0,
       calloutCompact: false,
+      calloutColor: calloutColor ?? null,
       style: 'idle',
       presence: orchestrator ? 1 : 0,
       presenceReady: false,
@@ -1172,11 +1175,13 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
     agentByKey = new Map(currentRoster.map((agent) => [agent.key, agent]))
     rosterKeys = new Set(currentRoster.map((agent) => agent.key))
     parkedKeys = parkedKeysFor(currentRoster)
+    const colors = agentColors(currentRoster)
     const added = []
     currentRoster.forEach((agent, rosterIndex) => {
+      const color = colors[rosterIndex] ?? agentColor(0)
       const existing = views.get(agent.key)
       if (existing) {
-        existing.color = agentColor(rosterIndex)
+        existing.color = color
         return
       }
       const sub = isSubOrchestrator(agent)
@@ -1188,9 +1193,9 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
         home: new THREE.Vector3(),
         scale: sub ? SUB_ORCHESTRATOR_SCALE : 1,
         subOrchestrator: sub,
-        color: agentColor(rosterIndex),
+        color,
       })
-      chips?.ensure?.(agent.key, agent.name)
+      chips?.ensure?.(agent.key, agent.name, color)
       added.push(view)
     })
     for (const view of views.values()) {
@@ -1207,6 +1212,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
   }
 
   layoutHomes(null)
+  const initialColors = agentColors(roster)
   roster.forEach((agent, rosterIndex) => {
     const sub = isSubOrchestrator(agent)
     addView(agent, {
@@ -1215,7 +1221,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       home: new THREE.Vector3(),
       scale: sub ? SUB_ORCHESTRATOR_SCALE : 1,
       subOrchestrator: sub,
-      color: agentColor(rosterIndex),
+      color: initialColors[rosterIndex] ?? agentColor(0),
     })
   })
   placeViews()
@@ -1406,7 +1412,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
 
       if (view.parentKey) {
         const parentName = state.agents.get(view.parentKey)?.name ?? view.parentKey
-        terminals.ensure?.(view.key, `${parentName} > ${entry?.name ?? view.name}`)
+        terminals.ensure?.(view.key, `${parentName} > ${entry?.name ?? view.name}`, view.color)
         terminals.setVisible?.(view.key, true)
         terminals.setFade?.(view.key, fade)
         if (fade <= 0) {
@@ -1437,7 +1443,7 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       writeColor(view.shape.material, style.color)
       writeOpacity(view.shape.material, opacity * fade * opacityFactor)
       writeOpacity(view.label.material, fade * opacityFactor)
-      const ringColor = status === 'working' || status === 'queued' ? YELLOW : style.color
+      const ringColor = status === 'working' || status === 'queued' ? view.color : style.color
       for (let index = 0; index < view.rings.length; index += 1) {
         const ring = view.rings[index]
         writeColor(ring.material, ringColor)
@@ -1494,6 +1500,11 @@ export function createAgents(scene, roster, cssScene = null, options = {}) {
       }
 
       const compact = Boolean(working) && !full.has(view.key)
+      const calloutColor = cssColor(view.color)
+      if (calloutColor && view.calloutColor !== calloutColor) {
+        view.calloutColor = calloutColor
+        paintAgentColor(view.callout.element, calloutColor)
+      }
       if (view.calloutCompact !== compact) {
         view.calloutCompact = compact
         view.callout.task.style.display = compact ? 'none' : ''

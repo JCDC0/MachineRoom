@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFollowFocus, createLater, createWorkingMaskCache, followAfterSeek, inspectorNamesPath, noteTouch, TOUCH_ENTRY_LIMIT, TOUCH_PATH_LIMIT, workingMask } from '../src/engine/room.js'
+import { agentColors } from '../src/engine/sprites.js'
 
 function state(status, focus, recent = []) {
   return {
@@ -145,6 +146,18 @@ describe('the target colours', () => {
     expect(idle.fileColors.size).toBe(0)
     const short = workingMask(stateWith([{ key: 'orchestrator', focus: ['src/a.js'] }]), () => 0x0000ff)
     expect(short.dirColors.get('src')).toBe('#0000ff')
+  })
+
+  it('gives the main orchestrator the yellow brackets', () => {
+    const roster = [
+      { key: 'orchestrator', name: 'Orchestrator' },
+      { key: 'opencode', name: 'OpenCode' },
+    ]
+    const colors = agentColors(roster)
+    const byKey = new Map(roster.map((agent, index) => [agent.key, colors[index]]))
+    const mask = workingMask(stateWith([{ key: 'orchestrator', focus: ['src/a.js'] }]), (key) => byKey.get(key))
+    expect(mask.dirColors.get('src')).toBe('#e5ff00')
+    expect(mask.fileColors.get('src/a.js')).toBe('#e5ff00')
   })
 
   it('rebuilds the cache when the roster colour changes', () => {
