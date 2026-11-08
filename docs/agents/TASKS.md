@@ -1794,3 +1794,11 @@ Files: src/engine/room.js, src/engine/cards.js, src/ui/FamilyTree.jsx, src/ui/Se
 Add a test for each step. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/ui/MusicPlayer.jsx, src/ui/musicQueue.js, src/ui/sound.js, tests/.
+
+**Q43. The co-orchestrator's review of S46, U164 and U165 (AGY 3).** This run is on Argon, not Flash, whatever `lanes.json` says. Read no part of TASKS.md beyond this brief and the S46, U164 and U165 briefs it reviews. Read narrowly: the diffs, then only the functions they touch, and no subagents. Change no code.
+
+Review `git diff d9b7b6b1^1 d9b7b6b1` (S46), `git diff d810250b^1 d810250b` (U164) and `git diff 6fa188d4^1 6fa188d4` (U165), the fixes for findings 2, 3, 4, 6 to 10 and 12 of `docs/agents/AUDIT-2026-11-REVIEW-6.md`. For each, say whether it fixes its finding and name any new fault with `file:line` and a concrete failing case. Look hard at these: a ladder save from an orchestrator (no Origin) that now keeps a lane the owner moved, a hidden lane two subs both held, a team copy whose source has only hidden lanes, a failed call from an agent the room never builds a view for, and a music track whose `loadedmetadata` never fires.
+
+Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-7.md`: a table of at most 8 findings, most severe first, then a line per merge saying sound or not, then at most one proposed brief. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 25.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-7.md.
