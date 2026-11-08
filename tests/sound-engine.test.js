@@ -167,6 +167,23 @@ describe('the sound engine with a fake analyser', () => {
     expect(results.some((result) => Math.max(...result.bands) > 0.1)).toBe(true)
     expect(results.filter((result) => result.beat > 0).length).toBeGreaterThan(2)
   })
+
+  it('turns the beat and the sway off when the Dance switch is off', () => {
+    drive(steadyKick(200))
+    sound.setSettings({ dance: false })
+    const rest = drive(Array.from({ length: 160 }, () => QUIET))
+    expect(rest.every((result) => result.beat === 0)).toBe(true)
+    expect(rest[rest.length - 1].sway).toBeLessThan(0.05)
+  })
+
+  it('turns the bands off when the Pulse switch is off', () => {
+    sound.setSettings({ pulse: false })
+    clock += STEP_MS
+    expect(sound.bands(clock)).toBe(null)
+    sound.setSettings({ pulse: true })
+    clock += STEP_MS
+    expect(sound.bands(clock)).not.toBe(null)
+  })
 })
 
 describe('the room gets the sound each frame', () => {

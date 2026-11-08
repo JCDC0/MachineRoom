@@ -162,6 +162,21 @@ describe('hub under reduced motion', () => {
     hub.update(1.5, 0.1)
     expect(dashes.rotation.y).toBeGreaterThan(0)
   })
+
+  it('sends no beat ring when still is true', () => {
+    const mql = { matches: true }
+    globalThis.window = { matchMedia: () => mql }
+    const scene = new THREE.Scene()
+    const hub = createHub(scene, 4)
+    const rings = hub.group.children.filter((child) => child.name === 'beat-ring')
+    expect(hub.beat(1)).toBe(false)
+    expect(rings.some((ring) => ring.visible)).toBe(false)
+
+    mql.matches = false
+    expect(hub.beat(1)).toBe(true)
+    expect(rings.some((ring) => ring.visible)).toBe(true)
+    hub.dispose()
+  })
 })
 
 describe('labels under reduced motion', () => {
