@@ -8,6 +8,10 @@ MachineRoom shows coding agents working on one project as a 3D machine room in y
 
 The room puts each agent on a ring in the middle, as its own wireframe shape. Your project folders sit around it as flat cards, and a working agent sends a grey tunnel to the card of the file it touches. Each agent has its own colour: its stars fly along the tunnels, and camera brackets in that colour mark the folder and file it is touching. White is activity, yellow is active, green is finished work and red is failure.
 
+After a minute without input, the menu and the transport slide away, the lens fills the whole window and the room turns slowly. Any key, click or scroll brings them back.
+
+![The room in the full window after a minute idle](docs/images/full-lens.png)
+
 ## What you can do
 
 - Watch your own Claude Code and OpenCode sessions live on the project.

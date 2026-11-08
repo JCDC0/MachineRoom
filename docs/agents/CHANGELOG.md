@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The README shows the idle view, the lens in the full window, in docs/images/full-lens.png.
 - The guide, the user guide and the README describe the grey tunnels, the stars, the agent colours, the camera brackets and the replay-time labels instead of the yellow stripes and packets, and the plan drops the version 7 findings S41 fixed.
 - U157: A working tunnel is grey and its star carries the agent colour, a touch flashes only the file row, labels and flashes run on replay time, and the agents take seven clearer colours.
 - U156: a failed call no longer turns white when its star lands, no star lands after its run ends or its agent leaves, the touch star follows the tunnel's route, the label rises from the tab where the star lands, no spawn star moves under reduced motion, a star stays on a moving card, and no web star flies while offline; the guide no longer speaks of yellow tunnels and packets.
