@@ -917,6 +917,18 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       if (finished.size > 0) {
         stars.cancel((star) => finished.has(star.agent) || finished.has(star.to))
         dropPendingTouches((item) => finished.has(item.agent), false)
+        for (let index = pendingSpawns.length - 1; index >= 0; index -= 1) {
+          const spawn = pendingSpawns[index]
+          if (finished.has(spawn.agent) || finished.has(spawn.child)) pendingSpawns.splice(index, 1)
+        }
+        for (const key of finished) {
+          openCalls.delete(key)
+          agentSet.webEnd(key)
+          for (const [storedKey, agentKey] of webCalls) {
+            if (agentKey !== key) continue
+            webCalls.delete(storedKey)
+          }
+        }
       }
       if (activity.type === 'run.end') {
         hub.pulse(activity.ok ? GREEN : RED, 1)

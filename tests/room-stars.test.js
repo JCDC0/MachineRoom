@@ -676,6 +676,84 @@ describe('the stars of a spawn and a web call', () => {
     }
   })
 
+  it('drops a queued spawn when its parent run ends first', async () => {
+    const { room, state } = await makeRoom()
+    try {
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 3000, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      const end = { type: 'run.end', agent: 'claude', ok: true, time: 3100, runId: 'r-claude' }
+      apply(state, end)
+      room.onActivity(end)
+      tickRoom(2)
+      expect(fakeStars.launches).toHaveLength(0)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('drops a queued spawn when its child ends first', async () => {
+    const { room, state } = await makeRoom()
+    try {
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 3000, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      const end = { type: 'agent.end', agent: 'claude~1', ok: false, time: 3100 }
+      apply(state, end)
+      room.onActivity(end)
+      tickRoom(2)
+      expect(fakeStars.launches).toHaveLength(0)
+    } finally {
+      room.dispose()
+    }
+  })
+
+  it('clears the calls of a child the parent run end finishes', async () => {
+    const { room, state } = await makeRoom(['src/a.js'], ['claude'])
+    try {
+      startRun(state, room)
+      const spawn = { type: 'agent.spawn', agent: 'claude', child: 'claude~1', name: 'Scout', time: 1500, runId: 'r-claude' }
+      apply(state, spawn)
+      room.onActivity(spawn)
+      tickRoom(1)
+      const childRun = { type: 'run.start', agent: 'claude~1', time: 1600, runId: 'r-child' }
+      apply(state, childRun)
+      room.onActivity(childRun)
+      const web = {
+        type: 'tool.start',
+        agent: 'claude~1',
+        id: 'w1',
+        time: 1700,
+        tool: 'web',
+        label: 'fetch https://example.com',
+        touches: [],
+      }
+      apply(state, web)
+      room.onActivity(web)
+      const edit = {
+        type: 'tool.start',
+        agent: 'claude~1',
+        id: 'e1',
+        time: 1750,
+        tool: 'edit',
+        label: 'write src/a.js',
+        touches: [{ path: 'src/a.js', mode: 'write', kind: 'file' }],
+      }
+      apply(state, edit)
+      room.onActivity(edit)
+      expect(room.webAgents()).toContain('claude~1')
+      expect(room.callsFor('claude~1').count).toBeGreaterThan(0)
+      const end = { type: 'run.end', agent: 'claude', ok: true, time: 1800, runId: 'r-claude' }
+      apply(state, end)
+      room.onActivity(end)
+      expect(room.webAgents()).not.toContain('claude~1')
+      expect(room.callsFor('claude~1').count).toBe(0)
+    } finally {
+      room.dispose()
+    }
+  })
+
+
   it('sends no web star while the room is offline', async () => {
     const { room, state } = await makeRoom()
     try {
