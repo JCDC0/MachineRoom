@@ -265,7 +265,7 @@ export function createTeamsApi(options = {}) {
       }
       let ladderError = null
       if (orchs && typeof orchs.ladderChange === 'function') {
-        const saved = orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner' }, true)
+        const saved = orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner', keepHidden: false }, true)
         if (saved && saved.status !== 200) {
           ladderError = saved.body?.error ?? 'The sub orchestrators could not be saved.'
           appliedLadder = null
@@ -412,7 +412,7 @@ export function createTeamsApi(options = {}) {
       }
       let ladderError = null
       if (orchs && typeof orchs.ladderChange === 'function') {
-        const saved = orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner' }, true)
+        const saved = orchs.ladderChange({ ladder: appliedLadder, confirmed: true, by: 'owner', keepHidden: false }, true)
         if (saved && saved.status !== 200) {
           ladderError = saved.body?.error ?? 'The sub orchestrators could not be saved.'
           appliedLadder = null

@@ -182,7 +182,8 @@ export default function MusicPlayer() {
   }
 
   const loopLabel = `Loop ${media.loop}`
-  const shownPosition = duration > 0 ? Math.min(position, duration) : 0
+  const elapsed = duration > 0 ? Math.min(position, duration) : Math.max(0, position)
+  const shownPosition = duration > 0 ? elapsed : 0
   const muteLabel = muted ? 'Unmute music' : 'Mute music'
 
   return (
@@ -224,7 +225,7 @@ export default function MusicPlayer() {
         </ul>
       )}
       <div className="hud-sound-time">
-        <span className="hud-sound-time-value mono">{formatTrackTime(shownPosition)}</span>
+        <span className="hud-sound-time-value mono">{formatTrackTime(elapsed)}</span>
         <input
           type="range"
           min="0"

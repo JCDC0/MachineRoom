@@ -578,7 +578,7 @@ export function createOrchestrators({
     if (by === 'owner' && !page) return { status: 403, body: { error: OWNER_LADDER_PROBLEM } }
     if (by === 'orchestrator' && page) return { status: 403, body: { error: PAGE_LADDER_PROBLEM } }
     let ladderInput = body.ladder
-    if (ladderInput && typeof ladderInput === 'object' && Array.isArray(ladderInput.subs)) {
+    if (body.keepHidden !== false && ladderInput && typeof ladderInput === 'object' && Array.isArray(ladderInput.subs)) {
       const savedLadder = readSaved().ladder
       const savedSubs = new Map((savedLadder?.subs ?? []).map((sub) => [sub.id, sub]))
       const claimedByNew = new Map()
