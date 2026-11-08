@@ -7443,7 +7443,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
   }
 
   .hud-menu {
-    background: transparent;
+    background: var(--black);
   }
 
   .hud-lower {

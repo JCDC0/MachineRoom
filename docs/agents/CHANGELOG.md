@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- At 900 pixels and wider the menu row is black, so the transport scrolls under it instead of showing through its buttons.
+- The Agents tab shows this project's lanes with an N more lanes row, its trash hides a lane in this project only, a Teams panel applies, saves and copies a team, Settings has a Lanes section that shows a hidden lane again or deletes one everywhere, and the first visit offers the saved teams beside Start fresh (task U162).
 - A touch on a leaving card flashes and labels that card, a failed folder also marks its nearest card red, a run end or a child end cancels its stars with no white flash, removing an agent cancels the stars to or from it, reduced-motion touches land after the frame's cards, the replay tail is 3 seconds and a speed that is not a number at or above 0 counts as 1 (task U163).
 - agy3 on Argon reviews each merged batch as a sub-orchestrator; its first review, AUDIT-2026-11-REVIEW-5.md, found nine faults in U156, U157 and T37 (task Q41).
 - A lane can be hidden in one project with /api/lanes/KEY/hide and shown again, leaving the room's lists there and staying in other projects, and up to 20 saved teams (/api/teams) hold a project's active lanes, labels and ladder to apply to another project or copy from one; a ladder the bridge refuses comes back as ladderError (task S45).
