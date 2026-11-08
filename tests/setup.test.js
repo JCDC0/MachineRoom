@@ -17,7 +17,10 @@ import {
   setupFromAnswer,
   setupNeeded,
   setupPostponed,
+  setupProjects,
   setupSavePayload,
+  setupStartLabel,
+  setupTeams,
 } from '../src/ui/setup.js'
 import { buttonWithText, withDom } from './helpers/uiDom.js'
 
@@ -41,7 +44,7 @@ afterEach(() => {
 describe('setup helpers', () => {
   it('asks the one question and starts at SETUP_DEFAULT_COUNT', () => {
     expect(SETUP_QUESTION).toBe('How many agents should work on this project?')
-    expect(SETUP_START).toBe('Start')
+    expect(SETUP_START).toBe('Start fresh')
     expect(SETUP_LATER).toBe('Later')
     expect(initialAgentCount(6)).toBe(SETUP_DEFAULT_COUNT)
     expect(initialAgentCount(1)).toBe(1)
@@ -102,6 +105,41 @@ describe('setup helpers', () => {
     expect(setupCountLabel(1)).toBe('1 agent')
     expect(setupCountLabel(2)).toBe('2 agents')
     expect(setupCountLabel(0)).toBe('0 agents')
+    expect(setupStartLabel(2)).toBe('Start fresh with 2 agents')
+    expect(setupStartLabel(1)).toBe('Start fresh with 1 agent')
+  })
+
+  it('keeps a hidden lane out of the first-run choice', () => {
+    const info = setupFromAnswer({
+      lanes: [...LANES, { key: 'hidden', name: 'Hidden', hidden: true }],
+      max: 5,
+      chosen: false,
+    })
+    expect(info.lanes.map((lane) => lane.key)).toEqual(['opencode', 'opencode2', 'claude', 'hermes'])
+    expect(info.max).toBe(4)
+  })
+
+  it('offers the saved team names and the recent projects once each', () => {
+    expect(
+      setupTeams({
+        teams: [{ name: 'Weekend' }, { name: 'Weekend' }, { name: ' ' }, { name: 'Night' }],
+      })
+    ).toEqual([{ name: 'Weekend' }, { name: 'Night' }])
+    expect(setupTeams(null)).toEqual([])
+    expect(
+      setupProjects({
+        recent: [
+          { path: '/work/one', name: 'One' },
+          { path: '/work/one', name: 'One' },
+          { path: '/work/two' },
+          { path: '' },
+        ],
+      })
+    ).toEqual([
+      { path: '/work/one', name: 'One' },
+      { path: '/work/two', name: 'two' },
+    ])
+    expect(setupProjects(null)).toEqual([])
   })
 
   it('remembers Later for this visit only', () => {
@@ -123,7 +161,7 @@ describe('SetupCard', () => {
     expect(html).toContain('OpenCode 2')
     expect(html).not.toContain('Claude')
     expect(html).toContain(`>${SETUP_LATER}</button>`)
-    expect(html).toContain(`>${SETUP_START}</button>`)
+    expect(html).toContain(`>${setupStartLabel(2)}</button>`)
   })
 
   it('stays closed when the owner already chose or the bridge has no lanes', () => {
@@ -182,7 +220,7 @@ describe('SetupCard', () => {
       await act(async () => {
         more.click()
       })
-      const start = buttonWithText(container, SETUP_START)
+      const start = buttonWithText(container, setupStartLabel(3))
       expect(start).not.toBeNull()
       await act(async () => {
         start.click()
@@ -190,6 +228,64 @@ describe('SetupCard', () => {
       expect(calls).toEqual([{ lanes: ['opencode', 'opencode2', 'claude'], confirmed: true }])
       expect(closed).toBe(1)
       expect(container.textContent).not.toContain(SETUP_QUESTION)
+    })
+  })
+
+  it('applies a saved team from the first-run card with no second card', async () => {
+    const calls = []
+    let closed = 0
+    const client = {
+      lanes: async () => ANSWER,
+      teams: async () => ({ teams: [{ name: 'Weekend' }, { name: 'Night' }] }),
+      projects: async () => ({ recent: [{ path: '/work/other', name: 'other' }] }),
+      applyTeam: async (payload) => {
+        calls.push(['apply', payload])
+        return { ok: true }
+      },
+      copyProjectTeam: async (payload) => {
+        calls.push(['copy', payload])
+        return { ok: true }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(SetupCard, { client, onClose: () => { closed += 1 } }))
+      })
+      await act(async () => {})
+      expect(container.textContent).toContain('Saved teams')
+      expect(container.textContent).toContain('Copy from other')
+      const weekend = buttonWithText(container, 'Weekend')
+      expect(weekend).not.toBeNull()
+      await act(async () => {
+        weekend.click()
+      })
+      expect(calls).toEqual([['apply', { name: 'Weekend', confirmed: true }]])
+      expect(closed).toBe(1)
+      expect(container.textContent).not.toContain(SETUP_QUESTION)
+    })
+  })
+
+  it('copies another project team from the first-run card', async () => {
+    const calls = []
+    const client = {
+      lanes: async () => ANSWER,
+      projects: async () => ({ recent: [{ path: '/work/other', name: 'other' }] }),
+      copyProjectTeam: async (payload) => {
+        calls.push(payload)
+        return { ok: true }
+      },
+    }
+    await withDom(async ({ container, root }) => {
+      await act(async () => {
+        root.render(createElement(SetupCard, { client }))
+      })
+      await act(async () => {})
+      const copy = buttonWithText(container, 'Copy from other')
+      expect(copy).not.toBeNull()
+      await act(async () => {
+        copy.click()
+      })
+      expect(calls).toEqual([{ path: '/work/other', confirmed: true }])
     })
   })
 
@@ -234,7 +330,7 @@ describe('SetupCard', () => {
         root.render(createElement(SetupCard, { client }))
       })
       await act(async () => {})
-      const start = buttonWithText(container, SETUP_START)
+      const start = buttonWithText(container, setupStartLabel(2))
       await act(async () => {
         start.click()
       })
@@ -251,7 +347,7 @@ describe('SetupCard', () => {
       })
       await act(async () => {})
       expect(container.textContent).toContain('Saving agents is not available from this bridge.')
-      const start = buttonWithText(container, SETUP_START)
+      const start = buttonWithText(container, setupStartLabel(2))
       expect(start).not.toBeNull()
       expect(start.getAttribute('disabled')).not.toBeNull()
     })

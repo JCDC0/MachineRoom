@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs'
 import { act, createElement } from 'react'
 import { describe, expect, it } from 'vitest'
 import FamilyTeam from '../src/ui/FamilyTeam.jsx'
-import FamilyTree from '../src/ui/FamilyTree.jsx'
+import { FamilyTeams, FamilyTree } from '../src/ui/FamilyTree.jsx'
 import { DIRECT_KEY_PROBLEM, LANES_JSON_SAVE_PROBLEM } from '../src/ui/family.js'
-import { buttonWithText, classesOf, click, settle, withDom } from './helpers/uiDom.js'
+import { buttonWithText, classesOf, click, settle, type, withDom } from './helpers/uiDom.js'
 
 const NODES = [
   {
@@ -110,7 +110,7 @@ const ORCHESTRATORS = [
 ]
 
 function makeClient() {
-  const calls = { createLane: [], deleteLane: [], setLadder: [], setActiveLanes: [] }
+  const calls = { createLane: [], deleteLane: [], hideLane: [], setLadder: [], setActiveLanes: [] }
   const added = []
   const directModels = []
   const client = {
@@ -148,6 +148,16 @@ function makeClient() {
       calls.deleteLane.push(payload)
       return { ok: true }
     },
+    hideLane: async (payload) => {
+      calls.hideLane.push(payload)
+      return { ok: true, hidden: payload?.key }
+    },
+    teams: async () => ({ teams: [] }),
+    saveTeam: async () => ({ ok: true }),
+    applyTeam: async () => ({ ok: true, applied: { lanes: [] }, dropped: { lanes: [] } }),
+    deleteTeam: async () => ({ ok: true }),
+    copyProjectTeam: async () => ({ ok: true, applied: { lanes: [] }, dropped: { lanes: [] } }),
+    projects: async () => ({ current: null, recent: [] }),
     setActiveLanes: async (payload) => {
       calls.setActiveLanes.push(payload)
       return { ok: true }
@@ -188,11 +198,11 @@ describe('FamilyTree rows', () => {
     await withDom(async ({ container, root }) => {
       await mount(root, client)
       expect(container.textContent).toContain('The lane file is missing.')
-      expect(container.querySelector('.mr-side-count').textContent).toBe('Agents failed to load.')
+      expect(container.querySelector('.mr-side-count').textContent).toBe('Lanes failed to load.')
     })
   })
 
-  it('draws the orchestrator, the sub and every lane in tree order', async () => {
+  it('draws the orchestrator, the sub and the active lanes, with the rest under a more row', async () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
@@ -202,23 +212,29 @@ describe('FamilyTree rows', () => {
         'sub',
         'lane',
         'lane',
-        'lane',
       ])
       expect(tree.map((row) => row.querySelector('.mr-family-label').textContent)).toEqual([
         'Orchestrator',
         'Frontend',
-        'OpenCode 2',
         'OpenCode',
         'Claude',
       ])
-      expect(tree.map((row) => Number(row.getAttribute('data-depth')))).toEqual([0, 1, 2, 1, 1])
+      expect(tree.map((row) => Number(row.getAttribute('data-depth')))).toEqual([0, 1, 1, 1])
       expect(tree[0].querySelector('.mr-family-kind').textContent).toBe('orchestrator')
       expect(tree[1].querySelector('.mr-family-kind').textContent).toBe('sub')
       expect(tree[2].querySelector('.mr-family-kind').textContent).toBe('lane')
-      expect(container.querySelector('.mr-side-count').textContent).toBe('2 of 4 active')
-      expect(container.querySelectorAll('.mr-family-check')).toHaveLength(3)
+      expect(container.querySelector('.mr-side-count').textContent).toBe('2 of 3 lanes in this project')
+      expect(container.querySelectorAll('.mr-family-check')).toHaveLength(2)
       expect(container.querySelectorAll('.mr-family-check-space')).toHaveLength(2)
       expect(container.textContent).not.toContain('agy')
+
+      const more = container.querySelector('.mr-family-more-head')
+      expect(more.textContent).toContain('1 more lane')
+      expect(more.getAttribute('aria-expanded')).toBe('false')
+      await click(root, more)
+      expect(container.querySelector('.mr-family-more-head').getAttribute('aria-expanded')).toBe('true')
+      expect(rowByLabel(container, 'OpenCode 2')).not.toBeNull()
+      expect(container.querySelectorAll('.mr-family-check')).toHaveLength(3)
     })
   })
 
@@ -229,6 +245,7 @@ describe('FamilyTree rows', () => {
       const working = rowByLabel(container, 'OpenCode')
       expect(classesOf(working.querySelector('.mr-family-dot'))).toEqual(['mr-family-dot', 'is-working'])
 
+      await click(root, container.querySelector('.mr-family-more-head'))
       const off = rowByLabel(container, 'OpenCode 2')
       expect(off.getAttribute('data-kind')).toBe('lane')
       expect(classesOf(off.querySelector('.mr-family-dot'))).toContain('is-off')
@@ -418,6 +435,7 @@ describe('FamilyTree rows', () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
+      await click(root, container.querySelector('.mr-family-more-head'))
       for (const label of ['OpenCode', 'OpenCode 2']) {
         const check = rowByLabel(container, label).querySelector('.mr-family-check')
         await act(async () => {
@@ -435,6 +453,7 @@ describe('FamilyTree rows', () => {
     const { client } = makeClient()
     await withDom(async ({ container, root }) => {
       await mount(root, client)
+      await click(root, container.querySelector('.mr-family-more-head'))
       const check = rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-check')
       await act(async () => {
         check.checked = true
@@ -460,22 +479,26 @@ describe('FamilyTree rows', () => {
     })
   })
 
-  it('removes a lane from its trash button behind a danger confirm', async () => {
+  it('hides a lane in this project from its trash button behind a confirm', async () => {
     const { client, calls } = makeClient()
     await withDom(async ({ container, root }) => {
-      await mount(root, client)
-      expect(container.querySelectorAll('.mr-family-trash')).toHaveLength(4)
+      await mount(root, client, { project: '/work/machine-room' })
+      expect(container.querySelectorAll('.mr-family-trash')).toHaveLength(3)
       expect(rowByLabel(container, 'Orchestrator').querySelector('.mr-family-trash')).toBeNull()
 
       const trash = rowByLabel(container, 'OpenCode').querySelector('.mr-family-trash')
-      expect(trash.getAttribute('aria-label')).toBe('Delete OpenCode')
+      expect(trash.getAttribute('aria-label')).toBe('Hide OpenCode')
+      await click(root, container.querySelector('.mr-family-more-head'))
       expect(rowByLabel(container, 'OpenCode 2').querySelector('.mr-family-trash')).not.toBeNull()
 
       await click(root, trash)
       const card = container.querySelector('.mr-side-confirm-card')
-      expect(card.textContent).toContain('Remove "OpenCode"? This cannot be undone.')
-      await click(root, buttonWithText(card, 'Remove'))
-      expect(calls.deleteLane).toEqual([{ key: 'opencode', confirmed: true }])
+      expect(card.textContent).toContain(
+        'Hide OpenCode in machine-room? It stays in your other projects.'
+      )
+      await click(root, buttonWithText(card, 'Hide'))
+      expect(calls.hideLane).toEqual([{ key: 'opencode', confirmed: true }])
+      expect(calls.deleteLane).toEqual([])
     })
   })
 
@@ -593,6 +616,111 @@ describe('FamilyTree rows', () => {
       } finally {
         dom.window.removeEventListener('machineroom:open-settings', onOpen)
       }
+    })
+  })
+})
+
+describe('FamilyTeams', () => {
+  function makeTeamClient(overrides = {}) {
+    const calls = { applyTeam: [], saveTeam: [], deleteTeam: [], copyProjectTeam: [] }
+    const client = {
+      teams: async () => ({ teams: [{ name: 'Weekend', lanes: ['opencode'] }] }),
+      projects: async () => ({ current: null, recent: [{ path: '/work/other', name: 'other' }] }),
+      applyTeam: async (payload) => {
+        calls.applyTeam.push(payload)
+        return { ok: true, dropped: { lanes: ['gone', 'old'] }, ladderError: 'Two sub orchestrators cannot lead a lane.' }
+      },
+      saveTeam: async (payload) => {
+        calls.saveTeam.push(payload)
+        return { ok: true }
+      },
+      deleteTeam: async (payload) => {
+        calls.deleteTeam.push(payload)
+        return { ok: true }
+      },
+      copyProjectTeam: async (payload) => {
+        calls.copyProjectTeam.push(payload)
+        return { ok: true, dropped: { lanes: [] } }
+      },
+      ...overrides,
+    }
+    return { client, calls }
+  }
+
+  async function mountTeams(root, client) {
+    await act(async () => {
+      root.render(createElement(FamilyTeams, { client, project: '/work/machine-room' }))
+    })
+    await act(async () => {})
+  }
+
+  it('applies the chosen team behind its card and shows the dropped lanes and the ladder sentence', async () => {
+    const { client, calls } = makeTeamClient()
+    await withDom(async ({ container, root }) => {
+      await mountTeams(root, client)
+      expect(container.querySelector('.mr-teams')).not.toBeNull()
+      expect(container.querySelector('select[aria-label="Saved team"]').querySelectorAll('option')).toHaveLength(1)
+
+      await click(root, buttonWithText(container, 'Apply'))
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain(
+        "Apply Weekend to machine-room? Its lanes, labels and sub orchestrators replace this project's."
+      )
+      await click(root, buttonWithText(card, 'Apply'))
+
+      expect(calls.applyTeam).toEqual([{ name: 'Weekend', confirmed: true }])
+      expect(container.textContent).toContain('Dropped gone, old.')
+      expect(container.textContent).toContain('Two sub orchestrators cannot lead a lane.')
+    })
+  })
+
+  it('saves and deletes a team from their cards', async () => {
+    const { client, calls } = makeTeamClient()
+    await withDom(async ({ container, root }) => {
+      await mountTeams(root, client)
+      const input = container.querySelector('input[aria-label="Team name"]')
+      await type(root, input, 'Night')
+      await act(async () => {
+        container.querySelector('.mr-teams-form').dispatchEvent({
+          type: 'submit',
+          bubbles: true,
+          cancelable: true,
+        })
+      })
+      let card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Save "Night" as a team?')
+      await click(root, buttonWithText(card, 'Save team'))
+      expect(calls.saveTeam).toEqual([{ name: 'Night', confirmed: true }])
+
+      await click(root, buttonWithText(container, 'Delete'))
+      card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Delete "Weekend"? This cannot be undone.')
+      await click(root, buttonWithText(card, 'Delete'))
+      expect(calls.deleteTeam).toEqual([{ name: 'Weekend', confirmed: true }])
+    })
+  })
+
+  it('copies another project team from its card', async () => {
+    const { client, calls } = makeTeamClient()
+    await withDom(async ({ container, root }) => {
+      await mountTeams(root, client)
+      const select = container.querySelector('select[aria-label="Copy from project"]')
+      await act(async () => {
+        select.value = '/work/other'
+        select.dispatchEvent({ type: 'change', bubbles: true, cancelable: true })
+      })
+      await click(root, buttonWithText(container, 'Copy'))
+      const card = container.querySelector('.mr-side-confirm-card')
+      expect(card.textContent).toContain('Copy the team of other into machine-room?')
+      await click(root, buttonWithText(card, 'Copy'))
+      expect(calls.copyProjectTeam).toEqual([{ path: '/work/other', confirmed: true }])
+    })
+  })
+
+  it('shows nothing without the teams method', async () => {
+    await withDom(async ({ container, root }) => {
+      await mountTeams(root, makeTeamClient({ teams: undefined }).client)
+      expect(container.querySelector('.mr-teams')).toBeNull()
     })
   })
 })

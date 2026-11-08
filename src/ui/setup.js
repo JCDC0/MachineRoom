@@ -1,5 +1,7 @@
+import { cleanText, projectName } from './sidebar.js'
+
 export const SETUP_QUESTION = 'How many agents should work on this project?'
-export const SETUP_START = 'Start'
+export const SETUP_START = 'Start fresh'
 export const SETUP_LATER = 'Later'
 export const SETUP_DEFAULT_COUNT = 2
 
@@ -9,7 +11,11 @@ export function setupFromAnswer(answer) {
   if (!answer || typeof answer !== 'object' || Array.isArray(answer)) return null
   const lanes = Array.isArray(answer.lanes)
     ? answer.lanes.filter(
-        (lane) => lane && typeof lane.key === 'string' && lane.key.trim() !== ''
+        (lane) =>
+          lane &&
+          typeof lane.key === 'string' &&
+          lane.key.trim() !== '' &&
+          lane.hidden !== true
       )
     : []
   const declared = Number(answer.max)
@@ -73,6 +79,38 @@ export function setupSavePayload(lanes, count) {
 export function setupCountLabel(count) {
   const value = Number(count) === 1 ? 1 : Math.max(0, Math.floor(Number(count)) || 0)
   return `${value} ${value === 1 ? 'agent' : 'agents'}`
+}
+
+export function setupStartLabel(count) {
+  return `${SETUP_START} with ${setupCountLabel(count)}`
+}
+
+export function setupTeams(answer) {
+  const list = Array.isArray(answer) ? answer : Array.isArray(answer?.teams) ? answer.teams : []
+  const seen = new Set()
+  const rows = []
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const name = cleanText(entry.name, 40)
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    rows.push({ name })
+  }
+  return rows
+}
+
+export function setupProjects(answer) {
+  const list = Array.isArray(answer) ? answer : Array.isArray(answer?.recent) ? answer.recent : []
+  const seen = new Set()
+  const rows = []
+  for (const entry of list) {
+    if (!entry || typeof entry !== 'object') continue
+    const path = cleanText(entry.path)
+    if (!path || seen.has(path)) continue
+    seen.add(path)
+    rows.push({ path, name: projectName(entry) })
+  }
+  return rows
 }
 
 export function setupPostponed() {

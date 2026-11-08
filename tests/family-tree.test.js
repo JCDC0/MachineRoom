@@ -11,18 +11,26 @@ import {
   childFormProblem,
   childHarnesses,
   convertPlan,
+  deleteLaneText,
+  droppedLaneLine,
   familyMeta,
   familyTree,
   harnessEfforts,
   harnessGroups,
   harnessLabel,
   harnessModels,
+  hideLaneText,
   keyNames,
   labelProblem,
+  laneCountLine,
+  moreLanesLabel,
   proposalRows,
   rowText,
+  splitMoreLanes,
   stateWord,
   subsLosingLanes,
+  teamLanePool,
+  teamRows,
 } from '../src/ui/family.js'
 
 const HARNESSES = {
@@ -452,5 +460,83 @@ describe('the requests', () => {
     expect(rows.map((row) => row.id)).toEqual(['p1', 'p2'])
     expect(rows[0]).toMatchObject({ from: 'orchestrator', label: 'Writer', reason: 'More hands' })
     expect(rows[1].label).toBe('Code agent')
+  })
+})
+
+describe('the project lane count', () => {
+  it('counts the active lanes of the lanes this project shows', () => {
+    expect(
+      laneCountLine([
+        { id: 'orchestrator', kind: 'orchestrator', active: true },
+        { id: 'a', kind: 'lane', active: true },
+        { id: 'b', kind: 'lane', active: false },
+        { id: 'c', kind: 'lane', active: true },
+      ])
+    ).toBe('2 of 3 lanes in this project')
+    expect(laneCountLine([])).toBe('0 of 0 lanes in this project')
+    expect(laneCountLine(null)).toBe('0 of 0 lanes in this project')
+  })
+
+  it('splits the inactive lanes off the tree and labels the row', () => {
+    const rows = [
+      { id: 'orchestrator', kind: 'orchestrator' },
+      { id: 'a', kind: 'lane', active: true },
+      { id: 'b', kind: 'lane', active: false },
+      { id: 'frontend', kind: 'sub' },
+      { id: 'c', kind: 'lane', active: false },
+    ]
+    const split = splitMoreLanes(rows)
+    expect(split.main.map((row) => row.id)).toEqual(['orchestrator', 'a', 'frontend'])
+    expect(split.more.map((row) => row.id)).toEqual(['b', 'c'])
+    expect(moreLanesLabel(1)).toBe('1 more lane')
+    expect(moreLanesLabel(2)).toBe('2 more lanes')
+    expect(moreLanesLabel(0)).toBe('0 more lanes')
+  })
+})
+
+describe('the saved teams and the lane cards', () => {
+  it('reads the saved team names once each', () => {
+    const rows = teamRows({
+      teams: [
+        { name: 'Weekend', lanes: ['a', 'b'] },
+        { name: 'Weekend', lanes: ['c'] },
+        { name: '  ' },
+        null,
+        { name: 'Night' },
+      ],
+    })
+    expect(rows.map((row) => row.name)).toEqual(['Weekend', 'Night'])
+    expect(rows[0].lanes).toEqual(['a', 'b'])
+    expect(teamRows(null)).toEqual([])
+  })
+
+  it('names the lanes a team apply dropped', () => {
+    expect(droppedLaneLine({ dropped: { lanes: ['a', 'b'] } })).toBe('Dropped a, b.')
+    expect(droppedLaneLine({ dropped: { lanes: [] } })).toBe('')
+    expect(droppedLaneLine({})).toBe('')
+  })
+
+  it('keeps a hidden lane out of the Build a team pool', () => {
+    const pool = teamLanePool(
+      {
+        lanes: [
+          { key: 'a', name: 'A', active: true },
+          { key: 'hidden', name: 'Hidden', active: true, hidden: true },
+          { key: 'b', name: 'B', active: false },
+        ],
+      },
+      { subs: [] }
+    )
+    expect(pool.map((row) => row.key)).toEqual(['a', 'b'])
+  })
+
+  it('gives the hide and delete cards their sentence', () => {
+    expect(hideLaneText('OpenCode', 'machine-room')).toBe(
+      'Hide OpenCode in machine-room? It stays in your other projects.'
+    )
+    expect(hideLaneText('', '')).toBe('Hide this agent in this project? It stays in your other projects.')
+    expect(deleteLaneText('OpenCode')).toBe(
+      'Delete OpenCode in every project? Its runs stay in the records.'
+    )
   })
 })
