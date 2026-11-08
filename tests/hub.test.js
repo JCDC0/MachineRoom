@@ -20,6 +20,9 @@ import {
   SUB_RING_OPACITY,
   SUB_RING_RADIUS,
   SUB_RING_Y,
+  SWAY_LIFT,
+  SWAY_RATE,
+  SWAY_SCALE,
   createHub,
   danceEnvelope,
   ringPulse,
@@ -352,6 +355,14 @@ describe('how a sector returns to rest', () => {
     expect(sectorGlow(2, false, 0.5)).toBeCloseTo(0.5)
     expect(sectorGlow(0.5, false, Number.NaN)).toBeCloseTo(0.5)
     expect(sectorGlow(0.5, false, -1)).toBeCloseTo(0.5)
+  })
+})
+
+describe('the sway the room shows', () => {
+  it('lifts a card 16 units and grows it 5 percent on a slow wave', () => {
+    expect(SWAY_LIFT).toBe(16)
+    expect(SWAY_SCALE).toBe(0.05)
+    expect(SWAY_RATE).toBeGreaterThan(0)
   })
 })
 

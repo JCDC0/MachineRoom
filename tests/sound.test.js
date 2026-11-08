@@ -368,6 +368,7 @@ describe('the beat a dancer hears', () => {
   })
 
   it('eases the sway over SWAY_MS', () => {
+    expect(SWAY_MS).toBe(1500)
     expect(swayStep(0, 1, 0)).toBe(0)
     expect(swayStep(0, 1, SWAY_MS / 2)).toBeCloseTo(0.5, 6)
     expect(swayStep(0, 1, SWAY_MS)).toBe(1)

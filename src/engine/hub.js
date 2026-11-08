@@ -194,8 +194,8 @@ export function sectorGlow(level, working, delta, reduced = false) {
 
 export const DANCE_RISE_MS = 90
 export const DANCE_SETTLE_MS = 420
-export const SWAY_LIFT = 6
-export const SWAY_SCALE = 0.02
+export const SWAY_LIFT = 16
+export const SWAY_SCALE = 0.05
 export const SWAY_RATE = 0.0018
 export const HUB_RING_GROW = 400
 export const HUB_RING_MS = 1200
