@@ -23,6 +23,11 @@ function messageOf(error, fallback) {
   return error instanceof Error && error.message.trim() ? error.message : fallback
 }
 
+function ladderErrorOf(answer) {
+  const text = typeof answer?.ladderError === 'string' ? answer.ladderError.trim() : ''
+  return text
+}
+
 export default function SetupCard({
   client = null,
   answer = undefined,
@@ -36,6 +41,7 @@ export default function SetupCard({
   const [closed, setClosed] = useState(() => setupPostponed())
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const cardRef = useRef(null)
   const onCheckRef = useRef(onCheck)
   onCheckRef.current = onCheck
@@ -137,8 +143,14 @@ export default function SetupCard({
     }
     setSaving(true)
     setError('')
+    setNotice('')
     try {
-      await client.applyTeam({ name, confirmed: true })
+      const answer = await client.applyTeam({ name, confirmed: true })
+      const ladderError = ladderErrorOf(answer)
+      if (ladderError) {
+        setNotice(`Applied ${name}. ${ladderError}`)
+        return
+      }
       setClosed(true)
       onCheckRef.current()
       onClose()
@@ -157,8 +169,15 @@ export default function SetupCard({
     }
     setSaving(true)
     setError('')
+    setNotice('')
     try {
-      await client.copyProjectTeam({ path, confirmed: true })
+      const answer = await client.copyProjectTeam({ path, confirmed: true })
+      const ladderError = ladderErrorOf(answer)
+      if (ladderError) {
+        const name = projects.find((row) => row.path === path)?.name ?? 'the project'
+        setNotice(`Applied ${name}. ${ladderError}`)
+        return
+      }
       setClosed(true)
       onCheckRef.current()
       onClose()
@@ -251,6 +270,11 @@ export default function SetupCard({
         {!canSave && (
           <p className="mr-setup-note mono">
             Saving agents is not available from this bridge.
+          </p>
+        )}
+        {notice && (
+          <p className="mr-setup-note mono" role="status">
+            {notice}
           </p>
         )}
         {error && (

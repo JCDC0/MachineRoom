@@ -224,6 +224,14 @@ export function FamilyTeams({ client = null, project = '' }) {
   }, [client])
 
   useEffect(() => {
+    if (typeof client?.subscribe !== 'function') return undefined
+    return client.subscribe((notice) => {
+      if (!notice || notice.topic !== 'family') return
+      readTeams()
+    })
+  }, [client])
+
+  useEffect(() => {
     if (!teams) return
     setChoice((current) => (teams.some((row) => row.name === current) ? current : teams[0]?.name ?? ''))
   }, [teams])
@@ -257,8 +265,9 @@ export function FamilyTeams({ client = null, project = '' }) {
     setConfirm(config)
   }
 
-  function applied(answer) {
+  function applied(answer, name) {
     const parts = []
+    if (name) parts.push(`Applied ${name}.`)
     const dropped = droppedLaneLine(answer)
     if (dropped) parts.push(dropped)
     if (typeof answer?.ladderError === 'string' && answer.ladderError.trim()) {
@@ -295,7 +304,7 @@ export function FamilyTeams({ client = null, project = '' }) {
       label: 'Apply',
       busyText: 'Applying the team...',
       run: async () => {
-        applied(await client.applyTeam({ name: team, confirmed: true }))
+        applied(await client.applyTeam({ name: team, confirmed: true }), team)
         await readTeams()
       },
     })
@@ -356,7 +365,7 @@ export function FamilyTeams({ client = null, project = '' }) {
       label: 'Copy',
       busyText: 'Copying the team...',
       run: async () => {
-        applied(await client.copyProjectTeam({ path, confirmed: true }))
+        applied(await client.copyProjectTeam({ path, confirmed: true }), other)
         await readTeams()
       },
     })
