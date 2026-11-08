@@ -816,3 +816,49 @@ describe('a touch under reduced motion', () => {
     }
   })
 })
+
+describe('a touch label on a leaving ancestor', () => {
+  it('anchors on the leaving card instead of the older ancestor', async () => {
+    motionMatches = true
+    const { room, state } = await makeRoom(
+      [
+        'src/model/deep/a.js',
+        'src/model/deep/sub/b.js',
+        'src/model/deep/one/1.js',
+        'src/model/deep/one/2.js',
+        'src/model/deep/two/1.js',
+        'src/model/deep/two/2.js',
+        'src/model/deep/three/1.js',
+        'src/model/deep/three/2.js',
+        'docs/x.md',
+      ],
+      ['claude']
+    )
+    try {
+      state.agents.get('claude').focus = ['src/model/deep/a.js']
+      tickRoom(1)
+      state.agents.get('claude').focus = ['docs/x.md']
+      tickRoom(1)
+      fakeLabels.shows.length = 0
+      const touch = {
+        type: 'tool.start',
+        agent: 'claude',
+        id: 'm2',
+        time: 5000,
+        tool: 'edit',
+        label: 'write src/model/deep/sub/b.js',
+        touches: [{ path: 'src/model/deep/sub/b.js', mode: 'write', kind: 'file' }],
+      }
+      apply(state, touch)
+      room.onActivity(touch)
+      tickRoom(1)
+      expect(fakeLabels.shows).toHaveLength(1)
+      const point = fakeLabels.shows[0].point
+      const root = room.anchor('')
+      expect(root).not.toBe(false)
+      expect(point.x === root.x && point.z === root.z).toBe(false)
+    } finally {
+      room.dispose()
+    }
+  })
+})

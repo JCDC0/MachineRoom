@@ -552,6 +552,41 @@ describe('idle frames', () => {
     cards.dispose()
   })
 
+  it('marks and anchors a folder inside a leaving ancestor card', () => {
+    const state = makeState(
+      [
+        'src/model/deep/a.js',
+        'src/model/deep/sub/b.js',
+        'src/model/deep/one/1.js',
+        'src/model/deep/one/2.js',
+        'src/model/deep/two/1.js',
+        'src/model/deep/two/2.js',
+        'src/model/deep/three/1.js',
+        'src/model/deep/three/2.js',
+        'docs/x.md',
+      ],
+      ['src/model/deep/a.js']
+    )
+    const { cards } = makeCards(0)
+    cards.sync(state)
+    cards.update(state, 0.016, camera())
+    const leaving = cards.cards.get('src/model/deep')
+    expect(leaving.leaving).toBe(false)
+    expect(cards.cards.get('src/model/deep/sub')).toBeUndefined()
+    state.agents.get('hermes').focus = ['docs/x.md']
+    cards.update(state, 0.016, camera())
+    expect(leaving.leaving).toBe(true)
+    cards.flashCluster('src/model/deep/sub', 'red')
+    cards.update(state, 0.016, camera())
+    const row = leaving.rows.find((entry) => entry.item.path === 'src/model/deep/sub')
+    expect(row.row.className).toContain('is-flash-red')
+    const leavingAnchor = cards.anchor('src/model/deep/sub', new THREE.Vector3(), true)
+    const olderAnchor = cards.anchor('src/model/deep/sub', new THREE.Vector3())
+    expect(leavingAnchor.distanceTo(olderAnchor)).toBeGreaterThan(0)
+    cards.dispose()
+  })
+
+
   it('treats a speed that is not a finite number at or above zero as one', () => {
     const state = makeState()
     const { cards } = makeCards()

@@ -474,8 +474,8 @@ export function createCards(cssScene, options = {}) {
   function markRowPath(path) {
     const card = nearestCard(dirname(path))
     if (card) rowDirty.add(card.path)
-    const own = cards.get(dirname(path))
-    if (own?.leaving) rowDirty.add(own.path)
+    const leaving = nearestCard(dirname(path), true)
+    if (leaving?.leaving) rowDirty.add(leaving.path)
   }
 
   function markRows() {

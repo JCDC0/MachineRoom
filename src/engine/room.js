@@ -781,7 +781,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function touchLabel(dir, out) {
     out.copy(cards.center(dir))
-    cards.anchor(dir, out, cards.cards.get(dir)?.leaving === true)
+    cards.anchor(dir, out, true)
     return touchLabelPoint(out, out)
   }
 
