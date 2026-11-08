@@ -12,7 +12,7 @@ import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
 import { agentStar, createStars, starRoute, touchLabelPoint } from './stars.js'
-import { GREEN, RED, WHITE, disposeStill, glowTexture, still } from './sprites.js'
+import { GREEN, RED, WHITE, cssColor, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, chipSideFromScreen, createTerminals } from './terminals.js'
 import { createVoid } from './void.js'
@@ -21,13 +21,6 @@ const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_R
 const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
 const HOVER_CHECK_MS = 100
-
-function colourText(value) {
-  if (value === null || value === undefined) return null
-  const number = Number(value)
-  if (!Number.isFinite(number)) return null
-  return `#${(Math.floor(number) & 0xffffff).toString(16).padStart(6, '0')}`
-}
 
 export function workingMask(state, colourOf = null, into = null) {
   const lit = into?.lit ?? new Set()
@@ -41,7 +34,7 @@ export function workingMask(state, colourOf = null, into = null) {
   let touched = false
   for (const agent of state.agents.values()) {
     if (agent.status !== 'working') continue
-    const colour = colourOf ? colourText(colourOf(agent.key)) : null
+    const colour = colourOf ? cssColor(colourOf(agent.key)) : null
     for (const path of agent.focus ?? []) {
       touched = true
       const file = state.files.has(path)
@@ -1006,15 +999,16 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     stars.update(delta, replaySpeed)
     for (const view of agentSet.views.values()) {
       const status = state.agents.get(view.key)?.status ?? 'idle'
-      const color = status === 'error' ? RED : status === 'done' ? GREEN : WHITE
-      const opacity = status === 'idle' ? 0.25 : status === 'working' || status === 'queued' ? 0.12 : 0.6
+      const active = status === 'working' || status === 'queued'
+      const color = status === 'error' ? RED : status === 'done' ? GREEN : active ? view.color : WHITE
+      const opacity = status === 'idle' ? 0.25 : active ? 0.12 : 0.6
       hub.setSlot(view.index, color, opacity * (view.presenceOpacity ?? 1))
     }
 
     rig.update(delta)
     const hubPoint = projectPoint(camera, HUB_CENTER, width, height)
     hubScreenX = hubPoint ? hubPoint.x : NaN
-    terminals.update(state, now, camera, followFocus.focused(), anchorOf, delta, chipSideOf)
+    terminals.update(state, now, camera, followFocus.focused(), anchorOf, delta, chipSideOf, colourOf)
     renderer.render(scene, camera)
     bloom?.render()
     cssRenderer.render(cssScene, camera)

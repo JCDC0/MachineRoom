@@ -1,7 +1,7 @@
 import * as THREE from 'three'
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js'
 import { orchestratorNameLift } from './agents.js'
-import { easeRate, still } from './sprites.js'
+import { agentColors, cssColor, easeRate, paintAgentColor, still } from './sprites.js'
 
 const VISIBLE_LINES = 7
 const SCALE = 1.2
@@ -144,7 +144,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
   const subKeys = new Set()
   let currentLabels = null
 
-  function addTerminal(key, name) {
+  function addTerminal(key, name, color = null) {
     const element = document.createElement('div')
     element.className = 'mr-term is-idle'
     element.dataset.agent = key
@@ -206,19 +206,29 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
       lastLine: null,
       rows: [],
       fade: '',
+      agentColor: null,
     }
     terminals.set(key, term)
+    setAgentColor(term, color)
     return term
   }
 
-  function ensure(key, name) {
+  function setAgentColor(term, color) {
+    const value = cssColor(color)
+    if (!value || term.agentColor === value) return false
+    term.agentColor = value
+    return paintAgentColor(term.element, value)
+  }
+
+  function ensure(key, name, color = null) {
     if (String(key).startsWith('sub-')) subKeys.add(key)
     const term = terminals.get(key)
     if (term) {
       if (name && term.name !== name) term.name = name
+      setAgentColor(term, color)
       return term
     }
-    return addTerminal(key, name ?? key)
+    return addTerminal(key, name ?? key, color)
   }
 
   function setVisible(key, visible) {
@@ -263,9 +273,10 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     notes.clear()
   }
 
-  roster.forEach((agent) => {
+  const colors = agentColors(roster)
+  roster.forEach((agent, index) => {
     if (agent?.subOrchestrator === true || String(agent?.key ?? '').startsWith('sub-')) subKeys.add(agent.key)
-    addTerminal(agent.key, agent.name)
+    addTerminal(agent.key, agent.name, colors[index])
   })
 
   function render(term, entry, now) {
@@ -318,7 +329,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
     currentLabels = labels instanceof Map || (labels && typeof labels === 'object') ? labels : null
   }
 
-  function update(state, now, camera, focusKey, anchorOf, delta, sideOf = () => 1) {
+  function update(state, now, camera, focusKey, anchorOf, delta, sideOf = () => 1, colourOf = null) {
     right.set(1, 0, 0).applyQuaternion(camera.quaternion)
     up.set(0, 1, 0).applyQuaternion(camera.quaternion)
     const rate = easeRate(delta, FOLLOW_RATE, still())
@@ -348,6 +359,7 @@ export function createTerminals(cssScene, roster, { onPick = null } = {}) {
         setVisible(term.key, false)
         continue
       }
+      if (colourOf) setAgentColor(term, colourOf(term.key))
       if (entry.parent) {
         const parentLabel = labelFor(entry.parent, currentLabels)
         const parentName = parentLabel ?? state.agents.get(entry.parent)?.name ?? entry.parent

@@ -2686,7 +2686,7 @@ summary:focus-visible,
 
 .mr-term.is-working,
 .mr-term.is-queued {
-  border-color: var(--white);
+  border-color: var(--agent-color, var(--yellow));
 }
 
 .mr-term.is-error {
@@ -2767,7 +2767,7 @@ summary:focus-visible,
 
 .mr-term.is-working::after {
   content: 'WORKING';
-  color: var(--yellow);
+  color: var(--agent-color, var(--yellow));
 }
 
 .mr-term.is-error::after {
@@ -2872,7 +2872,7 @@ summary:focus-visible,
 }
 
 .mr-callout.is-working {
-  border-color: var(--yellow);
+  border-color: var(--agent-color, var(--yellow));
 }
 
 .mr-callout.is-error {
@@ -5106,7 +5106,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 
 .mr-term.is-working:not(.is-open),
 .mr-term.is-queued:not(.is-open) {
-  border-color: var(--white);
+  border-color: var(--agent-color, var(--yellow));
 }
 
 .mr-term.is-error:not(.is-open) {
@@ -5140,7 +5140,7 @@ body:has(#hud-orchestrator-chat) .lens-waiting {
 .mr-term.is-working .mr-term-title::before,
 .mr-term.is-queued .mr-term-title::before {
   color: var(--black);
-  background: var(--yellow);
+  background: var(--agent-color, var(--yellow));
 }
 
 .mr-term.is-error .mr-term-title::before {

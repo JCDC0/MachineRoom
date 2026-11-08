@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { isOrchestrator } from './shapes.js'
 
 export const WHITE = 0xffffff
 export const YELLOW = 0xe5ff00
@@ -12,6 +13,32 @@ export function agentColor(index) {
   const value = Number(index)
   if (!Number.isFinite(value) || value < 0) return AGENT_COLORS[0]
   return AGENT_COLORS[Math.floor(value) % AGENT_COLORS.length]
+}
+
+export function agentColors(roster) {
+  const list = Array.isArray(roster) ? roster : []
+  let place = 0
+  return list.map((agent) => {
+    if (isOrchestrator(agent)) return YELLOW
+    const color = agentColor(place)
+    place += 1
+    return color
+  })
+}
+
+export function cssColor(value) {
+  if (value === null || value === undefined) return null
+  const number = Number(value)
+  if (!Number.isFinite(number)) return null
+  return `#${(Math.floor(number) & 0xffffff).toString(16).padStart(6, '0')}`
+}
+
+export function paintAgentColor(element, color) {
+  const style = element && element.style
+  if (!style || typeof style.setProperty !== 'function') return false
+  if (typeof style.getPropertyValue === 'function' && style.getPropertyValue('--agent-color') === color) return false
+  style.setProperty('--agent-color', color)
+  return true
 }
 
 const RANDOM_RANGE = 4294967296

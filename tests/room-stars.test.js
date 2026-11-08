@@ -337,6 +337,17 @@ describe('a touch star on the frame it belongs to', () => {
 })
 
 describe('the stars of a call and a run', () => {
+  it('sends the orchestrator star in yellow', async () => {
+    const { room, state } = await makeRoom(['src/a.js'], ['orchestrator', 'claude'])
+    try {
+      startRun(state, room)
+      expect(fakeStars.launches).toHaveLength(1)
+      expect(fakeStars.launches[0].color).toBe(0xe5ff00)
+    } finally {
+      room.dispose()
+    }
+  })
+
   it('cancels the flying stars of a failed call', async () => {
     const { room, state } = await makeRoom()
     try {
