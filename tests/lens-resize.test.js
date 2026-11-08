@@ -26,13 +26,21 @@ function memoryStore() {
 }
 
 describe('lens rails', () => {
-  it('clamps the lens share and falls back to the default split', () => {
-    expect(LENS_SHARE_DEFAULT).toBe(0.56)
-    expect(LENS_SHARE_MAX).toBe(0.85)
+  it('clamps the lens share and falls back to the full-height default split', () => {
+    expect(LENS_SHARE_DEFAULT).toBe(1)
+    expect(LENS_SHARE_MAX).toBe(1)
     expect(clampLensShare(0.1)).toBe(LENS_SHARE_MIN)
     expect(clampLensShare(2)).toBe(LENS_SHARE_MAX)
     expect(clampLensShare('x')).toBe(LENS_SHARE_DEFAULT)
     expect(clampLensShare(0.6)).toBe(0.6)
+    expect(clampLensShare(0.56)).toBe(0.56)
+  })
+
+  it('makes the default split the whole window less the menu and transport', () => {
+    const cap = 'calc(100vh - var(--menu-h) - var(--transport-h))'
+    expect(LENS_SHARE_DEFAULT).toBe(LENS_SHARE_MAX)
+    expect(lensHeightValue(LENS_SHARE_DEFAULT)).toBe(`min(${cap}, max(240px, 100.0vh))`)
+    expect(heightRailShare(LENS_SHARE_DEFAULT)).toBe(1)
   })
 
   it('reads a rail share from the pointer, top full and bottom empty', () => {
@@ -72,9 +80,9 @@ describe('lens rails', () => {
     const cap = 'calc(100vh - var(--menu-h) - var(--transport-h))'
     expect(lensHeightValue(0.52)).toBe(`min(${cap}, max(240px, 52.0vh))`)
     expect(lensHeightValue(0.79)).toBe(`min(${cap}, max(240px, 79.0vh))`)
-    expect(lensHeightValue(LENS_SHARE_MAX)).toBe(`min(${cap}, max(240px, 85.0vh))`)
-    expect(lensHeightValue(1)).toBe(`min(${cap}, max(240px, 85.0vh))`)
-    expect(lensHeightValue('x')).toBe(`min(${cap}, max(240px, 56.0vh))`)
+    expect(lensHeightValue(LENS_SHARE_MAX)).toBe(`min(${cap}, max(240px, 100.0vh))`)
+    expect(lensHeightValue(1)).toBe(`min(${cap}, max(240px, 100.0vh))`)
+    expect(lensHeightValue('x')).toBe(`min(${cap}, max(240px, 100.0vh))`)
     expect(multiplierText(1)).toBe('1.0x')
     expect(multiplierText(2.46)).toBe('2.5x')
     expect(multiplierText(12.4)).toBe('12x')
@@ -95,6 +103,8 @@ describe('lens rails', () => {
     expect(loadSettings(storage).lensSplit).toBeUndefined()
     saveSettings(storage, { lensSplit: 0.7 })
     expect(loadSettings(storage).lensSplit).toBe(0.7)
+    saveSettings(storage, { lensSplit: 0.85 })
+    expect(loadSettings(storage).lensSplit).toBe(0.85)
     saveSettings(storage, { lensSplit: 5 })
     expect(loadSettings(storage).lensSplit).toBe(LENS_SHARE_MAX)
 
