@@ -669,7 +669,10 @@ describe('the orchestrator permission modes', () => {
     turns += 1
     await waitIdle(rig, turns)
     expect(valueAfter(rig.calls()[turns - 1].args, '--agent')).toBe('plan')
-    expect(JSON.parse(rig.spawned[turns - 1].mcpContentDuringTurn)).toEqual({ mcp })
+    expect(JSON.parse(rig.spawned[turns - 1].mcpContentDuringTurn)).toEqual({
+      mcp,
+      permission: { edit: 'deny', bash: 'deny' },
+    })
 
     expect(rig.orchestrator.setMode({ mode: 'edits', confirmed: true }).status).toBe(200)
     rig.send('Edits turn')

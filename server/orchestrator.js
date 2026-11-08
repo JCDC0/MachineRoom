@@ -1199,7 +1199,7 @@ export function createOrchestrator({
     const enabledServers = enabledMcpServersFor(folder)
     const turnMode = mode ?? legacyMode(harness)
     const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
-    const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits')
+    const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits' || turnMode === 'plan')
     const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
     const turn = { startedAt, logPath, metaPath, mcpConfigPath, killed: false, done: false, child: null, timer: null, compacting: compaction, stderr: '' }
@@ -1215,6 +1215,7 @@ export function createOrchestrator({
         } else if (harness === 'opencode') {
           const config = needsMcp ? mcpConfigForOpencode(enabledServers) : {}
           if (turnMode === 'edits') config.permission = { bash: 'deny' }
+          else if (turnMode === 'plan') config.permission = { edit: 'deny', bash: 'deny' }
           writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
           mcpEnv = { OPENCODE_CONFIG: mcpConfigPath }
         }
