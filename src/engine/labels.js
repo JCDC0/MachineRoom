@@ -1,5 +1,6 @@
 import * as THREE from 'three'
 import { still } from './sprites.js'
+import { speedRate } from './stars.js'
 
 const WIDTH = 512
 const HEIGHT = 64
@@ -56,7 +57,7 @@ export function createLabels(scene, count = 16) {
 
   function update(delta, speed = 1) {
     const isStill = still()
-    const rate = Number.isFinite(Number(speed)) ? Math.max(0, Number(speed)) : 1
+    const rate = speedRate(speed)
     const step = delta * rate
     for (const item of items) {
       if (item.life <= 0) continue

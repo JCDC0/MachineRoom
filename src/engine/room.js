@@ -11,7 +11,7 @@ import { HUB_CENTER, HUB_RADIUS, createHub, workingKeys } from './hub.js'
 import { GIT_FOCUS_DIST, createGitTree } from './gitTree.js'
 import { INTERNET_RADIUS, createInternet } from './internet.js'
 import { createLabels } from './labels.js'
-import { agentStar, createStars, starRoute, touchLabelPoint } from './stars.js'
+import { agentStar, createStars, speedRate, starRoute, touchLabelPoint } from './stars.js'
 import { GREEN, RED, WHITE, cssColor, disposeStill, glowTexture, still } from './sprites.js'
 import { createStrings } from './strings.js'
 import { CHIP_REACH, chipSideFromScreen, createTerminals } from './terminals.js'
@@ -180,6 +180,39 @@ export function nearestDrawnPath(path, drawn) {
   return drawn.has('') ? '' : null
 }
 
+export function finishedAgentKeys(state, activity) {
+  const keys = new Set()
+  if (!state || !activity) return keys
+  const key = typeof activity.agent === 'string' ? activity.agent : ''
+  if (key === '') return keys
+  if (activity.type === 'agent.end') {
+    keys.add(key)
+    return keys
+  }
+  if (activity.type !== 'run.end') return keys
+  const agent = state.agents.get(key)
+  if (!agent) return keys
+  const mismatch = agent.runId !== null && activity.runId !== agent.runId
+  for (const child of state.agents.values()) {
+    if (child.parent === null || child.endedAt !== activity.time) continue
+    if (child.status !== 'done' && child.status !== 'error') continue
+    let at = child.parent
+    let below = false
+    while (at) {
+      if (at === key) {
+        below = true
+        break
+      }
+      at = state.agents.get(at)?.parent ?? null
+    }
+    if (!below) continue
+    if (mismatch && child.runId !== activity.runId) continue
+    keys.add(child.key)
+  }
+  if (!mismatch) keys.add(key)
+  return keys
+}
+
 export function inspectorNamesPath(detail, path) {
   if (!detail || (detail.kind !== 'folder' && detail.kind !== 'file')) return false
   if (typeof detail.id !== 'string' || typeof path !== 'string') return false
@@ -240,8 +273,12 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
   const hub = createHub(scene, roster)
   const agentSet = createAgents(scene, roster, cssScene, {
     onRemove: (key) => {
-      stars.cancel((star) => star.agent === key)
+      stars.cancel((star) => star.agent === key || star.to === key)
       dropPendingTouches((item) => item.agent === key, false)
+      for (let index = pendingSpawns.length - 1; index >= 0; index -= 1) {
+        const spawn = pendingSpawns[index]
+        if (spawn.agent === key || spawn.child === key) pendingSpawns.splice(index, 1)
+      }
     },
   })
   agentSet.setViewport(width, height)
@@ -744,7 +781,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function touchLabel(dir, out) {
     out.copy(cards.center(dir))
-    cards.anchor(dir, out)
+    cards.anchor(dir, out, cards.cards.get(dir)?.leaving === true)
     return touchLabelPoint(out, out)
   }
 
@@ -763,9 +800,9 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     return typeof activity?.id === 'string' && activity.id !== '' ? activity.id : null
   }
 
-  function launchStarPath(from, to, color, agent = null, call = null) {
+  function launchStarPath(from, to, color, agent = null, call = null, target = null) {
     const points = starRoute(from, null, cardAnchorOf, to, starPath)
-    stars.launch({ points, color, agent, call })
+    stars.launch({ points, color, agent, to: target, call })
   }
 
   function drawnCard(path) {
@@ -832,7 +869,11 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function flushTouchStars() {
     if (pendingTouches.length === 0) return
-    for (const item of pendingTouches) launchTouchStar(item.agent, item.touch, item.call)
+    const isStill = still()
+    for (const item of pendingTouches) {
+      if (isStill) showTouch(item.touch)
+      else launchTouchStar(item.agent, item.touch, item.call)
+    }
     pendingTouches.length = 0
   }
 
@@ -842,7 +883,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     const from = agentSet.views.get(pair.from)
     const to = agentSet.views.get(pair.to)
     if (!from || !to) return
-    launchStarPath(from.group.position, to.group.position, from.color, activity.agent)
+    launchStarPath(from.group.position, to.group.position, from.color, pair.from, null, pair.to)
   }
 
   function launchWebStar(view, activity) {
@@ -865,17 +906,26 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
     noteActivity(activity)
     terminals.note(activity)
     const view = agentSet.views.get(activity.agent)
-    if (!view) return
     trackWeb(activity)
     if (followFocus.following() && activity.type === 'tool.start') {
       const path = touchedCard(activity)
       if (path !== null) pendingFollow = path
     }
 
-    if (activity.type === 'run.start') {
-      hub.pulse(WHITE, 1)
-      if (!still()) launchAgentStar(activity)
-    } else if (activity.type === 'tool.start') {
+    if (activity.type === 'run.end' || activity.type === 'agent.end') {
+      const finished = finishedAgentKeys(getState(), activity)
+      if (finished.size > 0) {
+        stars.cancel((star) => finished.has(star.agent) || finished.has(star.to))
+        dropPendingTouches((item) => finished.has(item.agent), false)
+      }
+      if (activity.type === 'run.end') {
+        hub.pulse(activity.ok ? GREEN : RED, 1)
+        cards.markRows()
+      }
+      return
+    }
+
+    if (activity.type === 'tool.start') {
       for (const touch of activity.touches ?? []) {
         if (touch.kind === 'file') {
           const dir = dirname(touch.path)
@@ -883,10 +933,17 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         } else {
           agentSet.aimAt(activity.agent, touch.path, null, performance.now())
         }
-        if (still()) showTouch(touch)
-        else queueTouchStar(activity, touch)
+        queueTouchStar(activity, touch)
       }
-      if (isOnlineCall(activity) && !still()) launchWebStar(view, activity)
+      if (view && isOnlineCall(activity) && !still()) launchWebStar(view, activity)
+      return
+    }
+
+    if (!view) return
+
+    if (activity.type === 'run.start') {
+      hub.pulse(WHITE, 1)
+      if (!still()) launchAgentStar(activity)
     } else if (activity.type === 'tool.end' && !activity.ok) {
       const call = callOf(activity)
       if (call !== null) {
@@ -904,12 +961,6 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
         }
       })
       hub.pulse(RED, 0.5)
-    } else if (activity.type === 'run.end') {
-      stars.land((star) => star.agent === activity.agent)
-      dropPendingTouches((item) => item.agent === activity.agent, true)
-      const color = activity.ok ? GREEN : RED
-      hub.pulse(color, 1)
-      cards.markRows()
     } else if (activity.type === 'error') {
       hub.pulse(RED, 0.6)
     } else if (activity.type === 'agent.spawn' && typeof activity.child === 'string') {
@@ -1205,8 +1256,7 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
       agentSet.setLadder(next)
     },
     setSpeed(value) {
-      const next = Number(value)
-      replaySpeed = Number.isFinite(next) && next >= 0 ? next : 1
+      replaySpeed = speedRate(value)
     },
     setLabels(labels) {
       terminals.setLabels(labels)

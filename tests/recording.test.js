@@ -251,6 +251,11 @@ describe('player', () => {
     expect(player.position).toBe(player.duration)
   })
 
+  it('keeps three seconds after the last activity for the last flash and label', () => {
+    const player = createPlayer({ activities, tree, agents })
+    expect(player.duration - player.stamps[player.stamps.length - 1]).toBe(3000)
+  })
+
   it('tells the scene about every activity once while playing', () => {
     const seen = []
     const player = createPlayer({ activities, tree, agents, onActivity: (a) => seen.push(a) })

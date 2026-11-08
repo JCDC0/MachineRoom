@@ -49,6 +49,10 @@ export function starPoint(points, share, out = {}, lengths = null) {
   return samplePolyline(points, starEase(share), out, lengths)
 }
 
+export function speedRate(speed) {
+  return typeof speed === 'number' && Number.isFinite(speed) && speed >= 0 ? speed : 1
+}
+
 export function starAdvance(age, delta, speed) {
   const current = Number.isFinite(Number(age)) ? Math.max(0, Number(age)) : 0
   const step = Number(delta)
@@ -180,6 +184,7 @@ export function createStars(scene) {
     b: 1,
     onLand: null,
     agent: null,
+    to: null,
     call: null,
     follow: null,
     point: { x: 0, y: 0, z: 0 },
@@ -192,6 +197,7 @@ export function createStars(scene) {
     star.age = 0
     star.onLand = null
     star.agent = null
+    star.to = null
     star.call = null
     star.follow = null
   }
@@ -202,7 +208,7 @@ export function createStars(scene) {
     if (onLand) onLand()
   }
 
-  function launch({ points, color = WHITE, onLand = null, agent = null, call = null, follow = null } = {}) {
+  function launch({ points, color = WHITE, onLand = null, agent = null, to = null, call = null, follow = null } = {}) {
     const list = Array.isArray(points) ? points : []
     if (list.length === 0) return false
     const index = starSlot(pool)
@@ -228,6 +234,7 @@ export function createStars(scene) {
     star.b = tint.b
     star.onLand = typeof onLand === 'function' ? onLand : null
     star.agent = typeof agent === 'string' ? agent : null
+    star.to = typeof to === 'string' ? to : null
     star.call = typeof call === 'string' ? call : null
     star.follow = typeof follow === 'function' ? follow : null
     star.active = true
