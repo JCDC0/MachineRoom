@@ -135,18 +135,20 @@ const PLAN_TOOL_NAMES = new Set(['read_file', 'list_dir', 'search', 'web_search'
 const EDIT_TOOL_NAMES = new Set([...PLAN_TOOL_NAMES, 'write_file', 'edit_file'])
 const AUTO_SHELL_PROBLEM = 'Auto mode does not run this command.'
 const AUTO_FORBIDDEN = [
-  /\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b/i,
+  /\brm\b[^\n;&|]*\s(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b/i,
   /\bRemove-Item\b[^\n;&|]*-Recurse\b/i,
   /\bdel(?:ete)?\s+[^\n;&|]*\/s\b/i,
   /\brmdir\s+[^\n;&|]*\/s\b/i,
-  /\bgit\s+push\b/i,
-  /\bgit\s+reset\s+--hard\b/i,
-  /\bgit\s+clean\b/i,
-  /\bgit\s+checkout\s+--/i,
-  /\bgit\s+branch\s+-[dD]\b/,
-  /(?:^|[;&|]\s*)(?:\S*[\\/])?format(?:\.com)?\b/i,
-  /(?:^|[;&|]\s*)shutdown(?:\.exe)?\b/i,
-  /(?:^|[;&|]\s*)mkfs(?:\.\w+)?\b/i,
+  /\brd\s+[^\n;&|]*\/s\b/i,
+  /\berase\s+[^\n;&|]*\/s\b/i,
+  /\bgit\b[^\n;&|]*\bpush\b/i,
+  /\bgit\b[^\n;&|]*\breset\b[^\n;&|]*--hard\b/i,
+  /\bgit\b[^\n;&|]*\bclean\b/i,
+  /\bgit\b[^\n;&|]*\bcheckout\b[^\n;&|]*--/i,
+  /\bgit\b[^\n;&|]*\bbranch\b[^\n;&|]*-[dD]\b/i,
+  /(?:^|[;&|]\s*|["'`]|(?:-c|\/[ck])\s+)(?:\S*[\\/])?format(?:\.com)?\b/i,
+  /(?:^|[;&|]\s*|["'`]|(?:-c|\/[ck])\s+)(?:\S*[\\/])?shutdown(?:\.exe)?\b/i,
+  /(?:^|[;&|]\s*|["'`]|(?:-c|\/[ck])\s+)(?:\S*[\\/])?mkfs(?:\.\w+)?\b/i,
 ]
 
 function permissionModeFrom(env) {
@@ -161,6 +163,10 @@ function toolsForMode(mode) {
   if (mode === 'edits') return TOOLS.filter((tool) => EDIT_TOOL_NAMES.has(tool.function.name))
   return TOOLS
 }
+
+const MODE_TOOLS = toolsForMode(PERMISSION_MODE)
+const MODE_TOOL_NAMES = new Set(MODE_TOOLS.map((tool) => tool.function.name))
+const MODE_REFUSES_TOOLS = MODE_TOOLS.length < TOOLS.length
 
 function autoShellProblem(command) {
   if (PERMISSION_MODE !== 'auto') return ''
@@ -659,6 +665,9 @@ async function mcpCallTool(args) {
 
 async function runTool(name, args, cwd, web) {
   try {
+    if (MODE_REFUSES_TOOLS && !MODE_TOOL_NAMES.has(name)) {
+      return { text: `The ${name} tool is not allowed in ${PERMISSION_MODE} mode.`, isError: true }
+    }
     if (APPROVAL_TOOLS.has(name)) {
       const denied = await askApproval(name, args)
       if (denied) return denied

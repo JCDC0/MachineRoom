@@ -270,6 +270,38 @@ describe('mr-agent', () => {
     }
   })
 
+  it('refuses a tool the permission mode does not offer', async () => {
+    const folder = tempDir()
+    const planApi = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({ calls: [{ name: 'write_file', arguments: { path: 'plan.txt', content: 'made\n' } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const planResult = await runAgent({ folder, api: planApi, env: { MACHINEROOM_PERMISSION_MODE: 'plan' } })
+    expect(planResult.code).toBe(0)
+    expect(existsSync(join(folder, 'plan.txt'))).toBe(false)
+    const planUsers = jsonLines(planResult.stdout).filter((line) => line.type === 'user')
+    expect(planUsers[0].message.content[0]).toMatchObject({
+      is_error: true,
+      content: 'The write_file tool is not allowed in plan mode.',
+    })
+
+    const command = `"${process.execPath}" -e "require('fs').writeFileSync('ran.txt','x')"`
+    const editsApi = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({ calls: [{ name: 'run_shell', arguments: { command } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const editsResult = await runAgent({ folder, api: editsApi, env: { MACHINEROOM_PERMISSION_MODE: 'edits' } })
+    expect(editsResult.code).toBe(0)
+    expect(existsSync(join(folder, 'ran.txt'))).toBe(false)
+    const editsUsers = jsonLines(editsResult.stdout).filter((line) => line.type === 'user')
+    expect(editsUsers[0].message.content[0]).toMatchObject({
+      is_error: true,
+      content: 'The run_shell tool is not allowed in edits mode.',
+    })
+  })
+
   it('asks the bridge before a write in ask mode and allows it', async () => {
     const folder = tempDir()
     const bridge = await startApprovalBridge(() => ({ allow: true }))
@@ -357,6 +389,55 @@ describe('mr-agent', () => {
     }
     expect(users.at(-1).message.content[0].is_error).toBe(false)
     expect(users.at(-1).message.content[0].content).toContain('auto-ok')
+  })
+
+  it('refuses split, aliased, option-first and wrapped destructive commands in auto mode', async () => {
+    const folder = tempDir()
+    const commands = [
+      'rm -f -r build',
+      'rm -fR x',
+      'rd /s /q build',
+      'erase /s /q build',
+      'cmd /c rd /s /q build',
+      'git -C . push',
+      'git reset HEAD --hard',
+      'GIT branch -D old',
+      'bash -c "shutdown -h now"',
+      'bash -c shutdown -h now',
+      'cmd /c format C:',
+      'cmd /k format C:',
+      'bash -c "mkfs.ext4 /dev/sda"',
+    ]
+    const api = await startFakeApi((_body, index) =>
+      index < commands.length
+        ? chatAnswer({ calls: [{ name: 'run_shell', arguments: { command: commands[index] } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MACHINEROOM_PERMISSION_MODE: 'auto' } })
+    expect(result.code).toBe(0)
+    const users = jsonLines(result.stdout).filter((line) => line.type === 'user')
+    expect(users).toHaveLength(commands.length)
+    commands.forEach((command, index) => {
+      expect(users[index].message.content[0].is_error, command).toBe(true)
+      expect(users[index].message.content[0].content, command).toBe('Auto mode does not run this command.')
+    })
+  })
+
+  it('still runs git log and a plain rm in auto mode', async () => {
+    const folder = tempDir()
+    const commands = ['git log --oneline', 'rm notes.txt']
+    const api = await startFakeApi((_body, index) =>
+      index < commands.length
+        ? chatAnswer({ calls: [{ name: 'run_shell', arguments: { command: commands[index] } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({ folder, api, env: { MACHINEROOM_PERMISSION_MODE: 'auto' } })
+    expect(result.code).toBe(0)
+    const users = jsonLines(result.stdout).filter((line) => line.type === 'user')
+    expect(users).toHaveLength(commands.length)
+    for (const user of users) {
+      expect(user.message.content[0].content).not.toBe('Auto mode does not run this command.')
+    }
   })
 
   it('uses a saved endpoint and its key slot', async () => {
