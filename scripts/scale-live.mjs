@@ -658,7 +658,8 @@ export async function runScaleLive(options = {}) {
     const diff = await httpGet(port, `/api/control/reviews/${REVIEW_LANE}/diff`)
     if (diff.status !== 200) throw new Error(`GET /api/control/reviews/${REVIEW_LANE}/diff answered ${diff.status}.`)
     const diffBody = JSON.parse(diff.bytes.toString('utf8'))
-    row(`GET /api/control/reviews/${REVIEW_LANE}/diff`, diff.ms, LIVE_BUDGET.reviewDiff, `${diffBody.files} files, ${diffBody.patch.length} bytes`)
+    const diffFiles = Array.isArray(diffBody.files) ? diffBody.files.length : Number(diffBody.files) || 0
+    row(`GET /api/control/reviews/${REVIEW_LANE}/diff`, diff.ms, LIVE_BUDGET.reviewDiff, `${diffFiles} files, ${diffBody.patch.length} bytes`)
 
     removeScaleWorktree(dir, worktreePath)
     if (child) {
