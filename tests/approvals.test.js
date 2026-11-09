@@ -208,7 +208,7 @@ describe('orchestrator approvals', () => {
     expect(held.res.sent).toEqual({ status: 200, body: { allow: false, message: APPROVAL_DENIED } })
   })
 
-  it('answers the owner did not answer after ten minutes and when the turn stops', async () => {
+  it('answers the owner did not answer after four minutes and when the turn stops', async () => {
     const timed = makeRegistry({ approvalTimeoutMs: 30 })
     const timedHeld = hold(timed.registry)
     await timedHeld.done
