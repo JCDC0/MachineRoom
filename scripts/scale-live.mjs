@@ -1,15 +1,17 @@
 import { fork, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, rmSync, statfsSync, writeFileSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statfsSync, statSync, writeFileSync } from 'node:fs'
+import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { request } from 'node:http'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, parse, resolve } from 'node:path'
 import { performance } from 'node:perf_hooks'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { gunzipSync } from 'node:zlib'
+import { readProjectLine } from '../server/doctor.js'
 import { createBridge, readTree } from '../server/index.js'
 import { gitPath } from '../server/programPath.js'
 import { DEFAULTS, makeScaleTree } from '../src/model/scaleTree.js'
+import { prepareWorktree } from './run-lane.mjs'
 import { formatRows } from './scale-probe.mjs'
 
 export const LIVE_BUDGET = {
@@ -20,7 +22,19 @@ export const LIVE_BUDGET = {
   cpuShare: 50,
   lastFile: 3000,
   ignoredEvents: 0,
+  doctorRead: 10000,
+  gitClean: 2000,
+  gitUntracked: 2000,
+  gitTracked: 2000,
+  worktreeAdd: 30000,
+  worktreeReuse: 5000,
+  reviews: 5000,
+  reviewDiff: 5000,
+  plainRead: 1000,
 }
+
+const REVIEW_LANE = 'opencode'
+const REVIEW_BRANCH = 'p19-review'
 
 export const MIN_FREE_BYTES = 2 * 1024 * 1024 * 1024
 const BURST_TICK_MS = 50
@@ -115,6 +129,65 @@ function reusableCheckout(dir, message, files) {
 function cleanBurstFolders(dir) {
   for (const name of ['out', 'dist']) rmSync(join(dir, name), { recursive: true, force: true, maxRetries: 3 })
   rmSync(join(dir, 'new-file.js'), { force: true })
+}
+
+function worktreePathFor(dir) {
+  return join(dir, '.worktrees', REVIEW_LANE)
+}
+
+function removeScaleWorktree(dir, path) {
+  if (existsSync(path)) git(dir, ['worktree', 'remove', '--force', path], { allowFailure: true })
+  git(dir, ['worktree', 'prune'], { allowFailure: true })
+  git(dir, ['branch', '-D', REVIEW_BRANCH], { allowFailure: true })
+}
+
+function folderSize(dir) {
+  let bytes = 0
+  let files = 0
+  const stack = [dir]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    let entries
+    try {
+      entries = readdirSync(current, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const path = join(current, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(path)
+      } else if (entry.isFile()) {
+        files += 1
+        try {
+          bytes += statSync(path).size
+        } catch {}
+      }
+    }
+  }
+  return { bytes, files }
+}
+
+function gitFolderAway(dir) {
+  return `${dir}-git-away`
+}
+
+function restoreGitFolder(dir) {
+  const away = gitFolderAway(dir)
+  if (existsSync(away) && existsSync(dir) && !existsSync(join(dir, '.git'))) renameSync(away, join(dir, '.git'))
+}
+
+async function readPlainFolder(dir) {
+  const away = gitFolderAway(dir)
+  rmSync(away, { recursive: true, force: true })
+  renameSync(join(dir, '.git'), away)
+  try {
+    const started = performance.now()
+    const tree = await readTree(dir)
+    return { ms: performance.now() - started, files: tree.files }
+  } finally {
+    renameSync(away, join(dir, '.git'))
+  }
 }
 
 async function buildCheckout({ dir, files, folders, seed }) {
@@ -407,20 +480,33 @@ export async function runScaleLive(options = {}) {
     cpuWindowMs: options.cpuWindowMs ?? 3000,
     minFreeBytes: options.minFreeBytes ?? MIN_FREE_BYTES,
   }
+  const log = options.log ?? console.log
   const free = freeBytesAt(settings.root)
+  const drive = parse(resolve(settings.root)).root || settings.root
+  log(`free space: ${(free / 1024 / 1024 / 1024).toFixed(1)} GB on ${drive}`)
   if (free < settings.minFreeBytes) {
     throw new Error(`Only ${(free / 1024 / 1024 / 1024).toFixed(1)} GB is free. scale-live needs 2 GB.`)
   }
   mkdirSync(settings.root, { recursive: true })
   const dir = resolve(settings.root, `${settings.files}-${settings.seed}`)
+  const worktreePath = worktreePathFor(dir)
   const rows = []
-  const row = (stage, ms, budget, size = '') => rows.push({ stage, runsAt: 'live', ms, budget, size })
+  const row = (stage, ms, budget, size = '') => {
+    const entry = { stage, runsAt: 'live', ms, budget, size }
+    rows.push(entry)
+    log(formatRows([entry]).split('\n')[1])
+  }
   let child = null
   let stream = null
   let result = null
   try {
     const build = await buildCheckout({ dir, files: settings.files, folders: settings.folders, seed: settings.seed })
     row('build checkout', build.reused ? 0 : build.ms, null, build.reused ? 'reused' : `${settings.files} files in ${settings.folders} folders`)
+
+    const doctorAt = performance.now()
+    const doctorLine = await readProjectLine(dir)
+    row('doctor project read', performance.now() - doctorAt, LIVE_BUDGET.doctorRead, doctorLine.text)
+
     await mkdir(join(dir, 'out'), { recursive: true })
     await mkdir(join(dir, 'dist'), { recursive: true })
 
@@ -435,14 +521,16 @@ export async function runScaleLive(options = {}) {
     row('first tree read', firstReadMs, LIVE_BUDGET.firstRead, `${plainTree.files.length} files`)
 
     const afterRead = await child.ask('metrics')
-    rows.push({
+    const rssEntry = {
       stage: 'bridge RSS after first read',
       runsAt: 'live',
       ms: null,
       budget: LIVE_BUDGET.rssBytes,
       size: `${(afterRead.rss / 1024 / 1024).toFixed(1)} MB`,
       bytes: afterRead.rss,
-    })
+    }
+    rows.push(rssEntry)
+    log(formatRows([rssEntry]).split('\n')[1])
 
     const folder = await httpGet(port, '/api/tree', {
       Accept: 'application/json; shape=folders',
@@ -457,6 +545,12 @@ export async function runScaleLive(options = {}) {
       LIVE_BUDGET.folderGzip,
       `${folder.bytes.length} bytes, ${folderTree.folders.length} folders`
     )
+
+    const cleanGit = await httpGet(port, '/api/git')
+    if (cleanGit.status !== 200) throw new Error(`GET /api/git answered ${cleanGit.status}.`)
+    const cleanGitState = JSON.parse(cleanGit.bytes.toString('utf8'))
+    row('GET /api/git, clean', cleanGit.ms, LIVE_BUDGET.gitClean, cleanGitState.dirty ? `${cleanGitState.changeCount} changes` : 'clean')
+
 
     stream = openTreeStream(port, `/events?tree=folders&since=${folderTree.version}`)
     await stream.opened
@@ -496,6 +590,11 @@ export async function runScaleLive(options = {}) {
     const outShare = (outCpuMs / outWallMs) * 100
     row('burst out/, bridge CPU share', outShare, LIVE_BUDGET.cpuShare, `${outCpuMs.toFixed(0)} ms over ${Math.round(outWallMs)} ms`)
 
+    const untrackedGit = await httpGet(port, '/api/git')
+    if (untrackedGit.status !== 200) throw new Error(`GET /api/git after the out/ burst answered ${untrackedGit.status}.`)
+    const untrackedGitState = JSON.parse(untrackedGit.bytes.toString('utf8'))
+    row('GET /api/git, 2000 untracked', untrackedGit.ms, LIVE_BUDGET.gitUntracked, `${settings.burst} files, ${untrackedGitState.changeCount} changes`)
+
     const distFirstAt = stream.events.length
     const distCpuBefore = await child.ask('metrics')
     const distStartAt = performance.now()
@@ -520,6 +619,55 @@ export async function runScaleLive(options = {}) {
     row('burst dist/, tree events naming it', distEvents.length, LIVE_BUDGET.ignoredEvents, `${settings.burst} files over ${Math.round(settings.burstMs)} ms`)
     row('burst dist/, bridge CPU share', distShare, LIVE_BUDGET.cpuShare, `${distCpuMs.toFixed(0)} ms over ${Math.round(distWallMs)} ms`)
 
+    cleanBurstFolders(dir)
+    await sleep(1200)
+    const trackedFiles = build.scale.files.slice(0, 1000)
+    await eachLimit(trackedFiles, 16, (file) => appendFile(join(dir, file), 'scale\n'))
+    const trackedGit = await httpGet(port, '/api/git')
+    if (trackedGit.status !== 200) throw new Error(`GET /api/git after the tracked change answered ${trackedGit.status}.`)
+    const trackedGitState = JSON.parse(trackedGit.bytes.toString('utf8'))
+    row('GET /api/git, 1000 tracked files changed', trackedGit.ms, LIVE_BUDGET.gitTracked, `${trackedFiles.length} files, ${trackedGitState.changeCount} changes`)
+    for (let at = 0; at < trackedFiles.length; at += 200) {
+      git(dir, ['checkout', '--', ...trackedFiles.slice(at, at + 200)])
+    }
+    const trackedRestored = git(dir, ['status', '--porcelain', '--untracked-files=no']).stdout.trim() === ''
+
+    removeScaleWorktree(dir, worktreePath)
+    const worktreeAt = performance.now()
+    const made = prepareWorktree(dir, REVIEW_LANE)
+    const worktreeMs = performance.now() - worktreeAt
+    const addSize = folderSize(made.path)
+    row('worktree add', worktreeMs, LIVE_BUDGET.worktreeAdd, `${(addSize.bytes / 1024 / 1024).toFixed(1)} MB in ${addSize.files} files`)
+
+    const reuseAt = performance.now()
+    const reused = prepareWorktree(dir, REVIEW_LANE)
+    row('worktree reuse', performance.now() - reuseAt, LIVE_BUDGET.worktreeReuse, reused.made ? 'made' : 'reused')
+
+    git(worktreePath, ['switch', '-c', REVIEW_BRANCH])
+    await appendFile(join(worktreePath, build.scale.files[0]), 'p19 review\n')
+    git(worktreePath, ['add', '--', build.scale.files[0]])
+    git(worktreePath, ['commit', '--quiet', '--no-verify', '-m', 'p19 review commit'])
+
+    const reviews = await httpGet(port, '/api/control/reviews')
+    if (reviews.status !== 200) throw new Error(`GET /api/control/reviews answered ${reviews.status}.`)
+    const reviewsBody = JSON.parse(reviews.bytes.toString('utf8'))
+    const lane = Array.isArray(reviewsBody.lanes) ? reviewsBody.lanes.find((entry) => entry.lane === REVIEW_LANE) : null
+    if (!lane) throw new Error(`GET /api/control/reviews did not list the ${REVIEW_LANE} lane.`)
+    row('GET /api/control/reviews, one lane ahead', reviews.ms, LIVE_BUDGET.reviews, `${lane.ahead} ahead, ${lane.files} files`)
+
+    const diff = await httpGet(port, `/api/control/reviews/${REVIEW_LANE}/diff`)
+    if (diff.status !== 200) throw new Error(`GET /api/control/reviews/${REVIEW_LANE}/diff answered ${diff.status}.`)
+    const diffBody = JSON.parse(diff.bytes.toString('utf8'))
+    row(`GET /api/control/reviews/${REVIEW_LANE}/diff`, diff.ms, LIVE_BUDGET.reviewDiff, `${diffBody.files} files, ${diffBody.patch.length} bytes`)
+
+    removeScaleWorktree(dir, worktreePath)
+    if (child) {
+      await child.stop()
+      child = null
+    }
+    const plainFolder = await readPlainFolder(dir)
+    row('plain folder read', plainFolder.ms, LIVE_BUDGET.plainRead, `${plainFolder.files.length} files`)
+
     const allPaths = new Set()
     for (const entry of stream.events) for (const path of entry.paths) allPaths.add(path)
     result = {
@@ -543,15 +691,31 @@ export async function runScaleLive(options = {}) {
         lastFileMs: lastEvent.at - lastWriteAt,
         distEvents: distEvents.length,
         distShare,
+        doctorLine: doctorLine.text,
+        doctorOk: doctorLine.ok,
+        gitCleanChanges: cleanGitState.changeCount,
+        gitUntrackedChanges: untrackedGitState.changeCount,
+        gitTrackedChanges: trackedGitState.changeCount,
+        trackedRestored,
+        worktreeBytes: addSize.bytes,
+        worktreeFiles: addSize.files,
+        reviewsAhead: lane.ahead,
+        reviewsFiles: lane.files,
+        diffBytes: diffBody.patch.length,
+        plainReadFiles: plainFolder.files.length,
+        plainReadMs: plainFolder.ms,
       },
     }
   } finally {
     if (stream) stream.close()
     if (child) await child.stop()
+    restoreGitFolder(dir)
     if (existsSync(dir)) {
+      removeScaleWorktree(dir, worktreePath)
       cleanBurstFolders(dir)
       if (!settings.keep) rmSync(dir, { recursive: true, force: true, maxRetries: 5 })
     }
+    rmSync(gitFolderAway(dir), { recursive: true, force: true, maxRetries: 3 })
   }
   return result
 }
