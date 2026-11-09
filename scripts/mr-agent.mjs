@@ -135,18 +135,20 @@ const PLAN_TOOL_NAMES = new Set(['read_file', 'list_dir', 'search', 'web_search'
 const EDIT_TOOL_NAMES = new Set([...PLAN_TOOL_NAMES, 'write_file', 'edit_file'])
 const AUTO_SHELL_PROBLEM = 'Auto mode does not run this command.'
 const AUTO_FORBIDDEN = [
-  /\brm\s+(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b/i,
+  /\brm\b[^\n;&|]*\s(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)\b/i,
   /\bRemove-Item\b[^\n;&|]*-Recurse\b/i,
   /\bdel(?:ete)?\s+[^\n;&|]*\/s\b/i,
   /\brmdir\s+[^\n;&|]*\/s\b/i,
-  /\bgit\s+push\b/i,
-  /\bgit\s+reset\s+--hard\b/i,
-  /\bgit\s+clean\b/i,
-  /\bgit\s+checkout\s+--/i,
-  /\bgit\s+branch\s+-[dD]\b/,
-  /(?:^|[;&|]\s*)(?:\S*[\\/])?format(?:\.com)?\b/i,
-  /(?:^|[;&|]\s*)shutdown(?:\.exe)?\b/i,
-  /(?:^|[;&|]\s*)mkfs(?:\.\w+)?\b/i,
+  /\brd\s+[^\n;&|]*\/s\b/i,
+  /\berase\s+[^\n;&|]*\/s\b/i,
+  /\bgit\b[^\n;&|]*\bpush\b/i,
+  /\bgit\b[^\n;&|]*\breset\b[^\n;&|]*--hard\b/i,
+  /\bgit\b[^\n;&|]*\bclean\b/i,
+  /\bgit\b[^\n;&|]*\bcheckout\b[^\n;&|]*--/i,
+  /\bgit\b[^\n;&|]*\bbranch\b[^\n;&|]*-[dD]\b/i,
+  /(?:^|[;&|]\s*|["'`]|(?:-c|\/[ck])\s+)(?:\S*[\\/])?format(?:\.com)?\b/i,
+  /(?:^|[;&|]\s*|["'`]|(?:-c|\/[ck])\s+)(?:\S*[\\/])?shutdown(?:\.exe)?\b/i,
+  /(?:^|[;&|]\s*|["'`]|(?:-c|\/[ck])\s+)(?:\S*[\\/])?mkfs(?:\.\w+)?\b/i,
 ]
 
 function permissionModeFrom(env) {
