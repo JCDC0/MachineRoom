@@ -1848,3 +1848,11 @@ Files: server/orchestrators.js, server/orchestrator.js, scripts/mr-approve.mjs, 
 Keep the fonts, weights and colours of the house rules: no bold, no new colour. Add a test for each step. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
 
 Files: src/ui/OrchestratorChat.jsx, src/ui/orchestratorChat.js, src/ui/Transport.jsx, src/styles.css, tests/.
+
+**Q44. The review of U166, U167, S47 and S48, the permission modes batch (OpenCode).** Read no part of TASKS.md beyond this brief and the U166, S47, S48 and U167 briefs it reviews. Read narrowly: the diffs, then only the functions they touch, and no subagents. Change no code.
+
+Review `git diff 2eb9c4e4^1 2eb9c4e4` (U166), `git diff e1082c3e^1 e1082c3e` (U167), `git diff 93f8e52d^1 93f8e52d` with `git show fdc86e1a` (S47 and its fix at merge) and `git diff e530fe98^1 e530fe98` with `git show 819fe0dd` (S48 and its fix at merge). For each, say whether it does what its brief says and name any new fault with `file:line` and a concrete failing case. Look hard at these: a mode that lets an orchestrator write or run a command it should not (Plan on each harness, Edits on OpenCode and the native agent, an Auto command that slips past `AUTO_FORBIDDEN` by spacing, case, a flag order or another shell); an approval asked for or answered by the wrong orchestrator or with no token; an approval left waiting after Stop, the turn's end, a harness change or a bridge restart; the mode a chat file gets when it is new, when it has no `mode` and after a harness change to one that lists no modes; the MCP config of an Ask turn when MCP servers are also enabled, and whether it is removed; the approval cards and the mode picker on a sub's tab and on the Team tab; and a team apply in U166 whose sub had a lane the owner hid.
+
+Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-8.md`: a table of at most 10 findings, most severe first, then a line per merge saying sound or not, then at most two proposed briefs. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 35.
+
+Files: docs/agents/AUDIT-2026-11-REVIEW-8.md.
