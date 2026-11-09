@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An OpenCode lane hunted the page's start on a big project in AUDIT-2026-11-LIGHT-START.md: at 200,000 files the steps before the first card plan take about 1.2 seconds and keep about 81 MB, with the tree build, the folder index and the pipeline's indexes the largest; one finding was corrected (task P21).
 - The native agent refuses a tool its permission mode does not offer, whatever the model asks for, and Auto's guard also catches split rm flags, rd and erase, git options before or among its words, and shutdown, format and mkfs inside a quoted or -c command (U168).
 - The transport's orchestrator state reads waiting for you while any sub orchestrator holds an approval, and that sub's chip title says so (U169).
 - An OpenCode lane reviewed U166, U167, S47 and S48 in AUDIT-2026-11-REVIEW-8.md; all three findings held and became U168 and U169 (task Q44).
