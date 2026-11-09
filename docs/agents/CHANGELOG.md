@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- npm run scale-live also times the doctor's read, the git state clean and dirty, a lane worktree made and reused, the reviews list and a lane diff, and a read of the folder without its .git, prints the free space and each row as it goes, and ran at 40,000, 200,000 and 500,000 files: a worktree takes 54 to 245 seconds to make, and the bridge holds 422 MB at 500,000 files (task P19).
 - An OpenCode lane hunted the bridge on a 200,000 file project in AUDIT-2026-11-LIGHT-BRIDGE.md: the project is listed three times before a page draws, every watcher event lists it again, four full file lists stay in memory (about 90 MB), and the idle bridge rescans the runs folder five times a second (task P20).
 - An OpenCode lane hunted heavy folders in AUDIT-2026-11-LIGHT-FOLDERS.md: a folder of 50,000 files is drawn even at the lowest depth, builds every item on each plan and costs 15 to 50 ms a touch, a bulk name does not keep its list out, and a cap of 2,000 items keeps a touch under 2 ms (task P22).
 - An OpenCode lane hunted the page's start on a big project in AUDIT-2026-11-LIGHT-START.md: at 200,000 files the steps before the first card plan take about 1.2 seconds and keep about 81 MB, with the tree build, the folder index and the pipeline's indexes the largest; one finding was corrected (task P21).
