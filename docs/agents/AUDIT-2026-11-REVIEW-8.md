@@ -28,3 +28,14 @@ Files: `scripts/mr-agent.mjs`, `tests/mr-agent.test.js`.
 U169. Show a sub orchestrator's waiting approval in the transport.
 1. In `src/ui/Transport.jsx:134`, set `waiting` when the main or any entry in the `orchestrators` context has a non-empty `approvals` array, and give a sub chip with approvals a waiting tone in `src/ui/transportOrchestrators.js`. Add a test with the main idle and a sub holding an approval that the transport state reads `waiting for you`.
 Files: `src/ui/Transport.jsx`, `src/ui/transportOrchestrators.js`, `tests/transport-orchestrators.test.js`.
+
+## The orchestrator's corrections
+
+The orchestrator read each finding back against the code on 2026-11-09.
+
+- Finding 1 holds. `runTool` in `scripts/mr-agent.mjs` dispatches any tool name the model returns, so Plan and Edits on the native agent hold only while the model calls the tools it was offered. A model that names a tool it was not given writes or runs anyway. Brief U168.
+- Finding 2 holds for each case it names: `rm -f -r` splits the flag, the branch pattern has no `i`, `git -C . push` and `git reset HEAD --hard` put an argument between the words, `rd` is not listed, and the start anchor of `shutdown`, `format` and `mkfs` does not see a command inside `bash -c "..."`. A deny list will never be complete, and Auto stays a guard on common risky commands, not a sandbox; U168 widens the patterns rather than adding a shell parser.
+- Finding 3 holds. While a sub orchestrator waits on an approval, the transport shows the main's state word and the sub chip keeps its yellow working dot, so only the sub's open tab shows the card. Brief U169.
+- The test title at `tests/approvals.test.js:211` still says ten minutes; U168 renames it.
+
+U166 and S48 are sound. U167 and S47 are sound but for findings 1 to 3, which U168 and U169 fix.

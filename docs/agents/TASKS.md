@@ -1856,3 +1856,22 @@ Review `git diff 2eb9c4e4^1 2eb9c4e4` (U166), `git diff e1082c3e^1 e1082c3e` (U1
 Report only what you can name a file, a line and a concrete failing case for, and read each one back against the code first. Saying a merge is sound is a good result. Write `docs/agents/AUDIT-2026-11-REVIEW-8.md`: a table of at most 10 findings, most severe first, then a line per merge saying sound or not, then at most two proposed briefs. Leave ARCHITECTURE and the changelog alone. No full test suite. Commit the file by minute 35.
 
 Files: docs/agents/AUDIT-2026-11-REVIEW-8.md.
+
+**U168. The native agent keeps to its mode at the tool call, and Auto's guard catches more forms (OpenCode).** Read no part of TASKS.md beyond this brief and findings 1 and 2 and the orchestrator's corrections in `docs/agents/AUDIT-2026-11-REVIEW-8.md`. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 35. Do not edit any file under `docs/`.
+
+1. `runTool` in `scripts/mr-agent.mjs` refuses, before it asks for an approval or dispatches, a tool name that `toolsForMode(PERMISSION_MODE)` does not offer, with the error `The NAME tool is not allowed in MODE mode.`, so a Plan run never writes and an Edits run never runs a command or an MCP tool, whatever the model asks for.
+2. `AUTO_FORBIDDEN` also refuses: `rm` with an `r` in any flag group of the same command (`rm -f -r build`, `rm -fR x`); `rd` and `erase` beside `rmdir` and `del`; a git command whose own options sit before or among its words (`git -C . push`, `git reset HEAD --hard`, `GIT branch -D old`), by matching `git` and then the word within the same command, case insensitive; and `shutdown`, `format` and `mkfs` after a quote or a `-c`, `/c` or `/k` as well as at the start of a command. Refusing a harmless command now and then is fine; missing a listed one is not.
+3. Rename the test at `tests/approvals.test.js:211` so it says four minutes, not ten.
+
+Add a test for step 1 with a fake endpoint that names `write_file` in Plan and `run_shell` in Edits and checks the file is not written and the command does not run, and one test per case in step 2, plus two plain commands (`git log --oneline`, `rm notes.txt`) that still run. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: scripts/mr-agent.mjs, tests/mr-agent.test.js, tests/approvals.test.js.
+
+**U169. A sub orchestrator's waiting approval shows in the transport (OpenCode).** Read no part of TASKS.md beyond this brief and finding 3 and the orchestrator's corrections in `docs/agents/AUDIT-2026-11-REVIEW-8.md`. Use no subagents. Commit each step as you finish it, and stop starting new work at minute 25. Do not edit any file under `docs/`.
+
+1. In `src/ui/Transport.jsx` the orchestrator state word reads `waiting for you` when the main or any sub in the orchestrators list has a non-empty `approvals` list.
+2. `orchestratorChips` in `src/ui/transportOrchestrators.js` marks a sub with a waiting approval with `waiting: true`, and its chip's title ends with `, waiting for you`. Keep its dot and colours as they are. A click opens that sub's tab as now.
+
+Add a test for each step: the main idle and a sub holding an approval reads `waiting for you`, and that sub's chip carries `waiting` and the title. Run `npx vitest related --run` on every file you changed and `npm run build`; both must pass.
+
+Files: src/ui/Transport.jsx, src/ui/transportOrchestrators.js, tests/.
