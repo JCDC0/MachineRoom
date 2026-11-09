@@ -341,6 +341,12 @@ export function createClient({
       return request('POST', '/api/orchestrator/mode', body)
     },
 
+    answerApproval: ({ id, approvalId, allow, confirmed = true } = {}) => {
+      const body = { allow, confirmed }
+      if (id !== undefined && id !== null && id !== '') body.id = id
+      return request('POST', `/api/orchestrator/approvals/${encodeURIComponent(approvalId ?? '')}`, body)
+    },
+
     orchestratorSessions: ({ id } = {}) => {
       const query = id !== undefined && id !== null && id !== '' ? `?id=${encodeURIComponent(id)}` : ''
       return request('GET', `/api/orchestrator/sessions${query}`)

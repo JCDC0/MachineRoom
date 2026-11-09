@@ -88,6 +88,37 @@ function startFakeApi(handler) {
   })
 }
 
+function startApprovalBridge(handler) {
+  const requests = []
+  const server = createServer((req, res) => {
+    let body = ''
+    req.on('data', (chunk) => {
+      body += chunk
+    })
+    req.on('end', async () => {
+      const parsed = body === '' ? null : JSON.parse(body)
+      requests.push({ method: req.method, url: req.url, headers: req.headers, body: parsed })
+      const answer = await handler(parsed)
+      const text = JSON.stringify(answer)
+      res.writeHead(200, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(text) })
+      res.end(text)
+    })
+  })
+  cleanups.push(
+    () =>
+      new Promise((done) => {
+        server.close(() => done())
+        server.closeAllConnections?.()
+      }),
+  )
+  return new Promise((done) => {
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      done({ url: `http://127.0.0.1:${address.port}`, requests })
+    })
+  })
+}
+
 function runAgent({ folder, api = null, env = {}, model = 'test/model', endpoint = '', prompt = 'Do the task.', seconds = 40 }) {
   return new Promise((done, fail) => {
     const childEnv = { ...baseEnvironment(), ...env }
@@ -225,6 +256,7 @@ describe('mr-agent', () => {
     const cases = [
       ['plan', ['read_file', 'list_dir', 'search', 'web_search', 'web_fetch', 'mcp_list_tools']],
       ['edits', ['read_file', 'write_file', 'edit_file', 'list_dir', 'search', 'web_search', 'web_fetch', 'mcp_list_tools']],
+      ['ask', null],
       ['auto', null],
       ['bypass', null],
     ]
@@ -236,6 +268,61 @@ describe('mr-agent', () => {
       if (names) expect(offered, mode).toEqual(names)
       else expect(offered, mode).toHaveLength(10)
     }
+  })
+
+  it('asks the bridge before a write in ask mode and allows it', async () => {
+    const folder = tempDir()
+    const bridge = await startApprovalBridge(() => ({ allow: true }))
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({ calls: [{ name: 'write_file', arguments: { path: 'a.txt', content: 'made\n' } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MACHINEROOM_PERMISSION_MODE: 'ask',
+        MACHINEROOM_BRIDGE: bridge.url,
+        MACHINEROOM_ORCHESTRATOR_ID: 'orchestrator',
+        MACHINEROOM_ORCHESTRATOR_TOKEN: 'test-token',
+      },
+    })
+    expect(result.code).toBe(0)
+    expect(readFileSync(join(folder, 'a.txt'), 'utf8')).toBe('made\n')
+    expect(api.calls[0].body.tools).toHaveLength(10)
+    expect(bridge.requests).toHaveLength(1)
+    expect(bridge.requests[0].body).toEqual({
+      id: 'orchestrator',
+      tool: 'write_file',
+      input: { path: 'a.txt', content: 'made\n' },
+    })
+    expect(bridge.requests[0].headers['x-machineroom-orchestrator']).toBe('test-token')
+  })
+
+  it('returns a denied write as a tool error with the owner message', async () => {
+    const folder = tempDir()
+    const bridge = await startApprovalBridge(() => ({ allow: false, message: 'The owner denied it.' }))
+    const api = await startFakeApi((_body, index) =>
+      index === 0
+        ? chatAnswer({ calls: [{ name: 'write_file', arguments: { path: 'a.txt', content: 'made\n' } }] })
+        : chatAnswer({ text: 'Done.' }),
+    )
+    const result = await runAgent({
+      folder,
+      api,
+      env: {
+        MACHINEROOM_PERMISSION_MODE: 'ask',
+        MACHINEROOM_BRIDGE: bridge.url,
+        MACHINEROOM_ORCHESTRATOR_ID: 'orchestrator',
+        MACHINEROOM_ORCHESTRATOR_TOKEN: 'test-token',
+      },
+    })
+    expect(result.code).toBe(0)
+    expect(existsSync(join(folder, 'a.txt'))).toBe(false)
+    const users = jsonLines(result.stdout).filter((line) => line.type === 'user')
+    expect(users).toHaveLength(1)
+    expect(users[0].message.content[0]).toMatchObject({ is_error: true, content: 'The owner denied it.' })
   })
 
   it('refuses risky shell commands in auto mode and runs the rest', async () => {

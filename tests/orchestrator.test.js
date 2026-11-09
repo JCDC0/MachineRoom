@@ -30,6 +30,7 @@ import {
   ORCHESTRATOR_ROOM_WINDOW_MS,
   SESSION_PENDING_PROBLEM,
   AUTOCOMPACT_PROBLEM,
+  APPROVAL_PROMPT_TOOL,
   COMPACT_KEEP_PROBLEM,
   COMPACT_RUNNING_PROBLEM,
   CONFIRM_AUTOCOMPACT_PROBLEM,
@@ -728,6 +729,46 @@ describe('the orchestrator permission modes', () => {
     turns += 1
     await waitIdle(rig, turns)
     expect(rig.spawned[turns - 1].env.MACHINEROOM_PERMISSION_MODE).toBe('plan')
+  })
+
+  it('runs Claude in ask with the permission prompt tool and the approve server', async () => {
+    const rig = makeRig()
+    writeFileSync(join(rig.runs, 'mcp.json'), JSON.stringify({
+      servers: [{ name: 'browser', transport: 'http', url: 'https://example.com/mcp', enabled: true }],
+    }))
+    expect(rig.orchestrator.setMode({ mode: 'ask', confirmed: true }).status).toBe(200)
+
+    rig.send('Ask turn')
+    await waitIdle(rig, 1)
+
+    const args = rig.calls()[0].args
+    expect(valueAfter(args, '--permission-mode')).toBe('manual')
+    expect(valueAfter(args, '--permission-prompt-tool')).toBe(APPROVAL_PROMPT_TOOL)
+    expect(args).not.toContain('--dangerously-skip-permissions')
+
+    const config = JSON.parse(rig.spawned[0].mcpContentDuringTurn)
+    expect(Object.keys(config.mcpServers).sort()).toEqual(['browser', 'machineroom-approve'])
+    const server = config.mcpServers['machineroom-approve']
+    expect(server.command).toBe(process.execPath)
+    expect(server.args[0]).toMatch(/scripts[\\/]mr-approve\.mjs$/)
+    expect(server.env.MACHINEROOM_BRIDGE).toBe('http://127.0.0.1:5999')
+    expect(server.env.MACHINEROOM_ORCHESTRATOR_ID).toBe('orchestrator')
+    expect(typeof server.env.MACHINEROOM_ORCHESTRATOR_TOKEN).toBe('string')
+    expect(server.env.MACHINEROOM_ORCHESTRATOR_TOKEN.length).toBeGreaterThan(20)
+  })
+
+  it('passes the approval bridge env to the MachineRoom harness in ask mode', async () => {
+    const rig = makeRig({ harness: 'machineroom', lanes: MACHINEROOM_LANES })
+    expect(rig.orchestrator.setMode({ mode: 'ask', confirmed: true }).status).toBe(200)
+
+    rig.send('Ask turn')
+    await waitIdle(rig, 1)
+
+    const env = rig.spawned[0].env
+    expect(env.MACHINEROOM_PERMISSION_MODE).toBe('ask')
+    expect(env.MACHINEROOM_BRIDGE).toBe('http://127.0.0.1:5999')
+    expect(env.MACHINEROOM_ORCHESTRATOR_ID).toBe('orchestrator')
+    expect(env.MACHINEROOM_ORCHESTRATOR_TOKEN.length).toBeGreaterThan(20)
   })
 })
 

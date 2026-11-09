@@ -1,4 +1,4 @@
-export const ASK_READY = false
+export const ASK_READY = true
 
 export const MODES = [
   { id: 'plan', label: 'Plan', line: 'Reads and plans. Makes no edits and runs no commands.' },

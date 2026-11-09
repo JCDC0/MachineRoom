@@ -37,13 +37,20 @@ export const machineroomHarness = {
   name: 'MachineRoom',
   adapterType: 'machineroom_local',
   createParser: createClaudeParser,
-  command({ cli, prompt = '', folder, mode } = {}) {
+  command({ cli, prompt = '', folder, mode, bridgeUrl, orchestratorId, token } = {}) {
     const cwd = typeof folder === 'string' && folder !== '' ? folder : '.'
+    const env = {}
+    if (typeof mode === 'string' && mode !== '') env.MACHINEROOM_PERMISSION_MODE = mode
+    if (mode === 'ask') {
+      if (typeof bridgeUrl === 'string' && bridgeUrl !== '') env.MACHINEROOM_BRIDGE = bridgeUrl
+      if (typeof orchestratorId === 'string' && orchestratorId !== '') env.MACHINEROOM_ORCHESTRATOR_ID = orchestratorId
+      if (typeof token === 'string' && token !== '') env.MACHINEROOM_ORCHESTRATOR_TOKEN = token
+    }
     return {
       file: nodeFile(),
       args: [scriptFile(), '--model', String(cli?.model ?? ''), '--cwd', cwd, String(prompt)],
       cwd,
-      ...(typeof mode === 'string' && mode !== '' ? { env: { MACHINEROOM_PERMISSION_MODE: mode } } : {}),
+      ...(Object.keys(env).length > 0 ? { env } : {}),
     }
   },
   readLine() {

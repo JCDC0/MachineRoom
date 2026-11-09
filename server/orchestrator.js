@@ -65,6 +65,12 @@ export const AUTOCOMPACT_PERCENT_PROBLEM = 'Percent must be a number above 0 and
 export const AUTOCOMPACT_TOKENS_PROBLEM = 'Tokens must be a whole number from 1000 to 10000000.'
 export const AUTOCOMPACT_RULES_PROBLEM = 'Compact rules must be at most 2000 characters.'
 export const COMPACT_RUNNING_PROBLEM = 'A turn is already running.'
+export const APPROVAL_TIMEOUT_MS = 10 * 60 * 1000
+export const APPROVAL_LIMIT = 20
+export const APPROVAL_NO_ANSWER = 'The owner did not answer.'
+export const APPROVAL_DENIED = 'The owner denied it.'
+export const APPROVAL_SERVER = 'machineroom-approve'
+export const APPROVAL_PROMPT_TOOL = 'mcp__machineroom-approve__approve'
 export const NO_SESSION_PROBLEM = 'The orchestrator has no session yet.'
 export const COMPACT_KEEP_LIMIT = 2000
 export const COMPACT_KEEP_PROBLEM = 'Write at most 2000 characters to keep.'
@@ -739,6 +745,7 @@ export function createOrchestrator({
   rename = renameSync,
   siblings: siblingsOption = [],
   recordsCache: recordsCacheOption = null,
+  approvalTimeoutMs = APPROVAL_TIMEOUT_MS,
 } = {}) {
   const token = typeof tokenOption === 'string' && tokenOption ? tokenOption : randomBytes(24).toString('base64url')
   const root = projectRoot ? resolve(projectRoot) : ''
@@ -793,6 +800,7 @@ export function createOrchestrator({
   let persistError = null
   let siblings = Array.isArray(siblingsOption) ? [...siblingsOption] : []
   const completedRuns = new Map()
+  const approvals = new Map()
 
   function subExists(id) {
     if (!id || id === ORCHESTRATOR_KEY) return false
@@ -1144,6 +1152,56 @@ export function createOrchestrator({
     return messages.some((message) => message.from === 'owner' || (key !== ORCHESTRATOR_KEY && message.from === ORCHESTRATOR_KEY))
   }
 
+  function approvalList() {
+    return [...approvals.values()].map((entry) => ({
+      approvalId: entry.approvalId,
+      tool: entry.tool,
+      input: entry.input,
+      at: entry.at,
+    }))
+  }
+
+  function finishApproval(entry, answer) {
+    if (!approvals.has(entry.approvalId)) return false
+    approvals.delete(entry.approvalId)
+    if (entry.timer) clearTimeout(entry.timer)
+    entry.resolve(answer)
+    if (!stopped) notify()
+    return true
+  }
+
+  function requestApproval({ tool, input } = {}) {
+    if (stopped) return Promise.resolve({ allow: false, message: APPROVAL_NO_ANSWER })
+    if (approvals.size >= APPROVAL_LIMIT) return null
+    const approvalId = randomUUID()
+    let resolve
+    const waiting = new Promise((done) => {
+      resolve = done
+    })
+    const entry = { approvalId, tool, input, at: iso(now()), resolve, timer: null }
+    entry.timer = setTimeout(() => {
+      finishApproval(entry, { allow: false, message: APPROVAL_NO_ANSWER })
+    }, approvalTimeoutMs)
+    entry.timer.unref?.()
+    approvals.set(approvalId, entry)
+    notify()
+    return waiting
+  }
+
+  function answerApproval({ approvalId, allow } = {}) {
+    const entry = approvals.get(approvalId)
+    if (!entry) return null
+    const answered = allow === true ? { allow: true } : { allow: false, message: APPROVAL_DENIED }
+    finishApproval(entry, answered)
+    return { ok: true, approvalId, allow: answered.allow }
+  }
+
+  function denyApprovals(message = APPROVAL_NO_ANSWER) {
+    for (const entry of [...approvals.values()]) {
+      finishApproval(entry, { allow: false, message })
+    }
+  }
+
   function slashCommands() {
     return scanSlashCommands({ harness, projectRoot: root, home })
   }
@@ -1198,7 +1256,9 @@ export function createOrchestrator({
     const metaPath = join(folder, `${logName}.meta.json`)
     const enabledServers = enabledMcpServersFor(folder)
     const turnMode = mode ?? legacyMode(harness)
-    const needsMcp = enabledServers.length > 0 && (harness === 'claude' || harness === 'opencode')
+    const bridgeAddress = String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? '')
+    const ask = turnMode === 'ask' && harness === 'claude'
+    const needsMcp = (enabledServers.length > 0 || ask) && (harness === 'claude' || harness === 'opencode')
     const needsOpencodeConfig = harness === 'opencode' && (needsMcp || turnMode === 'edits' || turnMode === 'plan')
     const mcpConfigPath = needsMcp || needsOpencodeConfig ? join(folder, `${logName}.mcp.json`) : ''
     let mcpEnv = null
@@ -1211,7 +1271,19 @@ export function createOrchestrator({
       writeFileSync(metaPath, `${JSON.stringify({ project: root, sessionId })}\n`)
       if (mcpConfigPath) {
         if (harness === 'claude') {
-          writeFileSync(mcpConfigPath, `${JSON.stringify(mcpConfigForClaude(enabledServers), null, 2)}\n`, { mode: 0o600 })
+          const config = mcpConfigForClaude(enabledServers)
+          if (ask) {
+            config.mcpServers[APPROVAL_SERVER] = {
+              command: process.execPath,
+              args: [join(REPO_ROOT, 'scripts', 'mr-approve.mjs')],
+              env: {
+                MACHINEROOM_BRIDGE: bridgeAddress,
+                MACHINEROOM_ORCHESTRATOR_ID: key,
+                MACHINEROOM_ORCHESTRATOR_TOKEN: token,
+              },
+            }
+          }
+          writeFileSync(mcpConfigPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 })
         } else if (harness === 'opencode') {
           const config = needsMcp ? mcpConfigForOpencode(enabledServers) : {}
           if (turnMode === 'edits') config.permission = { bash: 'deny' }
@@ -1236,7 +1308,7 @@ export function createOrchestrator({
       promptFile,
       root,
       folder,
-      String((typeof bridgeUrl === 'function' ? bridgeUrl() : bridgeUrl) ?? ''),
+      bridgeAddress,
       token,
       scratchFolder
     )
@@ -1269,6 +1341,7 @@ export function createOrchestrator({
       if (turnMode === 'plan') args.push('--permission-mode', 'plan')
       else if (turnMode === 'edits') args.push('--permission-mode', 'acceptEdits')
       else if (turnMode === 'auto') args.push('--permission-mode', 'auto')
+      else if (turnMode === 'ask') args.push('--permission-mode', 'manual', '--permission-prompt-tool', APPROVAL_PROMPT_TOOL)
       else args.push('--dangerously-skip-permissions')
       args.push(first ? '--session-id' : '--resume', sessionId, '--append-system-prompt', instruction)
       if (mcpConfigPath) args.push('--mcp-config', mcpConfigPath)
@@ -1311,6 +1384,9 @@ export function createOrchestrator({
         title: logName,
         mcpConfig: mcpConfigPath,
         mode: turnMode,
+        bridgeUrl: bridgeAddress,
+        orchestratorId: key,
+        token,
       })
       program = cmd.file
       args = cmd.args
@@ -1366,6 +1442,7 @@ export function createOrchestrator({
   function completeTurn(turn, code, error) {
     if (turn.done) return
     turn.done = true
+    denyApprovals(APPROVAL_NO_ANSWER)
     if (turn.timer) clearTimeout(turn.timer)
     if (turn.mcpConfigPath) {
       try {
@@ -1499,6 +1576,7 @@ export function createOrchestrator({
       effort: effort ?? null,
       mode: mode ?? legacyMode(harness),
       modes: modesFor(harness),
+      approvals: approvalList(),
       saveError: persistError,
       messages: messages.map((message) => ({ ...message })),
     }
@@ -1535,6 +1613,7 @@ export function createOrchestrator({
   function stop(body) {
     if (body?.confirmed !== true) return { status: 400, body: { error: CONFIRM_STOP_PROBLEM } }
     if (!root) return { status: 409, body: { error: NO_PROJECT_PROBLEM } }
+    denyApprovals(APPROVAL_NO_ANSWER)
     if (running && !running.done) {
       if (!running.exited) {
         running.killed = true
@@ -1981,6 +2060,7 @@ export function createOrchestrator({
 
   function close(options = {}) {
     stopped = true
+    denyApprovals(APPROVAL_NO_ANSWER)
     if (options?.removed === true) state = 'idle'
     if (roomTimer) {
       clearTimeout(roomTimer)
@@ -2017,6 +2097,8 @@ export function createOrchestrator({
     setEffort,
     setHarness,
     setMode,
+    requestApproval,
+    answerApproval,
     listSessions,
     currentSessionInfo,
     getSession,

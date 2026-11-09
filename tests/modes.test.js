@@ -9,9 +9,9 @@ describe('permission modes', () => {
   })
 
   it('offers each harness only the modes its flags support', () => {
-    expect(ASK_READY).toBe(false)
-    expect(modesFor('claude').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
-    expect(modesFor('machineroom').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
+    expect(ASK_READY).toBe(true)
+    expect(modesFor('claude').map((mode) => mode.id)).toEqual(['plan', 'ask', 'edits', 'auto', 'bypass'])
+    expect(modesFor('machineroom').map((mode) => mode.id)).toEqual(['plan', 'ask', 'edits', 'auto', 'bypass'])
     expect(modesFor('opencode').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto'])
     expect(modesFor('agy').map((mode) => mode.id)).toEqual(['plan', 'edits', 'auto', 'bypass'])
     expect(modesFor('hermes')).toEqual([])
