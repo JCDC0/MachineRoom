@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The native agent refuses a tool its permission mode does not offer, whatever the model asks for, and Auto's guard also catches split rm flags, rd and erase, git options before or among its words, and shutdown, format and mkfs inside a quoted or -c command (U168).
 - The transport's orchestrator state reads waiting for you while any sub orchestrator holds an approval, and that sub's chip title says so (U169).
 - An OpenCode lane reviewed U166, U167, S47 and S48 in AUDIT-2026-11-REVIEW-8.md; all three findings held and became U168 and U169 (task Q44).
 - S48: Ask mode. Claude Code asks the owner through the mr-approve MCP prompt tool, the native agent asks before a write or command, and the bridge holds each approval until Allow, Deny, Stop, the turn's end or 4 minutes. The guide now describes the permission modes.
