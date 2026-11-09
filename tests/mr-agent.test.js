@@ -403,7 +403,9 @@ describe('mr-agent', () => {
       'git reset HEAD --hard',
       'GIT branch -D old',
       'bash -c "shutdown -h now"',
+      'bash -c shutdown -h now',
       'cmd /c format C:',
+      'cmd /k format C:',
       'bash -c "mkfs.ext4 /dev/sda"',
     ]
     const api = await startFakeApi((_body, index) =>
