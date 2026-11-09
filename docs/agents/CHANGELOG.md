@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- An OpenCode lane hunted heavy folders in AUDIT-2026-11-LIGHT-FOLDERS.md: a folder of 50,000 files is drawn even at the lowest depth, builds every item on each plan and costs 15 to 50 ms a touch, a bulk name does not keep its list out, and a cap of 2,000 items keeps a touch under 2 ms (task P22).
 - An OpenCode lane hunted the page's start on a big project in AUDIT-2026-11-LIGHT-START.md: at 200,000 files the steps before the first card plan take about 1.2 seconds and keep about 81 MB, with the tree build, the folder index and the pipeline's indexes the largest; one finding was corrected (task P21).
 - The native agent refuses a tool its permission mode does not offer, whatever the model asks for, and Auto's guard also catches split rm flags, rd and erase, git options before or among its words, and shutdown, format and mkfs inside a quoted or -c command (U168).
 - The transport's orchestrator state reads waiting for you while any sub orchestrator holds an approval, and that sub's chip title says so (U169).

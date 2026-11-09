@@ -34,6 +34,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-ORCHESTRATOR.md`: history. The November 2026 hunt of the orchestrator's turns, wakes and ladder.
 - `AUDIT-2026-11-GROWTH.md`: history. The November 2026 hunt of what grows without a bound in a day-long live room.
 - `AUDIT-2026-11-LIGHT-START.md`: history. The November 2026 hunt of the page's start and memory on a 200,000 file project, with three proposed briefs.
+- `AUDIT-2026-11-LIGHT-FOLDERS.md`: history. The November 2026 hunt of folders that hold tens of thousands of items, at the lowest folder depth and under a touch, with three proposed briefs.
 - `AUDIT-2026-11-FIRSTRUN.md`: history. The November 2026 hunt of a first run on a new project, with features.
 - `AUDIT-2026-11-FRAME.md`: history. The November 2026 audit of the frame cost of music, bloom and light trails.
 - `AUDIT-2026-11-PANELS.md`: history. The November 2026 hunt of the page's panels.
