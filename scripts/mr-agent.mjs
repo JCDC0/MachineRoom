@@ -162,6 +162,10 @@ function toolsForMode(mode) {
   return TOOLS
 }
 
+const MODE_TOOLS = toolsForMode(PERMISSION_MODE)
+const MODE_TOOL_NAMES = new Set(MODE_TOOLS.map((tool) => tool.function.name))
+const MODE_REFUSES_TOOLS = MODE_TOOLS.length < TOOLS.length
+
 function autoShellProblem(command) {
   if (PERMISSION_MODE !== 'auto') return ''
   return AUTO_FORBIDDEN.some((pattern) => pattern.test(command)) ? AUTO_SHELL_PROBLEM : ''
@@ -659,6 +663,9 @@ async function mcpCallTool(args) {
 
 async function runTool(name, args, cwd, web) {
   try {
+    if (MODE_REFUSES_TOOLS && !MODE_TOOL_NAMES.has(name)) {
+      return { text: `The ${name} tool is not allowed in ${PERMISSION_MODE} mode.`, isError: true }
+    }
     if (APPROVAL_TOOLS.has(name)) {
       const denied = await askApproval(name, args)
       if (denied) return denied
