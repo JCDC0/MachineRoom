@@ -177,7 +177,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
               type="button"
               className={`transport-chip is-${chip.tone} mono`}
               aria-label={`${chip.name}. Open the conversation`}
-              title={`${chip.name} ${chip.tone}`}
+              title={`${chip.name} ${chip.tone}${chip.waiting ? ', waiting for you' : ''}`}
               onClick={() => openOrchestratorChat(chip.id)}
             >
               <span className="transport-chip-dot" aria-hidden="true" />

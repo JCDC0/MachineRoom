@@ -37,6 +37,7 @@ export function orchestratorChips(list, limit = TRANSPORT_CHIP_LIMIT) {
       id: entry.id,
       name: chipName(entry),
       tone: chipTone(entry.state),
+      waiting: hasWaitingApproval(entry),
     })),
     more: subs.length - shown.length,
   }
