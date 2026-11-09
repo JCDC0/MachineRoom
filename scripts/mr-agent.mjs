@@ -168,7 +168,7 @@ function autoShellProblem(command) {
 }
 
 const APPROVAL_TOOLS = new Set(['write_file', 'edit_file', 'run_shell', 'mcp_call_tool'])
-const APPROVAL_WAIT_MS = 11 * 60 * 1000
+const APPROVAL_WAIT_MS = 4.5 * 60 * 1000
 const APPROVAL_DENIED = 'The owner did not allow it.'
 
 function approvalSettings() {

@@ -3,7 +3,7 @@ import { createInterface } from 'node:readline'
 
 const PROTOCOL_VERSION = '2024-11-05'
 const SERVER_NAME = 'machineroom-approve'
-const WAIT_MS = 11 * 60 * 1000
+const WAIT_MS = 4.5 * 60 * 1000
 
 function settings() {
   const bridge = String(process.env.MACHINEROOM_BRIDGE ?? '').trim().replace(/\/+$/, '')
