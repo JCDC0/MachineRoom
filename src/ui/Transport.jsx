@@ -6,7 +6,7 @@ import {
   contextTone,
   orchestratorStateWord,
 } from './contextRing.js'
-import { OPEN_CHAT_EVENT, orchestratorChips } from './transportOrchestrators.js'
+import { OPEN_CHAT_EVENT, hasWaitingApproval, orchestratorAnswerList, orchestratorChips } from './transportOrchestrators.js'
 import { inspectLane, lanePillTitle, lanePills } from './transportLanes.js'
 import { showCostBoard, spendText } from './transportSpend.js'
 
@@ -131,7 +131,8 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
         </div>
       )
     }
-    const waiting = Array.isArray(main.approvals) && main.approvals.length > 0
+    const waiting =
+      hasWaitingApproval(main) || orchestratorAnswerList(orchestrators).some(hasWaitingApproval)
     const state = waiting ? 'waiting for you' : orchestratorStateWord(main.state)
     const { chips, more } = orchestratorChips(orchestrators)
     const lanes =
@@ -176,7 +177,7 @@ export default function Transport({ snapshot, speeds, markers = [], orchestrator
               type="button"
               className={`transport-chip is-${chip.tone} mono`}
               aria-label={`${chip.name}. Open the conversation`}
-              title={`${chip.name} ${chip.tone}`}
+              title={`${chip.name} ${chip.tone}${chip.waiting ? ', waiting for you' : ''}`}
               onClick={() => openOrchestratorChat(chip.id)}
             >
               <span className="transport-chip-dot" aria-hidden="true" />

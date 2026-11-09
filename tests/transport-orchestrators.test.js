@@ -35,10 +35,20 @@ describe('the transport chip list', () => {
       sub('backend', 'Backend', 'idle'),
     ])
     expect(chips).toEqual([
-      { id: 'frontend', name: 'Frontend', tone: 'working' },
-      { id: 'backend', name: 'Backend', tone: 'idle' },
+      { id: 'frontend', name: 'Frontend', tone: 'working', waiting: false },
+      { id: 'backend', name: 'Backend', tone: 'idle', waiting: false },
     ])
     expect(more).toBe(0)
+  })
+
+  it('marks a sub with a waiting approval and keeps its tone', () => {
+    const { chips } = orchestratorChips([
+      MAIN,
+      { ...sub('frontend', 'Frontend', 'working'), approvals: [{ approvalId: 'a1' }] },
+      sub('backend', 'Backend', 'idle'),
+    ])
+    expect(chips.map((chip) => chip.waiting)).toEqual([true, false])
+    expect(chips[0].tone).toBe('working')
   })
 
   it('names a sub by its id when it has no name', () => {
@@ -63,8 +73,8 @@ describe('the transport chip list', () => {
     expect(chips.map((chip) => chip.id)).toEqual(names.slice(0, TRANSPORT_CHIP_LIMIT).map((name) => name.toLowerCase()))
     expect(more).toBe(names.length - TRANSPORT_CHIP_LIMIT)
     expect(orchestratorChips(list, 2)).toEqual({ chips: [
-      { id: 'one', name: 'One', tone: 'idle' },
-      { id: 'two', name: 'Two', tone: 'idle' },
+      { id: 'one', name: 'One', tone: 'idle', waiting: false },
+      { id: 'two', name: 'Two', tone: 'idle', waiting: false },
     ], more: names.length - 2 })
   })
 
@@ -118,6 +128,16 @@ describe('the transport chips', () => {
     expect(html).toContain('class="transport-orchestrator-state mono">waiting for you<')
     const clear = renderTransport([MAIN])
     expect(clear).toContain('class="transport-orchestrator-state mono">working<')
+  })
+
+  it('reads waiting for you while a sub holds an approval', () => {
+    const html = renderTransport([
+      { ...MAIN, state: 'idle' },
+      { ...sub('frontend', 'Frontend', 'working'), approvals: [{ approvalId: 'a1' }] },
+    ])
+    expect(html).toContain('class="transport-orchestrator-state mono">waiting for you<')
+    expect(html).toContain('title="Frontend working, waiting for you"')
+    expect(html).toContain('class="transport-chip is-working mono"')
   })
 
   it('shows no chips for a replay or with no sub', () => {
