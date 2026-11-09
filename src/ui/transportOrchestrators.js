@@ -19,6 +19,10 @@ export function orchestratorAnswerList(answer) {
   )
 }
 
+export function hasWaitingApproval(entry) {
+  return Boolean(entry && Array.isArray(entry.approvals) && entry.approvals.length > 0)
+}
+
 function chipName(entry) {
   const name = typeof entry.name === 'string' ? entry.name.trim() : ''
   return name || entry.id
