@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A live page builds its file indexes after the first frame, not before it (273 ms and 25 MB less before the first draw at 200,000 files), learns only the paths a frame touched, keeps only created paths for the sound check, and builds the assistant's path list when a command is first read (task P26).
 - The bridge lists the project once at start: up hands it the list the doctor read, it listens before its first read ends, a folder answer comes from the last read with its packed and gzipped body built once per version, a page at the current version gets no tree event, and the bridge keeps one file list plus the paths each of its last 4 versions added (task P25).
 - A folder card holds at most 2,000 items, the touched ones first and a + N more row for the rest, and a folder's plan is keyed by its version, not by a walk of its content, so a touch beside a folder of 50,000 files plans in 0.08 ms where it took 16 ms; a card no longer joins every path into a key on each change (task P24).
 - A replay keeps its speed when frames are slow: the player gets the real time since the last frame, up to 1 second, while the room's own animations keep their 0.1 second cap. A dust layer that is hidden or empty does no work, and dust colours are written only while Pulse is on (task P27).

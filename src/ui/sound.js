@@ -382,18 +382,26 @@ export function createRateLimit({ limit = SOUND_LIMIT, windowMs = SOUND_WINDOW_M
   }
 }
 
-export function activitySounds(activity, known) {
+export function activitySounds(activity, missing, state = null) {
   if (!activity || activity.type !== 'tool.start' || !Array.isArray(activity.touches)) return []
-  const remembered = known instanceof Set ? known : new Set()
+  const absent = missing instanceof Set ? missing : new Set()
+  const exists = (path) => {
+    const file = state?.files?.get?.(path)
+    return Boolean(file && file.exists !== false)
+  }
   const removes = isDeleteCommand(activity.label)
   const sounds = []
   for (const touch of activity.touches) {
     if (!touch || touch.kind !== 'file' || typeof touch.path !== 'string') continue
-    const existed = remembered.has(touch.path)
+    const wasGone = absent.has(touch.path)
     let kind = touch.mode === 'read' ? 'read' : 'write'
-    if (touch.mode !== 'read' && removes) kind = 'deleted'
-    else if (touch.mode !== 'read' && !existed) kind = 'created'
-    remembered.add(touch.path)
+    if (touch.mode !== 'read' && removes) {
+      kind = 'deleted'
+      absent.add(touch.path)
+    } else if (touch.mode !== 'read') {
+      if (wasGone || !exists(touch.path)) kind = 'created'
+      absent.delete(touch.path)
+    }
     sounds.push({ path: touch.path, kind })
   }
   return sounds

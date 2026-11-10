@@ -240,6 +240,39 @@ describe('incremental pipeline', () => {
     expect(pipeline.context.dirs).toEqual(['', 'src'])
   })
 
+  it('answers a Hermes read and an ls command before any index is warmed', () => {
+    const tree = makeTree({ root: 'project', files: ['src/math.js', 'docs/notes.md'], created: [] })
+    const agents = [{ id: 'h1', key: 'hermes', name: 'Hermes', parser: 'hermes' }]
+    const pipeline = createPipeline({ agents, tree })
+    const at = (n) => new Date(Date.parse('2026-10-20T00:00:00Z') + n).toISOString()
+    const base = { agentId: 'h1', runId: 'run-1' }
+    pipeline.push({ type: 'heartbeat.run.status', createdAt: at(0), payload: { ...base, status: 'running' } })
+    const out = pipeline.push({
+      type: 'heartbeat.run.log',
+      createdAt: at(1000),
+      payload: {
+        ...base,
+        stream: 'stdout',
+        seq: 1,
+        chunk: '  \u250a \ud83d\udcd6 read      math.js  1.2s\n  \u250a \ud83d\udcbb $         ls src  1.0s\n',
+      },
+    })
+    const starts = out.filter((activity) => activity.type === 'tool.start')
+    expect(starts.map((activity) => activity.label)).toEqual(['read src/math.js', '$ ls src'])
+    expect(starts[0].touches).toEqual([{ path: 'src/math.js', mode: 'read', kind: 'file' }])
+    expect(starts[1].touches).toEqual([{ path: 'src', mode: 'list', kind: 'dir' }])
+  })
+
+  it('warms both indexes and keeps learning new paths', () => {
+    const tree = makeTree({ root: 'project', files: ['src/math.js'], created: [] })
+    const pipeline = createPipeline({ agents: recording.agents, tree })
+    expect(pipeline.context.files).toEqual(['src/math.js'])
+    pipeline.warm()
+    pipeline.learn(['src/new.js', 'src/new.js'])
+    expect(pipeline.context.files).toEqual(['src/math.js', 'src/new.js'])
+    expect(pipeline.context.dirs).toEqual(['', 'src'])
+  })
+
   it('keeps a bounded memory of the frames it has seen over a long session', () => {
     const pipeline = createPipeline({ agents: recording.agents, tree: recording.tree })
     const agentId = recording.agents[0].id

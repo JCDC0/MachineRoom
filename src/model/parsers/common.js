@@ -39,10 +39,27 @@ export function parseJson(line) {
   }
 }
 
+const dirSets = new WeakMap()
+
+export function dirSetFor(dirs) {
+  if (dirs instanceof Set) return dirs
+  if (!Array.isArray(dirs)) return null
+  let held = dirSets.get(dirs)
+  if (!held) {
+    held = { set: new Set(), at: 0 }
+    dirSets.set(dirs, held)
+  }
+  while (held.at < dirs.length) {
+    held.set.add(dirs[held.at])
+    held.at += 1
+  }
+  return held.set
+}
+
 export function fileTouch(ctx, rawPath, tool) {
   const relative = relativeTo(ctx.rootName, rawPath)
   if (relative === null || relative === '') return { relative, touches: [] }
-  const isDir = Boolean(ctx.dirs && (Array.isArray(ctx.dirs) ? ctx.dirs.includes(relative) : ctx.dirs.has?.(relative)))
+  const isDir = Boolean(dirSetFor(ctx.dirs)?.has(relative))
   if (tool === 'read' && isDir) {
     return { relative, touches: [{ path: relative, mode: 'list', kind: 'dir' }] }
   }

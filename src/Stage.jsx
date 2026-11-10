@@ -426,6 +426,30 @@ export function snapshotSink(player, setSnapshot, initial) {
   }
 }
 
+export function touchedFiles(activities) {
+  const paths = []
+  const seen = new Set()
+  for (const activity of activities) {
+    if (activity?.type !== 'tool.start' || !Array.isArray(activity.touches)) continue
+    for (const touch of activity.touches) {
+      if (touch?.kind !== 'file' || typeof touch.path !== 'string' || seen.has(touch.path)) continue
+      seen.add(touch.path)
+      paths.push(touch.path)
+    }
+  }
+  return paths
+}
+
+export function afterIdle(callback, win = typeof window === 'undefined' ? null : window) {
+  if (!win) return () => {}
+  if (typeof win.requestIdleCallback === 'function') {
+    const id = win.requestIdleCallback(callback, { timeout: 2000 })
+    return () => win.cancelIdleCallback?.(id)
+  }
+  const id = win.setTimeout(callback, 0)
+  return () => win.clearTimeout(id)
+}
+
 function LensEdge({ side, yaw = 0, disconnected = false }) {
   const ref = useRef(null)
   const [width, setWidth] = useState(0)
@@ -560,9 +584,8 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       agents,
       onActivity: (activity, state) => {
         roomRef.current?.onActivity(activity, state)
-        const sounds = activitySounds(activity, knownSoundRef.current)
+        const sounds = activitySounds(activity, knownSoundRef.current, state)
         for (const item of sounds) {
-          if (item.kind === 'deleted') knownSoundRef.current.delete(item.path)
           sound.beep(item.kind, roomRef.current?.soundAt(item.path))
         }
       },
@@ -668,10 +691,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   const latestLabelsRef = useRef(null)
   const latestGitRef = useRef(null)
   const knownSoundRef = useRef(null)
-  if (knownSoundRef.current === null) {
-    const missing = new Set(data.tree?.created ?? [])
-    knownSoundRef.current = new Set((data.tree?.files ?? []).filter((path) => !missing.has(path)))
-  }
+  if (knownSoundRef.current === null) knownSoundRef.current = new Set(data.tree?.created ?? [])
   const framesRef = useRef([])
   const lastFrameRef = useRef(0)
   const grainRef = useRef(null)
@@ -686,17 +706,23 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
   }
 
   function resetSoundFiles(tree = data.tree) {
-    const missing = new Set(tree?.created ?? [])
-    knownSoundRef.current = new Set((tree?.files ?? []).filter((path) => !missing.has(path)))
+    knownSoundRef.current = new Set(tree?.created ?? [])
   }
   const fileCount = player.state.files.size
   const dirCount = player.state.dirs.size
-  const assistantPaths = useMemo(
-    () => [...new Set(['', ...player.state.dirs.keys(), ...player.state.files.keys()])],
-    [player, fileCount, dirCount]
-  )
-  const pathsRef = useRef(assistantPaths)
-  pathsRef.current = assistantPaths
+  const assistantPathsRef = useRef({ key: '', player: null, paths: [] })
+  function assistantPaths() {
+    const key = `${fileCount}:${dirCount}`
+    const held = assistantPathsRef.current
+    if (held.key !== key || held.player !== player) {
+      assistantPathsRef.current = {
+        key,
+        player,
+        paths: [...new Set(['', ...player.state.dirs.keys(), ...player.state.files.keys()])],
+      }
+    }
+    return assistantPathsRef.current.paths
+  }
   const inspectorTree = useMemo(() => {
     if (inspector?.kind !== 'folder') return null
     return {
@@ -1211,22 +1237,26 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
     if (!live) return undefined
     const pipeline = createPipeline({ agents, tree: data.tree })
     const entryFor = createLogger(agents)
-    let known = player.state.files.size
-    const learned = () => {
-      if (player.state.files.size === known) return
-      known = player.state.files.size
-      pipeline.learn([...player.state.files.keys()])
+    const noteNewFiles = (paths) => {
+      for (const path of paths) {
+        if (!player.state.files.has(path)) knownSoundRef.current?.add(path)
+      }
+    }
+    const learned = (paths) => {
+      if (paths.length > 0) pipeline.learn(paths)
     }
     const handlers = {
       onStatus: (status) => player.setStatus(status),
       onFrame: (frame) => {
         recorder?.push(frame)
         const activities = pipeline.push(frame)
+        const paths = touchedFiles(activities)
+        noteNewFiles(paths)
         player.push(activities)
         if (activities.length > 0) {
           setFailures((current) => addFailureActivities(current, activities))
         }
-        learned()
+        learned(paths)
         const added = activities
           .map((activity) => {
             const entry = entryFor(activity)
@@ -1238,15 +1268,17 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
       onTree: (tree) => {
         player.addFiles(tree.files)
         pipeline.learn(tree.files)
-        known = player.state.files.size
-        for (const path of tree.files) knownSoundRef.current?.add(path)
       },
     }
     if (!live.simulated && !live.bridge) return undefined
     const link = live.simulated
       ? openSimulated({ frames: live.frames, speed: live.speed, ...handlers })
       : openBridge({ url: live.bridge, ...handlers })
-    return () => link.close()
+    const stopWarm = afterIdle(() => pipeline.warm())
+    return () => {
+      stopWarm()
+      link.close()
+    }
   }, [agents, data, live, player])
 
   useEffect(() => {
@@ -1325,7 +1357,7 @@ export default function Stage({ data, mode = 'replay', liveAvailable = false, on
 
   const dispatcher = createDispatcher({
     client,
-    context: () => ({ agents: agents.map(({ key, name }) => ({ key, name })), paths: pathsRef.current }),
+    context: () => ({ agents: agents.map(({ key, name }) => ({ key, name })), paths: assistantPaths() }),
     agentName: (key) => agents.find((agent) => agent.key === key)?.name ?? key,
     agentId: (key) => agents.find((agent) => agent.key === key)?.id,
     focusAgent: (key, view) => {
