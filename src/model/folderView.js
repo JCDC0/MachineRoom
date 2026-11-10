@@ -262,13 +262,42 @@ export function planFolderView({
 
   const optionKey = `${alwaysLevel}|${alwaysLimit}|${folderLimit}|${itemLimit}|${limitItems ? 1 : 0}`
 
+  const drawnKids = new Map()
+  for (const path of drawn) {
+    if (path === '') continue
+    const parent = parentOf(path)
+    const list = drawnKids.get(parent)
+    if (list) list.push(path)
+    else drawnKids.set(parent, [path])
+  }
+  drawnKids.forEach((list) => list.sort(byName))
+
+  const rankMarks = new Map()
+  const markRank = (path, rank) => {
+    if (path === '') return
+    const parent = parentOf(path)
+    let map = rankMarks.get(parent)
+    if (!map) rankMarks.set(parent, (map = new Map()))
+    const kept = map.get(path)
+    if (kept && kept.rank <= rank) return
+    map.set(path, { rank, kind: fileSet.has(path) ? 'file' : 'dir' })
+  }
+  focusSet.forEach((path) => markRank(path, 0))
+  focusFolders.forEach((path) => markRank(path, 0))
+  touchedSet.forEach((path) => markRank(path, 1))
+  touchedFolders.forEach((path) => markRank(path, 1))
+
   const folderKey = (path) => {
     const parts = [optionKey, String(index.folderVersion.get(path) ?? 0), pinned.has(path) ? '1' : '0']
-    for (const child of children.get(path)) {
-      parts.push(child, drawn.has(child) ? '1' : '0', String(rankOf(child, focusFolders, touchedFolders)))
+    for (const child of drawnKids.get(path) ?? []) {
+      parts.push('d', child, String(rankOf(child, focusFolders, touchedFolders)))
     }
-    for (const file of filesIn.get(path) ?? []) {
-      parts.push(file, focusSet.has(file) ? '0' : touchedSet.has(file) ? '1' : '2')
+    const marks = rankMarks.get(path)
+    if (marks) {
+      for (const item of [...marks.keys()].sort(byName)) {
+        const mark = marks.get(item)
+        parts.push(mark.kind === 'dir' ? 'r' : 'f', item, String(mark.rank))
+      }
     }
     return parts.join('|')
   }
