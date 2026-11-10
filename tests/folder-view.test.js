@@ -220,6 +220,15 @@ describe('planFolderView', () => {
     expect(docs.items.length).toBeGreaterThanOrEqual(12)
   })
 
+  it('keeps a touched child folder even past the folder limit', () => {
+    const files = ['lib/a/x.js', 'lib/b/x.js', 'lib/c/x.js', 'lib/d/x.js']
+
+    const lib = byPath(planFolderView({ files, focus: ['lib'], touched: ['lib/d'], maxFolders: 0 })).get('lib')
+
+    expect(lib.items).toEqual([{ path: 'lib/d', kind: 'dir' }])
+    expect(lib.hiddenItems).toBe(3)
+  })
+
   it('opens both branches when two agents work on two files', () => {
     const files = [
       'docs/notes.md',
