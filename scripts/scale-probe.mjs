@@ -205,6 +205,7 @@ export function ringChain(activities, tree, agents = AGENTS, { alwaysDepth = 2 }
 
 export async function runProbe(options = {}) {
   const settings = { ...DEFAULTS, ...options }
+  if (settings.heavyFiles === undefined) settings.heavyFiles = 50000
   const rows = []
   const row = (stage, runsAt, ms, size = '') => rows.push({ stage, runsAt, ms, budget: runsAt === 'load' ? BUDGET.load : BUDGET.frame, size })
 
@@ -278,6 +279,48 @@ export async function runProbe(options = {}) {
     alwaysViews = planFolderView({ ...input.result, files, alwaysDepth: 2 })
   })
   row('planFolderView, one new file with alwaysDepth 2', 'activity', addedAlways.worst, `${alwaysViews.length} cards, ${alwaysViews.filter((view) => view.pinned).length} pinned`)
+
+  const heavyCount = Math.max(0, Math.floor(Number(settings.heavyFiles) || 0))
+  if (heavyCount > 0) {
+    const heavyName = (index) => `heavy-files/f${String(index).padStart(5, '0')}.js`
+    const heavyFiles = Array.from({ length: heavyCount }, (_, index) => heavyName(index))
+    const heavyTree = makeTree({ root: read.result.root, files: [...tree.files, ...heavyFiles] })
+    const inside = [heavyName(0), heavyName(1), heavyName(2), heavyName(3)]
+    const elsewhere = tree.files.filter((path) => !path.startsWith('heavy-files/')).slice(0, 4)
+    planFolderView({ files: [] })
+    planFolderView({ files: heavyTree.files, focus: [inside[0]], touched: [inside[0]], alwaysDepth: 2 })
+    let turn = 0
+    const insidePlan = timeIt(() => {
+      turn += 1
+      planFolderView({ files: heavyTree.files, focus: [inside[turn % inside.length]], touched: [inside[turn % inside.length]], alwaysDepth: 2 })
+    }, 9)
+    rows.push({
+      stage: `planFolderView, touch inside a ${heavyCount} file folder`,
+      runsAt: 'activity',
+      ms: insidePlan.ms,
+      budget: 5,
+      size: `${heavyTree.files.length} files`,
+    })
+    planFolderView({ files: [] })
+    planFolderView({ files: heavyTree.files, focus: [inside[0]], touched: [inside[0]], alwaysDepth: 2 })
+    turn = 0
+    const elsewherePlan = timeIt(() => {
+      turn += 1
+      planFolderView({
+        files: heavyTree.files,
+        focus: [elsewhere[turn % elsewhere.length]],
+        touched: [elsewhere[turn % elsewhere.length]],
+        alwaysDepth: 2,
+      })
+    }, 9)
+    rows.push({
+      stage: `planFolderView, touch elsewhere with a ${heavyCount} file folder drawn`,
+      runsAt: 'activity',
+      ms: elsewherePlan.ms,
+      budget: 5,
+      size: `${heavyTree.files.length} files`,
+    })
+  }
 
   const folderSize = cardSize({ state: 'files', items: [], hiddenItems: 0 })
   const ringFolders = tree.dirs.filter((path) => path === '' || path.split('/').length <= 2)
