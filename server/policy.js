@@ -89,7 +89,7 @@ export function createPolicyApi(options) {
     } catch {
       agents = []
     }
-    const costs = readLaneCosts({ agents })
+    const costs = readLaneCosts({ agents, file: join(resolvedRuns, 'runs.jsonl') })
     return { quotas: costs.quota, spent: { companyMonthlyUsd: costs.summary.spendCents / 100 } }
   }
 
