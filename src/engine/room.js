@@ -21,6 +21,13 @@ const HUB_SPHERE = { x: HUB_CENTER.x, y: HUB_CENTER.y, z: HUB_CENTER.z, r: HUB_R
 const REFIT_SHIFT = 150
 const REFIT_RATIO = 0.08
 const HOVER_CHECK_MS = 100
+export const FRAME_DELTA_CAP = 0.1
+export const FRAME_ELAPSED_CAP_MS = 1000
+
+export function frameTimes(previous, now) {
+  const elapsed = Math.min(Math.max(now - previous, 0), FRAME_ELAPSED_CAP_MS)
+  return { elapsed, delta: Math.min(elapsed / 1000, FRAME_DELTA_CAP) }
+}
 
 export function workingMask(state, colourOf = null, into = null) {
   const lit = into?.lit ?? new Set()
@@ -1028,9 +1035,10 @@ export function createRoom({ surface, gl, css, rootName, agents, getState, befor
 
   function frame(now) {
     frameId = requestAnimationFrame(frame)
-    const delta = Math.min((now - last) / 1000, 0.1)
+    const times = frameTimes(last, now)
+    const delta = times.delta
     last = now
-    beforeFrame(delta * 1000)
+    beforeFrame(times.elapsed)
 
     const state = getState()
     const mask = masks.of(state)

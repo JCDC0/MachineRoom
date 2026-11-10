@@ -424,6 +424,92 @@ describe('void drift', () => {
     space.dispose()
   })
 
+  it('writes no colour after the pulse turns off', () => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) }
+    setFineDust({ on: true, strength: 1, pulse: true })
+    const scene = new THREE.Scene()
+    const space = createVoid(scene, null)
+    const layers = pointLayers(space).filter((layer) => layer.geometry.attributes.color)
+    space.update(0.1)
+    space.update(0.1)
+    setFineDust({ pulse: false })
+    const versions = layers.map((layer) => layer.geometry.attributes.color.version)
+    for (let index = 0; index < 10; index += 1) space.update(0.1)
+    expect(layers.map((layer) => layer.geometry.attributes.color.version)).toEqual(versions)
+    for (const layer of layers) {
+      expect(new Set(layer.geometry.attributes.color.array)).toEqual(new Set([1]))
+    }
+    space.dispose()
+  })
+
+  it('writes no position or colour for a hidden layer over ten updates', () => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) }
+    setFineDust({ on: true, strength: 1, pulse: true })
+    const scene = new THREE.Scene()
+    const space = createVoid(scene, null)
+    const layers = pointLayers(space)
+    const far = layers.find((layer) => layer.geometry.attributes.position.count === DUST)
+    const fine = layers.filter((layer) => layer.geometry.attributes.color)
+    const hidden = fine[0]
+    const visible = fine[1]
+    far.material.visible = false
+    hidden.material.visible = false
+    const farVersion = far.geometry.attributes.position.version
+    const hiddenVersion = hidden.geometry.attributes.position.version
+    const hiddenColour = hidden.geometry.attributes.color.version
+    const visibleVersion = visible.geometry.attributes.position.version
+    for (let index = 0; index < 10; index += 1) space.update(0.1)
+    expect(far.geometry.attributes.position.version).toBe(farVersion)
+    expect(hidden.geometry.attributes.position.version).toBe(hiddenVersion)
+    expect(hidden.geometry.attributes.color.version).toBe(hiddenColour)
+    expect(visible.geometry.attributes.position.version).toBeGreaterThan(visibleVersion)
+    space.dispose()
+  })
+
+  it('writes nothing for a layer whose draw count is 0', () => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) }
+    setFineDust({ on: true, strength: 1, pulse: false })
+    const scene = new THREE.Scene()
+    const space = createVoid(scene, null)
+    const layers = pointLayers(space).filter((layer) => !layer.geometry.attributes.color)
+    const far = layers[0]
+    far.geometry.setDrawRange(0, 0)
+    const version = far.geometry.attributes.position.version
+    for (let index = 0; index < 10; index += 1) space.update(0.1)
+    expect(far.geometry.attributes.position.version).toBe(version)
+    space.dispose()
+  })
+
+  it('brings a hidden layer back where its drift puts it, with no jump', () => {
+    globalThis.window = { matchMedia: () => ({ matches: false }) }
+    setFineDust({ on: true, strength: 1, pulse: false })
+    const space = createVoid(new THREE.Scene(), null)
+    const reference = createVoid(new THREE.Scene(), null)
+    const layers = pointLayers(space).filter((layer) => layer.geometry.attributes.color)
+    const referenceLayers = pointLayers(reference).filter((layer) => layer.geometry.attributes.color)
+    const hidden = layers[0]
+    hidden.material.visible = false
+    for (let index = 0; index < 10; index += 1) {
+      space.update(0.1)
+      reference.update(0.1)
+    }
+    expect(Array.from(hidden.geometry.attributes.position.array)).not.toEqual(
+      Array.from(referenceLayers[0].geometry.attributes.position.array)
+    )
+    hidden.material.visible = true
+    const version = hidden.geometry.attributes.position.version
+    space.update(0.1)
+    reference.update(0.1)
+    expect(hidden.geometry.attributes.position.version).toBeGreaterThan(version)
+    space.update(0.1)
+    reference.update(0.1)
+    expect(Array.from(hidden.geometry.attributes.position.array)).toEqual(
+      Array.from(referenceLayers[0].geometry.attributes.position.array)
+    )
+    space.dispose()
+    reference.dispose()
+  })
+
   it('disposes the group and its layers', () => {
     globalThis.window = { matchMedia: () => ({ matches: false }) }
     const scene = new THREE.Scene()

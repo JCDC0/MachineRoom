@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A replay keeps its speed when frames are slow: the player gets the real time since the last frame, up to 1 second, while the room's own animations keep their 0.1 second cap. A dust layer that is hidden or empty does no work, and dust colours are written only while Pulse is on (task P27).
 - An OpenCode lane hunted how lanes are given work in AUDIT-2026-11-LANES.md: a lane waits a median of 33 to 88 minutes for its next brief and runs for 13, five lanes at once make a run 27 percent longer, 166 merged runs show as pending because no outcome was recorded, and nothing in the room calls the routing policy (task P28).
 - An OpenCode lane hunted the room's cost in a headless Chromium in AUDIT-2026-11-LIGHT-BROWSER.md: the frame loop draws at full rate while nothing moves, a slow frame loses replay time, bloom halves the frames and dust runs its drift even when hidden; the orchestrator added Brave numbers with a hardware GPU, 12 ms a frame paused and 206 ms at play at 200,000 files (task P23).
 - npm run scale-live also times the doctor's read, the git state clean and dirty, a lane worktree made and reused, the reviews list and a lane diff, and a read of the folder without its .git, prints the free space and each row as it goes, and ran at 40,000, 200,000 and 500,000 files: a worktree takes 54 to 245 seconds to make, and the bridge holds 422 MB at 500,000 files (task P19).
