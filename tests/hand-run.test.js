@@ -222,11 +222,12 @@ describe('hand-run record', () => {
         merged: 1,
         rejected: 0,
         pending: 0,
+        ungraded: 0,
         mergeRate: 1,
         averageFixes: null,
         costUsd: 0,
         decidedCostUsd: 0,
-        costPerMerge: 0,
+        costPerMerge: null,
       },
     ])
   })

@@ -114,6 +114,7 @@ describe('outcome command', () => {
         merged: 0,
         rejected: 1,
         pending: 0,
+        ungraded: 0,
         mergeRate: 0,
         averageFixes: null,
         costUsd: 0.5,
@@ -160,6 +161,7 @@ describe('outcomeTable', () => {
         merged: 1,
         rejected: 1,
         pending: 2,
+        ungraded: 0,
         mergeRate: 0.5,
         averageFixes: 1,
         costUsd: 1,
@@ -173,6 +175,7 @@ describe('outcomeTable', () => {
         merged: 1,
         rejected: 0,
         pending: 0,
+        ungraded: 0,
         mergeRate: 1,
         averageFixes: 1,
         costUsd: 0.2,
@@ -186,6 +189,7 @@ describe('outcomeTable', () => {
         merged: 0,
         rejected: 1,
         pending: 0,
+        ungraded: 0,
         mergeRate: 0,
         averageFixes: null,
         costUsd: 0,
@@ -215,6 +219,7 @@ describe('outcomeTable', () => {
         merged: 1,
         rejected: 1,
         pending: 2,
+        ungraded: 0,
         mergeRate: 0.5,
         averageFixes: 2,
         costUsd: 2,
@@ -224,7 +229,7 @@ describe('outcomeTable', () => {
     ])
   })
 
-  it('counts an outcome once per branch, on the newest run that names it', () => {
+  it('counts an outcome once per branch and puts only the newest run cost in the decided cost', () => {
     const runs = [
       { lane: 'hermes', model: 'm', branch: 'feat/a', costUsd: 0.5 },
       { lane: 'hermes', model: 'm', branch: 'feat/b', costUsd: 1 },
@@ -243,24 +248,105 @@ describe('outcomeTable', () => {
         merged: 1,
         rejected: 1,
         pending: 0,
+        ungraded: 0,
         mergeRate: 0.5,
         averageFixes: 2,
         costUsd: 1.75,
-        decidedCostUsd: 1.75,
-        costPerMerge: 1.75,
+        decidedCostUsd: 1,
+        costPerMerge: 1,
       },
     ])
   })
 
-  it('gives the merge to the model of the newest run on the branch and the older cost to its own model', () => {
+  it('gives the merge to the model of the newest run on the branch and no decided cost to the older run', () => {
     const runs = [
       { lane: 'hermes', model: 'first', branch: 'feat/a', costUsd: 0.5 },
       { lane: 'hermes', model: 'second', branch: 'feat/a', costUsd: 0.25 },
     ]
     const rows = outcomeTable(runs, [{ branch: 'feat/a', outcome: 'merged', fixes: 1 }])
     expect(rows.map(({ model, runs: count, merged, pending, decidedCostUsd, costPerMerge }) => ({ model, count, merged, pending, decidedCostUsd, costPerMerge }))).toEqual([
-      { model: 'first', count: 1, merged: 0, pending: 0, decidedCostUsd: 0.5, costPerMerge: null },
+      { model: 'first', count: 1, merged: 0, pending: 0, decidedCostUsd: 0, costPerMerge: null },
       { model: 'second', count: 1, merged: 1, pending: 0, decidedCostUsd: 0.25, costPerMerge: 0.25 },
+    ])
+  })
+
+  it('counts a run whose brief id follows Merge on main as merged and not graded', () => {
+    const runs = [
+      { lane: 'opencode', model: 'm', briefs: ['P21'], branch: 'feat/p21', costUsd: 0.2 },
+      { lane: 'opencode', model: 'm', briefs: ['P22'], branch: 'feat/p22', costUsd: 0.3 },
+      { lane: 'opencode', model: 'm', briefs: ['P23'], branch: 'feat/p23', costUsd: 0.1 },
+    ]
+    const subjects = ['0.1.401: Merge P21, the hunt', '0.1.180: Merge OpenCode bridge test (P15)']
+    expect(outcomeTable(runs, [], subjects)).toEqual([
+      {
+        lane: 'opencode',
+        model: 'm',
+        runs: 3,
+        merged: 1,
+        rejected: 0,
+        pending: 2,
+        ungraded: 1,
+        mergeRate: 1,
+        averageFixes: null,
+        costUsd: 0.6,
+        decidedCostUsd: 0.2,
+        costPerMerge: 0.2,
+      },
+    ])
+  })
+
+  it('does not count a brief id that is only part of another id in a subject', () => {
+    const runs = [{ lane: 'opencode', model: 'm', briefs: ['P2'], branch: 'feat/p2', costUsd: 0.2 }]
+    expect(outcomeTable(runs, [], ['0.1.401: Merge P21, the hunt']).map(({ merged, ungraded, pending }) => ({ merged, ungraded, pending }))).toEqual([
+      { merged: 0, ungraded: 0, pending: 1 },
+    ])
+  })
+
+  it('lets a rejected row win over a merge subject', () => {
+    const runs = [{ lane: 'opencode', model: 'm', briefs: ['P21'], branch: 'feat/p21', costUsd: 0.2 }]
+    const outcomes = [{ branch: 'feat/p21', outcome: 'rejected', fixes: 3 }]
+    expect(outcomeTable(runs, outcomes, ['0.1.401: Merge P21, the hunt'])).toEqual([
+      {
+        lane: 'opencode',
+        model: 'm',
+        runs: 1,
+        merged: 0,
+        rejected: 1,
+        pending: 0,
+        ungraded: 0,
+        mergeRate: 0,
+        averageFixes: null,
+        costUsd: 0.2,
+        decidedCostUsd: 0.2,
+        costPerMerge: null,
+      },
+    ])
+  })
+
+  it('counts a merge subject once for the newest run on a branch', () => {
+    const runs = [
+      { lane: 'opencode', model: 'm', briefs: ['P21'], branch: 'feat/p21', costUsd: 0.2 },
+      { lane: 'opencode', model: 'm', briefs: ['P21'], branch: 'feat/p21', costUsd: 0.3 },
+    ]
+    expect(outcomeTable(runs, [], ['0.1.401: Merge P21, the hunt']).map(({ merged, ungraded, pending }) => ({ merged, ungraded, pending }))).toEqual([
+      { merged: 1, ungraded: 1, pending: 0 },
+    ])
+  })
+
+  it('reports no cost per merge when every decided run reports none, and keeps a reported zero', () => {
+    const runs = [
+      { lane: 'agy', model: 'g', branch: 'feat/a', costUsd: null },
+      { lane: 'agy', model: 'g', branch: 'feat/b', costUsd: null },
+      { lane: 'opencode6', model: 'free', branch: 'feat/c', costUsd: 0 },
+    ]
+    const outcomes = [
+      { branch: 'feat/a', outcome: 'merged', fixes: 1 },
+      { branch: 'feat/b', outcome: 'merged', fixes: 0 },
+      { branch: 'feat/c', outcome: 'merged', fixes: 0 },
+    ]
+    expect(outcomeTable(runs, outcomes).map(({ lane, merged, costPerMerge }) => ({ lane, merged, costPerMerge }))).toEqual([
+      { lane: 'agy', merged: 2, costPerMerge: null },
+      { lane: 'opencode6', merged: 1, costPerMerge: 0 },
     ])
   })
 
@@ -274,6 +360,7 @@ describe('outcomeTable', () => {
         merged: 0,
         rejected: 1,
         pending: 0,
+        ungraded: 0,
         mergeRate: 0,
         averageFixes: null,
         costUsd: 1,
@@ -320,6 +407,7 @@ describe('outcome route', () => {
         merged: 1,
         rejected: 0,
         pending: 0,
+        ungraded: 0,
         mergeRate: 1,
         averageFixes: 2,
         costUsd: 0.4,
@@ -333,6 +421,7 @@ describe('outcome route', () => {
         merged: 0,
         rejected: 1,
         pending: 0,
+        ungraded: 0,
         mergeRate: 0,
         averageFixes: null,
         costUsd: 0.2,

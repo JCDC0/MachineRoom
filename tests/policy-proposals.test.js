@@ -123,15 +123,31 @@ describe('proposePolicy', () => {
     ])
   })
 
-  it('treats a null cost as the highest cost', () => {
+  it('treats a null cost as not known', () => {
     const answer = proposePolicy({
       policy: policyOf([A, B]),
       rows: [row(A.lane, A.model, 10, 10, 0.03), row(B.lane, B.model, 11, 1, null)],
     })
     expect(answer.changes).toEqual([])
     expect(smallNotes(answer)).toEqual([
-      'The small tier keeps its order: hermes on minimax/minimax-m3.1-flash:free costs no cost a merge against $0.03 for hermes on deepseek/deepseek-v4.1-flash-1017.',
+      'The small tier keeps its order: hermes on minimax/minimax-m3.1-flash:free costs not reported against $0.03 for hermes on deepseek/deepseek-v4.1-flash-1017.',
     ])
+  })
+
+  it('joins a policy model name to a run model name by its letters and digits', () => {
+    const answer = proposePolicy({
+      policy: policyOf([choice('agy', 'Gemini 3.8 Flash (High)')]),
+      rows: [row('agy', 'gemini-3.8-flash-high', 4, 0, 0.03)],
+    })
+    expect(answer.joins).toContain('small: agy on Gemini 3.8 Flash (High) joined the row agy on gemini-3.8-flash-high with 4 decided runs.')
+  })
+
+  it('does not join two model names that differ in a letter or digit', () => {
+    const answer = proposePolicy({
+      policy: policyOf([choice('agy', 'Gemini 3.8 Flash (High)')]),
+      rows: [row('agy', 'gemini-3.9-flash-high', 4, 0, 0.03)],
+    })
+    expect(answer.joins).toContain('small: agy on Gemini 3.8 Flash (High) joined no row, 0 decided runs.')
   })
 
   it('never moves the owner choice', () => {

@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process'
+import { execFile, spawn, spawnSync } from 'node:child_process'
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -6,7 +6,7 @@ import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
 import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
-import { outcomeTable } from './outcomes.js'
+import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
 import { readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
@@ -68,6 +68,28 @@ function git(folder, args) {
 async function gitCheckout(folder) {
   const inside = await git(folder, ['rev-parse', '--is-inside-work-tree'])
   return inside !== null && inside.trim() === 'true'
+}
+
+export function readMainSubjects() {
+  return git(REPO_ROOT, ['log', '--format=%s', 'refs/heads/main']).then((text) => (text === null ? [] : subjectsFromLog(text)))
+}
+
+export function readMainSubjectsSync() {
+  let file
+  try {
+    file = gitPath()
+  } catch {
+    return []
+  }
+  const result = spawnSync(file, ['log', '--format=%s', 'refs/heads/main'], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    windowsHide: true,
+    timeout: GIT_TIMEOUT_MS,
+    maxBuffer: GIT_MAX_BUFFER,
+  })
+  if (result.error || result.status !== 0) return []
+  return subjectsFromLog(String(result.stdout ?? ''))
 }
 
 async function projectDirty(folder) {
@@ -470,7 +492,8 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       }
       const records = readAllRunRecords(recordsPath())
       const outcomes = readOutcomeRecords(outcomesPath())
-      sendJson(req, res, 200, { rows: outcomeTable(records, outcomes) })
+      const subjects = await readMainSubjects()
+      sendJson(req, res, 200, { rows: outcomeTable(records, outcomes, subjects) })
       return true
     }
     if (path === '/api/control/runs/stats') {

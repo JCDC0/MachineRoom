@@ -188,7 +188,8 @@ function outcomeFixes(value) {
 }
 
 function outcomeCost(value) {
-  return typeof value === 'number' && Number.isFinite(value) ? `$${value.toFixed(2)}` : '-'
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'not reported'
+  return `$${value.toFixed(2)} a merge`
 }
 
 export function formatOutcomes(rows) {
@@ -198,7 +199,7 @@ export function formatOutcomes(rows) {
   return list.map((row) => {
     const lane = String(row?.lane ?? '')
     const model = String(row?.model ?? MODEL_UNKNOWN)
-    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)}, rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)} a merge`
+    return `${lane}  ${model}  runs ${count(row?.runs)}, merged ${count(row?.merged)} (${count(row?.ungraded)} not graded), rejected ${count(row?.rejected)}, pending ${count(row?.pending)}, merge rate ${outcomePercent(row?.mergeRate)}, fixes ${outcomeFixes(row?.averageFixes)}, ${outcomeCost(row?.costPerMerge)}`
   })
 }
 

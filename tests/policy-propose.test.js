@@ -14,6 +14,7 @@ const OPENCODE2 = 'opencode2'
 const AGY = 'agy'
 const A = 'opencode-go/deepseek-v4.1-flash'
 const B = 'Gemini 3.8 Flash (High)'
+const AGY_RUN_MODEL = 'gemini-3.8-flash-high'
 const cleanups = []
 
 afterEach(() => {
@@ -67,7 +68,7 @@ function swapRecords() {
   }
   for (let index = 1; index <= 12; index += 1) {
     const branch = `feat/b${index}`
-    runs.push(record(AGY, B, branch, 0.03))
+    runs.push(record(AGY, AGY_RUN_MODEL, branch, 0.03))
     outcomes.push({ branch, outcome: index <= 11 ? 'merged' : 'rejected', fixes: 0 })
   }
   return { runs, outcomes }
@@ -98,6 +99,7 @@ describe('policy-propose command', () => {
 
     const result = runPolicy(temp, [])
     expect(result.status).toBe(0)
+    expect(result.stdout).toContain('small: agy on Gemini 3.8 Flash (High) joined the row agy on gemini-3.8-flash-high with 12 decided runs.')
     expect(result.stdout).toContain('Move agy on Gemini 3.8 Flash (High) ahead of opencode2 on opencode-go/deepseek-v4.1-flash in the small tier:')
 
     const [name] = patchFiles(temp)

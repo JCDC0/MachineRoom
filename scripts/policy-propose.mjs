@@ -84,6 +84,7 @@ function main(argv) {
   const minDecided = parsed.min === null ? MIN_DEFAULT : Number(parsed.min)
   const answer = proposePolicy({ policy, rows, minDecided })
 
+  for (const join of answer.joins) console.log(join)
   for (const change of answer.changes) console.log(change)
   for (const note of answer.notes) console.log(note)
 
