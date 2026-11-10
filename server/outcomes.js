@@ -112,8 +112,8 @@ export function outcomeTable(runs, outcomes, subjects = []) {
       row.pending += 1
       continue
     }
-    row.decidedCost += cost
     if (newestRun.get(branch) !== index) continue
+    row.decidedCost += cost
     if (decision.merged) {
       row.merged += 1
       if (decision.ungraded) row.ungraded += 1
