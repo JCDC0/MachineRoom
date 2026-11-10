@@ -66,6 +66,9 @@ Briefs:
 
 - One set of files per lane in a round. End each brief with `Files:` and name in its first lines the files and folders other lanes hold. Two briefs that need the same file run one after the other.
 - A usual OpenCode run ends in about 13 minutes (the median since 2026-10-28). Three to five numbered steps fit, with `Use no subagents`, `Commit each step as you finish it` and `stop starting new work at minute N`.
+- Start the run with `--minutes` at the brief's stop minute plus 20: the brief's minute is where the lane stops starting new work, and the runner's limit, 100 by default, is what stops a run that hangs.
+- Two small briefs that share no file can go to one run (`npm run run-lane -- LANE ID1 ID2`): one wait and one review less. From 2026-10-28 to 2026-11-10 this was never done, and a lane waited a median of 33 to 88 minutes for its next brief while a run took 13 (`AUDIT-2026-11-LANES.md`).
+- Five lanes at once and no more: at five or more a run's median is 27 percent longer and nothing merges sooner.
 - Give the exact sentences, names and budgets, and name each test by what it proves. Say which part of which doc to read and no more.
 - A fix starts from a measured number and ends with the same tool's number before and after, both taken in that lane's own run, because the other lanes load the machine.
 - A hunt changes no code and writes one audit file: at most 12 findings, each with `file:line`, a measured cost and the smallest fix, then at most three proposed briefs. Its proposals go to the owner as one ranked list with what each would change for them, and none starts before the owner's yes.

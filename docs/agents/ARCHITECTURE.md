@@ -37,6 +37,7 @@ Every file in this folder, and what it is for:
 - `AUDIT-2026-11-LIGHT-BRIDGE.md`: history. The November 2026 hunt of what the bridge holds and repeats on a 200,000 file project, at start and at rest, with three proposed briefs.
 - `AUDIT-2026-11-LIGHT-FOLDERS.md`: history. The November 2026 hunt of folders that hold tens of thousands of items, at the lowest folder depth and under a touch, with three proposed briefs.
 - `AUDIT-2026-11-LIGHT-BROWSER.md`: history. The November 2026 hunt of the room's script, style, layout, heap and DOM cost in a headless Chromium at 40,000 and 200,000 files, at load, at rest and at work, with three proposed briefs.
+- `AUDIT-2026-11-LANES.md`: history. The November 2026 hunt of how lanes are given work, from the run and outcome records and the routing code, with twelve findings and the orchestrator's corrections.
 - `AUDIT-2026-11-FIRSTRUN.md`: history. The November 2026 hunt of a first run on a new project, with features.
 - `AUDIT-2026-11-FRAME.md`: history. The November 2026 audit of the frame cost of music, bloom and light trails.
 - `AUDIT-2026-11-PANELS.md`: history. The November 2026 hunt of the page's panels.
