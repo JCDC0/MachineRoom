@@ -692,8 +692,8 @@ describe('run routes', () => {
     const { url, token } = await startRunsBridge({ script: TINY_SLEEPER })
 
     const noLane = await tokenPost(`${url}/api/control/runs`, { briefs: ['C3e'], confirmed: true }, token)
-    expect(noLane.status).toBe(400)
-    expect(noLane.body).toEqual({ error: 'Choose a lane from the list.' })
+    expect(noLane.status).toBe(404)
+    expect(noLane.body).toEqual({ error: 'The policy file is missing.' })
     const badLane = await tokenPost(`${url}/api/control/runs`, { lane: 'nobody', briefs: ['C3e'], confirmed: true }, token)
     expect(badLane.body).toEqual({ error: 'Choose a lane from the list.' })
     const noCli = await tokenPost(`${url}/api/control/runs`, { lane: 'agy', briefs: ['C3e'], confirmed: true }, token)

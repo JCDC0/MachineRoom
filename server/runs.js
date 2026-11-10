@@ -5,11 +5,14 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { StringDecoder } from 'node:string_decoder'
 import { fileURLToPath } from 'node:url'
 import { parseBriefs } from '../src/briefs/briefs.js'
-import { SINCE_PROBLEM, dayStart, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
+import { SINCE_PROBLEM, dayStart, laneLockPids, laneStats, pathInside, projectProblems, runRecord } from '../src/briefs/run.js'
+import { profileFromBrief } from '../src/policy/profile.js'
+import { readPolicy, routeLane } from '../src/policy/route.js'
+import { readLaneCosts } from './lane-costs.js'
 import { outcomeTable, subjectsFromLog } from './outcomes.js'
 import { gitPath } from './programPath.js'
 import { killTree, treeSpawnOptions } from './processTree.js'
-import { readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
+import { laneAgents, readAllLanes, runsFolder as defaultRunsFolder } from './lanes-source.js'
 import { activeLanesFileFor, hiddenLaneProblem, projectLanesFileFor, readActiveLanesChoice, readHiddenLanes } from './active-lanes.js'
 
 export const RECENT_LIMIT = 20
@@ -42,6 +45,16 @@ function realPath(value) {
     return realpathSync.native(folder)
   } catch {
     return folder
+  }
+}
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
   }
 }
 
@@ -338,6 +351,131 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
     return readPath(join(resolvedBriefs, name))
   }
 
+  function laneLockAlive(key) {
+    const holder = laneLockPids(readPath(join(recordsDir(), `${key}.lock`)) ?? '')
+    return processAlive(holder.pid) || processAlive(holder.child)
+  }
+
+  function laneStates(lanesConfig) {
+    const helper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+    const hiddenSet = helper && typeof helper.hiddenKeySet === 'function'
+      ? helper.hiddenKeySet()
+      : runsFolder
+        ? new Set(readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)))
+        : new Set()
+    const saved = !helper && runsFolder ? readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder)) : null
+    const list = []
+    for (const [key, entry] of Object.entries(lanesConfig ?? {})) {
+      if (key === 'orchestrator') continue
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
+      const active = typeof isLaneActive === 'function'
+        ? isLaneActive(key)
+        : helper && typeof helper.isLaneActive === 'function'
+          ? helper.isLaneActive(key)
+          : runsFolder
+            ? saved !== null && saved.includes(key)
+            : true
+      list.push({
+        key,
+        eligible: entry.retired !== true && entry.cli !== null && typeof entry.cli === 'object',
+        active: active && !hiddenSet.has(key),
+        busy: running.has(key) || laneLockAlive(key),
+      })
+    }
+    return list
+  }
+
+  function routeStart({ lanesConfig, profile, only }) {
+    const policyText = readText('policy.json')
+    if (policyText === null) return { status: 404, error: 'The policy file is missing.' }
+    let policy
+    try {
+      policy = readPolicy(policyText)
+    } catch (error) {
+      return { status: 400, error: error.message }
+    }
+    const costs = readLaneCosts({ agents: laneAgents(lanesConfig), records: readAllRunRecords(recordsPath()) })
+    const states = laneStates(lanesConfig).filter((lane) => only === null || only.includes(lane.key))
+    const answer = routeLane({
+      policy,
+      profile,
+      quotas: costs.quota,
+      spent: { companyMonthlyUsd: costs.summary.spendCents / 100 },
+      lanes: states,
+    })
+    if (answer.lane === null) return { status: 409, error: answer.reason }
+    return { lane: answer.lane, routed: { tier: answer.tier, reason: answer.reason } }
+  }
+
+  function readActor(req, body) {
+    const registry = typeof orchestrators === 'function' ? orchestrators() : null
+    const page = Boolean(req.headers.origin)
+    if (!page) {
+      if (!registry) return { registry: null, page, actor: '', startedBy: '', sector: null, missingSector: false }
+      const tokenHeader = req.headers['x-machineroom-orchestrator']
+      const token = typeof tokenHeader === 'string' ? tokenHeader.trim() : Array.isArray(tokenHeader) ? tokenHeader[0].trim() : ''
+      const actor = registry.idForToken(token)
+      if (!actor) return { status: 403, error: NO_TOKEN_PROBLEM }
+      const main = actor === 'orchestrator'
+      let startedBy = ''
+      if (Object.hasOwn(body, 'startedBy')) {
+        const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
+        if (!wanted) return { status: 403, error: TOKEN_MISMATCH_PROBLEM }
+        if (wanted !== actor) {
+          const target = main ? registry.sector(wanted) : null
+          if (!target) return { status: 403, error: TOKEN_MISMATCH_PROBLEM }
+          startedBy = wanted
+        } else {
+          startedBy = wanted
+        }
+      } else if (!main) {
+        startedBy = actor
+      }
+      let sector = null
+      let missingSector = false
+      if (!main) {
+        sector = registry.sector(actor)
+        missingSector = !sector
+      } else if (startedBy !== '' && startedBy !== actor) {
+        sector = registry.sector(startedBy)
+      }
+      return { registry, page, actor, startedBy, sector, missingSector }
+    }
+    if (Object.hasOwn(body, 'startedBy')) {
+      const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
+      if (!wanted) return { status: 400, error: 'startedBy needs an orchestrator id.' }
+      const sector = registry ? registry.sector(wanted) : null
+      if (!sector) return { status: 400, error: 'There is no orchestrator with that id.' }
+      return { registry, page, actor: '', startedBy: wanted, sector: wanted === 'orchestrator' ? null : sector, missingSector: false }
+    }
+    return { registry, page, actor: '', startedBy: '', sector: null, missingSector: false }
+  }
+
+  function finishActor(info, lane) {
+    const { registry, page, actor, sector } = info
+    if (sector && Array.isArray(sector.lanes) && !sector.lanes.includes(lane)) {
+      const name = typeof sector.name === 'string' && sector.name.trim() ? sector.name.trim() : actor || info.startedBy
+      return { status: 403, error: `The ${name} sector does not hold the lane ${lane}.` }
+    }
+    if (info.missingSector) {
+      const name = actor || info.startedBy
+      return { status: 403, error: `The ${name} sector does not hold the lane ${lane}.` }
+    }
+    let startedBy = info.startedBy
+    if (!startedBy) {
+      const holder = registry && typeof registry.sectorForLane === 'function' ? registry.sectorForLane(lane) : null
+      if (holder) startedBy = holder.id
+      else if (!page && registry && actor === 'orchestrator') startedBy = actor
+    }
+    return { startedBy }
+  }
+
+  function laneRestriction(info) {
+    if (info.missingSector) return []
+    if (info.sector && Array.isArray(info.sector.lanes)) return info.sector.lanes
+    return null
+  }
+
   function snapshot(item) {
     return {
       lane: item.entry.lane,
@@ -579,125 +717,84 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
 
-    const lane = typeof body.lane === 'string' ? body.lane : ''
-    if (!Object.hasOwn(lanes, lane) || !lanes[lane] || typeof lanes[lane] !== 'object') {
-      sendJson(req, res, 400, { error: 'Choose a lane from the list.' })
-      return true
-    }
-    if (lanes[lane].retired === true) {
-      sendJson(req, res, 400, { error: `The ${lane} lane is retired.` })
-      return true
-    }
-    if (!Object.hasOwn(lanes[lane], 'cli') || !lanes[lane].cli || typeof lanes[lane].cli !== 'object') {
-      sendJson(req, res, 400, { error: 'That lane has no command line.' })
-      return true
-    }
-
-    if (lane === 'orchestrator') {
-      sendJson(req, res, 400, { error: 'The orchestrator lane runs from the room, not as a lane run.' })
-      return true
-    }
-
-    const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
-    const isHidden = typeof isLaneHidden === 'function'
-      ? isLaneHidden(lane)
-      : activeHelper && typeof activeHelper.isLaneHidden === 'function'
-        ? activeHelper.isLaneHidden(lane)
-        : runsFolder && projectRoot
-          ? readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)).includes(lane)
-          : false
-    if (isHidden) {
-      sendJson(req, res, 400, { error: hiddenLaneProblem(lane) })
-      return true
-    }
-    const chosen = activeHelper && typeof activeHelper.isChosen === 'function'
-      ? activeHelper.isChosen()
-      : runsFolder
-        ? readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder)) !== null
-        : true
-    if (!chosen) {
-      sendJson(req, res, 400, { error: 'Pick the lanes for this project first.' })
-      return true
-    }
-
-    const laneActive = typeof isLaneActive === 'function'
-      ? isLaneActive(lane)
-      : activeHelper && typeof activeHelper.isLaneActive === 'function'
-        ? activeHelper.isLaneActive(lane)
-        : true
-    if (!laneActive) {
-      sendJson(req, res, 400, { error: `The lane ${lane} is not active. Add it in Agents first.` })
-      return true
-    }
-
+    const wantsAuto = body.lane === undefined || body.lane === null || body.lane === 'auto' || body.lane === ''
+    let startInfo = null
     let startedBy = ''
-    const registry = typeof orchestrators === 'function' ? orchestrators() : null
-    const page = Boolean(req.headers.origin)
-    if (!page) {
-      if (registry) {
-        const tokenHeader = req.headers['x-machineroom-orchestrator']
-        const token = typeof tokenHeader === 'string' ? tokenHeader.trim() : Array.isArray(tokenHeader) ? tokenHeader[0].trim() : ''
-        const actor = registry.idForToken(token)
-        if (!actor) {
-          sendJson(req, res, 403, { error: NO_TOKEN_PROBLEM })
-          return true
-        }
-        const main = actor === 'orchestrator'
-        if (Object.hasOwn(body, 'startedBy')) {
-          const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
-          if (!wanted) {
-            sendJson(req, res, 403, { error: TOKEN_MISMATCH_PROBLEM })
-            return true
-          }
-          if (wanted !== actor) {
-            const target = main ? registry.sector(wanted) : null
-            if (!target) {
-              sendJson(req, res, 403, { error: TOKEN_MISMATCH_PROBLEM })
-              return true
-            }
-            if (Array.isArray(target.lanes) && !target.lanes.includes(lane)) {
-              sendJson(req, res, 403, { error: `The ${target.name} sector does not hold the lane ${lane}.` })
-              return true
-            }
-          }
-          startedBy = wanted
-        } else if (main) {
-          const holder = typeof registry.sectorForLane === 'function' ? registry.sectorForLane(lane) : null
-          startedBy = holder ? holder.id : actor
-        } else {
-          startedBy = actor
-        }
-        const sector = registry.sector(actor)
-        if (!main && (!sector || !Array.isArray(sector.lanes) || !sector.lanes.includes(lane))) {
-          const name = sector && typeof sector.name === 'string' && sector.name.trim() ? sector.name.trim() : actor
-          sendJson(req, res, 403, { error: `The ${name} sector does not hold the lane ${lane}.` })
-          return true
-        }
-      }
-    } else if (Object.hasOwn(body, 'startedBy')) {
-      const wanted = typeof body.startedBy === 'string' ? body.startedBy.trim() : ''
-      if (!wanted) {
-        sendJson(req, res, 400, { error: 'startedBy needs an orchestrator id.' })
+    if (wantsAuto) {
+      startInfo = readActor(req, body)
+      if (startInfo.error) {
+        sendJson(req, res, startInfo.status, { error: startInfo.error })
         return true
       }
-      const sector = registry ? registry.sector(wanted) : null
-      if (!sector) {
-        sendJson(req, res, 400, { error: 'There is no orchestrator with that id.' })
+    }
+
+    let lane = typeof body.lane === 'string' ? body.lane : ''
+    if (!wantsAuto) {
+      if (!Object.hasOwn(lanes, lane) || !lanes[lane] || typeof lanes[lane] !== 'object') {
+        sendJson(req, res, 400, { error: 'Choose a lane from the list.' })
         return true
       }
-      if (wanted !== 'orchestrator' && Array.isArray(sector.lanes) && !sector.lanes.includes(lane)) {
-        sendJson(req, res, 403, { error: `The ${sector.name} sector does not hold the lane ${lane}.` })
+      if (lanes[lane].retired === true) {
+        sendJson(req, res, 400, { error: `The ${lane} lane is retired.` })
         return true
       }
-      startedBy = wanted
-    } else {
-      const holder = typeof registry?.sectorForLane === 'function' ? registry.sectorForLane(lane) : null
-      if (holder) {
-        startedBy = holder.id
+      if (!Object.hasOwn(lanes[lane], 'cli') || !lanes[lane].cli || typeof lanes[lane].cli !== 'object') {
+        sendJson(req, res, 400, { error: 'That lane has no command line.' })
+        return true
       }
+
+      if (lane === 'orchestrator') {
+        sendJson(req, res, 400, { error: 'The orchestrator lane runs from the room, not as a lane run.' })
+        return true
+      }
+
+      const activeHelper = typeof activeLanes === 'function' ? activeLanes() : activeLanes
+      const isHidden = typeof isLaneHidden === 'function'
+        ? isLaneHidden(lane)
+        : activeHelper && typeof activeHelper.isLaneHidden === 'function'
+          ? activeHelper.isLaneHidden(lane)
+          : runsFolder && projectRoot
+            ? readHiddenLanes(projectLanesFileFor(projectRoot, runsFolder)).includes(lane)
+            : false
+      if (isHidden) {
+        sendJson(req, res, 400, { error: hiddenLaneProblem(lane) })
+        return true
+      }
+      const chosen = activeHelper && typeof activeHelper.isChosen === 'function'
+        ? activeHelper.isChosen()
+        : runsFolder
+          ? readActiveLanesChoice(activeLanesFileFor(projectRoot, runsFolder)) !== null
+          : true
+      if (!chosen) {
+        sendJson(req, res, 400, { error: 'Pick the lanes for this project first.' })
+        return true
+      }
+
+      const laneActive = typeof isLaneActive === 'function'
+        ? isLaneActive(lane)
+        : activeHelper && typeof activeHelper.isLaneActive === 'function'
+          ? activeHelper.isLaneActive(lane)
+          : true
+      if (!laneActive) {
+        sendJson(req, res, 400, { error: `The lane ${lane} is not active. Add it in Agents first.` })
+        return true
+      }
+
+      startInfo = readActor(req, body)
+      if (startInfo.error) {
+        sendJson(req, res, startInfo.status, { error: startInfo.error })
+        return true
+      }
+      const finish = finishActor(startInfo, lane)
+      if (finish.error) {
+        sendJson(req, res, finish.status, { error: finish.error })
+        return true
+      }
+      startedBy = finish.startedBy
     }
 
     let briefs = []
+    let parsedBriefs = null
     let task = ''
     let allowDirty = false
     const worktree = projectRun && body.worktree === true
@@ -722,6 +819,41 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
         task = body.task
         allowDirty = body.allowDirty === true
       }
+    } else {
+      briefs = body.briefs
+      if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 5) {
+        sendJson(req, res, 400, { error: 'Choose one to five briefs.' })
+        return true
+      }
+      parsedBriefs = parseBriefs(tasksText)
+      const known = new Set(parsedBriefs.map((brief) => brief.id))
+      if (briefs.some((id) => typeof id !== 'string' || !BRIEF_ID.test(id) || !known.has(id))) {
+        sendJson(req, res, 400, { error: 'Choose a brief from the list.' })
+        return true
+      }
+    }
+
+    let routedAnswer = null
+    if (wantsAuto) {
+      const profile = projectRun
+        ? profileFromBrief({ text: hasTasks ? body.tasks[0] : task })
+        : profileFromBrief(parsedBriefs.find((brief) => brief.id === briefs[0]) ?? { text: '' })
+      const routed = routeStart({ lanesConfig: lanes, profile, only: laneRestriction(startInfo) })
+      if (routed.error) {
+        sendJson(req, res, routed.status, { error: routed.error })
+        return true
+      }
+      lane = routed.lane
+      routedAnswer = routed.routed
+      const finish = finishActor(startInfo, lane)
+      if (finish.error) {
+        sendJson(req, res, finish.status, { error: finish.error })
+        return true
+      }
+      startedBy = finish.startedBy
+    }
+
+    if (projectRun) {
       if (!resolvedRoot) {
         sendJson(req, res, 400, { error: NO_PROJECT })
         return true
@@ -746,17 +878,6 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       })
       if (problems.length > 0) {
         sendJson(req, res, 400, { error: problems.join(' ') })
-        return true
-      }
-    } else {
-      briefs = body.briefs
-      if (!Array.isArray(briefs) || briefs.length < 1 || briefs.length > 5) {
-        sendJson(req, res, 400, { error: 'Choose one to five briefs.' })
-        return true
-      }
-      const known = new Set(parseBriefs(tasksText).map((brief) => brief.id))
-      if (briefs.some((id) => typeof id !== 'string' || !BRIEF_ID.test(id) || !known.has(id))) {
-        sendJson(req, res, 400, { error: 'Choose a brief from the list.' })
         return true
       }
     }
@@ -794,7 +915,7 @@ export function createRunsApi({ projectRoot = '', briefsDir = '', runnerCommand,
       return true
     }
     notify({ topic: 'runs' })
-    sendJson(req, res, 202, entry)
+    sendJson(req, res, 202, routedAnswer ? { ...entry, routed: routedAnswer } : entry)
     return true
   }
 

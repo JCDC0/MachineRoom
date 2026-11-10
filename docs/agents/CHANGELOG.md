@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- POST /api/control/runs with no lane or with lane auto picks the lane from the routing policy, starts the run there, answers the lane with routed tier and reason, answers 409 when no lane is free, and a sub orchestrator's token routes only among its own lanes (task P31).
 - The bridge answers POST /api/control/route/lane for a brief or a task, with the lane states the run start checks and a reason for each skipped lane, and the client and the mock answer it (task P31).
 - The routing policy answers a lane for a brief or a task: it walks the tier's choices and skips a lane that is not in the room, retired, turned off or busy with a reason for each, falls to the first free lane, and answers no lane when every lane is busy or turned off (task P31).
 - The outcome table counts a run as merged, not graded, when main has its merge commit and no outcome was recorded, so the lane opencode reads 49 merged of 50 where it read 13 of 48; a lane that reports no cost reads not reported, an older run on a branch no longer raises the cost of a merge, and npm run policy-propose joins Gemini 3.8 Flash (High) to gemini-3.8-flash-high and prints each join (task P29).
